@@ -15,6 +15,42 @@ export const accentColorSchema = z
   .string()
   .regex(new RegExp("^#[0-9a-fA-F]{6}$"));
 
+/** One browser profile. See [`BrowserConfig::profiles`]. */
+export const browserProfileSchema = z.strictObject({
+  color: accentColorSchema,
+  extensions: z
+    .array(z.string())
+    .nullish()
+    .transform((value) => value ?? undefined),
+  name: z.string(),
+  private: z.boolean().prefault(false),
+});
+
+/**
+ * Browser profiles: sets of sign-ins, site data and extensions, and the
+ * sites each opens. See `docs/architecture/BROWSER-PROFILES.md`.
+ */
+export const browserConfigSchema = z.strictObject({
+  default_private_profile: z.string().prefault("private"),
+  default_profile: z.string().prefault("default"),
+  order: z.array(z.string()).prefault([]),
+  profiles: z.record(z.string(), browserProfileSchema).prefault({
+    default: {
+      color: "#0d9488",
+      extensions: null,
+      name: "Default",
+      private: false,
+    },
+    private: {
+      color: "#a78bfa",
+      extensions: null,
+      name: "Private",
+      private: true,
+    },
+  }),
+  sites: z.record(z.string(), z.string()).prefault({}),
+});
+
 /** Buttons assigned to one-, two- and three-finger taps. */
 export const buttonMapSchema = z.enum(["lrm", "lmr"]);
 
@@ -152,10 +188,6 @@ export const siteAccessSchema = z.union([
 /** One extension's settings. See [`ExtensionsConfig::settings`]. */
 export const extensionSettingsSchema = z.strictObject({
   file_access: z
-    .boolean()
-    .nullish()
-    .transform((value) => value ?? undefined),
-  private: z
     .boolean()
     .nullish()
     .transform((value) => value ?? undefined),
@@ -470,6 +502,26 @@ export const configSchema = z.strictObject({
     .string()
     .nullish()
     .transform((value) => value ?? undefined),
+  browser: browserConfigSchema.prefault({
+    default_private_profile: "private",
+    default_profile: "default",
+    order: [],
+    profiles: {
+      default: {
+        color: "#0d9488",
+        extensions: null,
+        name: "Default",
+        private: false,
+      },
+      private: {
+        color: "#a78bfa",
+        extensions: null,
+        name: "Private",
+        private: true,
+      },
+    },
+    sites: {},
+  }),
   electron: electronConfigSchema.prefault({ apps: [] }),
   extensions: extensionsConfigSchema.prefault({
     settings: {},

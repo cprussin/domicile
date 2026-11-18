@@ -55,6 +55,9 @@ struct ElectronPageCalls {
   base::RepeatingCallback<void(int width, int height)> resized;
   // The user clicked entry `command` of the window's menu bar.
   base::RepeatingCallback<void(int command)> menu_clicked;
+  // The user asked to close the window, which closes only if the app closes
+  // it, as an Electron window's `close` event can prevent it.
+  base::RepeatingClosure close_asked;
 };
 
 // A window's menu bar, as the desk lists it: the menu's entries as JSON
@@ -166,8 +169,9 @@ class ElectronSession {
                      ElectronPermissionDetails details,
                      base::OnceCallback<void(bool granted)> answered);
 
-  // session.setUserAgent's, for the session's pages; empty for the engine's.
-  const std::string& user_agent() const { return user_agent_; }
+  // The user agent of the session's pages: session.setUserAgent's, else the
+  // app's fallback; empty for the engine's.
+  const std::string& user_agent() const;
   const std::string& name() const { return name_; }
   base::WeakPtr<ElectronSession> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -194,16 +198,20 @@ class ElectronDesk {
   // Opens an app window at `url` for app `app_id`, in `partition`, whose
   // pages run `preload` (none when empty), make `calls` and load through
   // `session`. A `view` is a WebContentsView's page, listed only while a
-  // window holds it. Returns its id, or nothing when there is no shell to
-  // open it in.
+  // window holds it. A window shows `title` instead of its page's when it
+  // isn't empty, and opens `hidden` when asked. Returns its id, or nothing
+  // when there is no shell to open it in.
   virtual std::optional<std::string> Open(
       const GURL& url,
       const std::string& app_id,
       const WebViewPartition& partition,
       const std::string& preload,
+      const std::optional<ElectronNode>& node,
       ElectronPageCalls calls,
       base::WeakPtr<ElectronSession> session,
-      bool view) = 0;
+      bool view,
+      const std::string& title,
+      bool hidden) = 0;
   // Window `id` holds `views`, bottom first, and no others. A view another
   // window held moves here.
   virtual void SetViews(const std::string& id,
@@ -221,6 +229,11 @@ class ElectronDesk {
           answered) = 0;
   virtual void Load(const std::string& id, const GURL& url) = 0;
   virtual void Focus(const std::string& id) = 0;
+  // The title the desktop shows for window `id`, over its page's.
+  virtual void SetTitle(const std::string& id, const std::string& title) = 0;
+  // Whether the desktop shows window `id`. A hidden window stays open, its
+  // page running.
+  virtual void SetHidden(const std::string& id, bool hidden) = 0;
   // Closes window `id` once its page agrees.
   virtual void AskToClose(const std::string& id) = 0;
   // Closes window `id` without asking.
@@ -230,6 +243,16 @@ class ElectronDesk {
   virtual void SendToPage(const std::string& id,
                           const std::string& channel,
                           const std::string& args_json) = 0;
+  // webContents.executeJavaScript: runs `code` in the main world of window
+  // `id`'s page, as if the user had acted when `user_gesture`, and runs
+  // `done` once with what it gave, after a promise it gives settles, or why
+  // it gave nothing, which a page that goes first is.
+  virtual void ExecuteJavaScript(
+      const std::string& id,
+      const std::string& code,
+      bool user_gesture,
+      base::OnceCallback<void(base::expected<base::Value, std::string>)>
+          done) = 0;
   // webContents.postMessage: `message_json` on `channel`, and a port in the
   // page for each of `ports`.
   virtual void PostToPage(const std::string& id,
@@ -282,10 +305,11 @@ class ElectronApp {
  public:
   using Send = base::RepeatingCallback<void(std::string line)>;
 
-  // `schemes` are the apps' own schemes the engine registered as it
-  // started, which hello's answer names.
+  // `engine` and `schemes`, the apps' own schemes the engine registered as it
+  // started, are what hello's answer names.
   ElectronApp(ElectronDesk& desk,
               Send send,
+              ElectronEngineInfo engine,
               std::vector<ElectronScheme> schemes = {});
   ElectronApp(const ElectronApp&) = delete;
   ElectronApp& operator=(const ElectronApp&) = delete;
@@ -303,6 +327,9 @@ class ElectronApp {
   // Reports that window `id`'s page finished loading. Any other id is not
   // this app's.
   void Loaded(const std::string& id);
+  // Reports that window `id`'s main frame's DOM is ready. Any other id is not
+  // this app's.
+  void DomReady(const std::string& id);
 
  private:
   friend class ElectronSession;
@@ -393,7 +420,12 @@ class ElectronApp {
   void PageResized(ElectronWindow number, int width, int height);
   void SetViews(const ElectronSetViews& set);
   void MenuClicked(ElectronWindow number, int command);
+  void CloseAsked(ElectronWindow number);
   void SetMenuBar(const ElectronSetMenuBar& bar);
+  // The desk id of window `number` when it is a window, not a view, or
+  // nothing after refusing `what` of a view.
+  std::optional<std::string> WindowIdOf(ElectronWindow number,
+                                        std::string_view what);
   void ShowMessageBox(const ElectronShowMessageBox& box);
   void MessageBoxAnswered(ElectronWindow number,
                           int box,
@@ -402,9 +434,15 @@ class ElectronApp {
   // The desk id of window `number`, or nothing after refusing the request.
   std::optional<std::string> IdOf(ElectronWindow number);
 
+  // Applies app.userAgentFallback to the sessions without their own.
+  void SetUserAgentFallback(const ElectronSetUserAgentFallback& fallback);
+
   const raw_ref<ElectronDesk> desk_;
   const Send send_;
+  const ElectronEngineInfo engine_;
   const std::vector<ElectronScheme> schemes_;
+  // app.userAgentFallback; empty leaves pages the engine's.
+  std::string user_agent_fallback_;
   // Set by the app's hello.
   std::optional<ElectronHello> hello_;
   // The app's open windows, by the numbers it gave them.

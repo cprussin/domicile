@@ -824,6 +824,7 @@ const extensionsInstalled = (popped = true): void => {
         id: CLICKED,
         name: "Clicked",
         popup: null,
+        profile: "default",
         title: "Clicked",
       },
       {
@@ -834,6 +835,7 @@ const extensionsInstalled = (popped = true): void => {
         id: POPPED,
         name: "Popped",
         popup: `chrome-extension://${POPPED}/popup.html`,
+        profile: "default",
         title: "Popped",
       },
     ],
@@ -1714,6 +1716,7 @@ describe("Shell", () => {
         "https://inbox.example.com/",
         "fake-chat",
         "focus",
+        "",
       ]);
       await waitFor(() => {
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -2520,6 +2523,7 @@ describe("Shell", () => {
       expect(domicile.calls).toContainEqual([
         "openBrowserWindow",
         "https://example.com",
+        "",
         "",
       ]);
     });
@@ -4240,6 +4244,38 @@ describe("the overview", () => {
     fireEvent.keyDown(overview() ?? document, { key: "Escape" });
 
     expect(overview()).toBeNull();
+  });
+
+  describe("on the lock screen", () => {
+    // Stacking is a style, so this reads the shell's stylesheet.
+    loadEmittedStylesheet(
+      document,
+      new URL("../styled-system/styles.css", import.meta.url),
+    );
+
+    it("stays under it, so it blurs with the rest of the desk", async () => {
+      const { container } = await renderShell();
+      clientAppears("one");
+      press("o");
+      act(() => {
+        domicile.fake.set({ locked: true });
+      });
+      const sheet =
+        container.querySelector("[data-veil]")?.parentElement ?? undefined;
+      if (sheet === undefined) {
+        throw new Error("test: no lock screen");
+      }
+
+      const lock = Number(globalThis.getComputedStyle(sheet).zIndex);
+      const over = [
+        ...container.querySelectorAll<HTMLElement>("[style*='z-index']"),
+      ]
+        .map((part) => Number(part.style.zIndex))
+        .filter((depth) => depth >= lock);
+      expect(overview()).not.toBeNull();
+      expect(Number.isFinite(lock)).toBe(true);
+      expect(over).toEqual([]);
+    });
   });
 });
 

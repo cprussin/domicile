@@ -89,6 +89,7 @@ mod dmabuf_descriptor;
 mod dmabuf_import;
 mod eis;
 mod electron_apps;
+mod emulated_input;
 mod engine;
 mod engine_buffers;
 mod engine_damage;
@@ -185,7 +186,8 @@ use crate::chrome_hub::{serve_outbound, ChromeHub};
 use crate::client_requests::ClientRequest;
 use crate::clients::{accept_app_client, sees_privileged_globals, ClientState};
 use crate::config_adoption::{
-    hand_over_the_extensions, hand_over_the_shell_config, theme_on_the_wire,
+    hand_over_the_browser_profiles, hand_over_the_extensions, hand_over_the_shell_config,
+    theme_on_the_wire,
 };
 use crate::configure_answers::ConfigureAnswers;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
@@ -1098,6 +1100,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // Extensions, which the browser process installs. See
         // `docs/architecture/EXTENSIONS.md`.
         hand_over_the_extensions(&mut host, &config.extensions);
+        // Browser profiles, which the browser process opens pages in. See
+        // `docs/architecture/BROWSER-PROFILES.md`.
+        hand_over_the_browser_profiles(&mut host, &config.browser);
         // Sites the browser draws dark while the theme is dark.
         host.set_force_dark(config.theme.force_dark.clone());
         // The theme, so the page paints correctly the first time. Set, not
@@ -1231,11 +1236,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         thread::spawn(move || serve_outbound(hub, outbound_rx));
     }
 
-    // Without an EGL renderer (a container, no DRM device), the dmabuf global
-    // is not advertised and clients fall back to `wl_shm`.
-    //
     // The renderer imports client dmabufs and reads back shm buffers, which is
-    // how client frames reach the engine.
+    // how client frames reach the engine. Without one no window shows: EGL or
+    // the graphics driver did not load, as when the driver needs a newer glibc
+    // than Domicile's. That is a bug, so it is an error and the person is told.
+    // The dmabuf global is not advertised.
     let mut gpu = match headless_renderer() {
         Ok((renderer, importer)) => Some(Gpu {
             gbm: shm_allocator(&importer),
@@ -1243,7 +1248,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             renderer: Box::new(renderer),
         }),
         Err(err) => {
-            tracing::warn!(%err, "no EGL renderer: serving wl_shm clients only");
+            tracing::error!(
+                ?err,
+                "no EGL renderer, so no app window can be shown; the graphics driver's own \
+                 error is above"
+            );
+            hub.notifications
+                .get()
+                .expect("the notification server is handed to the hub before the renderer starts")
+                .warn_that_the_renderer_failed();
             None
         }
     };

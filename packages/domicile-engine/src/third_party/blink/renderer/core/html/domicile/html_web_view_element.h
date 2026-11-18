@@ -32,6 +32,7 @@ class DomicileIdentityEvent;
 class DomicilePromptEvent;
 class DomicileSignInEvent;
 class DomicileFileChooserEvent;
+class DomicileHistory;
 class DomicileMediaDevices;
 class DomicilePermissionRequestEvent;
 class ExceptionState;
@@ -73,6 +74,9 @@ class CORE_EXPORT HTMLWebViewElement final
   void goForward();
   void goBackInNewWindow();
   void goForwardInNewWindow();
+  ScriptPromise<DomicileHistory> history(ScriptState*, ExceptionState&);
+  void goToHistoryEntry(int32_t id);
+  void goToHistoryEntryInNewWindow(int32_t id);
   void stop();
   void reload();
 
@@ -200,6 +204,9 @@ class CORE_EXPORT HTMLWebViewElement final
   ScriptPromise<IDLLong> countMatches(ScriptState*,
                                       const String& selector,
                                       ExceptionState&);
+  ScriptPromise<IDLBoolean> clickMatch(ScriptState*,
+                                       const String& selector,
+                                       ExceptionState&);
 
   // Releases the permission request once answered. See
   // `permission_request_`.
@@ -325,6 +332,9 @@ class CORE_EXPORT HTMLWebViewElement final
   // KeyboardEvent on this element. See UnhandledModifierUp in
   // components/domicile/mojom/web_view_guest.mojom.
   void UnhandledModifierUp(const String& key, const String& code) override;
+  // The window this shows has a new page, in another browser profile: shows
+  // it in a new placeholder. See WebViewGuestClient.Replaced.
+  void Replaced() override;
 
   // Dispatches `domicile-key-delivered`, which names no key. See KeyDelivered
   // in components/domicile/mojom/web_view_guest.mojom.
@@ -468,7 +478,9 @@ class CORE_EXPORT HTMLWebViewElement final
   // The `window` attribute for CreateGuest, or a null String if absent.
   String BrowserWindow() const;
 
-  // The `partition` attribute for CreateGuest, or empty if absent.
+  // The `profile` and `partition` attributes for CreateGuest, or empty if
+  // absent.
+  String Profile() const;
   String Partition() const;
 
   // Kept open while the element is in the document: the browser may hold the

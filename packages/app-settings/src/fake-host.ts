@@ -1,8 +1,10 @@
 // An in-memory stand-in for the settings host, for the app's tests.
 
 import type {
+  BrowserProfiles,
   ExtensionSettings,
   InstalledExtension,
+  KnownAgents,
   MediaDevices,
   Monitor,
   SettingsFiles,
@@ -27,6 +29,10 @@ export type FakeHostState = {
   media: MediaDevices;
   /** The lit monitors; none by default. */
   monitors?: Monitor[] | undefined;
+  /** The agents in now and remembered; none by default. */
+  agents?: KnownAgents | undefined;
+  /** The browser profiles the engine runs; one default profile if unset. */
+  profiles?: BrowserProfiles | undefined;
   /** The reason every write is refused, if any. */
   refuse?: string | undefined;
 };
@@ -45,7 +51,26 @@ export const fakeHost = (state: FakeHostState) => {
   const configured: { id: string; settings: ExtensionSettings }[] = [];
   /** Each folder the picker returned. */
   const chosen: (string | undefined)[] = [];
+  /** Each extension switched in one profile. */
+  const switched: { id: string; enabled: boolean; profile: string }[] = [];
+  /** Each site pinned to a profile. */
+  const pinned: { site: string; profile: string }[] = [];
   const host: SettingsHost = {
+    agents: () =>
+      Promise.resolve(
+        structuredClone(state.agents ?? { connected: [], remembered: [] }),
+      ),
+    browserProfiles: () =>
+      Promise.resolve(
+        structuredClone(
+          state.profiles ?? {
+            defaultPrivateProfile: "private",
+            defaultProfile: "default",
+            profiles: [],
+            sites: [],
+          },
+        ),
+      ),
     chooseFolder: () => {
       chosen.push(state.chosen);
       return Promise.resolve(state.chosen);
@@ -66,6 +91,14 @@ export const fakeHost = (state: FakeHostState) => {
       }
     },
     extensions: () => Promise.resolve(structuredClone(state.installed)),
+    forgetAgent: (agent) => {
+      if (state.agents !== undefined) {
+        state.agents.remembered = state.agents.remembered.filter(
+          (remembered) => remembered.agent !== agent,
+        );
+      }
+      return Promise.resolve();
+    },
     loadUnpacked: (directory) => {
       loaded.push(directory);
       return Promise.resolve("c".repeat(32));
@@ -82,8 +115,31 @@ export const fakeHost = (state: FakeHostState) => {
       opened.push(url);
       return Promise.resolve();
     },
+    pinBrowserSite: (site, profile) => {
+      pinned.push({ profile, site });
+      const profiles = state.profiles;
+      if (profiles !== undefined) {
+        const others = profiles.sites.filter((each) => each.site !== site);
+        profiles.sites =
+          profile === profiles.defaultProfile
+            ? others
+            : [...others, { pinned: true, profile, site }];
+      }
+      return Promise.resolve();
+    },
     read: () => Promise.resolve(structuredClone(state.files)),
-    setExtensionEnabled: (id, enabled) => {
+    setExtensionEnabled: (id, enabled, profile) => {
+      if (profile !== undefined) {
+        switched.push({ enabled, id, profile });
+        const found = state.profiles?.profiles
+          .find((each) => each.id === profile)
+          ?.extensions.find((extension) => extension.id === id);
+        if (found === undefined) {
+          throw new Error(`No extension ${id} in ${profile}`);
+        }
+        found.enabled = enabled;
+        return Promise.resolve();
+      }
       const found = state.installed.find((extension) => extension.id === id);
       if (found === undefined) {
         throw new Error(`No extension ${id}`);
@@ -116,6 +172,14 @@ export const fakeHost = (state: FakeHostState) => {
     },
     siteData: () => Promise.resolve(structuredClone(state.siteData)),
     sitePermissions: () => Promise.resolve(structuredClone(state.sites)),
+    stopAgent: (session) => {
+      if (state.agents !== undefined) {
+        state.agents.connected = state.agents.connected.filter(
+          (connected) => connected.session !== session,
+        );
+      }
+      return Promise.resolve();
+    },
     uninstallExtension: (id) => {
       uninstalled.push(id);
       return Promise.resolve();
@@ -148,7 +212,9 @@ export const fakeHost = (state: FakeHostState) => {
     host,
     loaded,
     opened,
+    pinned,
     state,
+    switched,
     uninstalled,
     writes,
   };

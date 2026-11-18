@@ -64,6 +64,18 @@ Once `ExtensionSystem::ready()`, reconciling:
 Listing an extension is consent. There is no install prompt, and manifest
 permissions are granted as declared.
 
+Each browser profile is a Chrome profile of its own, so the lists are
+reconciled once per profile: each gets every extension, switched on or off
+in it. An extension the user installs in one profile goes into the others
+too, from the Web Store or its unpacked directory, and one they uninstall
+leaves them all. A profile whose `browser.profiles.<id>.extensions` names its
+extensions has those on and the rest off, and the user cannot switch them.
+One that names none starts each extension on, or off in a private profile,
+the first time it is installed there, and the user switches it from then on
+(`BrowserProfileRegistry` in
+`chrome/browser/domicile/domicile_browser_profiles.h`). See
+[BROWSER-PROFILES.md](BROWSER-PROFILES.md).
+
 The Settings app removes extensions by editing these lists, and switches
 extensions on and off through `chrome.management`
 ([SETTINGS.md](/docs/SETTINGS.md)).
@@ -96,7 +108,6 @@ config and the Settings app:
   "extensions": {
     "settings": {
       "eimadpbcbfnmbkopoojfekhnkhdbieeh": {
-        "private": true,
         "file_access": false,
         "site_access": ["github.com", "*.example.com"]
       },
@@ -111,13 +122,15 @@ config and the Settings app:
 
 | Setting | Chrome's call | Chrome's default |
 |---|---|---|
-| `private` | `util::SetIsIncognitoEnabled` | off |
 | `file_access` | `util::SetAllowFileAccess` | off |
 | `user_scripts` | `UserScriptManager::SetUserScriptPrefEnabled` | off |
 | `site_access` | `ScriptingPermissionsModifier`: `"all_sites"` grants every host it asks for, `"on_click"` withholds them, a list grants `*://host/*` for each | `"all_sites"` |
 
-- An extension that cannot use a setting is refused it: one whose manifest
-  says `"incognito": "not_allowed"`, one that asks for no `file://` access,
+- Private windows are not a setting: a private browser profile's extension
+  switches say what runs in its pages (below). The config refuses `private`,
+  and so do `configure_extension` and the engine's `extensions` message.
+- An extension that cannot use a setting is refused it: one that asks for no
+  `file://` access,
   no `userScripts` permission, or no hosts. The listing leaves those out.
 - A setting the config leaves out is the user's, changed in the Settings app
   through the command socket's `configure_extension`.
@@ -126,7 +139,7 @@ config and the Settings app:
   (`ReconcileSettings`).
 - A Web Store id is still pending when the config arrives, so its settings are
   applied once it installs (`InstallWatch`).
-- `private` and `file_access` reload the extension, as on chrome://extensions.
+- `file_access` reloads the extension, as on chrome://extensions.
 
 Code: `components/domicile/browser/extension_settings.{h,cc}` (parse, write,
 reconcile) and `chrome/browser/domicile/domicile_extension_settings.{h,cc}`
@@ -134,9 +147,13 @@ reconcile) and `chrome/browser/domicile/domicile_extension_settings.{h,cc}`
 
 ### Private windows
 
-A private page is a `<webview private>`, a guest of the off-the-record
-profile. Its desk is that profile's own `DomicileWindowController`, made the
-first time a private page opens. Chrome's `EventRouter` and
+A private page is a `<webview private>`, a guest of a private browser
+profile's off-the-record profile. Its extensions are installed into its
+hidden parent and allowed into private pages, and those switched on there
+run in them (ExtensionsFor in
+`components/domicile/browser/browser_profiles.h`). Its desk is that
+off-the-record profile's own `DomicileWindowController`, made the first time
+a private page opens. Chrome's `EventRouter` and
 `ExtensionTabUtil` already hide an off-the-record window from an extension not
 allowed in private windows, so the desk only has to treat the private desk as
 one more window:
@@ -156,12 +173,14 @@ one more window:
 `components/domicile/mojom/extension_tray.mojom` carries action state from the
 browser process to the shell. It binds on the shell's origin only, like the
 control channel, and appears on the `DomicileHost`. The SDK layer gives a
-shell it as `domicile.extensions` (`list`, `activate`, `on("change")`):
+shell it as `domicile.extensions` (`list`, `activate`, `setProfile`,
+`on("change")`):
 
 ```ts
 // DomicileHost
 readonly extensions: readonly DomicileExtension[] | null; // with extensionschanged
 activateExtension(id: string): void;
+setExtensionsProfile(profile: string): void;
 
 interface DomicileExtension {
   id: string;
@@ -172,8 +191,18 @@ interface DomicileExtension {
   badgeColor: string;         // CSS color, #rrggbbaa
   popup: string | null;       // chrome-extension://<id>/popup.html, or null (undefined in the SDK)
   enabled: boolean;
+  profile: string;            // the browser profile it is in, which its popup opens in
 }
 ```
+
+- **One profile's actions.** Each browser profile is a Chrome profile with
+  its own extensions, so the tray shows one profile's, as Chrome's toolbar
+  shows its window's: `setExtensionsProfile(profile)` names it, and a shell
+  names the profile of the page it last focused. The default profile's until
+  then, and while that profile loads. Clicks go to the active tab of that
+  profile's pages, and each entry's `profile` says which it is. The popup
+  opens as `<webview extensionpopup profile={profile}>`, in the extension's
+  own profile, where its storage and sign-ins are.
 
 - **`extensions`** holds every extension whose manifest names an action, and
   `extensionschanged` fires on every change, so a reloaded page reads it
@@ -216,8 +245,9 @@ interface DomicileExtension {
   no toolbar. The desk's function replaces Chrome's
   (`domicile_desk_functions.cc`) and checks as Chrome does: the desk's
   window, not a popup window, and a popup on the active tab. It sends
-  `ExtensionTrayClient.PopupRequested(id, popup)` to every tray, which the
-  shell gets as `extensionpopuprequested`. It answers once the shell is
+  `ExtensionTrayClient.PopupRequested(id, popup, profile)` to every tray, which
+  the shell gets as `extensionpopuprequested`, with the extension's profile
+  for the popup's `<webview>`. It answers once the shell is
   asked, not once the popup loads. The popup's URL is carried because
   Phantom clears its popup as soon as the call answers.
 - **`sidePanel.open()`** opens the side panel's page as a popup window of its

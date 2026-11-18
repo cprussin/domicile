@@ -9,7 +9,8 @@ use std::time::Instant;
 use tracing::{debug, error, warn};
 
 use domicile_config::{
-    ExtensionsConfig, IdleConfig, KeyRepeat, KeyboardConfig, Keymap, LockConfig, Omit, ThemeMode,
+    BrowserConfig, ExtensionsConfig, IdleConfig, KeyRepeat, KeyboardConfig, Keymap, LockConfig,
+    Omit, ThemeMode,
 };
 use domicile_host::keymaps::Listed;
 use domicile_host::Host;
@@ -55,6 +56,25 @@ pub fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) 
     );
 }
 
+/// Give the host the config's `browser`, for chromes that connect later.
+pub fn hand_over_the_browser_profiles(host: &mut Host, browser: &BrowserConfig) {
+    host.set_browser_profiles(
+        browser
+            .ordered_profiles()
+            .map(|(id, profile)| domicile_protocol::BrowserProfile {
+                id: id.clone(),
+                name: profile.name.clone(),
+                color: String::from(profile.color),
+                private: profile.private,
+                extensions: profile.extensions.clone(),
+            })
+            .collect(),
+        browser.default_profile.clone(),
+        browser.default_private_profile.clone(),
+        browser.sites.clone(),
+    );
+}
+
 /// One extension's config settings, as [`HostMessage::Extensions`] carries
 /// them.
 fn settings_on_the_wire(
@@ -64,7 +84,6 @@ fn settings_on_the_wire(
     use domicile_protocol::SiteAccess as WireAccess;
     use domicile_protocol::SiteAccessMode as WireMode;
     domicile_protocol::ExtensionSettings {
-        in_private: settings.in_private,
         file_access: settings.file_access,
         user_scripts: settings.user_scripts,
         site_access: settings.site_access.as_ref().map(|access| match access {
@@ -132,6 +151,17 @@ impl DomicileCompositor {
             };
             self.hub.broadcast(
                 told.expect("a host that has just been given extensions has them to state"),
+            );
+        }
+        if let Some(browser) = &restated.browser {
+            // Store then broadcast, like the extensions.
+            let told = {
+                let mut host = self.hub.host.lock().unwrap();
+                hand_over_the_browser_profiles(&mut host, browser);
+                host.describe_browser_profiles()
+            };
+            self.hub.broadcast(
+                told.expect("a host that has just been given profiles has them to state"),
             );
         }
         if let Some(sites) = &restated.force_dark {
@@ -436,7 +466,7 @@ mod tests {
                     (
                         DARK_READER.to_string(),
                         domicile_config::ExtensionSettings {
-                            in_private: Some(true),
+                            file_access: Some(true),
                             site_access: Some(SiteAccess::Sites(vec!["github.com".into()])),
                             ..Default::default()
                         },
@@ -447,7 +477,6 @@ mod tests {
                             file_access: Some(false),
                             user_scripts: Some(true),
                             site_access: Some(SiteAccess::Mode(SiteAccessMode::OnClick)),
-                            ..Default::default()
                         },
                     ),
                 ]
@@ -463,7 +492,7 @@ mod tests {
                     (
                         DARK_READER.to_string(),
                         ExtensionSettings {
-                            in_private: Some(true),
+                            file_access: Some(true),
                             site_access: Some(domicile_protocol::SiteAccess::Sites(vec![
                                 "github.com".into()
                             ])),
@@ -478,7 +507,6 @@ mod tests {
                             site_access: Some(domicile_protocol::SiteAccess::Mode(
                                 domicile_protocol::SiteAccessMode::OnClick
                             )),
-                            ..Default::default()
                         },
                     ),
                 ]

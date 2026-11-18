@@ -4,6 +4,7 @@ import { Fragment, memo, useCallback, useMemo, useState } from "react";
 
 import { AppWindow } from "./AppWindow";
 import { BrowserWindow } from "./BrowserWindow";
+import { useProfileMark } from "./browser/useBrowserProfile";
 import type { Direction } from "./direction";
 import { FocusGlow } from "./FocusGlow";
 import { FloatBorder } from "./floating/FloatBorder";
@@ -576,6 +577,7 @@ export const Stage = memo(
                 <WindowBar
                   crossing={crossing}
                   description={descriptionOf(window)}
+                  domicile={domicile}
                   dragging={stretching || held.has(window.id)}
                   float={desk.floats.get(window.id)}
                   focused={focused}
@@ -1081,6 +1083,8 @@ const WindowContents = memo(
 type WindowBarProps = {
   /** See `DrawnWindow.crossing`. */
   crossing: boolean;
+  /** Where a browser window's page's profile comes from, for its mark. */
+  domicile: Pick<Domicile, "browser">;
   description: string | undefined;
   dragging: boolean;
   float: Float | undefined;
@@ -1118,6 +1122,7 @@ const WindowBar = memo(
   ({
     crossing,
     description,
+    domicile,
     dragging,
     float,
     focused,
@@ -1146,6 +1151,10 @@ const WindowBar = memo(
     window,
   }: WindowBarProps) => {
     const { id } = window;
+    const mark = useProfileMark(
+      domicile,
+      window.kind === WindowKind.Browser ? engineWindowOf(id) : undefined,
+    );
     const hovered = useCallback(
       (at: Spot) => {
         onHover(id, at);
@@ -1212,6 +1221,7 @@ const WindowBar = memo(
           frame={placement.frame}
           fullscreen={fullscreen}
           icon={icon}
+          mark={mark}
           motion={barMotion(motion)}
           onAim={onAim}
           onClose={closed}
@@ -1682,8 +1692,9 @@ const windowNamed = (
 };
 
 /**
- * A window's icon URL: a client's from its desktop entry, a browser window's
- * page icon.
+ * A window's icon URL: a client's from its desktop entry, an app window's
+ * from its app's (an Electron app's, whose page icon isn't its own), else a
+ * browser window's page icon.
  */
 const iconOf = (
   window: ShellWindow,
@@ -1691,7 +1702,8 @@ const iconOf = (
 ): string | undefined =>
   window.kind === WindowKind.App
     ? clientIcons.get(window.desktopId)
-    : window.icon;
+    : ((window.appId === "" ? undefined : clientIcons.get(window.appId)) ??
+      window.icon);
 
 /** A browser window's page description; a client's window has none. */
 const descriptionOf = (window: ShellWindow): string | undefined =>

@@ -44,7 +44,10 @@ export const setUp = ({ refuse }: { refuse?: (why: string) => never } = {}) => {
       (message) => sent.push(message),
       () => undefined,
     ),
-    createSessionCalls((message) => sent.push(message)),
+    createSessionCalls(
+      (message) => sent.push(message),
+      () => "Notes/1 Electron/45",
+    ),
     createPermissions(
       (message) => sent.push(message),
       () => undefined,
@@ -64,7 +67,12 @@ export const setUp = ({ refuse }: { refuse?: (why: string) => never } = {}) => {
     },
   });
   const windows = createBrowserWindow(
-    { events, schemes: [], send: (request) => sent.push(request) },
+    {
+      browser: { chromeVersion: "160.0.8155.0", userAgent: "Chrome/160" },
+      events,
+      schemes: [],
+      send: (request) => sent.push(request),
+    },
     app,
     ipc,
     sessions,
@@ -82,6 +90,11 @@ export const setUp = ({ refuse }: { refuse?: (why: string) => never } = {}) => {
     },
     (path) => `source of ${path}`,
     refuse,
+    () => ({
+      electron_version: "45.2.1",
+      env: { HOME: "/home/me" },
+      resources_path: "/cache/x/resources",
+    }),
   );
   const say = (event: WindowEvent) => events.emit("window", event);
   return { ...windows, app, exits, ipcMain, menus, say, sent, sessions };

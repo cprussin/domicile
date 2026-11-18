@@ -10,6 +10,7 @@ const action = {
   id: "abcdefghijklmnopabcdefghijklmnop",
   name: "Dark Reader",
   popup: null,
+  profile: "default",
   title: "Dark Reader",
 };
 
@@ -20,7 +21,6 @@ const installed = {
   fromConfig: true,
   icon: "data:image/png;base64,AA==",
   id: "abcdefghijklmnopabcdefghijklmnop",
-  inPrivate: null,
   name: "Dark Reader",
   optionsUrl: null,
   siteAccess: "specific_sites" as const,
@@ -78,12 +78,21 @@ describe("extensions", () => {
     fake.dispatch("extensionpopuprequested", {
       extensionId: action.id,
       popup: `chrome-extension://${action.id}/popup.html`,
+      profile: "work",
     });
 
     expect(await asked).toStrictEqual({
       id: action.id,
       popup: `chrome-extension://${action.id}/popup.html`,
+      profile: "work",
     });
+  });
+
+  it("shows a profile's actions", () => {
+    const fake = new FakeDomicileHost();
+    desktop(fake.host).extensions.setProfile("work");
+
+    expect(fake.calls).toStrictEqual([["setExtensionsProfile", "work"]]);
   });
 
   describe("installed", () => {
@@ -100,7 +109,6 @@ describe("extensions", () => {
       expect(desktop(fake.host).extensions.installed).toStrictEqual([
         {
           ...installed,
-          inPrivate: undefined,
           optionsUrl: undefined,
           userScripts: undefined,
         },

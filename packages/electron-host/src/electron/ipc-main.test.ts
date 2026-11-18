@@ -27,6 +27,29 @@ const outcome = (
   });
 
 describe(createIpcMain, () => {
+  it("names the page's main frame as the sender's frame, as Slack checks", async () => {
+    const { invoke, ipcMain, receive } = createIpcMain();
+    const frame = { routingId: 7 };
+    const sender: IpcSender = {
+      id: 3,
+      mainFrame: frame,
+      send: () => undefined,
+    };
+    const heard: unknown[] = [];
+    ipcMain.on("state", (event: { frameId: number; senderFrame: unknown }) =>
+      heard.push(event.senderFrame, event.frameId),
+    );
+    ipcMain.handle(
+      "get",
+      (event) => (event as { senderFrame: unknown }).senderFrame === frame,
+    );
+
+    receive(sender, "state", []);
+
+    expect(heard).toEqual([frame, 7]);
+    expect(outcome(await invoke(sender, "get", []))).toEqual({ value: true });
+  });
+
   it("gives a page's send to the channel's listeners, with its page", () => {
     const { ipcMain, receive } = createIpcMain();
     const { sender } = page();
@@ -133,5 +156,33 @@ describe(createIpcMain, () => {
     post(page().sender, "port", "hi", [port1]);
 
     expect(heard).toEqual([3, [port1], "hi"]);
+  });
+});
+
+describe("a page's own webContents.ipc", () => {
+  it("hears only its page, and answers that page's invokes ahead of ipcMain", async () => {
+    const { IpcMain } = await import("./ipc-main");
+    const routes = createIpcMain();
+    const own = new IpcMain();
+    const page = { id: 1, ipc: own, send: () => undefined };
+    const other = { id: 2, send: () => undefined };
+    const heard: string[] = [];
+    own.on("hi", (_event, word) => heard.push(`own ${word}`));
+    routes.ipcMain.on("hi", (event, word) =>
+      heard.push(`main ${event.sender.id} ${word}`),
+    );
+    own.handle("who", () => "own");
+    routes.ipcMain.handle("who", () => "main");
+
+    routes.receive(page, "hi", ["a"]);
+    routes.receive(other, "hi", ["b"]);
+
+    expect(heard).toEqual(["own a", "main 1 a", "main 2 b"]);
+    expect(
+      (await routes.invoke(page, "who", [])).unwrapOr({ result: "none" }),
+    ).toEqual({ result: "own" });
+    expect(
+      (await routes.invoke(other, "who", [])).unwrapOr({ result: "none" }),
+    ).toEqual({ result: "main" });
   });
 });

@@ -60,8 +60,6 @@ class PictureInPictureVideos : public mojom::PictureInPictureVideos {
     const std::string& id() const { return id_; }
 
     void SetSize(const gfx::Size& size);
-    // Where the video was in its page, in DIPs; empty when unknown.
-    void SetSource(const gfx::Rect& source);
     void SetPlaying(bool playing);
     void SetControls(bool can_play,
                      bool can_previous_track,
@@ -92,9 +90,13 @@ class PictureInPictureVideos : public mojom::PictureInPictureVideos {
 
   ~PictureInPictureVideos() override;
 
-  // Lists a video of browser window `window`'s page, whose controls are
-  // `controls` until the listing goes. Its id is the next unused one.
-  std::unique_ptr<Listing> List(const std::string& window, Controls* controls);
+  // Lists a video of browser window `window`'s page, which was at `source` in
+  // it (DIPs; empty when unknown), whose controls are `controls` until the
+  // listing goes. Its id is the next unused one. The source comes with the
+  // first list the shell hears, so it never places the video without it.
+  std::unique_ptr<Listing> List(const std::string& window,
+                                const gfx::Rect& source,
+                                Controls* controls);
 
   // Binds a document in the renderer whose frame sinks have client id
   // `renderer_client_id`.

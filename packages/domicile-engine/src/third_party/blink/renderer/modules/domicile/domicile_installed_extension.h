@@ -30,7 +30,6 @@ class MODULES_EXPORT DomicileInstalledExtension final : public ScriptWrappable {
   const String& name() const { return name_; }
   const String& icon() const { return icon_; }
   bool enabled() const { return enabled_; }
-  std::optional<bool> inPrivate() const { return in_private_; }
   std::optional<bool> fileAccess() const { return file_access_; }
   std::optional<bool> userScripts() const { return user_scripts_; }
   // A null String where the extension asks for no sites, so the IDL's
@@ -49,7 +48,6 @@ class MODULES_EXPORT DomicileInstalledExtension final : public ScriptWrappable {
   String name_;
   String icon_;
   bool enabled_ = false;
-  std::optional<bool> in_private_;
   std::optional<bool> file_access_;
   std::optional<bool> user_scripts_;
   String site_access_;

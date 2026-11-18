@@ -61,14 +61,23 @@ type Props = Common &
         name?: string | undefined;
         /** Makes the whole row one button. Its `end` must not be a control. */
         onPress: () => void;
+        /**
+         * A middle-click on the row, for the row's thing elsewhere, as a
+         * link opens in a new tab.
+         */
+        onMiddlePress?: (() => void) | undefined;
       }
     | {
         actions?: undefined;
         busy?: undefined;
         name?: undefined;
         onPress?: undefined;
+        onMiddlePress?: undefined;
       }
   );
+
+/** `MouseEvent.button` for the middle button. */
+const MIDDLE_BUTTON = 1;
 
 /**
  * One row of a panel's list: an icon, a label over a detail, and something
@@ -90,6 +99,7 @@ export const ListRow = ({
   label,
   motion,
   name,
+  onMiddlePress,
   onPress,
   surface = "plain",
 }: Props) => {
@@ -152,6 +162,15 @@ export const ListRow = ({
             aria-busy={busy === true ? true : undefined}
             aria-label={name}
             className={rowStyles({ pressable: true })}
+            onAuxClick={
+              onMiddlePress === undefined
+                ? undefined
+                : (event) => {
+                    if (event.button === MIDDLE_BUTTON) {
+                      onMiddlePress();
+                    }
+                  }
+            }
             onClick={onPress}
             type="button"
           >

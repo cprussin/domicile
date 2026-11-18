@@ -26,6 +26,8 @@
 #include "base/no_destructor.h"
 #include "base/task/bind_post_task.h"
 #include "base/threading/sequence_bound.h"
+#include "base/types/expected.h"
+#include "base/values.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_electron_page.h"
 #include "chrome/browser/domicile/domicile_electron_storage.h"
@@ -35,6 +37,8 @@
 #include "components/domicile/browser/line_framer.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "components/domicile/common/electron_schemes.h"
+#include "components/embedder_support/user_agent_utils.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/io_buffer.h"
@@ -65,11 +69,15 @@ class ChromeElectronDesk final : public ElectronDesk {
                                   const std::string& app_id,
                                   const WebViewPartition& partition,
                                   const std::string& preload,
+                                  const std::optional<ElectronNode>& node,
                                   ElectronPageCalls calls,
                                   base::WeakPtr<ElectronSession> session,
-                                  bool view) override {
-    return OpenElectronWindow(url, app_id, partition, preload, std::move(calls),
-                              std::move(session), view);
+                                  bool view,
+                                  const std::string& title,
+                                  bool hidden) override {
+    return OpenElectronWindow(url, app_id, partition, preload, node,
+                              std::move(calls), std::move(session), view,
+                              title, hidden);
   }
   void SetViews(const std::string& id,
                 std::vector<ElectronDeskView> views) override {
@@ -87,6 +95,12 @@ class ChromeElectronDesk final : public ElectronDesk {
     LoadBrowserWindow(id, url);
   }
   void Focus(const std::string& id) override { FocusBrowserWindow(id); }
+  void SetTitle(const std::string& id, const std::string& title) override {
+    SetElectronTitle(id, title);
+  }
+  void SetHidden(const std::string& id, bool hidden) override {
+    SetElectronHidden(id, hidden);
+  }
   void AskToClose(const std::string& id) override {
     AskToCloseBrowserWindow(id);
   }
@@ -96,6 +110,18 @@ class ChromeElectronDesk final : public ElectronDesk {
                   const std::string& args_json) override {
     if (ElectronPage* page = ElectronPageOf(id)) {
       page->Deliver(channel, args_json);
+    }
+  }
+  void ExecuteJavaScript(
+      const std::string& id,
+      const std::string& code,
+      bool user_gesture,
+      base::OnceCallback<void(base::expected<base::Value, std::string>)> done)
+      override {
+    if (ElectronPage* page = ElectronPageOf(id)) {
+      page->ExecuteJavaScript(code, user_gesture, std::move(done));
+    } else {
+      std::move(done).Run(base::unexpected("the window's page is gone"));
     }
   }
   void PostToPage(const std::string& id,
@@ -161,12 +187,18 @@ class AppOnUIThread {
   explicit AppOnUIThread(ElectronApp::Send send)
       : app_(desk_,
              std::move(send),
+             ElectronEngineInfo{
+                 .user_agent = embedder_support::GetUserAgent(),
+                 .chrome_version = std::string(version_info::GetVersionNumber())},
              ElectronSchemesIn(*base::CommandLine::ForCurrentProcess())),
         listing_(WatchBrowserWindowListing(
             base::BindRepeating(&AppOnUIThread::Listed,
                                 base::Unretained(this)))),
         loads_(WatchBrowserWindowLoads(
             base::BindRepeating(&ElectronApp::Loaded,
+                                base::Unretained(&app_)))),
+        dom_readies_(WatchBrowserWindowDomReadies(
+            base::BindRepeating(&ElectronApp::DomReady,
                                 base::Unretained(&app_)))) {
     CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   }
@@ -180,6 +212,7 @@ class AppOnUIThread {
   ElectronApp app_;
   base::CallbackListSubscription listing_;
   base::CallbackListSubscription loads_;
+  base::CallbackListSubscription dom_readies_;
 };
 
 // One connection on the IO thread: reads its lines, writes its events, and

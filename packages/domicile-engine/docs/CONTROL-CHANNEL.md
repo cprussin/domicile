@@ -283,9 +283,16 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 {"type":"config_extensions","ids":["…"]}
 
 {"type":"extensions","version":1}
-{"type":"extensions","extensions":[{"id":"…","name":"…","description":"…","version":"1.0","enabled":true,"options_url":"chrome-extension://…/options.html","settings":{"private":false,"site_access":"all_sites"}}]}
+{"type":"extensions","extensions":[{"id":"…","name":"…","description":"…","version":"1.0","enabled":true,"options_url":"chrome-extension://…/options.html","settings":{"private":false,"site_access":"all_sites"},"icon_path":"/home/…/icons/128.png"}]}
 
 {"type":"set_extension_enabled","version":1,"id":"…","enabled":false}
+{"type":"set_extension_enabled","version":1,"id":"…","enabled":true,"profile":"work"}
+{"type":"set"}   |   {"type":"refused","why":"…"}
+
+{"type":"browser_profiles","version":1}
+{"type":"browser_profiles","default_profile":"personal","default_private_profile":"private","profiles":[{"id":"work","name":"Work","color":"#d97706","private":false,"extensions":[{"id":"…","enabled":true,"locked":true}]}],"sites":[{"site":"github.com/acme","profile":"work","pinned":true}]}
+
+{"type":"pin_browser_site","version":1,"site":"github.com/acme","profile":"work"}
 {"type":"set"}   |   {"type":"refused","why":"…"}
 
 {"type":"configure_extension","version":1,"id":"…","settings":{"private":true,"site_access":["github.com"]}}
@@ -317,6 +324,9 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 
 {"type":"disable_while_typing","version":1,"enabled":false}
 {"type":"disable_while_typing","enabled":false}   |   {"type":"refused","why":"…"}
+
+{"type":"devtools","version":1,"window":"3","method":"DOM.getContentQuads","params":{"backendNodeId":42}}
+{"type":"devtools","result":{"quads":[[10,20,110,20,110,40,10,40]]}}   |   {"type":"refused","why":"…"}
 ```
 
 - Without the switch, the engine binds nothing. Every desktop `domicile`
@@ -361,10 +371,22 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
   ([APP-MODULES.md](/docs/architecture/APP-MODULES.md#domiciles-own-state)).
   `extensions` lists the shell profile's extensions, without apps, themes or
   Chrome's components; `options_url` is left out when there is no options
-  page. `settings` has each setting the extension can use, spelled as the
+  page. `icon_path` is the file of its manifest icon closest to 128px, left
+  out when the manifest names none: a path, so listing reads no files, which
+  `domicile-app-host` turns into the image Settings draws. `settings` has each setting the extension can use, spelled as the
   config's `extensions.settings`; `configure_extension` changes the ones it
   names, and refuses one the extension cannot use
   ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md#settings)).
+- `browser_profiles`, `pin_browser_site` and `set_extension_enabled` with a
+  `profile` are the Settings app's Profiles page
+  ([BROWSER-PROFILES.md](/docs/architecture/BROWSER-PROFILES.md)), as the
+  shell's `browserProfiles`, `pinBrowserSite` and
+  `setBrowserProfileExtensionEnabled`. Without a `profile`,
+  `set_extension_enabled` switches the shell profile's extension. A profile's
+  `extensions` is empty while it loads; `locked` is a switch the config's
+  `extensions` list sets. A site is `pinned` when the user pinned it, and the
+  config's otherwise. Pinning a site to the default profile unpins it; a site
+  the config lists is refused.
 - `media_devices` and `set_media_device` are the Settings app's too. They list
   each kind's devices in the order of Chrome's device ranking in the shell
   profile's prefs, and move one to the top. A site that names no device gets
@@ -408,6 +430,14 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
   It sets whether the touchpads rest while a keyboard types when `enabled` is
   given, and replies with whether they do. Off a tty it is refused: the host
   compositor reads the touchpad.
+- `devtools` is `domicile devtools`
+  ([CLI.md](/docs/CLI.md#domicile-devtools-window-method-params)), which
+  `domicile mcp` drives browser windows with. `window` is the engine's id for
+  a browser window. It attaches a DevTools client of its own for the one
+  method and detaches once answered, so DevTools the user has open keeps
+  working. Only `kDevToolsMethods` in `command_protocol.h` go through, and
+  `Page.navigate` only to http and https; a private window is refused, and so
+  is a page that does not answer within 10 seconds.
 - It is its own socket because the compositor has no part in choosing the
   shell. The supervisor also passes it at
   launch as `--domicile-shell-root` and `--domicile-shell-module`. See

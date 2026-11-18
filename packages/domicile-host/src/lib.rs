@@ -10,9 +10,9 @@ use std::collections::HashMap;
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    AppFrame, Appearance, BoundShortcut, Capturing, ChromeMessage, DesktopStatus, DisplayInfo,
-    ExtensionSettings, HostMessage, ListedDisplay, ListedInput, ListedWindow, MonitorInfo,
-    Notification, Owner, PortalRequest, PortalWallpaper, Theme, TrayItem, WindowKind,
+    AppFrame, Appearance, BoundShortcut, BrowserProfile, Capturing, ChromeMessage, DesktopStatus,
+    DisplayInfo, ExtensionSettings, HostMessage, ListedDisplay, ListedInput, ListedWindow,
+    MonitorInfo, Notification, Owner, PortalRequest, PortalWallpaper, Theme, TrayItem, WindowKind,
 };
 
 pub mod app_names;
@@ -220,6 +220,9 @@ pub struct Host {
     /// Host names of sites the browser draws dark, for
     /// [`HostMessage::ForceDark`].
     force_dark: Vec<String>,
+    /// The [`HostMessage::BrowserProfiles`] the config's `browser` makes.
+    /// `None` until set; a host without a config sends none.
+    browser_profiles: Option<HostMessage>,
     /// The keysyms the keymap types, with their keys, and the config's shell
     /// options as JSON text, for [`HostMessage::ShellConfig`]. `None` until
     /// set, as for `keymap`.
@@ -351,6 +354,7 @@ impl Host {
                 // An older engine says no address.
                 url: (!window.url.is_empty()).then(|| window.url.clone()),
                 private: window.private,
+                engine_id: Some(window.id.clone()),
             })
         });
         HostMessage::WindowList {
@@ -367,6 +371,7 @@ impl Host {
                     urgent: app.urgent,
                     url: None,
                     private: false,
+                    engine_id: None,
                 })
                 .chain(browser)
                 .collect(),
@@ -515,6 +520,27 @@ impl Host {
     /// The extensions message, or `None` if none were set.
     pub fn describe_extensions(&self) -> Option<HostMessage> {
         self.extensions.clone()
+    }
+
+    /// Replace the browser profiles, for chromes that connect later.
+    pub fn set_browser_profiles(
+        &mut self,
+        profiles: Vec<BrowserProfile>,
+        default_profile: String,
+        default_private_profile: String,
+        sites: BTreeMap<String, String>,
+    ) {
+        self.browser_profiles = Some(HostMessage::BrowserProfiles {
+            profiles,
+            default_profile,
+            default_private_profile,
+            sites,
+        });
+    }
+
+    /// The browser profiles message, or `None` if none were set.
+    pub fn describe_browser_profiles(&self) -> Option<HostMessage> {
+        self.browser_profiles.clone()
     }
 
     /// Replace the sites the browser draws dark, for chromes that connect
@@ -1142,6 +1168,8 @@ impl Host {
             | ChromeMessage::Watch { .. }
             | ChromeMessage::ActOnWindow { .. }
             | ChromeMessage::ConfigureDisplay { .. }
+            | ChromeMessage::ShootDesk { .. }
+            | ChromeMessage::Emulate { .. }
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerRelative { .. }

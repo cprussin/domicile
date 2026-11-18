@@ -89,8 +89,16 @@ enters a gap, because pointer crossing follows `desk`.
 - `DrmScreen::GetCursorScreenPoint` answers where the host hears the pointer
   (`PointerHeardAt`), so a mouse move aura synthesizes after a window change
   or a warp lands where the cursor is.
-- Each CRTC keeps its own cursor (`DrmCursor`). The host sets the cursor shape
-  on every monitor.
+- When the host moves, the pointer stays where it is on screen
+  (`OzonePlatform::SetDomicilePointerStays`, `PointerStaysAt`). Upstream keeps
+  it at its spot in the window, which would carry a pointer on another monitor
+  to the host's new one, and focus would follow it. If no window holds the
+  spot yet (the presenter for the monitor the host left opens next), the
+  pointer waits there for it.
+- One cursor client serves every window, and `DrmCursor` takes the cursor
+  from any of them and draws it on the CRTC the pointer is on. A window added
+  or removed sets the cursor again (`DesktopNativeCursorManager::RedrawSoon`),
+  so the pointer stays current across a hotplug.
 - The page's cursor applies off the host monitor too: `RenderWidgetHostViewAura`
   takes a pointer outside its root but on the page as over itself
   (`DeskPagePoint`, patch `0159`).

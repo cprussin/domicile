@@ -78,7 +78,7 @@ export type Protocol = {
 export const createProtocols = (send: (request: ProtocolRequest) => void) => {
   const sessions = new Map<string, Map<string, ProtocolHandler>>();
 
-  const forSession = (session: string): Protocol => {
+  const forSession = (session: string) => {
     const handlers =
       sessions.get(session) ??
       (() => {
@@ -87,7 +87,7 @@ export const createProtocols = (send: (request: ProtocolRequest) => void) => {
         send({ scheme: "file", session, type: "handle_protocol" });
         return made;
       })();
-    return {
+    const protocol: Protocol = {
       handle: (scheme, handler) => {
         if (handlers.has(scheme)) {
           throw new Error(`Failed to register protocol: ${scheme}`);
@@ -105,6 +105,7 @@ export const createProtocols = (send: (request: ProtocolRequest) => void) => {
         }
       },
     };
+    return withLegacyProtocols(protocol);
   };
 
   /** Answers `incoming` with its session's handler, or why there is none. */
@@ -221,3 +222,153 @@ const headerPairs = (headers: Headers): [string, string][] => [
 
 const whyFailed = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
+
+/** What an Electron 24-style protocol handler hands its callback. */
+type LegacyAnswer =
+  | string
+  | Uint8Array
+  | NodeJS.ReadableStream
+  | {
+      readonly error?: number;
+      readonly path?: string;
+      readonly data?: string | Uint8Array | NodeJS.ReadableStream;
+      readonly url?: string;
+      readonly method?: string;
+      readonly mimeType?: string;
+      readonly charset?: string;
+      readonly statusCode?: number;
+      readonly headers?: Record<string, string | string[]>;
+    };
+
+type LegacyKind = "buffer" | "file" | "http" | "stream" | "string";
+
+/** Electron's `ProtocolRequest`, from the request `handle` gives. */
+const legacyRequest = async (request: Request) => ({
+  headers: Object.fromEntries(request.headers),
+  method: request.method,
+  referrer: request.headers.get("referer") ?? "",
+  uploadData:
+    request.body === null
+      ? []
+      : [{ bytes: Buffer.from(await request.arrayBuffer()), type: "rawData" }],
+  url: request.url,
+});
+
+const isStream = (value: unknown): value is NodeJS.ReadableStream =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as { pipe?: unknown }).pipe === "function";
+
+/** Chromium's net errors a handler answers with, as HTTP statuses. */
+const statusOfError = (error: number) =>
+  error === -6 || error === -10 ? 404 : 500;
+
+/** The `Response` a legacy handler's answer of `kind` stands for. */
+export const legacyResponse = async (
+  kind: LegacyKind,
+  answer: LegacyAnswer,
+): Promise<Response> => {
+  const options =
+    typeof answer === "string" ||
+    answer instanceof Uint8Array ||
+    isStream(answer)
+      ? {}
+      : answer;
+  if (options.error !== undefined) {
+    return new Response(null, { status: statusOfError(options.error) });
+  }
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(options.headers ?? {})) {
+    for (const each of [value].flat()) {
+      headers.append(name, each);
+    }
+  }
+  if (options.mimeType !== undefined) {
+    headers.set(
+      "content-type",
+      options.charset === undefined
+        ? options.mimeType
+        : `${options.mimeType}; charset=${options.charset}`,
+    );
+  }
+  const status = options.statusCode ?? 200;
+  const data =
+    typeof answer === "string" ||
+    answer instanceof Uint8Array ||
+    isStream(answer)
+      ? answer
+      : answer.data;
+  if (kind === "file") {
+    const path = typeof answer === "string" ? answer : options.path;
+    if (path === undefined) {
+      return new Response(null, { status: 404 });
+    }
+    const file = Bun.file(path);
+    if (!(await file.exists())) {
+      return new Response(null, { status: 404 });
+    }
+    if (!headers.has("content-type") && file.type !== "") {
+      headers.set("content-type", file.type);
+    }
+    return new Response(file, { headers, status });
+  } else if (kind === "http") {
+    if (options.url === undefined) {
+      return new Response(null, { status: 500 });
+    }
+    return fetch(options.url, { method: options.method ?? "GET" });
+  } else if (isStream(data)) {
+    const { Readable } = await import("node:stream");
+    return new Response(
+      Readable.toWeb(data as import("node:stream").Readable) as ReadableStream,
+      { headers, status },
+    );
+  } else {
+    return new Response(data ?? null, { headers, status });
+  }
+};
+
+/**
+ * Electron's `register*Protocol`, `unregisterProtocol` and
+ * `isProtocolRegistered`, which apps written before `protocol.handle` call,
+ * on top of `protocol`'s `handle`.
+ */
+export const withLegacyProtocols = <P extends Protocol>(protocol: P) => {
+  const legacy = new Set<string>();
+  const register =
+    (kind: LegacyKind) =>
+    (
+      scheme: string,
+      handler: (
+        request: unknown,
+        callback: (answer: LegacyAnswer) => void,
+      ) => void,
+    ) => {
+      if (protocol.isProtocolHandled(scheme) && scheme !== "file") {
+        return false;
+      }
+      protocol.handle(scheme, async (request) => {
+        const asked = await legacyRequest(request);
+        const answer = await new Promise<LegacyAnswer>((resolve) => {
+          handler(asked, resolve);
+        });
+        return legacyResponse(kind, answer);
+      });
+      legacy.add(scheme);
+      return true;
+    };
+  return Object.assign(protocol, {
+    isProtocolRegistered: (scheme: string) => legacy.has(scheme),
+    registerBufferProtocol: register("buffer"),
+    registerFileProtocol: register("file"),
+    registerHttpProtocol: register("http"),
+    registerStreamProtocol: register("stream"),
+    registerStringProtocol: register("string"),
+    unregisterProtocol: (scheme: string) => {
+      const had = legacy.delete(scheme);
+      if (had) {
+        protocol.unhandle(scheme);
+      }
+      return had;
+    },
+  });
+};

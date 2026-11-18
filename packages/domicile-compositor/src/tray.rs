@@ -56,6 +56,10 @@ const ITEM_INTERFACE: &str = "org.kde.StatusNotifierItem";
 /// hung item would hold its read, and its thread, forever.
 const ANSWER_WITHIN: Duration = Duration::from_secs(3);
 
+/// The longest wait before reading an item that timed out again. The waits
+/// double from [`ANSWER_WITHIN`] up to this.
+const RETRY_AT_MOST: Duration = Duration::from_secs(60);
+
 /// Work for the worker thread.
 enum Event {
     /// `RegisterStatusNotifierItem(service)`, from `sender`.
@@ -82,6 +86,8 @@ enum Event {
     },
     /// The config's icon theme changed.
     Rethemed { theme: Option<String> },
+    /// Time to read item `id` again, after a read that timed out.
+    Retry { id: String },
 }
 
 /// A handle that forwards clicks to tray items.
@@ -211,6 +217,8 @@ fn answer(
         .interface::<_, Watcher>(WATCHER_PATH)?;
     let mut registry = Registry::default();
     let mut reads = Reads::default();
+    // Reads in a row that timed out, by item, for the wait before the next.
+    let mut timeouts: HashMap<String, u32> = HashMap::new();
     // Ends when every sender is dropped, when the compositor exits.
     for event in events {
         match event {
@@ -235,6 +243,7 @@ fn answer(
                 for id in registry.vanished(&name) {
                     debug!(%id, "a tray icon went away");
                     reads.forget(&id);
+                    timeouts.remove(&id);
                     listed(&watcher, &registry, None, Some(&id));
                 }
             }
@@ -250,6 +259,7 @@ fn answer(
                 if let Landed::Current { again } = reads.landed(&id, sequence) {
                     match properties {
                         Ok(properties) => {
+                            timeouts.remove(&id);
                             let properties = parse(properties);
                             let name = registry.named(&id, &properties.id);
                             let (bus, _) = registry
@@ -258,14 +268,25 @@ fn answer(
                             registry.show(&id, item(&name, &bus, properties, &mut icons));
                         }
                         // Kept registered but hidden: there is nothing to
-                        // draw. Its next signal reads it again.
+                        // draw. Its next signal reads it again, and so does
+                        // a wait after a timeout: an application busy
+                        // starting up, as many are at login, answers late
+                        // and may never signal.
                         Err(why) => {
-                            if timed_out(&why) && reads.hung(&id) {
-                                warn!(
-                                    %id,
-                                    "a tray icon did not answer within {ANSWER_WITHIN:?}; \
-                                     it is hidden until it signals a change"
-                                );
+                            if timed_out(&why) {
+                                let wait = retry_after(timeouts.entry(id.clone()).or_default());
+                                if reads.hung(&id) {
+                                    warn!(
+                                        %id,
+                                        "a tray icon did not answer within {ANSWER_WITHIN:?}; \
+                                         it is hidden until it answers, asked again in {wait:?}"
+                                    );
+                                } else {
+                                    debug!(%id, ?wait, "a tray icon timed out again");
+                                }
+                                if again.is_none() {
+                                    retry(&told, &id, wait);
+                                }
                             } else {
                                 debug!(%id, %why, "a tray icon could not be read");
                             }
@@ -284,6 +305,12 @@ fn answer(
             }
             Event::Activate { id, action, token } => {
                 activate(&connection, &registry, &id, action, &token);
+            }
+            Event::Retry { id } => {
+                // Unless it went away meanwhile.
+                if registry.address(&id).is_some() {
+                    read(&connection, &told, &mut reads, &registry, &id);
+                }
             }
             // Read every item again: the registry keeps what it drew, not the
             // names it drew from.
@@ -366,6 +393,26 @@ fn start(
             sequence,
             properties,
         });
+    });
+}
+
+/// The wait before reading an item again after its `timeouts`-th read in a
+/// row timed out, counting this one: [`ANSWER_WITHIN`], doubling up to
+/// [`RETRY_AT_MOST`].
+fn retry_after(timeouts: &mut u32) -> Duration {
+    *timeouts = timeouts.saturating_add(1);
+    ANSWER_WITHIN
+        .saturating_mul(1 << (*timeouts - 1).min(16))
+        .min(RETRY_AT_MOST)
+}
+
+/// Sends [`Event::Retry`] for `id` after `wait`.
+fn retry(told: &Sender<Event>, id: &str, wait: Duration) {
+    let (told, id) = (told.clone(), id.to_string());
+    thread::spawn(move || {
+        thread::sleep(wait);
+        // A closed channel means the worker stopped and already logged why.
+        let _ = told.send(Event::Retry { id });
     });
 }
 
@@ -609,6 +656,17 @@ mod tests {
     use crate::portals::socket_pair::connected_both;
     use std::time::Instant;
     use zbus::zvariant::{ObjectPath, Value};
+
+    #[test]
+    fn a_hung_item_is_asked_again_ever_more_slowly() {
+        let mut timeouts = 0;
+        let waits: Vec<Duration> = (0..7).map(|_| retry_after(&mut timeouts)).collect();
+        assert_eq!(
+            waits,
+            [3, 6, 12, 24, 48, 60, 60].map(Duration::from_secs),
+            "doubling from the answer timeout, capped"
+        );
+    }
 
     #[test]
     fn a_read_of_an_item_that_never_answers_times_out() {

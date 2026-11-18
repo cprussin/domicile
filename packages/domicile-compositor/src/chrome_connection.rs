@@ -8,21 +8,26 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
-use domicile_host::system::{locked_out, reach, refused_to_an_app, Handled, System};
+use domicile_host::system::{
+    locked_out, reach, refused_to_an_app, AgentTold, Agents, Handled, LetIn, System,
+};
 use domicile_launch::handshake::Handshake;
 use domicile_protocol::{
-    negotiate, ChromeMessage, DisplayChange, HostMessage, SystemError, SystemErrorKind,
-    SystemRequest, Theme, WindowAct, PROTOCOL_VERSION,
+    negotiate, ChromeMessage, DeskShot, DisplayChange, EmulatedInput, HostMessage, KnownAgents,
+    SystemError, SystemErrorKind, SystemRequest, Theme, WindowAct, PROTOCOL_VERSION,
 };
 use tracing::{debug, error, warn};
 
 use crate::chrome_hub::{broadcast_focus_request, Chrome, ChromeHub};
 use crate::client_requests::ClientRequest;
 use crate::configured_displays::Answer;
+use crate::emulated_input::{steps, Step};
 use crate::grepped;
+use crate::keymap::Keyboard;
 use crate::lock::Asked;
 use crate::locking::say_what_the_lock_refused;
 use crate::peer_process::peer_pid;
+use crate::portals::agent::OpenWindows;
 use crate::scale::output_scale;
 use crate::spawning::{desktop_environment, home_directory, terminal_variable};
 use crate::theme_turnover::chrome_key;
@@ -166,6 +171,36 @@ fn chrome_connection(
 }
 
 /// The pinch, swipe or hold a connection began ends with it.
+/// The desk's agents, offered the windows `hub`'s host lists.
+struct HubAgents {
+    hub: Arc<ChromeHub>,
+}
+
+impl Agents for HubAgents {
+    fn let_in(&self, agent: String, told: AgentTold) -> Result<LetIn, SystemError> {
+        let hub = self.hub.clone();
+        let windows: OpenWindows =
+            Arc::new(move || match hub.host.lock().unwrap().list_windows() {
+                HostMessage::WindowList { windows } => windows,
+                listed => unreachable!("the host lists windows as a window list, not {listed:?}"),
+            });
+        self.hub.portals.agents().let_in(agent, windows, told)
+    }
+
+    fn known(&self) -> KnownAgents {
+        self.hub.portals.agents().known()
+    }
+
+    fn stop(&self, session: u32) -> Result<(), SystemError> {
+        self.hub.portals.agents().stop(session)
+    }
+
+    fn forget(&self, agent: &str) -> Result<(), SystemError> {
+        self.hub.portals.agents().forget(agent);
+        Ok(())
+    }
+}
+
 struct GestureOwner<'a> {
     hub: &'a ChromeHub,
     id: usize,
@@ -232,6 +267,7 @@ fn read_chrome_messages(
         let portals = hub.portals.clone();
         move || portals.screen_record()
     })
+    .letting_agents_in(HubAgents { hub: hub.clone() })
     .previewing_with({
         let portals = hub.portals.clone();
         move |window| portals.preview(window)
@@ -479,6 +515,18 @@ fn read_chrome_messages(
                     refused: configure_display(hub, display, change).err(),
                 }]
             }
+            // Waits for a frame of every monitor. Only `domicile screenshot
+            // --fit` sends it, on a connection of its own.
+            Ok(ChromeMessage::ShootDesk { file, fit }) => {
+                let shot = shoot_desk(hub, file, fit);
+                vec![HostMessage::DeskShot {
+                    shot: shot.as_ref().ok().copied(),
+                    refused: shot.err(),
+                }]
+            }
+            Ok(ChromeMessage::Emulate { input }) => vec![HostMessage::Emulated {
+                refused: emulate(hub, &input).err(),
+            }],
             // For `domicile subscribe`. Not checked against the lock: each
             // topic is one a `which_*` answers while locked. The writer thread
             // sends the answers, so this thread never waits on them.
@@ -873,6 +921,41 @@ fn act_on_window(hub: &ChromeHub, id: &str, act: WindowAct) -> Result<(), String
                     std::io::Error::last_os_error()
                 ));
             }
+        }
+    }
+    Ok(())
+}
+
+/// Write a PNG of the desk to `file` for `domicile screenshot --fit`, or say
+/// why not. Refused while locked, like the shell's own screenshot.
+fn shoot_desk(hub: &ChromeHub, file: String, fit: u32) -> Result<DeskShot, String> {
+    if hub.the_desk_is_locked() {
+        return Err("the desktop is locked".to_string());
+    }
+    hub.portals.shoot_desk(file.into(), fit)
+}
+
+/// Send `input` to the desk for `domicile pointer`, `key` and `type`, or say
+/// why not. Nothing is sent when any of it cannot be. Refused while locked,
+/// as [`crate::eis`] refuses every emulated event then.
+fn emulate(hub: &ChromeHub, input: &[EmulatedInput]) -> Result<(), String> {
+    if hub.the_desk_is_locked() {
+        return Err("the desktop is locked".to_string());
+    }
+    let keymap = match hub.host.lock().unwrap().describe_keymap() {
+        Some(HostMessage::Keymap { keymap }) => keymap,
+        _ => return Err("the desktop has no keyboard yet".to_string()),
+    };
+    let keyboard = Keyboard::from_text(&keymap)
+        .expect("the compositor wrote this keymap, so xkb reads it back");
+    let steps = steps(input, &keyboard)?;
+    let eis = hub.eis.get().ok_or("the desktop takes no input yet")?;
+    // Dropped at the end, which lets go of every key and button it holds.
+    let emulator = eis.emulate();
+    for step in steps {
+        match step {
+            Step::Send(emulated) => emulator.send(emulated),
+            Step::Keysym { keysym, pressed } => emulator.keysym(keysym, pressed),
         }
     }
     Ok(())

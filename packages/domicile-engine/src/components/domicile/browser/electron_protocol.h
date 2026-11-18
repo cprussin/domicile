@@ -28,20 +28,45 @@ namespace domicile {
 //   {"type":"hello","version":1,"app_id":"com.anthropic.Claude",
 //    "partition":"persist:electron-claude"}
 //   -> {"type":"ready","schemes":[{"scheme":"app",
-//                                  "privileges":["standard","secure"]}]}
+//                                  "privileges":["standard","secure"]}],
+//       "user_agent":"Mozilla/5.0 ... Chrome/160.0.0.0 Safari/537.36",
+//       "chrome_version":"160.0.8155.0"}
 //        (the apps' own schemes the engine registered as it started; see
-//        components/domicile/common/electron_schemes.h)
+//        components/domicile/common/electron_schemes.h. The engine's own
+//        user agent and Chrome version, which Electron's user agent is
+//        made from.)
 //   -> {"type":"refused","why":"..."}
 //
 //   {"type":"open_window","window":1,"url":"https://claude.ai/",
 //    "preload":"...the preload's source...",       ("preload" may be left out)
-//    "session":"persist:cowork"}           (Electron's partition; left out
+//    "session":"persist:cowork",           (Electron's partition; left out
 //                                           or "" is the app's own session)
+//    "title":"Claude",                     (the window's own title, which
+//                                           the desktop shows over its
+//                                           page's; left out for none)
+//    "hidden":true,                        (show: false; left out is shown)
+//    "node":{"preload":"/abs/preload.js",  (a window that isn't sandboxed:
+//            "integration":false,           Node.js in its page; see
+//            "context_isolation":true,      ElectronNode. Left out, the
+//            "resources_path":"/abs",       page is sandboxed. With it the
+//            "app_path":"/abs/app",         preload is a file, so the
+//            "electron_version":"45.2.1",   top-level "preload" is left
+//            "env":{"HOME":"/home/a"}}}     out)
 //   -> {"type":"window_opened","window":1}
 //   -> {"type":"window_refused","window":1,"why":"..."}
 //
 //   {"type":"load_url","window":1,"url":"https://claude.ai/new"}
 //   {"type":"focus_window","window":1}
+//   {"type":"set_title","window":1,"title":"Claude"}
+//                                          (win.setTitle, and a page title
+//                                           the app let through)
+//   {"type":"set_user_agent_fallback","user_agent":"..."}
+//                                          (app.userAgentFallback: the user
+//                                           agent of each session without
+//                                           its own)
+//   {"type":"set_hidden","window":1,"hidden":true}
+//                                          (win.hide, and win.show with
+//                                           false)
 //   {"type":"close_window","window":1}     (the page may refuse)
 //   {"type":"destroy_window","window":1}   (closes without asking)
 //   {"type":"ipc_send","window":1,"channel":"c","args":[...]}
@@ -80,9 +105,14 @@ namespace domicile {
 //
 // The engine also says, on its own:
 //
+//   {"type":"window_dom_ready","window":1}  (its main frame's
+//                                           DOMContentLoaded)
 //   {"type":"window_loaded","window":1}
 //   {"type":"title_changed","window":1,"title":"Claude"}
 //   {"type":"window_closed","window":1}
+//   {"type":"close_asked","window":1}      (the user asked to close the
+//                                           window: the app decides, as a
+//                                           BrowserWindow's `close` event)
 //   {"type":"ipc_message","window":1,"channel":"c","args":[...]}
 //                                          (ipcRenderer.send)
 //   {"type":"ipc_invoke","window":1,"invoke":3,"channel":"c","args":[...]}
@@ -155,6 +185,14 @@ inline constexpr int kElectronProtocolVersion = 1;
 // A window's number, from 1. The host counts them up from 1, so an int lasts.
 using ElectronWindow = int;
 
+// What the engine tells each app of itself as it says ready.
+struct ElectronEngineInfo {
+  // The engine's own user agent, its pages' by default.
+  std::string user_agent;
+  // Chrome's full version, which Electron's user agent names.
+  std::string chrome_version;
+};
+
 struct ElectronHello {
   // The app's desktop id, never empty.
   std::string app_id;
@@ -162,16 +200,50 @@ struct ElectronHello {
   WebViewPartition partition;
 };
 
+// Node.js in a window's page, as Electron gives a window that isn't
+// sandboxed: its preload loads through Node's require, in its own world, or
+// in the page's without context isolation, where with nodeIntegration the
+// page keeps Node's globals. See "Phase 2" in
+// docs/architecture/ELECTRON-APPS.md.
+struct ElectronNode {
+  // The preload's file; empty for none.
+  std::string preload;
+  // nodeIntegration: Node's require and globals in the page's own world.
+  // Electron gives them only without context isolation.
+  bool integration = false;
+  // contextIsolation: the preload runs in a world of its own, not the
+  // page's.
+  bool context_isolation = true;
+  // process.resourcesPath, and the app's directory, which a page that isn't
+  // a file searches for modules from.
+  std::string resources_path;
+  std::string app_path;
+  // process.versions.electron: the Electron the app is told it runs on.
+  std::string electron_version;
+  // The main process's environment, which an Electron page's process.env
+  // is.
+  std::vector<std::pair<std::string, std::string>> env;
+
+  friend bool operator==(const ElectronNode&, const ElectronNode&) = default;
+};
+
 struct ElectronOpenWindow {
   ElectronWindow window;
   GURL url;
-  // The preload's source; empty for none.
+  // The preload's source, for a sandboxed page; empty for none.
   std::string preload;
+  // Node.js in the page, for a window that isn't sandboxed; none when it is.
+  std::optional<ElectronNode> node;
   // Its Electron partition; empty for the app's own session.
   std::string session;
   // A WebContentsView's page rather than a BrowserWindow: listed to the shell
   // only while a window holds it (ElectronSetViews).
   bool view = false;
+  // A window's own title, which the desktop shows instead of its page's;
+  // empty for none. Never a view's.
+  std::string title;
+  // Whether the window opens hidden, as `show: false`. Never a view.
+  bool hidden = false;
 };
 
 // Where a window holds one of its views, in CSS pixels from the top left of
@@ -236,6 +308,26 @@ struct ElectronCloseWindow {
   ElectronWindow window;
 };
 
+// win.setTitle, and a page title the app let through: the title the desktop
+// shows for `window` from now on, over its page's.
+struct ElectronSetTitle {
+  ElectronWindow window;
+  std::string title;
+};
+
+// win.hide and win.show: a hidden window stays open, its page running, and
+// the desktop doesn't show it.
+struct ElectronSetHidden {
+  ElectronWindow window;
+  bool hidden = false;
+};
+
+// app.userAgentFallback: the user agent of the pages of each session that
+// has none of its own.
+struct ElectronSetUserAgentFallback {
+  std::string user_agent;
+};
+
 struct ElectronDestroyWindow {
   ElectronWindow window;
 };
@@ -245,6 +337,19 @@ struct ElectronSendToPage {
   ElectronWindow window;
   std::string channel;
   base::ListValue args;
+};
+
+// webContents.executeJavaScript: runs `code` in the main world of window
+// `window`'s page, as if the user had acted when `user_gesture`, and answers
+// with ElectronJavaScriptResult under `call`, once a promise it gives settles.
+struct ElectronExecuteJavaScript {
+  ElectronWindow window;
+  int call = 0;
+  std::string code;
+  bool user_gesture = false;
+
+  friend bool operator==(const ElectronExecuteJavaScript&,
+                         const ElectronExecuteJavaScript&) = default;
 };
 
 // webContents.postMessage: `message` and the main process's ends of `ports`
@@ -573,7 +678,11 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronPermissionAnswer,
                                      ElectronSetViews,
                                      ElectronSetMenuBar,
-                                     ElectronShowMessageBox>;
+                                     ElectronShowMessageBox,
+                                     ElectronExecuteJavaScript,
+                                     ElectronSetTitle,
+                                     ElectronSetHidden,
+                                     ElectronSetUserAgentFallback>;
 
 // Why a line is not a request, and which window or protocol request it was
 // for when it names one, so the app hears of it as that window's and the
@@ -602,7 +711,14 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
 
 // The lines the engine sends, each ending in a newline.
 // `schemes` are the apps' own schemes the engine registered as it started.
-std::string ElectronReady(const std::vector<ElectronScheme>& schemes);
+std::string ElectronReady(const std::vector<ElectronScheme>& schemes,
+                          const ElectronEngineInfo& engine);
+// The answer to window `window`'s executeJavaScript `call`: what the code
+// gave, or why it gave nothing.
+std::string ElectronJavaScriptResult(
+    ElectronWindow window,
+    int call,
+    const base::expected<base::Value, std::string>& result);
 // The answer to session call `call`: its result (null when it has none), or
 // why it failed.
 std::string ElectronSessionResult(
@@ -615,8 +731,11 @@ std::string ElectronRefused(std::string_view why);
 std::string ElectronWindowOpened(ElectronWindow window);
 std::string ElectronWindowRefused(ElectronWindow window, std::string_view why);
 std::string ElectronWindowLoaded(ElectronWindow window);
+std::string ElectronWindowDomReady(ElectronWindow window);
 std::string ElectronTitleChanged(ElectronWindow window, std::string_view title);
 std::string ElectronWindowClosed(ElectronWindow window);
+// The user asked to close `window`, which closes only if the app closes it.
+std::string ElectronCloseAsked(ElectronWindow window);
 // The size, in CSS pixels, the shell gave window or view `window`'s page.
 std::string ElectronWindowResized(ElectronWindow window, int width, int height);
 // The user clicked entry `command` of `window`'s menu bar.

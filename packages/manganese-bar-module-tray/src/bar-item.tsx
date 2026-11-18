@@ -11,8 +11,17 @@ import { useTrayState } from "./tray-context";
 export const Tray = () => {
   const domicile = useDomicile();
   const { screen } = useBar();
-  const { clicked, extensions, installed, items, open, opened, order, pins } =
-    useTrayState();
+  const {
+    clicked,
+    extensions,
+    installed,
+    items,
+    open,
+    opened,
+    order,
+    pins,
+    profile,
+  } = useTrayState();
   return (
     <TrayRow
       domicile={domicile}
@@ -34,6 +43,7 @@ export const Tray = () => {
             domicile.processes.launch(["domicile-settings"]);
           }}
           onUnpin={pins.unpin}
+          profile={profile}
           unpinned={pins.unpinned}
         />
       }

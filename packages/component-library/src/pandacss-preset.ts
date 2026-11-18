@@ -612,8 +612,10 @@ export const domicilePreset = definePreset({
         sizes: quarterStepSpacing,
         spacing: quarterStepSpacing,
         zIndex: {
-          // Above everything, so an open panel can't be used while locked.
-          lock: { value: "202" },
+          // Above everything, so an open panel can't be used while locked and
+          // the veil blurs the whole desk. The highest z-index there is, since
+          // a shell stacks its windows at depths of its own.
+          lock: { value: "2147483647" },
           modal: { value: "201" },
           modalBackdrop: { value: "200" },
           // Below modals so it never covers a dialog, and below the lock

@@ -50,6 +50,7 @@
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_clipboard_entry.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_browser_profile.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_browser_window.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_cast_sink.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_picture_in_picture_video.h"
@@ -1239,6 +1240,19 @@ void DomicileHost::activateExtension(ScriptState*,
   }
 }
 
+// Over the tray's pipe, as activateExtension().
+void DomicileHost::setExtensionsProfile(ScriptState*,
+                                        const String& profile,
+                                        ExceptionState& exception_state) {
+  if (profile.empty()) {
+    exception_state.ThrowTypeError("profile must be a browser profile's id");
+    return;
+  }
+  if (Ready(exception_state)) {
+    tray_->SetProfile(profile);
+  }
+}
+
 namespace {
 
 // The browser's answer to a change asked of an extension: empty for done, or
@@ -1300,9 +1314,6 @@ ScriptPromise<IDLUndefined> DomicileHost::configureExtension(
     return EmptyPromise();
   }
   auto wanted = domicile::mojom::blink::ExtensionSettings::New();
-  if (settings->hasInPrivate()) {
-    wanted->in_private = settings->inPrivate();
-  }
   if (settings->hasFileAccess()) {
     wanted->file_access = settings->fileAccess();
   }
@@ -2107,7 +2118,7 @@ void DomicileHost::ExtensionsChanged(
         extension->id, extension->name, extension->title, extension->icon,
         extension->badge_text, extension->badge_color,
         extension->popup.empty() ? String() : extension->popup,
-        extension->enabled));
+        extension->enabled, extension->profile));
   }
   extensions_ =
       MakeGarbageCollected<FrozenArray<DomicileExtension>>(std::move(tray));
@@ -2131,9 +2142,11 @@ void DomicileHost::InstalledChanged(
 }
 
 // Dispatched, not held: see onextensionpopuprequested in the IDL.
-void DomicileHost::PopupRequested(const String& id, const String& popup) {
+void DomicileHost::PopupRequested(const String& id,
+                                  const String& popup,
+                                  const String& profile) {
   DispatchEvent(*MakeGarbageCollected<DomicileExtensionPopupEvent>(
-      domicile_event_names::Extensionpopuprequested(), id, popup));
+      domicile_event_names::Extensionpopuprequested(), id, popup, profile));
 }
 
 // An answer to searchFiles(): it settles the promise that asked it.
@@ -2310,14 +2323,16 @@ void DomicileHost::FocusRequested(const String& app_id) {
 void DomicileHost::openBrowserWindow(ScriptState*,
                                      const String& url,
                                      const String& partition,
+                                     const String& profile,
                                      ExceptionState& exception_state) {
-  OpenBrowserWindow(url, WindowKind::kBrowser, partition, exception_state);
+  OpenBrowserWindow(url, WindowKind::kBrowser, profile, partition,
+                    exception_state);
 }
 
 void DomicileHost::openPrivateBrowserWindow(ScriptState*,
                                             const String& url,
                                             ExceptionState& exception_state) {
-  OpenBrowserWindow(url, WindowKind::kPrivate, g_empty_string,
+  OpenBrowserWindow(url, WindowKind::kPrivate, g_empty_string, g_empty_string,
                     exception_state);
 }
 
@@ -2351,12 +2366,24 @@ void SettleBrowserWindowCount(ScriptPromiseResolver<IDLLong>* resolver,
   resolver->Resolve(*count);
 }
 
+void SettleBrowserWindowClick(ScriptPromiseResolver<IDLBoolean>* resolver,
+                              std::optional<bool> clicked) {
+  if (!clicked.has_value()) {
+    resolver->RejectWithDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "The browser window is gone, or its page gave no answer.");
+    return;
+  }
+  resolver->Resolve(*clicked);
+}
+
 }  // namespace
 
 void DomicileHost::openAppWindow(ScriptState*,
                                  const String& url,
                                  const String& app_id,
                                  const String& reuse,
+                                 const String& profile,
                                  ExceptionState& exception_state) {
   // Resolved against this document, as openBrowserWindow's is.
   const KURL resolved = window_->CompleteURL(url);
@@ -2378,7 +2405,7 @@ void DomicileHost::openAppWindow(ScriptState*,
     return;
   }
   if (Ready(exception_state)) {
-    windows_->OpenApp(resolved, app_id, *named);
+    windows_->OpenApp(resolved, app_id, *named, profile);
   }
 }
 
@@ -2405,8 +2432,31 @@ ScriptPromise<IDLLong> DomicileHost::countBrowserWindowMatches(
   return promise;
 }
 
+ScriptPromise<IDLBoolean> DomicileHost::clickBrowserWindowMatch(
+    ScriptState* script_state,
+    const String& id,
+    const String& selector,
+    ExceptionState& exception_state) {
+  // Parsed here, as countBrowserWindowMatches parses it.
+  window_->document()->QuerySelector(AtomicString(selector), exception_state);
+  if (exception_state.HadException()) {
+    return EmptyPromise();
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLBoolean>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  windows_->ClickMatch(
+      id, selector,
+      BindOnce(&SettleBrowserWindowClick, WrapPersistent(resolver)));
+  return promise;
+}
+
 void DomicileHost::OpenBrowserWindow(const String& url,
                                      WindowKind kind,
+                                     const String& profile,
                                      const String& partition,
                                      ExceptionState& exception_state) {
   // Resolved against this document, as a <webview src> is. An unresolvable
@@ -2428,10 +2478,12 @@ void DomicileHost::OpenBrowserWindow(const String& url,
   if (Ready(exception_state)) {
     switch (kind) {
       case WindowKind::kBrowser:
-        windows_->Open(resolved, /*private_browsing=*/false, partition);
+        windows_->Open(resolved, /*private_browsing=*/false, profile,
+                       partition);
         break;
       case WindowKind::kPrivate:
-        windows_->Open(resolved, /*private_browsing=*/true, partition);
+        windows_->Open(resolved, /*private_browsing=*/true, profile,
+                       partition);
         break;
     }
   }
@@ -2447,6 +2499,135 @@ void DomicileHost::closeBrowserWindow(ScriptState*,
   if (Ready(exception_state)) {
     windows_->Close(id);
   }
+}
+
+namespace {
+
+// The browser's answer to browserProfileFor().
+void SettleBrowserProfile(ScriptPromiseResolver<IDLString>* resolver,
+                          const String& profile) {
+  resolver->Resolve(profile);
+}
+
+}  // namespace
+
+void DomicileHost::reopenBrowserWindow(ScriptState*,
+                                       const String& id,
+                                       const String& profile,
+                                       ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a browser window's id");
+    return;
+  }
+  if (profile.empty()) {
+    exception_state.ThrowTypeError("profile must be a browser profile's id");
+    return;
+  }
+  if (Ready(exception_state)) {
+    windows_->Reopen(id, profile);
+  }
+}
+
+ScriptPromise<IDLString> DomicileHost::browserProfileFor(
+    ScriptState* script_state,
+    const String& url,
+    ExceptionState& exception_state) {
+  // Resolved against this document, as openBrowserWindow's is.
+  const KURL resolved = window_->CompleteURL(url);
+  if (!resolved.IsValid()) {
+    exception_state.ThrowTypeError("url must be an address");
+    return EmptyPromise();
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLString>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  windows_->ProfileFor(
+      resolved, BindOnce(&SettleBrowserProfile, WrapPersistent(resolver)));
+  return promise;
+}
+
+namespace {
+
+// The browser's answer to browserSiteFor(): empty for none.
+void SettleBrowserSite(ScriptPromiseResolver<IDLString>* resolver,
+                       const String& site) {
+  resolver->Resolve(site.IsNull() ? g_empty_string : site);
+}
+
+}  // namespace
+
+ScriptPromise<IDLString> DomicileHost::browserSiteFor(
+    ScriptState* script_state,
+    const String& url,
+    ExceptionState& exception_state) {
+  // Resolved against this document, as browserProfileFor's is.
+  const KURL resolved = window_->CompleteURL(url);
+  if (!resolved.IsValid()) {
+    exception_state.ThrowTypeError("url must be an address");
+    return EmptyPromise();
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLString>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  windows_->SiteFor(resolved,
+                    BindOnce(&SettleBrowserSite, WrapPersistent(resolver)));
+  return promise;
+}
+
+ScriptPromise<IDLUndefined> DomicileHost::pinBrowserSite(
+    ScriptState* script_state,
+    const String& site,
+    const String& profile,
+    ExceptionState& exception_state) {
+  if (site.empty()) {
+    exception_state.ThrowTypeError("site must be a site, such as a host");
+    return EmptyPromise();
+  }
+  if (profile.empty()) {
+    exception_state.ThrowTypeError("profile must be a browser profile's id");
+    return EmptyPromise();
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  windows_->PinSite(site, profile,
+                    BindOnce(&ExtensionAnswered, WrapPersistent(resolver)));
+  return promise;
+}
+
+ScriptPromise<IDLUndefined> DomicileHost::setBrowserProfileExtensionEnabled(
+    ScriptState* script_state,
+    const String& profile,
+    const String& id,
+    bool enabled,
+    ExceptionState& exception_state) {
+  if (profile.empty()) {
+    exception_state.ThrowTypeError("profile must be a browser profile's id");
+    return EmptyPromise();
+  }
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a non-empty extension id");
+    return EmptyPromise();
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  windows_->SetExtensionEnabled(
+      profile, id, enabled,
+      BindOnce(&ExtensionAnswered, WrapPersistent(resolver)));
+  return promise;
 }
 
 void DomicileHost::clickBrowserWindowMenu(ScriptState*,
@@ -2664,6 +2845,7 @@ ScriptPromise<DomicileFetchResponse> DomicileHost::fetchWithCookies(
     const HeapVector<Member<DomicileFetchHeader>>& headers,
     const String& body,
     const String& sapisid_hash_origin,
+    const String& profile,
     ExceptionState& exception_state) {
   const KURL resolved = window_->CompleteURL(url);
   if (!resolved.IsValid()) {
@@ -2693,7 +2875,7 @@ ScriptPromise<DomicileFetchResponse> DomicileHost::fetchWithCookies(
   auto promise = resolver->Promise();
   // The browser checks the method and the body: see shell_fetch.h.
   shell_fetch_->Fetch(resolved, method, std::move(sent), body,
-                      sapisid_hash_origin,
+                      sapisid_hash_origin, profile,
                       BindOnce(&Fetched, WrapPersistent(resolver)));
   return promise;
 }
@@ -2728,7 +2910,9 @@ void DomicileHost::ListBrowserWindows() {
             ? std::nullopt
             : std::optional<int32_t>(window->popup_window),
         window->width, window->height, window->private_browsing,
-        window->partition, window->app, window->app_id, window->captured,
+        window->partition,
+        window->profile.empty() ? String() : String(window->profile),
+        window->app, window->app_id, window->captured,
         toplevel_id == browser_toplevel_ids_.end() ? String()
                                                    : toplevel_id->value,
         window->parent.empty() ? String() : String(window->parent), window->x,
@@ -2741,6 +2925,39 @@ void DomicileHost::ListBrowserWindows() {
       std::move(listed));
   DispatchEvent(
       *Event::Create(domicile_event_names::Browserwindowschanged()));
+}
+
+// Stored, like WindowsChanged.
+void DomicileHost::ProfilesChanged(
+    Vector<domicile::mojom::blink::BrowserProfilePtr> profiles,
+    const String& default_profile,
+    const String& default_private_profile) {
+  HeapVector<Member<DomicileBrowserProfile>> listed;
+  listed.reserve(profiles.size());
+  for (const auto& profile : profiles) {
+    Vector<String> extensions;
+    Vector<String> enabled;
+    Vector<String> locked;
+    for (const auto& extension : profile->extensions) {
+      extensions.push_back(extension->id);
+      if (extension->enabled) {
+        enabled.push_back(extension->id);
+      }
+      if (extension->locked) {
+        locked.push_back(extension->id);
+      }
+    }
+    listed.push_back(MakeGarbageCollected<DomicileBrowserProfile>(
+        profile->id, profile->name, profile->color, profile->private_browsing,
+        profile->id == default_profile,
+        profile->id == default_private_profile, profile->pinned_sites,
+        profile->config_sites, extensions, enabled, locked));
+  }
+  browser_profiles_ =
+      MakeGarbageCollected<FrozenArray<DomicileBrowserProfile>>(
+          std::move(listed));
+  DispatchEvent(
+      *Event::Create(domicile_event_names::Browserprofileschanged()));
 }
 
 // Stored, like WindowsChanged.
@@ -2906,6 +3123,7 @@ ExecutionContext* DomicileHost::GetExecutionContext() const {
 void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(displays_);
   visitor->Trace(browser_windows_);
+  visitor->Trace(browser_profiles_);
   visitor->Trace(cast_sinks_);
   visitor->Trace(downloads_);
   visitor->Trace(picture_in_picture_videos_);

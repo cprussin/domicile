@@ -14,6 +14,7 @@ use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -21,19 +22,25 @@ use std::time::{Duration, Instant};
 use domicile_host::data_dirs::data_dirs;
 use domicile_host::desk_terminal;
 use domicile_host::mime_apps::lists;
+use domicile_launch::accessibility::{self, AtSpi, Element};
+use domicile_launch::agent_lending::{admit, forward_actions, DECIDING_WITHIN};
 use domicile_launch::app_entry::app_entry;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation, Listing, MonitorMode, USAGE};
 use domicile_launch::command_socket::{
-    clear_browsing_data, clear_site_data, config_extensions, configure_extension, delete_history,
-    disable_while_typing, extensions, history, load_shell, load_unpacked, media_devices, open_app,
-    open_url, run_app, set_extension_enabled, set_media_device, set_site_permission, site_data,
-    site_permissions, uninstall_extension, visits,
+    browser_profiles, clear_browsing_data, clear_site_data, config_extensions, configure_extension,
+    delete_history, devtools, disable_while_typing, extensions, history, load_shell, load_unpacked,
+    media_devices, open_app, open_url, pin_browser_site, run_app, set_extension_enabled,
+    set_media_device, set_site_permission, site_data, site_permissions, uninstall_extension,
+    visits,
 };
-use domicile_launch::components::{builder, components, electron_host, our_shell, Components};
+use domicile_launch::components::{
+    builder, components, electron_host, engine as engine_path, our_shell, version_file, Components,
+};
 use domicile_launch::compositor_socket::{
-    act_on_window, configure_display, displays, inputs, lock, monitors, power_displays,
-    screen_record, screenshot, send_shell, shell_bindings, shell_commands, status, theme, windows,
+    act_on_window, agents, configure_display, displays, emulate, forget_agent, inputs, lock,
+    monitors, power_displays, screen_record, screenshot, send_shell, shell_bindings,
+    shell_commands, shoot_desk, status, stop_agent, theme, windows,
 };
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
@@ -42,19 +49,23 @@ use domicile_launch::control::{
     answer, Desktop as ControlDesktop, Request, Response, SettingsFiles,
 };
 use domicile_launch::control_socket::{
-    address, advertised, ask, hold, listen, serve_one, take, Control, PATIENCE as ANSWER_WITHIN,
-    VARIABLE,
+    address, advertised, ask, hold, listen, serve_one, take, Control, Lenders,
+    PATIENCE as ANSWER_WITHIN, VARIABLE,
 };
+use domicile_launch::dev::{dev_socket, going_back, loading};
 use domicile_launch::electron_app::{electron_app, UNSUPPORTED_EXIT};
-use domicile_launch::electron_schemes::{self, schemes_switch};
+use domicile_launch::electron_schemes::{self, schemes_switch, with_known};
+use domicile_launch::electron_wrapper::{record, through_wrappers, WrapperError, RECORD};
 use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
 use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::idle_inhibit::{exit_code, inhibit_idle};
 use domicile_launch::install_app::{data_home, install_app, Fetched};
 use domicile_launch::listing::{
-    bindings_table, displays_table, inputs_table, shell_commands_table, status_table, windows_table,
+    agents_table, bindings_table, displays_table, inputs_table, shell_commands_table, status_table,
+    windows_table,
 };
+use domicile_launch::mcp;
 use domicile_launch::milestones::{reach, Milestone, Stalled};
 use domicile_launch::monitor_lending::{forward_sizes, lend};
 use domicile_launch::notification;
@@ -70,7 +81,7 @@ use domicile_launch::restart::{
 };
 use domicile_launch::serving::serve;
 use domicile_launch::session::Session;
-use domicile_launch::shell_path::Shell;
+use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::shell_source::{shell_source, ShellSource};
 use domicile_launch::software_compositing::{self, on_the_cpu};
 use domicile_launch::spawn::{
@@ -81,7 +92,8 @@ use domicile_launch::splash::{lay_out, tell, the_page_ends, Progress, ENDED};
 use domicile_launch::subscription::follow;
 use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
 use domicile_launch::uninstall_app::uninstall_app;
-use domicile_protocol::{Theme, WatchTopic};
+use domicile_launch::version::engine as engine_version;
+use domicile_protocol::{Theme, WatchTopic, WindowKind};
 
 /// How long each startup milestone may take. A debug build on a loaded
 /// machine takes seconds.
@@ -96,6 +108,10 @@ const LOAD_WITHIN: Duration = Duration::from_secs(10);
 /// How long a screenshot may take: the compositor reads back every monitor
 /// and encodes a PNG, which for several 4K monitors takes seconds.
 const CAPTURE_WITHIN: Duration = Duration::from_secs(10);
+
+/// How long the engine has to answer `devtools`: past the 10s it gives the
+/// page, so its own refusal arrives rather than a timeout.
+const DEVTOOLS_WITHIN: Duration = Duration::from_secs(12);
 
 /// How long the supervisor waits for the compositor to lay the desktop out
 /// again after `configure-display`. Longer than the compositor's own 5s, so
@@ -122,6 +138,17 @@ const FETCH_WITHIN: &str = "30";
 const WORTH_REPEATING: usize = 20;
 
 fn main() -> ExitCode {
+    // An Electron app's wrappers reached its program: see `electron_wrapper`.
+    let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+    if args.first().is_some_and(|first| first == RECORD) {
+        return match record(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(said) => {
+                eprintln!("domicile: {said}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     match run() {
         Ok(code) => code,
         Err(said) => {
@@ -136,7 +163,8 @@ fn run() -> Result<ExitCode, String> {
         Invocation::Run { shell, config } => desktop(shell.as_deref(), config.as_deref()),
         Invocation::Ask { request } => asked(&request),
         Invocation::Load { shell } => asked(&shell_to_load(&shell)?),
-        Invocation::Open { target } => opened(&target),
+        Invocation::Dev { entry } => developed(&entry),
+        Invocation::Open { target, profile } => opened(&target, profile),
         Invocation::Opener { target } => {
             let id = opener(&target, &typed_in()?, &places()).map_err(|why| why.to_string())?;
             if let Some(id) = id {
@@ -145,15 +173,29 @@ fn run() -> Result<ExitCode, String> {
             Ok(ExitCode::SUCCESS)
         }
         Invocation::OpenElectron { target, command } => electron_opened(&target, &command),
-        Invocation::OpenAsApp { target, id, reuse } => {
+        Invocation::OpenAsApp {
+            target,
+            id,
+            reuse,
+            profile,
+        } => {
             let here = typed_in()?;
             match app_opening(&target, &here).map_err(|why| why.to_string())? {
                 AppOpening::Module(_) if id.is_some() => Err(format!(
                     "--id is for a site; {target} is an app module, which opens \
                      a window of its own each time"
                 )),
+                AppOpening::Module(_) if profile.is_some() => Err(format!(
+                    "--profile is for a site; {target} is an app module, whose \
+                     page is its app's, in no browser profile"
+                )),
                 AppOpening::Module(entry) => ran_app(&entry, &here),
-                AppOpening::Address(url) => asked(&Request::OpenApp { url, id, reuse }),
+                AppOpening::Address(url) => asked(&Request::OpenApp {
+                    url,
+                    id,
+                    reuse,
+                    profile,
+                }),
             }
         }
         // Absolute here, since the compositor does not share this working
@@ -166,6 +208,12 @@ fn run() -> Result<ExitCode, String> {
                 })
                 .transpose()?,
         }),
+        // Absolute here, as for `Screenshot`.
+        Invocation::ShootDesk { file, fit } => asked(&Request::ShootDesk {
+            file: std::path::absolute(&file)
+                .map_err(|why| format!("cannot tell where {file} is: {why}"))?,
+            fit,
+        }),
         Invocation::Check { config } => check(&config).map(|()| ExitCode::SUCCESS),
         Invocation::Power { power } => powered(power),
         Invocation::Monitor { name, mode } => monitored(name, mode),
@@ -175,20 +223,66 @@ fn run() -> Result<ExitCode, String> {
             let status = inhibit_idle(&command)?;
             Ok(ExitCode::from(exit_code(status)))
         }
+        Invocation::Mcp => agents_served(),
+        Invocation::Agent { name } => admitted(name),
+        Invocation::Accessibility { window } => {
+            let (pid, title) = native_window(&window)?;
+            let mut bus = AtSpi::connected()?;
+            let root = accessibility::window(&mut bus, pid, &title)?;
+            print!("{}", accessibility::outline(&mut bus, &root)?);
+            Ok(ExitCode::SUCCESS)
+        }
+        Invocation::AccessibilityAct {
+            window,
+            element,
+            act,
+        } => {
+            let (pid, _) = native_window(&window)?;
+            let element = Element::named(&element).ok_or_else(|| {
+                format!("{element} is not an element's ref, as accessibility prints them")
+            })?;
+            accessibility::act_on(&mut AtSpi::connected()?, pid, &element, &act)?;
+            Ok(ExitCode::SUCCESS)
+        }
         Invocation::Help => {
             print!("{USAGE}");
             Ok(ExitCode::SUCCESS)
         }
+        Invocation::Version => versioned(),
         Invocation::InstallApp { url } => installed(&url),
         Invocation::UninstallApp { url } => uninstalled(&url),
     }
 }
 
+/// Prints the version file beside the binary, then the engine's provenance.
+fn versioned() -> Result<ExitCode, String> {
+    let binary = myself()?;
+    let read = |path: &Path| {
+        std::fs::read_to_string(path)
+            .map_err(|why| format!("cannot read {}: {why}", path.display()))
+    };
+    let env = |name: &str| std::env::var(name).ok();
+    let engine =
+        engine_path(&binary, &env, &|path| path.exists()).map_err(|missing| missing.to_string())?;
+    let built = read(&version_file(&binary))?;
+    let provenance = engine.join("PROVENANCE");
+    let engine = engine_version(&read(&provenance)?)
+        .map_err(|why| format!("{why}, at {}", provenance.display()))?;
+    print!("{built}");
+    println!("{engine}");
+    Ok(ExitCode::SUCCESS)
+}
+
 /// Opens `target` with what opens its type, in this process's place, or in a
-/// browser window of the running desktop; see `domicile_launch::open`.
-fn opened(target: &str) -> Result<ExitCode, String> {
+/// browser window of the running desktop, in browser profile `profile` when
+/// given; see `domicile_launch::open`. Only a web address takes a profile.
+fn opened(target: &str, profile: Option<String>) -> Result<ExitCode, String> {
     match opening(target, &typed_in()?, &places()).map_err(|why| why.to_string())? {
-        Opening::Browse(url) => asked(&Request::OpenUrl { url }),
+        Opening::Browse(url) => asked(&Request::OpenUrl { url, profile }),
+        Opening::Run(_) if profile.is_some() => Err(CliError::ProfileForAFile {
+            target: target.to_string(),
+        }
+        .to_string()),
         Opening::Run(argv) => {
             let (program, args) = argv
                 .split_first()
@@ -205,6 +299,9 @@ fn opened(target: &str) -> Result<ExitCode, String> {
 /// `electron-host`; see `domicile_launch::electron_app`. An app that needs
 /// what the engine doesn't do yet runs on its own Electron instead, with a
 /// notification saying so, when there is a `command` or entry to run.
+/// How long an app's wrappers may take to reach its program.
+const WRAPPERS_WAIT: std::time::Duration = std::time::Duration::from_secs(10);
+
 fn electron_opened(target: &str, command: &[String]) -> Result<ExitCode, String> {
     let applications: Vec<PathBuf> = places()
         .data_dirs
@@ -223,9 +320,29 @@ fn electron_opened(target: &str, command: &[String]) -> Result<ExitCode, String>
     let env = |name: &str| std::env::var(name).ok();
     let host = electron_host(&myself()?, &env, &|path| path.exists())
         .map_err(|missing| missing.to_string())?;
-    let status = Command::new(&host)
-        .arg(&app.resources)
-        .args(&app.args)
+    let recorder = myself()?;
+    let mut run = Command::new(&host);
+    run.arg(&app.resources);
+    // What the app's wrappers set (a preloaded library, programs on PATH,
+    // flags) reaches it on the engine too. An app run straight from its
+    // binary has none.
+    match app
+        .fallback
+        .as_deref()
+        .map(|command| through_wrappers(command, &app.resources, &recorder, WRAPPERS_WAIT))
+    {
+        Some(Ok(launch)) => {
+            run.args(&launch.args).env_clear().envs(launch.env);
+        }
+        Some(Err(WrapperError::NotBash { .. })) | None => {
+            run.args(&app.args);
+        }
+        Some(Err(why)) => {
+            eprintln!("domicile: {target} runs on the engine without what its wrappers set: {why}");
+            run.args(&app.args);
+        }
+    }
+    let status = run
         .status()
         .map_err(|why| format!("cannot run {}: {why}", host.display()))?;
     match (status.code(), app.fallback) {
@@ -359,6 +476,7 @@ fn curl(url: &str) -> Result<Fetched, String> {
 fn shell_to_load(shell: &str) -> Result<Request, String> {
     let page = shell_named(shell, None, None)?;
     Ok(Request::LoadShell {
+        dev_server: false,
         module: page.module,
         root: page.root,
     })
@@ -425,6 +543,7 @@ fn wanted(shell: &str, handed_in: Option<&str>, from: Option<&Path>) -> Result<W
                 Wanted::Ours(Shell {
                     root,
                     module: PathBuf::from("shell.js"),
+                    files: ShellFiles::Directory,
                 })
             })
             .map_err(|missing| missing.to_string()),
@@ -454,16 +573,10 @@ fn built(
     let env = |name: &str| std::env::var(name).ok();
     let builder =
         builder(binary, &env, &|path| path.exists()).map_err(|missing| missing.to_string())?;
-    let cache = env("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .or_else(|| env("HOME").map(|home| PathBuf::from(home).join(".cache")))
-        .ok_or("nowhere to keep built shells -- neither XDG_CACHE_HOME nor HOME is set")?
-        .join("domicile")
-        .join("shells");
     let mut child = Command::new(&builder)
         .args(asked)
         .arg("--cache")
-        .arg(&cache)
+        .arg(shells_cache()?)
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
@@ -512,6 +625,174 @@ fn built(
         _ => Err(format!(
             "the shell builder stopped ({status}) without saying it built anything\n{}",
             log.join("\n")
+        )),
+    }
+}
+
+/// Where the builder keeps built shells and dev servers' dependencies.
+fn shells_cache() -> Result<PathBuf, String> {
+    let env = |name: &str| std::env::var(name).ok();
+    Ok(env("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env("HOME").map(|home| PathBuf::from(home).join(".cache")))
+        .ok_or("nowhere to keep built shells -- neither XDG_CACHE_HOME nor HOME is set")?
+        .join("domicile")
+        .join("shells"))
+}
+
+/// `domicile dev <entry>`: serves the shell whose source starts at `entry`
+/// from the builder's dev server, with hot module replacement, until Ctrl-C;
+/// then loads the shell it replaced again and stops the dev server.
+///
+/// The dev server's log, such as each update it sends, goes to this
+/// terminal.
+fn developed(entry: &str) -> Result<ExitCode, String> {
+    let desktop =
+        advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
+    let typed = typed_in()?.join(entry);
+    let entry = std::fs::canonicalize(&typed)
+        .ok()
+        .filter(|found| found.is_file())
+        .ok_or_else(|| {
+            format!(
+                "there is no file at {} to serve. dev takes the file your \
+                 shell's source starts at, such as src/shell.tsx.",
+                typed.display()
+            )
+        })?;
+    let back = going_back(
+        ask(&desktop, &Request::WhichShell, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())?,
+    )?;
+    let runtime = std::env::var_os("XDG_RUNTIME_DIR").ok_or(
+        "XDG_RUNTIME_DIR is not set, and the dev server's socket goes there so \
+         only you can open it",
+    )?;
+    let socket = dev_socket(Path::new(&runtime), std::process::id());
+    let builder = builder(&myself()?, &|name| std::env::var(name).ok(), &|path| {
+        path.exists()
+    })
+    .map_err(|missing| missing.to_string())?;
+    // Ctrl-C reaches only this process, which loads the old shell before it
+    // stops the dev server, so the page never asks a server that is gone.
+    catch_interrupts();
+    let mut server = Command::new(&builder)
+        .arg("--serve")
+        .arg(&entry)
+        .arg("--socket")
+        .arg(&socket)
+        .arg("--cache")
+        .arg(shells_cache()?)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .process_group(0)
+        .spawn()
+        .map_err(|why| {
+            format!(
+                "cannot start the shell builder {}: {why}",
+                builder.display()
+            )
+        })?;
+    let stdout = server
+        .stdout
+        .take()
+        .ok_or("the shell builder has no stdout")?;
+    let (said, heard_from) = channel();
+    std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines() {
+            let heard = match line {
+                Ok(line) => heard(&line),
+                Err(why) => BuilderHeard::Failed(format!("cannot read the dev server: {why}")),
+            };
+            // Nobody listens once `domicile dev` is stopping.
+            if said.send(heard).is_err() {
+                break;
+            }
+        }
+    });
+    let mut loaded = false;
+    let served = developing(&desktop, &entry, &heard_from, &mut loaded);
+    // Also after a failure: the page cannot load from a server that is gone.
+    let restored = loaded.then(|| asked_quietly(&desktop, &back));
+    let stopped = stop(&mut server);
+    if let Some(Err(why)) = restored {
+        return Err(format!(
+            "the dev server stopped, and the shell it replaced did not load \
+             again: {why}. Load it yourself with domicile load-shell."
+        ));
+    }
+    served.and(stopped).map(|()| ExitCode::SUCCESS)
+}
+
+/// Stops the dev server, which closes Vite and its socket, and waits for it.
+fn stop(server: &mut std::process::Child) -> Result<(), String> {
+    // SAFETY: `kill` takes any pid and signal. The child is unreaped, so its
+    // pid is still its own.
+    if unsafe { libc::kill(server.id() as libc::pid_t, libc::SIGTERM) } != 0 {
+        return Err(format!(
+            "cannot stop the dev server: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    match server.wait() {
+        Ok(status) if status.success() => Ok(()),
+        Ok(status) => Err(format!("the dev server did not stop cleanly ({status})")),
+        Err(why) => Err(format!("cannot wait for the dev server to stop: {why}")),
+    }
+}
+
+/// Loads the dev server's shell once it serves, setting `loaded`, and passes
+/// on its log, until a stop or why the dev server failed.
+fn developing(
+    desktop: &Path,
+    entry: &Path,
+    heard_from: &Receiver<BuilderHeard>,
+    loaded: &mut bool,
+) -> Result<(), String> {
+    let terminal = std::io::stderr().is_terminal();
+    while !interrupted() {
+        match heard_from.recv_timeout(ASK_EVERY) {
+            Ok(BuilderHeard::Step(step)) => {
+                if terminal {
+                    eprint!("\r\x1b[K{}", bar(&step));
+                    let _ = std::io::stderr().flush();
+                }
+            }
+            Ok(BuilderHeard::Serving(shell)) => {
+                if terminal {
+                    eprint!("\r\x1b[K");
+                }
+                asked_quietly(desktop, &loading(&shell))?;
+                *loaded = true;
+                eprintln!(
+                    "domicile: serving {} with hot module replacement. Press \
+                     Ctrl-C to go back to the shell it replaced.",
+                    entry.display()
+                );
+            }
+            Ok(BuilderHeard::Log(said)) => eprintln!("{said}"),
+            Ok(BuilderHeard::Failed(why)) => {
+                return Err(format!("the dev server failed: {why}"));
+            }
+            Ok(other) => {
+                return Err(format!("the shell builder answered dev with {other:?}"));
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                return Err("the dev server stopped by itself".into());
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Sends the `load_shell` `request` to the desktop, and passes on a refusal
+/// as an error.
+fn asked_quietly(desktop: &Path, request: &Request) -> Result<(), String> {
+    match ask(desktop, request, Some(LOAD_WITHIN + ANSWER_WITHIN)).map_err(|why| why.to_string())? {
+        Response::Shell { .. } => Ok(()),
+        Response::Refused { why } => Err(why),
+        other => Err(format!(
+            "the desktop answered load-shell with {other:?}, which is not a shell"
         )),
     }
 }
@@ -580,11 +861,13 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         // did not run reaches this terminal rather than a timeout.
         Request::LoadShell { .. } => Some(LOAD_WITHIN + ANSWER_WITHIN),
         Request::ConfigureDisplay { .. } => Some(CONFIGURE_WITHIN + ANSWER_WITHIN),
+        Request::ShootDesk { .. } => Some(CAPTURE_WITHIN + ANSWER_WITHIN),
+        Request::DevTools { .. } => Some(DEVTOOLS_WITHIN + ANSWER_WITHIN),
         _ => Some(ANSWER_WITHIN),
     };
     let answer = ask(&socket, request, patience).map_err(|why| why.to_string())?;
     match answer {
-        Response::Shell { module } => {
+        Response::Shell { module, .. } => {
             println!("{}", module.display());
             Ok(ExitCode::SUCCESS)
         }
@@ -600,6 +883,10 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             println!("{}", if enabled { "on" } else { "off" });
             Ok(ExitCode::SUCCESS)
         }
+        Response::DevTools { result } => {
+            println!("{result}");
+            Ok(ExitCode::SUCCESS)
+        }
         Response::Theme { theme } => {
             println!(
                 "{}",
@@ -612,6 +899,13 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         }
         Response::Captured { file } => {
             println!("{}", file.display());
+            Ok(ExitCode::SUCCESS)
+        }
+        Response::DeskShot { shot } => {
+            println!(
+                "{}",
+                serde_json::to_string(&shot).expect("a desk shot serializes")
+            );
             Ok(ExitCode::SUCCESS)
         }
         // Nothing on stdout: there is no file.
@@ -629,6 +923,8 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         }
         // Only `domicile monitor` asks for this, and holds the connection.
         Response::VirtualMonitor { .. }
+        // Only `domicile agent` asks for this, and holds the connection.
+        | Response::Agent { .. }
         // `subscribed` asks for these.
         | Response::Heard { .. }
         // Only `domicile-app-host` asks for these.
@@ -640,6 +936,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         | Response::ConfigExtensions { .. }
         | Response::MediaDevices(_)
         | Response::Extensions { .. }
+        | Response::BrowserProfiles(_)
         | Response::History { .. }
         | Response::Visits { .. }
         | Response::Deleted
@@ -652,7 +949,8 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         | Response::Status { .. }
         | Response::ShellCommands { .. }
         | Response::ShellBindings { .. }
-        | Response::Inputs { .. } => Err(format!(
+        | Response::Inputs { .. }
+        | Response::Agents { .. } => Err(format!(
             "the desktop answered {answer:?}, which no command asks for"
         )),
         // Print the desktop's own reason.
@@ -665,6 +963,118 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
 
 /// Asks the running desktop for `listing` and prints it as a table, or with
 /// `json` as the JSON array it answered with.
+/// Serves the Model Context Protocol on stdio, each tool running this
+/// binary.
+/// The process and title of native window `id`, as `list-windows` lists it,
+/// while the desktop is unlocked.
+fn native_window(id: &str) -> Result<(u32, String), String> {
+    let socket =
+        advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
+    let asked =
+        |request| ask(&socket, &request, Some(ANSWER_WITHIN)).map_err(|why| why.to_string());
+    match asked(Request::Status)? {
+        Response::Status { status, .. } if status.locked => {
+            return Err("the desktop is locked".to_string())
+        }
+        Response::Status { .. } => {}
+        other => return Err(format!("the desktop answered status with {other:?}")),
+    }
+    let Response::Windows { windows } = asked(Request::Windows)? else {
+        return Err("the desktop did not answer with its windows".to_string());
+    };
+    let window = windows
+        .into_iter()
+        .find(|window| window.id == id)
+        .ok_or_else(|| format!("there is no window {id}; list-windows lists them"))?;
+    match (window.kind, window.pid) {
+        (WindowKind::Native, Some(pid)) => Ok((
+            u32::try_from(pid).map_err(|_| format!("window {id} has process id {pid}"))?,
+            window.title,
+        )),
+        (WindowKind::Native, None) => {
+            Err(format!("the desktop does not know window {id}'s process"))
+        }
+        (WindowKind::Browser, _) => Err(format!(
+            "window {id} is a browser window; devtools reads and drives those"
+        )),
+    }
+}
+
+fn agents_served() -> Result<ExitCode, String> {
+    let binary = myself()?;
+    mcp::serve(
+        std::io::stdin().lock(),
+        std::io::stdout().lock(),
+        |args| {
+            let output = Command::new(&binary).args(args).output()?;
+            Ok(mcp::Ran {
+                success: output.status.success(),
+                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            })
+        },
+        |name| let_in(&binary, name),
+    )
+    .map_err(|why| format!("mcp: {why}"))?;
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Runs `domicile agent name`, which asks the user to let it in, and holds
+/// the agent in for as long as this process runs.
+fn let_in(binary: &Path, name: &str) -> Result<mcp::Grant, String> {
+    let mut agent = Command::new(binary)
+        .args(["agent", name])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|why| format!("domicile agent did not start: {why}"))?;
+    let mut said = BufReader::new(agent.stdout.take().expect("stdout is piped"));
+    let mut allowed = String::new();
+    let _ = said.read_line(&mut allowed);
+    let reach = match serde_json::from_str(allowed.trim()) {
+        Ok(reach) => reach,
+        Err(_) => {
+            let mut why = String::new();
+            if let Some(mut stderr) = agent.stderr.take() {
+                let _ = std::io::Read::read_to_string(&mut stderr, &mut why);
+            }
+            let _ = agent.wait();
+            return Err(why.trim().trim_start_matches("domicile: ").to_string());
+        }
+    };
+    // Each later line is a change the user made; its output ending is the
+    // user stopping it.
+    let stopped = Arc::new(AtomicBool::new(false));
+    let reach = Arc::new(Mutex::new(reach));
+    std::thread::spawn({
+        let (stopped, reach) = (Arc::clone(&stopped), Arc::clone(&reach));
+        move || {
+            for line in said.lines() {
+                let Ok(changed) = line.map_err(|_| ()).and_then(|line| {
+                    serde_json::from_str::<domicile_protocol::AgentReach>(line.trim())
+                        .map_err(|_| ())
+                }) else {
+                    break;
+                };
+                *reach.lock().unwrap() = changed;
+            }
+            stopped.store(true, Ordering::SeqCst);
+        }
+    });
+    // It runs until this process ends, which closes its stdin and lets the
+    // agent go.
+    let mut actions = agent.stdin.take().expect("stdin is piped");
+    Ok(mcp::Grant {
+        reach: Box::new(move || reach.lock().unwrap().clone()),
+        stopped: Box::new(move || stopped.load(Ordering::SeqCst)),
+        did: Box::new(move |said| {
+            // Gone once the user stopped it, which the next call says.
+            let _ = writeln!(actions, "{}", said.replace('\n', " "));
+        }),
+    })
+}
+
 fn listed(listing: Listing, json: bool) -> Result<ExitCode, String> {
     let socket =
         advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
@@ -685,6 +1095,8 @@ fn listed(listing: Listing, json: bool) -> Result<ExitCode, String> {
         (Response::ShellBindings { bindings }, true) => as_json(&bindings),
         (Response::Inputs { inputs }, false) => inputs_table(&inputs),
         (Response::Inputs { inputs }, true) => as_json(&inputs),
+        (Response::Agents { agents }, false) => agents_table(&agents),
+        (Response::Agents { agents }, true) => as_json(&agents),
         (Response::Refused { why }, _) => {
             eprintln!("domicile: {why}");
             return Ok(ExitCode::FAILURE);
@@ -743,6 +1155,66 @@ fn monitored(name: String, mode: MonitorMode) -> Result<ExitCode, String> {
     });
     forward_sizes(std::io::stdin().lock(), &held, std::io::stderr())
         .map_err(|why| format!("the monitor's sizes did not reach the desktop: {why}"))?;
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Asks the user to let agent `name` in and prints what they allowed as a
+/// JSON line, then lists each line of stdin as what it did. Ends when stdin
+/// does, which lets it go; fails when the user refuses, or stops it first.
+fn admitted(name: String) -> Result<ExitCode, String> {
+    let socket =
+        advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
+    // As long as the user may take to decide.
+    let (answer, held) = hold(
+        &socket,
+        &Request::Agent { agent: name },
+        Some(DECIDING_WITHIN + ANSWER_WITHIN),
+    )
+    .map_err(|why| why.to_string())?;
+    match answer {
+        Response::Agent { reach } => {
+            let mut stdout = std::io::stdout().lock();
+            let _ = writeln!(
+                stdout,
+                "{}",
+                serde_json::to_string(&reach).expect("a reach serializes")
+            )
+            .and_then(|()| stdout.flush());
+        }
+        Response::Refused { why } => {
+            eprintln!("domicile: {why}");
+            return Ok(ExitCode::FAILURE);
+        }
+        answer => return Err(format!("the desktop answered {answer:?} to an agent")),
+    }
+    held.set_read_timeout(None)
+        .map_err(|why| format!("cannot keep the agent in: {why}"))?;
+    let told = held
+        .try_clone()
+        .map_err(|why| format!("cannot keep the agent in: {why}"))?;
+    // Each change the user makes comes as another reach, printed as the
+    // first was; anything else, or a hang-up, is the user stopping it.
+    std::thread::spawn(move || {
+        for line in BufReader::new(told).lines() {
+            let Ok(Response::Agent { reach }) = line
+                .map_err(|_| ())
+                .and_then(|line| serde_json::from_str(&line).map_err(|_| ()))
+            else {
+                break;
+            };
+            let mut stdout = std::io::stdout().lock();
+            let _ = writeln!(
+                stdout,
+                "{}",
+                serde_json::to_string(&reach).expect("a reach serializes")
+            )
+            .and_then(|()| stdout.flush());
+        }
+        eprintln!("domicile: the agent was stopped from the desktop");
+        std::process::exit(1);
+    });
+    forward_actions(std::io::stdin().lock(), &held)
+        .map_err(|why| format!("the agent's actions did not reach the desktop: {why}"))?;
     Ok(ExitCode::SUCCESS)
 }
 
@@ -1277,26 +1749,31 @@ fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), Down>
 /// at each engine start, so an app that brought a new scheme runs on the
 /// engine from the next one. See `domicile_launch::electron_schemes`.
 ///
-/// A record that can't be read registers none, with an error in the log:
-/// those apps run on their own Electron, as the engine does with a wrong
-/// switch.
+/// Known apps' schemes always register. A record that can't be read
+/// registers only those, with an error in the log: the other apps run on
+/// their own Electron, as the engine does with a wrong switch.
 fn electron_schemes(env: &dyn Fn(&str) -> Option<String>) -> Option<String> {
-    let path = state_directory(env)?.join(electron_schemes::RECORD);
+    let Some(state) = state_directory(env) else {
+        return schemes_switch(electron_schemes::KNOWN).expect("the known schemes register");
+    };
+    let path = state.join(electron_schemes::RECORD);
     let record = match std::fs::read_to_string(&path) {
         Ok(record) => record,
-        Err(why) if why.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(why) if why.kind() == std::io::ErrorKind::NotFound => "{}".to_string(),
         Err(why) => {
             eprintln!("domicile: cannot read {}: {why}", path.display());
-            return None;
+            "{}".to_string()
         }
     };
-    schemes_switch(&record).unwrap_or_else(|why| {
-        eprintln!(
-            "domicile: registering no Electron app schemes, since {} is wrong: {why}",
-            path.display()
-        );
-        None
-    })
+    with_known(&record)
+        .and_then(|record| schemes_switch(&record))
+        .unwrap_or_else(|why| {
+            eprintln!(
+                "domicile: registering only known Electron apps' schemes, since {} is wrong: {why}",
+                path.display()
+            );
+            schemes_switch(electron_schemes::KNOWN).expect("the known schemes register")
+        })
 }
 
 /// Sleeps for the backoff, returning early on a stop request.
@@ -1358,6 +1835,7 @@ fn answer_a_command(
 ) {
     let lending = |lent| lend(lent, chrome, ANSWER_WITHIN);
     let following = |subscription| follow(subscription, chrome);
+    let admitting = |admission| admit(admission, chrome, DECIDING_WITHIN);
     if let Err(why) = serve_one(
         stream,
         ANSWER_WITHIN,
@@ -1366,23 +1844,17 @@ fn answer_a_command(
             answer(
                 line,
                 &ControlDesktop {
-                    module: &page.root.join(&page.module),
+                    shell: &page,
                     files,
                     // Asked once: the client stops waiting after `LOAD_WITHIN`
                     // plus `ANSWER_WITHIN`, so a retry could load a shell after
                     // it reported a failure.
-                    load: &|root, module| {
-                        let page = Shell {
-                            module: module.to_path_buf(),
-                            root: root.to_path_buf(),
-                        };
-                        load_the_shell(engine, &page, serving, &|| true)
+                    load: &|page| load_the_shell(engine, page, serving, &|| true),
+                    open: &|url, profile| {
+                        open_url(engine, url, profile, ANSWER_WITHIN).map_err(|why| why.to_string())
                     },
-                    open: &|url| {
-                        open_url(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string())
-                    },
-                    open_app: &|url, id, reuse| {
-                        open_app(engine, url, id, reuse, ANSWER_WITHIN)
+                    open_app: &|url, id, reuse, profile| {
+                        open_app(engine, url, id, reuse, profile, ANSWER_WITHIN)
                             .map_err(|why| why.to_string())
                     },
                     run_app: &|root, module| {
@@ -1428,8 +1900,15 @@ fn answer_a_command(
                     extensions: &|| {
                         extensions(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
                     },
-                    set_extension_enabled: &|id, enabled| {
-                        set_extension_enabled(engine, id, enabled, ANSWER_WITHIN)
+                    set_extension_enabled: &|id, enabled, profile| {
+                        set_extension_enabled(engine, id, enabled, profile, ANSWER_WITHIN)
+                            .map_err(|why| why.to_string())
+                    },
+                    browser_profiles: &|| {
+                        browser_profiles(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    },
+                    pin_browser_site: &|site, profile| {
+                        pin_browser_site(engine, site, profile, ANSWER_WITHIN)
                             .map_err(|why| why.to_string())
                     },
                     configure_extension: &|id, settings| {
@@ -1470,6 +1949,18 @@ fn answer_a_command(
                         act_on_window(chrome, id, act, Some(ANSWER_WITHIN))
                             .map_err(|why| why.to_string())?
                     },
+                    shoot_desk: &|file, fit| {
+                        shoot_desk(chrome, file, fit, Some(CAPTURE_WITHIN))
+                            .map_err(|why| why.to_string())?
+                    },
+                    emulate: &|input| {
+                        emulate(chrome, input, Some(ANSWER_WITHIN))
+                            .map_err(|why| why.to_string())?
+                    },
+                    devtools: &|window, method, params| {
+                        devtools(engine, window, method, params, DEVTOOLS_WITHIN)
+                            .map_err(|why| why.to_string())
+                    },
                     // The compositor waits up to 5s for the desktop to be laid
                     // out again.
                     configure_display: &|display, change| {
@@ -1493,11 +1984,23 @@ fn answer_a_command(
                         shell_bindings(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
                     },
                     inputs: &|| inputs(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string()),
+                    agents: &|| agents(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string()),
+                    stop_agent: &|session| {
+                        stop_agent(chrome, session, Some(ANSWER_WITHIN))
+                            .map_err(|why| why.to_string())
+                    },
+                    forget_agent: &|agent| {
+                        forget_agent(chrome, agent, Some(ANSWER_WITHIN))
+                            .map_err(|why| why.to_string())
+                    },
                 },
             )
         },
-        &lending,
-        &following,
+        Lenders {
+            monitor: &lending,
+            subscribe: &following,
+            agent: &admitting,
+        },
     ) {
         eprintln!("domicile: a command went unanswered: {why}");
     }
@@ -1585,7 +2088,7 @@ fn load_the_shell(
     serve(
         page,
         serving,
-        &|page| load_shell(engine, &page.root, &page.module, LOAD_WITHIN),
+        &|page| load_shell(engine, page, LOAD_WITHIN),
         given_up,
         &mut || std::thread::sleep(ASK_EVERY),
     )

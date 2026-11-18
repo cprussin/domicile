@@ -14,12 +14,13 @@ use domicile_launch::extensions::{
 };
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
+use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 use domicile_protocol::{
-    AdaptiveSync, DesktopStatus, DisplayChange, DisplayHdr, DisplayInfo, DisplayTransform,
-    InputConnection, InputKind, ListedDisplay, ListedInput, ListedWindow, MonitorInfo,
-    ShellBinding, ShellCommandHelp, Theme, WindowAct, WindowKind,
+    AdaptiveSync, DeskRect, DeskShot, DesktopStatus, DisplayChange, DisplayHdr, DisplayInfo,
+    DisplayTransform, EmulatedInput, InputConnection, InputKind, ListedDisplay, ListedInput,
+    ListedWindow, MonitorInfo, ShellBinding, ShellCommandHelp, Theme, WindowAct, WindowKind,
 };
 
 #[test]
@@ -30,10 +31,36 @@ fn a_desktop_says_which_shell_it_is_running() {
         answered(
             "{\"type\":\"which_shell\"}",
             Path::new("/desktops/mine/shell.js"),
-            &|_, _| panic!("a question is answered where it lands, not dialed on"),
+            &|_| panic!("a question is answered where it lands, not dialed on"),
         ),
         Response::Shell {
-            module: PathBuf::from("/desktops/mine/shell.js")
+            module: PathBuf::from("/desktops/mine/shell.js"),
+            root: PathBuf::from("/desktops/mine"),
+            dev_server: false,
+        }
+    );
+}
+
+#[test]
+fn a_desktop_says_when_its_shell_comes_from_a_dev_server() {
+    // `domicile dev` loads the shell it replaced again from this answer, so
+    // it must say where that shell's files come from.
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"which_shell\"}",
+            &Desktop {
+                shell: &Shell {
+                    files: ShellFiles::DevServer,
+                    module: PathBuf::from("domicile-dev-shell.js"),
+                    root: PathBuf::from("/run/dev.sock"),
+                },
+                ..nothing_dialed()
+            },
+        ),
+        Response::Shell {
+            module: PathBuf::from("/run/dev.sock/domicile-dev-shell.js"),
+            root: PathBuf::from("/run/dev.sock"),
+            dev_server: true,
         }
     );
 }
@@ -46,22 +73,52 @@ fn a_desktop_told_to_load_a_shell_tells_the_engine_and_says_what_it_serves() {
     let answered = answered(
         "{\"type\":\"load_shell\",\"root\":\"/desktops/other\",\"module\":\"shell.js\"}",
         Path::new("/desktops/mine/shell.js"),
-        &|root, module| {
-            told.set(Some((root.to_path_buf(), module.to_path_buf())));
+        &|shell| {
+            told.set(Some(shell.clone()));
             Ok(())
         },
     );
 
     assert_eq!(
         told.take(),
-        Some((PathBuf::from("/desktops/other"), PathBuf::from("shell.js")))
+        Some(Shell {
+            root: PathBuf::from("/desktops/other"),
+            module: PathBuf::from("shell.js"),
+            files: ShellFiles::Directory,
+        })
     );
     // Replies with the new shell, as `which-shell` would.
     assert_eq!(
         answered,
         Response::Shell {
-            module: PathBuf::from("/desktops/other/shell.js")
+            module: PathBuf::from("/desktops/other/shell.js"),
+            root: PathBuf::from("/desktops/other"),
+            dev_server: false,
         }
+    );
+}
+
+#[test]
+fn a_desktop_told_to_load_a_shell_from_a_dev_server_tells_the_engine_so() {
+    // `domicile dev` sends this: the root is the dev server's socket.
+    let told = Cell::new(None);
+    answered(
+        "{\"type\":\"load_shell\",\"root\":\"/run/user/1000/domicile-dev.7.sock\",\
+         \"module\":\"domicile-dev-shell.js\",\"dev_server\":true}",
+        Path::new("/desktops/mine/shell.js"),
+        &|shell| {
+            told.set(Some(shell.clone()));
+            Ok(())
+        },
+    );
+
+    assert_eq!(
+        told.take(),
+        Some(Shell {
+            root: PathBuf::from("/run/user/1000/domicile-dev.7.sock"),
+            module: PathBuf::from("domicile-dev-shell.js"),
+            files: ShellFiles::DevServer,
+        })
     );
 }
 
@@ -72,7 +129,7 @@ fn an_engine_that_refused_the_shell_is_quoted_to_whoever_typed_the_command() {
     let Response::Refused { why } = answered(
         "{\"type\":\"load_shell\",\"root\":\"/desktops/other\",\"module\":\"shell.js\"}",
         Path::new("/desktops/mine/shell.js"),
-        &|_, _| Err("this engine has no shell window to load a shell into".to_string()),
+        &|_| Err("this engine has no shell window to load a shell into".to_string()),
     ) else {
         panic!("an engine that refused the shell is not a desktop that loaded it");
     };
@@ -86,7 +143,7 @@ fn an_engine_that_refused_the_shell_is_quoted_to_whoever_typed_the_command() {
 fn a_line_that_is_not_a_request_is_refused_and_quoted_back() {
     // The refusal quotes the line so the client sees what was rejected.
     let Response::Refused { why } =
-        answered("{\"type\":\"reboot\"}", Path::new("/shell.js"), &|_, _| {
+        answered("{\"type\":\"reboot\"}", Path::new("/shell.js"), &|_| {
             panic!("a line that is not a request reaches no engine")
         })
     else {
@@ -104,14 +161,31 @@ fn a_desktop_told_to_open_an_address_tells_the_engine() {
     let told = Cell::new(None);
     let answered = answered_opening(
         "{\"type\":\"open_url\",\"url\":\"https://example.com/\"}",
-        &|url| {
-            told.set(Some(url.to_string()));
+        &|url, profile| {
+            told.set(Some((url.to_string(), profile.map(str::to_string))));
             Ok(())
         },
     );
 
-    assert_eq!(told.take(), Some("https://example.com/".to_string()));
+    assert_eq!(
+        told.take(),
+        Some(("https://example.com/".to_string(), None))
+    );
     assert_eq!(answered, Response::Opened);
+}
+
+#[test]
+fn a_desktop_hands_the_engine_the_profile_an_address_opens_in() {
+    let told = Cell::new(None);
+    answered_opening(
+        "{\"type\":\"open_url\",\"url\":\"https://example.com/\",\"profile\":\"work\"}",
+        &|_, profile| {
+            told.set(profile.map(str::to_string));
+            Ok(())
+        },
+    );
+
+    assert_eq!(told.take(), Some("work".to_string()));
 }
 
 #[test]
@@ -141,7 +215,7 @@ fn a_desktop_told_to_open_an_app_tells_the_engine() {
     let answered = reply_to(
         "{\"type\":\"open_app\",\"url\":\"https://example.com/\"}",
         &Desktop {
-            open_app: &|url, id, reuse| {
+            open_app: &|url, id, reuse, _| {
                 told.set(Some((url.to_string(), id.map(str::to_string), reuse)));
                 Ok(())
             },
@@ -163,7 +237,7 @@ fn a_desktop_told_to_reuse_an_app_window_tells_the_engine_which() {
         "{\"type\":\"open_app\",\"url\":\"https://example.com/\",\"id\":\"mail\",\
          \"reuse\":\"navigate\"}",
         &Desktop {
-            open_app: &|url, id, reuse| {
+            open_app: &|url, id, reuse, _| {
                 told.set(Some((url.to_string(), id.map(str::to_string), reuse)));
                 Ok(())
             },
@@ -186,7 +260,7 @@ fn a_desktop_told_to_reuse_an_app_window_tells_the_engine_which() {
 fn an_engine_that_would_not_open_the_address_is_quoted() {
     let Response::Refused { why } = answered_opening(
         "{\"type\":\"open_url\",\"url\":\"https://example.com/\"}",
-        &|_| Err("this engine has no shell page to open it in".to_string()),
+        &|_, _| Err("this engine has no shell page to open it in".to_string()),
     ) else {
         panic!("an engine that refused the address is not one that opened it");
     };
@@ -376,6 +450,7 @@ fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
         urgent: false,
         url: None,
         private: false,
+        engine_id: Some("3".to_string()),
     };
     assert_eq!(
         reply_to(
@@ -614,7 +689,7 @@ fn a_desktop_says_which_files_the_settings_app_edits() {
             "{\"type\":\"settings_files\"}",
             &Desktop {
                 files: &files,
-                module: Path::new("/home/me/.cache/domicile/abc/shell.js"),
+                shell: &served_from("/home/me/.cache/domicile/abc/shell.js"),
                 ..nothing_dialed()
             }
         ),
@@ -826,7 +901,8 @@ fn a_desktop_told_to_disable_an_extension_tells_the_engine() {
     let answered = reply_to(
         "{\"type\":\"set_extension_enabled\",\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"enabled\":false}",
         &Desktop {
-            set_extension_enabled: &|id, enabled| {
+            set_extension_enabled: &|id, enabled, profile| {
+                assert_eq!(profile, None, "no profile is the shell's");
                 told.replace(Some((id.to_string(), enabled)));
                 Ok(())
             },
@@ -1141,10 +1217,11 @@ fn an_extension() -> InstalledExtension {
             "chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html".to_string(),
         ),
         settings: ExtensionSettings {
-            in_private: Some(false),
+            file_access: Some(false),
             site_access: Some(SiteAccess::Mode(SiteAccessMode::AllSites)),
             ..ExtensionSettings::default()
         },
+        icon_path: Some("/ext/dark/128.png".to_string()),
     }
 }
 
@@ -1193,17 +1270,20 @@ fn nothing_dialed() -> Desktop<'static> {
         extensions: &|| panic!("only extensions lists every extension"),
         files: &NO_FILES,
         history: &|_| panic!("only history searches the history"),
-        load: &|_, _| panic!("only load_shell loads anything"),
+        load: &|_| panic!("only load_shell loads anything"),
         load_unpacked: &|_| panic!("only load_unpacked loads an extension"),
         media_devices: &|| panic!("only media_devices lists media devices"),
-        module: Path::new("/shell.js"),
-        open: &|_| panic!("only open_url opens a browser window"),
-        open_app: &|_, _, _| panic!("only open_app opens an app window"),
+        shell: Box::leak(Box::new(served_from("/shell.js"))),
+        open: &|_, _| panic!("only open_url opens a browser window"),
+        open_app: &|_, _, _, _| panic!("only open_app opens an app window"),
         run_app: &|_, _| panic!("only run_app runs an app module"),
         permissions: &|| panic!("only site_permissions lists site permissions"),
         power_displays: &|_, _| panic!("only sleep_displays and wake_displays power them"),
         lock: &|| panic!("only lock locks the desktop"),
         act_on_window: &|_, _| panic!("only act_on_window acts on a window"),
+        shoot_desk: &|_, _| panic!("only shoot_desk shoots the desk"),
+        emulate: &|_| panic!("only emulate sends input"),
+        devtools: &|_, _, _| panic!("only devtools sends DevTools methods"),
         configure_display: &|_, _| panic!("only configure_display configures a display"),
         monitors: &|| panic!("only monitors lists the monitors"),
         displays: &|| panic!("only displays lists the displays"),
@@ -1212,11 +1292,16 @@ fn nothing_dialed() -> Desktop<'static> {
         shell_commands: &|| panic!("only shell_commands lists the shell's commands"),
         shell_bindings: &|| panic!("only shell_bindings lists the shell's bindings"),
         inputs: &|| panic!("only inputs lists the input devices"),
+        agents: &|| panic!("only agents lists the agents"),
+        stop_agent: &|_| panic!("only stop_agent stops an agent"),
+        forget_agent: &|_| panic!("only forget_agent forgets an agent"),
         record: &|| panic!("only screen_record records anything"),
         send: &|_| panic!("only send_shell sends anything"),
         site_data: &|| panic!("only site_data lists site data"),
         theme: &|_| panic!("only theme reads or sets the theme"),
-        set_extension_enabled: &|_, _| panic!("only set_extension_enabled enables one"),
+        set_extension_enabled: &|_, _, _| panic!("only set_extension_enabled enables one"),
+        browser_profiles: &|| panic!("only browser_profiles lists the profiles"),
+        pin_browser_site: &|_, _| panic!("only pin_browser_site pins a site"),
         configure_extension: &|_, _| panic!("only configure_extension configures one"),
         set_media_device: &|_, _| panic!("only set_media_device prefers one"),
         set_permission: &|_| panic!("only set_site_permission sets one"),
@@ -1238,10 +1323,20 @@ fn answered(line: &str, module: &Path, load: LoadShell) -> Response {
         line,
         &Desktop {
             load,
-            module,
+            shell: &served_from(module),
             ..nothing_dialed()
         },
     )
+}
+
+/// The shell `module` names, served from its directory.
+fn served_from(module: impl AsRef<Path>) -> Shell {
+    let module = module.as_ref();
+    Shell {
+        files: ShellFiles::Directory,
+        module: PathBuf::from(module.file_name().expect("a module is a file")),
+        root: module.parent().expect("a module is in a directory").into(),
+    }
 }
 
 /// [`answered`], for `open_url`.
@@ -1284,7 +1379,7 @@ fn a_virtual_monitor_is_refused_on_a_connection_that_is_not_held() {
         "{\"type\":\"virtual_monitor\",\"name\":\"Pane\",\"width\":1280,\
          \"height\":720,\"refresh_mhz\":60000}",
         Path::new("/shell.js"),
-        &|_, _| panic!("a monitor reaches no engine"),
+        &|_| panic!("a monitor reaches no engine"),
     );
     assert!(matches!(refused, Response::Refused { .. }), "{refused:?}");
 }
@@ -1295,7 +1390,197 @@ fn a_resize_with_no_monitor_held_is_refused() {
         "{\"type\":\"resize_virtual_monitor\",\"width\":1280,\"height\":720,\
          \"refresh_mhz\":60000}",
         Path::new("/shell.js"),
-        &|_, _| panic!("a resize reaches no engine"),
+        &|_| panic!("a resize reaches no engine"),
     );
     assert!(matches!(refused, Response::Refused { .. }), "{refused:?}");
+}
+
+#[test]
+fn a_desk_shot_says_what_it_shows() {
+    let shot = DeskShot {
+        place: DeskRect {
+            position: (0, 0),
+            size: (3840, 1080),
+        },
+        width: 1280,
+        height: 360,
+    };
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"shoot_desk\",\"file\":\"/tmp/desk.png\",\"fit\":1280}",
+            &Desktop {
+                shoot_desk: &|file, fit| {
+                    assert_eq!((file, fit), (Path::new("/tmp/desk.png"), 1280));
+                    Ok(shot)
+                },
+                ..nothing_dialed()
+            },
+        ),
+        Response::DeskShot { shot }
+    );
+}
+
+#[test]
+fn emulated_input_is_sent_or_refused_with_why() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"emulate\",\"input\":[{\"kind\":\"point_to\",\"x\":1.0,\"y\":2.0}]}",
+            &Desktop {
+                emulate: &|input| {
+                    assert_eq!(input, [EmulatedInput::PointTo { x: 1.0, y: 2.0 }]);
+                    Err("the desktop is locked".to_string())
+                },
+                ..nothing_dialed()
+            },
+        ),
+        Response::Refused {
+            why: "the desktop is locked".to_string()
+        }
+    );
+}
+
+/// The desk's windows for `devtools`: a native one, a browser window and a
+/// private one.
+fn three_windows() -> Result<Vec<ListedWindow>, String> {
+    let native = ListedWindow {
+        id: "kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA".to_string(),
+        kind: WindowKind::Native,
+        title: "notes.org".to_string(),
+        app: Some("emacs".to_string()),
+        pid: Some(4242),
+        size: Some([640.0, 480.0]),
+        focused: true,
+        urgent: false,
+        url: None,
+        private: false,
+        engine_id: None,
+    };
+    let mail = ListedWindow {
+        id: "Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE".to_string(),
+        kind: WindowKind::Browser,
+        title: "Inbox".to_string(),
+        app: None,
+        pid: None,
+        size: None,
+        focused: false,
+        url: Some("https://mail.example/".to_string()),
+        engine_id: Some("3".to_string()),
+        ..native.clone()
+    };
+    let private = ListedWindow {
+        id: "aU2iO9pE4rT7yW1qZ5xC8vB3nM6lK0jH".to_string(),
+        private: true,
+        engine_id: Some("7".to_string()),
+        ..mail.clone()
+    };
+    Ok(vec![native, mail, private])
+}
+
+#[test]
+fn devtools_sends_to_a_browser_window_by_its_listed_id() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"devtools\",\"window\":\"Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE\",\"method\":\"DOM.getBoxModel\",\"params\":{\"backendNodeId\":4}}",
+            &Desktop {
+                windows: &three_windows,
+                status: &|| status(false),
+                devtools: &|window, method, params| {
+                    assert_eq!(
+                        (window, method, params),
+                        ("3", "DOM.getBoxModel", &serde_json::json!({"backendNodeId": 4}))
+                    );
+                    Ok(serde_json::json!({"model": {}}))
+                },
+                ..nothing_dialed()
+            },
+        ),
+        Response::DevTools {
+            result: serde_json::json!({"model": {}})
+        }
+    );
+}
+
+#[test]
+fn devtools_refuses_a_window_it_does_not_drive_saying_why() {
+    for (window, why) in [
+        ("kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA", "native"),
+        ("aU2iO9pE4rT7yW1qZ5xC8vB3nM6lK0jH", "private"),
+        ("nope", "no window nope"),
+    ] {
+        let reply = reply_to(
+            &format!("{{\"type\":\"devtools\",\"window\":\"{window}\",\"method\":\"Page.reload\",\"params\":{{}}}}"),
+            &Desktop {
+                windows: &three_windows,
+                status: &|| status(false),
+                ..nothing_dialed()
+            },
+        );
+        match reply {
+            Response::Refused { why: refused } => assert!(refused.contains(why), "{refused}"),
+            other => panic!("{window} was not refused: {other:?}"),
+        }
+    }
+}
+
+fn status(locked: bool) -> Result<DesktopStatus, String> {
+    Ok(DesktopStatus {
+        theme: Theme::Light,
+        locked,
+        keymap: None,
+        screens_off: false,
+        held_awake_by: Vec::new(),
+        capturing: Vec::new(),
+    })
+}
+
+#[test]
+fn devtools_is_refused_while_the_desktop_is_locked() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"devtools\",\"window\":\"Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE\",\"method\":\"Page.reload\",\"params\":{}}",
+            &Desktop {
+                windows: &three_windows,
+                status: &|| status(true),
+                ..nothing_dialed()
+            },
+        ),
+        Response::Refused {
+            why: "the desktop is locked".to_string()
+        }
+    );
+}
+
+#[test]
+fn agents_are_listed_stopped_and_forgotten_through_the_compositor() {
+    use domicile_protocol::KnownAgents;
+    let stopped = Cell::new(None);
+    let forgot = std::cell::RefCell::new(None);
+    let desktop = Desktop {
+        agents: &|| Ok(KnownAgents::default()),
+        stop_agent: &|session| {
+            stopped.set(Some(session));
+            Ok(())
+        },
+        forget_agent: &|agent| {
+            *forgot.borrow_mut() = Some(agent.to_string());
+            Ok(())
+        },
+        ..nothing_dialed()
+    };
+    assert_eq!(
+        reply_to("{\"type\":\"agents\"}", &desktop),
+        Response::Agents {
+            agents: KnownAgents::default()
+        }
+    );
+    assert_eq!(
+        reply_to("{\"type\":\"stop_agent\",\"session\":4}", &desktop),
+        Response::Done
+    );
+    assert_eq!(stopped.get(), Some(4));
+    assert_eq!(
+        reply_to("{\"type\":\"forget_agent\",\"agent\":\"Codex\"}", &desktop),
+        Response::Done
+    );
+    assert_eq!(forgot.borrow().as_deref(), Some("Codex"));
 }

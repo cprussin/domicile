@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import type { BrowserProfile } from "@domicile-desktop/sdk/desktop/browser";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type {
   Extension,
@@ -31,7 +32,6 @@ const darkReader: InstalledExtension = {
   fromConfig: false,
   icon: ICON,
   id: DARK,
-  inPrivate: false,
   name: "Dark Reader",
   optionsUrl: `chrome-extension://${DARK}/options.html`,
   siteAccess: "all_sites",
@@ -54,6 +54,7 @@ const darkAction: Extension = {
   id: DARK,
   name: "Dark Reader",
   popup: `chrome-extension://${DARK}/popup.html`,
+  profile: "default",
   title: "Dark Reader",
 };
 
@@ -62,6 +63,10 @@ const recordingDomicile = (calls: unknown[][], refuse = false): Domicile =>
   ({
     browser: {
       open: (...args: unknown[]) => calls.push(["browser.open", ...args]),
+      setExtensionEnabled: (...args: unknown[]) => {
+        calls.push(["browser.setExtensionEnabled", ...args]);
+        return Promise.resolve();
+      },
     },
     extensions: {
       activate: (...args: unknown[]) =>
@@ -86,9 +91,26 @@ const recordingDomicile = (calls: unknown[][], refuse = false): Domicile =>
     },
   }) as unknown as Domicile;
 
+/** A Work profile with Dark Reader off and Switched Off locked on. */
+const work: BrowserProfile = {
+  color: "#d97706",
+  configSites: [],
+  enabledExtensions: [OFF],
+  extensions: [DARK, OFF],
+  id: "work",
+  isDefault: false,
+  isDefaultPrivate: false,
+  isPrivate: false,
+  lockedExtensions: [OFF],
+  name: "Work",
+  pinnedSites: [],
+};
+
 type Options = {
   calls?: unknown[][];
   extensions?: readonly Extension[];
+  installed?: readonly InstalledExtension[];
+  profile?: BrowserProfile;
   refuse?: boolean;
   unpinned?: ReadonlySet<string>;
 };
@@ -96,6 +118,8 @@ type Options = {
 const renderMenu = ({
   calls = [],
   extensions = [darkAction],
+  installed = [darkReader, switchedOff],
+  profile,
   refuse = false,
   unpinned = new Set(),
 }: Options = {}) =>
@@ -103,13 +127,14 @@ const renderMenu = ({
     <TrayIconsMenu
       domicile={recordingDomicile(calls, refuse)}
       extensions={extensions}
-      installed={[darkReader, switchedOff]}
+      installed={installed}
       items={[sync]}
       onActivate={(id) => calls.push(["onActivate", id])}
       onOpen={(popup) => calls.push(["onOpen", popup])}
       onPin={(key) => calls.push(["onPin", key])}
       onSettings={() => calls.push(["onSettings"])}
       onUnpin={(key) => calls.push(["onUnpin", key])}
+      profile={profile}
       unpinned={unpinned}
     />,
   );
@@ -163,7 +188,7 @@ describe(TrayIconsMenu, () => {
       ["tray.activate", "syncthing", "primary"],
       ["onActivate", DARK],
       ["extensions.activate", DARK],
-      ["onOpen", { id: DARK, popup: darkAction.popup }],
+      ["onOpen", { id: DARK, popup: darkAction.popup, profile: "default" }],
     ]);
   });
 
@@ -175,6 +200,24 @@ describe(TrayIconsMenu, () => {
     await userEvent.click(screen.getByRole("switch", { name: "Dark Reader" }));
 
     expect(calls).toStrictEqual([["extensions.setEnabled", DARK, false]]);
+  });
+
+  it("switches the extensions of the last focused page's profile", async () => {
+    const calls: unknown[][] = [];
+    renderMenu({ calls, profile: work });
+    await openMenu();
+
+    expect(screen.getByText("Extensions in Work")).toBeVisible();
+    const dark = screen.getByRole("switch", { name: "Dark Reader" });
+    expect(dark).not.toBeChecked();
+    const locked = screen.getByRole("switch", { name: "Switched Off" });
+    expect(locked).toBeChecked();
+    expect(locked).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(dark);
+
+    expect(calls).toStrictEqual([
+      ["browser.setExtensionEnabled", "work", DARK, true],
+    ]);
   });
 
   it("says when the engine refuses a change", async () => {
@@ -221,16 +264,26 @@ describe(TrayIconsMenu, () => {
 
     it("changes a setting", async () => {
       const calls: unknown[][] = [];
-      const menu = await more(calls);
+      renderMenu({
+        calls,
+        installed: [{ ...darkReader, configured: [] }, switchedOff],
+      });
+      await openMenu();
+      await userEvent.click(
+        screen.getByRole("button", { name: "More for Dark Reader" }),
+      );
+      const menu = await screen.findByRole("menu", {
+        name: "More for Dark Reader",
+      });
 
       await userEvent.click(
         within(menu).getByRole("menuitemcheckbox", {
-          name: "Allow in private windows",
+          name: "Allow on local files",
         }),
       );
 
       expect(calls).toStrictEqual([
-        ["extensions.configure", DARK, { inPrivate: true }],
+        ["extensions.configure", DARK, { fileAccess: false }],
       ]);
     });
 

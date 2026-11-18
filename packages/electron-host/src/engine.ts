@@ -26,6 +26,20 @@ import type {
 
 export const PROTOCOL_VERSION = 1;
 
+/** What a page with Node.js needs: Electron's renderer's own settings. */
+export type PageNode = {
+  /** The preload's file, for Node's require; left out for none. */
+  readonly preload?: string;
+  /** `nodeIntegration`: Node in the page's own world too, without isolation. */
+  readonly integration: boolean;
+  readonly context_isolation: boolean;
+  readonly resources_path: string;
+  readonly app_path: string;
+  readonly electron_version: string;
+  /** The app's environment, which the page's `process.env` has. */
+  readonly env: Readonly<Record<string, string>>;
+};
+
 /** Where the app asks for one of a window's views, in its page's CSS pixels. */
 export type ViewPlacement = {
   readonly window: number;
@@ -53,6 +67,15 @@ export type EngineRequest =
       readonly session?: string;
       /** A view (`WebContentsView`), shown only as part of a window. */
       readonly view?: true;
+      /** A window's own title, which the desktop shows over its page's. */
+      readonly title?: string;
+      /** A window that opens hidden, as `show: false`. */
+      readonly hidden?: true;
+      /**
+       * Node.js in the page of a window that isn't sandboxed. Its preload is
+       * a file Node loads, so `preload` is left out.
+       */
+      readonly node?: PageNode;
     }
   | {
       readonly type: "set_views";
@@ -62,6 +85,21 @@ export type EngineRequest =
     }
   | { readonly type: "load_url"; readonly window: number; readonly url: string }
   | { readonly type: "focus_window"; readonly window: number }
+  | {
+      readonly type: "set_title";
+      readonly window: number;
+      readonly title: string;
+    }
+  | {
+      readonly type: "set_hidden";
+      readonly window: number;
+      readonly hidden: boolean;
+    }
+  | {
+      /** app.userAgentFallback: each session's pages' unless it has its own. */
+      readonly type: "set_user_agent_fallback";
+      readonly user_agent: string;
+    }
   | { readonly type: "close_window"; readonly window: number }
   | { readonly type: "destroy_window"; readonly window: number }
   | {
@@ -97,6 +135,13 @@ export type EngineRequest =
       /** The names of the app's ports that go with it, each "m" and a number. */
       readonly ports: string[];
     }
+  | {
+      readonly type: "execute_javascript";
+      readonly window: number;
+      readonly call: number;
+      readonly code: string;
+      readonly user_gesture?: true;
+    }
   | ShowMessageBoxMessage
   | PortRequest
   | ProtocolRequest
@@ -106,10 +151,12 @@ export type EngineRequest =
 
 const engineEvent = z.discriminatedUnion("type", [
   z.object({
+    chrome_version: z.string(),
     schemes: z.array(
       z.object({ privileges: z.array(z.string()), scheme: z.string() }),
     ),
     type: z.literal("ready"),
+    user_agent: z.string(),
   }),
   z.object({ type: z.literal("refused"), why: z.string() }),
   z.object({ type: z.literal("window_opened"), window: z.number() }),
@@ -118,6 +165,8 @@ const engineEvent = z.discriminatedUnion("type", [
     why: z.string(),
     window: z.number(),
   }),
+  // The page's DOM is ready: Electron's dom-ready.
+  z.object({ type: z.literal("window_dom_ready"), window: z.number() }),
   z.object({ type: z.literal("window_loaded"), window: z.number() }),
   z.object({
     title: z.string(),
@@ -125,6 +174,8 @@ const engineEvent = z.discriminatedUnion("type", [
     window: z.number(),
   }),
   z.object({ type: z.literal("window_closed"), window: z.number() }),
+  // The user asked to close the window: the app's `close` listeners decide.
+  z.object({ type: z.literal("close_asked"), window: z.number() }),
   z.object({
     args: z.array(z.unknown()),
     channel: z.string(),
@@ -164,6 +215,14 @@ const engineEvent = z.discriminatedUnion("type", [
     window: z.number(),
   }),
   z.object({ type: z.literal("page_gone"), window: z.number() }),
+  /** What the app's executeJavaScript `call` gave, or why it gave nothing. */
+  z.object({
+    call: z.number(),
+    error: z.string().optional(),
+    result: z.unknown().optional(),
+    type: z.literal("javascript_result"),
+    window: z.number(),
+  }),
   /** The size the shell gives a page, a window's or a view's. */
   z.object({
     height: z.number(),
@@ -243,8 +302,15 @@ export type EngineEvent = z.infer<typeof engineEvent>;
 /** What the engine says about one window. */
 export type WindowEvent = Extract<EngineEvent, { window: number }>;
 
+/** The engine's own user agent and Chrome's full version, from its `ready`. */
+export type EngineBrowser = {
+  readonly userAgent: string;
+  readonly chromeVersion: string;
+};
+
 export type Engine = {
   readonly send: (request: EngineRequest) => void;
+  readonly browser: EngineBrowser;
   /**
    * The apps' own schemes the engine registered as it started, with the
    * privileges it granted each, by Electron's names.
@@ -284,7 +350,7 @@ export const connectEngine = (
     let ready = false;
     let pending = "";
 
-    const engine: Omit<Engine, "schemes"> = {
+    const engine: Omit<Engine, "schemes" | "browser"> = {
       events,
       send: (request) => {
         socket.write(`${JSON.stringify(request)}\n`);
@@ -299,7 +365,14 @@ export const connectEngine = (
         ready = true;
         resolve(
           parsed.data.type === "ready"
-            ? Ok({ ...engine, schemes: parsed.data.schemes })
+            ? Ok({
+                ...engine,
+                browser: {
+                  chromeVersion: parsed.data.chrome_version,
+                  userAgent: parsed.data.user_agent,
+                },
+                schemes: parsed.data.schemes,
+              })
             : Err(
                 `the engine refused this app: ${"why" in parsed.data ? parsed.data.why : parsed.data.type}`,
               ),
@@ -368,5 +441,41 @@ const parseJson = (text: string): unknown => {
     } else {
       throw error;
     }
+  }
+};
+
+/**
+ * The engine at `path`, once it's up: the desktop starts its apps as it
+ * comes up, before the engine may be listening, so a socket that isn't there
+ * or isn't answering yet is tried again until `wait` milliseconds have passed.
+ * Any other failure, or one that outlasts the wait, is the answer.
+ */
+export const connectEngineWhenUp = async (
+  connect: () => Promise<Result<Engine, string>>,
+  wait: number,
+  sleep: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms),
+): Promise<Result<Engine, string>> => {
+  const started = Date.now();
+  for (;;) {
+    const result = await connect();
+    const notUpYet = result.match({
+      Err: (why) =>
+        why.startsWith("can't reach the engine") &&
+        /ENOENT|ECONNREFUSED/.test(why),
+      Ok: () => false,
+    });
+    if (!notUpYet) {
+      return result;
+    }
+    if (Date.now() - started >= wait) {
+      return result.match({
+        Err: (why) =>
+          Err(
+            `${why}, and it still wasn't up after ${Math.round(wait / 1000)}s`,
+          ),
+        Ok: (engine) => Ok(engine),
+      });
+    }
+    await sleep(250);
   }
 };

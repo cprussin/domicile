@@ -119,12 +119,13 @@ export const ScreenshotDialog = ({
       ),
       pick: Pick.Window(id),
     })),
-    ...browserWindows.map(({ id, title }) => ({
+    ...browserWindows.map(({ appId, id, title }) => ({
       ...browserChoice(
         id,
         title,
         pageIcon(id),
         shownArea(body, shown, ShownWindowKind.Browser, id),
+        appId === "" ? undefined : apps(appId),
       ),
       pick: Pick.BrowserWindow(id),
     })),

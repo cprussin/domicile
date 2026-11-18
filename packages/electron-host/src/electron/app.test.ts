@@ -119,5 +119,25 @@ describe(createApp, () => {
       app.commandLine.removeSwitch("no-sandbox");
       expect(app.commandLine.hasSwitch("no-sandbox")).toBe(false);
     });
+
+    it("has the switches the app was started with, as Chromium's does", () => {
+      const { app } = make();
+      const argv = process.argv;
+      process.argv = [
+        "electron",
+        "--password-store=gnome-libsecret",
+        "--hidden",
+        "file.txt",
+      ];
+      try {
+        expect(app.commandLine.getSwitchValue("password-store")).toBe(
+          "gnome-libsecret",
+        );
+        expect(app.commandLine.hasSwitch("hidden")).toBe(true);
+        expect(app.commandLine.hasSwitch("file.txt")).toBe(false);
+      } finally {
+        process.argv = argv;
+      }
+    });
   });
 });

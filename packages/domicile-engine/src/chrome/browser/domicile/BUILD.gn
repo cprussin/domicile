@@ -13,6 +13,10 @@
 # hosts. Code that does not is in //components/domicile, with the tests.
 source_set("domicile") {
   sources = [
+    "domicile_agent_devtools.cc",
+    "domicile_agent_devtools.h",
+    "domicile_browser_profiles.cc",
+    "domicile_browser_profiles.h",
     "domicile_browser_windows.cc",
     "domicile_browser_windows.h",
     "domicile_cast_sinks.cc",
@@ -111,6 +115,8 @@ source_set("domicile") {
     # Lists each browser window for capture tools.
     "//components/domicile:browser_window_listing",
     "//components/domicile:command_protocol",
+    # Marks the renderer an Electron page with Node.js starts.
+    "//components/domicile:electron_node_switches",
     "//components/domicile:common",
     # Somebody at the desk, from ui::UserActivityDetector in //ui/base.
     "//components/domicile:desk_activity",
@@ -118,6 +124,9 @@ source_set("domicile") {
     "//components/domicile:desk_downloads",
     # Electron apps' windows, for the Electron socket.
     "//components/domicile:electron_app",
+    # The engine's user agent and version, which Electron's user agent names.
+    "//components/embedder_support:user_agent",
+    "//components/version_info",
     "//components/domicile:line_framer",
     # Where the pointer is on the desk, from aura's own events.
     "//components/domicile:desk_pointer",
@@ -137,6 +146,7 @@ source_set("domicile") {
     "//components/domicile:shell_swap",
     "//components/domicile:shell_window_wait",
     "//components/domicile:shell_windows",
+    "//components/domicile:shortcut_registry",
     "//components/tabs:public",
     "//content/public/browser",
     "//net",
@@ -149,6 +159,10 @@ source_set("domicile") {
     # profile is destroyed through Chrome's ProfileDestroyer.
     "//chrome/browser/profiles:profile_manager",
     "//components/domicile:private_pages",
+    # The desk's browser profiles, from the control channel.
+    "//components/crx_file",
+    "//components/domicile:browser_profiles",
+    "//components/domicile:control_channel",
     "//chrome/common:constants",
     "//components/domicile:extension_installer",
     # Each extension's chrome://extensions settings.
@@ -211,6 +225,7 @@ source_set("domicile") {
     # sheet are off (patch 0183).
     "//components/web_modal",
     "//content/public/common",
+    "//sandbox/policy",
     # The Settings app's site permissions, listed and set through the command
     # socket.
     "//components/content_settings/core/browser",

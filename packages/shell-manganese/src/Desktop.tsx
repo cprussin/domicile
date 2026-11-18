@@ -21,6 +21,7 @@ import { KeymapOptionsContext } from "@domicile-desktop/manganese-bar-module-key
 import { PortalSignIn } from "@domicile-desktop/manganese-bar-module-network/PortalSignIn";
 import { useCaptivePortal } from "@domicile-desktop/manganese-bar-module-network/useCaptivePortal";
 import { useExtensions } from "@domicile-desktop/manganese-bar-module-tray/extensions/useExtensions";
+import { useFocusedProfile } from "@domicile-desktop/manganese-bar-module-tray/extensions/useFocusedProfile";
 import { useInstalledExtensions } from "@domicile-desktop/manganese-bar-module-tray/extensions/useInstalledExtensions";
 import { useOpenedPopup } from "@domicile-desktop/manganese-bar-module-tray/extensions/useOpenedPopup";
 import type { TrayState } from "@domicile-desktop/manganese-bar-module-tray/tray-context";
@@ -90,6 +91,7 @@ import { usePointerLock } from "@domicile-desktop/manganese-window-management/us
 import { usePointerWarp } from "@domicile-desktop/manganese-window-management/usePointerWarp";
 import { useWindows } from "@domicile-desktop/manganese-window-management/useWindows";
 import {
+  browserIdOf,
   browserWindowId,
   WindowKind,
 } from "@domicile-desktop/manganese-window-management/window";
@@ -200,8 +202,9 @@ export const Desktop = ({
   const { act } = windows;
   const clientIcons = useClientIcons(
     domicile,
-    windows.windows.flatMap((window) =>
-      window.kind === WindowKind.App ? [window.desktopId] : [],
+    // An app window draws its app's icon, when its app has one.
+    windows.windows.map((window) =>
+      window.kind === WindowKind.App ? window.desktopId : window.appId,
     ),
     desktopClientIcons,
   );
@@ -647,7 +650,8 @@ export const Desktop = ({
   // Frames with their bars; the page's own boxes leave those out and still
   // count a hidden tab.
   const shownWindows = useCallback(() => shownWindowsOf(screens), [screens]);
-  // Closed inboxes' windows, which keep running, are no one's to pick.
+  // Closed inboxes' windows and windows their apps hid, which keep running,
+  // are no one's to pick.
   const closedBrowsers = useMemo(() => closedBrowsersOf(windows), [windows]);
   // Shared, so the stage sees a change only when one is shown or hidden.
   const shutIds = useMemo(() => shutIdsOf(windows), [windows]);
@@ -675,6 +679,11 @@ export const Desktop = ({
       notificationsHandle,
     ],
   );
+  // The tray shows the extensions of the last focused page's profile.
+  const trayProfile = useFocusedProfile(
+    domicile,
+    windows.activeId === undefined ? undefined : browserIdOf(windows.activeId),
+  );
   const trayState = useMemo(
     () => ({
       clicked: clickedExtension,
@@ -685,6 +694,7 @@ export const Desktop = ({
       opened,
       order: trayOrder,
       pins: trayPins,
+      profile: trayProfile,
     }),
     [
       clickedExtension,
@@ -694,6 +704,7 @@ export const Desktop = ({
       openExtension,
       tray,
       trayOrder,
+      trayProfile,
       trayPins,
     ],
   );
@@ -950,6 +961,7 @@ export const Desktop = ({
         closedBrowsers={closedBrowsers}
         domicile={domicile}
         holdKeyboard={holdKeyboard}
+        omitAgents={showsSharing(bar)}
         omitScreenCasts={showsSharing(bar)}
         screen={windows.focused}
         screenOf={screenOf}
@@ -1102,7 +1114,13 @@ const launch = (
       break;
     }
     case LaunchKind.Browsed: {
-      act(WindowAction.BrowserOpened(picked.url, picked.isPrivate));
+      act(
+        WindowAction.BrowserOpened(
+          picked.url,
+          picked.isPrivate,
+          picked.profile,
+        ),
+      );
       break;
     }
   }

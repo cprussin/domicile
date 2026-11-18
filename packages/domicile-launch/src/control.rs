@@ -2,8 +2,10 @@
 //!
 //! One JSON request line in, one response line out, per connection. This uses
 //! the same newline-delimited JSON framing as the host protocol. The one
-//! exception is [`Request::VirtualMonitor`], whose connection is held: see
-//! [`crate::monitor_lending`].
+//! exceptions are [`Request::VirtualMonitor`], [`Request::Subscribe`] and
+//! [`Request::Agent`], whose connections are held: see
+//! [`crate::monitor_lending`], [`crate::subscription`] and
+//! [`crate::agent_lending`].
 //!
 //! Lines come from a socket, so [`answer`] parses them strictly and refuses
 //! anything else.
@@ -12,14 +14,17 @@ use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    DesktopStatus, DisplayChange, HostMessage, ListedDisplay, ListedInput, ListedWindow,
-    MonitorInfo, Scale, ShellBinding, ShellCommandHelp, Theme, WatchTopic, WindowAct,
+    AgentReach, DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage, KnownAgents,
+    ListedDisplay, ListedInput, ListedWindow, MonitorInfo, Scale, ShellBinding, ShellCommandHelp,
+    Theme, WatchTopic, WindowAct, WindowKind,
 };
 use serde::{Deserialize, Serialize};
 
+use crate::browser_profiles::BrowserProfileList;
 use crate::extensions::{ExtensionSettings, InstalledExtension};
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
 use crate::media_devices::{MediaDevices, MediaKind};
+use crate::shell_path::{Shell, ShellFiles};
 use crate::site_data::SiteData;
 use crate::site_permissions::{SitePermission, SiteSettings};
 
@@ -38,11 +43,22 @@ pub enum Request {
     /// Serve this shell instead.
     ///
     /// The client resolves the paths (see [`crate::shell_path::Shell`])
-    /// because the desktop does not share its working directory.
-    LoadShell { root: PathBuf, module: PathBuf },
-    /// Open this URL in a browser window. The client converts paths with
-    /// [`crate::address`].
-    OpenUrl { url: String },
+    /// because the desktop does not share its working directory. With
+    /// `dev_server`, `root` is `domicile dev`'s socket.
+    LoadShell {
+        root: PathBuf,
+        module: PathBuf,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        dev_server: bool,
+    },
+    /// Open this URL in a browser window: in browser profile `profile`, or
+    /// with none in the one its site opens in. The client converts paths
+    /// with [`crate::address`].
+    OpenUrl {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        profile: Option<String>,
+    },
     /// Open this URL in an app window: a browser window the shell draws
     /// without an address bar. See `docs/architecture/WEB-APPS.md`.
     ///
@@ -54,6 +70,10 @@ pub enum Request {
         id: Option<String>,
         #[serde(default)]
         reuse: AppReuse,
+        /// The browser profile a new window opens in, or with none the one
+        /// its site opens in.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        profile: Option<String>,
     },
     /// Run the app module `module` under `root` in an app window. The client
     /// resolves both ([`crate::app_entry`]). See
@@ -92,8 +112,20 @@ pub enum Request {
     SetMediaDevice { kind: MediaKind, id: String },
     /// Report every extension installed in the engine's profile.
     Extensions,
-    /// Enable or disable an extension.
-    SetExtensionEnabled { id: String, enabled: bool },
+    /// Enable or disable an extension, in browser profile `profile` or the
+    /// shell's own.
+    SetExtensionEnabled {
+        id: String,
+        enabled: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        profile: Option<String>,
+    },
+    /// Report the desk's browser profiles and the sites that open outside the
+    /// default one.
+    BrowserProfiles,
+    /// Open `site` in browser profile `profile` from now on. The default
+    /// profile unpins it.
+    PinBrowserSite { site: String, profile: String },
     /// Change each of `settings` that is set on an extension.
     ConfigureExtension {
         id: String,
@@ -142,6 +174,13 @@ pub enum Request {
     ShellBindings,
     /// Report the keyboards, pointers and touch devices the engine reads.
     Inputs,
+    /// Report the agents let in now and those remembered. Asked by
+    /// `domicile-app-host` for Settings › Agents.
+    Agents,
+    /// End agent session `session`, as the bar's Stop does.
+    StopAgent { session: u32 },
+    /// Make the remembered agent `agent` ask again next time.
+    ForgetAgent { agent: String },
     /// Turn every monitor off until input or [`Request::WakeDisplays`], or
     /// only `display`, by any name a profile matches it by, until it is woken. The
     /// compositor owns the monitors, so this works with any shell. See
@@ -173,6 +212,20 @@ pub enum Request {
     /// Focus, close or kill the native window `id`, as `domicile
     /// list-windows` prints it.
     ActOnWindow { id: String, act: WindowAct },
+    /// Write a PNG of the desk to `file`, its longer side at most `fit`
+    /// pixels. See `domicile screenshot --fit`.
+    ShootDesk { file: PathBuf, fit: u32 },
+    /// Send `input` to the desk. See `domicile pointer`, `key` and `type`.
+    Emulate { input: Vec<EmulatedInput> },
+    /// Send DevTools Protocol `method` with `params` to browser window
+    /// `window`, as `domicile list-windows` prints it. See `domicile
+    /// devtools`.
+    #[serde(rename = "devtools")]
+    DevTools {
+        window: String,
+        method: String,
+        params: serde_json::Value,
+    },
     /// Change how the monitor `display` is set up until the desktop
     /// restarts. See `domicile configure-display`.
     ConfigureDisplay {
@@ -183,6 +236,14 @@ pub enum Request {
     /// topic's answer at once, then again whenever it changes, each as a
     /// [`Response::Heard`]. See `domicile subscribe`.
     Subscribe { topics: Vec<WatchTopic> },
+    /// Let agent `agent` see and use the desk for as long as the connection
+    /// is open, as the user allows in the shell's dialog. Answered with
+    /// [`Response::Agent`]; each later line is a [`Request::AgentDid`]. The
+    /// desktop hangs up when the shell stops it. See `domicile agent`.
+    Agent { agent: String },
+    /// Note what the agent this connection holds did, for the shell to list.
+    /// Not answered.
+    AgentDid { said: String },
     /// Resize the monitor this connection holds. Not answered.
     ResizeVirtualMonitor {
         width: u32,
@@ -243,10 +304,17 @@ pub struct SettingsFiles {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Response {
-    /// The absolute path of the module the desktop is serving.
+    /// The absolute path of the module the desktop is serving, the directory
+    /// it is served from, and whether that is `domicile dev`'s socket instead.
     ///
-    /// Answers both `which-shell` and a successful `load-shell`.
-    Shell { module: PathBuf },
+    /// Answers both `which-shell` and a successful `load-shell`. `domicile
+    /// dev` loads the shell it replaced again from `root` and `dev_server`.
+    Shell {
+        module: PathBuf,
+        root: PathBuf,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        dev_server: bool,
+    },
 
     /// The engine passed the address to the shell.
     ///
@@ -256,6 +324,13 @@ pub enum Response {
 
     /// The compositor wrote the screenshot or the recording to this file.
     Captured { file: PathBuf },
+
+    /// Answers `shoot_desk`: what the PNG shows.
+    DeskShot { shot: DeskShot },
+
+    /// Answers `devtools`: the method's result.
+    #[serde(rename = "devtools")]
+    DevTools { result: serde_json::Value },
 
     /// The user dismissed the shell's screenshot or recording dialog, or
     /// discarded the recording.
@@ -296,6 +371,9 @@ pub enum Response {
 
     /// Answers `extensions`.
     Extensions { extensions: Vec<InstalledExtension> },
+
+    /// Answers `browser_profiles`.
+    BrowserProfiles(BrowserProfileList),
 
     /// Answers `history`.
     History { items: Vec<HistoryItem> },
@@ -343,11 +421,14 @@ pub enum Response {
     /// Answers `inputs`.
     Inputs { inputs: Vec<ListedInput> },
 
+    /// Answers `agents`.
+    Agents { agents: KnownAgents },
+
     /// The compositor turned the monitors off or on.
     Powered,
 
-    /// The compositor did what was asked: locked the desktop, or acted on a
-    /// window.
+    /// The compositor did what was asked: locked the desktop, acted on a
+    /// window, or stopped or forgot an agent.
     Done,
 
     /// What a [`Request::Subscribe`] heard: the compositor's answer for one
@@ -356,6 +437,9 @@ pub enum Response {
 
     /// The compositor added the virtual monitor, on this output.
     VirtualMonitor { output: String },
+
+    /// The user let the agent reach this.
+    Agent { reach: AgentReach },
 
     /// The request was unknown or could not be carried out.
     ///
@@ -380,18 +464,20 @@ pub fn parse_response(line: &str) -> Result<Response, serde_json::Error> {
 /// Tells the engine to serve a shell.
 ///
 /// [`crate::command_socket::load_shell`] in a desktop; a closure in tests.
-pub type LoadShell<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
+pub type LoadShell<'a> = &'a dyn Fn(&Shell) -> Result<(), String>;
 
-/// Tells the engine to open an address in the shell.
+/// Tells the engine to open an address in the shell, in a browser profile or
+/// with none in the one its site opens in.
 ///
 /// [`crate::command_socket::open_url`] in a desktop; a closure in tests.
-pub type OpenUrl<'a> = &'a dyn Fn(&str) -> Result<(), String>;
+pub type OpenUrl<'a> = &'a dyn Fn(&str, Option<&str>) -> Result<(), String>;
 
 /// Tells the engine to open an address in an app window with an id, or to
-/// reuse the open one as [`AppReuse`] says.
+/// reuse the open one as [`AppReuse`] says, a new one in a browser profile or
+/// with none in the one its site opens in.
 ///
 /// [`crate::command_socket::open_app`] in a desktop; a closure in tests.
-pub type OpenApp<'a> = &'a dyn Fn(&str, Option<&str>, AppReuse) -> Result<(), String>;
+pub type OpenApp<'a> = &'a dyn Fn(&str, Option<&str>, AppReuse, Option<&str>) -> Result<(), String>;
 
 /// Tells the engine to run an app module.
 ///
@@ -465,7 +551,19 @@ pub type ListExtensions<'a> = &'a dyn Fn() -> Result<Vec<InstalledExtension>, St
 ///
 /// [`crate::command_socket::set_extension_enabled`] in a desktop; a closure in
 /// tests.
-pub type SetExtensionEnabled<'a> = &'a dyn Fn(&str, bool) -> Result<(), String>;
+pub type SetExtensionEnabled<'a> = &'a dyn Fn(&str, bool, Option<&str>) -> Result<(), String>;
+
+/// Asks the engine for the desk's browser profiles.
+///
+/// [`crate::command_socket::browser_profiles`] in a desktop; a closure in
+/// tests.
+pub type ListBrowserProfiles<'a> = &'a dyn Fn() -> Result<BrowserProfileList, String>;
+
+/// Tells the engine to open a site in a browser profile from now on.
+///
+/// [`crate::command_socket::pin_browser_site`] in a desktop; a closure in
+/// tests.
+pub type PinBrowserSite<'a> = &'a dyn Fn(&str, &str) -> Result<(), String>;
 
 /// Tells the engine to change an extension's settings.
 ///
@@ -535,6 +633,23 @@ pub type Locking<'a> = &'a dyn Fn() -> Result<(), String>;
 /// tests.
 pub type ActingOnWindows<'a> = &'a dyn Fn(&str, WindowAct) -> Result<(), String>;
 
+/// Asks the compositor for a PNG of the desk, shrunk to fit.
+///
+/// [`crate::compositor_socket::shoot_desk`] in a desktop; a closure in tests.
+pub type ShootingTheDesk<'a> = &'a dyn Fn(&Path, u32) -> Result<DeskShot, String>;
+
+/// Asks the compositor to send input to the desk.
+///
+/// [`crate::compositor_socket::emulate`] in a desktop; a closure in tests.
+pub type Emulating<'a> = &'a dyn Fn(&[EmulatedInput]) -> Result<(), String>;
+
+/// Sends a DevTools Protocol method to a browser window, by its id in the
+/// engine, and returns its result.
+///
+/// [`crate::command_socket::devtools`] in a desktop; a closure in tests.
+pub type SendDevTools<'a> =
+    &'a dyn Fn(&str, &str, &serde_json::Value) -> Result<serde_json::Value, String>;
+
 /// Asks the compositor to change how a monitor is set up.
 ///
 /// [`crate::compositor_socket::configure_display`] in a desktop; a closure in
@@ -578,13 +693,29 @@ pub type ListShellBindings<'a> = &'a dyn Fn() -> Result<Vec<ShellBinding>, Strin
 /// [`crate::compositor_socket::inputs`] in a desktop; a closure in tests.
 pub type ListInputs<'a> = &'a dyn Fn() -> Result<Vec<ListedInput>, String>;
 
+/// Asks the compositor for the agents it knows.
+///
+/// [`crate::compositor_socket::agents`] in a desktop; a closure in tests.
+pub type ListAgents<'a> = &'a dyn Fn() -> Result<KnownAgents, String>;
+
+/// Asks the compositor to end an agent's session.
+///
+/// [`crate::compositor_socket::stop_agent`] in a desktop; a closure in tests.
+pub type StoppingAgents<'a> = &'a dyn Fn(u32) -> Result<(), String>;
+
+/// Asks the compositor to forget a remembered agent.
+///
+/// [`crate::compositor_socket::forget_agent`] in a desktop; a closure in
+/// tests.
+pub type ForgettingAgents<'a> = &'a dyn Fn(&str) -> Result<(), String>;
+
 /// What a request can learn about or do to the running desktop.
 ///
 /// The dials reach the engine and the compositor; they are injected so
 /// [`answer`] can be tested without sockets.
 pub struct Desktop<'a> {
-    /// The shell module being served.
-    pub module: &'a Path,
+    /// The shell being served.
+    pub shell: &'a Shell,
     pub files: &'a SettingsFiles,
     pub load: LoadShell<'a>,
     pub open: OpenUrl<'a>,
@@ -603,6 +734,8 @@ pub struct Desktop<'a> {
     pub extensions: ListExtensions<'a>,
     pub set_extension_enabled: SetExtensionEnabled<'a>,
     pub configure_extension: ConfigureExtension<'a>,
+    pub browser_profiles: ListBrowserProfiles<'a>,
+    pub pin_browser_site: PinBrowserSite<'a>,
     pub history: SearchHistory<'a>,
     pub visits: ListVisits<'a>,
     pub delete_history: DeleteHistory<'a>,
@@ -614,6 +747,9 @@ pub struct Desktop<'a> {
     pub power_displays: PowerDisplays<'a>,
     pub lock: Locking<'a>,
     pub act_on_window: ActingOnWindows<'a>,
+    pub shoot_desk: ShootingTheDesk<'a>,
+    pub emulate: Emulating<'a>,
+    pub devtools: SendDevTools<'a>,
     pub configure_display: ConfiguringDisplays<'a>,
     pub monitors: ListMonitors<'a>,
     pub displays: ListDisplays<'a>,
@@ -622,6 +758,9 @@ pub struct Desktop<'a> {
     pub shell_commands: ListShellCommands<'a>,
     pub shell_bindings: ListShellBindings<'a>,
     pub inputs: ListInputs<'a>,
+    pub agents: ListAgents<'a>,
+    pub stop_agent: StoppingAgents<'a>,
+    pub forget_agent: ForgettingAgents<'a>,
 }
 
 /// A [`Request::VirtualMonitor`] and the connection it came on, which
@@ -630,6 +769,17 @@ pub struct Desktop<'a> {
 pub struct Lent {
     pub name: String,
     pub mode: crate::cli::MonitorMode,
+    /// The client's lines after the request.
+    pub lines: std::io::BufReader<std::os::unix::net::UnixStream>,
+    /// Where the client hears back.
+    pub client: std::os::unix::net::UnixStream,
+}
+
+/// A [`Request::Agent`] and the connection it came on, which
+/// [`crate::control_socket::serve_one`] lends to
+/// [`crate::agent_lending::admit`].
+pub struct Admission {
+    pub agent: String,
     /// The client's lines after the request.
     pub lines: std::io::BufReader<std::os::unix::net::UnixStream>,
     /// Where the client hears back.
@@ -656,30 +806,57 @@ pub enum Shot {
     Canceled,
 }
 
+/// The answer naming `shell` as the one served.
+fn serving(shell: &Shell) -> Response {
+    Response::Shell {
+        module: shell.root.join(&shell.module),
+        root: shell.root.clone(),
+        dev_server: shell.files == ShellFiles::DevServer,
+    }
+}
+
 /// Answers one request line to `desktop`.
 pub fn answer(line: &str, desktop: &Desktop) -> String {
     match parse_request(line.trim()) {
-        Ok(Request::WhichShell) => to_line(&Response::Shell {
-            module: desktop.module.to_path_buf(),
-        }),
+        Ok(Request::WhichShell) => to_line(&serving(desktop.shell)),
         // Reply with the resolved path so the user can see which file was
         // loaded.
-        Ok(Request::LoadShell { root, module }) => to_line(&match (desktop.load)(&root, &module) {
-            Ok(()) => Response::Shell {
-                module: root.join(module),
-            },
-            Err(why) => Response::Refused { why },
-        }),
-        Ok(Request::OpenUrl { url }) => to_line(&match (desktop.open)(&url) {
-            Ok(()) => Response::Opened,
-            Err(why) => Response::Refused { why },
-        }),
-        Ok(Request::OpenApp { url, id, reuse }) => {
-            to_line(&match (desktop.open_app)(&url, id.as_deref(), reuse) {
+        Ok(Request::LoadShell {
+            root,
+            module,
+            dev_server,
+        }) => {
+            let shell = Shell {
+                files: if dev_server {
+                    ShellFiles::DevServer
+                } else {
+                    ShellFiles::Directory
+                },
+                module,
+                root,
+            };
+            to_line(&match (desktop.load)(&shell) {
+                Ok(()) => serving(&shell),
+                Err(why) => Response::Refused { why },
+            })
+        }
+        Ok(Request::OpenUrl { url, profile }) => {
+            to_line(&match (desktop.open)(&url, profile.as_deref()) {
                 Ok(()) => Response::Opened,
                 Err(why) => Response::Refused { why },
             })
         }
+        Ok(Request::OpenApp {
+            url,
+            id,
+            reuse,
+            profile,
+        }) => to_line(
+            &match (desktop.open_app)(&url, id.as_deref(), reuse, profile.as_deref()) {
+                Ok(()) => Response::Opened,
+                Err(why) => Response::Refused { why },
+            },
+        ),
         Ok(Request::RunApp { root, module }) => to_line(&match (desktop.run_app)(&root, &module) {
             Ok(()) => Response::Opened,
             Err(why) => Response::Refused { why },
@@ -701,7 +878,13 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::SettingsFiles) => to_line(&Response::SettingsFiles {
             files: SettingsFiles {
-                options: Some(desktop.module.with_file_name(OPTIONS)),
+                options: Some(
+                    desktop
+                        .shell
+                        .root
+                        .join(&desktop.shell.module)
+                        .with_file_name(OPTIONS),
+                ),
                 ..desktop.files.clone()
             },
         }),
@@ -745,8 +928,22 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(extensions) => Response::Extensions { extensions },
             Err(why) => Response::Refused { why },
         }),
-        Ok(Request::SetExtensionEnabled { id, enabled }) => {
-            to_line(&match (desktop.set_extension_enabled)(&id, enabled) {
+        Ok(Request::SetExtensionEnabled {
+            id,
+            enabled,
+            profile,
+        }) => to_line(
+            &match (desktop.set_extension_enabled)(&id, enabled, profile.as_deref()) {
+                Ok(()) => Response::Stored,
+                Err(why) => Response::Refused { why },
+            },
+        ),
+        Ok(Request::BrowserProfiles) => to_line(&match (desktop.browser_profiles)() {
+            Ok(list) => Response::BrowserProfiles(list),
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::PinBrowserSite { site, profile }) => {
+            to_line(&match (desktop.pin_browser_site)(&site, &profile) {
                 Ok(()) => Response::Stored,
                 Err(why) => Response::Refused { why },
             })
@@ -809,7 +1006,7 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::Status) => to_line(&match (desktop.status)() {
             Ok(status) => Response::Status {
-                shell: desktop.module.to_path_buf(),
+                shell: desktop.shell.root.join(&desktop.shell.module),
                 status,
             },
             Err(why) => Response::Refused { why },
@@ -826,12 +1023,40 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(inputs) => Response::Inputs { inputs },
             Err(why) => Response::Refused { why },
         }),
+        Ok(Request::Agents) => to_line(&match (desktop.agents)() {
+            Ok(agents) => Response::Agents { agents },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::StopAgent { session }) => to_line(&match (desktop.stop_agent)(session) {
+            Ok(()) => Response::Done,
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::ForgetAgent { agent }) => to_line(&match (desktop.forget_agent)(&agent) {
+            Ok(()) => Response::Done,
+            Err(why) => Response::Refused { why },
+        }),
         Ok(Request::Lock) => to_line(&match (desktop.lock)() {
             Ok(()) => Response::Done,
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::ActOnWindow { id, act }) => to_line(&match (desktop.act_on_window)(&id, act) {
             Ok(()) => Response::Done,
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::ShootDesk { file, fit }) => to_line(&match (desktop.shoot_desk)(&file, fit) {
+            Ok(shot) => Response::DeskShot { shot },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::Emulate { input }) => to_line(&match (desktop.emulate)(&input) {
+            Ok(()) => Response::Done,
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::DevTools {
+            window,
+            method,
+            params,
+        }) => to_line(&match driven(desktop, &window, &method, &params) {
+            Ok(result) => Response::DevTools { result },
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::ConfigureDisplay { display, change }) => {
@@ -859,6 +1084,15 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
                   was not lent"
                 .to_string(),
         }),
+        // Lent the connection by `serve_one` too.
+        Ok(Request::Agent { .. }) => to_line(&Response::Refused {
+            why: "an agent is let in for as long as its connection lasts, which this \
+                  desktop was not lent"
+                .to_string(),
+        }),
+        Ok(Request::AgentDid { .. }) => to_line(&Response::Refused {
+            why: "this connection holds no agent".to_string(),
+        }),
         Ok(Request::ResizeVirtualMonitor { .. }) => to_line(&Response::Refused {
             why: "this connection holds no virtual monitor to resize".to_string(),
         }),
@@ -882,6 +1116,39 @@ fn powered(power: DisplayPower, display: Option<String>, set: PowerDisplays) -> 
 
 /// Carries out `to` with `set`. A toggle asks first, since the engine keeps the
 /// setting.
+/// Sends `method` to the browser window `domicile list-windows` lists as
+/// `window`, which must be neither native nor private, while the desktop is
+/// unlocked.
+fn driven(
+    desktop: &Desktop,
+    window: &str,
+    method: &str,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    if (desktop.status)()?.locked {
+        return Err("the desktop is locked".to_string());
+    }
+    let windows = (desktop.windows)()?;
+    let listed = windows
+        .iter()
+        .find(|listed| listed.id == window)
+        .ok_or_else(|| format!("there is no window {window}; list-windows lists them"))?;
+    if listed.private {
+        return Err(format!(
+            "window {window} is private, and agents do not drive private windows"
+        ));
+    }
+    match (&listed.kind, &listed.engine_id) {
+        (WindowKind::Browser, Some(engine_id)) => (desktop.devtools)(engine_id, method, params),
+        (WindowKind::Browser, None) => Err(format!(
+            "the compositor listed browser window {window} without its id in the engine"
+        )),
+        (WindowKind::Native, _) => Err(format!(
+            "window {window} is a native window; devtools drives browser windows"
+        )),
+    }
+}
+
 fn switched(to: Option<Switch>, set: DisableWhileTyping) -> Result<bool, String> {
     match to {
         None => set(None),

@@ -10,6 +10,7 @@
 #include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
+#include "chrome/browser/domicile/domicile_browser_profiles.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_chrome_dialogs.h"
 #include "chrome/browser/domicile/domicile_desk_functions.h"
@@ -107,6 +108,8 @@ void StartDesk(Profile* profile) {
     RegisterDeskFunctions();
     // Browser windows: tabs opened by guests and shown by <webview window>.
     StartBrowserWindows();
+    // Browser profiles, which the compositor names on the control channel.
+    StartBrowserProfiles();
     // Electron apps, whose windows are browser windows.
     StartElectronSocket();
     // DevTools for the context menu's "inspect" and <webview>.inspect().

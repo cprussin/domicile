@@ -21,6 +21,7 @@ SCRIPTS="$ROOT/packages/domicile-engine/scripts"
 FIRST=(
   build-produced-what-the-guards-load
   locales-are-trimmed
+  node-runs-on-the-engine
   unit-tests
   drm-unit-tests
   build-the-compositor
@@ -63,6 +64,7 @@ TOGETHER=(
   guard-webview-browser-page
   guard-webview-history
   guard-webview-history-new-window
+  guard-webview-history-menu
   guard-webview-untrusted-cert
   guard-webview-find
   guard-webview-click
@@ -82,6 +84,7 @@ TOGETHER=(
   guard-webview-device-request
   guard-webview-media-devices
   guard-webview-count-matches
+  guard-webview-click-match
   guard-webview-dialog
   guard-webview-beforeunload
   guard-webview-external-app
@@ -105,8 +108,10 @@ TOGETHER=(
   guard-webview-survives-load-shell
   guard-webview-hidden
   guard-webview-moved
+  guard-profile-routing
   guard-webview-paused
   guard-animation-main-frames
+  guard-webview-scale-animation
   guard-webview-crash
   guard-desktop-geometry
   guard-windows-state
@@ -122,6 +127,7 @@ TOGETHER=(
   guard-shell-crash
   guard-app-only-in-shell
   guard-domicile-fetch
+  guard-shell-hmr
   guard-shell-workers
   guard-shell-pdf
   guard-pdf-scaled-text
@@ -129,6 +135,7 @@ TOGETHER=(
   guard-app-module
   guard-electron-socket
   guard-electron-preload
+  guard-electron-node
   guard-electron-protocol
   guard-electron-menu-bar
   guard-electron-message-box
@@ -151,14 +158,17 @@ LAST=(
 
 # Guards with no control run.
 ONCE=(
+  node-runs-on-the-engine
   guard-app-only-in-shell
   guard-asks-promise
   guard-browser-brand
   guard-desk-state
   guard-desktop-geometry
   guard-domicile-fetch
+  guard-shell-hmr
   guard-electron-menu-bar
   guard-electron-message-box
+  guard-electron-node
   guard-electron-preload
   guard-electron-protocol
   guard-electron-permissions

@@ -3,6 +3,7 @@
 
 #include "components/domicile/browser/control_channel.h"
 
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -659,6 +660,39 @@ TEST_F(ControlChannelTest, TheSitesToForceDarkReachTheBrowser) {
 
   EXPECT_EQ(force_dark_.Take(),
             (std::vector<std::string>{"mail.google.com"}));
+}
+
+// The desk's browser profiles are this process's too, and reach it with the
+// page whose channel heard them. Ones that name a profile they do not list are
+// dropped.
+TEST_F(ControlChannelTest, TheBrowserProfilesReachTheBrowserWithThePage) {
+  base::test::TestFuture<Page, BrowserProfiles> heard;
+  SetBrowserProfilesSink(
+      heard.GetRepeatingCallback<const Page&, const BrowserProfiles&>());
+
+  Say("{\"type\":\"browser_profiles\",\"profiles\":[{\"id\":\"default\","
+      "\"name\":\"Personal\",\"color\":\"#0d9488\",\"private\":false}],"
+      "\"default_profile\":\"work\",\"default_private_profile\":\"work\","
+      "\"sites\":{}}\n"
+      "{\"type\":\"browser_profiles\",\"profiles\":[{\"id\":\"default\","
+      "\"name\":\"Personal\",\"color\":\"#0d9488\",\"private\":false},"
+      "{\"id\":\"private\",\"name\":\"Private\",\"color\":\"#a78bfa\","
+      "\"private\":true},{\"id\":\"work\",\"name\":\"Work\","
+      "\"color\":\"#2563eb\",\"private\":false,"
+      "\"extensions\":[\"aeblfdkhhhdcdjpifhhbdiojplfjncoa\"]}],"
+      "\"default_profile\":\"default\",\"default_private_profile\":"
+      "\"private\",\"sites\":{\"github.com/acme\":\"work\"}}\n");
+
+  const auto [page, profiles] = heard.Take();
+  EXPECT_EQ(page, Page{});
+  EXPECT_EQ(profiles.default_profile, "default");
+  EXPECT_EQ(profiles.default_private_profile, "private");
+  ASSERT_NE(profiles.Find("work"), nullptr);
+  EXPECT_EQ(profiles.Find("work")->extensions,
+            (std::vector<std::string>{"aeblfdkhhhdcdjpifhhbdiojplfjncoa"}));
+  EXPECT_EQ(profiles.sites,
+            (std::map<std::string, std::string>{{"github.com/acme", "work"}}));
+  SetBrowserProfilesSink(BrowserProfilesSink());
 }
 
 // A compositor that exits takes its windows and the page's system calls with

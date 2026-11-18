@@ -15,6 +15,8 @@
 #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_domicile_history.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_domicile_history_entry.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_domicile_media_device.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_domicile_media_devices.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_keyboard_event_init.h"
@@ -173,9 +175,13 @@ constexpr char kFocusRequestEvent[] = "domicile-focus-request";
 // matters.
 constexpr char kExtensionPopupAttr[] = "extensionpopup";
 
-// Makes the guest's page private: in the off-the-record profile. Read once,
-// on requesting the guest; only presence matters.
+// Makes the guest's page private: in the default private profile, off the
+// record. Read once, on requesting the guest; only presence matters.
 constexpr char kPrivateAttr[] = "private";
+
+// Puts the guest's page in the browser profile it names, by id. Read once, on
+// requesting the guest. See docs/architecture/BROWSER-PROFILES.md.
+constexpr char kProfileAttr[] = "profile";
 
 // Gives the guest's page storage of its own: "persist:<name>" on disk, any
 // other name in memory. Read once, on requesting the guest. See
@@ -389,11 +395,18 @@ void HTMLWebViewElement::RequestGuest() {
                      client_receiver_.BindNewPipeAndPassRemote(task_runner),
                      BrowserWindow(),
                      hasAttribute(AtomicString(kExtensionPopupAttr)),
-                     hasAttribute(AtomicString(kPrivateAttr)), Partition());
+                     hasAttribute(AtomicString(kPrivateAttr)), Profile(),
+                     Partition());
 }
 
 String HTMLWebViewElement::BrowserWindow() const {
   return getAttribute(AtomicString(kWindowAttr));
+}
+
+String HTMLWebViewElement::Profile() const {
+  const AtomicString& profile = getAttribute(AtomicString(kProfileAttr));
+  // Empty, not null, when absent, as Partition.
+  return profile.IsNull() ? g_empty_string : profile.GetString();
 }
 
 String HTMLWebViewElement::Partition() const {
@@ -506,6 +519,60 @@ void HTMLWebViewElement::goBackInNewWindow() {
 void HTMLWebViewElement::goForwardInNewWindow() {
   if (guest_.is_bound()) {
     guest_->GoForwardInNewWindow();
+  }
+}
+
+namespace {
+
+HeapVector<Member<DomicileHistoryEntry>> HistoryListed(
+    const Vector<domicile::mojom::blink::WebViewHistoryEntryPtr>& entries) {
+  HeapVector<Member<DomicileHistoryEntry>> listed;
+  listed.reserve(entries.size());
+  for (const auto& entry : entries) {
+    auto* page = DomicileHistoryEntry::Create();
+    page->setId(entry->id);
+    page->setUrl(entry->url.GetString());
+    page->setTitle(entry->title);
+    page->setFavicon(entry->favicon);
+    listed.push_back(page);
+  }
+  return listed;
+}
+
+void ResolveHistory(ScriptPromiseResolver<DomicileHistory>* resolver,
+                    domicile::mojom::blink::WebViewHistoryPtr history) {
+  auto* answer = DomicileHistory::Create();
+  answer->setBack(HistoryListed(history->back));
+  answer->setForward(HistoryListed(history->forward));
+  resolver->Resolve(answer);
+}
+
+}  // namespace
+
+ScriptPromise<DomicileHistory> HTMLWebViewElement::history(
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
+  if (!guest_.is_bound()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "This <webview> has no page yet.");
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<DomicileHistory>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  guest_->ListHistory(BindOnce(&ResolveHistory, WrapPersistent(resolver)));
+  return promise;
+}
+
+void HTMLWebViewElement::goToHistoryEntry(int32_t id) {
+  if (guest_.is_bound()) {
+    guest_->GoToHistoryEntry(id);
+  }
+}
+
+void HTMLWebViewElement::goToHistoryEntryInNewWindow(int32_t id) {
+  if (guest_.is_bound()) {
+    guest_->GoToHistoryEntryInNewWindow(id);
   }
 }
 
@@ -678,6 +745,16 @@ void SettleCount(ScriptPromiseResolver<IDLLong>* resolver,
   }
 }
 
+void SettleClick(ScriptPromiseResolver<IDLBoolean>* resolver,
+                 std::optional<bool> clicked) {
+  if (clicked.has_value()) {
+    resolver->Resolve(*clicked);
+  } else {
+    resolver->RejectWithDOMException(DOMExceptionCode::kInvalidStateError,
+                                     "The page gave no answer.");
+  }
+}
+
 std::optional<domicile::mojom::blink::WebViewMediaDeviceKind>
 MediaDeviceKindNamed(const String& kind) {
   if (kind == "camera") {
@@ -758,6 +835,28 @@ ScriptPromise<IDLLong> HTMLWebViewElement::countMatches(
   return promise;
 }
 
+// The selector is parsed here first, as countMatches() parses it.
+ScriptPromise<IDLBoolean> HTMLWebViewElement::clickMatch(
+    ScriptState* script_state,
+    const String& selector,
+    ExceptionState& exception_state) {
+  GetDocument().QuerySelector(AtomicString(selector), exception_state);
+  if (exception_state.HadException()) {
+    return EmptyPromise();
+  }
+  if (!guest_.is_bound()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "This <webview> has no page yet.");
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLBoolean>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  guest_->ClickMatch(selector,
+                     BindOnce(&SettleClick, WrapPersistent(resolver)));
+  return promise;
+}
+
 // State updates store the new value before dispatching, so handlers read it.
 void HTMLWebViewElement::HistoryChanged(bool can_go_back, bool can_go_forward) {
   can_go_back_ = can_go_back;
@@ -818,6 +917,30 @@ void HTMLWebViewElement::UnhandledModifierUp(const String& key,
   init->setCode(code);
   DispatchEvent(*MakeGarbageCollected<KeyboardEvent>(
       AtomicString(kGuestKeyupEvent), init));
+}
+
+void HTMLWebViewElement::Replaced() {
+  // The old page's asks go with it, as when it withdraws them.
+  PermissionRequestWithdrawn();
+  DeviceRequestWithdrawn();
+  DialogWithdrawn();
+  SignInWithdrawn();
+  PromptWithdrawn();
+  IdentityWithdrawn();
+  PickerWithdrawn();
+  if (external_app_) {
+    external_app_->DismissIfUnanswered();
+  }
+  host_.reset();
+  guest_.reset();
+  client_receiver_.reset();
+  // The old page is attached to the placeholder frame, and stays there until
+  // the frame goes, so the new page needs a new one. Removing the frame
+  // detaches the old page, which the browser destroys. Inserting this element
+  // makes a placeholder and asks for the window the same way, and the window
+  // id now names the new page.
+  DisconnectContentFrame();
+  DidNotifySubtreeInsertionsToDocument();
 }
 
 void HTMLWebViewElement::ZoomChanged(double factor) {

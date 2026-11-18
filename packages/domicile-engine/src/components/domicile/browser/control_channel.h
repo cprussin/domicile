@@ -16,6 +16,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/timer/timer.h"
+#include "components/domicile/browser/browser_profiles.h"
 #include "components/domicile/browser/desk_activity.h"
 #include "components/domicile/browser/desk_faults.h"
 #include "components/domicile/browser/desk_gestures.h"
@@ -95,6 +96,17 @@ using CursorThemeSink =
 // UI thread. See components/domicile/browser/force_dark.h.
 using ForceDarkSink =
     base::RepeatingCallback<void(std::vector<std::string>)>;
+
+// How the desk's browser profiles reach the profile the shell is in, with the
+// shell frame whose channel heard them. Process-wide rather than a constructor
+// argument, as WebViewGuest::SetInspect: //chrome sets it once with
+// SetBrowserProfilesSink, before any channel; a test sets one and gives it back
+// with a null sink. A callback for KeymapSink's
+// reason: a Profile belongs to the UI thread. See
+// chrome/browser/domicile/domicile_browser_profiles.h.
+using BrowserProfilesSink =
+    base::RepeatingCallback<void(const Page&, const BrowserProfiles&)>;
+void SetBrowserProfilesSink(BrowserProfilesSink sink);
 
 // The shell's control channel, in the browser process.
 //
@@ -292,6 +304,8 @@ class ControlChannel : public mojom::ControlChannel {
   const ExtensionsSink extensions_sink_;
   const CursorThemeSink cursor_theme_sink_;
   const ForceDarkSink force_dark_sink_;
+  // The frame the channel was bound for, which BrowserProfilesSink is told.
+  const Page page_;
   mojo::Receiver<mojom::ControlChannel> receiver_;
   mojo::Remote<mojom::ControlChannelClient> client_;
 

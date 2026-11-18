@@ -70,13 +70,25 @@ impl std::fmt::Debug for Passphrase {
     }
 }
 
+/// One browser profile, in [`HostMessage::BrowserProfiles`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BrowserProfile {
+    /// Names its directory: lowercase letters, digits and `-`.
+    pub id: String,
+    pub name: String,
+    /// `#rrggbb`.
+    pub color: String,
+    /// Keeps nothing past its last page.
+    pub private: bool,
+    /// The extension ids it turns on; `None` turns on all of them, or none
+    /// for a private profile.
+    pub extensions: Option<Vec<String>>,
+}
+
 /// One extension's chrome://extensions settings, in
 /// [`HostMessage::Extensions`]. Each is left as the user set it when absent.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExtensionSettings {
-    /// Runs in private windows.
-    #[serde(rename = "private", default, skip_serializing_if = "Option::is_none")]
-    pub in_private: Option<bool>,
     /// Runs on `file://` pages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file_access: Option<bool>,
@@ -431,6 +443,18 @@ pub enum ChromeMessage {
     /// connection only. Sent by `domicile focus-window`, `close-window` and
     /// `kill-window`.
     ActOnWindow { id: String, act: WindowAct },
+
+    /// Write a PNG of the whole desk to the absolute path `file`, shrunk so
+    /// its longer side is at most `fit` pixels. Answered with
+    /// [`HostMessage::DeskShot`] on this connection only. Sent by `domicile
+    /// screenshot --fit`.
+    ShootDesk { file: String, fit: u32 },
+
+    /// Send `input` to the desk, in order, as one emulated device would; it
+    /// lets go of what it held once done. Answered with
+    /// [`HostMessage::Emulated`] on this connection only. Sent by `domicile
+    /// pointer`, `key` and `type`.
+    Emulate { input: Vec<EmulatedInput> },
 
     /// Change how the monitor `display` is set up until the desktop restarts,
     /// over what its config's profile says, like `swaymsg output`. `display`
@@ -891,6 +915,22 @@ pub enum HostMessage {
         refused: Option<String>,
     },
 
+    /// Answers [`ChromeMessage::ShootDesk`] on the asking connection only:
+    /// what the PNG shows, or why there is none.
+    DeskShot {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        shot: Option<DeskShot>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        refused: Option<String>,
+    },
+
+    /// Answers [`ChromeMessage::Emulate`] on the asking connection only: why
+    /// it was not sent, or nothing when it was.
+    Emulated {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        refused: Option<String>,
+    },
+
     /// The compositor's compiled keymap, in `XKB_KEYMAP_FORMAT_TEXT_V1`.
     ///
     /// Read by the browser process and never forwarded to the page. Off
@@ -949,6 +989,20 @@ pub enum HostMessage {
         web_store: Vec<String>,
         unpacked: Vec<String>,
         settings: BTreeMap<String, ExtensionSettings>,
+    },
+
+    /// The browser profiles and the profile each site opens in: the config's
+    /// `browser`. See `docs/architecture/BROWSER-PROFILES.md`.
+    ///
+    /// Always the full set. Sent with the handshake and on reloads that
+    /// change it. Not sent by a host without a config, whose browser keeps
+    /// one profile and its private one.
+    BrowserProfiles {
+        profiles: Vec<BrowserProfile>,
+        default_profile: String,
+        default_private_profile: String,
+        /// Profile ids by site: a host, `*.host`, or a host and path.
+        sites: BTreeMap<String, String>,
     },
 
     /// Host names of sites the browser draws dark while the theme is dark.
@@ -1236,6 +1290,10 @@ pub enum PortalKind {
     /// `org.freedesktop.impl.portal.Screenshot`'s `PickColor`: pick a pixel
     /// of a frozen desk.
     PickColor(FrozenDesk),
+    /// An agent, such as one connected through `domicile mcp`, asks to see
+    /// and use the desk: all of it, or only some windows. Domicile's own, not
+    /// a portal's. Allowed with [`PortalAnswer::Agent`].
+    Agent(AgentDialog),
 }
 
 impl PortalKind {
@@ -1288,6 +1346,12 @@ impl PortalKind {
             (PortalKind::PickColor(desk), PortalAnswer::PickColor { x, y }) => {
                 *x < desk.width && *y < desk.height
             }
+            // Only the whole desk is remembered: window ids last as long as
+            // their windows.
+            (PortalKind::Agent(_), PortalAnswer::Agent { reach, remember }) => match reach {
+                AgentReach::Desk => true,
+                AgentReach::Windows { windows } => !windows.is_empty() && !remember,
+            },
             // A stop, pause, resume or discard answers a running session and
             // a press or release a bound shortcut, never a request.
             (
@@ -1306,7 +1370,9 @@ impl PortalKind {
                 | PortalAnswer::ScreenshotWindow { .. }
                 | PortalAnswer::ScreenshotBrowserWindow { .. }
                 | PortalAnswer::PickColor { .. }
+                | PortalAnswer::Agent { .. }
                 | PortalAnswer::Stop
+                | PortalAnswer::Change
                 | PortalAnswer::Pause
                 | PortalAnswer::Resume
                 | PortalAnswer::Discard
@@ -1463,6 +1529,100 @@ pub enum CapturingKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         running_since_ms: Option<u64>,
     },
+    /// An agent the user let in, until it disconnects or the shell stops it.
+    Agent(AgentSession),
+}
+
+/// An agent's ask to see and use the desk, as [`PortalKind::Agent`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentDialog {
+    /// What the agent calls itself, such as "Claude Code". Its own word, not
+    /// checked.
+    pub agent: String,
+    /// The windows the user may pick from: every one open but private
+    /// browser windows, which no agent reaches.
+    pub windows: Vec<AgentWindow>,
+    /// What it reaches now, when the user asked to change it with
+    /// [`PortalAnswer::Change`]. Canceling keeps it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current: Option<AgentReach>,
+    /// Whether it is let in without asking now, so a change starts with
+    /// Remember on.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub remembered: bool,
+}
+
+/// The agents the desk knows: those let in now, and those let in for good.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KnownAgents {
+    /// Let in now, oldest first.
+    pub connected: Vec<ConnectedAgent>,
+    /// Let in without asking, by name, most recently used first.
+    pub remembered: Vec<RememberedAgent>,
+}
+
+/// An agent let in now.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConnectedAgent {
+    /// Its [`CapturingKind::Agent`] session's id, which
+    /// [`SystemRequest::StopAgent`] takes.
+    pub session: u32,
+    pub agent: String,
+    pub reach: AgentReach,
+}
+
+/// An agent the user let reach the whole desk without asking again, until
+/// [`SystemRequest::ForgetAgent`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RememberedAgent {
+    pub agent: String,
+    /// When it was last let in, in milliseconds since the Unix epoch.
+    pub last_used_ms: u64,
+}
+
+/// A window an agent may be let reach.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentWindow {
+    /// Its `list-windows` id: its `ext-foreign-toplevel-list-v1` identifier.
+    pub id: String,
+    pub kind: WindowKind,
+    /// Empty when it has none.
+    pub title: String,
+    /// A native window's desktop entry id, or a browser window's app id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app: Option<String>,
+}
+
+/// What an agent may reach.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum AgentReach {
+    /// Every window, the pointer and the keyboard.
+    Desk,
+    /// These windows alone, through their accessibility trees and their own
+    /// screenshots. Never the pointer or the keyboard.
+    Windows { windows: Vec<AgentWindow> },
+}
+
+/// A running [`CapturingKind::Agent`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentSession {
+    pub agent: String,
+    pub reach: AgentReach,
+    /// What it did last, newest first, at most [`AGENT_ACTIONS`].
+    pub actions: Vec<AgentAction>,
+}
+
+/// How many of an agent's actions its session lists.
+pub const AGENT_ACTIONS: usize = 5;
+
+/// One thing an agent did, as it says it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentAction {
+    /// Such as `Clicked "Save" in Notes`.
+    pub said: String,
+    /// When, in milliseconds since the Unix epoch.
+    pub at_ms: u64,
 }
 
 /// An `AccessDialog`'s texts.
@@ -1681,6 +1841,45 @@ pub struct ShotWindow {
     pub title: String,
     /// Its Wayland app id, which names its desktop entry; empty if unset.
     pub app_id: String,
+}
+
+/// What a [`HostMessage::DeskShot`]'s PNG shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeskShot {
+    /// The desktop the PNG covers: every monitor.
+    pub place: DeskRect,
+    /// The PNG's size, in pixels.
+    pub width: u32,
+    pub height: u32,
+}
+
+/// One event of a [`ChromeMessage::Emulate`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum EmulatedInput {
+    /// Move the pointer to `x`, `y`: logical pixels from the top-left corner
+    /// of the desk, which is a [`DeskShot`]'s `place`.
+    PointTo { x: f64, y: f64 },
+    Button {
+        button: PointerButton,
+        pressed: bool,
+    },
+    /// Smooth scrolling, in logical pixels; positive is down and right.
+    Scroll { dx: f64, dy: f64 },
+    /// Press or release the key that types the XKB keysym named `key`, such
+    /// as `Return` or `Control_L`.
+    Key { key: String, pressed: bool },
+    /// Type `text`, a key for each character.
+    Text { text: String },
+}
+
+/// A pointer button.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PointerButton {
+    Left,
+    Right,
+    Middle,
 }
 
 /// A rectangle of the desktop, in logical pixels.
@@ -2023,6 +2222,18 @@ pub enum PortalAnswer {
     },
     /// The pixel of a [`PortalKind::PickColor`] the user picked.
     PickColor { x: u32, y: u32 },
+    /// What the user lets a [`PortalKind::Agent`] reach. Windows must be
+    /// ones its dialog offered; the compositor drops any other. `remember`
+    /// lets the agent reach the whole desk later without asking; it takes
+    /// [`AgentReach::Desk`].
+    Agent {
+        reach: AgentReach,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        remember: bool,
+    },
+    /// Ask the user again what the [`CapturingKind::Agent`] with this id may
+    /// reach. Answers no request.
+    Change,
     /// Pause the [`CapturingKind::Recording`] with this id. Answers no
     /// request.
     Pause,
@@ -2061,9 +2272,11 @@ impl PortalAnswer {
             | PortalAnswer::ScreenshotWindow { .. }
             | PortalAnswer::ScreenshotBrowserWindow { .. }
             | PortalAnswer::PickColor { .. }
+            | PortalAnswer::Agent { .. }
             | PortalAnswer::Stop => 0,
             PortalAnswer::Canceled => 1,
             PortalAnswer::Refused
+            | PortalAnswer::Change
             | PortalAnswer::Pause
             | PortalAnswer::Resume
             | PortalAnswer::Discard
@@ -2337,6 +2550,26 @@ pub enum SystemRequest {
         #[serde(default)]
         scale: Scale,
     },
+    /// Let the agent `agent` see and use the desk, as the user allows in a
+    /// [`PortalKind::Agent`] dialog. Answered with [`SystemReply::Agent`]
+    /// once allowed, or [`SystemErrorKind::Canceled`] when the user cancels
+    /// or does not answer within a minute. Listed as a
+    /// [`CapturingKind::Agent`] until [`SystemRequest::Unwatch`] or the
+    /// caller going away. When the shell stops it, ends with
+    /// [`SystemEnd::Stopped`]. `domicile agent` sends this.
+    Agent { agent: String },
+    /// Note that the agent this id let in did `said`, for the shell to list.
+    /// No reply.
+    AgentDid { said: String },
+    /// Report the agents let in now and those remembered. Answered with
+    /// [`SystemReply::Agents`].
+    Agents,
+    /// End the [`CapturingKind::Agent`] session `session`, as the shell's
+    /// [`PortalAnswer::Stop`] does. Answered with [`SystemReply::Set`].
+    StopAgent { session: u32 },
+    /// Make the remembered agent `agent` ask again next time. Answered with
+    /// [`SystemReply::Set`], whether or not it was remembered.
+    ForgetAgent { agent: String },
     /// Report the keymaps the desktop switches between and which it types
     /// on. Answered with [`SystemReply::Started`], then a
     /// [`SystemEvent::Keymaps`] at once and on each change.
@@ -2547,6 +2780,11 @@ pub enum SystemReply {
     Set,
     /// The virtual monitor was added, as the `wl_output` named `output`.
     VirtualMonitor { output: String },
+    /// The user let the agent reach this. A
+    /// [`SystemEvent::AgentReach`] follows each time they change it.
+    Agent { reach: AgentReach },
+    /// The agents the desk knows.
+    Agents(KnownAgents),
     /// The call failed. Nothing else follows under this id.
     Failed { error: SystemError },
 }
@@ -2606,6 +2844,8 @@ pub enum SystemEvent {
     /// A client rang the bell, from window `app_id`, or from none when it
     /// named no surface or one that is not a window.
     Bell { app_id: Option<String> },
+    /// The user changed what the agent this id let in may reach.
+    AgentReach { reach: AgentReach },
     /// The keymaps the desktop switches between, in the config's order, and
     /// the name of the one it types on.
     Keymaps {
@@ -2891,6 +3131,9 @@ pub struct ListedWindow {
     pub url: Option<String>,
     /// A browser window in the off-the-record profile.
     pub private: bool,
+    /// A browser window's id in the engine, which `domicile devtools` sends
+    /// to.
+    pub engine_id: Option<String>,
 }
 
 /// What a [`ChromeMessage::ActOnWindow`] does to a window.

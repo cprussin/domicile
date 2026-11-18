@@ -139,7 +139,8 @@ export const Shell = runManganese({
 
 ## Clock
 
-- Reads like `Wednesday 2026-09-16 20:53:40` and ticks every second.
+- Reads like `Wednesday 2026-09-16 20:53:40` and ticks every second. Without
+  seconds it changes on the minute, and reads the time every few seconds.
 - The shell options `clock.format` (`24h` or `12h`) and `clock.seconds` change
   that, e.g. `Wednesday 2026-09-16 08:53 PM`. See the
   [README](../README.md#configure).
@@ -171,9 +172,10 @@ button, and their controls in one panel, each labeled in words.
 - Scroll over the button to step the volume by 5%. Middle-click to mute or
   unmute it.
 - **The panel**, a `Drilldown` in a popover:
-  - Tiles (`QuickTile`): Wi-Fi, Wired (with a cable in, or without Wi-Fi),
-    Bluetooth, Keep awake, Night light, Dark mode. A press switches the tile.
-    An arrow opens its details.
+  - Tiles (`QuickTile`): Wi-Fi, Wired (with a cable in, or without Wi-Fi)
+    and Bluetooth. Each icon is lit in the accent color while connected. A
+    press opens the tile's details.
+  - Toggles (`QuickToggle`): Keep awake, Night light, Dark mode.
   - The brightness slider, and the volume slider with an arrow to the mixer.
   - The battery in words, such as `Battery 78%, about 3 h 20 min left`. Red
     while low.
@@ -548,9 +550,17 @@ extension with an action. See
   - **Rows** click as their icon does. An unpinned extension's popup opens
     from the row's icon, shown while the popup is open. Right-clicking an
     app's name opens its own menu.
-  - **Switch** turns an extension on or off entirely.
+  - **The tray's actions** are the same profile's, so an extension on only in
+    another profile, such as a password manager kept to a work profile, shows
+    once a page of that profile is focused, and its popup opens there.
+  - **Extensions in <profile>** are the last focused browser page's
+    profile's ([BROWSER-PROFILES.md](/docs/architecture/BROWSER-PROFILES.md)):
+    the tray shows the actions of those switched on there, and each **Switch**
+    turns one on or off in that profile. One the config switches there is
+    locked. Focusing an app keeps the last page's profile; before any page,
+    it is the default profile's.
   - **⋯** holds an extension's options page (in a browser window), what
-    websites it can read, private windows, local files and user scripts,
+    websites it can read, local files and user scripts,
     each where it can use them, and Uninstall…, which asks first. "On sites
     you choose…" opens Settings. A setting the config sets is grayed with a
     lock, saying "Set in your config"; an extension the config installed has

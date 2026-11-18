@@ -47,6 +47,7 @@ template <typename IDLType>
 class FrozenArray;
 
 class DOMRectReadOnly;
+class DomicileBrowserProfile;
 class DomicileBrowserWindow;
 class DomicileCastSink;
 class DomicileDisplay;
@@ -239,6 +240,9 @@ class MODULES_EXPORT DomicileHost final
   void grabGesture(ScriptState*, const String& gesture, ExceptionState&);
   void ungrabGesture(ScriptState*, const String& gesture, ExceptionState&);
   void activateExtension(ScriptState*, const String& id, ExceptionState&);
+  void setExtensionsProfile(ScriptState*,
+                            const String& profile,
+                            ExceptionState&);
   ScriptPromise<IDLUndefined> setExtensionEnabled(ScriptState*,
                                                   const String& id,
                                                   bool enabled,
@@ -277,11 +281,17 @@ class MODULES_EXPORT DomicileHost final
     return browser_windows_.Get();
   }
 
+  // The desk's browser profiles, or null until the browser has listed them.
+  const FrozenArray<DomicileBrowserProfile>* browserProfiles() const {
+    return browser_profiles_.Get();
+  }
+
   // Opens or closes a browser window. The next `browserwindowschanged`
   // reflects it.
   void openBrowserWindow(ScriptState*,
                          const String& url,
                          const String& partition,
+                         const String& profile,
                          ExceptionState&);
   void openPrivateBrowserWindow(ScriptState*,
                                 const String& url,
@@ -290,12 +300,37 @@ class MODULES_EXPORT DomicileHost final
                      const String& url,
                      const String& app_id,
                      const String& reuse,
+                     const String& profile,
                      ExceptionState&);
   ScriptPromise<IDLLong> countBrowserWindowMatches(ScriptState*,
                                                    const String& id,
                                                    const String& selector,
                                                    ExceptionState&);
+  ScriptPromise<IDLBoolean> clickBrowserWindowMatch(ScriptState*,
+                                                    const String& id,
+                                                    const String& selector,
+                                                    ExceptionState&);
   void closeBrowserWindow(ScriptState*, const String& id, ExceptionState&);
+  void reopenBrowserWindow(ScriptState*,
+                           const String& id,
+                           const String& profile,
+                           ExceptionState&);
+  ScriptPromise<IDLString> browserProfileFor(ScriptState*,
+                                             const String& url,
+                                             ExceptionState&);
+  ScriptPromise<IDLString> browserSiteFor(ScriptState*,
+                                          const String& url,
+                                          ExceptionState&);
+  ScriptPromise<IDLUndefined> pinBrowserSite(ScriptState*,
+                                             const String& site,
+                                             const String& profile,
+                                             ExceptionState&);
+  ScriptPromise<IDLUndefined> setBrowserProfileExtensionEnabled(
+      ScriptState*,
+      const String& profile,
+      const String& id,
+      bool enabled,
+      ExceptionState&);
   void clickBrowserWindowMenu(ScriptState*,
                               const String& id,
                               int32_t command,
@@ -360,6 +395,7 @@ class MODULES_EXPORT DomicileHost final
       const HeapVector<Member<DomicileFetchHeader>>& headers,
       const String& body,
       const String& sapisid_hash_origin,
+      const String& profile,
       ExceptionState&);
   // Every client window, in the order they appeared. Not const: reading it
   // binds the channel, which is what has the compositor announce them.
@@ -470,11 +506,17 @@ class MODULES_EXPORT DomicileHost final
   void InstalledChanged(
       Vector<domicile::mojom::blink::InstalledExtensionPtr> extensions)
       override;
-  void PopupRequested(const String& id, const String& popup) override;
+  void PopupRequested(const String& id,
+                      const String& popup,
+                      const String& profile) override;
 
   // domicile::mojom::blink::BrowserWindowsClient:
   void WindowsChanged(
       Vector<domicile::mojom::blink::BrowserWindowPtr> windows) override;
+  void ProfilesChanged(
+      Vector<domicile::mojom::blink::BrowserProfilePtr> profiles,
+      const String& default_profile,
+      const String& default_private_profile) override;
 
   // domicile::mojom::blink::CastSinksClient:
   void SinksChanged(
@@ -631,6 +673,7 @@ class MODULES_EXPORT DomicileHost final
   // `partition` as openBrowserWindow's.
   void OpenBrowserWindow(const String& url,
                          WindowKind,
+                         const String& profile,
                          const String& partition,
                          ExceptionState&);
   bool ReadyForApp(const String& app_id, ExceptionState&);
@@ -684,6 +727,8 @@ class MODULES_EXPORT DomicileHost final
   Member<FrozenArray<DomicileBrowserWindow>> browser_windows_;
   Vector<domicile::mojom::blink::BrowserWindowPtr> listed_browser_windows_;
   HashMap<String, String> browser_toplevel_ids_;
+  // And `browser_profiles_`, for the same reason.
+  Member<FrozenArray<DomicileBrowserProfile>> browser_profiles_;
   // And `cast_sinks_`, for the same reason.
   Member<FrozenArray<DomicileCastSink>> cast_sinks_;
   // And `downloads_`.

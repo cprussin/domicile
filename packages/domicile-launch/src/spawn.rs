@@ -5,7 +5,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::control_socket::VARIABLE;
-use crate::shell_path::Shell;
+use crate::shell_path::{Shell, ShellFiles};
 
 /// The URL of the shell page the engine generates.
 ///
@@ -137,6 +137,11 @@ pub fn engine(
         format!("--user-data-dir={}", runtime.profile.display()).into(),
         format!("--domicile-broker-socket={}", runtime.broker.display()).into(),
     ];
+    // The root is `domicile dev`'s socket, so an engine restarted during
+    // development keeps asking the dev server.
+    if shell.files == ShellFiles::DevServer {
+        args.push("--domicile-shell-dev-server".into());
+    }
     // On drm, a window drives a CRTC only if its bounds match the CRTC's
     // exactly (`ScreenManager::FindWindowAt`). Otherwise its page flips are
     // dropped and the screen stays black. Fullscreen takes the display's own

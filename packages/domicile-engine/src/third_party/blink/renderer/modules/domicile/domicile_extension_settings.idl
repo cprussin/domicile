@@ -6,7 +6,6 @@
 // DomicileInstalledExtension's.
 
 dictionary DomicileExtensionSettings {
-  boolean inPrivate;
   boolean fileAccess;
   boolean userScripts;
   // "on_click", "specific_sites" or "all_sites".

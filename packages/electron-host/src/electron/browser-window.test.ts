@@ -28,15 +28,22 @@ describe(createBrowserWindow, () => {
     expect(given.webContents.session).toBe(named.webContents.session);
     expect(sent).toEqual([
       { scheme: "file", session: "persist:cowork", type: "handle_protocol" },
-      { type: "open_window", url: "https://notes.test/", window: 1 },
+      {
+        title: "Notes",
+        type: "open_window",
+        url: "https://notes.test/",
+        window: 1,
+      },
       {
         session: "persist:cowork",
+        title: "Notes",
         type: "open_window",
         url: "https://notes.test/",
         window: 2,
       },
       {
         session: "persist:cowork",
+        title: "Notes",
         type: "open_window",
         url: "https://notes.test/",
         window: 3,
@@ -52,7 +59,12 @@ describe(createBrowserWindow, () => {
     void window.loadURL("https://notes.test/b");
 
     expect(sent).toEqual([
-      { type: "open_window", url: "https://notes.test/", window: 1 },
+      {
+        title: "Notes",
+        type: "open_window",
+        url: "https://notes.test/",
+        window: 1,
+      },
       { type: "load_url", url: "https://notes.test/b", window: 1 },
     ]);
   });
@@ -74,6 +86,7 @@ describe(createBrowserWindow, () => {
 
     expect(sent).toEqual([
       {
+        title: "Notes",
         type: "open_window",
         url: "file:///cache/x/resources/app.asar/dist/index.html",
         window: 1,
@@ -96,6 +109,42 @@ describe(createBrowserWindow, () => {
     await shown;
     await finished;
     expect(window.isVisible()).toBe(true);
+  });
+
+  it("tells the app of each page as it makes it, as Electron's web-contents-created", () => {
+    const { app, BrowserWindow, WebContentsView } = setUp();
+    const created: unknown[] = [];
+    app.on("web-contents-created", (event, webContents) => {
+      created.push(event.sender, webContents);
+    });
+
+    const window = new BrowserWindow();
+    const view = new WebContentsView();
+
+    expect(created).toEqual([
+      window.webContents,
+      window.webContents,
+      view.webContents,
+      view.webContents,
+    ]);
+  });
+
+  it("is dom-ready when the engine says its DOM is, before it finishes loading", async () => {
+    const { BrowserWindow, say } = setUp();
+    const window = new BrowserWindow();
+    const heard: string[] = [];
+    window.webContents.on("dom-ready", () => heard.push("dom-ready"));
+    window.webContents.on("did-finish-load", () =>
+      heard.push("did-finish-load"),
+    );
+
+    const loading = window.loadURL("https://notes.test/");
+    say({ type: "window_dom_ready", window: 1 });
+    expect(heard).toEqual(["dom-ready"]);
+    say({ type: "window_loaded", window: 1 });
+    await loading;
+
+    expect(heard).toEqual(["dom-ready", "did-finish-load"]);
   });
 
   it("rejects a load the engine refused, with why", async () => {
@@ -138,6 +187,113 @@ describe(createBrowserWindow, () => {
     closed.close();
 
     expect(sent).toEqual([{ type: "close_window", window: 2 }]);
+  });
+
+  it("tells the engine the title the window shows, its own over its page's", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const kept = new BrowserWindow({ title: "Mine" });
+    const taken = new BrowserWindow();
+    kept.on("page-title-updated", (event: { preventDefault: () => void }) =>
+      event.preventDefault(),
+    );
+    void kept.loadURL("https://a.test/");
+    void taken.loadURL("https://b.test/");
+
+    say({ title: "Page", type: "title_changed", window: 1 });
+    say({ title: "Page", type: "title_changed", window: 2 });
+    kept.setTitle("Still mine");
+
+    expect(sent).toEqual([
+      {
+        title: "Mine",
+        type: "open_window",
+        url: "https://a.test/",
+        window: 1,
+      },
+      {
+        title: "Notes",
+        type: "open_window",
+        url: "https://b.test/",
+        window: 2,
+      },
+      { title: "Page", type: "set_title", window: 2 },
+      { title: "Still mine", type: "set_title", window: 1 },
+    ]);
+  });
+
+  it("puts the user's close to the app's close listeners", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const kept = new BrowserWindow();
+    const closed = new BrowserWindow();
+    void kept.loadURL("https://a.test/");
+    void closed.loadURL("https://b.test/");
+    kept.on("close", (event: { preventDefault: () => void }) => {
+      event.preventDefault();
+      kept.hide();
+    });
+    sent.length = 0;
+
+    say({ type: "close_asked", window: 1 });
+    say({ type: "close_asked", window: 2 });
+
+    expect(sent).toEqual([
+      { hidden: true, type: "set_hidden", window: 1 },
+      { type: "close_window", window: 2 },
+    ]);
+    expect(kept.isDestroyed()).toBe(false);
+  });
+
+  it("hides and shows a window, which opens hidden with show: false", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const window = new BrowserWindow({ show: false });
+    const heard: string[] = [];
+    window.on("show", () => heard.push("show"));
+    window.on("hide", () => heard.push("hide"));
+    void window.loadURL("https://a.test/");
+    say({ type: "window_loaded", window: 1 });
+
+    expect(window.isVisible()).toBe(false);
+    window.show();
+    expect(window.isVisible()).toBe(true);
+    window.show();
+    window.hide();
+    window.hide();
+    expect(window.isVisible()).toBe(false);
+    window.showInactive();
+
+    expect(sent).toEqual([
+      {
+        hidden: true,
+        title: "Notes",
+        type: "open_window",
+        url: "https://a.test/",
+        window: 1,
+      },
+      { hidden: false, type: "set_hidden", window: 1 },
+      { type: "focus_window", window: 1 },
+      { type: "focus_window", window: 1 },
+      { hidden: true, type: "set_hidden", window: 1 },
+      { hidden: false, type: "set_hidden", window: 1 },
+    ]);
+    expect(heard).toEqual(["show", "hide", "show"]);
+  });
+
+  it("hides a window not yet open by opening it hidden", () => {
+    const { BrowserWindow, sent } = setUp();
+    const window = new BrowserWindow();
+
+    window.hide();
+    void window.loadURL("https://a.test/");
+
+    expect(sent).toEqual([
+      {
+        hidden: true,
+        title: "Notes",
+        type: "open_window",
+        url: "https://a.test/",
+        window: 1,
+      },
+    ]);
   });
 
   it("destroys without asking", () => {
@@ -216,6 +372,7 @@ describe(createBrowserWindow, () => {
     expect(sent).toEqual([
       {
         preload: "source of /app/preload.js",
+        title: "Notes",
         type: "open_window",
         url: "https://notes.test/",
         window: 1,
@@ -223,18 +380,67 @@ describe(createBrowserWindow, () => {
     ]);
   });
 
-  it("refuses a window whose page needs Node.js", () => {
-    const { BrowserWindow } = setUp();
+  it("opens a window with nodeIntegration with Node.js in its page", () => {
+    const { BrowserWindow, sent } = setUp();
 
-    expect(
-      () => new BrowserWindow({ webPreferences: { nodeIntegration: true } }),
-    ).toThrow("needs Node.js");
-    expect(
-      () => new BrowserWindow({ webPreferences: { contextIsolation: false } }),
-    ).toThrow("needs Node.js");
+    void new BrowserWindow({
+      webPreferences: {
+        contextIsolation: false,
+        nodeIntegration: true,
+        preload: "/app/preload.js",
+      },
+    }).loadURL("https://notes.test/");
+
+    expect(sent).toEqual([
+      {
+        node: {
+          app_path: "/cache/x/resources/app.asar",
+          context_isolation: false,
+          electron_version: "45.2.1",
+          env: { HOME: "/home/me" },
+          integration: true,
+          preload: "/app/preload.js",
+          resources_path: "/cache/x/resources",
+        },
+        title: "Notes",
+        type: "open_window",
+        url: "https://notes.test/",
+        window: 1,
+      },
+    ]);
   });
 
-  it("hands a page that needs Node.js to its refuse", () => {
+  it("gives an unsandboxed window's preload Node.js, isolated", () => {
+    const { BrowserWindow, sent } = setUp();
+
+    void new BrowserWindow({
+      webPreferences: { preload: "/app/preload.js", sandbox: false },
+    }).loadURL("https://notes.test/");
+
+    expect(sent).toMatchObject([
+      {
+        node: {
+          context_isolation: true,
+          integration: false,
+          preload: "/app/preload.js",
+        },
+        type: "open_window",
+      },
+    ]);
+    expect(sent[0]).not.toHaveProperty("preload");
+  });
+
+  it("keeps a sandboxed window sandboxed, nodeIntegration or not", () => {
+    const { BrowserWindow, sent } = setUp();
+
+    void new BrowserWindow({
+      webPreferences: { nodeIntegration: true, sandbox: true },
+    }).loadURL("https://notes.test/");
+
+    expect(sent[0]).not.toHaveProperty("node");
+  });
+
+  it("hands a sandboxed preload in the page's own world to its refuse", () => {
     const refused: string[] = [];
     const { BrowserWindow } = setUp({
       refuse: (why) => {
@@ -244,10 +450,10 @@ describe(createBrowserWindow, () => {
     });
 
     expect(
-      () => new BrowserWindow({ webPreferences: { nodeIntegration: true } }),
+      () => new BrowserWindow({ webPreferences: { contextIsolation: false } }),
     ).toThrow("refused");
     expect(refused).toEqual([
-      "this window's page needs Node.js or the preload's world, which Domicile's engine doesn't give a page",
+      "this window's sandboxed preload runs in its page's own world, which Domicile's engine doesn't give a preload",
     ]);
   });
 
@@ -317,6 +523,76 @@ describe(createBrowserWindow, () => {
         window: 1,
       },
     ]);
+  });
+
+  it("runs the app's script in its page once loaded, and resolves with what it gave", async () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://a.test/");
+    sent.length = 0;
+
+    const title = window.webContents.executeJavaScript("document.title", true);
+    const thrown = window.webContents.mainFrame.executeJavaScript("throw 1");
+    // Electron waits for the page's load under way.
+    await Bun.sleep(0);
+    expect(sent).toEqual([]);
+    say({ type: "window_loaded", window: 1 });
+    await Bun.sleep(0);
+
+    expect(sent).toEqual([
+      {
+        call: 1,
+        code: "document.title",
+        type: "execute_javascript",
+        user_gesture: true,
+        window: 1,
+      },
+      { call: 2, code: "throw 1", type: "execute_javascript", window: 1 },
+    ]);
+    say({ call: 2, error: "it threw", type: "javascript_result", window: 1 });
+    say({ call: 1, result: "A", type: "javascript_result", window: 1 });
+    expect(await title).toBe("A");
+    await expect(thrown).rejects.toThrow("it threw");
+  });
+
+  it("rejects the app's script when its window closes first", async () => {
+    const { BrowserWindow, say } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://a.test/").catch(() => undefined);
+
+    const waiting = window.webContents.executeJavaScript("1");
+    say({ type: "window_closed", window: 1 });
+
+    await expect(waiting).rejects.toThrow("Object has been destroyed");
+  });
+
+  it("gives its main frame, the page's one frame, as a WebFrameMain", () => {
+    const { BrowserWindow, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://a.test/path");
+    sent.length = 0;
+    const frame = window.webContents.mainFrame;
+
+    expect(window.webContents.mainFrame).toBe(frame);
+    expect(frame.url).toBe("https://a.test/path");
+    expect(frame.origin).toBe("https://a.test");
+    expect(frame.top).toBe(frame);
+    expect(frame.parent).toBeNull();
+    expect(frame.framesInSubtree).toEqual([frame]);
+    frame.send("ping", 1);
+    expect(sent).toEqual([
+      { args: [1], channel: "ping", type: "ipc_send", window: 1 },
+    ]);
+  });
+
+  it("drops what it sends before its page opens, as Electron has no page to give it", () => {
+    const { BrowserWindow, sent } = setUp();
+    const window = new BrowserWindow({ show: false });
+
+    window.webContents.send("ready", 1);
+    window.webContents.postMessage("port", { a: 1 });
+
+    expect(sent).toEqual([]);
   });
 
   it("answers its page's sendSync with the returnValue a listener sets", async () => {
@@ -421,7 +697,12 @@ describe("a window's menu bar", () => {
     void window.loadURL("https://notes.test/");
 
     expect(sent).toEqual([
-      { type: "open_window", url: "https://notes.test/", window: 1 },
+      {
+        title: "Notes",
+        type: "open_window",
+        url: "https://notes.test/",
+        window: 1,
+      },
       {
         auto_hide: false,
         menu: [entry(1, "New Note")],
@@ -491,6 +772,32 @@ describe("a window's menu bar", () => {
     ]);
     expect(window.isMenuBarVisible()).toBe(false);
     expect(window.isMenuBarAutoHide()).toBe(false);
+  });
+
+  it("has Electron's properties for it, as Element's settings read them", () => {
+    const { BrowserWindow, menus, sent } = setUp();
+    menus.Menu.setApplicationMenu(
+      menus.Menu.buildFromTemplate([{ label: "New Note" }]),
+    );
+    const window = new BrowserWindow({ autoHideMenuBar: true });
+    void window.loadURL("https://notes.test/");
+
+    const autoHid = window.autoHideMenuBar;
+    window.autoHideMenuBar = false;
+    window.menuBarVisible = false;
+
+    expect(autoHid).toBe(true);
+    expect([window.autoHideMenuBar, window.menuBarVisible]).toEqual([
+      false,
+      false,
+    ]);
+    expect(
+      menuBars(sent).map(({ auto_hide, visible }) => ({ auto_hide, visible })),
+    ).toEqual([
+      { auto_hide: true, visible: true },
+      { auto_hide: false, visible: true },
+      { auto_hide: false, visible: false },
+    ]);
   });
 
   it("tells the engine nothing before the window opens", () => {

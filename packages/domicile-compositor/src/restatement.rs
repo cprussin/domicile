@@ -25,6 +25,7 @@
 //! | `files.omit` | sent to the index, which rewalks the home (`omit_from_the_index`) |
 //! | `electron.apps` | the entries that run them on the engine written again (`write_the_electron_entries`) |
 //! | `extensions.*` | sent to every chrome, whose browser installs them (`hand_over_the_extensions`) |
+//! | `browser.*` | sent to every chrome, whose browser takes up the profiles (`hand_over_the_browser_profiles`) |
 //! | `lock.*` | the verifier replaced; the desktop stays as locked as it was (`rekey_the_lock`, `Lock::rekeyed`) |
 //! | `lockdown.*` | sent to the Lockdown portal, which signals the change (`Portals::lock_down`) |
 //! | `keybindings` | resolved on the keyboard and sent to every chrome (`rebind_the_keys`) |
@@ -50,8 +51,8 @@
 //! restated and an unchanged one is not.
 
 use domicile_config::{
-    Config, ExtensionsConfig, IdleConfig, KeyRepeat, KeyboardConfig, LockConfig, LockdownConfig,
-    Omit, ThemeConfig, ThemeMode,
+    BrowserConfig, Config, ExtensionsConfig, IdleConfig, KeyRepeat, KeyboardConfig, LockConfig,
+    LockdownConfig, Omit, ThemeConfig, ThemeMode,
 };
 
 /// What a reloaded config asks the compositor to restate.
@@ -86,6 +87,8 @@ pub struct Restatement {
     pub electron_apps: Option<Vec<String>>,
     /// The extensions the browser process installs, or `None` if unchanged.
     pub extensions: Option<ExtensionsConfig>,
+    /// The browser profiles, or `None` if unchanged.
+    pub browser: Option<BrowserConfig>,
     /// What applications are asked not to do, or `None` if unchanged.
     pub lockdown: Option<LockdownConfig>,
     /// What opens the lock, or `None` if unchanged.
@@ -126,6 +129,7 @@ impl Restatement {
             omit: (was.files.omit != now.files.omit).then(|| now.files.omit.clone()),
             electron_apps: (was.electron != now.electron).then(|| now.electron.apps.clone()),
             extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
+            browser: (was.browser != now.browser).then(|| now.browser.clone()),
             lockdown: (was.lockdown != now.lockdown).then(|| now.lockdown.clone()),
             lock: (was.lock != now.lock).then(|| now.lock.clone()),
             shell_config: keymap_moved || was.shell_options != now.shell_options,
@@ -285,6 +289,29 @@ mod tests {
 
         assert_eq!(restated.force_dark, Some(vec!["mail.google.com".into()]));
         assert_eq!(restated.appearance, None);
+    }
+
+    #[test]
+    fn browser_profiles_that_moved_are_restated() {
+        let was = parsed(A_DVORAK_DESK);
+        let now = parsed(A_DESK_WITH_AN_EXTENSION);
+        assert_eq!(Restatement::between(&was, &was).browser, None);
+
+        let now = Config {
+            browser: domicile_config::BrowserConfig {
+                default_profile: "private".into(),
+                ..now.browser
+            },
+            ..now
+        };
+        assert_eq!(
+            Restatement::between(&was, &now)
+                .browser
+                .expect("the profiles moved")
+                .default_profile,
+            "private",
+            "the profiles handed back are the new ones"
+        );
     }
 
     #[test]

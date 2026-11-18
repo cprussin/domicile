@@ -78,6 +78,44 @@ const siteDataSchema = z.object({
 /** What one host stores: its cookies, and its bytes on disk of every kind. */
 export type SiteData = z.infer<typeof siteDataSchema>;
 
+const agentReachSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("desk") }),
+  z.object({
+    type: z.literal("windows"),
+    windows: z.array(z.object({ id: z.string(), title: z.string() })),
+  }),
+]);
+
+/** What an agent reaches: the whole desk, or these windows. */
+export type AgentReach = z.infer<typeof agentReachSchema>;
+
+const knownAgentsSchema = z
+  .object({
+    connected: z.array(
+      z.object({
+        agent: z.string(),
+        reach: agentReachSchema,
+        session: z.number(),
+      }),
+    ),
+    remembered: z.array(
+      z.object({ agent: z.string(), last_used_ms: z.number() }),
+    ),
+  })
+  .transform(({ connected, remembered }) => ({
+    connected,
+    remembered: remembered.map(({ agent, last_used_ms }) => ({
+      agent,
+      lastUsedMs: last_used_ms,
+    })),
+  }));
+
+/**
+ * The agents in now, each by its session, and those let reach the whole
+ * desk without asking, most recently used first.
+ */
+export type KnownAgents = z.output<typeof knownAgentsSchema>;
+
 const mediaDeviceSchema = z.object({ id: z.string(), name: z.string() });
 
 /** A camera or microphone. */
@@ -107,7 +145,6 @@ export type Monitor = z.infer<typeof monitorSchema>;
 
 const extensionSettingsSchema = z.object({
   file_access: z.boolean().optional(),
-  private: z.boolean().optional(),
   site_access: z
     .union([z.enum(["on_click", "all_sites"]), z.array(z.string())])
     .optional(),
@@ -116,8 +153,8 @@ const extensionSettingsSchema = z.object({
 
 /**
  * An extension's chrome://extensions settings, spelled as the config's
- * `extensions.settings`: whether it runs in private windows and on local
- * files, may run user scripts, and which sites it runs on. A listed extension
+ * `extensions.settings`: whether it runs on local files, may run user
+ * scripts, and which sites it runs on. A listed extension
  * has each it can use; a change names only those that change.
  */
 export type ExtensionSettings = z.infer<typeof extensionSettingsSchema>;
@@ -126,19 +163,67 @@ const extensionSchema = z
   .object({
     description: z.string(),
     enabled: z.boolean(),
+    icon: z.string().nullish(),
     id: z.string(),
     name: z.string(),
     options_url: z.string().nullish(),
     settings: extensionSettingsSchema,
     version: z.string(),
   })
-  .transform(({ options_url, ...extension }) => ({
+  .transform(({ icon, options_url, ...extension }) => ({
     ...extension,
+    icon: icon ?? undefined,
     optionsUrl: options_url ?? undefined,
   }));
 
 /** An extension in the browser windows' profile. */
 export type InstalledExtension = z.output<typeof extensionSchema>;
+
+const profileExtensionSchema = z.object({
+  enabled: z.boolean(),
+  id: z.string(),
+  locked: z.boolean(),
+});
+
+/**
+ * One extension's switch in a browser profile. `locked` when the config
+ * switches it, so only the config changes it.
+ */
+export type ProfileExtension = z.infer<typeof profileExtensionSchema>;
+
+const browserProfileSchema = z.object({
+  color: z.string(),
+  extensions: z.array(profileExtensionSchema),
+  id: z.string(),
+  name: z.string(),
+  private: z.boolean(),
+});
+
+/** A browser profile, as the desktop runs it. */
+export type BrowserProfile = z.infer<typeof browserProfileSchema>;
+
+const browserSiteSchema = z.object({
+  pinned: z.boolean(),
+  profile: z.string(),
+  site: z.string(),
+});
+
+/**
+ * A site that opens in a profile other than the default. `pinned` when the
+ * user chose it, from a browser window or Settings; otherwise the config
+ * lists it.
+ */
+export type BrowserSite = z.infer<typeof browserSiteSchema>;
+
+/** Every browser profile, and where each listed site opens. */
+export type BrowserProfiles = {
+  /** Where a link opens when no site names a profile. */
+  defaultProfile: string;
+  /** Where a private window opens when nothing names a profile. */
+  defaultPrivateProfile: string;
+  profiles: BrowserProfile[];
+  sites: BrowserSite[];
+};
 
 /** Which list a device is in. */
 export type MediaKind = "camera" | "microphone";
@@ -184,7 +269,22 @@ export type SettingsHost = {
   configExtensions: () => Promise<string[]>;
   /** Every extension in the browser windows' profile. */
   extensions: () => Promise<InstalledExtension[]>;
-  setExtensionEnabled: (id: string, enabled: boolean) => Promise<void>;
+  /**
+   * Switches an extension on or off: in every profile, or in `profile` alone.
+   * The engine refuses a switch the config sets.
+   */
+  setExtensionEnabled: (
+    id: string,
+    enabled: boolean,
+    profile?: string,
+  ) => Promise<void>;
+  /** The browser profiles the desktop runs, and where each listed site opens. */
+  browserProfiles: () => Promise<BrowserProfiles>;
+  /**
+   * Opens `site` in `profile` from now on; the default profile unpins it. The
+   * engine refuses a site the config lists.
+   */
+  pinBrowserSite: (site: string, profile: string) => Promise<void>;
   /** Changes each of `settings` that is set; the engine refuses one `id` cannot use. */
   configureExtension: (
     id: string,
@@ -197,6 +297,12 @@ export type SettingsHost = {
   monitors: () => Promise<Monitor[]>;
   /** Gives device `id` to sites that ask for a `kind` without naming one. */
   setMediaDevice: (kind: MediaKind, id: string) => Promise<void>;
+  /** The agents in now, and those remembered. */
+  agents: () => Promise<KnownAgents>;
+  /** Ends agent session `session`, as the bar's Stop does. */
+  stopAgent: (session: number) => Promise<void>;
+  /** Makes remembered agent `agent` ask again next time. */
+  forgetAgent: (agent: string) => Promise<void>;
   /** Calls `listener` when a file changes on disk. Returns an unsubscribe. */
   onChange: (listener: () => void) => () => void;
 };
@@ -263,6 +369,27 @@ export const spawnedHost = (
     });
 
   return {
+    agents: async () => {
+      const reply = await ask({ type: "agents" });
+      if (reply.type === "agents") {
+        return reply.agents;
+      } else {
+        throw unexpected(reply, "agents");
+      }
+    },
+    browserProfiles: async () => {
+      const reply = await ask({ type: "browser_profiles" });
+      if (reply.type === "browser_profiles") {
+        return {
+          defaultPrivateProfile: reply.default_private_profile,
+          defaultProfile: reply.default_profile,
+          profiles: reply.profiles,
+          sites: reply.sites,
+        };
+      } else {
+        throw unexpected(reply, "browser_profiles");
+      }
+    },
     chooseFolder: async () => {
       const reply = await ask({ type: "choose_folder" });
       if (reply.type === "folder") {
@@ -301,6 +428,12 @@ export const spawnedHost = (
         return reply.extensions;
       } else {
         throw unexpected(reply, "extensions");
+      }
+    },
+    forgetAgent: async (agent) => {
+      const reply = await ask({ agent, type: "forget_agent" });
+      if (reply.type !== "done") {
+        throw unexpected(reply, "done");
       }
     },
     loadUnpacked: async (directory) => {
@@ -343,6 +476,12 @@ export const spawnedHost = (
         throw unexpected(reply, "opened");
       }
     },
+    pinBrowserSite: async (site, profile) => {
+      const reply = await ask({ profile, site, type: "pin_browser_site" });
+      if (reply.type !== "stored") {
+        throw unexpected(reply, "stored");
+      }
+    },
     read: async () => {
       const reply = await ask({ type: "read" });
       if (reply.type === "files") {
@@ -356,10 +495,11 @@ export const spawnedHost = (
         throw unexpected(reply, "files");
       }
     },
-    setExtensionEnabled: async (extension, enabled) => {
+    setExtensionEnabled: async (extension, enabled, profile) => {
       const reply = await ask({
         enabled,
         extension,
+        ...(profile === undefined ? {} : { profile }),
         type: "set_extension_enabled",
       });
       if (reply.type !== "stored") {
@@ -392,6 +532,12 @@ export const spawnedHost = (
         return { defaults: reply.defaults, sites: reply.sites };
       } else {
         throw unexpected(reply, "site_permissions");
+      }
+    },
+    stopAgent: async (session) => {
+      const reply = await ask({ session, type: "stop_agent" });
+      if (reply.type !== "done") {
+        throw unexpected(reply, "done");
       }
     },
     uninstallExtension: async (extension) => {
@@ -462,11 +608,25 @@ const replySchema = z.discriminatedUnion("type", [
   }),
   z.object({ id: z.number(), type: z.literal("opened") }),
   z.object({
+    default_private_profile: z.string(),
+    default_profile: z.string(),
+    id: z.number(),
+    profiles: z.array(browserProfileSchema),
+    sites: z.array(browserSiteSchema),
+    type: z.literal("browser_profiles"),
+  }),
+  z.object({
     id: z.number(),
     sites: z.array(siteDataSchema),
     type: z.literal("site_data"),
   }),
   z.object({ id: z.number(), type: z.literal("cleared") }),
+  z.object({
+    agents: knownAgentsSchema,
+    id: z.number(),
+    type: z.literal("agents"),
+  }),
+  z.object({ id: z.number(), type: z.literal("done") }),
   z.object({ id: z.number(), type: z.literal("refused"), why: z.string() }),
   z.object({ type: z.literal("changed") }),
 ]);

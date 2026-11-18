@@ -98,10 +98,13 @@ another mode ([DISPLAYS.md](../DISPLAYS.md#which-connectors-light),
 
 Two guards:
 
-- **No repeat modesets.** Each `Configure` makes the kernel emit a udev CHANGE,
-  which triggers another read and another modeset. `ModesetWouldChangeAnything`
-  skips the modeset when the hardware reports what it last confirmed. A real
-  hotplug changes the report.
+- **Only what changed.** `ModesetParamsThatChange` asks for the displays whose
+  request differs from the last confirmed modeset, or that read dark. A
+  display asked for again gets a new modeset buffer, which is black on a driver
+  that tiles its framebuffers (i915), so sleeping one monitor must not ask for
+  the others. It also stops a loop: each `Configure` makes the kernel emit a
+  udev CHANGE, which triggers another read. A reading that matches asks for
+  nothing. A real hotplug changes the report.
 - **Ignore answers from inside the browser.** `DrmModeset::Start()` runs before
   the GPU process exists, so `DrmDisplayHostManager` answers from its dummy
   snapshots, synchronously. An answer that arrives before `Configure` returns

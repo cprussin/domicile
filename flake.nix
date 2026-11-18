@@ -1,6 +1,14 @@
 {
   description = "Domicile — a Wayland compositor whose renderer is a web engine";
 
+  # Domicile's binary cache, filled for each commit `stable` moves to
+  # (.github/workflows/nix-cache.yml), so `nix run` and configs pinned to
+  # `stable` substitute Domicile instead of building it.
+  nixConfig = {
+    extra-substituters = [ "https://packages.domicile-desktop.com/nix" ];
+    extra-trusted-public-keys = [ "packages.domicile-desktop.com-1:iAulr298MtC52WMi2GPI8bqPEvOXHoQtSRAGOo0ny90=" ];
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     # Fetches the packages of a home-manager TS config from its `bun.nix`.
@@ -429,6 +437,11 @@
         exec ${pkgs.bun}/bin/bun ${shellWorkspace}/packages/electron-host/src/main.ts "$@"
       '';
 
+      # Loads graphics libraries as the compositor and the engine do, with
+      # this flake's glibc. The NixOS module runs it on the system's driver.
+      domicileGraphicsProbe = pkgs.writeCBin "domicile-graphics-probe"
+        (builtins.readFile ./packages/distro/graphics-probe.c);
+
       # Domicile, laid out so that `domicile` can find the rest of itself.
       #
       #   bin/domicile
@@ -442,9 +455,13 @@
       #   bin/domicile-recorder       what the compositor records the
       #                               screen with
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
+      #   libexec/domicile/version    the version and commit `--version` prints
       #   libexec/domicile/builder    builds a shell from an entry or a package
       #   libexec/domicile/electron-host
       #                               runs an Electron app's main process
+      #   libexec/domicile/graphics-probe
+      #                               loads a graphics driver as the
+      #                               compositor and the engine would
       #   libexec/domicile/shells/    Domicile's prebuilt shells, which
       #                               `@domicile-desktop/manganese` names,
       #                               and the splash
@@ -472,6 +489,11 @@
           };
         } ''
         mkdir -p "$out/bin" "$out/libexec/domicile"
+        # What `domicile --version` prints first. `packages/distro/stage.sh`
+        # writes the same.
+        printf 'domicile %s\ncommit   %s\n' \
+          ${(builtins.fromJSON (builtins.readFile ./packages/domicile/package.json)).version} \
+          ${self.rev or self.dirtyRev} > "$out/libexec/domicile/version"
         cp ${domicileBinaries}/bin/domicile "$out/bin/domicile"
         cp ${domicileBinaries}/bin/domicile-compositor "$out/bin/domicile-compositor"
         # `BROWSER` inside a desktop. Copied for the same reason as above.
@@ -505,6 +527,7 @@
         ln -s ${domicileEngine} "$out/libexec/domicile/engine"
         cp ${domicileBuilder} "$out/libexec/domicile/builder"
         cp ${domicileElectronHost} "$out/libexec/domicile/electron-host"
+        cp ${domicileGraphicsProbe}/bin/domicile-graphics-probe "$out/libexec/domicile/graphics-probe"
         mkdir -p "$out/libexec/domicile/shells"
         ln -s ${shellPage "manganese"} "$out/libexec/domicile/shells/manganese"
         ln -s ${shellPage "simple"} "$out/libexec/domicile/shells/simple"
@@ -765,7 +788,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-o0pCW7PAFYwctEnf6ZOefYQLXoriXpvGJD4rgfV5oQ4=";
+        outputHash = "sha256-ow4armjOjlyJNstRVU6yeg37I2rAPXwPGAOLl6gWk7Y=";
       };
 
       # The production modules `shellWorkspace` ships, from
@@ -791,7 +814,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-WUoV6dODNvXFsmLZ2tzUjVwq9dDTPBHB2UJwYEWuJlo=";
+        outputHash = "sha256-qhGY30ICbOqI5IlIbpogj9MFTI3ku0Kel00aO5PoSWE=";
       };
 
 
@@ -925,7 +948,11 @@
 
       # The nixpkgs this flake builds with, so scripts take tools such as
       # `.#bun` from the same set.
-      legacyPackages.${system} = pkgs;
+      # `benchmarks`: Domicile against other desktops in identical VMs, run by
+      # hand from benchmarks.yml. See packages/benchmarks/README.md.
+      legacyPackages.${system} = pkgs // {
+        benchmarks = import ./packages/benchmarks/desktops.nix { inherit pkgs nixpkgs system self; };
+      };
 
       # `nix run` offers running a desktop and claiming a new npm package.
       # Checks, e2e scripts and measurements need a checkout; run them with
@@ -1364,8 +1391,8 @@
         # system.
         nixos-module =
           let
-            machine = pkgs.nixos {
-              imports = [ self.nixosModules.domicile ];
+            machineWith = extra: pkgs.nixos {
+              imports = [ self.nixosModules.domicile extra ];
               programs.domicile.enable = true;
               # The module does not enable a display manager itself.
               services.displayManager.enable = true;
@@ -1376,7 +1403,22 @@
                 fsType = "tmpfs";
               };
               system.stateVersion = pkgs.lib.trivial.release;
+              hardware.graphics.enable = true;
             };
+            machine = machineWith { };
+            # The check that Domicile loads the system's driver, with that
+            # driver `graphics`.
+            loadsDriver = graphics: pkgs.lib.findFirst
+              (check: check.name == "domicile-loads-the-graphics-driver")
+              (throw "the module adds no check that Domicile loads the graphics driver")
+              (machineWith { hardware.graphics.package = graphics; }).config.system.checks;
+            # A driver no glibc loads.
+            unloadableDriver = pkgs.runCommand "unloadable-driver" { } ''
+              mkdir -p "$out/lib/gbm"
+              echo "not a library" > "$out/lib/libEGL_mesa.so.0"
+              echo "not a library" > "$out/lib/gbm/dri_gbm.so"
+            '';
+            refusedDriver = pkgs.testers.testBuildFailure (loadsDriver unloadableDriver);
             # The sessions the display manager receives. NixOS rejects a
             # package missing the file its `providedSessions` names.
             inherit (machine.config.services.displayManager.sessionData) sessionNames;
@@ -1434,6 +1476,17 @@
             # declare it, and without it a locked desk opens to nothing.
             [ ${pkgs.lib.boolToString (machine.config.security.pam.services ? domicile)} = true ] || {
               echo "the module declared no domicile PAM service" >&2
+              exit 1
+            }
+
+            # The system build loads the system's driver with Domicile's
+            # glibc: this nixpkgs' mesa loads, and a driver that does not load
+            # fails the build saying how to fix it.
+            test -e ${loadsDriver pkgs.mesa}
+            grep -qF 'cannot load ${unloadableDriver}/lib/libEGL_mesa.so.0' ${refusedDriver}/testBuildFailure.log &&
+              grep -qF 'inputs.domicile.inputs.nixpkgs.follows' ${refusedDriver}/testBuildFailure.log || {
+              echo "a driver Domicile cannot load did not fail the build saying why:" >&2
+              cat ${refusedDriver}/testBuildFailure.log >&2
               exit 1
             }
 
@@ -2738,7 +2791,9 @@
                   """Every one of alice's processes' proportional memory, in KiB."""
                   return int(machine.succeed(
                       "for pid in $(pgrep -u alice); do "
-                      "grep -s '^Pss:' /proc/$pid/smaps_rollup; done "
+                      # A process can exit between pgrep and grep, and then
+                      # grep exits 2, which pipefail would make the test's.
+                      "grep -s '^Pss:' /proc/$pid/smaps_rollup || true; done "
                       "| awk '{ total += $2 } END { print total }'").strip())
 
 
@@ -2795,6 +2850,183 @@
                       "tail -8 /tmp/open.log | cut -c1-200",
                       "tail -30 /tmp/electron.log | cut -c1-200",
                       "ls /run/user/1000; pgrep -a -u alice -f electron | cut -c1-200",
+                      "grep -iE 'electron' /tmp/domicile.log | tail -8 | cut -c1-200 || true",
+                      "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -4 | cut -c1-200 || true",
+                  ]:
+                      print(f"$ {command}")
+                      print(machine.execute(f"{command} 2>&1")[1])
+                  raise
+            '';
+          };
+
+        # Real Electron apps start on the desk's engine: each goes through
+        # `domicile open --electron` with no network, as far as its startup
+        # goes. An Electron API the host doesn't have must hand the app to its
+        # own Electron with a reason, never crash it, and an app the host runs
+        # fully stays on the engine. Claude and ChatGPT aren't in nixpkgs, so
+        # the host's unit tests and its surface check cover them. See "Every
+        # API" in docs/architecture/ELECTRON-APPS.md.
+        #
+        # Runs the pinned engine, as `tty-on-a-card-with-no-3d` does.
+        electron-apps-start-on-a-tty =
+          let
+            unfree = import nixpkgs {
+              inherit system;
+              config.allowUnfreePredicate = pkg: builtins.elem (pkgs.lib.getName pkg) [ "slack" ];
+            };
+            # Element behind a compiled wrapper, as nixpkgs' wrapGAppsHook3
+            # makes one for Claude's and ChatGPT's packages (neither of which
+            # this nixpkgs has for Linux): the real makeBinaryWrapper output,
+            # around Element's own scripts.
+            elementCompiled = pkgs.stdenv.mkDerivation {
+              name = "element-desktop-compiled-wrapper";
+              dontUnpack = true;
+              nativeBuildInputs = [ pkgs.makeWrapper pkgs.wrapGAppsHook3 ];
+              dontWrapGApps = true;
+              installPhase = "mkdir -p $out/bin";
+              postFixup = ''
+                makeWrapper ${pkgs.element-desktop}/bin/element-desktop "$out/bin/element-desktop" \
+                  "''${gappsWrapperArgs[@]}" --set-default ELEMENT_WRAPPED compiled
+                head -c 4 "$out/bin/element-desktop" | grep -q ELF \
+                  || (echo "makeWrapper wrote a script here, not a compiled wrapper" >&2; exit 1)
+              '';
+            };
+            # Each app's `domicile open --electron` arguments, and whether it
+            # must run on the engine: an app still allowed to hand itself
+            # back names what it needs. All of these must stay on it.
+            apps = {
+              element = { open = "element-desktop.desktop"; package = pkgs.element-desktop; onTheEngine = true; };
+              slack = { open = "slack.desktop"; package = unfree.slack; onTheEngine = true; };
+              element-compiled = {
+                open = "${elementCompiled}/bin/element-desktop -- ${elementCompiled}/bin/element-desktop";
+                package = elementCompiled;
+                onTheEngine = true;
+              };
+            };
+          in
+          pkgs.testers.runNixOSTest {
+            name = "electron-apps-start-on-a-tty";
+            nodes.machine = {
+              imports = [ self.nixosModules.domicile ];
+              programs.domicile.enable = true;
+              xdg.portal.enable = true;
+              virtualisation = {
+                memorySize = 6144;
+                # See `tty-on-a-card-with-no-3d`.
+                useNixStoreImage = true;
+                cores = 2;
+                qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800" ];
+              };
+              users.users.alice = {
+                isNormalUser = true;
+                uid = 1000;
+                extraGroups = [ "domicile" "video" "input" ];
+              };
+              services.getty.autologinUser = "alice";
+              environment.loginShellInit =
+                let
+                  config = pkgs.writeText "domicile.json" (builtins.toJSON {
+                    electron.apps = [ "element-desktop.desktop" "slack.desktop" ];
+                  });
+                  # Element as a user has it once it has run: on a desktop
+                  # Chromium doesn't know, a first run asks in a message box
+                  # whether to keep its keys in plain text (which hands it
+                  # back, as no window has a page yet) and stores the answer.
+                  elementConfig = pkgs.writeText "electron-config.json" (builtins.toJSON {
+                    safeStorageBackend = "basic_text";
+                  });
+                in
+                ''
+                  if [ "$(tty)" = /dev/tty1 ]; then
+                    mkdir -p ~/.config/domicile ~/.config/Element
+                    cp ${config} ~/.config/domicile/domicile.json
+                    cp ${elementConfig} ~/.config/Element/electron-config.json
+                    exec ${self.packages.${system}.manganese}/bin/manganese >/tmp/domicile.log 2>&1
+                  fi
+                '';
+              environment.systemPackages = map (app: app.package) (builtins.attrValues apps);
+              fonts.enableDefaultPackages = true;
+            };
+            testScript = ''
+              import datetime as dt
+              import json
+              import re
+
+              WAIT = dt.timedelta(seconds=300)
+              APPS = json.loads(${pkgs.lib.escapeShellArg (builtins.toJSON (builtins.mapAttrs (_: app: { inherit (app) open onTheEngine; }) apps))})
+              HOST = "electron-host/src/main.ts"
+
+
+              def in_the_desk(command):
+                  """`command`, as alice, in the environment the desk's apps get."""
+                  return (
+                      "su alice -c 'env $(tr \"\\0\" \"\\n\" "
+                      "</proc/$(pgrep -u alice -o -f bin/domicile-compositor)/environ "
+                      "| grep -E \"^(DOMICILE_|XDG_|DBUS_|PATH=|WAYLAND_)\") "
+                      f"{command}'"
+                  )
+
+
+              def starts(entry, open, on_the_engine):
+                  log = f"/tmp/{entry}.log"
+                  machine.succeed(in_the_desk(f"domicile open --electron {open}") + f" >{log} 2>&1 &")
+                  machine.sleep(60)
+                  said = machine.succeed(f"cat {log}")
+                  print(f"--- {entry}\n{said}")
+                  # A crash, not a hand-back: what fell through to the app.
+                  for crash in ["TypeError", "ReferenceError", "is not a function", "Unhandled"]:
+                      assert crash not in said, f"{entry} crashed on the engine: {crash}\n{said[-3000:]}"
+                  # A read of a name Electron doesn't have on Linux is logged,
+                  # not refused: apps probe for macOS's (Slack reads app.dock),
+                  # and a call of one hands the app back with a reason.
+                  # Found through its wrappers, scripts or compiled, and run
+                  # with what they set.
+                  assert "doesn't look like an Electron app" not in said, f"{entry} wasn't found:\n{said[-3000:]}"
+                  assert "without what its wrappers set" not in said, f"{entry} lost its wrappers:\n{said[-3000:]}"
+                  # An app that relaunches itself on every start (Element
+                  # migrating its safeStorage did) never settles on lyra.
+                  for loop in ["Relaunching", "safeStorage migration"]:
+                      assert loop not in said, f"{entry} restarts itself: {loop}\n{said[-3000:]}"
+                  # The schemes it registered, which the next start brings.
+                  print(machine.execute("cat /home/alice/.local/state/domicile/electron-schemes.json 2>&1")[1])
+                  hosted = machine.execute(f"pgrep -u alice -f {HOST}")[0] == 0
+                  # CI keeps only the end of the log, so a failure carries
+                  # what the app said.
+                  tail = "\n".join(said.splitlines()[-30:])
+                  running = machine.execute("pgrep -a -u alice -f 'electron|element|slack' | cut -c1-160")[1]
+                  if on_the_engine:
+                      assert hosted, f"{entry} left the engine:\n{tail}\nrunning:\n{running}"
+                      lacks = [line for line in said.splitlines() if "Domicile's Electron doesn't have yet" in line]
+                      assert not lacks, f"{entry} reached for what Domicile's Electron lacks:\n" + "\n".join(lacks)
+                  else:
+                      # Every hand-back names what the engine lacks.
+                      assert hosted or re.search(
+                          r"Domicile's (Electron doesn't have|engine can't|engine doesn't|engine registers only)", said
+                      ), (
+                          f"{entry} left the engine without saying why:\n{tail}\nrunning:\n{running}"
+                      )
+                  # An app handed back runs on its own Electron: stopped too, so
+                  # the next app's single-instance lock is its own.
+                  # Not the engine's renderers, whose being killed takes the
+                  # engine down in a DCHECK build.
+                  machine.execute(
+                      f"pkill -u alice -f {HOST}; "
+                      "for p in $(pgrep -u alice -f -- '--type=renderer'); do "
+                      "grep -q chrome-unwrapped /proc/$p/cmdline || kill $p; done; "
+                      "pkill -u alice -f 'element|slack'; sleep 5"
+                  )
+
+
+              machine.wait_for_unit("multi-user.target")
+              try:
+                  machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+                  machine.wait_until_succeeds("pgrep -u alice -f bin/domicile-compositor", timeout=WAIT)
+                  machine.sleep(20)
+                  for entry, app in APPS.items():
+                      starts(entry, app["open"], app["onTheEngine"])
+              except Exception:
+                  machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
+                  for command in [
                       "grep -iE 'electron' /tmp/domicile.log | tail -8 | cut -c1-200 || true",
                       "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -4 | cut -c1-200 || true",
                   ]:

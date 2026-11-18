@@ -30,7 +30,9 @@ const counted = (unread: number, total: number) =>
 
 /** Gmail's list of unread messages, newest first, each its own thread. */
 const unread = (...ids: readonly string[]) =>
-  json(200, { messages: ids.map((id) => ({ id, threadId: `t-${id}` })) });
+  json(200, {
+    messages: ids.map((id) => ({ id, threadId: `f${id.slice(1)}` })),
+  });
 
 /** Gmail's sender, subject and arrival of message `id`. */
 const headers = (id: string) =>
@@ -43,7 +45,7 @@ const headers = (id: string) =>
         { name: "Subject", value: `Subject ${id}` },
       ],
     },
-    threadId: `t-${id}`,
+    threadId: `f${id.slice(1)}`,
   });
 
 const mail = (id: string): Mail => ({
@@ -51,7 +53,7 @@ const mail = (id: string): Mail => ({
   id,
   receivedAt: 7,
   subject: `Subject ${id}`,
-  threadId: `t-${id}`,
+  threadId: `f${id.slice(1)}`,
 });
 
 const ignored = () => Promise.resolve();
@@ -119,7 +121,7 @@ describe("inboxReader", () => {
           json(200, {
             messages: ids.map((id) => ({
               id,
-              threadId: id === "m9" ? "t-m10" : `t-${id}`,
+              threadId: id === "m9" ? "f10" : `f${id.slice(1)}`,
             })),
           }),
         ],

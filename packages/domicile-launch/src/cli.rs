@@ -4,9 +4,12 @@
 //! running one. `--config` is optional; [`crate::config_path`] finds the
 //! default.
 
+use crate::accessibility::Act;
 use std::path::PathBuf;
 
-use domicile_protocol::{DisplayChange, DisplayTransform, Scale, WatchTopic, WindowAct};
+use domicile_protocol::{
+    DisplayChange, DisplayTransform, EmulatedInput, PointerButton, Scale, WatchTopic, WindowAct,
+};
 
 use crate::control::{AppReuse, Request, Switch, ThemeChange};
 use crate::power::Power;
@@ -27,18 +30,47 @@ Ask the running desktop:
 
   domicile which-shell                  Print the shell it serves
   domicile load-shell <shell>           Serve another shell, or a new build
+  domicile dev <entry>                  Serve a shell's source with hot module
+                                        replacement until stopped, then go
+                                        back to the shell it replaced
   domicile open <file|folder|url>       Open with its default app, a link in
                                         a browser window
+  domicile open --profile <id> <url>    Open a link in browser profile <id>
   domicile open --app <url|module>      Open a site or app module as an app
   domicile open --app --id <id> [--reuse new|focus|navigate] <url>
                                         Open a site as app <id>; with focus or
                                         navigate, reuse its open window
+  domicile open --app --profile <id> <url>
+                                        Open a site as an app in browser
+                                        profile <id>
   domicile open --which <file|url>      Print the app open would use
   domicile open --electron <entry|path> [-- <command>...]
                                         Run an installed Electron app on the
                                         desktop's engine; <command> is its own,
                                         which runs it if the engine can't
   domicile screenshot [file]            Take the shell's screenshot, or write a PNG
+  domicile screenshot --fit <px> <file> Write a PNG of the desk no wider or
+                                        taller than <px>, and print what it
+                                        shows as JSON
+  domicile pointer <x>,<y> [click|double-click|right-click|middle-click|press|release]
+                                        Move the pointer to a point of the desk,
+                                        in logical pixels from its top-left
+                                        corner, then click or press there
+  domicile scroll <dx>,<dy>             Scroll where the pointer is, in logical
+                                        pixels; positive is right and down
+  domicile key <chord>                  Press and release a chord such as
+                                        ctrl+shift+Tab or Return
+  domicile type <text>                  Type text on the desk's keyboard
+  domicile accessibility <window>       Print a native window's accessibility
+                                        tree, one element a line with its ref
+  domicile accessibility-act <window> <ref> click|focus|set-text <text>
+                                        Click, focus or set the text of an
+                                        element of a native window
+  domicile devtools <window> <method> [params]
+                                        Send a DevTools Protocol method, with
+                                        its params as a JSON object, to a
+                                        browser window's page and print its
+                                        result
   domicile screen-record                Record the screen until the toolbar stops it
   domicile send-shell <word>...         Run a shell command, as a keybinding does,
                                         and print what it answers
@@ -84,6 +116,17 @@ Ask the running desktop:
   domicile power-off                    Ask, then turn the computer off
   domicile reboot                       Ask, then restart the computer
   domicile log-out                      Ask, then end the login session
+  domicile mcp                          Serve the Model Context Protocol on
+                                        stdio, for agents to drive the desktop
+  domicile agent <name>                 Ask to let an agent in; print what the
+                                        user allowed and each change, then
+                                        list each line read as what it did,
+                                        until stopped
+  domicile list-agents [--json]         Print the agents let in now and those
+                                        remembered
+  domicile stop-agent <session>         Stop an agent, by its list-agents
+                                        session
+  domicile forget-agent <name>          Make a remembered agent ask again
 
 Without a desktop:
 
@@ -91,6 +134,7 @@ Without a desktop:
   domicile install-app <url>            Add a site to your applications
   domicile uninstall-app <url>          Remove a site install-app added
   domicile help                         Print this, as do --help and -h
+  domicile --version                    Print the version, commit and engine
 ";
 
 /// An invalid `domicile` command line.
@@ -126,6 +170,17 @@ pub enum CliError {
     )]
     ExtraToLoad { extra: String },
     #[error(
+        "dev takes the file your shell's source starts at, and was given \
+         nothing:\n\n    \
+         domicile dev ./my-desktop/src/shell.tsx\n"
+    )]
+    NoEntryToServe,
+    #[error(
+        "dev serves one shell, and it was given {extra} as well. Stop the \
+         other domicile dev first, or give the one entry that imports both."
+    )]
+    ExtraToServe { extra: String },
+    #[error(
         "open takes the file, folder or address to open, and was given \
          nothing:\n\n    \
          domicile open ~/notes.org\n    \
@@ -141,6 +196,12 @@ pub enum CliError {
          domicile open --app --id mail --reuse focus https://mail.example\n"
     )]
     ReuseWithoutId,
+    #[error(
+        "--profile picks the browser profile a web address opens in, and \
+         {target} is no web address:\n\n    \
+         domicile open --profile work https://example.com\n"
+    )]
+    ProfileForAFile { target: String },
     #[error("--reuse is new, focus or navigate, and was given {given}.")]
     UnknownReuse { given: String },
     #[error("{flag} takes a value, and was given none.")]
@@ -174,6 +235,49 @@ pub enum CliError {
     ExtraToUninstall { extra: String },
     #[error("screenshot takes one file, and it was given {extra} as well.")]
     ExtraToSave { extra: String },
+    #[error(
+        "screenshot --fit takes the most pixels the picture may be across or \
+         down, then the file to write:\n\n    \
+         domicile screenshot --fit 1280 desk.png\n"
+    )]
+    NotAFit,
+    #[error(
+        "{said} is not a point. pointer takes x,y in logical pixels from the \
+         desk's top-left corner, as screenshot --fit places them:\n\n    \
+         domicile pointer 640,360 click\n"
+    )]
+    NotAPoint { said: String },
+    #[error(
+        "{said} is not something pointer does: click, double-click, \
+         right-click, middle-click, press or release."
+    )]
+    NotAPointerAction { said: String },
+    #[error("{said} is not a distance like 0,120 to scroll across and down.")]
+    NotADistance { said: String },
+    #[error(
+        "{said} is not an agent's session. stop-agent takes the number \
+         list-agents prints:\n\n    \
+         domicile stop-agent 12\n"
+    )]
+    NotASession { said: String },
+    #[error("{said} is not a JSON object of a DevTools method's params.")]
+    NotParams { said: String },
+    #[error(
+        "devtools takes a browser window's id, as list-windows prints it, and \
+         a DevTools Protocol method such as Accessibility.getFullAXTree."
+    )]
+    NotDevTools,
+    #[error(
+        "accessibility-act takes a native window's id, an element's ref from \
+         accessibility, and click, focus or set-text <text>."
+    )]
+    NotAnAct,
+    #[error("{verb} takes one {what}, and was given {said}.")]
+    NotOne {
+        verb: String,
+        what: String,
+        said: String,
+    },
     #[error(
         "send-shell takes the command to send the shell, and was given \
          nothing:\n\n    \
@@ -255,6 +359,8 @@ pub enum CliError {
          settings nobody chose."
     )]
     TwoConfigs { second: String },
+    #[error("{flag} is not a flag domicile takes. domicile --help lists what it takes.")]
+    UnknownFlag { flag: String },
 }
 
 /// A parsed `domicile` command line.
@@ -274,11 +380,21 @@ pub enum Invocation {
     ///
     /// Kept as typed; `shell_path` resolves it against the filesystem.
     Load { shell: String },
+    /// Serve the shell whose source starts at this entry from a dev server,
+    /// with hot module replacement, until stopped; then load the shell it
+    /// replaced again.
+    ///
+    /// Kept as typed; it is relative to the working directory.
+    Dev { entry: String },
     /// Open this file, folder or address with what opens its type; see
     /// [`crate::open`]. A web address opens in a new browser window.
     ///
-    /// Kept as typed; it is relative to the working directory.
-    Open { target: String },
+    /// Kept as typed; it is relative to the working directory. A web address
+    /// opens in browser profile `profile`, or the one its site opens in.
+    Open {
+        target: String,
+        profile: Option<String>,
+    },
     /// Tell the running desktop to open this as an app: an existing file as
     /// an app module ([`crate::app_entry`]), anything else as a site in a
     /// browser window without an address bar ([`crate::address`]).
@@ -289,6 +405,9 @@ pub enum Invocation {
         target: String,
         id: Option<String>,
         reuse: AppReuse,
+        /// The browser profile a new window opens in, or with none its
+        /// site's.
+        profile: Option<String>,
     },
     /// Print the desktop file id of the application [`Invocation::Open`]
     /// would run for this, or nothing for a web address. The launcher lists
@@ -312,6 +431,11 @@ pub enum Invocation {
     ///
     /// Kept as typed; the client makes it absolute.
     Screenshot { file: Option<String> },
+    /// Tell the running desktop to write a PNG of the desk to this file, its
+    /// longer side at most `fit` pixels, and print what it shows.
+    ///
+    /// Kept as typed; the client makes it absolute.
+    ShootDesk { file: String, fit: u32 },
     /// Check that the compositor takes this config, without running a desktop.
     Check { config: PathBuf },
     /// Power off or reboot the computer, or log out, after a yes in the
@@ -328,8 +452,26 @@ pub enum Invocation {
     /// Ask the running desktop for a listing and print it as a table, or
     /// with `json` as the JSON array it answered with.
     List { listing: Listing, json: bool },
+    /// Serve the Model Context Protocol on stdio until it ends; see
+    /// [`crate::mcp`].
+    Mcp,
+    /// Ask the user to let agent `name` in, print what they allowed, then
+    /// list each line of stdin as what it did, until either side ends it;
+    /// see [`crate::agent_lending`].
+    Agent { name: String },
+    /// Print native window `window`'s accessibility tree; see
+    /// [`crate::accessibility`].
+    Accessibility { window: String },
+    /// Act on an element of native window `window`'s accessibility tree.
+    AccessibilityAct {
+        window: String,
+        element: String,
+        act: Act,
+    },
     /// Print [`USAGE`].
     Help,
+    /// Print the version, the commit it was built from, and the engine's.
+    Version,
 }
 
 /// What a `list-*` verb or `status` prints.
@@ -341,6 +483,7 @@ pub enum Listing {
     ShellCommands,
     Bindings,
     Inputs,
+    Agents,
 }
 
 impl Listing {
@@ -353,6 +496,7 @@ impl Listing {
             Self::ShellCommands => Request::ShellCommands,
             Self::Bindings => Request::ShellBindings,
             Self::Inputs => Request::Inputs,
+            Self::Agents => Request::Agents,
         }
     }
 }
@@ -367,7 +511,8 @@ impl Listing {
 /// - Each verb has a closed argument list and takes no flags but `open`'s
 ///   `--app`, `--id` and `--reuse`, and `--which`. The running desktop already read its config, so a `--config`
 ///   would be silently ignored.
-/// - `--config` may come before or after the shell.
+/// - `--config` may come before or after the shell. Any other flag in a run is
+///   refused, rather than taken as the shell.
 pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, CliError> {
     let mut args = args.into_iter();
     let Some(first) = args.next() else {
@@ -377,6 +522,12 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
         });
     };
     let mut args = args.peekable();
+    if first == VERSION {
+        return match args.next() {
+            None => Ok(Invocation::Version),
+            Some(extra) => Err(CliError::Extra { verb: first, extra }),
+        };
+    }
     if HELP.contains(&first.as_str())
         || (verb(&first).is_some()
             && args
@@ -408,6 +559,11 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (Some(shell), None) => Ok(Invocation::Load { shell }),
                 (Some(_), Some(extra)) => Err(CliError::ExtraToLoad { extra }),
             },
+            Verb::Developing => match (args.next(), args.next()) {
+                (None, _) => Err(CliError::NoEntryToServe),
+                (Some(entry), None) => Ok(Invocation::Dev { entry }),
+                (Some(_), Some(extra)) => Err(CliError::ExtraToServe { extra }),
+            },
             Verb::Opening if args.peek().is_some_and(|word| word == ELECTRON) => {
                 args.next();
                 let target = args.next().ok_or(CliError::NothingToOpen)?;
@@ -423,21 +579,43 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     Some(extra) => Err(CliError::ExtraToOpen { extra }),
                 }
             }
+            Verb::Opening if args.peek().is_some_and(|word| word == PROFILE) => {
+                args.next();
+                let profile = args.next().ok_or_else(|| CliError::FlagWithoutValue {
+                    flag: PROFILE.to_string(),
+                })?;
+                match (args.next(), args.next()) {
+                    (None, _) => Err(CliError::NothingToOpen),
+                    (Some(_), Some(extra)) => Err(CliError::ExtraToOpen { extra }),
+                    (Some(target), None) => Ok(Invocation::Open {
+                        target,
+                        profile: Some(profile),
+                    }),
+                }
+            }
             Verb::Opening => {
                 let first = args.next();
                 let flag = first.clone().filter(|word| word == APP || word == WHICH);
-                let (id, reuse) = match flag.as_deref() {
+                let (id, reuse, profile) = match flag.as_deref() {
                     Some(APP) => app_flags(&mut args)?,
-                    _ => (None, AppReuse::New),
+                    _ => (None, AppReuse::New, None),
                 };
                 let target = if flag.is_some() { args.next() } else { first };
                 match (target, args.next()) {
                     (None, _) => Err(CliError::NothingToOpen),
                     (Some(_), Some(extra)) => Err(CliError::ExtraToOpen { extra }),
                     (Some(target), None) => Ok(match flag.as_deref() {
-                        Some(APP) => Invocation::OpenAsApp { target, id, reuse },
+                        Some(APP) => Invocation::OpenAsApp {
+                            target,
+                            id,
+                            reuse,
+                            profile,
+                        },
                         Some(_) => Invocation::Opener { target },
-                        None => Invocation::Open { target },
+                        None => Invocation::Open {
+                            target,
+                            profile: None,
+                        },
                     }),
                 }
             }
@@ -503,6 +681,16 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 },
             },
             Verb::Capturing => match (args.next(), args.next()) {
+                (Some(flag), fit) if flag == "--fit" => {
+                    match (
+                        fit.and_then(|fit| fit.parse().ok()),
+                        args.next(),
+                        args.next(),
+                    ) {
+                        (Some(fit), Some(file), None) => Ok(Invocation::ShootDesk { file, fit }),
+                        _ => Err(CliError::NotAFit),
+                    }
+                }
                 (Some(_), Some(extra)) => Err(CliError::ExtraToSave { extra }),
                 (file, _) => Ok(Invocation::Screenshot { file }),
             },
@@ -564,6 +752,112 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     request: Request::ConfigureDisplay { display, change },
                 })
             }
+            Verb::Pointing => {
+                let point = args.next().ok_or(CliError::NotAPoint {
+                    said: "nothing".to_string(),
+                })?;
+                let (x, y) = pair(&point).ok_or_else(|| CliError::NotAPoint {
+                    said: point.clone(),
+                })?;
+                let then = match (args.next(), args.next()) {
+                    (None, _) => Vec::new(),
+                    (Some(action), None) => pointer_action(&action)
+                        .ok_or(CliError::NotAPointerAction { said: action })?,
+                    (Some(action), Some(extra)) => {
+                        return Err(CliError::Extra {
+                            verb: format!("{first} {point} {action}"),
+                            extra,
+                        })
+                    }
+                };
+                emulated([vec![EmulatedInput::PointTo { x, y }], then].concat())
+            }
+            Verb::Scrolling => match (args.next(), args.next()) {
+                (Some(said), None) => match pair(&said) {
+                    Some((dx, dy)) => emulated(vec![EmulatedInput::Scroll { dx, dy }]),
+                    None => Err(CliError::NotADistance { said }),
+                },
+                (said, _) => Err(one(&first, "distance", said)),
+            },
+            Verb::Keying => match (args.next(), args.next()) {
+                (Some(chord), None) => emulated(chord_input(&chord)),
+                (said, _) => Err(one(&first, "chord", said)),
+            },
+            Verb::Typing => match (args.next(), args.next()) {
+                (Some(text), None) => emulated(vec![EmulatedInput::Text { text }]),
+                (said, _) => Err(one(&first, "text, quoted", said)),
+            },
+            Verb::DevTooling => match (args.next(), args.next(), args.next(), args.next()) {
+                (Some(window), Some(method), params, None) => {
+                    let params = match params {
+                        None => serde_json::json!({}),
+                        Some(params) => match serde_json::from_str(&params) {
+                            Ok(params @ serde_json::Value::Object(_)) => params,
+                            _ => return Err(CliError::NotParams { said: params }),
+                        },
+                    };
+                    Ok(Invocation::Ask {
+                        request: Request::DevTools {
+                            window,
+                            method,
+                            params,
+                        },
+                    })
+                }
+                (_, _, _, Some(extra)) => Err(CliError::Extra { extra, verb: first }),
+                _ => Err(CliError::NotDevTools),
+            },
+            Verb::Reading => match (args.next(), args.next()) {
+                (Some(window), None) => Ok(Invocation::Accessibility { window }),
+                (said, _) => Err(one(&first, "window id", said)),
+            },
+            Verb::Accessing => {
+                let (Some(window), Some(element), Some(act)) =
+                    (args.next(), args.next(), args.next())
+                else {
+                    return Err(CliError::NotAnAct);
+                };
+                let act = match (act.as_str(), args.next()) {
+                    ("click", None) => Act::Click,
+                    ("focus", None) => Act::Focus,
+                    ("set-text", Some(text)) => Act::SetText(text),
+                    _ => return Err(CliError::NotAnAct),
+                };
+                match args.next() {
+                    None => Ok(Invocation::AccessibilityAct {
+                        window,
+                        element,
+                        act,
+                    }),
+                    Some(extra) => Err(CliError::Extra { extra, verb: first }),
+                }
+            }
+            Verb::Admitting => match (args.next(), args.next()) {
+                (Some(name), None) if !name.trim().is_empty() => Ok(Invocation::Agent { name }),
+                (Some(_), None) | (None, _) => Err(one(&first, "agent name", None)),
+                (said, Some(_)) => Err(one(&first, "agent name", said)),
+            },
+            Verb::StoppingAgent => match (args.next(), args.next()) {
+                (Some(session), None) => match session.parse() {
+                    Ok(session) => Ok(Invocation::Ask {
+                        request: Request::StopAgent { session },
+                    }),
+                    Err(_) => Err(CliError::NotASession { said: session }),
+                },
+                (None, _) => Err(one(&first, "agent session", None)),
+                (said, Some(_)) => Err(one(&first, "agent session", said)),
+            },
+            Verb::Forgetting => match (args.next(), args.next()) {
+                (Some(agent), None) if !agent.trim().is_empty() => Ok(Invocation::Ask {
+                    request: Request::ForgetAgent { agent },
+                }),
+                (Some(_), None) | (None, _) => Err(one(&first, "agent name", None)),
+                (said, Some(_)) => Err(one(&first, "agent name", said)),
+            },
+            Verb::Serving => match args.next() {
+                None => Ok(Invocation::Mcp),
+                Some(extra) => Err(CliError::Extra { extra, verb: first }),
+            },
             Verb::Inhibiting => {
                 let mut command: Vec<String> = args.collect();
                 // `--` ends the options, which this takes none of.
@@ -618,6 +912,8 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
             } else {
                 return Err(CliError::ConfigWithoutPath);
             }
+        } else if said.starts_with('-') {
+            return Err(CliError::UnknownFlag { flag: said });
         } else if shell.is_none() {
             shell = Some(said);
         } else {
@@ -631,11 +927,17 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
 /// The words that ask for [`USAGE`], first or right after a verb.
 const HELP: [&str; 3] = ["help", "--help", "-h"];
 
+/// The flag that asks for [`Invocation::Version`].
+const VERSION: &str = "--version";
+
 /// `open`'s flag for opening as an app.
 const APP: &str = "--app";
 
 /// `open`'s flag for running an installed Electron app on the engine.
 const ELECTRON: &str = "--electron";
+
+/// `open`'s flag naming the browser profile a web address opens in.
+const PROFILE: &str = "--profile";
 
 /// `open --app`'s flag naming the app a site's window belongs to.
 const ID: &str = "--id";
@@ -643,18 +945,22 @@ const ID: &str = "--id";
 /// `open --app`'s flag saying what to do when the app's window is open.
 const REUSE: &str = "--reuse";
 
-/// `open --app`'s `--id` and `--reuse`, in either order, before the target.
+/// `open --app`'s `--id`, `--reuse` and `--profile`, in any order, before the
+/// target.
 fn app_flags(
     args: &mut std::iter::Peekable<impl Iterator<Item = String>>,
-) -> Result<(Option<String>, AppReuse), CliError> {
+) -> Result<(Option<String>, AppReuse, Option<String>), CliError> {
     let mut id = None;
     let mut reuse = AppReuse::New;
-    while let Some(flag) = args.next_if(|word| word == ID || word == REUSE) {
+    let mut profile = None;
+    while let Some(flag) = args.next_if(|word| word == ID || word == REUSE || word == PROFILE) {
         let value = args
             .next()
             .ok_or_else(|| CliError::FlagWithoutValue { flag: flag.clone() })?;
         if flag == ID {
             id = Some(value);
+        } else if flag == PROFILE {
+            profile = Some(value);
         } else {
             reuse = match value.as_str() {
                 "new" => AppReuse::New,
@@ -667,7 +973,7 @@ fn app_flags(
     if reuse != AppReuse::New && id.is_none() {
         return Err(CliError::ReuseWithoutId);
     }
-    Ok((id, reuse))
+    Ok((id, reuse, profile))
 }
 
 /// A listing's flag for printing JSON rather than a table.
@@ -689,6 +995,8 @@ enum Verb {
     Asking(Request),
     /// `load-shell`, which takes a shell.
     Loading,
+    /// `dev`, which takes an entry.
+    Developing,
     /// `open`, which takes `--app` or nothing, then a target.
     Opening,
     /// `install-app`, which takes an address.
@@ -707,6 +1015,28 @@ enum Verb {
     Theming,
     /// `power-off`, `reboot` or `log-out`, which take no arguments.
     Powering(Power),
+    /// `mcp`, which takes no arguments.
+    Serving,
+    /// `pointer`, which takes a point and maybe what to do there.
+    Pointing,
+    /// `scroll`, which takes a distance.
+    Scrolling,
+    /// `key`, which takes a chord.
+    Keying,
+    /// `type`, which takes text.
+    Typing,
+    /// `devtools`, which takes a window, a method and maybe its params.
+    DevTooling,
+    /// `agent`, which takes a name.
+    Admitting,
+    /// `stop-agent`, which takes a session.
+    StoppingAgent,
+    /// `forget-agent`, which takes a name.
+    Forgetting,
+    /// `accessibility`, which takes a window.
+    Reading,
+    /// `accessibility-act`, which takes a window, an element and an act.
+    Accessing,
     /// `monitor`, which takes a name, a size and maybe a scale.
     Monitoring,
     /// `subscribe`, which takes topics or nothing.
@@ -728,10 +1058,71 @@ enum Verb {
 /// The verb `word` names, if any.
 ///
 /// Every [`Request`] variant needs a verb here, or nobody can send it.
+/// Asks the running desktop to send `input`.
+fn emulated(input: Vec<EmulatedInput>) -> Result<Invocation, CliError> {
+    Ok(Invocation::Ask {
+        request: Request::Emulate { input },
+    })
+}
+
+/// A [`CliError::NotOne`] for `verb`, given nothing or `said` and more.
+fn one(verb: &str, what: &str, said: Option<String>) -> CliError {
+    CliError::NotOne {
+        verb: verb.to_string(),
+        what: what.to_string(),
+        said: said.map_or("nothing".to_string(), |said| format!("{said} and more")),
+    }
+}
+
+/// Two numbers written `a,b`.
+fn pair(said: &str) -> Option<(f64, f64)> {
+    let (a, b) = said.split_once(',')?;
+    Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+}
+
+/// What `pointer` does after moving, by the word for it.
+fn pointer_action(word: &str) -> Option<Vec<EmulatedInput>> {
+    let button = |button, pressed| EmulatedInput::Button { button, pressed };
+    let click = |pointer| vec![button(pointer, true), button(pointer, false)];
+    match word {
+        "click" => Some(click(PointerButton::Left)),
+        "double-click" => Some([click(PointerButton::Left), click(PointerButton::Left)].concat()),
+        "right-click" => Some(click(PointerButton::Right)),
+        "middle-click" => Some(click(PointerButton::Middle)),
+        "press" => Some(vec![button(PointerButton::Left, true)]),
+        "release" => Some(vec![button(PointerButton::Left, false)]),
+        _ => None,
+    }
+}
+
+/// Presses each key of `chord`, such as `ctrl+shift+Tab`, in order, then
+/// releases them in reverse. The compositor refuses a key no keysym names.
+fn chord_input(chord: &str) -> Vec<EmulatedInput> {
+    let keys: Vec<&str> = chord
+        .split('+')
+        .map(|key| match key {
+            "ctrl" | "control" => "Control_L",
+            "shift" => "Shift_L",
+            "alt" => "Alt_L",
+            "super" | "meta" => "Super_L",
+            key => key,
+        })
+        .collect();
+    let key = |key: &&str, pressed| EmulatedInput::Key {
+        key: (*key).to_string(),
+        pressed,
+    };
+    keys.iter()
+        .map(|name| key(name, true))
+        .chain(keys.iter().rev().map(|name| key(name, false)))
+        .collect()
+}
+
 fn verb(word: &str) -> Option<Verb> {
     match word {
         "which-shell" => Some(Verb::Asking(Request::WhichShell)),
         "load-shell" => Some(Verb::Loading),
+        "dev" => Some(Verb::Developing),
         "open" => Some(Verb::Opening),
         "install-app" => Some(Verb::Installing),
         "uninstall-app" => Some(Verb::Uninstalling),
@@ -760,6 +1151,18 @@ fn verb(word: &str) -> Option<Verb> {
         "list-shell-commands" => Some(Verb::Listing(Listing::ShellCommands)),
         "list-bindings" => Some(Verb::Listing(Listing::Bindings)),
         "list-inputs" => Some(Verb::Listing(Listing::Inputs)),
+        "list-agents" => Some(Verb::Listing(Listing::Agents)),
+        "stop-agent" => Some(Verb::StoppingAgent),
+        "forget-agent" => Some(Verb::Forgetting),
+        "mcp" => Some(Verb::Serving),
+        "agent" => Some(Verb::Admitting),
+        "pointer" => Some(Verb::Pointing),
+        "scroll" => Some(Verb::Scrolling),
+        "key" => Some(Verb::Keying),
+        "type" => Some(Verb::Typing),
+        "devtools" => Some(Verb::DevTooling),
+        "accessibility" => Some(Verb::Reading),
+        "accessibility-act" => Some(Verb::Accessing),
         _ => None,
     }
 }

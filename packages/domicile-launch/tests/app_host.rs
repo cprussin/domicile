@@ -5,6 +5,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use domicile_launch::app_host::{answer, read_message, watched, write_message, Host};
+use domicile_launch::browser_profiles::{
+    BrowserProfileList, ListedBrowserProfile, ListedBrowserSite, ProfileExtension,
+};
 use domicile_launch::control::{Request, Response, SettingsFiles};
 use domicile_launch::extensions::{
     ExtensionSettings, InstalledExtension, SiteAccess, SiteAccessMode,
@@ -246,6 +249,36 @@ fn the_monitors_are_the_desktops() {
 }
 
 #[test]
+fn agents_are_listed_stopped_and_forgotten_on_the_desktop() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 20, "type": "agents"})),
+        json!({
+            "id": 20,
+            "type": "agents",
+            "agents": {"connected": [], "remembered": [{"agent": "Codex", "last_used_ms": 9}]},
+        })
+    );
+    assert_eq!(
+        host.answer(&json!({"id": 21, "type": "stop_agent", "session": 4})),
+        json!({"id": 21, "type": "done"})
+    );
+    assert_eq!(
+        host.answer(&json!({"id": 22, "type": "forget_agent", "agent": "Codex"})),
+        json!({"id": 22, "type": "done"})
+    );
+    assert_eq!(
+        host.asked.take()[1..],
+        [
+            Request::StopAgent { session: 4 },
+            Request::ForgetAgent {
+                agent: "Codex".to_string()
+            }
+        ]
+    );
+}
+
+#[test]
 fn a_media_device_is_preferred_on_the_desktop() {
     let host = a_host(FILES.clone());
     assert_eq!(
@@ -322,7 +355,8 @@ fn every_installed_extension_is_the_desktop_s() {
                 "version": "1.0",
                 "enabled": true,
                 "options_url": null,
-                "settings": {"private": false},
+                "settings": {"file_access": false},
+                "icon": "data:image/png;base64,iVBORw==",
             }],
         })
     );
@@ -342,6 +376,73 @@ fn an_extension_is_disabled_on_the_desktop() {
         Some(&Request::SetExtensionEnabled {
             id: ID.to_string(),
             enabled: false,
+            profile: None,
+        })
+    );
+}
+
+#[test]
+fn an_extension_is_switched_in_the_browser_profile_the_app_names() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({
+            "id": 31,
+            "type": "set_extension_enabled",
+            "extension": ID,
+            "enabled": true,
+            "profile": "work",
+        })),
+        json!({"id": 31, "type": "stored"})
+    );
+    assert_eq!(
+        host.asked.take().last(),
+        Some(&Request::SetExtensionEnabled {
+            id: ID.to_string(),
+            enabled: true,
+            profile: Some("work".to_string()),
+        })
+    );
+}
+
+#[test]
+fn the_desks_browser_profiles_are_the_desktop_s() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 32, "type": "browser_profiles"})),
+        json!({
+            "id": 32,
+            "type": "browser_profiles",
+            "default_profile": "personal",
+            "default_private_profile": "private",
+            "profiles": [{
+                "id": "work",
+                "name": "Work",
+                "color": "#3b82f6",
+                "private": false,
+                "extensions": [{"id": ID, "enabled": false, "locked": false}],
+            }],
+            "sites": [{"site": "github.com/acme", "profile": "work", "pinned": false}],
+        })
+    );
+}
+
+#[test]
+fn a_site_is_pinned_to_a_browser_profile_on_the_desktop() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({
+            "id": 33,
+            "type": "pin_browser_site",
+            "site": "github.com/acme",
+            "profile": "work",
+        })),
+        json!({"id": 33, "type": "stored"})
+    );
+    assert_eq!(
+        host.asked.take().last(),
+        Some(&Request::PinBrowserSite {
+            site: "github.com/acme".to_string(),
+            profile: "work".to_string(),
         })
     );
 }
@@ -354,7 +455,7 @@ fn an_extension_is_configured_on_the_desktop() {
             "id": 19,
             "type": "configure_extension",
             "extension": ID,
-            "settings": {"private": true, "site_access": "on_click"},
+            "settings": {"file_access": true, "site_access": "on_click"},
         })),
         json!({"id": 19, "type": "stored"})
     );
@@ -363,7 +464,7 @@ fn an_extension_is_configured_on_the_desktop() {
         Some(&Request::ConfigureExtension {
             id: ID.to_string(),
             settings: ExtensionSettings {
-                in_private: Some(true),
+                file_access: Some(true),
                 site_access: Some(SiteAccess::Mode(SiteAccessMode::OnClick)),
                 ..ExtensionSettings::default()
             },
@@ -382,7 +483,10 @@ fn an_address_is_opened_in_a_browser_window_on_the_desktop() {
     );
     assert_eq!(
         host.asked.take().last(),
-        Some(&Request::OpenUrl { url: options })
+        Some(&Request::OpenUrl {
+            url: options,
+            profile: None
+        })
     );
 }
 
@@ -543,6 +647,7 @@ fn the_host_watches_the_directory_of_each_file_once() {
 
 /// An extension id.
 const ID: &str = "abcdefghijklmnopabcdefghijklmnop";
+const ICON: &str = "/home/me/.config/domicile/Extensions/tabs/icon128.png";
 
 static FILES: std::sync::LazyLock<SettingsFiles> = std::sync::LazyLock::new(|| SettingsFiles {
     config: Some(PathBuf::from("/home/me/.config/domicile/domicile.json")),
@@ -631,12 +736,34 @@ impl Fake {
                                 enabled: true,
                                 options_url: None,
                                 settings: ExtensionSettings {
-                                    in_private: Some(false),
+                                    file_access: Some(false),
                                     ..ExtensionSettings::default()
                                 },
+                                icon_path: Some(ICON.to_string()),
                             }],
                         },
                         Request::SetExtensionEnabled { .. } => Response::Stored,
+                        Request::BrowserProfiles => Response::BrowserProfiles(BrowserProfileList {
+                            default_profile: "personal".to_string(),
+                            default_private_profile: "private".to_string(),
+                            profiles: vec![ListedBrowserProfile {
+                                id: "work".to_string(),
+                                name: "Work".to_string(),
+                                color: "#3b82f6".to_string(),
+                                private: false,
+                                extensions: vec![ProfileExtension {
+                                    id: ID.to_string(),
+                                    enabled: false,
+                                    locked: false,
+                                }],
+                            }],
+                            sites: vec![ListedBrowserSite {
+                                site: "github.com/acme".to_string(),
+                                profile: "work".to_string(),
+                                pinned: false,
+                            }],
+                        }),
+                        Request::PinBrowserSite { .. } => Response::Stored,
                         Request::ConfigureExtension { .. } => Response::Stored,
                         Request::OpenUrl { .. } => Response::Opened,
                         Request::History(_) => Response::History {
@@ -668,6 +795,16 @@ impl Fake {
                                 hdr: DisplayHdr::Unsupported,
                             }],
                         },
+                        Request::Agents => Response::Agents {
+                            agents: domicile_protocol::KnownAgents {
+                                connected: vec![],
+                                remembered: vec![domicile_protocol::RememberedAgent {
+                                    agent: "Codex".to_string(),
+                                    last_used_ms: 9,
+                                }],
+                            },
+                        },
+                        Request::StopAgent { .. } | Request::ForgetAgent { .. } => Response::Done,
                         other => panic!("the host never asks {other:?}"),
                     })
                 },
@@ -684,6 +821,10 @@ impl Fake {
                     Some("/nix/store/x-shell.ts") => {
                         Ok("export const Shell = runManganese();".to_string())
                     }
+                    _ => Err(std::io::Error::from(std::io::ErrorKind::NotFound)),
+                },
+                read_bytes: &|path| match path.to_str() {
+                    Some(ICON) => Ok(vec![0x89, b'P', b'N', b'G']),
                     _ => Err(std::io::Error::from(std::io::ErrorKind::NotFound)),
                 },
                 home: Some(Path::new("/home/me")),

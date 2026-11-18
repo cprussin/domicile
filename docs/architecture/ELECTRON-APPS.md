@@ -34,12 +34,26 @@ domicile open --electron claude-desktop.desktop [-- <its Exec>]
   entry id or a path into the install
   ([`electron_app.rs`](../../packages/domicile-launch/src/electron_app.rs)).
   The entry's program, or the command's when one is given, is followed
-  through symlinks and through the paths each wrapper script names until one
-  is a directory holding `app.asar` or `app/`, or a program beside a
-  `resources/` that does. Packages wrap Electron in scripts (`makeWrapper`
-  on NixOS, shell scripts in `/usr/bin`), so the `Exec` rarely names it.
-  The command's arguments, or the `Exec`'s, are the app's `process.argv`.
-  What a wrapper sets (`LD_PRELOAD`, flags) does not reach the app.
+  through symlinks and through the paths each wrapper names until one is a
+  directory holding `app.asar` or `app/`, or a program beside a `resources/`
+  that does. Packages wrap Electron in scripts (`makeWrapper` on NixOS,
+  shell scripts in `/usr/bin`), so the `Exec` rarely names it. On NixOS the
+  wrapper is often compiled (`makeBinaryWrapper`, which wrapGAppsHook3 and
+  wrapQtAppsHook use, as Claude's and ChatGPT's packages do); a compiled
+  wrapper keeps the `makeCWrapper` command that made it, and the paths that
+  command names are followed.
+  What the wrappers set reaches the app: when the command is a bash script,
+  it runs with `BASH_ENV` naming a script that replaces `exec`. Each script
+  it execs runs the same way; the `exec` of the program execs `domicile`
+  instead, which records the command line and the environment it got and
+  exits. A compiled wrapper is followed by running its `makeCWrapper`
+  command as bash, which sets what the wrapper sets, adds its flags and
+  execs the same way. The app gets that
+  environment (`LD_PRELOAD`, `PATH`) and those arguments, less the app's own
+  path a generic Electron is given, as its `process.argv`
+  ([`electron_wrapper.rs`](../../packages/domicile-launch/src/electron_wrapper.rs)).
+  A command that is neither a bash script nor a compiled wrapper, or that never reaches the app's program
+  within 10 seconds, gives its arguments alone, and the latter is logged.
 - **`electron.apps`** in the desk config lists desktop entry ids. The
   compositor copies each entry into a directory first on the desk's
   `XDG_DATA_DIRS`, with every `Exec` running
@@ -83,8 +97,10 @@ A bun workspace package, `packages/electron-host`, run by Bun.
 - **Quirks table:** per-app overrides inside the package, keyed by the
   app's `package.json` name
   ([`quirks.ts`](../../packages/electron-host/src/quirks.ts)). Today it names
-  the phase-2 apps inspected (below); Node instead of Bun and an updater to
-  skip go there when an app needs them.
+  the apps that need their own Electron: the phase-2 apps inspected (below),
+  and ChatGPT, which refuses to start on anything but OpenAI's Electron fork,
+  Owl. Node instead of Bun and an updater to skip go there when an app needs
+  them.
 
 Bun over Node because the desktop already ships Bun for the builder. Node is
 the fallback for an app Bun can't run, and becomes required in phase 2.
@@ -135,7 +151,28 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
     views. `BrowserWindow.fromWebContents` finds the window holding a view's
     page.
 - **`loadURL`, `loadFile`, title, show, focus and close** map to existing
-  window requests. Window size and position are not the app's to set: the
+  window requests.
+  - **Title:** a window has its own title, which the desktop shows (the
+    shell's tab, capture tools) over its page's: `title` with `open_window`,
+    then `set_title {window, title}` on `setTitle` and on each page title the
+    app's `page-title-updated` listeners let through. An app that prevents
+    them, as Claude Desktop does, keeps its own.
+  - **Close:** the user closing a window doesn't close it. The engine says
+    `close_asked {window}`, and the host emits the window's `close` event;
+    only if no listener prevents it does the host ask with `close_window`.
+    An app that closes to its tray, as Slack and Element do, prevents it and
+    hides the window.
+  - **Hide and show:** `hide()`, `show()`, `showInactive()` and `show:
+    false` send `set_hidden {window, hidden}` (`hidden` with `open_window`).
+    A hidden window stays open, its page running; the engine lists it with
+    `isHidden`, which tells the shell to keep it out of sight, and leaves it
+    out of capture tools' lists. `show()` also focuses it. Manganese takes a
+    hidden window off its workspace and puts it on the one on screen when it
+    is shown.
+  - **Icon:** an Electron window is listed with its app's desktop id
+    (`appId`), and Manganese draws the app's icon from its desktop entry for
+    it, in its title bar and in the screenshot and screen cast pickers, over
+    the page's icon. Window size and position are not the app's to set: the
   shell lays out windows. A window's size reads as the shell gave it
   (`getContentBounds`, `getBounds`, `getSize`), and `resize` fires as it
   changes; before the shell gives one, it is the size the app asked for.
@@ -153,6 +190,26 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   it to the window's main frame before each navigation commits, and the
   renderer runs it at document start, ahead of extensions' content scripts
   ([`electron_preload.h`](../../packages/domicile-engine/src/components/domicile/renderer/electron_preload.h)).
+- **Node in the page:** a window that isn't sandboxed (`sandbox: false`, or
+  `nodeIntegration` without `sandbox: true`, as Electron decides) has Node.js
+  in its page instead. The host sends `node` with `open_window` in place of
+  the preload's source: the preload's file, `nodeIntegration`,
+  `contextIsolation`, the app's paths and environment. The browser learns
+  which renderer the page's navigation goes to before it starts
+  (`ContentBrowserClient::MainFrameNavigatesInto`, patch 0236) and starts it
+  unsandboxed and outside the zygote, for that page alone, as Electron does
+  ([`domicile_electron_page.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_electron_page.h)).
+  There the renderer starts Electron's Node on its own V8, a Node environment
+  in the preload's world (the page's own without context isolation), with
+  libuv's loop run in turns off the renderer's, and loads the preload with
+  Node's `require`, `require("electron")` giving the same `contextBridge` and
+  `ipcRenderer`
+  ([`electron_node.h`](../../packages/domicile-engine/src/components/domicile/renderer/electron_node.h)).
+  With `nodeIntegration` and no context isolation the page gets `require`,
+  `module`, `__filename` and `__dirname`; without either, Node's globals
+  leave the page's world once the preload ran. A preload's `require` of a
+  native module needs the engine to export Node's symbols, which it doesn't
+  yet.
 - **`contextBridge.exposeInMainWorld`** copies the API into the page:
   objects, arrays, dates, errors and bytes are copied, functions and promises
   are wrapped so they run and settle in their own world
@@ -206,9 +263,13 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   `stream`, `codeCache` and `allowServiceWorkers` are not yet, and don't
   hold an app back. A scheme the engine keeps for itself is refused without
   being kept ([`electron_schemes.h`](../../packages/domicile-engine/src/components/domicile/common/electron_schemes.h)).
-  An app's first run with a new scheme falls back; the quirks table can
-  seed known apps' schemes to spare it, once their privileges are checked
-  against the real apps.
+  Local Network Access classes a page in one as loopback, as it does the
+  shell: the app is installed on this machine, not a site. Left public, every
+  request into the LAN or a VPN (Element's homeserver) asked a permission no
+  one answers (patch 0238).
+  An app's first run with a new scheme falls back. Known apps' schemes, as
+  their own runs recorded them, register from the first start (`KNOWN` in
+  `packages/domicile-launch/src/electron_schemes.rs`) to spare them that.
 - **Not yet:** a handler's redirect (the load fails loudly), a request body
   that is a file or a stream, and requests from an Electron page's workers,
   which go to the network.
@@ -237,6 +298,11 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   windows from their next navigation and its new windows before their first
   ([`domicile_electron_storage.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_electron_storage.h)).
   Not yet: `cookies.on('changed')`.
+- **User agent**: `ready` names the engine's user agent and Chrome's full
+  version. The host makes Electron's from them (`Name/1.2.3 Chrome/<full>
+  Electron/<version>` in Chrome's place) and sends it as
+  `set_user_agent_fallback`, `app.userAgentFallback`, before the app's
+  windows open. A session without its own user agent has it.
 - **Permission handlers** (`permission_handler`): while one of the app's
   sessions has a `setPermissionRequestHandler`, its pages' permission
   requests ask the app (`permission_request`, answered by
@@ -265,7 +331,7 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 | `dialog` | file dialogs through the file chooser portal ([PORTALS.md](/docs/PORTALS.md)), built in the host (`src/electron/dialog.ts`): Electron's properties, filters, button label and default path become the portal's options, and its URIs come back as paths. The `Sync` calls block on a child process that asks the portal (`src/choose-file.ts`), as Electron's block the main process. Dialogs aren't tied to the app's window yet: Electron windows are the shell's pages, not toplevels a portal can name. `showMessageBox` sends `show_message_box` over the window the app names, or its most recent open one, and resolves with the `message_box_answered` the shell's answer brings (`src/electron/message-boxes.ts`); with no window open it rejects. As Electron, no buttons is one OK, and the cancel button the app names none for is the first labeled Cancel or No. `showMessageBoxSync` throws, as nothing can block for the shell's answer; `showErrorBox` writes to the host's log |
 | `nativeTheme` | the settings portal's `org.freedesktop.appearance` `color-scheme` and `contrast`, read before the app's main runs and followed after; the app's `themeSource` overrides `shouldUseDarkColors` |
 | `shell.openExternal`, `openPath`, `showItemInFolder` | `domicile open` (the item's folder for `showItemInFolder`) |
-| `safeStorage` | Chromium's OSCrypt for Linux, byte for byte, built in the host (`src/electron/safe-storage.ts`), so what an app encrypted on its own Electron decrypts here and back: AES-128-CBC with the PBKDF2 key of a password the Secret Service keeps as "Chromium Safe Storage" with `application` set to the app's name (`src/secret-service.ts`), prefixed `v11`. The password is read, or created, when the app first needs it, blocking on a child process (`src/safe-storage-password.ts`) as Electron blocks on libsecret, so a locked keyring asks to be unlocked then. With no Secret Service, or an unlock refused, the backend is `basic_text`: encryption needs `setUsePlainTextEncryption(true)` and uses the hardcoded `v10` key, as in Electron |
+| `safeStorage` | Chromium's OSCrypt for Linux, byte for byte, built in the host (`src/electron/safe-storage.ts`), so what an app encrypted on its own Electron decrypts here and back: AES-128-CBC with the PBKDF2 key of a password the Secret Service keeps as "Chromium Safe Storage" with `application` set to the app's name (`src/secret-service.ts`), prefixed `v11`. The password is read, or created, when the app first needs it, blocking on a child process (`src/safe-storage-password.ts`) as Electron blocks on libsecret, so a locked keyring asks to be unlocked then, both to read the password and to create it. The backend is chosen as Chromium chooses it, so an app finds its store where its own Electron left it: `--password-store` first (`basic` is `basic_text`; `gnome`, `gnome-keyring` and `gnome-libsecret` are the Secret Service; KWallet hands the app back), then `XDG_CURRENT_DESKTOP` (GNOME, Cinnamon, Pantheon, XFCE, Unity, Deepin and UKUI use the Secret Service; KDE hands the app back; any other desktop, Domicile included, is `basic_text`, as on Chromium). On `basic_text` the keyring is never read. With no Secret Service, an unlock refused, or a Secret Service that fails (said on stderr), the backend is `basic_text` too: encryption needs `setUsePlainTextEncryption(true)` and uses the hardcoded `v10` key, as in Electron |
 | `desktopCapturer`, `setDisplayMediaRequestHandler` | the desktop's share picker, as Electron's own under Wayland. `desktopCapturer.getSources` gives one source, "Screen or window" (`screen:0:0`, or `window:0:0` when only windows are asked for), with an empty thumbnail; a page's `getUserMedia()` with it as `chromeMediaSourceId` opens the picker, which says what is captured, sound included when asked. `getDisplayMedia()` opens the same picker, as Electron's `useSystemPicker` does, so a display media handler is kept but not asked (`src/electron/desktop-capturer.ts`) |
 | `clipboard` | the desktop clipboard through `wl-paste` and `wl-copy`, which the compositor serves with data-control (docs/use/CLIPBOARD.md), built in the host (`src/electron/clipboard.ts`). Each call waits on its command, as Electron's clipboard is synchronous; `selection` is the primary selection. `wl-copy` offers one type per copy, so a `write` of several formats throws, naming them, until the host can offer several. Rich copies in pages go through the engine's own clipboard, which has no such limit. The host's package needs `wl-clipboard` on its `PATH` |
 | `nativeImage` | the image's PNG or JPEG bytes, in the host. PNGs are read and written without a library (`src/png.ts`) for `resize`, `crop` and bitmaps; a JPEG is kept as it came and can't be decoded, so those throw for one. One scale factor, 1 |
@@ -295,14 +361,48 @@ waits on every one. Only a window shows a message box; a view's is refused.
 
 ### Unsupported apps
 
-An app whose pages need Node fails phase 1. When a window asks for
-`nodeIntegration: true` or `contextIsolation: false`, `electron-host` exits
-with status 3, whatever the app catches. `domicile open --electron` then
+An app the engine can't run yet falls back to its own Electron. When a
+sandboxed window asks for `contextIsolation: false`, whose preload would run
+in the page's own world without Node, `electron-host` exits with status 3,
+whatever the app catches; a window with Node in its page runs on the engine
+(see [Preload and IPC](#preload-and-ipc)). `domicile open --electron` then
 shows a notification naming the app and runs its own command: the one given
 after `--`, else the entry's `Exec`. An app named by its path alone has no
 command to fall back to, and the status is passed on. An app the quirks
-table names as needing Node exits with status 3 before its main runs, so its
-own Electron starts without a window opening on the engine first.
+table names as needing its own Electron exits with status 3 before its main
+runs, so its own Electron starts without a window opening on the engine
+first.
+
+### Every API
+
+An app must never find a plain `undefined` where Electron has an API: that
+is a `TypeError` in the app's main, which takes the app down with no reason
+given and no fallback. `scripts/electron-surface.ts` reads `electron.d.ts`
+from Electron 45.2.1 and the newest release of each of the twelve majors
+before it, and writes `src/electron/surface.ts`: every module, its methods
+and properties, which exist only on macOS or Windows, and each instance
+class's members with its parents'. Regenerate it with
+`bun scripts/electron-surface.ts` when Electron ships a major.
+
+At start the host fills what it lacks from the surface
+(`src/electron/complete.ts`):
+
+- A Linux method the host doesn't have exits with status 3, naming it, so the
+  app runs on its own Electron, as for [unsupported apps](#unsupported-apps).
+- A macOS or Windows method does nothing and gives `undefined`, as
+  Electron's does on Linux.
+- A property the host doesn't have logs once and reads as `undefined`; an
+  object may still set it.
+- A name Electron itself doesn't have logs once ("doesn't have on Linux"):
+  the surface is stale or the app is probing.
+
+What the host has is real where the engine can do it and a stated answer
+where the shell owns it: window state reads as shown and normal, because
+the shell lays windows out, and `globalShortcut` refuses with a warning,
+because shortcuts are the shell's. `screen` and `powerMonitor` follow the
+desk through `domicile subscribe` from their first use. The
+`electron-apps-start-on-a-tty` VM test starts Element and Slack as packaged
+and fails on a crash or on Element leaving the engine.
 
 ### Phase 2: Node in the page
 
@@ -310,6 +410,29 @@ The engine embeds Node in the page processes of apps that ask for it, as
 Electron does. Node, not Bun: pages run on V8, Bun on JavaScriptCore. The
 main process moves to the same Node, so both sides load one build of each
 native module.
+
+Electron's `main` is on Chromium 160.0.8158.0, three builds from the
+engine's 160.0.8155.0, with Node v26.13.1. So the engine takes Electron's
+Node as Electron builds it, rather than porting a Node to this V8:
+
+1. **Node in the engine.** Electron's Node fork at the commit its `DEPS`
+   names, with its `patches/node`, built by Node's own GN files against the
+   engine's V8 and BoringSSL, linked into the engine. The engine binary runs
+   as plain Node when told to, as `ELECTRON_RUN_AS_NODE` does.
+2. **Node in a page.** A window whose `webPreferences` ask for it
+   (`nodeIntegration`, `contextIsolation: false` with a Node preload,
+   `sandbox: false`) gets an unsandboxed page process with a Node
+   environment in its main world, and libuv run off the renderer's own
+   loop, as Electron's `NodeBindings` does. Every other page stays
+   sandboxed and Node-free. `require("electron")` in the page is the
+   existing preload surface.
+3. **The main process on that Node.** `electron-host` runs on the engine's
+   Node instead of Bun, with `electron` resolved through Node's module hooks,
+   so a native module loads once for both sides.
+4. **`<webview>` in Electron pages**, as Zulip uses it, over the guests the
+   engine already has.
+5. **App by app:** Joplin, Teams for Linux, Zulip and Signal, each leaving
+   the quirks table as it runs.
 
 ## Apps inspected
 
@@ -329,6 +452,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 | Teams for Linux 2.29.0 | 2 | Preload uses Node, `contextIsolation: false` |
 | Zulip 5.14.2 | 2 | `@electron/remote`, `<webview>`, `sandbox: false` |
 | Joplin 3.7.22 | 2 | `nodeIntegration: true`, `@electron/remote` |
+| ChatGPT 26.1103.60933 | none | Needs Owl, OpenAI's Electron fork: throws at start without `app.showTaskManager`, then calls Owl's own APIs |
 
 ## Key decisions
 
@@ -391,6 +515,17 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron.apps`: every start of a listed entry goes through `domicile open --electron`
 - [x] an app's own schemes kept for the next engine start
 - [x] the quirks table: known phase-2 apps go straight to their own Electron
-- [ ] the quirks table seeds known apps' schemes, once checked against the real apps
+- [x] known apps' schemes (Element, Claude, Slack, ChatGPT, from their own runs) register from the first engine start (`KNOWN` in `packages/domicile-launch/src/electron_schemes.rs`)
 - [x] VM test with a fixture app, and memory against the same app on its own Electron (`electron-app-on-a-tty` in `flake.nix`)
-- [ ] phase 2: Node in the page
+- [x] every Electron API an app can call: what the host lacks hands the app back with a reason, never a `TypeError` (`electron-apps-start-on-a-tty` in `flake.nix`)
+- [x] engine: a window's own title (`set_title`), hidden windows (`set_hidden`), and the user's close asking the app (`close_asked`); `ipcRenderer` is an EventEmitter (`emit` reaches the preload's own listeners, which Element's preload relies on)
+- [x] `electron-host`: `setTitle`, `hide`, `show`, `showInactive`, `show: false`, and the `close` event for the user's close
+- [x] Manganese: hidden Electron windows off every workspace; app windows drawn with their app's icon
+- [x] engine: `webContents.executeJavaScript` and `mainFrame` (a `WebFrameMain` for the page's one frame), which Claude calls at start: the code runs in the page's main world after any load under way, a promise it gives is awaited, and what it gives comes back as JSON carries it (`execute_javascript` and `javascript_result` in `electron_protocol.h`). A throw rejects with a generic reason; the page's console has the exception
+- [ ] engine: a message box before any window has a page, which Element shows when there's no keyring and hands itself back on
+- [ ] phase 2, engine: Electron's Node built into the engine, and the engine run as Node
+- [x] phase 2, engine: Node in the pages of windows that ask for it (`guard-electron-node.sh`)
+- [ ] phase 2, engine: native modules in pages (Node's symbols exported from the engine)
+- [ ] phase 2, `electron-host`: the main process on the engine's Node
+- [ ] phase 2, engine: `<webview>` in Electron pages
+- [ ] phase 2: Joplin, Teams for Linux, Zulip and Signal on the engine, out of the quirks table

@@ -19,6 +19,7 @@ ARTIFACTS=(
   domicile_color_probe
   domicile_capture_probe
   domicile_desk_probe
+  node
 )
 
 # The entry points the compositor looks up by name. Matched as bytes because

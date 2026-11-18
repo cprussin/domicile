@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/barrier_closure.h"
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
@@ -23,6 +24,8 @@
 #include "base/strings/strcat.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
+#include "chrome/browser/domicile/domicile_agent_devtools.h"
+#include "chrome/browser/domicile/domicile_browser_profiles.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_extension_installer.h"
 #include "chrome/browser/domicile/domicile_extension_settings.h"
@@ -38,10 +41,12 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/domicile/browser/app_roots.h"
+#include "components/domicile/browser/browser_profiles.h"
 #include "components/domicile/browser/command_protocol.h"
 #include "components/domicile/browser/shell_source.h"
 #include "components/domicile/browser/shell_swap.h"
 #include "components/domicile/browser/shell_window_wait.h"
+#include "components/domicile/browser/shortcut_registry.h"
 #include "components/domicile/browser/site_permissions.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/permissions/permissions_client.h"
@@ -178,7 +183,11 @@ void LoadTheServedShell() {
   params.source_site_instance = page->GetSiteInstance();
   shell->GetController().LoadURLWithParams(params);
   LOG(INFO) << "domicile: now serving " << ShellSource::Get().Module()
-            << " out of " << ShellSource::Get().Root();
+            << " out of "
+            << (ShellSource::Get().Files() == ShellFiles::kDevServer
+                    ? "the dev server at "
+                    : "")
+            << ShellSource::Get().Root();
 }
 
 // The process's shell swap, which hears from the shell's page through
@@ -186,16 +195,21 @@ void LoadTheServedShell() {
 ShellSwap& TheShellSwap() {
   static base::NoDestructor<ShellSwap> swap(
       ShellSource::Get(), base::BindRepeating(&LoadTheServedShell),
+      // Drops the old shell's shortcut claims on a swap to another shell.
+      base::BindRepeating(&ShortcutRegistry::ShellChanged,
+                          base::Unretained(&ShortcutRegistry::Get())),
       kShellRunsWithin);
   return *swap;
 }
 
-// Swaps in the shell at `root`/`module`, and answers once it ran or the old
-// one is back, or refuses when there is no page to load it into.
+// Swaps in the shell at `root`/`module`, as `files` says, and answers once it
+// ran or the old one is back, or refuses when there is no page to load it
+// into.
 //
 // The source is set before the navigation because the navigation reads it.
 void LoadShellIntoAPage(const base::FilePath& root,
                         const std::string& module,
+                        ShellFiles files,
                         ShellLoaded loaded,
                         bool has_a_page) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -204,7 +218,7 @@ void LoadShellIntoAPage(const base::FilePath& root,
     return;
   }
   TheShellSwap().Swap(
-      root, module,
+      root, module, files,
       base::BindOnce(
           [](ShellLoaded loaded, const ShellOutcome& ran) {
             if (ran.has_value()) {
@@ -221,9 +235,10 @@ void LoadShellIntoAPage(const base::FilePath& root,
 // that window shows a page. The load navigates from the committed page.
 void LoadShellIntoTheShellWindow(const base::FilePath& root,
                                  const std::string& module,
+                                 ShellFiles files,
                                  ShellLoaded loaded) {
-  WhenTheShellWindowCanTakeIt(
-      base::BindOnce(&LoadShellIntoAPage, root, module, std::move(loaded)));
+  WhenTheShellWindowCanTakeIt(base::BindOnce(&LoadShellIntoAPage, root, module,
+                                             files, std::move(loaded)));
 }
 
 // Serves the app module `module` under `root` and opens an app window pinned
@@ -259,24 +274,32 @@ void RunAppInAnAppWindow(const base::FilePath& root,
 // shell sees it in its window list. See domicile_browser_windows.h.
 void OpenUrlOnceTheShellHasAPage(const GURL& url,
                                  std::optional<AppLaunch> app,
+                                 const std::string& profile,
                                  WindowOpened opened,
                                  bool has_a_page) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!has_a_page) {
     std::move(opened).Run(false);
   } else if (app.has_value()) {
-    std::move(opened).Run(OpenAppWindow(url, app->id, app->reuse));
+    std::move(opened).Run(OpenAppWindow(url, app->id, app->reuse, profile));
   } else {
-    std::move(opened).Run(OpenBrowserWindow(url));
+    std::move(opened).Run(OpenBrowserWindow(url, profile));
   }
 }
 
 // Opens the window once the shell window shows a page, which owns it.
 void OpenUrlInABrowserWindow(const GURL& url,
                              std::optional<AppLaunch> app,
+                             const std::string& profile,
                              WindowOpened opened) {
-  WhenTheShellWindowCanTakeIt(base::BindOnce(
-      &OpenUrlOnceTheShellHasAPage, url, std::move(app), std::move(opened)));
+  WhenTheShellWindowCanTakeIt(base::BindOnce(&OpenUrlOnceTheShellHasAPage, url,
+                                             std::move(app), profile,
+                                             std::move(opened)));
+}
+
+// Whether the config names browser profile `id`.
+bool DeskHasBrowserProfile(const std::string& id) {
+  return BrowserProfileRegistry::Get().profiles().Find(id) != nullptr;
 }
 
 // The site settings of the shell's profile, which browser windows share, or
@@ -399,15 +422,96 @@ std::optional<std::vector<InstalledExtension>> ListShellExtensions() {
   return ExtensionsOf(*profile);
 }
 
+// In browser profile `browser_profile`, or the shell's own when empty.
 base::expected<void, std::string> SetShellExtensionEnabled(
     const std::string& id,
-    bool enabled) {
+    bool enabled,
+    const std::string& browser_profile) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   Profile* profile = ShellProfile();
   if (profile == nullptr) {
     return base::unexpected(kNoProfile);
   }
-  return SetExtensionEnabledIn(*profile, id, enabled);
+  if (browser_profile.empty()) {
+    return SetExtensionEnabledIn(*profile, id, enabled);
+  }
+  return BrowserProfileRegistry::Get().SetExtensionEnabled(
+      *profile->GetOriginalProfile(), browser_profile, id, enabled);
+}
+
+// The desk's browser profiles, their extension switches and the sites that
+// open outside the default, as they are now.
+BrowserProfileList BrowserProfilesNow() {
+  BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+  const BrowserProfiles& profiles = registry.profiles();
+  BrowserProfileList list;
+  list.default_profile = profiles.default_profile;
+  list.default_private_profile = profiles.default_private_profile;
+  for (const BrowserProfile& profile : profiles.profiles) {
+    ListedBrowserProfile& listed = list.profiles.emplace_back();
+    listed.id = profile.id;
+    listed.name = profile.name;
+    listed.color = profile.color;
+    listed.is_private = profile.is_private;
+    for (const BrowserProfileRegistry::ExtensionSwitch& extension :
+         registry.ExtensionSwitchesOf(profile.id)) {
+      listed.extensions.push_back(ListedProfileExtension{
+          .id = extension.id,
+          .enabled = extension.enabled,
+          .locked = extension.locked});
+    }
+  }
+  for (const auto& [site, profile] : profiles.sites) {
+    list.sites.push_back(ListedBrowserSite{
+        .site = site,
+        .profile = profile,
+        .pinned = !registry.IsConfigSite(site)});
+  }
+  return list;
+}
+
+// The desk's browser profiles for the Settings app, once each has loaded:
+// ExtensionSwitchesOf has nothing for a profile that has not.
+void ListDeskBrowserProfiles(BrowserProfilesFound found) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Profile* profile = ShellProfile();
+  if (profile == nullptr) {
+    std::move(found).Run(std::nullopt);
+    return;
+  }
+  BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+  const std::vector<BrowserProfile>& profiles = registry.profiles().profiles;
+  base::RepeatingClosure loaded = base::BarrierClosure(
+      profiles.size(), base::BindOnce(
+                           [](BrowserProfilesFound found) {
+                             // The shell may have gone while they loaded.
+                             if (ShellProfile() == nullptr) {
+                               std::move(found).Run(std::nullopt);
+                               return;
+                             }
+                             std::move(found).Run(BrowserProfilesNow());
+                           },
+                           std::move(found)));
+  // Copied: the compositor may send new profiles while one loads.
+  std::vector<std::string> ids;
+  for (const BrowserProfile& each : profiles) {
+    ids.push_back(each.id);
+  }
+  for (const std::string& id : ids) {
+    registry.WhenLoaded(*profile->GetOriginalProfile(), id, loaded);
+  }
+}
+
+base::expected<void, std::string> PinDeskBrowserSite(
+    const std::string& site,
+    const std::string& browser_profile) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Profile* profile = ShellProfile();
+  if (profile == nullptr) {
+    return base::unexpected(kNoProfile);
+  }
+  return BrowserProfileRegistry::Get().PinSite(*profile->GetOriginalProfile(),
+                                               site, browser_profile);
 }
 
 base::expected<void, std::string> ConfigureShellExtension(
@@ -537,13 +641,15 @@ base::expected<bool, std::string> DisableTouchpadsWhileTyping(
 // Runs on the UI thread because `ShellSource` is unlocked and UI-thread only,
 // and loading a shell navigates a window. `reply` is bound to the IO thread,
 // so it may be called from any thread, and later for `load_shell`, `run_app`,
-// `open_url`, `load_unpacked`, the History app's commands and site data.
+// `open_url`, `load_unpacked`, the History app's commands, site data and
+// `devtools`.
 void AnswerOnUIThread(const std::string& line, CommandReply reply) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   AnswerCommand(line,
                 {.load_shell = &LoadShellIntoTheShellWindow,
                  .run_app = &RunAppInAnAppWindow,
                  .open_url = &OpenUrlInABrowserWindow,
+                 .has_browser_profile = &DeskHasBrowserProfile,
                  .list_site_permissions = &ListShellSitePermissions,
                  .set_site_permission = &SetShellSitePermission,
                  .load_unpacked = &LoadUnpackedIntoTheShellProfile,
@@ -553,6 +659,8 @@ void AnswerOnUIThread(const std::string& line, CommandReply reply) {
                  .list_extensions = &ListShellExtensions,
                  .set_extension_enabled = &SetShellExtensionEnabled,
                  .configure_extension = &ConfigureShellExtension,
+                 .list_browser_profiles = &ListDeskBrowserProfiles,
+                 .pin_browser_site = &PinDeskBrowserSite,
                  .list_media_devices = &ListShellMediaDevices,
                  .set_media_device = &PreferShellMediaDevice,
                  .search_history = &SearchShellHistory,
@@ -561,7 +669,8 @@ void AnswerOnUIThread(const std::string& line, CommandReply reply) {
                  .clear_browsing_data = &ClearShellBrowsingData,
                  .list_site_data = &ListShellSiteData,
                  .clear_site_data = &ClearShellSiteData,
-                 .disable_while_typing = &DisableTouchpadsWhileTyping},
+                 .disable_while_typing = &DisableTouchpadsWhileTyping,
+                 .send_devtools = &SendDevToolsToBrowserWindow},
                 std::move(reply));
 }
 

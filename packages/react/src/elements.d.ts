@@ -25,6 +25,8 @@ declare module "react" {
   interface WebViewHTMLAttributes<T> extends HTMLAttributes<T> {
     extensionpopup?: string | undefined;
     private?: string | undefined;
+    /** The browser profile its page is in; read as it enters the document. */
+    profile?: string | undefined;
     resizing?: string | undefined;
     window?: string | undefined;
   }

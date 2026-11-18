@@ -139,12 +139,17 @@ const PopoverComponent = ({
   );
   // The trigger that opened it, which may be outside this component.
   const opener = useRef<Element | undefined>(undefined);
+  // When it last opened, to tell a focus thief from the user moving on.
+  const openedAt = useRef(0);
   const within = useRef<FocusEvent | undefined>(undefined);
   const container = useContext(PopoverContainer);
   return (
     <BasePopover.Root
       actionsRef={actions}
       onOpenChange={(open, details) => {
+        if (open) {
+          openedAt.current = performance.now();
+        }
         if (open && details.trigger !== undefined) {
           opener.current = details.trigger;
           attach(details.trigger);
@@ -206,6 +211,7 @@ const PopoverComponent = ({
           >
             <CloseOnFocusOut
               actions={actions}
+              openedAt={openedAt}
               opener={opener}
               popup={popupRef}
               trigger={triggerRef}
@@ -338,14 +344,29 @@ const bodyStyles = cva({
  * Portaled content counts as inside: React focus events follow the component
  * tree and reach `within` before the document sees them.
  */
+/** Sooner than a person can move focus after a panel opens. */
+const SNATCHED_WITHIN_MS = 300;
+
+/** An element as a selector-like name, such as `webview#page-12.view`. */
+const describeElement = (node: Node): string => {
+  if (!(node instanceof Element)) {
+    return node.nodeName;
+  }
+  const id = node.id === "" ? "" : `#${node.id}`;
+  const classes = [...node.classList].map((name) => `.${name}`).join("");
+  return `${node.localName}${id}${classes}`;
+};
+
 const CloseOnFocusOut = ({
   actions,
+  openedAt,
   opener,
   popup,
   trigger,
   within,
 }: {
   actions: RefObject<BasePopover.Root.Actions | null>;
+  openedAt: RefObject<number>;
   opener: RefObject<Element | undefined>;
   popup: RefObject<HTMLDivElement | null>;
   trigger: RefObject<HTMLElement | null>;
@@ -362,6 +383,15 @@ const CloseOnFocusOut = ({
         trigger.current?.contains(target) !== true &&
         opener.current?.contains(target) !== true
       ) {
+        const after = performance.now() - openedAt.current;
+        if (after < SNATCHED_WITHIN_MS) {
+          // Nobody moves on this fast: something took focus as the panel
+          // opened, and the panel looks like it never opened. Say what.
+          // biome-ignore lint/suspicious/noConsole: the only trace of a panel that shut as it opened
+          console.error(
+            `Popover: ${describeElement(target)} took focus ${String(Math.round(after))} ms after the panel opened, which shut it`,
+          );
+        }
         actions.current?.close();
       }
     };
@@ -369,7 +399,7 @@ const CloseOnFocusOut = ({
     return () => {
       document.removeEventListener("focusin", left);
     };
-  }, [actions, opener, popup, trigger, within]);
+  }, [actions, openedAt, opener, popup, trigger, within]);
   return undefined;
 };
 

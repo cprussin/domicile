@@ -24,21 +24,28 @@ class FilePath;
 namespace domicile {
 
 // Registers the pref of extension ids `InstallExtensionsInto` added, so it
-// only uninstalls extensions it installed, and the settings it set
-// (domicile_extension_settings.h).
+// only uninstalls extensions it installed, the settings it set
+// (domicile_extension_settings.h), and the sites the user pinned to a browser
+// profile (domicile_browser_profiles.h): the desk's profile prefs.
 void RegisterExtensionInstallerPrefs(PrefRegistrySimple* registry);
 
-// Installs the extensions in `wanted` into `profile` and uninstalls ones it
-// added earlier that `wanted` no longer lists. Web Store ids install from the
-// Store; directories load unpacked. Then sets `wanted.settings`
-// (ApplyConfigSettings). There is no prompt: the config is the consent. The
-// diffs are `ReconcileExtensions` and `ReconcileSettings`, which have the
-// tests.
+// Takes every extension the desk's config names, for the shell in `shell`:
+// resolves their directories, then has BrowserProfileRegistry install into
+// each browser profile the ones it turns on.
 //
-// Must be called on the UI thread. `profile` is weak because the request comes
+// Must be called on the UI thread. `shell` is weak because the request comes
 // from the IO thread and the profile may be gone at shutdown.
-void InstallExtensionsInto(base::WeakPtr<Profile> profile,
+void InstallExtensionsInto(base::WeakPtr<Profile> shell,
                            const ExtensionList& wanted);
+
+// Installs the extensions in `wanted`, its directories resolved, into
+// `profile` and uninstalls ones it added earlier that `wanted` no longer
+// lists. Web Store ids install from the Store; directories load unpacked. Then
+// sets `wanted.settings` (ApplyConfigSettings). There is no prompt: the config
+// is the consent. Waits for the profile's extension system first. The diffs
+// are `ReconcileExtensions` and `ReconcileSettings`, which have the tests.
+void ReconcileConfigExtensions(base::WeakPtr<Profile> profile,
+                               ExtensionList wanted);
 
 // Loads the unpacked extension in `directory` into `profile` for the Settings
 // app. The config did not add it, so reconciling leaves it, and it stays until
@@ -66,7 +73,8 @@ void WatchConfigExtensions(PrefChangeRegistrar& registrar,
 std::vector<InstalledExtension> ExtensionsOf(Profile& profile);
 
 // Switches extension `id` in `profile` on or off, as its user would, or says
-// why not.
+// why not: one not installed, or one the config switches in the browser
+// profile `profile` is (BrowserProfileRegistry::IsSwitchLocked).
 base::expected<void, std::string> SetExtensionEnabledIn(Profile& profile,
                                                         const std::string& id,
                                                         bool enabled);

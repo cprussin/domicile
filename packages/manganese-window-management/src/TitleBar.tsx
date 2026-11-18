@@ -100,6 +100,11 @@ type Props = {
    * stand-in.
    */
   icon?: string | undefined;
+  /**
+   * A color for a dot on the icon's corner, or `undefined` for none: a
+   * browser window's page's profile, when it is not the default one.
+   */
+  mark?: string | undefined;
   /** Whether the window floats. Switches the float button to "Tile". */
   floating: boolean;
   /**
@@ -172,6 +177,7 @@ export const TitleBar = ({
   group,
   hanging = false,
   icon,
+  mark,
   motion,
   onClose,
   onContextMenu,
@@ -300,7 +306,7 @@ export const TitleBar = ({
               <GroupMark layout={group.layout} windows={group.windows.length} />
             )}
             {/* Keyed so a new icon gets another try after one fails to load. */}
-            <WindowIcon icon={icon} key={icon} />
+            <WindowIcon icon={icon} key={icon} mark={mark} />
             <span
               className={titleStyles({ hoverable: fill.hoverable, lit })}
               data-title={title}
@@ -451,10 +457,24 @@ const GroupMark = ({
  * The window's icon, or a stand-in when it has none or it does not load, so
  * every title starts in the same place.
  */
-const WindowIcon = ({ icon }: { icon: string | undefined }) => {
+const WindowIcon = ({
+  icon,
+  mark,
+}: {
+  icon: string | undefined;
+  mark: string | undefined;
+}) => {
   const [failed, setFailed] = useState(false);
   return (
     <span className={iconStyles} data-icon>
+      {mark !== undefined && (
+        <span
+          className={markStyles}
+          data-mark
+          // Inline because the color is the config's, at runtime.
+          style={{ backgroundColor: mark }}
+        />
+      )}
       {icon === undefined || failed ? (
         <AppWindowIcon size={16} />
       ) : (
@@ -773,6 +793,20 @@ const iconStyles = css({
   color: "muted",
   display: "flex",
   flexShrink: 0,
+  // Anchors the mark.
+  position: "relative",
+});
+
+// A dot on the icon's bottom corner, ringed in the bar's color so it reads
+// on any icon.
+const markStyles = css({
+  blockSize: "8px",
+  borderRadius: "full",
+  boxShadow: "0 0 0 2px {colors.chrome}",
+  inlineSize: "8px",
+  insetBlockEnd: "-2px",
+  insetInlineEnd: "-2px",
+  position: "absolute",
 });
 
 const iconImageStyles = css({

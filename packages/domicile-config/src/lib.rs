@@ -862,6 +862,190 @@ pub enum Contrast {
     High,
 }
 
+/// Browser profiles: sets of sign-ins, site data and extensions, and the
+/// sites each opens. See `docs/architecture/BROWSER-PROFILES.md`.
+// `PartialEq` lets a reload detect a change; see the compositor's
+// `Restatement`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct BrowserConfig {
+    /// The profiles, by id. An id is a directory name: lowercase letters,
+    /// digits and `-`.
+    pub profiles: BTreeMap<String, BrowserProfile>,
+    /// The order the shell lists the profiles in, by id. Profiles it leaves
+    /// out follow, by id.
+    pub order: Vec<String>,
+    /// The profile a site opens in when `sites` names none. Not private.
+    pub default_profile: String,
+    /// The profile a new private window opens in. Private.
+    pub default_private_profile: String,
+    /// The profile each site opens in, by site: a host, `*.host` for it and
+    /// its subdomains, or a host and path such as `github.com/acme` for the
+    /// addresses under it. The most specific match wins. A site is never in
+    /// `default_profile`, which opens every unlisted site.
+    pub sites: BTreeMap<String, String>,
+}
+
+impl Default for BrowserConfig {
+    fn default() -> Self {
+        let profile = |name: &str, color, private| BrowserProfile {
+            name: name.to_string(),
+            color: AccentColor(color),
+            private,
+            extensions: None,
+        };
+        BrowserConfig {
+            profiles: BTreeMap::from([
+                (
+                    "default".to_string(),
+                    profile("Default", [0x0d, 0x94, 0x88], false),
+                ),
+                (
+                    "private".to_string(),
+                    profile("Private", [0xa7, 0x8b, 0xfa], true),
+                ),
+            ]),
+            order: Vec::new(),
+            default_profile: "default".to_string(),
+            default_private_profile: "private".to_string(),
+            sites: BTreeMap::new(),
+        }
+    }
+}
+
+/// One browser profile. See [`BrowserConfig::profiles`].
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserProfile {
+    /// The name the shell shows.
+    pub name: String,
+    /// The color the shell marks the profile's pages with.
+    pub color: AccentColor,
+    /// Keeps no history, sign-ins or site data after its last page closes.
+    #[serde(default)]
+    pub private: bool,
+    /// The ids of the extensions it turns on, from those `extensions`
+    /// installs; the rest are off, and the shell cannot switch them. Unset
+    /// leaves the switches to the user: each starts on, or off in a private
+    /// profile, whose pages stay away from extensions unless allowed.
+    #[serde(default)]
+    pub extensions: Option<Vec<String>>,
+}
+
+/// Whether `id` can name a profile's directory.
+fn is_profile_id(id: &str) -> bool {
+    !id.is_empty()
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// Whether `site` is a [`BrowserConfig::sites`] key: a site as
+/// [`is_site`] has it, or a host and a path with no empty segment.
+fn is_profile_site(site: &str) -> bool {
+    match site.split_once('/') {
+        Some((host, path)) => is_site(host) && path.split('/').all(|part| !part.is_empty()),
+        None => is_site(site),
+    }
+}
+
+impl BrowserConfig {
+    /// The profiles in [`BrowserConfig::order`]: those it lists, then the
+    /// rest by id.
+    pub fn ordered_profiles(&self) -> impl Iterator<Item = (&String, &BrowserProfile)> {
+        let listed = self
+            .order
+            .iter()
+            .filter_map(|id| self.profiles.get_key_value(id));
+        let rest = self
+            .profiles
+            .iter()
+            .filter(|(id, _)| !self.order.contains(id));
+        listed.chain(rest)
+    }
+
+    fn validate(&self) -> Result<(), ConfigError> {
+        let invalid = |message: String| Err(ConfigError::Validation(message));
+        let profile = |id: &str| self.profiles.get(id);
+        if let Some(id) = self.profiles.keys().find(|id| !is_profile_id(id)) {
+            return invalid(format!(
+                "browser.profiles {id:?} is not a profile id, which is lowercase letters, \
+                 digits and `-`"
+            ));
+        }
+        if let Some(id) = self.order.iter().find(|id| profile(id).is_none()) {
+            return invalid(format!("browser.order {id:?} is not in browser.profiles"));
+        }
+        if let Some((_, id)) = self
+            .order
+            .iter()
+            .enumerate()
+            .find(|(at, id)| self.order[..*at].contains(id))
+        {
+            return invalid(format!("browser.order names {id:?} twice"));
+        }
+        let extension = self
+            .profiles
+            .values()
+            .filter_map(|profile| profile.extensions.as_ref())
+            .flatten()
+            .find(|id| !is_extension_id(id));
+        if let Some(id) = extension {
+            return invalid(format!(
+                "browser.profiles' extension {id:?} is not an extension id, which is 32 \
+                 letters from `a` to `p`"
+            ));
+        }
+        match profile(&self.default_profile) {
+            None => {
+                return invalid(format!(
+                    "browser.default_profile {:?} is not in browser.profiles",
+                    self.default_profile
+                ));
+            }
+            Some(default) if default.private => {
+                return invalid(format!(
+                    "browser.default_profile {:?} is private; unlisted sites need a profile \
+                     that keeps their sign-ins",
+                    self.default_profile
+                ));
+            }
+            Some(_) => {}
+        }
+        match profile(&self.default_private_profile) {
+            None => {
+                return invalid(format!(
+                    "browser.default_private_profile {:?} is not in browser.profiles",
+                    self.default_private_profile
+                ));
+            }
+            Some(private) if !private.private => {
+                return invalid(format!(
+                    "browser.default_private_profile {:?} is not private",
+                    self.default_private_profile
+                ));
+            }
+            Some(_) => {}
+        }
+        match self.sites.iter().find(|(site, id)| {
+            !is_profile_site(site) || profile(id).is_none() || **id == self.default_profile
+        }) {
+            Some((site, _)) if !is_profile_site(site) => invalid(format!(
+                "browser.sites {site:?} is not a site such as `github.com`, `*.github.com` \
+                 or `github.com/acme`"
+            )),
+            Some((site, id)) if profile(id).is_none() => invalid(format!(
+                "browser.sites {site:?} opens in {id:?}, which is not in browser.profiles"
+            )),
+            Some((site, _)) => invalid(format!(
+                "browser.sites {site:?} opens in the default profile, which every unlisted \
+                 site opens in; leave it out"
+            )),
+            None => Ok(()),
+        }
+    }
+}
+
 /// Chrome extensions the engine installs into the browser windows' profile.
 /// See `docs/architecture/EXTENSIONS.md`.
 ///
@@ -886,9 +1070,6 @@ pub struct ExtensionsConfig {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct ExtensionSettings {
-    /// Runs in private windows. Chrome's default is no.
-    #[serde(rename = "private")]
-    pub in_private: Option<bool>,
     /// Runs on local files (`file://` pages). Chrome's default is no.
     pub file_access: Option<bool>,
     /// May run the user scripts you add to it (`chrome.userScripts`), as
@@ -1085,6 +1266,7 @@ impl ElectronConfig {
 #[derive(Debug, Clone, Default, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub browser: BrowserConfig,
     pub electron: ElectronConfig,
     pub extensions: ExtensionsConfig,
     pub files: FilesConfig,
@@ -1155,6 +1337,7 @@ impl Config {
 
     /// Validation the deserializer cannot express.
     fn validate(&self) -> Result<(), ConfigError> {
+        self.browser.validate()?;
         self.electron.validate()?;
         self.extensions.validate()?;
         self.idle.validate()?;

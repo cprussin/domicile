@@ -11,6 +11,17 @@ import type { MessagePortMain } from "./message-port-main";
 export type IpcSender = {
   readonly id: number;
   readonly send: (channel: string, ...args: unknown[]) => void;
+  /**
+   * The page's own `webContents.ipc`, which hears only this page, ahead of
+   * `ipcMain`.
+   */
+  readonly ipc?: IpcMain;
+  /**
+   * The page's main frame, the one frame that sends: an event's
+   * `senderFrame`, which apps check before they answer (Slack drops a message
+   * without one).
+   */
+  readonly mainFrame?: { readonly routingId: number };
 };
 
 type Handler = (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown;
@@ -29,7 +40,11 @@ export const createIpcMain = () => {
   const ipcMain = new IpcMain();
   return {
     invoke: (sender: IpcSender, channel: string, args: unknown[]) =>
-      ipcMain.invoked(sender, channel, args),
+      (sender.ipc?.handles(channel) ? sender.ipc : ipcMain).invoked(
+        sender,
+        channel,
+        args,
+      ),
     ipcMain,
     /** A page's `ipcRenderer.postMessage`, with the ports that came with it. */
     post: (
@@ -38,13 +53,18 @@ export const createIpcMain = () => {
       message: unknown,
       ports: readonly MessagePortMain[],
     ) => {
+      sender.ipc?.emit(channel, { ...messageEvent(sender), ports }, message);
       ipcMain.emit(channel, { ...messageEvent(sender), ports }, message);
     },
     receive: (sender: IpcSender, channel: string, args: unknown[]) => {
+      sender.ipc?.emit(channel, messageEvent(sender), ...args);
       ipcMain.emit(channel, messageEvent(sender), ...args);
     },
     sendSync: (sender: IpcSender, channel: string, args: unknown[]) =>
-      ipcMain.sentSync(sender, channel, args),
+      (sender.ipc !== undefined && sender.ipc.listenerCount(channel) > 0
+        ? sender.ipc
+        : ipcMain
+      ).sentSync(sender, channel, args),
   };
 };
 
@@ -72,6 +92,9 @@ export class IpcMain extends EventEmitter {
       return handler(event, ...args);
     });
   };
+
+  /** Whether something answers invokes on `channel`. */
+  readonly handles = (channel: string) => this.#handlers.has(channel);
 
   readonly removeHandler = (channel: string) => {
     this.#handlers.delete(channel);
@@ -119,9 +142,10 @@ export class IpcMain extends EventEmitter {
 }
 
 const invokeEvent = (sender: IpcSender) => ({
-  frameId: 0,
+  frameId: sender.mainFrame?.routingId ?? 0,
   processId: 0,
   sender,
+  senderFrame: sender.mainFrame ?? null,
 });
 
 const messageEvent = (sender: IpcSender) => ({

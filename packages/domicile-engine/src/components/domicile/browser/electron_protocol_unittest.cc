@@ -273,10 +273,31 @@ TEST(ElectronProtocolTest, ALineThatIsNotAnObjectIsRefused) {
 
 TEST(ElectronProtocolTest, ReadySaysWhichSchemesTheEngineRegistered) {
   EXPECT_EQ(ElectronReady({{.scheme = "app", .standard = true, .secure = true},
-                           {.scheme = "claude-media"}}),
-            "{\"schemes\":[{\"privileges\":[\"standard\",\"secure\"],"
-            "\"scheme\":\"app\"},{\"privileges\":[],\"scheme\":"
-            "\"claude-media\"}],\"type\":\"ready\"}\n");
+                           {.scheme = "claude-media"}},
+                          {}),
+            "{\"chrome_version\":\"\",\"schemes\":[{\"privileges\":"
+            "[\"standard\",\"secure\"],\"scheme\":\"app\"},"
+            "{\"privileges\":[],\"scheme\":\"claude-media\"}],"
+            "\"type\":\"ready\",\"user_agent\":\"\"}\n");
+}
+
+TEST(ElectronProtocolTest, ReadySaysTheEnginesUserAgentAndChromeVersion) {
+  EXPECT_EQ(ElectronReady({}, {.user_agent = "Mozilla/5.0 Chrome/160.0.0.0",
+                               .chrome_version = "160.0.8155.0"}),
+            "{\"chrome_version\":\"160.0.8155.0\",\"schemes\":[],"
+            "\"type\":\"ready\",\"user_agent\":\"Mozilla/5.0 "
+            "Chrome/160.0.0.0\"}\n");
+}
+
+TEST(ElectronProtocolTest, SetUserAgentFallbackCarriesTheAgent) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"set_user_agent_fallback","user_agent":"Slack/4 Electron/45"})");
+
+  ASSERT_TRUE(request.has_value());
+  EXPECT_EQ(std::get<ElectronSetUserAgentFallback>(*request).user_agent,
+            "Slack/4 Electron/45");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_user_agent_fallback"})"),
+            "\"user_agent\" must be a string");
 }
 
 TEST(ElectronProtocolTest, OpenWindowMayOpenAView) {
@@ -292,6 +313,89 @@ TEST(ElectronProtocolTest, OpenWindowMayOpenAView) {
   EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
                        R"("url":"https://a.test/","view":1})"),
             "\"view\" must be true or false");
+}
+
+TEST(ElectronProtocolTest, OpenWindowMayGiveATitleAndOpenHidden) {
+  const auto plain = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  const auto set = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+      R"("title":"Claude","hidden":true})");
+
+  ASSERT_TRUE(plain.has_value() && set.has_value());
+  EXPECT_EQ(std::get<ElectronOpenWindow>(*plain).title, "");
+  EXPECT_FALSE(std::get<ElectronOpenWindow>(*plain).hidden);
+  EXPECT_EQ(std::get<ElectronOpenWindow>(*set).title, "Claude");
+  EXPECT_TRUE(std::get<ElectronOpenWindow>(*set).hidden);
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"https://a.test/","title":1})"),
+            "\"title\" must be a string");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"https://a.test/","hidden":"yes"})"),
+            "\"hidden\" must be true or false");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"https://a.test/","view":true,"hidden":true})"),
+            "a view has no title or hidden of its own: its window has them");
+}
+
+TEST(ElectronProtocolTest, OpenWindowMayGiveItsPageNode) {
+  const auto plain = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"file:///app/index.html"})");
+  const auto node = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"file:///app/index.html",)"
+      R"("node":{"preload":"/app/preload.js","integration":true,)"
+      R"("context_isolation":false,"resources_path":"/res",)"
+      R"("app_path":"/res/app","electron_version":"45.2.1",)"
+      R"("env":{"HOME":"/home/a"}}})");
+  const auto bare = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"file:///app/index.html",)"
+      R"("node":{}})");
+
+  ASSERT_TRUE(plain.has_value() && node.has_value() && bare.has_value());
+  EXPECT_FALSE(std::get<ElectronOpenWindow>(*plain).node.has_value());
+  EXPECT_EQ(std::get<ElectronOpenWindow>(*node).node,
+            (ElectronNode{.preload = "/app/preload.js",
+                          .integration = true,
+                          .context_isolation = false,
+                          .resources_path = "/res",
+                          .app_path = "/res/app",
+                          .electron_version = "45.2.1",
+                          .env = {{"HOME", "/home/a"}}}));
+  // Electron's defaults: no nodeIntegration, and context isolation.
+  EXPECT_EQ(std::get<ElectronOpenWindow>(*bare).node, ElectronNode{});
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"file:///a/","node":true})"),
+            "\"node\" must be an object: what the page's Node.js needs");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"file:///a/","node":{"integration":1}})"),
+            "\"node\"'s \"integration\" must be true or false");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"file:///a/","node":{"preload":"p.js"}})"),
+            "\"node\"'s \"preload\" must be an absolute path");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"file:///a/","node":{"env":{"A":1}}})"),
+            "\"node\"'s \"env\" must be an object of strings");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"file:///a/","preload":"x","node":{}})"),
+            "a page with Node.js loads its preload from a file, "
+            "\"node\"'s \"preload\", not from \"preload\"");
+}
+
+TEST(ElectronProtocolTest, SetTitleAndSetHiddenNameTheirWindow) {
+  const auto title = ParseElectronRequest(
+      R"({"type":"set_title","window":2,"title":"Slack"})");
+  const auto hidden =
+      ParseElectronRequest(R"({"type":"set_hidden","window":3,"hidden":true})");
+
+  ASSERT_TRUE(title.has_value() && hidden.has_value());
+  EXPECT_EQ(std::get<ElectronSetTitle>(*title).window, 2);
+  EXPECT_EQ(std::get<ElectronSetTitle>(*title).title, "Slack");
+  EXPECT_EQ(std::get<ElectronSetHidden>(*hidden).window, 3);
+  EXPECT_TRUE(std::get<ElectronSetHidden>(*hidden).hidden);
+  EXPECT_EQ(WhyRefused(R"({"type":"set_title","window":2})"),
+            "\"title\" must be a string");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_hidden","window":2,"hidden":1})"),
+            "\"hidden\" must be true or false");
 }
 
 TEST(ElectronProtocolTest, SetViewsPlacesEachViewBottomFirst) {
@@ -452,7 +556,9 @@ TEST(ElectronProtocolTest, ABadShowMessageBoxIsRefusedAsTheWindows) {
 }
 
 TEST(ElectronProtocolTest, EventsAreOneLineEach) {
-  EXPECT_EQ(ElectronReady({}), "{\"schemes\":[],\"type\":\"ready\"}\n");
+  EXPECT_EQ(ElectronReady({}, {}),
+            "{\"chrome_version\":\"\",\"schemes\":[],\"type\":\"ready\","
+            "\"user_agent\":\"\"}\n");
   EXPECT_EQ(ElectronRefused("no"), "{\"type\":\"refused\",\"why\":\"no\"}\n");
   EXPECT_EQ(ElectronWindowOpened(1),
             "{\"type\":\"window_opened\",\"window\":1}\n");
@@ -460,10 +566,13 @@ TEST(ElectronProtocolTest, EventsAreOneLineEach) {
             "{\"type\":\"window_refused\",\"why\":\"gone\",\"window\":2}\n");
   EXPECT_EQ(ElectronWindowLoaded(3),
             "{\"type\":\"window_loaded\",\"window\":3}\n");
+  EXPECT_EQ(ElectronWindowDomReady(3),
+            "{\"type\":\"window_dom_ready\",\"window\":3}\n");
   EXPECT_EQ(ElectronTitleChanged(4, "Claude"),
             "{\"title\":\"Claude\",\"type\":\"title_changed\",\"window\":4}\n");
   EXPECT_EQ(ElectronWindowClosed(5),
             "{\"type\":\"window_closed\",\"window\":5}\n");
+  EXPECT_EQ(ElectronCloseAsked(6), "{\"type\":\"close_asked\",\"window\":6}\n");
   EXPECT_EQ(ElectronMenuClicked(7, 12),
             "{\"command\":12,\"type\":\"menu_clicked\",\"window\":7}\n");
   EXPECT_EQ(ElectronMessageBoxAnswered(3, 9, 1, true),
@@ -501,6 +610,48 @@ TEST(ElectronProtocolTest, IpcSendCarriesItsChannelAndArguments) {
   ASSERT_FALSE(refused.has_value());
   EXPECT_EQ(refused.error(),
             (ElectronRefusal{.why = "\"args\" must be an array", .window = 2}));
+}
+
+TEST(ElectronProtocolTest, ExecuteJavaScriptCarriesItsCodeAndGesture) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"execute_javascript","window":2,"call":5,"code":"1 + 1",)"
+      R"("user_gesture":true})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(
+      std::get<ElectronExecuteJavaScript>(*request),
+      (ElectronExecuteJavaScript{
+          .window = 2, .call = 5, .code = "1 + 1", .user_gesture = true}));
+
+  const auto without_gesture = ParseElectronRequest(
+      R"({"type":"execute_javascript","window":2,"call":6,"code":"x"})");
+  ASSERT_TRUE(without_gesture.has_value()) << without_gesture.error().why;
+  EXPECT_FALSE(
+      std::get<ElectronExecuteJavaScript>(*without_gesture).user_gesture);
+
+  const auto refused = ParseElectronRequest(
+      R"({"type":"execute_javascript","window":2,"call":7})");
+  ASSERT_FALSE(refused.has_value());
+  EXPECT_EQ(refused.error(),
+            (ElectronRefusal{.why = "\"code\" must be a string", .window = 2}));
+  const auto no_call = ParseElectronRequest(
+      R"({"type":"execute_javascript","window":2,"code":"x"})");
+  ASSERT_FALSE(no_call.has_value());
+  EXPECT_EQ(no_call.error().window, 2);
+}
+
+TEST(ElectronProtocolTest, AJavaScriptResultIsTheWindowsOneLine) {
+  EXPECT_EQ(ElectronJavaScriptResult(2, 5, base::Value(2)),
+            "{\"call\":5,\"result\":2,\"type\":\"javascript_result\","
+            "\"window\":2}\n");
+  EXPECT_EQ(ElectronJavaScriptResult(2, 6, base::unexpected("it threw")),
+            "{\"call\":6,\"error\":\"it threw\",\"type\":"
+            "\"javascript_result\",\"window\":2}\n");
+  // Bytes have no JSON, so the app hears why instead of nothing.
+  EXPECT_EQ(
+      ElectronJavaScriptResult(2, 7, base::Value(base::Value::BlobStorage{1})),
+      "{\"call\":7,\"error\":\"the script's result can't be carried to the "
+      "app\",\"type\":\"javascript_result\",\"window\":2}\n");
 }
 
 TEST(ElectronProtocolTest, IpcReplyCarriesAResultOrWhyItFailed) {

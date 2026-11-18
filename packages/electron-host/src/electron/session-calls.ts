@@ -3,6 +3,8 @@
 // answers with a `session_result`. See "Requests" in
 // docs/architecture/ELECTRON-APPS.md.
 
+import { EventEmitter } from "node:events";
+
 /** The calls the host makes on a session, by their names on the wire. */
 export type SessionCallMessage = {
   readonly type: "session_call";
@@ -105,10 +107,12 @@ const defined = (fields: Record<string, unknown>) =>
 
 /**
  * The session calls of an app whose requests to the engine go through
- * `send`; `hear` takes the engine's answers.
+ * `send`; `hear` takes the engine's answers. A session without its own user
+ * agent has `userAgentFallback`'s, app.userAgentFallback.
  */
 export const createSessionCalls = (
   send: (message: SessionCallMessage) => void,
+  userAgentFallback: () => string,
 ) => {
   const waiting = new Map<
     number,
@@ -130,7 +134,7 @@ export const createSessionCalls = (
   const nothing = (promise: Promise<unknown>) => promise.then(() => undefined);
 
   const forSession = (session: string): SessionCalls => {
-    let userAgent = "";
+    let userAgent: string | undefined;
     return {
       clearCache: () => nothing(call(session, "clear_cache")),
       clearStorageData: (options = {}) =>
@@ -141,7 +145,9 @@ export const createSessionCalls = (
             defined({ origin: options.origin, storages: options.storages }),
           ),
         ),
-      cookies: {
+      // An EventEmitter, as Electron's is. The engine doesn't report cookie
+      // changes yet, so `changed` never fires.
+      cookies: Object.assign<EventEmitter, Cookies>(new EventEmitter(), {
         flushStore: () => nothing(call(session, "cookies_flush")),
         get: async (filter) =>
           (await call(session, "cookies_get", {
@@ -173,8 +179,8 @@ export const createSessionCalls = (
               }),
             }),
           ),
-      },
-      getUserAgent: () => userAgent,
+      }),
+      getUserAgent: () => userAgent ?? userAgentFallback(),
       setUserAgent: (agent) => {
         userAgent = agent;
         // Electron's is synchronous; a refusal is the engine's bug, and its

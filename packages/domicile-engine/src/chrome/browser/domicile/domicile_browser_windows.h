@@ -50,16 +50,19 @@ class ElectronPage;
 // browser_window_capture_target.h). Called once, from StartDesk.
 void StartBrowserWindows();
 
-// Opens a browser window at `url` in the shell's profile, for `domicile
-// open`. Returns false when there is no shell to own it.
-bool OpenBrowserWindow(const GURL& url);
+// Opens a browser window at `url`, for `domicile open`: in browser profile
+// `profile`, or for an empty one the profile `url`'s site opens in. Returns
+// false when there is no shell to own it.
+bool OpenBrowserWindow(const GURL& url, const std::string& profile);
 
 // Opens an app window at `url` with `app_id`, or reuses one as `reuse` says,
-// for `domicile open --app`. See mojom::BrowserWindows.OpenApp. Returns false
-// when there is no shell to own it.
+// for `domicile open --app`, in browser profile `profile` or for an empty
+// one the profile `url`'s site opens in. See mojom::BrowserWindows.OpenApp.
+// Returns false when there is no shell to own it.
 bool OpenAppWindow(const GURL& url,
                    const std::string& app_id,
-                   mojom::AppReuse reuse);
+                   mojom::AppReuse reuse,
+                   const std::string& profile);
 
 // Opens an app window at `url`, an app module's address, pinned to the app
 // at `app_host` so it may show that app and no other domicile:// address.
@@ -69,7 +72,10 @@ bool OpenAppModuleWindow(const GURL& url, const std::string& app_host);
 
 // Opens an app window at `url` for an Electron app, with `app_id`, in its own
 // `partition`, whose pages run `preload` (none when empty) and make `calls`.
+// A `node` page has Node.js, in a renderer of its own that isn't sandboxed.
 // A `view` is a WebContentsView's page, listed only while a window holds it.
+// A window shows `title` instead of its page's when it isn't empty, and opens
+// `hidden` when asked.
 // Returns the window's id. Nothing when there is no shell to own it. See
 // docs/architecture/ELECTRON-APPS.md.
 std::optional<std::string> OpenElectronWindow(
@@ -77,9 +83,19 @@ std::optional<std::string> OpenElectronWindow(
     const std::string& app_id,
     const WebViewPartition& partition,
     const std::string& preload,
+    const std::optional<ElectronNode>& node,
     ElectronPageCalls calls,
     base::WeakPtr<ElectronSession> session,
-    bool view);
+    bool view,
+    const std::string& title,
+    bool hidden);
+
+// Electron window `id`'s own title, listed with it over its page's.
+void SetElectronTitle(const std::string& id, const std::string& title);
+
+// Whether Electron window `id` is hidden, listed with it (`isHidden`) for the
+// shell to leave out of sight while its page runs.
+void SetElectronHidden(const std::string& id, bool hidden);
 
 // Electron window `id` holds `views`, bottom first, and no others; each is
 // listed with it as its parent. A view another window held moves here.
@@ -107,6 +123,10 @@ void SetBrowserWindowUserAgent(const std::string& id,
                                const std::string& user_agent);
 void LoadBrowserWindow(const std::string& id, const GURL& url);
 
+// Browser window `id`'s page, or null when there is no shell or no such
+// window.
+content::WebContents* BrowserWindowContents(const std::string& id);
+
 // Asks the shell to focus browser window `id` of the shell's profile.
 void FocusBrowserWindow(const std::string& id);
 
@@ -120,6 +140,11 @@ void CloseBrowserWindow(const std::string& id);
 // loading, until the subscription goes.
 base::CallbackListSubscription WatchBrowserWindowLoads(
     base::RepeatingCallback<void(const std::string& id)> loaded);
+
+// Runs `ready` with a browser window's id each time its main frame's DOM is
+// ready, until the subscription goes.
+base::CallbackListSubscription WatchBrowserWindowDomReadies(
+    base::RepeatingCallback<void(const std::string& id)> ready);
 
 // The shell's WebContents in any profile, or null while there is none.
 content::WebContents* DeskShellContents();

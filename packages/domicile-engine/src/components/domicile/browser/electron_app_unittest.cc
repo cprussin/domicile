@@ -36,15 +36,20 @@ class FakeDesk final : public ElectronDesk {
                                   const std::string& app_id,
                                   const WebViewPartition& partition,
                                   const std::string& preload,
+                                  const std::optional<ElectronNode>& node,
                                   ElectronPageCalls page_calls,
                                   base::WeakPtr<ElectronSession> session,
-                                  bool view) override {
+                                  bool view,
+                                  const std::string& title,
+                                  bool hidden) override {
     if (!has_shell) {
       return std::nullopt;
     }
-    calls.push_back(std::string(view ? "open view " : "open ") + url.spec() +
-                    " as " + app_id +
-                    (preload.empty() ? "" : " with " + preload));
+    calls.push_back(
+        std::string(view ? "open view " : "open ") + url.spec() + " as " +
+        app_id + (preload.empty() ? "" : " with " + preload) +
+        (node.has_value() ? " with node" : "") +
+        (title.empty() ? "" : " titled " + title) + (hidden ? " hidden" : ""));
     const std::string id = base::NumberToString(next_id++);
     pages.emplace(id, std::move(page_calls));
     partitions.emplace(id, partition);
@@ -55,6 +60,12 @@ class FakeDesk final : public ElectronDesk {
     calls.push_back("load " + id + " " + url.spec());
   }
   void Focus(const std::string& id) override { calls.push_back("focus " + id); }
+  void SetTitle(const std::string& id, const std::string& title) override {
+    calls.push_back("title " + id + " " + title);
+  }
+  void SetHidden(const std::string& id, bool hidden) override {
+    calls.push_back(std::string(hidden ? "hide " : "show ") + id);
+  }
   void AskToClose(const std::string& id) override {
     calls.push_back("ask to close " + id);
   }
@@ -81,6 +92,16 @@ class FakeDesk final : public ElectronDesk {
                   const std::string& channel,
                   const std::string& args_json) override {
     calls.push_back("send " + id + " " + channel + " " + args_json);
+  }
+  void ExecuteJavaScript(
+      const std::string& id,
+      const std::string& code,
+      bool user_gesture,
+      base::OnceCallback<void(base::expected<base::Value, std::string>)> done)
+      override {
+    calls.push_back("run " + id + " " + code +
+                    (user_gesture ? " with a gesture" : ""));
+    ran.push_back(std::move(done));
   }
   void PostToPage(const std::string& id,
                   const std::string& channel,
@@ -164,6 +185,10 @@ class FakeDesk final : public ElectronDesk {
   // What GetCookies finds and why SetCookie fails, when it does.
   std::vector<ElectronCookie> cookies;
   std::optional<std::string> cookie_refusal;
+  // Each ExecuteJavaScript's answer, oldest first.
+  std::vector<
+      base::OnceCallback<void(base::expected<base::Value, std::string>)>>
+      ran;
   // A ClearStorage that has not finished.
   base::OnceClosure waiting;
 };
@@ -177,7 +202,9 @@ class ElectronAppTest : public testing::Test {
                  [](std::vector<std::string>* sent, std::string line) {
                    sent->push_back(std::move(line));
                  },
-                 &sent_)) {}
+                 &sent_),
+             ElectronEngineInfo{.user_agent = "Mozilla/5.0 Chrome/160.0.0.0",
+                                .chrome_version = "160.0.8155.0"}) {}
 
   // Says hello and forgets the reply.
   void Hello() {
@@ -195,7 +222,9 @@ using Lines = std::vector<std::string>;
 TEST_F(ElectronAppTest, HelloIsAnsweredReady) {
   app_->Take(kHello);
 
-  EXPECT_EQ(sent_, Lines{"{\"schemes\":[],\"type\":\"ready\"}\n"});
+  EXPECT_EQ(sent_, Lines{"{\"chrome_version\":\"160.0.8155.0\","
+                         "\"schemes\":[],\"type\":\"ready\",\"user_agent\":"
+                         "\"Mozilla/5.0 Chrome/160.0.0.0\"}\n"});
 }
 
 TEST_F(ElectronAppTest, ReadySaysWhichSchemesTheEngineRegistered) {
@@ -205,12 +234,14 @@ TEST_F(ElectronAppTest, ReadySaysWhichSchemesTheEngineRegistered) {
                      sent->push_back(std::move(line));
                    },
                    &sent_),
+               ElectronEngineInfo{},
                std::vector<ElectronScheme>{{.scheme = "app", .secure = true}});
 
   app_->Take(kHello);
 
-  EXPECT_EQ(sent_, Lines{"{\"schemes\":[{\"privileges\":[\"secure\"],"
-                         "\"scheme\":\"app\"}],\"type\":\"ready\"}\n"});
+  EXPECT_EQ(sent_, Lines{"{\"chrome_version\":\"\",\"schemes\":[{"
+                         "\"privileges\":[\"secure\"],\"scheme\":\"app\"}],"
+                         "\"type\":\"ready\",\"user_agent\":\"\"}\n"});
 }
 
 TEST_F(ElectronAppTest, NothingOpensBeforeHello) {
@@ -343,6 +374,18 @@ TEST_F(ElectronAppTest, OnlyItsOwnWindowsLoadsAreReported) {
   EXPECT_EQ(sent_, Lines{"{\"type\":\"window_loaded\",\"window\":2}\n"});
 }
 
+TEST_F(ElectronAppTest, OnlyItsOwnWindowsDomReadiesAreReported) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  sent_.clear();
+
+  app_->DomReady("10");
+  app_->DomReady("11");
+
+  EXPECT_EQ(sent_,
+            Lines{"{\"type\":\"window_dom_ready\",\"window\":2}\n"});
+}
+
 TEST_F(ElectronAppTest, AnAppThatGoesClosesItsWindows) {
   Hello();
   app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
@@ -362,6 +405,16 @@ TEST_F(ElectronAppTest, AWindowsPreloadReachesTheDesk) {
 
   EXPECT_EQ(desk_.calls, Lines{"open https://a.test/ as com.anthropic.Claude "
                                "with window.x = 1"});
+}
+
+TEST_F(ElectronAppTest, AWindowsNodeReachesTheDesk) {
+  Hello();
+
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+             R"("node":{"preload":"/a/preload.js"}})");
+
+  EXPECT_EQ(desk_.calls,
+            Lines{"open https://a.test/ as com.anthropic.Claude with node"});
 }
 
 using Answer = std::optional<base::expected<base::Value, std::string>>;
@@ -464,6 +517,54 @@ TEST_F(ElectronAppTest, AClickOnTheMenuBarReachesTheApp) {
   sent_.clear();
   page.menu_clicked.Run(8);
   EXPECT_TRUE(sent_.empty());
+}
+
+TEST_F(ElectronAppTest, TheUserClosingAWindowAsksTheApp) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  sent_.clear();
+  desk_.calls.clear();
+
+  page.close_asked.Run();
+  EXPECT_EQ(sent_, Lines{"{\"type\":\"close_asked\",\"window\":3}\n"});
+  // Only the app closes it.
+  EXPECT_TRUE(desk_.calls.empty());
+
+  // A close that raced the window closing says nothing.
+  app_->Listed({});
+  sent_.clear();
+  page.close_asked.Run();
+  EXPECT_TRUE(sent_.empty());
+}
+
+TEST_F(ElectronAppTest, AWindowHasItsOwnTitleAndMayHide) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+             R"("title":"Claude","hidden":true})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+             R"("view":true})");
+  sent_.clear();
+
+  app_->Take(R"({"type":"set_title","window":1,"title":"Claude 2"})");
+  app_->Take(R"({"type":"set_hidden","window":1,"hidden":false})");
+  app_->Take(R"({"type":"set_hidden","window":1,"hidden":true})");
+  app_->Take(R"({"type":"set_title","window":2,"title":"no"})");
+  app_->Take(R"({"type":"set_hidden","window":2,"hidden":true})");
+  app_->Take(R"({"type":"set_hidden","window":9,"hidden":true})");
+
+  EXPECT_EQ(desk_.calls,
+            (Lines{"open https://a.test/ as com.anthropic.Claude titled Claude "
+                   "hidden",
+                   "open view https://a.test/ as com.anthropic.Claude",
+                   "title 10 Claude 2", "show 10", "hide 10"}));
+  EXPECT_EQ(sent_,
+            (Lines{"{\"type\":\"window_refused\",\"why\":\"window 2 is a "
+                   "view, and only a window has a title\",\"window\":2}\n",
+                   "{\"type\":\"window_refused\",\"why\":\"window 2 is a "
+                   "view, and only a window has hiding\",\"window\":2}\n",
+                   "{\"type\":\"window_refused\",\"why\":\"window 9 is not "
+                   "open\",\"window\":9}\n"}));
 }
 
 TEST_F(ElectronAppTest, AMessageBoxGoesOverItsWindowAndItsAnswerBack) {
@@ -610,6 +711,29 @@ TEST_F(ElectronAppTest, TheAppsSendReachesItsWindowsPage) {
              R"("args":[1,"a"]})");
 
   EXPECT_EQ(desk_.calls, Lines{R"(send 10 ping [1,"a"])"});
+}
+
+TEST_F(ElectronAppTest, TheAppsJavaScriptRunsInItsWindowsPageAndAnswers) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  desk_.calls.clear();
+  sent_.clear();
+
+  app_->Take(R"({"type":"execute_javascript","window":2,"call":1,)"
+             R"("code":"document.title","user_gesture":true})");
+  app_->Take(R"({"type":"execute_javascript","window":2,"call":2,)"
+             R"("code":"throw 1"})");
+  ASSERT_EQ(desk_.calls,
+            (Lines{"run 10 document.title with a gesture", "run 10 throw 1"}));
+  std::move(desk_.ran[1]).Run(base::unexpected("Uncaught 1"));
+  std::move(desk_.ran[0]).Run(base::Value("A"));
+
+  EXPECT_EQ(sent_, (Lines{R"({"call":2,"error":"Uncaught 1",)"
+                          R"("type":"javascript_result","window":2})"
+                          "\n",
+                          R"({"call":1,"result":"A",)"
+                          R"("type":"javascript_result","window":2})"
+                          "\n"}));
 }
 
 TEST_F(ElectronAppTest, APagesSendSyncIsAnsweredByTheAppsReply) {
@@ -1222,6 +1346,43 @@ TEST_F(ElectronAppTest, AUserAgentReachesTheSessionsWindowsAndItsNewOnes) {
   // A window opened later finds it on its session, before it loads.
   EXPECT_EQ(desk_.sessions.at("10")->user_agent(), "Claude/1");
   EXPECT_EQ(desk_.sessions.at("11")->user_agent(), "");
+}
+
+TEST_F(ElectronAppTest, TheFallbackReachesSessionsWithoutTheirOwnUserAgent) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+             R"("session":"persist:work"})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"session_call","call":5,"session":"persist:work",)"
+             R"("method":"set_user_agent","user_agent":"Claude/1"})");
+  desk_.calls.clear();
+  sent_.clear();
+
+  app_->Take(
+      R"({"type":"set_user_agent_fallback","user_agent":"Slack/4 Electron/45"})");
+
+  EXPECT_EQ(desk_.calls, Lines{"user agent 11 Slack/4 Electron/45"});
+  EXPECT_EQ(sent_, Lines{});
+  EXPECT_EQ(desk_.sessions.at("10")->user_agent(), "Claude/1");
+  EXPECT_EQ(desk_.sessions.at("11")->user_agent(), "Slack/4 Electron/45");
+}
+
+TEST_F(ElectronAppTest, ASessionsEmptyUserAgentGivesItsWindowsTheFallback) {
+  Hello();
+  app_->Take(
+      R"({"type":"set_user_agent_fallback","user_agent":"Slack/4 Electron/45"})");
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+             R"("session":"persist:work"})");
+  app_->Take(R"({"type":"session_call","call":5,"session":"persist:work",)"
+             R"("method":"set_user_agent","user_agent":"Claude/1"})");
+  desk_.calls.clear();
+
+  app_->Take(R"({"type":"session_call","call":6,"session":"persist:work",)"
+             R"("method":"set_user_agent","user_agent":""})");
+
+  // As a window opened now would.
+  EXPECT_EQ(desk_.calls, Lines{"user agent 10 Slack/4 Electron/45"});
+  EXPECT_EQ(desk_.sessions.at("10")->user_agent(), "Slack/4 Electron/45");
 }
 
 TEST_F(ElectronAppTest, ABadSessionCallIsAnsweredWithWhy) {

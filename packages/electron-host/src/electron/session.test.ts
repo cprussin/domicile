@@ -17,7 +17,10 @@ const setUp = () => {
     | SessionCallMessage
     | PermissionMessage
   )[] = [];
-  const calls = createSessionCalls((m) => sent.push(m));
+  const calls = createSessionCalls(
+    (m) => sent.push(m),
+    () => "Notes/1 Electron/45",
+  );
   const sessions = createSessions(
     createProtocols((r) => sent.push(r)),
     createWebRequests(
@@ -45,6 +48,26 @@ describe(createSessions, () => {
     expect(sessions.fromPartition("a")).not.toBe(
       sessions.fromPartition("persist:a"),
     );
+  });
+
+  it("has service workers and a net log for Slack to read, which say what the engine doesn't do", async () => {
+    const { sessions } = setUp();
+    const { netLog, serviceWorkers } = sessions.defaultSession;
+
+    expect(serviceWorkers.getAllRunning()).toEqual({});
+    serviceWorkers.on("running-status-changed", () => undefined);
+    expect(netLog.currentlyLogging).toBe(false);
+    await expect(netLog.startLogging("/tmp/net.log")).rejects.toThrow(
+      "net log",
+    );
+  });
+
+  it("takes the domains an app allows NTLM sign-in for, as Slack sets them", () => {
+    const { sessions } = setUp();
+
+    expect(() =>
+      sessions.defaultSession.allowNTLMCredentialsForDomains("*"),
+    ).not.toThrow();
   });
 
   it("takes a display media handler, leaving the desktop's picker to answer", () => {

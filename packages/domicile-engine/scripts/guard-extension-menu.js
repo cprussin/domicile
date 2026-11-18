@@ -9,10 +9,10 @@
 //   GUARD installed count=…    an `installedextensionschanged` arrived, and
 //                              how many rows it had. The control's reading
 //                              that its absence is an answer
-//   GUARD row enabled=… fromConfig=… icon=… configured=… inPrivate=…
+//   GUARD row enabled=… fromConfig=… icon=… configured=…
 //                              the `?expect=` row, the first time it arrives
-//   GUARD private              configureExtension() set inPrivate, and the row
-//                              says so
+//   GUARD private              the row has no `inPrivate`: private windows
+//                              are a private browser profile's switches
 //   GUARD locked               configureExtension() of a setting the config
 //                              sets was refused with an OperationError
 //   GUARD kept                 uninstallExtension() of the config's extension
@@ -115,17 +115,13 @@ export const HostShell = (_root, desktop) => {
       .configureExtension(expected, { fileAccess: true })
       .then(failed("locked"), refused("locked", "locked", uninstall));
   };
-  const allowPrivate = () => {
-    host
-      .configureExtension(expected, { inPrivate: true })
-      .catch(failed("private"));
-    when(
-      () => rowOf()?.inPrivate === true,
-      () => {
-        say("private");
-        lock();
-      },
-    );
+  const noPrivate = () => {
+    if ("inPrivate" in (rowOf() ?? {})) {
+      say("failed step=private error=the row still has inPrivate");
+    } else {
+      say("private");
+      lock();
+    }
   };
 
   let started = false;
@@ -145,10 +141,9 @@ export const HostShell = (_root, desktop) => {
         say(
           `row enabled=${row.enabled} fromConfig=${row.fromConfig}` +
             ` icon=${row.icon.startsWith("data:image/png;base64,")}` +
-            ` configured=${row.configured.join(",")}` +
-            ` inPrivate=${row.inPrivate}`,
+            ` configured=${row.configured.join(",")}`,
         );
-        allowPrivate();
+        noPrivate();
       }
     }
     check();

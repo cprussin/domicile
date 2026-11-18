@@ -7,7 +7,9 @@ use domicile_launch::cli::{
 };
 use domicile_launch::control::{AppReuse, Request, Switch, ThemeChange};
 use domicile_launch::power::Power;
-use domicile_protocol::{DisplayChange, DisplayTransform, Scale, WatchTopic, WindowAct};
+use domicile_protocol::{
+    DisplayChange, DisplayTransform, EmulatedInput, PointerButton, Scale, WatchTopic, WindowAct,
+};
 
 fn run(args: &[&str]) -> Result<Invocation, CliError> {
     invocation(args.iter().map(|arg| (*arg).to_string()))
@@ -159,6 +161,33 @@ fn load_shell_is_the_verb_that_takes_a_shell() {
 }
 
 #[test]
+fn dev_is_the_verb_that_serves_a_shells_source() {
+    // Kept as typed, like load-shell's shell: it is relative to where it was
+    // typed.
+    assert_eq!(
+        run(&["dev", "./src/shell.tsx"]).unwrap(),
+        Invocation::Dev {
+            entry: "./src/shell.tsx".to_string()
+        }
+    );
+}
+
+#[test]
+fn dev_with_nothing_to_serve_is_refused() {
+    assert_eq!(run(&["dev"]), Err(CliError::NoEntryToServe));
+}
+
+#[test]
+fn dev_serves_one_entry_and_the_extra_word_is_named() {
+    assert_eq!(
+        run(&["dev", "./src/shell.tsx", "./src/other.tsx"]),
+        Err(CliError::ExtraToServe {
+            extra: "./src/other.tsx".to_string()
+        })
+    );
+}
+
+#[test]
 fn load_shell_with_nothing_to_load_is_refused() {
     // It does not mean "reload the current shell".
     assert_eq!(run(&["load-shell"]), Err(CliError::NoShellToLoad));
@@ -186,7 +215,8 @@ fn open_takes_one_thing_to_open_as_typed() {
     assert_eq!(
         run(&["open", "~/notes.org"]).unwrap(),
         Invocation::Open {
-            target: "~/notes.org".to_string()
+            target: "~/notes.org".to_string(),
+            profile: None,
         }
     );
     assert_eq!(run(&["open"]), Err(CliError::NothingToOpen));
@@ -194,6 +224,33 @@ fn open_takes_one_thing_to_open_as_typed() {
         run(&["open", "a.txt", "b.txt"]),
         Err(CliError::ExtraToOpen {
             extra: "b.txt".to_string()
+        })
+    );
+}
+
+#[test]
+fn open_with_profile_names_the_browser_profile() {
+    assert_eq!(
+        run(&["open", "--profile", "work", "https://example.com"]).unwrap(),
+        Invocation::Open {
+            target: "https://example.com".to_string(),
+            profile: Some("work".to_string()),
+        }
+    );
+    assert_eq!(
+        run(&["open", "--profile"]),
+        Err(CliError::FlagWithoutValue {
+            flag: "--profile".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["open", "--profile", "work"]),
+        Err(CliError::NothingToOpen)
+    );
+    assert_eq!(
+        run(&["open", "--profile", "work", "a.example", "b.example"]),
+        Err(CliError::ExtraToOpen {
+            extra: "b.example".to_string()
         })
     );
 }
@@ -251,6 +308,7 @@ fn open_with_app_opens_an_address_or_module_as_an_app() {
             target: "https://example.com/".to_string(),
             id: None,
             reuse: AppReuse::New,
+            profile: None,
         }
     );
     assert_eq!(run(&["open", "--app"]), Err(CliError::NothingToOpen));
@@ -270,6 +328,7 @@ fn open_with_app_takes_an_id_and_what_to_do_when_its_window_is_open() {
             target: "https://mail.example/".to_string(),
             id: Some("mail".to_string()),
             reuse: AppReuse::New,
+            profile: None,
         }
     );
     for (word, reuse) in [
@@ -292,9 +351,38 @@ fn open_with_app_takes_an_id_and_what_to_do_when_its_window_is_open() {
                 target: "https://mail.example/".to_string(),
                 id: Some("mail".to_string()),
                 reuse,
+                profile: None,
             }
         );
     }
+}
+
+#[test]
+fn open_with_app_takes_a_browser_profile() {
+    assert_eq!(
+        run(&[
+            "open",
+            "--app",
+            "--id",
+            "mail",
+            "--profile",
+            "work",
+            "https://mail.example/"
+        ])
+        .unwrap(),
+        Invocation::OpenAsApp {
+            target: "https://mail.example/".to_string(),
+            id: Some("mail".to_string()),
+            reuse: AppReuse::New,
+            profile: Some("work".to_string()),
+        }
+    );
+    assert_eq!(
+        run(&["open", "--app", "--profile"]),
+        Err(CliError::FlagWithoutValue {
+            flag: "--profile".to_string()
+        })
+    );
 }
 
 #[test]
@@ -580,6 +668,32 @@ fn help_after_a_verb_s_first_argument_is_that_argument() {
 }
 
 #[test]
+fn version_is_asked_for_by_flag_and_takes_nothing() {
+    assert_eq!(run(&["--version"]), Ok(Invocation::Version));
+    assert_eq!(
+        run(&["--version", "simple"]),
+        Err(CliError::Extra {
+            verb: "--version".to_string(),
+            extra: "simple".to_string()
+        })
+    );
+}
+
+#[test]
+fn a_flag_domicile_does_not_take_is_refused_and_named() {
+    // Taken as a shell, it reached the shell builder, which failed on it.
+    for line in [&["--bsaothus"][..], &["./dist/shell.js", "--bsaothus"]] {
+        assert_eq!(
+            run(line),
+            Err(CliError::UnknownFlag {
+                flag: "--bsaothus".to_string()
+            }),
+            "{line:?}"
+        );
+    }
+}
+
+#[test]
 fn help_takes_no_arguments() {
     assert_eq!(
         run(&["help", "theme"]),
@@ -602,6 +716,7 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
     for verb in [
         "which-shell",
         "load-shell",
+        "dev",
         "open",
         "install-app",
         "uninstall-app",
@@ -619,6 +734,9 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
         "list-shell-commands",
         "list-bindings",
         "list-inputs",
+        "list-agents",
+        "stop-agent",
+        "forget-agent",
         "subscribe",
         "lock",
         "focus-window",
@@ -1044,4 +1162,262 @@ fn configure_display_names_what_it_could_not_read() {
             said: "brightness".to_string()
         })
     );
+}
+
+#[test]
+fn mcp_is_the_verb_that_serves_agents_and_takes_nothing() {
+    assert_eq!(run(&["mcp"]), Ok(Invocation::Mcp));
+    assert_eq!(
+        run(&["mcp", "extra"]),
+        Err(CliError::Extra {
+            verb: "mcp".to_string(),
+            extra: "extra".to_string()
+        })
+    );
+}
+
+#[test]
+fn screenshot_fit_shrinks_the_desk_into_a_file() {
+    assert_eq!(
+        run(&["screenshot", "--fit", "1280", "desk.png"]),
+        Ok(Invocation::ShootDesk {
+            file: "desk.png".to_string(),
+            fit: 1280
+        })
+    );
+    assert!(run(&["screenshot", "--fit", "1280"]).is_err());
+    assert!(run(&["screenshot", "--fit", "big", "desk.png"]).is_err());
+}
+
+fn emulated(input: Vec<EmulatedInput>) -> Result<Invocation, CliError> {
+    Ok(Invocation::Ask {
+        request: Request::Emulate { input },
+    })
+}
+
+fn left(pressed: bool) -> EmulatedInput {
+    EmulatedInput::Button {
+        button: PointerButton::Left,
+        pressed,
+    }
+}
+
+#[test]
+fn pointer_moves_then_clicks_presses_or_releases() {
+    let to = EmulatedInput::PointTo { x: 10.0, y: 20.5 };
+    assert_eq!(run(&["pointer", "10,20.5"]), emulated(vec![to.clone()]));
+    assert_eq!(
+        run(&["pointer", "10,20.5", "click"]),
+        emulated(vec![to.clone(), left(true), left(false)])
+    );
+    assert_eq!(
+        run(&["pointer", "10,20.5", "double-click"]),
+        emulated(vec![
+            to.clone(),
+            left(true),
+            left(false),
+            left(true),
+            left(false)
+        ])
+    );
+    assert_eq!(
+        run(&["pointer", "10,20.5", "right-click"]),
+        emulated(vec![
+            to.clone(),
+            EmulatedInput::Button {
+                button: PointerButton::Right,
+                pressed: true
+            },
+            EmulatedInput::Button {
+                button: PointerButton::Right,
+                pressed: false
+            },
+        ])
+    );
+    assert_eq!(
+        run(&["pointer", "10,20.5", "press"]),
+        emulated(vec![to.clone(), left(true)])
+    );
+    assert_eq!(
+        run(&["pointer", "10,20.5", "release"]),
+        emulated(vec![to, left(false)])
+    );
+    assert!(run(&["pointer", "ten,20"]).is_err());
+    assert!(run(&["pointer", "10,20", "poke"]).is_err());
+    assert!(run(&["pointer"]).is_err());
+}
+
+#[test]
+fn scroll_takes_a_distance_across_and_down() {
+    assert_eq!(
+        run(&["scroll", "0,-30"]),
+        emulated(vec![EmulatedInput::Scroll { dx: 0.0, dy: -30.0 }])
+    );
+}
+
+#[test]
+fn key_presses_a_chord_in_order_and_releases_it_in_reverse() {
+    let key = |key: &str, pressed| EmulatedInput::Key {
+        key: key.to_string(),
+        pressed,
+    };
+    assert_eq!(
+        run(&["key", "ctrl+shift+Tab"]),
+        emulated(vec![
+            key("Control_L", true),
+            key("Shift_L", true),
+            key("Tab", true),
+            key("Tab", false),
+            key("Shift_L", false),
+            key("Control_L", false),
+        ])
+    );
+    assert_eq!(
+        run(&["key", "alt+super+F4"]),
+        emulated(vec![
+            key("Alt_L", true),
+            key("Super_L", true),
+            key("F4", true),
+            key("F4", false),
+            key("Super_L", false),
+            key("Alt_L", false),
+        ])
+    );
+}
+
+#[test]
+fn type_types_its_text_as_given() {
+    assert_eq!(
+        run(&["type", "Hello, world"]),
+        emulated(vec![EmulatedInput::Text {
+            text: "Hello, world".to_string()
+        }])
+    );
+    assert!(run(&["type"]).is_err());
+}
+
+#[test]
+fn devtools_sends_a_method_and_its_params_to_a_window() {
+    let devtools = |params| {
+        Ok(Invocation::Ask {
+            request: Request::DevTools {
+                window: "Xy7p".to_string(),
+                method: "DOM.getBoxModel".to_string(),
+                params,
+            },
+        })
+    };
+    assert_eq!(
+        run(&[
+            "devtools",
+            "Xy7p",
+            "DOM.getBoxModel",
+            "{\"backendNodeId\":4}"
+        ]),
+        devtools(serde_json::json!({"backendNodeId": 4}))
+    );
+    assert_eq!(
+        run(&["devtools", "Xy7p", "DOM.getBoxModel"]),
+        devtools(serde_json::json!({}))
+    );
+    assert!(run(&["devtools", "Xy7p"]).is_err());
+    assert!(run(&["devtools", "Xy7p", "Page.reload", "[1]"]).is_err());
+    assert!(run(&["devtools", "Xy7p", "Page.reload", "{", "more"]).is_err());
+}
+
+#[test]
+fn accessibility_reads_a_windows_tree_and_acts_on_its_elements() {
+    use domicile_launch::accessibility::Act;
+    assert_eq!(
+        run(&["accessibility", "kD3m"]),
+        Ok(Invocation::Accessibility {
+            window: "kD3m".to_string()
+        })
+    );
+    let act = |act| {
+        Ok(Invocation::AccessibilityAct {
+            window: "kD3m".to_string(),
+            element: ":1.7/w/1".to_string(),
+            act,
+        })
+    };
+    assert_eq!(
+        run(&["accessibility-act", "kD3m", ":1.7/w/1", "click"]),
+        act(Act::Click)
+    );
+    assert_eq!(
+        run(&["accessibility-act", "kD3m", ":1.7/w/1", "focus"]),
+        act(Act::Focus)
+    );
+    assert_eq!(
+        run(&[
+            "accessibility-act",
+            "kD3m",
+            ":1.7/w/1",
+            "set-text",
+            "hi there"
+        ]),
+        act(Act::SetText("hi there".to_string()))
+    );
+    assert!(run(&["accessibility"]).is_err());
+    assert!(run(&["accessibility-act", "kD3m", ":1.7/w/1"]).is_err());
+    assert!(run(&["accessibility-act", "kD3m", ":1.7/w/1", "explode"]).is_err());
+    assert!(run(&["accessibility-act", "kD3m", ":1.7/w/1", "set-text"]).is_err());
+    assert!(run(&["accessibility-act", "kD3m", ":1.7/w/1", "click", "more"]).is_err());
+}
+
+#[test]
+fn agent_takes_one_name() {
+    assert_eq!(
+        run(&["agent", "Claude Code"]),
+        Ok(Invocation::Agent {
+            name: "Claude Code".to_string()
+        })
+    );
+    for refused in [&["agent"][..], &["agent", " "], &["agent", "a", "b"]] {
+        assert!(
+            matches!(run(refused), Err(CliError::NotOne { .. })),
+            "{refused:?}"
+        );
+    }
+}
+
+#[test]
+fn agents_are_listed_stopped_by_session_and_forgotten_by_name() {
+    use domicile_launch::control::Request;
+    assert_eq!(
+        run(&["list-agents", "--json"]),
+        Ok(Invocation::List {
+            listing: Listing::Agents,
+            json: true
+        })
+    );
+    assert_eq!(
+        run(&["stop-agent", "12"]),
+        Ok(Invocation::Ask {
+            request: Request::StopAgent { session: 12 }
+        })
+    );
+    assert!(matches!(
+        run(&["stop-agent", "Claude"]),
+        Err(CliError::NotASession { .. })
+    ));
+    assert_eq!(
+        run(&["forget-agent", "Claude Code"]),
+        Ok(Invocation::Ask {
+            request: Request::ForgetAgent {
+                agent: "Claude Code".into()
+            }
+        })
+    );
+    for refused in [
+        &["stop-agent"][..],
+        &["forget-agent"],
+        &["forget-agent", "a", "b"],
+    ] {
+        assert!(
+            matches!(run(refused), Err(CliError::NotOne { .. })),
+            "{refused:?}"
+        );
+    }
 }

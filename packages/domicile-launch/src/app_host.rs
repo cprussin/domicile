@@ -6,7 +6,8 @@
 //! ([`Request::SettingsFiles`]) rather than taking a path from the page,
 //! refuses a config whose `shell_options` the shell's declaration refuses, and
 //! forwards site permissions, site data, extensions, media devices and
-//! addresses to open to the engine through the desktop. For History, it forwards history
+//! addresses to open to the engine through the desktop, and lists, stops and
+//! forgets agents through the compositor. For History, it forwards history
 //! searches, deletions and clearing browsing data. See `docs/SETTINGS.md` and
 //! `docs/HISTORY.md`.
 //!
@@ -32,8 +33,13 @@
 //! {"id":9,"type":"set_media_device","kind":"camera","device":"…"}
 //!   {"id":9,"type":"stored"}
 //! {"id":10,"type":"extensions"}
-//!   {"id":10,"type":"extensions","extensions":[{"id":…,"name":…,"description":…,"version":…,"enabled":true,"options_url":…,"settings":{…}}]}   (options_url null if none)
+//!   {"id":10,"type":"extensions","extensions":[{"id":…,"name":…,"description":…,"version":…,"enabled":true,"options_url":…,"settings":{…},"icon":"data:image/png;base64,…"}]}   (options_url and icon null if none)
 //! {"id":11,"type":"set_extension_enabled","extension":"…","enabled":false}
+//! {"id":11,"type":"set_extension_enabled","extension":"…","enabled":false,"profile":"work"}
+//!   {"id":11,"type":"stored"}
+//! {"id":11,"type":"browser_profiles"}
+//!   {"id":11,"type":"browser_profiles","default_profile":"personal","default_private_profile":"private","profiles":[{"id":"work","name":"Work","color":"#d97706","private":false,"extensions":[{"id":…,"enabled":true,"locked":false}]}],"sites":[{"site":"github.com/acme","profile":"work","pinned":true}]}
+//! {"id":11,"type":"pin_browser_site","site":"github.com/acme","profile":"work"}
 //!   {"id":11,"type":"stored"}
 //! {"id":11,"type":"configure_extension","extension":"…","settings":{"private":true}}
 //!   {"id":11,"type":"stored"}
@@ -53,6 +59,12 @@
 //!   {"id":18,"type":"cleared"}
 //! {"id":19,"type":"monitors"}
 //!   {"id":19,"type":"monitors","monitors":[{"names":["drm-1","DEL DELL U3219Q 2ZLS413",…],"hdr":"unsupported"}]}
+//! {"id":20,"type":"agents"}
+//!   {"id":20,"type":"agents","agents":{"connected":[{"session":4,"agent":"Claude Code","reach":{"type":"desk"}}],"remembered":[{"agent":"Codex","last_used_ms":…}]}}
+//! {"id":21,"type":"stop_agent","session":4}
+//!   {"id":21,"type":"done"}
+//! {"id":22,"type":"forget_agent","agent":"Codex"}
+//!   {"id":22,"type":"done"}
 //! any request
 //!   {"id":…,"type":"refused","why":"…"}
 //! pushed when a file changes on disk
@@ -68,7 +80,7 @@ use serde_json::{json, Value};
 
 use crate::config_path::is_module;
 use crate::control::{Request, Response, SettingsFiles};
-use crate::extensions::ExtensionSettings;
+use crate::extensions::{ExtensionSettings, InstalledExtension};
 use crate::history::{BrowsingData, HistoryQuery};
 use crate::media_devices::MediaKind;
 use crate::shell_options::problems;
@@ -83,6 +95,8 @@ pub struct Host<'a> {
     /// Asks the running desktop over its control socket.
     pub ask: &'a dyn Fn(&Request) -> Result<Response, String>,
     pub read: &'a dyn Fn(&Path) -> std::io::Result<String>,
+    /// Reads a file that is not text, such as an extension's icon.
+    pub read_bytes: &'a dyn Fn(&Path) -> std::io::Result<Vec<u8>>,
     /// The user's home directory, which a leading `~` names.
     pub home: Option<&'a Path>,
     /// Shows the desktop's folder picker: the folder, or `None` if canceled.
@@ -174,6 +188,13 @@ enum AppRequest {
     SetExtensionEnabled {
         extension: String,
         enabled: bool,
+        #[serde(default)]
+        profile: Option<String>,
+    },
+    BrowserProfiles,
+    PinBrowserSite {
+        site: String,
+        profile: String,
     },
     // `extension`, since the message's own `id` is the request's.
     ConfigureExtension {
@@ -196,6 +217,13 @@ enum AppRequest {
         host: String,
     },
     Monitors,
+    Agents,
+    StopAgent {
+        session: u32,
+    },
+    ForgetAgent {
+        agent: String,
+    },
 }
 
 /// Which file a write replaces.
@@ -294,15 +322,36 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
         }
         AppRequest::Extensions => match (host.ask)(&Request::Extensions)? {
             Response::Extensions { extensions } => {
-                Ok(json!({"type": "extensions", "extensions": extensions}))
+                let listed: Vec<Value> = extensions
+                    .into_iter()
+                    .map(|extension| with_icon(extension, host))
+                    .collect();
+                Ok(json!({"type": "extensions", "extensions": listed}))
             }
             other => Err(refusal_or_surprise(other)),
         },
-        AppRequest::SetExtensionEnabled { extension, enabled } => {
-            match (host.ask)(&Request::SetExtensionEnabled {
-                id: extension,
-                enabled,
-            })? {
+        AppRequest::SetExtensionEnabled {
+            extension,
+            enabled,
+            profile,
+        } => match (host.ask)(&Request::SetExtensionEnabled {
+            id: extension,
+            enabled,
+            profile,
+        })? {
+            Response::Stored => Ok(json!({"type": "stored"})),
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::BrowserProfiles => match (host.ask)(&Request::BrowserProfiles)? {
+            Response::BrowserProfiles(list) => {
+                let mut reply = serde_json::to_value(list).map_err(|why| why.to_string())?;
+                reply["type"] = json!("browser_profiles");
+                Ok(reply)
+            }
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::PinBrowserSite { site, profile } => {
+            match (host.ask)(&Request::PinBrowserSite { site, profile })? {
                 Response::Stored => Ok(json!({"type": "stored"})),
                 other => Err(refusal_or_surprise(other)),
             }
@@ -317,10 +366,12 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
             Response::Stored => Ok(json!({"type": "stored"})),
             other => Err(refusal_or_surprise(other)),
         },
-        AppRequest::OpenUrl { url } => match (host.ask)(&Request::OpenUrl { url })? {
-            Response::Opened => Ok(json!({"type": "opened"})),
-            other => Err(refusal_or_surprise(other)),
-        },
+        AppRequest::OpenUrl { url } => {
+            match (host.ask)(&Request::OpenUrl { url, profile: None })? {
+                Response::Opened => Ok(json!({"type": "opened"})),
+                other => Err(refusal_or_surprise(other)),
+            }
+        }
         AppRequest::History(query) => match (host.ask)(&Request::History(query))? {
             Response::History { items } => Ok(json!({"type": "history", "items": items})),
             other => Err(refusal_or_surprise(other)),
@@ -355,6 +406,18 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
             Response::Monitors { monitors } => {
                 Ok(json!({"type": "monitors", "monitors": monitors}))
             }
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::Agents => match (host.ask)(&Request::Agents)? {
+            Response::Agents { agents } => Ok(json!({"type": "agents", "agents": agents})),
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::StopAgent { session } => match (host.ask)(&Request::StopAgent { session })? {
+            Response::Done => Ok(json!({"type": "done"})),
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::ForgetAgent { agent } => match (host.ask)(&Request::ForgetAgent { agent })? {
+            Response::Done => Ok(json!({"type": "done"})),
             other => Err(refusal_or_surprise(other)),
         },
     }
@@ -397,6 +460,60 @@ fn file(path: Option<&Path>, host: &Host) -> Result<Value, String> {
     })
     .transpose()
     .map(|found| found.unwrap_or(Value::Null))
+}
+
+/// `extension` as the Settings app takes it: its icon as a `data:` URL in
+/// place of the icon's path, since the app cannot read files. Null when it has
+/// no icon, or the icon cannot be read, so the app draws its own placeholder.
+fn with_icon(extension: InstalledExtension, host: &Host) -> Value {
+    let icon = extension
+        .icon_path
+        .as_deref()
+        .and_then(|path| icon_data_url(Path::new(path), host));
+    let mut value = json!(extension);
+    if let Some(entry) = value.as_object_mut() {
+        entry.remove("icon_path");
+        entry.insert("icon".to_string(), icon.map_or(Value::Null, Value::String));
+    }
+    value
+}
+
+/// The image at `path` as a `data:` URL, or `None` for a file that cannot be
+/// read or is not an image a manifest may name.
+fn icon_data_url(path: &Path, host: &Host) -> Option<String> {
+    let extension = path.extension()?.to_str()?.to_ascii_lowercase();
+    let mime = match extension.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        "svg" => "image/svg+xml",
+        _ => return None,
+    };
+    let bytes = (host.read_bytes)(path).ok()?;
+    Some(format!("data:{mime};base64,{}", base64(&bytes)))
+}
+
+/// Standard base64, with padding.
+fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let triple = chunk.iter().enumerate().fold(0_u32, |acc, (at, byte)| {
+            acc | u32::from(*byte) << (16 - 8 * at)
+        });
+        for at in 0..4 {
+            if at <= chunk.len() {
+                let index = (triple >> (18 - 6 * at)) & 0x3f;
+                encoded.push(char::from(ALPHABET[index as usize]));
+            } else {
+                encoded.push('=');
+            }
+        }
+    }
+    encoded
 }
 
 fn read(path: &Path, host: &Host) -> Result<String, String> {

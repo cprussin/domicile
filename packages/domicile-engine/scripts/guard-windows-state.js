@@ -33,6 +33,7 @@ const EVENT_NAMES = [
   "shortcutrelease",
   "gesture",
   "focusrequested",
+  "browserprofileschanged",
   "browserwindowschanged",
   "castsinkschanged",
   "pictureinpicturevideoschanged",

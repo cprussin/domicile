@@ -41,15 +41,35 @@ takes the same forms as `domicile [shell]`.
 - A module rebuilt in place has no old shell to go back to, so it stays on its
   error screen.
 
+## `domicile dev <entry>`
+
+Serve a shell from its source, with hot module replacement, until Ctrl-C.
+Then the desktop goes back to the shell it replaced. `<entry>` is the file the
+shell's source starts at, such as `src/shell.tsx`
+([WRITING-A-SHELL.md](WRITING-A-SHELL.md#hot-module-replacement)).
+
+- An edit Vite can apply in place keeps the page's state. Any other edit
+  reloads the shell, and windows stay open, as with `load-shell`.
+- The dev server's log, such as each update it sends, prints in this
+  terminal.
+- A failed build or a dev server that stops prints why, and the desktop goes
+  back to the shell it replaced.
+
 ## `domicile open <file|folder|url>`
 
 Open a file or folder with its type's default app, or a link in a browser
 window ([LAUNCHER.md](LAUNCHER.md#opening-files)).
 
+- `domicile open --profile <id> <url>` opens a link in browser profile `<id>`
+  ([BROWSER-PROFILES.md](architecture/BROWSER-PROFILES.md)). Without it, a
+  link opens in the profile its site opens in. A profile the config doesn't
+  name is an error.
 - `domicile open --app <url|module>` opens a site or an app module as an
   app: its own window, without an address bar
   ([WEB-APPS.md](architecture/WEB-APPS.md)).
   - `--id <id>` makes a site's window app `<id>`'s.
+  - `--profile <id>` opens a new window in that browser profile rather than
+    its site's.
   - `--reuse focus` brings `<id>`'s open window to the front instead of
     opening another; `--reuse navigate` also loads the address in it. Both
     need `--id`. `new`, the default, always opens a window.
@@ -78,6 +98,94 @@ With no file, open the shell's screenshot picker. The picture goes in
 `Pictures/Screenshots` and its path is printed; Ctrl+C in the picker copies
 it instead. With a file, write every monitor to it as a PNG, without asking.
 Exits 1 if the picker is dismissed.
+
+## `domicile screenshot --fit <px> <file>`
+
+Write a PNG of every monitor to `<file>`, shrunk so neither side is over
+`<px>` pixels, without asking. Print what it shows as JSON: the desktop it
+covers in logical pixels, and its size.
+
+```
+$ domicile screenshot --fit 1280 desk.png
+{"place":{"position":[0,0],"size":[3840,1080]},"width":1280,"height":360}
+```
+
+A point in the PNG is a point for `pointer`, scaled by `place.size` over
+`width` and `height`.
+
+## `domicile pointer <x>,<y> [click|double-click|right-click|middle-click|press|release]`
+
+Move the pointer to `<x>,<y>`, in logical pixels from the desk's top-left
+corner, then click or press the left button there, or click the right or
+middle one. `press` and `release` with moves between them drag.
+
+## `domicile scroll <dx>,<dy>`
+
+Scroll where the pointer is, in logical pixels: positive is right and down.
+
+## `domicile key <chord>`
+
+Press the keys of a chord in order, then release them in reverse. Each key is
+an XKB keysym name, such as `Return`, `Tab`, `l` or `F4`, in any case;
+`ctrl`, `shift`, `alt` and `super` name the left modifiers.
+
+```
+domicile key ctrl+shift+Tab
+```
+
+## `domicile type <text>`
+
+Type `<text>` on the desk's keyboard, holding Shift where a character needs
+it. Refused, typing nothing, when no key types a character without AltGr.
+
+## `domicile accessibility <window>`
+
+Print a native window's [AT-SPI](https://gitlab.gnome.org/GNOME/at-spi2-core)
+accessibility tree, one element a line: its role, name, ref, an editable
+text's text, and whether it is focused, checked, pressed, expanded or
+selected. `domicile mcp` reads native windows with it.
+
+```
+$ domicile accessibility kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA
+- frame "notes.txt" [ref=:1.7/org/a11y/atspi/accessible/1]
+  - push button "Save" [ref=:1.7/org/a11y/atspi/accessible/12]
+  - text [ref=:1.7/org/a11y/atspi/accessible/13] text="hello" focused
+```
+
+- The window is found by its process and title, so an app that does not
+  support accessibility, or one sandboxed in another process, is refused.
+- Elements that are not visible are left out, with what is under them, and a
+  password's text is never printed. Past 1,500 elements the outline is cut.
+- It needs the accessibility bus, which at-spi2-core runs
+  (`services.gnome.at-spi2-core.enable` on NixOS).
+
+## `domicile accessibility-act <window> <ref> click|focus|set-text <text>`
+
+Click an element of a native window by its ref from `accessibility`, give it
+the keyboard focus, or replace its text. Clicking runs the element's own
+click, press or activate action, so it works on a window the desk hides. A
+ref of another process is refused.
+
+## `domicile devtools <window> <method> [params]`
+
+Send one [DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/)
+method to a browser window's page, with its params as a JSON object, and print
+its result as JSON. `<window>` is an id `list-windows` prints. `domicile mcp`
+drives browser windows with it.
+
+```
+$ domicile devtools Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE DOM.getContentQuads '{"backendNodeId":42}'
+{"quads":[[10,20,110,20,110,40,10,40]]}
+```
+
+Only the methods an agent needs to read and drive a page go through:
+`Accessibility.getFullAXTree`, `getPartialAXTree` and `queryAXTree`;
+`DOM.focus`, `getBoxModel`, `getContentQuads` and `scrollIntoViewIfNeeded`;
+`Input.dispatchKeyEvent`, `dispatchMouseEvent` and `insertText`; and `Page.captureScreenshot`,
+`getLayoutMetrics`, `getNavigationHistory`, `navigate` (to http and https
+only), `navigateToHistoryEntry` and `reload`. Nothing reads cookies or
+storage or runs script. Private windows and native windows are refused. A page
+that does not answer in 10 seconds is refused too.
 
 ## `domicile screen-record`
 
@@ -230,7 +338,8 @@ Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox (private)
 
 `--json` prints a JSON array instead, for scripts, with `kind`, `title`,
 `app`, `pid`, `size`, `focused`, `urgent`, `url` (a browser window's address,
-`null` for a native window) and `private` per window.
+`null` for a native window), `private` and `engine_id` (a browser window's
+id in the engine, `null` for a native window) per window.
 
 ## `domicile list-inputs [--json]`
 
@@ -361,6 +470,93 @@ Ask, then restart the computer.
 
 Ask, then end the login session.
 
+## `domicile mcp`
+
+Serve the [Model Context Protocol](https://modelcontextprotocol.io) on stdin
+and stdout, so an agent can drive the running desktop. Add it to Claude Code
+with:
+
+```
+claude mcp add domicile -- domicile mcp
+```
+
+The first tool call asks you, in Domicile's dialog, to let the agent in,
+named as its client names itself: your entire desktop, or only the windows you
+check. Until you answer, the call waits; a minute without an answer counts as
+Cancel. While it's in, the bar shows it and what it did last, and Stop there
+ends it. Every call after is checked against what you allowed:
+
+- **Entire desktop**: every tool.
+- **Only these windows**: `list_windows` lists only those windows, and
+  `close_window` and the browser and app tools work on them alone. The tools
+  that reach the whole desk (screenshots, the pointer and keyboard, `open`,
+  `send_shell`, `focus_window`, `theme` and the other listings) are refused.
+  Private browser windows are never offered.
+
+An agent you cancel or stop is refused from then on; its next session asks
+again. If you turn on **Remember** with the entire desktop, it comes in
+without asking until you forget it in Settings › Agents or with
+`forget-agent`. **Change** in the bar asks again; what you pick applies from
+the agent's next call. See [AGENTS.md](AGENTS.md).
+
+Each tool runs a verb and answers what it printed, or its error:
+
+| Tool | Runs |
+|---|---|
+| `list_windows`, `list_displays`, `list_inputs`, `status`, `list_shell_commands`, `list_bindings` | that verb with `--json` |
+| `send_shell` | `send-shell <words>...` |
+| `open` | `open [--app] [--profile <id>] <target>` |
+| `focus_window`, `close_window` | that verb with the window's id |
+| `theme` | `theme [light\|dark\|toggle]` |
+| `screenshot` | `screenshot --fit 1280 <file>`, answered as the PNG |
+| `click`, `move_pointer`, `drag` | `pointer`, with the point scaled from the last screenshot's pixels to the desk's |
+| `scroll` | `pointer`, then `scroll` |
+| `key`, `type_text` | `key <chord>`, `type <text>` |
+| `browser_snapshot` | `devtools <window> Accessibility.getFullAXTree`, answered as an outline of the page, one element a line with its ref |
+| `browser_click` | `devtools` scrolling the element into view, finding its box, and clicking its middle |
+| `browser_type` | `devtools` focusing the element, if given a ref, then `Input.insertText` |
+| `browser_key` | `devtools` pressing and releasing Enter, Tab, Escape, an arrow or another named key |
+| `browser_navigate` | `devtools <window> Page.navigate` |
+| `browser_screenshot` | `devtools <window> Page.captureScreenshot`, answered as a WebP |
+| `app_snapshot` | `accessibility <window>` |
+| `app_click`, `app_focus`, `app_set_text` | `accessibility-act <window> <ref> click\|focus\|set-text <text>` |
+
+The browser and app tools work on a window the desk hides and need no screenshot, so prefer them for browser windows and for native apps that support accessibility. Tools the lock refuses are refused while the desktop is locked.
+
+## `domicile agent <name>`
+
+Ask, in Domicile's dialog, to let the agent `name` see and use the desktop,
+and print what you allowed as a JSON line: `{"type":"desk"}`, or
+`{"type":"windows","windows":[...]}` with each window's `id`, `kind`, `title`
+and `app`. A remembered agent is let in without asking. Each time you change
+what it reaches from the bar, another such line follows. Each line read from
+stdin is listed in the bar as what the agent did last. The agent stays in
+until stdin ends. Exits 1 if you cancel, don't answer within a minute, or stop
+it from the bar. `domicile mcp` runs this on its first tool call.
+
+## `domicile list-agents [--json]`
+
+Print the agents in now, with the session `stop-agent` takes and the windows
+they reach (or `desk`), then those remembered.
+
+```text
+SESSION  STATE       REACH  AGENT
+12       in          kD3m   Claude Code
+-        remembered  desk   Codex
+```
+
+`--json` prints `{"connected": [{"session", "agent", "reach"}],
+"remembered": [{"agent", "last_used_ms"}]}`.
+
+## `domicile stop-agent <session>`
+
+Stop an agent, by its `list-agents` session, as Stop in the bar does.
+
+## `domicile forget-agent <name>`
+
+Make a remembered agent ask again the next time it connects. Forgetting one
+that isn't remembered does nothing.
+
 ## `domicile check-config <file>`
 
 Check a config file without a desktop. Exits non-zero with the reason the
@@ -371,10 +567,30 @@ compositor would refuse it. home-manager runs it on the file it writes.
 Print the commands. `--help` and `-h` do the same, also after a verb, except
 that `send-shell --help` prints the shell's own commands.
 
+## `domicile --version`
+
+Print the version, the commit it was built from, and the engine.
+
+```text
+domicile 1.2.0
+commit   144a93c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7
+engine   s2ffe1826ced0, checked build of Chromium 7703634 at 246fa60eff4e, built 2026-11-15T09:12:44Z
+```
+
+- The first two lines are `libexec/domicile/version`, which the flake and the
+  distribution packages write.
+- The engine line is from its release's `PROVENANCE`.
+- A missing file fails, naming it.
+
+Any other flag before or after a shell is refused rather than taken as the
+shell.
+
 ## While locked
 
-`screenshot`, `screen-record`, `send-shell`, `focus-window`, `close-window`
-and `kill-window` are refused while the desktop is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
+`screenshot`, `screen-record`, `send-shell`, `focus-window`, `close-window`,
+`kill-window`, `pointer`, `scroll`, `key`, `type`, `devtools`, `accessibility`,
+`accessibility-act`, `agent`, `list-agents`, `stop-agent` and `forget-agent`
+are refused while the desktop is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
 `wake-displays`, `lock`, `inhibit-idle`, `list-displays`, `list-windows`,
 `list-inputs`, `status`, `subscribe`, `configure-display`,
 `list-shell-commands` and `list-bindings` work, and a `monitor` added before keeps resizing.

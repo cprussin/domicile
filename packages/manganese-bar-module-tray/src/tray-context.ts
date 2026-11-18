@@ -1,6 +1,7 @@
 // The tray's state, held once for every bar's tray.
 
 import { useProvided } from "@domicile-desktop/manganese-host/use-provided";
+import type { BrowserProfile } from "@domicile-desktop/sdk/desktop/browser";
 import type {
   Extension,
   ExtensionPopup,
@@ -17,6 +18,11 @@ export type TrayState = {
   extensions: readonly Extension[];
   /** Every installed extension, for the tray's menu. */
   installed: readonly InstalledExtension[];
+  /**
+   * The browser profile of the page last focused, whose extensions the tray
+   * shows and switches; `undefined` until the engine lists its profiles.
+   */
+  profile: BrowserProfile | undefined;
   /** The applications' tray icons. */
   items: readonly TrayItem[];
   /** Extension `id`'s action was clicked on the bar on `screen`. */

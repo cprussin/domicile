@@ -13,6 +13,7 @@
 export type Config = {
   /** Where editors find this file's JSON Schema. Domicile ignores it. */
   $schema?: string | null;
+  browser?: BrowserConfig;
   electron?: ElectronConfig;
   extensions?: ExtensionsConfig;
   files?: FilesConfig;
@@ -49,6 +50,51 @@ export type AccelProfile = "adaptive" | "flat";
 
 /** An sRGB color, written `"#rrggbb"`. */
 export type AccentColor = string;
+
+/**
+ * Browser profiles: sets of sign-ins, site data and extensions, and the
+ * sites each opens. See `docs/architecture/BROWSER-PROFILES.md`.
+ */
+export type BrowserConfig = {
+  /** The profile a new private window opens in. Private. */
+  default_private_profile?: string;
+  /** The profile a site opens in when `sites` names none. Not private. */
+  default_profile?: string;
+  /**
+   * The order the shell lists the profiles in, by id. Profiles it leaves
+   * out follow, by id.
+   */
+  order?: string[];
+  /**
+   * The profiles, by id. An id is a directory name: lowercase letters,
+   * digits and `-`.
+   */
+  profiles?: Record<string, BrowserProfile>;
+  /**
+   * The profile each site opens in, by site: a host, `*.host` for it and
+   * its subdomains, or a host and path such as `github.com/acme` for the
+   * addresses under it. The most specific match wins. A site is never in
+   * `default_profile`, which opens every unlisted site.
+   */
+  sites?: Record<string, string>;
+};
+
+/** One browser profile. See [`BrowserConfig::profiles`]. */
+export type BrowserProfile = {
+  /** The color the shell marks the profile's pages with. */
+  color: AccentColor;
+  /**
+   * The ids of the extensions it turns on, from those `extensions`
+   * installs; the rest are off, and the shell cannot switch them. Unset
+   * leaves the switches to the user: each starts on, or off in a private
+   * profile, whose pages stay away from extensions unless allowed.
+   */
+  extensions?: string[] | null;
+  /** The name the shell shows. */
+  name: string;
+  /** Keeps no history, sign-ins or site data after its last page closes. */
+  private?: boolean;
+};
 
 /** Buttons assigned to one-, two- and three-finger taps. */
 export type ButtonMap = "lrm" | "lmr";
@@ -212,8 +258,6 @@ export type ElectronConfig = {
 export type ExtensionSettings = {
   /** Runs on local files (`file://` pages). Chrome's default is no. */
   file_access?: boolean | null;
-  /** Runs in private windows. Chrome's default is no. */
-  private?: boolean | null;
   /** Which of the sites it asks for it runs on. Chrome's default is all. */
   site_access?: SiteAccess | null;
   /**

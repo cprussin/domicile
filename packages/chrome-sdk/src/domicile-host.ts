@@ -123,6 +123,7 @@ export type DomicileAppEventInit = EventInit & {
 export type DomicileExtensionPopupEventInit = EventInit & {
   extensionId?: string;
   popup?: string;
+  profile?: string;
 };
 
 /**
@@ -131,7 +132,6 @@ export type DomicileExtensionPopupEventInit = EventInit & {
  * DomicileInstalledExtension's.
  */
 export type DomicileExtensionSettings = {
-  inPrivate?: boolean;
   fileAccess?: boolean;
   userScripts?: boolean;
   /** "on_click", "specific_sites" or "all_sites". */
@@ -245,6 +245,57 @@ export type DomicileAppHost = {
 };
 
 /**
+ * One of the desk's browser profiles, in DomicileHost.browserProfiles: a set
+ * of sign-ins, site data and extensions, as the config's `browser.profiles`
+ * names it. A page is in one profile, and its new windows are in it too. See
+ * docs/architecture/BROWSER-PROFILES.md in the Domicile repository.
+ */
+export type DomicileBrowserProfile = {
+  /**
+   * Lowercase letters, digits and `-`. What DomicileBrowserWindow.profile
+   * and openBrowserWindow() name it by.
+   */
+  readonly id: string;
+  /** The name the user gave it. */
+  readonly name: string;
+  /** Its color, `#rrggbb`. */
+  readonly color: string;
+  /** Whether it keeps nothing past its last page, as private browsing does. */
+  readonly isPrivate: boolean;
+  /** Whether a site no profile lists opens here. Exactly one profile is. */
+  readonly isDefault: boolean;
+  /**
+   * Whether a private window that names no profile opens here. Exactly one
+   * profile is, and it is private.
+   */
+  readonly isDefaultPrivate: boolean;
+  /**
+   * The sites that open here because the user pinned them
+   * (DomicileHost.pinBrowserSite). Each is a host, `*.host`, or a host and
+   * path, as the config's `browser.sites` keys are.
+   */
+  readonly pinnedSites: readonly string[];
+  /**
+   * The sites that open here because the config's `browser.sites` names
+   * them. Only the config changes these.
+   */
+  readonly configSites: readonly string[];
+  /**
+   * The ids of the extensions in it, each switched on or off there; empty
+   * until it loads. Every profile has every extension the config names.
+   */
+  readonly extensions: readonly string[];
+  /** Those of `extensions` switched on here. */
+  readonly enabledExtensions: readonly string[];
+  /**
+   * Those of `extensions` the config switches here, because it names the
+   * profile's extensions. Only the config changes these
+   * (DomicileHost.setBrowserProfileExtensionEnabled refuses them).
+   */
+  readonly lockedExtensions: readonly string[];
+};
+
+/**
  * One of the desk's browser windows: a page the browser holds, drawn with
  * `<webview window="id">`. See components/domicile/mojom/browser_windows.mojom.
  *
@@ -274,11 +325,17 @@ export type DomicileBrowserWindow = {
   readonly width: number;
   readonly height: number;
   /**
-   * Whether the page is private: in the off-the-record profile, sharing
-   * nothing with the user's pages and storing nothing past the last private
-   * page. A private window's new windows are private too.
+   * Whether the page is private: in a private profile, off the record,
+   * sharing nothing with the user's other pages and storing nothing past the
+   * profile's last page. A private window's new windows are private too.
    */
   readonly isPrivate: boolean;
+  /**
+   * The id of the browser profile the page is in, one of
+   * DomicileHost.browserProfiles; null for a page in none, such as an
+   * Electron app's. A window's new windows are in its profile.
+   */
+  readonly profile: string | null;
   /**
    * The page's storage partition, as a <webview>'s `partition` attribute
    * names it: "persist:<name>" on disk, any other name in memory. Empty for
@@ -321,8 +378,11 @@ export type DomicileBrowserWindow = {
   readonly x: number;
   readonly y: number;
   /**
-   * Whether the view's app hid it. Keep a hidden view laid out, out of
-   * sight, as a page draws only while laid out. False for every window.
+   * Whether its Electron app hid it. Keep a hidden view laid out, out of
+   * sight, as a page draws only while laid out. A hidden window is open, its
+   * page running, but the app wants it out of sight (win.hide, or `show:
+   * false`): don't show it until it is shown again. Its app shows it and
+   * then asks for focus. False for every other window.
    */
   readonly isHidden: boolean;
   /**
@@ -546,6 +606,11 @@ export type DomicileExtension = {
   readonly popup: string | null;
   /** False after the extension's action.disable(). */
   readonly enabled: boolean;
+  /**
+   * The id of the browser profile it is in: the one setExtensionsProfile()
+   * named, once that has loaded. Its popup opens in a <webview> in it.
+   */
+  readonly profile: string;
 };
 
 /**
@@ -561,6 +626,11 @@ export type DomicileExtensionPopupEvent = Event & {
    * soon as the call answers.
    */
   readonly popup: string;
+  /**
+   * The id of the browser profile the extension is in, which the popup opens
+   * in, as a <webview>'s `profile`.
+   */
+  readonly profile: string;
 };
 
 /**
@@ -660,6 +730,13 @@ export type DomicileHostEventMap = {
    * `browserWindows` for the current list.
    */
   browserwindowschanged: Event;
+  /**
+   * Fires when a profile is added, removed, renamed or recolored, the
+   * defaults move, a site is pinned, or an extension is installed,
+   * uninstalled or switched in one. Read `browserProfiles` for the current
+   * list.
+   */
+  browserprofileschanged: Event;
   /**
    * Fires when a TV appears or goes, or a cast to one starts or ends. Read
    * `castSinks` for the current list.
@@ -968,6 +1045,16 @@ export type DomicileHost = {
    */
   activateExtension(id: string): void;
   /**
+   * Show the actions of browser profile `profile`'s extensions in
+   * `extensions`, and have activateExtension() click them there, on the
+   * active tab of its pages: as Chrome's toolbar shows its window's
+   * profile's. A shell names the profile of the page it last focused. The
+   * default profile's until called, and while `profile` loads; one the desk
+   * does not have shows the default's. Each entry's `profile` says which it
+   * is. Over the tray's pipe, as activateExtension(). An empty id throws.
+   */
+  setExtensionsProfile(profile: string): void;
+  /**
    * Switch installed extension `id` on or off, as chrome://extensions does.
    * Resolves once switched; `installedExtensions` and `extensions` follow.
    * Rejects with an OperationError saying why, in words to show, when it is
@@ -998,12 +1085,16 @@ export type DomicileHost = {
    *
    * `partition` gives its page storage of its own, as a <webview>'s
    * `partition` attribute does. Throws TypeError for "persist:" with no name.
+   *
+   * `profile` opens it in that browser profile, one of `browserProfiles`;
+   * empty for the one `url`'s site opens in (browserProfileFor). A profile
+   * the desk no longer has opens in the default one.
    */
-  openBrowserWindow(url: string, partition?: string): void;
+  openBrowserWindow(url: string, partition?: string, profile?: string): void;
   /**
-   * Opens a private browser window at `url`, as openBrowserWindow does. Its
-   * page is in the off-the-record profile; see DomicileBrowserWindow's
-   * `isPrivate`.
+   * Opens a private browser window at `url`, as openBrowserWindow does, in
+   * the default private profile; see DomicileBrowserWindow's `isPrivate`. To
+   * open one in another private profile, name it to openBrowserWindow.
    */
   openPrivateBrowserWindow(url: string): void;
   /**
@@ -1018,8 +1109,17 @@ export type DomicileHost = {
    * The browser matches the window, so two quick calls never open two.
    * Throws TypeError for another `reuse`, and for "focus" or "navigate" with
    * no `appId`.
+   *
+   * `profile` opens a new window in that browser profile, one of
+   * `browserProfiles`; empty for the one `url`'s site opens in
+   * (browserProfileFor), as for openBrowserWindow.
    */
-  openAppWindow(url: string, appId?: string, reuse?: string): void;
+  openAppWindow(
+    url: string,
+    appId?: string,
+    reuse?: string,
+    profile?: string,
+  ): void;
   /**
    * How many elements in browser window `id`'s main document match the CSS
    * `selector`, as a <webview>'s countMatches() counts them. A hidden window
@@ -1029,11 +1129,69 @@ export type DomicileHost = {
    */
   countBrowserWindowMatches(id: string, selector: string): Promise<number>;
   /**
+   * Clicks the first shown element in browser window `id`'s main document that
+   * matches the CSS `selector`, as a <webview>'s clickMatch() clicks it. A
+   * hidden window is clicked too. Resolves whether an element matched. Throws
+   * SyntaxError for a selector that does not parse. Rejects with
+   * InvalidStateError for an unknown window, and when the page gave no answer,
+   * as when it navigated first.
+   */
+  clickBrowserWindowMatch(id: string, selector: string): Promise<boolean>;
+  /**
    * Closes window `id`; it leaves the next `browserwindowschanged`. A page
    * with a `beforeunload` handler may first ask to stay, as a `domicile-dialog`
    * on its <webview>; Cancel keeps the window. An unknown id does nothing.
    */
   closeBrowserWindow(id: string): void;
+  /**
+   * Moves window `id`'s page to browser profile `profile`, one of
+   * `browserProfiles`, as a new page under the same id: the window keeps its
+   * place, its <webview> shows the new page, and its back and forward list
+   * comes along as addresses. The page reloads; what was typed into it is
+   * not kept. Throws TypeError for an empty id or profile. An unknown window
+   * or profile, or an app window, does nothing: the shell's lists may be a
+   * change behind.
+   */
+  reopenBrowserWindow(id: string, profile: string): void;
+  /**
+   * The browser profile `url` opens in: the most specific of the config's
+   * `browser.sites` that matches it, else the default profile. The engine
+   * routes every new window and every page the user takes to another site
+   * by this. Throws TypeError for a `url` that is no address.
+   */
+  browserProfileFor(url: string): Promise<string>;
+  /**
+   * The site that routes `url` to its profile: the entry of the config's
+   * `browser.sites`, or of the sites the user pinned, that browserProfileFor
+   * matched. Empty when none did, so it opens in the default profile.
+   * Throws TypeError for a `url` that is no address.
+   */
+  browserSiteFor(url: string): Promise<string>;
+  /**
+   * Opens `site` in browser profile `profile` from now on, kept across
+   * restarts; the default profile unpins it. `site` is a host, `*.host`, or
+   * a host and path, as the config's `browser.sites` keys are; it shows in
+   * the profile's `pinnedSites` from the next `browserprofileschanged`.
+   * Pages already open stay where they are. Throws TypeError for an empty
+   * site or profile. Rejects with an OperationError saying why for a site
+   * the config's sites name, which only the config changes, for one that is
+   * no such key, and for a profile the desk does not have.
+   */
+  pinBrowserSite(site: string, profile: string): Promise<void>;
+  /**
+   * Switches extension `id` on or off in browser profile `profile`, kept
+   * across restarts: it runs in that profile's pages, or nowhere in them, and
+   * keeps its data while off. The profile's `enabledExtensions` shows it from
+   * the next `browserprofileschanged`. Throws TypeError for an empty profile
+   * or id. Rejects with an OperationError saying why for a profile the desk
+   * does not have or has not loaded, an extension it does not have, and one
+   * in its `lockedExtensions`, which only the config switches.
+   */
+  setBrowserProfileExtensionEnabled(
+    profile: string,
+    id: string,
+    enabled: boolean,
+  ): Promise<void>;
   /**
    * The user clicked entry `command` of window `id`'s menu bar
    * (DomicileBrowserWindow.menu); its Electron app runs the entry. Throws a
@@ -1100,8 +1258,9 @@ export type DomicileHost = {
   resizePictureInPictureVideo(id: string, width: number, height: number): void;
   /**
    * Sends `method`, "GET" or "POST", to `url` from the browser process with
-   * the cookies of the profile the ordinary browser windows use, so a bar
-   * item can read a site the user is signed in to. A POST sends `body`, as a
+   * the cookies of browser profile `profile`, one of `browserProfiles`, or
+   * for an empty one the default profile's, so a bar item can read a site
+   * the user is signed in to. A POST sends `body`, as a
    * same-origin CORS request from `url`'s own origin.
    * Resolves with the response, whatever its status. Rejects with a
    * NetworkError for a network failure or a refusal: an address that is not
@@ -1115,6 +1274,9 @@ export type DomicileHost = {
    * SAPISIDHASH` header Google's first-party APIs take, computed from the
    * SAPISID cookie, and follows no redirect. The page never sees the cookie.
    *
+   * Also rejects with a NetworkError for a profile the desk does not have,
+   * or a private one, which keeps no sign-ins to fetch with.
+   *
    * Handled by the browser process, over its own pipe: see
    * components/domicile/mojom/shell_fetch.mojom.
    */
@@ -1124,6 +1286,7 @@ export type DomicileHost = {
     headers: readonly DomicileFetchHeader[],
     body: string | null,
     sapisidHashOrigin: string | null,
+    profile?: string,
   ): Promise<DomicileFetchResponse>;
   /**
    * The screens of the desktop.
@@ -1210,6 +1373,13 @@ export type DomicileHost = {
    */
   readonly browserWindows: readonly DomicileBrowserWindow[] | null;
   /**
+   * The desk's browser profiles, in the config's order: sets of sign-ins,
+   * site data and extensions, as the config's `browser.profiles` names them.
+   * Null until the browser lists them. No [SameObject], for `displays`'
+   * reason. See docs/architecture/BROWSER-PROFILES.md.
+   */
+  readonly browserProfiles: readonly DomicileBrowserProfile[] | null;
+  /**
    * The TVs the desktop can cast to: the Google Cast receivers the browser
    * finds, by name. Null until the browser lists them, which it does as soon
    * as this page listens; empty when the profile turns casting off. No
@@ -1275,11 +1445,10 @@ export type DomicileInstalledExtension = {
   readonly enabled: boolean;
   /**
    * Its chrome://extensions settings. Each is null where the extension cannot
-   * use it: private windows where its manifest keeps it out, local files and
-   * sites where it asks for none, user scripts where it does not ask for
-   * chrome.userScripts.
+   * use it: local files and sites where it asks for none, user scripts where
+   * it does not ask for chrome.userScripts. Private windows are a private
+   * browser profile's, whose switches say what runs there.
    */
-  readonly inPrivate: boolean | null;
   readonly fileAccess: boolean | null;
   readonly userScripts: boolean | null;
   /** "on_click", "specific_sites" or "all_sites". */

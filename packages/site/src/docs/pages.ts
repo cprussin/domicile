@@ -47,6 +47,7 @@ const SECTIONS: readonly DocSection[] = [
     pages: [
       page("windows", "WINDOWS", "Windows and workspaces"),
       page("browser", "BROWSER", "Browsing and web apps"),
+      page("electron-apps", "ELECTRON-APPS", "Electron apps"),
       page("launcher", "LAUNCHER", "The launcher"),
       page("top-bar", "TOP-BAR", "The top bar"),
       page("notifications", "NOTIFICATIONS", "Notifications"),
@@ -77,6 +78,11 @@ const SECTIONS: readonly DocSection[] = [
     ],
     product: "manganese",
     title: "Help",
+  },
+  {
+    pages: [page("release-notes", "RELEASE-NOTES", "Release notes")],
+    product: "manganese",
+    title: "What's new",
   },
 ];
 
@@ -152,6 +158,11 @@ const AUTHOR_SECTIONS: readonly DocSection[] = [
     ],
     product: "domicile",
     title: "Reference",
+  },
+  {
+    pages: [doc("release-notes", "docs/RELEASE-NOTES.md", "Release notes")],
+    product: "domicile",
+    title: "What's new",
   },
 ];
 

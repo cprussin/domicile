@@ -51,8 +51,8 @@ pub enum ImportError {
 /// Creates an offscreen GLES renderer on the best EGL device, for a
 /// compositor that is not presenting.
 ///
-/// Fails without a working EGL; the compositor then advertises no dmabuf
-/// global and `wl_shm` clients keep working.
+/// Fails without a working EGL; the compositor then reports it and advertises
+/// no dmabuf global.
 pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError> {
     // Smithay panics if EGL is missing, so try loading it first.
     // SAFETY: this opens the same library Smithay opens next, running the
@@ -100,7 +100,7 @@ fn gbm_or_surfaceless_display(
             Ok((display, Some(node), main_device))
         }
         Err(err) => {
-            tracing::debug!(%err, "no render node has GBM; using surfaceless EGL");
+            tracing::warn!(%err, "no render node has GBM; using surfaceless EGL");
             // SAFETY: a surfaceless display wraps no native handle.
             let display = unsafe { EGLDisplay::new(EGLSurfacelessDisplay) }?;
             Ok((display, None, None))
@@ -115,7 +115,7 @@ fn gbm_display(dir: &Path) -> Result<(EGLDisplay, PathBuf), ImportError> {
         let gbm = match Gbm::open(crate::gbm::LIBRARY, &node) {
             Ok(gbm) => gbm,
             Err(err) => {
-                tracing::debug!(?node, %err, "no GBM device on this render node");
+                tracing::warn!(?node, %err, "no GBM device on this render node");
                 continue;
             }
         };
@@ -123,7 +123,7 @@ fn gbm_display(dir: &Path) -> Result<(EGLDisplay, PathBuf), ImportError> {
         // whole life.
         match unsafe { EGLDisplay::new(GbmDisplay(gbm)) } {
             Ok(display) => return Ok((display, node)),
-            Err(err) => tracing::debug!(?node, %err, "EGL refuses this GBM device"),
+            Err(err) => tracing::warn!(?node, ?err, "EGL refuses this GBM device"),
         }
     }
     Err(ImportError::NoDevice)

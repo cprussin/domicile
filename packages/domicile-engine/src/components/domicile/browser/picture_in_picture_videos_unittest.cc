@@ -119,7 +119,7 @@ class PictureInPictureVideosTest : public testing::Test {
 
 TEST_F(PictureInPictureVideosTest, AShellHearsTheVideosThenEachChange) {
   std::unique_ptr<PictureInPictureVideos::Listing> listing =
-      videos_.List("4", &controls_);
+      videos_.List("4", gfx::Rect(), &controls_);
   listing->SetSize(gfx::Size(640, 360));
   listing->SetPlaying(true);
   listing->SetControls(/*can_play=*/true, /*can_previous_track=*/false,
@@ -149,7 +149,7 @@ TEST_F(PictureInPictureVideosTest, AShellHearsTheVideosThenEachChange) {
 
 TEST_F(PictureInPictureVideosTest, AnUnchangedVideoSendsNoList) {
   std::unique_ptr<PictureInPictureVideos::Listing> listing =
-      videos_.List("4", &controls_);
+      videos_.List("4", gfx::Rect(), &controls_);
   listing->SetPlaying(true);
   mojo::Remote<mojom::PictureInPictureVideos> shell = Shell();
   RecordingClient client;
@@ -164,7 +164,7 @@ TEST_F(PictureInPictureVideosTest, AnUnchangedVideoSendsNoList) {
 
 TEST_F(PictureInPictureVideosTest, AShellHearsWhereTheVideoIs) {
   std::unique_ptr<PictureInPictureVideos::Listing> listing =
-      videos_.List("4", &controls_);
+      videos_.List("4", gfx::Rect(), &controls_);
   mojo::Remote<mojom::PictureInPictureVideos> shell = Shell();
   RecordingClient client;
   shell->SetClient(client.receiver.BindNewPipeAndPassRemote());
@@ -181,20 +181,19 @@ TEST_F(PictureInPictureVideosTest, AShellHearsWhereTheVideoIs) {
   EXPECT_EQ(video.playback_rate, 1);
 }
 
-TEST_F(PictureInPictureVideosTest, AShellHearsWhereTheVideoCameFrom) {
-  std::unique_ptr<PictureInPictureVideos::Listing> listing =
-      videos_.List("4", &controls_);
+TEST_F(PictureInPictureVideosTest, AShellHearsWhereTheVideoCameFromAtOnce) {
   mojo::Remote<mojom::PictureInPictureVideos> shell = Shell();
   RecordingClient client;
   shell->SetClient(client.receiver.BindNewPipeAndPassRemote());
   RunUntilIdle();
 
-  listing->SetSource(gfx::Rect(8, 120, 640, 360));
-  listing->SetSource(gfx::Rect(8, 120, 640, 360));
+  std::unique_ptr<PictureInPictureVideos::Listing> listing =
+      videos_.List("4", gfx::Rect(8, 120, 640, 360), &controls_);
   RunUntilIdle();
 
+  // The empty list, then the video, whose first list carries its source:
+  // the shell never places it without one.
   ASSERT_EQ(client.heard.size(), 2u);
-  EXPECT_TRUE(client.heard[0][0]->source.IsEmpty());
   EXPECT_EQ(client.heard[1][0]->source, gfx::Rect(8, 120, 640, 360));
 }
 
@@ -205,9 +204,9 @@ TEST_F(PictureInPictureVideosTest, AVideoLeavesTheListWithItsListing) {
   RunUntilIdle();
 
   std::unique_ptr<PictureInPictureVideos::Listing> first =
-      videos_.List("4", &controls_);
+      videos_.List("4", gfx::Rect(), &controls_);
   std::unique_ptr<PictureInPictureVideos::Listing> second =
-      videos_.List("5", &controls_);
+      videos_.List("5", gfx::Rect(), &controls_);
   first.reset();
   RunUntilIdle();
 
@@ -219,17 +218,17 @@ TEST_F(PictureInPictureVideosTest, AVideoLeavesTheListWithItsListing) {
 }
 
 TEST_F(PictureInPictureVideosTest, AnIdIsNeverReused) {
-  videos_.List("4", &controls_).reset();
+  videos_.List("4", gfx::Rect(), &controls_).reset();
 
-  EXPECT_EQ(videos_.List("4", &controls_)->id(), "2");
+  EXPECT_EQ(videos_.List("4", gfx::Rect(), &controls_)->id(), "2");
 }
 
 TEST_F(PictureInPictureVideosTest, TheShellsControlsReachTheVideosPage) {
   RecordingControls other;
   std::unique_ptr<PictureInPictureVideos::Listing> listing =
-      videos_.List("4", &controls_);
+      videos_.List("4", gfx::Rect(), &controls_);
   std::unique_ptr<PictureInPictureVideos::Listing> other_listing =
-      videos_.List("5", &other);
+      videos_.List("5", gfx::Rect(), &other);
   mojo::Remote<mojom::PictureInPictureVideos> shell = Shell();
 
   shell->Act("1", Action::kPause);
@@ -253,7 +252,7 @@ TEST_F(PictureInPictureVideosTest, TheShellsControlsReachTheVideosPage) {
 
 TEST_F(PictureInPictureVideosTest, ASeekBeforeTheStartIsABadMessage) {
   std::unique_ptr<PictureInPictureVideos::Listing> listing =
-      videos_.List("4", &controls_);
+      videos_.List("4", gfx::Rect(), &controls_);
   mojo::Remote<mojom::PictureInPictureVideos> shell = Shell();
 
   mojo::test::BadMessageObserver bad_message;
@@ -266,7 +265,7 @@ TEST_F(PictureInPictureVideosTest, ASeekBeforeTheStartIsABadMessage) {
 
 TEST_F(PictureInPictureVideosTest, AShownVideoDrawsUnderTheShellsFrameSink) {
   std::unique_ptr<PictureInPictureVideos::Listing> listing =
-      videos_.List("4", &controls_);
+      videos_.List("4", gfx::Rect(), &controls_);
   listing->SetSurface(Surface(9, 1));
   mojo::Remote<mojom::PictureInPictureVideos> shell = Shell();
 
@@ -281,7 +280,7 @@ TEST_F(PictureInPictureVideosTest, AShownVideoDrawsUnderTheShellsFrameSink) {
 
 TEST_F(PictureInPictureVideosTest, AShownVideoHearsEachNewSurface) {
   std::unique_ptr<PictureInPictureVideos::Listing> listing =
-      videos_.List("4", &controls_);
+      videos_.List("4", gfx::Rect(), &controls_);
   mojo::Remote<mojom::PictureInPictureVideos> shell = Shell();
   RecordingSurface surface;
   // Shown before the player gave a surface: it hears the first.
@@ -308,7 +307,7 @@ TEST_F(PictureInPictureVideosTest, AShownVideoHearsEachNewSurface) {
 
 TEST_F(PictureInPictureVideosTest, AVideoThatLeavesDropsItsShownSurfaces) {
   std::unique_ptr<PictureInPictureVideos::Listing> listing =
-      videos_.List("4", &controls_);
+      videos_.List("4", gfx::Rect(), &controls_);
   listing->SetSurface(Surface(9, 1));
   mojo::Remote<mojom::PictureInPictureVideos> shell = Shell();
   RecordingSurface surface;
@@ -325,7 +324,7 @@ TEST_F(PictureInPictureVideosTest, AVideoThatLeavesDropsItsShownSurfaces) {
 
 TEST_F(PictureInPictureVideosTest, AnElementThatGoesUndoesItsChild) {
   std::unique_ptr<PictureInPictureVideos::Listing> listing =
-      videos_.List("4", &controls_);
+      videos_.List("4", gfx::Rect(), &controls_);
   listing->SetSurface(Surface(9, 1));
   mojo::Remote<mojom::PictureInPictureVideos> shell = Shell();
   auto surface = std::make_unique<RecordingSurface>();
@@ -342,7 +341,7 @@ TEST_F(PictureInPictureVideosTest, AnElementThatGoesUndoesItsChild) {
 // Viz refuses one child twice under a parent.
 TEST_F(PictureInPictureVideosTest, TwoElementsShowingAVideoShareItsChild) {
   std::unique_ptr<PictureInPictureVideos::Listing> listing =
-      videos_.List("4", &controls_);
+      videos_.List("4", gfx::Rect(), &controls_);
   listing->SetSurface(Surface(9, 1));
   mojo::Remote<mojom::PictureInPictureVideos> shell = Shell();
   auto first = std::make_unique<RecordingSurface>();
@@ -379,7 +378,7 @@ TEST_F(PictureInPictureVideosTest, ShowingAnUnknownVideoDropsTheSurface) {
 // ExternalSurfaceProvider.
 TEST_F(PictureInPictureVideosTest, AParentOutsideTheRendererIsABadMessage) {
   std::unique_ptr<PictureInPictureVideos::Listing> listing =
-      videos_.List("4", &controls_);
+      videos_.List("4", gfx::Rect(), &controls_);
   listing->SetSurface(Surface(9, 1));
   mojo::Remote<mojom::PictureInPictureVideos> shell = Shell();
   RecordingSurface surface;

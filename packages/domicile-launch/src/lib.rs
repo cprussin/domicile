@@ -24,6 +24,10 @@
 //!   [`install_app`]).
 //! - `domicile uninstall-app`: removes that entry and its icon
 //!   ([`uninstall_app`]).
+//! - `domicile mcp`: a Model Context Protocol server that runs the other
+//!   verbs for an agent ([`mcp`]).
+//! - `domicile accessibility`: a native window's AT-SPI tree, and acting on
+//!   its elements ([`accessibility`]).
 //! - Failed runs report the compositor's last output ([`heard`]).
 //! - The compositor's side: its command line ([`arguments`]), the session
 //!   document it publishes ([`session`]), and whether a page connected
@@ -32,10 +36,13 @@
 //! This lives in a library so it can be tested without a GPU or a display. See
 //! `docs/architecture/THE-DOMICILE-BINARY.md`.
 
+pub mod accessibility;
 pub mod address;
+pub mod agent_lending;
 pub mod app_entry;
 pub mod app_host;
 pub mod arguments;
+pub mod browser_profiles;
 pub mod build_progress;
 pub mod cli;
 pub mod command;
@@ -48,8 +55,10 @@ pub mod config_watch;
 pub mod control;
 pub mod control_socket;
 pub mod desktop_entry;
+pub mod dev;
 pub mod electron_app;
 pub mod electron_schemes;
+pub mod electron_wrapper;
 pub mod extensions;
 pub mod folder_chooser;
 pub mod graphical_session;
@@ -59,6 +68,7 @@ pub mod history;
 pub mod idle_inhibit;
 pub mod install_app;
 pub mod listing;
+pub mod mcp;
 pub mod media_devices;
 pub mod milestones;
 pub mod monitor_lending;
@@ -82,5 +92,6 @@ pub mod splash;
 pub mod subscription;
 pub mod supervise;
 pub mod uninstall_app;
+pub mod version;
 pub mod web_address;
 pub mod web_app;

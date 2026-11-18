@@ -7,6 +7,15 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+/** The engine's `ready`, as a fake engine answers hello. */
+export const READY = {
+  chrome_version: "160.0.8155.0",
+  schemes: [],
+  type: "ready",
+  user_agent:
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/160.0.0.0 Safari/537.36",
+};
+
 export type FakeEngine = {
   readonly path: string;
   /** Every request line, parsed. */
@@ -26,7 +35,7 @@ export type FakeEngine = {
  */
 export const startFakeEngine = async (
   answer: (request: { type: string }) => unknown[] = (request) =>
-    request.type === "hello" ? [{ schemes: [], type: "ready" }] : [],
+    request.type === "hello" ? [READY] : [],
 ): Promise<FakeEngine> => {
   const dir = await mkdtemp(join(tmpdir(), "electron-host-engine-"));
   const path = join(dir, "electron.sock");

@@ -85,6 +85,63 @@ base::expected<ElectronRequest, ElectronRefusal> RefuseRequest(std::string why,
       ElectronRefusal{.why = std::move(why), .request = request});
 }
 
+// An open_window's "node", which `request` has.
+base::expected<ElectronNode, std::string> NodeIn(const base::Value& node) {
+  if (!node.is_dict()) {
+    return base::unexpected(
+        "\"node\" must be an object: what the page's Node.js needs");
+  }
+  const base::DictValue& dict = node.GetDict();
+  ElectronNode made;
+  for (auto [key, out] :
+       {std::pair<const char*, std::string*>{"preload", &made.preload},
+        {"resources_path", &made.resources_path},
+        {"app_path", &made.app_path},
+        {"electron_version", &made.electron_version}}) {
+    const base::Value* value = dict.Find(key);
+    if (value == nullptr) {
+      continue;
+    }
+    if (!value->is_string()) {
+      return base::unexpected(
+          base::StrCat({"\"node\"'s \"", key, "\" must be a string"}));
+    }
+    *out = value->GetString();
+  }
+  for (auto [key, out] :
+       {std::pair<const char*, bool*>{"integration", &made.integration},
+        {"context_isolation", &made.context_isolation}}) {
+    const base::Value* value = dict.Find(key);
+    if (value == nullptr) {
+      continue;
+    }
+    if (!value->is_bool()) {
+      return base::unexpected(base::StrCat(
+          {"\"node\"'s \"", key, "\" must be true or false"}));
+    }
+    *out = value->GetBool();
+  }
+  if (!made.preload.empty() &&
+      !base::FilePath(made.preload).IsAbsolute()) {
+    return base::unexpected(
+        "\"node\"'s \"preload\" must be an absolute path");
+  }
+  if (const base::Value* env = dict.Find("env")) {
+    if (!env->is_dict()) {
+      return base::unexpected(
+          "\"node\"'s \"env\" must be an object of strings");
+    }
+    for (const auto [name, value] : env->GetDict()) {
+      if (!value.is_string()) {
+        return base::unexpected(
+            "\"node\"'s \"env\" must be an object of strings");
+      }
+      made.env.emplace_back(name, value.GetString());
+    }
+  }
+  return made;
+}
+
 // The "session" a request names: "" when it names none and may leave it out.
 base::expected<std::string, std::string> SessionIn(
     const base::DictValue& request,
@@ -407,7 +464,9 @@ bool IsWindowRequest(std::string_view type) {
          type == "focus_window" || type == "close_window" ||
          type == "destroy_window" || type == "ipc_send" || type == "ipc_post" ||
          type == "port_post" || type == "port_close" || type == "set_views" ||
-         type == "set_menu_bar" || type == "show_message_box";
+         type == "set_menu_bar" || type == "show_message_box" ||
+         type == "execute_javascript" || type == "set_title" ||
+         type == "set_hidden";
 }
 
 // Entry `entry` of a menu, with only the keys the shell reads, or why it is
@@ -693,6 +752,26 @@ base::expected<ElectronRequest, ElectronRefusal> ParseReply(
   return ElectronReply{
       .invoke = *invoke,
       .answer = result.has_value() ? std::move(*result) : base::Value()};
+}
+
+base::expected<ElectronRequest, ElectronRefusal> ParseExecuteJavaScript(
+    const base::DictValue& request,
+    ElectronWindow window) {
+  const std::optional<int> call = request.FindInt("call");
+  const std::string* code = request.FindString("code");
+  const base::Value* user_gesture = request.Find("user_gesture");
+  if (!call.has_value() || *call < 1) {
+    return Refuse("\"call\" must be a whole number from 1", window);
+  } else if (code == nullptr) {
+    return Refuse("\"code\" must be a string", window);
+  } else if (user_gesture != nullptr && !user_gesture->is_bool()) {
+    return Refuse("\"user_gesture\" must be true or false", window);
+  }
+  return ElectronExecuteJavaScript{
+      .window = window,
+      .call = *call,
+      .code = *code,
+      .user_gesture = user_gesture != nullptr && user_gesture->GetBool()};
 }
 
 base::expected<ElectronRequest, ElectronRefusal> ParseSendToPage(
@@ -989,6 +1068,12 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ParsePermissionHandler(*request);
   } else if (*type == "permission_answer") {
     return ParsePermissionAnswer(*request);
+  } else if (*type == "set_user_agent_fallback") {
+    const std::string* user_agent = request->FindString("user_agent");
+    if (user_agent == nullptr) {
+      return Refuse("\"user_agent\" must be a string");
+    }
+    return ElectronSetUserAgentFallback{.user_agent = *user_agent};
   } else if (!IsWindowRequest(*type)) {
     return Refuse(base::StrCat({"no request is named ", *type}));
   }
@@ -1002,12 +1087,35 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     } else if (*type == "open_window") {
       const base::Value* preload = request->Find("preload");
       const base::Value* view = request->Find("view");
+      const base::Value* title = request->Find("title");
+      const base::Value* hidden = request->Find("hidden");
+      const base::Value* node = request->Find("node");
       base::expected<std::string, std::string> session =
           SessionIn(*request, /*optional=*/true);
+      std::optional<base::expected<ElectronNode, std::string>> node_in;
+      if (node != nullptr) {
+        node_in = NodeIn(*node);
+      }
       if (preload != nullptr && !preload->is_string()) {
         return Refuse("\"preload\" must be a string", *window);
+      } else if (node_in.has_value() && !node_in->has_value()) {
+        return Refuse(std::move(node_in->error()), *window);
+      } else if (node != nullptr && preload != nullptr) {
+        return Refuse(
+            "a page with Node.js loads its preload from a file, "
+            "\"node\"'s \"preload\", not from \"preload\"",
+            *window);
       } else if (view != nullptr && !view->is_bool()) {
         return Refuse("\"view\" must be true or false", *window);
+      } else if (title != nullptr && !title->is_string()) {
+        return Refuse("\"title\" must be a string", *window);
+      } else if (hidden != nullptr && !hidden->is_bool()) {
+        return Refuse("\"hidden\" must be true or false", *window);
+      } else if (view != nullptr && view->GetBool() &&
+                 (title != nullptr || hidden != nullptr)) {
+        return Refuse(
+            "a view has no title or hidden of its own: its window has them",
+            *window);
       } else if (!session.has_value()) {
         return Refuse(std::move(session.error()), *window);
       }
@@ -1015,8 +1123,13 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
           .window = *window,
           .url = std::move(*url),
           .preload = preload ? preload->GetString() : std::string(),
+          .node = node_in.has_value()
+                      ? std::optional<ElectronNode>(std::move(**node_in))
+                      : std::nullopt,
           .session = std::move(*session),
-          .view = view != nullptr && view->GetBool()};
+          .view = view != nullptr && view->GetBool(),
+          .title = title ? title->GetString() : std::string(),
+          .hidden = hidden != nullptr && hidden->GetBool()};
     } else {
       return ElectronLoadUrl{.window = *window, .url = std::move(*url)};
     }
@@ -1030,8 +1143,22 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ElectronFocusWindow{.window = *window};
   } else if (*type == "close_window") {
     return ElectronCloseWindow{.window = *window};
+  } else if (*type == "set_title") {
+    const std::string* title = request->FindString("title");
+    if (title == nullptr) {
+      return Refuse("\"title\" must be a string", *window);
+    }
+    return ElectronSetTitle{.window = *window, .title = *title};
+  } else if (*type == "set_hidden") {
+    const std::optional<bool> hidden = request->FindBool("hidden");
+    if (!hidden.has_value()) {
+      return Refuse("\"hidden\" must be true or false", *window);
+    }
+    return ElectronSetHidden{.window = *window, .hidden = *hidden};
   } else if (*type == "ipc_send") {
     return ParseSendToPage(*request, *window);
+  } else if (*type == "execute_javascript") {
+    return ParseExecuteJavaScript(*request, *window);
   } else if (*type == "ipc_post") {
     return ParsePostToPage(*request, *window);
   } else if (*type == "port_post") {
@@ -1160,6 +1287,29 @@ bool ElectronCookieMatches(const ElectronCookie& cookie,
           cookie.http_only == *filter.http_only);
 }
 
+std::string ElectronJavaScriptResult(
+    ElectronWindow window,
+    int call,
+    const base::expected<base::Value, std::string>& result) {
+  base::DictValue event = Event("javascript_result", window);
+  event.Set("call", call);
+  if (result.has_value()) {
+    event.Set("result", result->Clone());
+    std::string line;
+    if (base::JSONWriter::Write(event, &line)) {
+      line.push_back('\n');
+      return line;
+    }
+    // A value of the page's that JSON can't carry is the page's to fix,
+    // as Electron's structured clone refuses what it can't carry.
+    event.Remove("result");
+    event.Set("error", "the script's result can't be carried to the app");
+    return Line(std::move(event));
+  }
+  event.Set("error", result.error());
+  return Line(std::move(event));
+}
+
 std::string ElectronSessionResult(
     int call,
     const base::expected<base::Value, std::string>& result) {
@@ -1191,7 +1341,8 @@ base::DictValue ElectronCookieValue(const ElectronCookie& cookie) {
   return value;
 }
 
-std::string ElectronReady(const std::vector<ElectronScheme>& schemes) {
+std::string ElectronReady(const std::vector<ElectronScheme>& schemes,
+                          const ElectronEngineInfo& engine) {
   base::ListValue registered;
   for (const ElectronScheme& scheme : schemes) {
     base::ListValue privileges;
@@ -1205,6 +1356,8 @@ std::string ElectronReady(const std::vector<ElectronScheme>& schemes) {
   base::DictValue event;
   event.Set("type", "ready");
   event.Set("schemes", std::move(registered));
+  event.Set("user_agent", engine.user_agent);
+  event.Set("chrome_version", engine.chrome_version);
   return Line(std::move(event));
 }
 
@@ -1229,6 +1382,10 @@ std::string ElectronWindowLoaded(ElectronWindow window) {
   return Line(Event("window_loaded", window));
 }
 
+std::string ElectronWindowDomReady(ElectronWindow window) {
+  return Line(Event("window_dom_ready", window));
+}
+
 std::string ElectronTitleChanged(ElectronWindow window,
                                  std::string_view title) {
   base::DictValue event = Event("title_changed", window);
@@ -1238,6 +1395,10 @@ std::string ElectronTitleChanged(ElectronWindow window,
 
 std::string ElectronWindowClosed(ElectronWindow window) {
   return Line(Event("window_closed", window));
+}
+
+std::string ElectronCloseAsked(ElectronWindow window) {
+  return Line(Event("close_asked", window));
 }
 
 std::string ElectronWindowResized(ElectronWindow window,

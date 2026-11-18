@@ -109,8 +109,15 @@ export const Inbox = {
        * The app window it opens in, if any, which the launcher lists: app
        * `appId`'s, at `url`. With `pageNotifies`, its page notifies what the
        * inbox notifies already, so the page's are cleared as they arrive.
+       * With `profile`, it opens in that browser profile rather than its
+       * site's.
        */
-      app?: { appId: string; url: string; pageNotifies?: boolean };
+      app?: {
+        appId: string;
+        url: string;
+        pageNotifies?: boolean;
+        profile?: string;
+      };
     },
   ) => ({ ...inbox, kind: InboxKind.Watched as const }),
   /**
@@ -125,6 +132,11 @@ export const Inbox = {
       appId: string;
       /** The page's address. */
       url: string;
+      /**
+       * The id of the browser profile its window opens in, such as `work`.
+       * By default, the one its site opens in.
+       */
+      profile?: string;
       /**
        * Calls `onUnread` with the page's unread conversations, read with
        * `countMatches`, which counts the window's elements matching a CSS

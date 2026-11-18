@@ -50,9 +50,15 @@ import { PagePopup } from "./browser/PagePopup";
 import { PageProblem } from "./browser/PageProblem";
 import { PageTooltip } from "./browser/PageTooltip";
 import { PageViews } from "./browser/PageViews";
+import { pageHistoryFor } from "./browser/page-history";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useAppMenuBar } from "./browser/useAppMenuBar";
 import { useAppMessageBox } from "./browser/useAppMessageBox";
+import {
+  useBrowserProfile,
+  usePinnedSite,
+  useProfileExtensions,
+} from "./browser/useBrowserProfile";
 import { useFileRequest } from "./browser/useFileRequest";
 import { usePageMenu } from "./browser/usePageMenu";
 import { useSitePermissions } from "./browser/useSitePermissions";
@@ -303,6 +309,12 @@ export const BrowserWindow = ({
   // the shell did not start (links, redirects, form posts).
   const shown = useShownPage(view);
   const address = addressOf(shown.url, sent);
+  const pageProfile = useBrowserProfile(domicile, window);
+  const pinned = usePinnedSite(domicile, address);
+  const profileExtensions = useProfileExtensions(
+    domicile,
+    pageProfile?.profile,
+  );
   usePageIcon(view, window, onIcon);
   usePageDescription(view, window, onDescription);
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
@@ -326,9 +338,11 @@ export const BrowserWindow = ({
     () => foldersOf(domicile.files),
     [domicile, foldersOf],
   );
-  // A pending file request from the page. The engine draws no dialog; see
-  // `useFileRequest`.
-  const asking = useFileRequest(view, folders);
+  // A pending file request from the page, or from one of an Electron app's
+  // views over it, as an upload or a download in either asks for a path. The
+  // request bubbles, so the element around them all hears it. The engine
+  // draws no dialog; see `useFileRequest`.
+  const asking = useFileRequest(page, folders);
   // The file picker's input. While open it takes the window's keyboard.
   const [pickerBox, setPickerBox] = useState<HTMLInputElement | null>(null);
   // Whether the find bar is open, and its input.
@@ -682,10 +696,13 @@ export const BrowserWindow = ({
     }
   };
 
-  // Opens a link from the page in another browser window, private when this
-  // one is.
+  // Opens a link from the page in another browser window: in this one's
+  // profile when it is private, so the link stays private, and otherwise in
+  // its site's.
   const openWindow = (url: string): void => {
-    if (isPrivate) {
+    if (isPrivate && pageProfile !== undefined) {
+      domicile.browser.open(url, { profile: pageProfile.profile.id });
+    } else if (isPrivate) {
       domicile.browser.openPrivate(url);
     } else {
       domicile.browser.open(url);
@@ -796,6 +813,8 @@ export const BrowserWindow = ({
             address={address}
             canGoBack={canGoBack}
             canGoForward={canGoForward}
+            // Cheap, so read each render rather than memoized with the view.
+            history={view === null ? undefined : pageHistoryFor(view)}
             holdZoom={zoomShown}
             isPrivate={isPrivate}
             loading={loading}
@@ -822,6 +841,9 @@ export const BrowserWindow = ({
                 loaded.setSitePermission(permission, setting);
               });
             }}
+            onShowAllHistory={() => {
+              domicile.processes.launch(["domicile-history"]);
+            }}
             onStop={drive((loaded) => {
               loaded.stop();
             })}
@@ -835,6 +857,46 @@ export const BrowserWindow = ({
               run(BrowserCommand.ZoomReset);
             }}
             permissionRequest={permissionRequest}
+            profile={
+              pageProfile === undefined
+                ? undefined
+                : {
+                    ...pageProfile,
+                    extensions: profileExtensions,
+                    onMove: (id) => {
+                      domicile.browser.reopen(window, id);
+                    },
+                    onOpenInNew: (id) => {
+                      domicile.browser.open(address, { profile: id });
+                    },
+                    onPin: (id) => {
+                      if (pinned !== undefined) {
+                        domicile.browser
+                          .pin(pinned.site, id)
+                          .catch((error: unknown) => {
+                            // biome-ignore lint/suspicious/noConsole: the menu offers no pin the engine refuses, so one is a list a change behind
+                            console.error(
+                              `Couldn't pin ${pinned.site} to profile ${id}`,
+                              error,
+                            );
+                          });
+                      }
+                    },
+                    onSwitchExtension: (id, on) => {
+                      const { profile } = pageProfile;
+                      domicile.browser
+                        .setExtensionEnabled(profile.id, id, on)
+                        .catch((error: unknown) => {
+                          // biome-ignore lint/suspicious/noConsole: the menu offers no switch the engine refuses, so one is a list a change behind
+                          console.error(
+                            `Couldn't switch ${id} ${on ? "on" : "off"} in profile ${profile.id}`,
+                            error,
+                          );
+                        });
+                    },
+                    pinned,
+                  }
+            }
             security={shown.security}
             sitePermissions={sitePermissions}
             visited={shown.visited}

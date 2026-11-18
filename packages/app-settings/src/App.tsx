@@ -16,6 +16,7 @@ import type { SettingsFiles, SettingsHost, Target } from "./host";
 import { Notice } from "./Notice";
 import { Page } from "./Page";
 import { PAGES, PageId } from "./pages";
+import { AgentsPage } from "./pages/AgentsPage";
 import { AppearancePage } from "./pages/AppearancePage";
 import { CodePage } from "./pages/CodePage";
 import { DisplaysPage } from "./pages/DisplaysPage";
@@ -25,6 +26,7 @@ import { LauncherPage } from "./pages/LauncherPage";
 import { PermissionsPage } from "./pages/PermissionsPage";
 import { PowerPage } from "./pages/PowerPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
+import { ProfilesPage } from "./pages/ProfilesPage";
 import { ShellPage } from "./pages/ShellPage";
 import { SiteDataPage } from "./pages/SiteDataPage";
 import { StartupPage } from "./pages/StartupPage";
@@ -167,6 +169,17 @@ const PageContent = ({
           report={report}
         />
       );
+    case PageId.Profiles:
+      return (
+        <ProfilesPage
+          {...named}
+          editor={editor}
+          extensions={extensions}
+          host={host}
+          readOnly={state === undefined ? undefined : whyReadOnly(state)}
+          report={report}
+        />
+      );
     case PageId.Permissions:
       return (
         <PermissionsPage
@@ -178,6 +191,8 @@ const PageContent = ({
       );
     case PageId.SiteData:
       return <SiteDataPage {...named} host={host} report={report} />;
+    case PageId.Agents:
+      return <AgentsPage {...named} host={host} report={report} />;
     case PageId.Code:
       return files === undefined ? (
         <Page {...named} />

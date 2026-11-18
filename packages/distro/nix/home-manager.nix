@@ -304,6 +304,11 @@
       The shell chooses when to dim before blanking, with
       `session.idleBeforeBlanking`. See docs/SHELL-IDLE-AND-LOCK.md.
     '';
+    "extensions.settings.*.private" = ''
+      A private browser profile's extension switches say what runs in
+      private windows: `browser.profiles.<id>.extensions`. See
+      docs/architecture/BROWSER-PROFILES.md.
+    '';
   };
 
   removed = import ./removed-settings.nix {inherit lib;} removedSettings;
@@ -469,12 +474,7 @@ in {
                 that cannot use a setting refuses it.
               '';
               type = lib.types.attrsOf (lib.types.submodule {
-                options = {
-                  private = lib.mkOption {
-                    description = "Runs in private windows. Chrome's default is no.";
-                    type = lib.types.nullOr lib.types.bool;
-                    default = null;
-                  };
+                options = lib.recursiveUpdate (removed.optionsUnder "extensions.settings.*") {
                   file_access = lib.mkOption {
                     description = "Runs on local files (`file://` pages). Chrome's default is no.";
                     type = lib.types.nullOr lib.types.bool;
@@ -499,7 +499,7 @@ in {
               default = {};
               example = {
                 eimadpbcbfnmbkopoojfekhnkhdbieeh = {
-                  private = true;
+                  file_access = true;
                   site_access = ["github.com"];
                 };
               };

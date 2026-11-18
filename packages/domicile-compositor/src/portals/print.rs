@@ -230,6 +230,8 @@ impl Print {
             | PortalAnswer::ScreenshotWindow { .. }
             | PortalAnswer::ScreenshotBrowserWindow { .. }
             | PortalAnswer::PickColor { .. }
+            | PortalAnswer::Agent { .. }
+            | PortalAnswer::Change
             | PortalAnswer::GlobalShortcuts { .. }
             | PortalAnswer::Pressed
             | PortalAnswer::Released

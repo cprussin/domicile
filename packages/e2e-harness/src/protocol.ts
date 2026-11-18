@@ -365,6 +365,8 @@ const windowListSchema = z.looseObject({
   windows: z.array(
     z.looseObject({
       app: z.string().nullable(),
+      // A browser window's id in the engine, for `domicile devtools`.
+      engine_id: z.string().nullable(),
       focused: z.boolean(),
       // The window's `ext-foreign-toplevel-list-v1` identifier.
       id: z.string().min(1),
@@ -451,7 +453,6 @@ const extensionsSchema = z.looseObject({
     z.string(),
     z.looseObject({
       file_access: z.boolean().optional(),
-      private: z.boolean().optional(),
       site_access: z
         .union([z.enum(["on_click", "all_sites"]), z.array(z.string())])
         .optional(),
@@ -461,6 +462,25 @@ const extensionsSchema = z.looseObject({
   type: z.literal("extensions"),
   unpacked: z.array(z.string()),
   web_store: z.array(z.string()),
+});
+
+// The browser profiles and the profile each site opens in: the config's
+// `browser`. Sent with the handshake and on config reload. The browser process
+// reads it; see `docs/architecture/BROWSER-PROFILES.md`.
+const browserProfilesSchema = z.looseObject({
+  default_private_profile: z.string(),
+  default_profile: z.string(),
+  profiles: z.array(
+    z.looseObject({
+      color: z.string(),
+      extensions: z.array(z.string()).nullable(),
+      id: z.string(),
+      name: z.string(),
+      private: z.boolean(),
+    }),
+  ),
+  sites: z.record(z.string(), z.string()),
+  type: z.literal("browser_profiles"),
 });
 
 // Host names of sites the browser draws dark while the theme is dark: the
@@ -671,6 +691,30 @@ const windowActedSchema = z.looseObject({
 const displayConfiguredSchema = z.looseObject({
   refused: z.string().optional(),
   type: z.literal("display_configured"),
+});
+
+// Answers `shoot_desk` on the asking connection only, for `domicile
+// screenshot --fit`: what the PNG shows, or why there is none.
+const deskShotSchema = z.looseObject({
+  refused: z.string().optional(),
+  shot: z
+    .looseObject({
+      height: z.number(),
+      place: z.looseObject({
+        position: z.tuple([z.number(), z.number()]),
+        size: z.tuple([z.number(), z.number()]),
+      }),
+      width: z.number(),
+    })
+    .optional(),
+  type: z.literal("desk_shot"),
+});
+
+// Answers `emulate` on the asking connection only, for `domicile pointer`,
+// `key` and `type`: why not, or nothing.
+const emulatedSchema = z.looseObject({
+  refused: z.string().optional(),
+  type: z.literal("emulated"),
 });
 
 const boundShortcutSchema = z.looseObject({
@@ -933,8 +977,11 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   inputListSchema,
   windowActedSchema,
   displayConfiguredSchema,
+  deskShotSchema,
+  emulatedSchema,
   browserToplevelIdsSchema,
   keymapSchema,
+  browserProfilesSchema,
   extensionsSchema,
   forceDarkSchema,
   inputMethodSchema,

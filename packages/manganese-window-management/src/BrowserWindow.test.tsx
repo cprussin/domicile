@@ -121,24 +121,31 @@ const progresses = (element: HTMLWebViewElement, progress: number): void => {
 };
 
 /**
- * Fires a file chooser request, recording each answer in `answers`. Cancelable
+ * Fires a file chooser request, recording each answer in `answers`. It bubbles,
+ * as the engine's does, and is cancelable
  * because taking it calls `preventDefault()`.
  */
 const asksForAFile = (element: HTMLWebViewElement, answers: string[]): void => {
   fireEvent(
     element,
-    Object.assign(new Event(WEBVIEW_FILE_CHOOSER_EVENT, { cancelable: true }), {
-      accept: [],
-      cancel: () => {
-        answers.push("cancel");
+    Object.assign(
+      new Event(WEBVIEW_FILE_CHOOSER_EVENT, {
+        bubbles: true,
+        cancelable: true,
+      }),
+      {
+        accept: [],
+        cancel: () => {
+          answers.push("cancel");
+        },
+        choose: (paths: readonly string[]) => {
+          answers.push(`choose ${paths.join(",")}`);
+        },
+        home: "/home/someone",
+        mode: "open",
+        suggestedName: "",
       },
-      choose: (paths: readonly string[]) => {
-        answers.push(`choose ${paths.join(",")}`);
-      },
-      home: "/home/someone",
-      mode: "open",
-      suggestedName: "",
-    }),
+    ),
   );
 };
 
@@ -1651,6 +1658,63 @@ describe("BrowserWindow", () => {
       }
 
       expect(calls).toStrictEqual(["back", "forward"]);
+    });
+
+    // `AddressBar` tests the menus. This checks they read the view's history
+    // and open the History app.
+    it("opens the History app from Back's menu", async () => {
+      const launched = new Promise<readonly string[]>((resolve) => {
+        const { container } = render(
+          <BrowserWindow
+            behindPanel={false}
+            clickThrough={false}
+            covered={false}
+            depth={0}
+            domicile={{
+              ...silentDomicile,
+              processes: { ...silentDomicile.processes, launch: resolve },
+            }}
+            dragging={false}
+            focused
+            frame={FRAME}
+            fullscreen={false}
+            motion="resting"
+            onDescription={noDescription}
+            onFocusRequest={() => undefined}
+            onIcon={noIcon}
+            onMotionEnded={nothingEnded}
+            onPageFullscreen={noFullscreen}
+            onReach={() => undefined}
+            rect={ON_SCREEN}
+            resizing={false}
+            url="https://example.com"
+            window="1"
+          />,
+        );
+        const element = view(container);
+        Object.assign(element, {
+          history: () =>
+            Promise.resolve({
+              back: [
+                {
+                  favicon: "",
+                  id: 1,
+                  title: "One",
+                  url: "https://example.com/1",
+                },
+              ],
+              forward: [],
+            }),
+        });
+        historyReaches(element, true, false);
+      });
+
+      fireEvent.contextMenu(control("Back"));
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: "Show full history" }),
+      );
+
+      expect(await launched).toStrictEqual(["domicile-history"]);
     });
   });
 
@@ -3355,6 +3419,26 @@ describe("an Electron app's menu bar", () => {
     });
 
     expect(clicks()).toEqual([["clickBrowserWindowMenu", "1", 2]]);
+  });
+
+  // An Electron app's page is often in a view, as Claude's is: its uploads
+  // and downloads ask from there.
+  it("asks for a file one of the app's views wants, as for the window's page", async () => {
+    const { host, rendered } = appWindow();
+    act(() => {
+      host.openBrowser("https://claude.test/chat", { parent: "1" });
+    });
+    const chat = rendered.container.querySelector<HTMLWebViewElement>(
+      'webview[window="2"]',
+    );
+    expect(chat).not.toBeNull();
+    const answers: string[] = [];
+
+    asksForAFile(chat ?? view(rendered.container), answers);
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(pickerBox()).toBeInTheDocument();
+    expect(answers).toStrictEqual([]);
   });
 
   it("leaves the browser's keys pressed in a view alone, as they act on the window's page", () => {

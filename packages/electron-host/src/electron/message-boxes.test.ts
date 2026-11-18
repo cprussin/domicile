@@ -129,3 +129,30 @@ describe("createMessageBoxes", () => {
     }).toThrow("which nothing asked");
   });
 });
+
+describe("boxWindow", () => {
+  const window = (id: number, open: boolean, destroyed = false) => ({
+    id,
+    isDestroyed: () => destroyed,
+    isOpen: () => open,
+  });
+
+  it("goes over the window named, else the latest with a page, else none", async () => {
+    const { boxWindow } = await import("./message-boxes");
+    const windows = (...all: ReturnType<typeof window>[]) => ({
+      getAllWindows: () => all,
+    });
+
+    expect(
+      boxWindow({ id: 1 }, windows(window(1, true), window(2, true))),
+    ).toBe(1);
+    expect(
+      boxWindow({ id: 3 }, windows(window(2, true), window(3, false))),
+    ).toBe(2);
+    expect(
+      boxWindow(undefined, windows(window(2, true), window(3, true, true))),
+    ).toBe(2);
+    expect(boxWindow({ id: 1 }, windows(window(1, false)))).toBeUndefined();
+    expect(() => boxWindow({}, windows())).toThrow(TypeError);
+  });
+});

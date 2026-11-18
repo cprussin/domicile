@@ -9,8 +9,8 @@
 # claim's refusals.
 #
 # Also checks what the guard cannot check at runtime: its id is the tray
-# fixture's, and the fixture can go into private windows but asks for no file
-# access, so the config's file access is the only reason to refuse it.
+# fixture's, and the fixture asks for no file access, so the config's file
+# access is the only reason to refuse it.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -93,8 +93,6 @@ expect "an unknown leg fails" "fail" "$(verdict "")"
 ID="$(sed -n 's/^readonly ID="\(.*\)"$/\1/p' "$GUARD")"
 TRAY_ID="$(sed -n 's/^readonly ID="\(.*\)"$/\1/p' "$SCRIPTS/guard-extension-tray.sh")"
 expect "the guard's id is the tray fixture's" "$TRAY_ID" "$ID"
-expect "the fixture names no incognito mode, so it may go into private windows" \
-  "no" "$(grep -qF '"incognito"' "$FIXTURE/manifest.json" && echo yes || echo no)"
 expect "and asks for no file or host access, so only the config owns its file access" \
   "no" "$(grep -qE 'file://|host_permissions|<all_urls>' "$FIXTURE/manifest.json" && echo yes || echo no)"
 

@@ -1,14 +1,26 @@
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 import type { Options } from "@domicile-desktop/sdk/options";
 import { defineOptions, option } from "@domicile-desktop/sdk/options";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { App } from "./App";
 import { hostExtensions } from "./extensions";
 import type { FakeHostState } from "./fake-host";
 import { fakeHost } from "./fake-host";
-import type { InstalledExtension, Monitor, SettingsFiles } from "./host";
+import type {
+  BrowserProfiles,
+  InstalledExtension,
+  KnownAgents,
+  Monitor,
+  SettingsFiles,
+} from "./host";
 
 const CONFIG_PATH = "/home/me/.config/domicile/domicile.json";
 const SHELL_PATH = "/home/me/.config/domicile/shell.ts";
@@ -88,10 +100,11 @@ const INSTALLED: InstalledExtension[] = [
   {
     description: "An efficient content blocker.",
     enabled: true,
+    icon: undefined,
     id: UBLOCK,
     name: "uBlock Origin Lite",
     optionsUrl: `chrome-extension://${UBLOCK}/dashboard.html`,
-    settings: { file_access: false, private: false, site_access: "all_sites" },
+    settings: { file_access: false, site_access: "all_sites" },
     version: "2025.1",
   },
 ];
@@ -104,14 +117,20 @@ const ublock = async () =>
 const renderApp = async (
   page: string,
   {
+    agents,
     chosen = "/home/me/src/my-extension",
     config = {},
     configExtensions = [],
     monitors,
     options,
+    profiles,
     refuse,
     writable = true,
   }: {
+    /** The agents in now and remembered; none by default. */
+    agents?: KnownAgents;
+    /** The browser profiles the engine runs. */
+    profiles?: BrowserProfiles;
     /** The folder the picker returns; `null` for a canceled picker. */
     chosen?: string | null;
     config?: Record<string, unknown>;
@@ -125,12 +144,14 @@ const renderApp = async (
   } = {},
 ) => {
   const host = fakeHost({
+    agents: structuredClone(agents),
     chosen: chosen ?? undefined,
     configExtensions,
     files: files(config, writable, options),
     installed: structuredClone(INSTALLED),
     media: structuredClone(MEDIA),
     monitors,
+    profiles: structuredClone(profiles),
     refuse,
     siteData: structuredClone(SITE_DATA),
     sites: structuredClone(SITES),
@@ -148,6 +169,55 @@ const written = (writes: { file: string; text: string }[]) => {
   expect(last?.file).toBe("config");
   return JSON.parse(last?.text ?? "");
 };
+
+/** The config's profiles, as the Profiles page tests start them. */
+const BROWSER = {
+  default_private_profile: "private",
+  default_profile: "personal",
+  profiles: {
+    personal: { color: "#0d9488", name: "Personal" },
+    private: { color: "#a78bfa", name: "Private", private: true },
+    work: { color: "#d97706", extensions: [UBLOCK], name: "Work" },
+  },
+  sites: { "*.acme.com": "work" },
+};
+
+/** What the engine runs for {@link BROWSER}, with a site the user pinned. */
+const PROFILES: BrowserProfiles = {
+  defaultPrivateProfile: "private",
+  defaultProfile: "personal",
+  profiles: [
+    {
+      color: "#0d9488",
+      extensions: [{ enabled: false, id: UBLOCK, locked: false }],
+      id: "personal",
+      name: "Personal",
+      private: false,
+    },
+    {
+      color: "#d97706",
+      extensions: [{ enabled: true, id: UBLOCK, locked: true }],
+      id: "work",
+      name: "Work",
+      private: false,
+    },
+    {
+      color: "#a78bfa",
+      extensions: [{ enabled: false, id: UBLOCK, locked: false }],
+      id: "private",
+      name: "Private",
+      private: true,
+    },
+  ],
+  sites: [
+    { pinned: false, profile: "work", site: "*.acme.com" },
+    { pinned: true, profile: "work", site: "github.com/acme" },
+  ],
+};
+
+/** A profile's card on the Profiles page. */
+const profileCard = async (name: string) =>
+  within(await screen.findByRole("region", { name }));
 
 const choose = async (
   user: ReturnType<typeof userEvent.setup>,
@@ -688,12 +758,12 @@ describe(App, () => {
       const { user } = await renderApp("Extensions");
       const row = await ublock();
       expect(
-        row.getByRole("switch", { name: "Allow in private windows" }),
+        row.getByRole("switch", { name: "Allow on local files" }),
       ).toBeVisible();
       await user.click(row.getByRole("switch", { name: "uBlock Origin Lite" }));
       await waitFor(() => {
         expect(
-          row.queryByRole("switch", { name: "Allow in private windows" }),
+          row.queryByRole("switch", { name: "Allow on local files" }),
         ).not.toBeInTheDocument();
       });
     });
@@ -709,16 +779,16 @@ describe(App, () => {
       ).not.toBeInTheDocument();
     });
 
-    it("allows an extension in private windows", async () => {
+    it("allows an extension on local files", async () => {
       const { host, user } = await renderApp("Extensions");
       await user.click(
         (await ublock()).getByRole("switch", {
-          name: "Allow in private windows",
+          name: "Allow on local files",
         }),
       );
       await waitFor(() => {
         expect(host.configured).toEqual([
-          { id: UBLOCK, settings: { private: true } },
+          { id: UBLOCK, settings: { file_access: true } },
         ]);
       });
       expect(host.writes).toEqual([]);
@@ -726,16 +796,18 @@ describe(App, () => {
 
     it("changes a setting the config sets in the config", async () => {
       const { host, user } = await renderApp("Extensions", {
-        config: { extensions: { settings: { [UBLOCK]: { private: true } } } },
+        config: {
+          extensions: { settings: { [UBLOCK]: { file_access: true } } },
+        },
       });
       const allowed = (await ublock()).getByRole("switch", {
-        name: "Allow in private windows",
+        name: "Allow on local files",
       });
       expect(allowed).toBeChecked();
       await user.click(allowed);
       await waitFor(() => {
         expect(written(host.writes)).toEqual({
-          extensions: { settings: { [UBLOCK]: { private: false } } },
+          extensions: { settings: { [UBLOCK]: { file_access: false } } },
         });
       });
       expect(host.configured).toEqual([]);
@@ -743,12 +815,14 @@ describe(App, () => {
 
     it("leaves a setting a read-only config sets", async () => {
       await renderApp("Extensions", {
-        config: { extensions: { settings: { [UBLOCK]: { private: true } } } },
+        config: {
+          extensions: { settings: { [UBLOCK]: { file_access: true } } },
+        },
         writable: false,
       });
       expect(
         (await ublock()).getByRole("switch", {
-          name: "Allow in private windows",
+          name: "Allow on local files",
         }),
       ).toHaveAttribute("aria-disabled", "true");
     });
@@ -806,12 +880,14 @@ describe(App, () => {
 
     it("reads a config that sets a setting to null as leaving it", async () => {
       await renderApp("Extensions", {
-        config: { extensions: { settings: { [UBLOCK]: { private: null } } } },
+        config: {
+          extensions: { settings: { [UBLOCK]: { file_access: null } } },
+        },
         writable: false,
       });
       expect(
         (await ublock()).getByRole("switch", {
-          name: "Allow in private windows",
+          name: "Allow on local files",
         }),
       ).not.toHaveAttribute("aria-disabled", "true");
     });
@@ -993,6 +1069,224 @@ describe(App, () => {
       });
       await waitFor(() => {
         expect(screen.queryByText("mail.example")).not.toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("agents", () => {
+    const AGENTS: KnownAgents = {
+      connected: [
+        {
+          agent: "Claude Code",
+          reach: {
+            type: "windows",
+            windows: [
+              { id: "n1", title: "Notes" },
+              { id: "w1", title: "Pull requests" },
+            ],
+          },
+          session: 4,
+        },
+      ],
+      remembered: [{ agent: "Codex", lastUsedMs: Date.now() }],
+    };
+
+    it("lists each agent connected now, then those remembered", async () => {
+      await renderApp("Agents", { agents: AGENTS });
+      expect(
+        await screen.findByText("Connected now · Notes and Pull requests"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Remembered · Your whole desktop · Last used today"),
+      ).toBeInTheDocument();
+    });
+
+    it("stops a connected agent and forgets a remembered one", async () => {
+      const { host, user } = await renderApp("Agents", { agents: AGENTS });
+      await user.click(
+        await screen.findByRole("button", { name: "Stop Claude Code" }),
+      );
+      await user.click(screen.getByRole("button", { name: "Forget Codex" }));
+      await waitFor(() => {
+        expect(screen.queryByText("Codex")).not.toBeInTheDocument();
+      });
+      expect(host.state.agents).toEqual({ connected: [], remembered: [] });
+      expect(
+        screen.getByText(/No agent is connected or remembered/u),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("profiles", () => {
+    const openProfiles = (writable = true) =>
+      renderApp("Profiles", {
+        config: { browser: BROWSER },
+        profiles: PROFILES,
+        writable,
+      });
+
+    it("switches an extension in one profile through the desktop", async () => {
+      const { host, user } = await openProfiles();
+      const personal = await profileCard("Personal");
+      await user.click(
+        personal.getByRole("switch", {
+          name: "uBlock Origin Lite in Personal",
+        }),
+      );
+      await waitFor(() => {
+        expect(host.switched).toEqual([
+          { enabled: true, id: UBLOCK, profile: "personal" },
+        ]);
+      });
+      expect(host.writes).toEqual([]);
+    });
+
+    it("switches an extension the config locks in the config", async () => {
+      const { host, user } = await openProfiles();
+      const work = await profileCard("Work");
+      await user.click(
+        work.getByRole("switch", { name: "uBlock Origin Lite in Work" }),
+      );
+      await waitFor(() => {
+        expect(written(host.writes).browser.profiles.work.extensions).toEqual(
+          [],
+        );
+      });
+      expect(host.switched).toEqual([]);
+    });
+
+    it("locks what the config sets when the config is read-only", async () => {
+      await openProfiles(false);
+      const work = await profileCard("Work");
+      expect(
+        work.getByRole("switch", { name: "uBlock Origin Lite in Work" }),
+      ).toHaveAttribute("aria-disabled", "true");
+      expect(
+        screen.getByRole("combobox", { name: "Where *.acme.com opens" }),
+      ).toBeDisabled();
+      expect(
+        screen.queryByRole("button", { name: "Remove *.acme.com" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("combobox", { name: "Where github.com/acme opens" }),
+      ).toBeEnabled();
+      expect(
+        screen.queryByRole("button", { name: "Make default" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("adds a site through the desktop", async () => {
+      const { host, user } = await openProfiles();
+      await user.type(
+        await screen.findByRole("textbox", { name: "Add a site" }),
+        "Chase.com",
+      );
+      await choose(user, "Profile to open it in", "Private");
+      await user.click(screen.getByRole("button", { name: "Add" }));
+      await waitFor(() => {
+        expect(host.pinned).toEqual([
+          { profile: "private", site: "chase.com" },
+        ]);
+      });
+      expect(
+        await screen.findByRole("combobox", { name: "Where chase.com opens" }),
+      ).toHaveTextContent("Private");
+    });
+
+    it("refuses a site that is already listed, pointing at its row", async () => {
+      const { host, user } = await openProfiles();
+      await user.type(
+        await screen.findByRole("textbox", { name: "Add a site" }),
+        "github.com/acme",
+      );
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "github.com/acme already opens in Work. Change its profile in its row above.",
+      );
+      expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+      expect(host.pinned).toEqual([]);
+    });
+
+    it("moves the config's site in the config and the user's through the desktop", async () => {
+      const { host, user } = await openProfiles();
+      await screen.findByRole("combobox", { name: "Where *.acme.com opens" });
+      await choose(user, "Where *.acme.com opens", "Private");
+      await waitFor(() => {
+        expect(written(host.writes).browser.sites).toEqual({
+          "*.acme.com": "private",
+        });
+      });
+      await user.click(
+        screen.getByRole("button", { name: "Remove github.com/acme" }),
+      );
+      await waitFor(() => {
+        expect(host.pinned).toEqual([
+          { profile: "personal", site: "github.com/acme" },
+        ]);
+      });
+    });
+
+    it("makes a profile the default, unlisting its sites", async () => {
+      const { host, user } = await openProfiles();
+      const work = await profileCard("Work");
+      await user.click(work.getByRole("button", { name: "Make default" }));
+      await waitFor(() => {
+        const { browser } = written(host.writes);
+        expect(browser.default_profile).toBe("work");
+        expect(browser.sites).toEqual({});
+      });
+    });
+
+    it("moves a profile in the config's order", async () => {
+      const { host, user } = await openProfiles();
+      const personal = await profileCard("Personal");
+      expect(
+        personal.getByRole("button", { name: "Move Personal up" }),
+      ).toBeDisabled();
+      const work = await profileCard("Work");
+      await user.click(work.getByRole("button", { name: "Move Work up" }));
+      // Unordered, the config lists them by id: personal, private, work.
+      await waitFor(() => {
+        expect(written(host.writes).browser.order).toEqual([
+          "personal",
+          "work",
+          "private",
+        ]);
+      });
+    });
+
+    it("sets any color from the well", async () => {
+      const { host } = await openProfiles();
+      const work = await profileCard("Work");
+      const well = work.getByLabelText("Work's color, any color");
+      fireEvent.change(well, { target: { value: "#2bd96b" } });
+      fireEvent.blur(well);
+      await waitFor(() => {
+        expect(written(host.writes).browser.profiles.work?.color).toBe(
+          "#2bd96b",
+        );
+      });
+    });
+
+    it("adds and removes a profile in the config", async () => {
+      const { host, user } = await openProfiles();
+      await user.type(
+        await screen.findByRole("textbox", { name: "New profile's name" }),
+        "Side Project",
+      );
+      await user.click(screen.getByRole("button", { name: "Add profile" }));
+      await waitFor(() => {
+        expect(written(host.writes).browser.profiles["side-project"]).toEqual({
+          color: "#06b6d4",
+          name: "Side Project",
+          private: false,
+        });
+      });
+      const work = await profileCard("Work");
+      await user.click(work.getByRole("button", { name: "Remove Work" }));
+      await waitFor(() => {
+        const { browser } = written(host.writes);
+        expect(Object.keys(browser.profiles)).not.toContain("work");
+        expect(browser.sites).toEqual({});
       });
     });
   });

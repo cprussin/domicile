@@ -78,6 +78,10 @@ done
 # the default paths, so the engine needs no wrapper, unlike in `flake.nix`.
 cp -a "$ENGINE" "$LIBEXEC/engine"
 
+# What `domicile --version` prints first, as `domicilePackage` in `flake.nix`.
+VERSION="$(jq -er .version "$WORKSPACE/packages/domicile/package.json")"
+printf 'domicile %s\ncommit   %s\n' "$VERSION" "$REV" >"$LIBEXEC/version"
+
 install -m 755 "$BUN" "$LIBEXEC/bun"
 install -m 755 "$ROOT/packages/distro/builder" "$LIBEXEC/builder"
 install -m 755 "$ROOT/packages/distro/electron-host" "$LIBEXEC/electron-host"

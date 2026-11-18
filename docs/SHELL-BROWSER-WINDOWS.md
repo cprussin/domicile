@@ -85,6 +85,9 @@ plus.addEventListener("click", () => {
 - **`browser.countMatches(id, selector)`** counts the elements matching a CSS
   selector in window `id`'s page, as a `<webview>`'s `countMatches` does. A
   hidden window answers.
+- **`browser.clickMatch(id, selector)`** clicks the first shown element matching
+  a CSS selector in window `id`'s page, as a `<webview>`'s `clickMatch` does,
+  and resolves whether one matched.
 - **Set `window` before the view enters the document.** The engine reads it
   once, when the view connects. A window shows in one view at a time: a second
   view naming it stays empty, so never remount the view drawing it.
@@ -138,12 +141,57 @@ view.addEventListener(WEBVIEW_WILL_NAVIGATE_EVENT, (event) => {
   `isPrivate: true`. Draw it so the user can tell.
 - **`<webview private>`** makes your own page private, such as a preview. Set
   `private` before the view enters the document.
-- A private page is in Chrome's off-the-record profile: its cookies, cache and
-  storage stay in memory, shared by every private page and none of the user's.
-- Private data ends when the last private page closes, whether a private
+- A private page is in the default private profile, off the record: its
+  cookies, cache and storage stay in memory, shared by every page of that
+  profile and none of the user's others.
+- Private data ends when the profile's last page closes, whether a private
   window or a `<webview private>`. The next private page starts empty.
 - A private window's new windows are private too.
-- Extensions see no private page.
+- Only the extensions switched on in the private profile see its pages.
+
+## Browser profiles
+
+A browser profile is a set of sign-ins, site data and extensions, from the
+config's `browser.profiles`. See
+[BROWSER-PROFILES.md](architecture/BROWSER-PROFILES.md).
+
+- **`domicile.browserProfiles`** lists them, each with its `id`, `name`,
+  `color`, `isPrivate`, and whether it `isDefault` or `isDefaultPrivate`. It
+  changes with `browserprofileschanged`.
+- Every browser window is listed with its `profile` id, a site's app window
+  (`openAppWindow`) included. An app module's or Electron app's window has
+  `null`.
+- **`domicile.openAppWindow(url, appId, reuse, profile)`** opens a new app
+  window in `profile`, or with `""` where its site goes.
+- **`domicile.openBrowserWindow(url, partition, profile)`** opens a window in
+  `profile`. `""` opens it where its site goes: the most specific of the
+  config's `browser.sites` that matches `url`, or the default profile.
+  **`domicile.browserProfileFor(url)`** resolves to that profile's id, and
+  **`domicile.browserSiteFor(url)`** to the `browser.sites` entry that
+  matched, or `""`.
+- **`domicile.pinBrowserSite(site, profile)`** opens a site in a profile from
+  now on, as a profile menu's pin does. The engine keeps the pin across
+  restarts and lists it in the profile's `pinnedSites`. The config wins: a
+  site in its `browser.sites` is in the profile's `configSites` and the pin is
+  refused. Pinning to the default profile removes the pin.
+- **`<webview profile="work">`** puts your own page in one. Set it before the
+  view enters the document.
+- **The engine moves pages between profiles.** When the user takes a window
+  to a site of another profile with a link, the address bar or back and
+  forward, the page moves there in place. A page you moved by hand stays
+  while it stays on the same site. Redirects, a page's own script and pages
+  with an opener stay where they are, so a sign-in finishes where it started.
+- **`domicile.reopenBrowserWindow(id, profile)`** moves window `id` to
+  `profile`, for the user picking a profile. The page reloads there.
+- **A moved window keeps its id.** Its `<webview window>` shows the new page
+  on its own, and the next list shows its new `profile`. The back and forward
+  list comes along as addresses. Form input does not, and anything the old
+  page was asking, such as a permission, is withdrawn.
+- A page's new window with no opener opens where its site goes, as above. A
+  private page's new windows stay in its profile, and a private page never
+  moves on its own.
+- A profile the desk no longer has opens in the default one, or the default
+  private one for a private page.
 
 ## Partitions
 
@@ -170,6 +218,13 @@ user's and every other partition, like a separate browser profile:
   with a copy of the view's history and take the step there, as a middle
   click on Chrome's back button does. The view stays on its page. A private
   view's window is private.
+- **`history()`** lists the pages behind and ahead of the current one, each
+  side nearest first, with each page's `id`, `url`, `title` and `favicon` (a
+  `data:` URL, or `""`), for a back or forward menu like Chrome's.
+  `goToHistoryEntry(id)` goes to one; `goToHistoryEntryInNewWindow(id)` goes
+  there in a new window, as `goBackInNewWindow` does. An `id` gone from the
+  history does nothing. Manganese lists them on a long press or right click
+  on Back or Forward.
 - `src` is reflected: setting the property or the attribute navigates. A view
   drawing a browser window does not send `src` on connect, since the page is
   already loaded.
@@ -201,6 +256,12 @@ user's and every other partition, like a separate browser profile:
   cannot change the answer. A hidden page answers. It throws `SyntaxError` for
   a bad selector, and rejects with `InvalidStateError` before the view has a
   page or when the page gave no number, as when it navigated first.
+- **`view.clickMatch(selector)`** clicks the first shown element in the page's
+  main document that matches a CSS selector, as a press of the mouse's main
+  button on it does: scrolled into view, it gets `pointerdown`, `mousedown`,
+  `pointerup`, `mouseup` and `click`, which the page hears as untrusted events.
+  A hidden page is clicked too. It resolves whether an element matched, throws
+  and rejects as `countMatches` does.
 
 ## State: history, loading, address
 
@@ -577,7 +638,11 @@ and pause. Each has the browser window it plays in (`window`), its
 own size, which controls the site offers, and its length and position.
 
 Show one with `<app picture-in-picture="id">`: the element draws the page's
-own video, stretched to its box. Tell the page how big it is shown with
+own video, stretched to its box. It fires `PICTURE_IN_PICTURE_SHOWN_EVENT`
+(`@domicile-desktop/sdk/desktop/picture-in-picture`) once it embeds the
+video's first surface: show the element, or start its motion, from there
+rather than over an empty box. It keeps its last frame after the video leaves
+picture-in-picture, for a fade. Tell the page how big it is shown with
 `pictureInPicture.resize(id, width, height)`, move it with
 `pictureInPicture.seek(id, seconds)`, and act on it with
 `pictureInPicture.act(id, action)`:
@@ -594,8 +659,9 @@ in the shape it has now.
 
 Manganese floats each video over every window, in the bottom-right corner of
 its window's screen, with its controls and progress bar under the pointer. It
-grows out of its place in the page, and "Back to tab" shrinks it back in
-before acting.
+grows out of its place in the page once drawn; "Back to tab" and close
+shrink it back in before acting, and it fades there once the page has the
+video again.
 
 ## Crashed pages
 
