@@ -49,6 +49,7 @@ TOGETHER=(
   guard-webview-notifications
   guard-notification-server-late
   guard-notification-window
+  guard-notification-site-icon
   guard-shell-web-apis
   guard-display-capture
   guard-headless-desk
