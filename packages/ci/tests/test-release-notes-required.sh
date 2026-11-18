@@ -83,6 +83,15 @@ commit "Change a file"
 commit "$(printf 'Tidy\n\nRelease-notes: none\n')"
 expect "passes" 0
 
+echo "== a trailer in the newest commit, before more than a pipe holds =="
+reset
+echo b >file
+# Older trailers enough to fill the pipe, so the log is still writing them when
+# the check has its answer.
+commit "$(printf 'Long\n\nRelease-notes: %s\n' "$(head -c 100000 /dev/zero | tr '\0' x)")"
+commit "$(printf 'Tidy\n\nRelease-notes: none\n')"
+expect "passes" 0
+
 echo "== the words in a subject, not a trailer =="
 reset
 echo b >file
