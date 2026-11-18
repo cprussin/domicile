@@ -85,8 +85,7 @@ const char kNodeRendererKey[] = "domicile-electron-node-renderer";
 
 mojom::ElectronNodePtr ToMojom(const ElectronNode& node) {
   return mojom::ElectronNode::New(node.preload, node.integration,
-                                  node.context_isolation, node.resources_path,
-                                  node.app_path, node.electron_version,
+                                  node.context_isolation, node.app_path,
                                   base::flat_map<std::string, std::string>(
                                       node.env.begin(), node.env.end()));
 }
@@ -390,7 +389,14 @@ void ElectronPage::ReadyToCommitNavigation(
       process->Shutdown(content::RESULT_CODE_KILLED);
       return;
     }
+    if (!session_) {
+      // The app is gone, and its windows with it.
+      return;
+    }
+    const ElectronHello& hello = session_->hello();
     frame_->Preload(preload_, arguments_,
+                    mojom::ElectronAppFacts::New(hello.electron_version,
+                                                 hello.resources_path),
                     node_.has_value() ? ToMojom(*node_) : nullptr,
                     receiver_.BindNewEndpointAndPassRemote());
   }

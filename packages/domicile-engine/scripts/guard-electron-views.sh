@@ -194,7 +194,8 @@ except OSError as failure:
 reader = connection.makefile("r", encoding="utf-8")
 
 send({"type": "hello", "version": 1, "app_id": "guard.electron.views",
-      "partition": "persist:electron-guard-views"})
+      "partition": "persist:electron-guard-views",
+      "electron_version": "45.2.1", "resources_path": "/opt/guard/resources"})
 ready = hear_until(lambda e: e["type"] in ("ready", "refused"))
 send({"type": "open_window", "window": 1, "url": page})
 send({"type": "open_window", "window": 2, "url": page, "view": True})

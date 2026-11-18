@@ -12,6 +12,15 @@ import "mojo/public/mojom/base/values.mojom";
 // navigation commits reaches the renderer before the commit does, and a
 // Deliver sent after reaches the document that committed.
 
+// What every page of the app is told of the app, sandboxed or not: the
+// hello's in components/domicile/browser/electron_protocol.h.
+struct ElectronAppFacts {
+  // process.versions.electron.
+  string electron_version;
+  // process.resourcesPath.
+  string resources_path;
+};
+
 // Node.js in the page of a window that isn't sandboxed. The renderer was
 // started for it: see components/domicile/common/electron_node_switches.h.
 // The fields are components/domicile/browser/electron_protocol.h's
@@ -24,9 +33,7 @@ struct ElectronNode {
   bool integration;
   // contextIsolation: the preload runs in a world of its own.
   bool context_isolation;
-  string resources_path;
   string app_path;
-  string electron_version;
   map<string, string> env;
 };
 
@@ -37,9 +44,10 @@ interface ElectronFrame {
   // page is sandboxed, or, with `node`, the file Node loads, in the world
   // `node` says. Its ipcRenderer talks to `host`. Its process.argv has
   // `arguments`, the window's webPreferences.additionalArguments, after the
-  // renderer's own.
+  // renderer's own. Its process has what `app` says.
   Preload(string source,
           array<string> arguments,
+          ElectronAppFacts app,
           ElectronNode? node,
           pending_associated_remote<ElectronFrameHost> host);
 

@@ -28,7 +28,8 @@ std::string WhyRefused(std::string_view line) {
 TEST(ElectronProtocolTest, HelloNamesTheAppAndItsPartition) {
   const auto request = ParseElectronRequest(
       R"({"type":"hello","version":1,"app_id":"com.anthropic.Claude",)"
-      R"("partition":"persist:electron-claude"})");
+      R"("partition":"persist:electron-claude","electron_version":"45.2.1",)"
+      R"("resources_path":"/opt/Claude/resources"})");
 
   ASSERT_TRUE(request.has_value()) << request.error().why;
   const auto* hello = std::get_if<ElectronHello>(&*request);
@@ -36,6 +37,27 @@ TEST(ElectronProtocolTest, HelloNamesTheAppAndItsPartition) {
   EXPECT_EQ(hello->app_id, "com.anthropic.Claude");
   EXPECT_EQ(hello->partition,
             (WebViewPartition{.name = "electron-claude", .persist = true}));
+  EXPECT_EQ(hello->electron_version, "45.2.1");
+  EXPECT_EQ(hello->resources_path, "/opt/Claude/resources");
+}
+
+TEST(ElectronProtocolTest, HelloNamesTheElectronAndResourcesItsPagesAreTold) {
+  EXPECT_EQ(WhyRefused(R"({"type":"hello","version":1,"app_id":"a",)"
+                       R"("partition":"persist:a","resources_path":"/r"})"),
+            "\"electron_version\" must be a string that is not empty: the "
+            "Electron the app's pages are told they run on");
+  EXPECT_EQ(WhyRefused(R"({"type":"hello","version":1,"app_id":"a",)"
+                       R"("partition":"persist:a","electron_version":"",)"
+                       R"("resources_path":"/r"})"),
+            "\"electron_version\" must be a string that is not empty: the "
+            "Electron the app's pages are told they run on");
+  EXPECT_EQ(WhyRefused(R"({"type":"hello","version":1,"app_id":"a",)"
+                       R"("partition":"persist:a","electron_version":"45.2.1"})"),
+            "\"resources_path\" must be an absolute path");
+  EXPECT_EQ(WhyRefused(R"({"type":"hello","version":1,"app_id":"a",)"
+                       R"("partition":"persist:a","electron_version":"45.2.1",)"
+                       R"("resources_path":"resources"})"),
+            "\"resources_path\" must be an absolute path");
 }
 
 TEST(ElectronProtocolTest, HelloFromAnotherVersionIsRefusedWithOurs) {
@@ -344,8 +366,7 @@ TEST(ElectronProtocolTest, OpenWindowMayGiveItsPageNode) {
   const auto node = ParseElectronRequest(
       R"({"type":"open_window","window":1,"url":"file:///app/index.html",)"
       R"("node":{"preload":"/app/preload.js","integration":true,)"
-      R"("context_isolation":false,"resources_path":"/res",)"
-      R"("app_path":"/res/app","electron_version":"45.2.1",)"
+      R"("context_isolation":false,"app_path":"/res/app",)"
       R"("env":{"HOME":"/home/a"}}})");
   const auto bare = ParseElectronRequest(
       R"({"type":"open_window","window":1,"url":"file:///app/index.html",)"
@@ -357,9 +378,7 @@ TEST(ElectronProtocolTest, OpenWindowMayGiveItsPageNode) {
             (ElectronNode{.preload = "/app/preload.js",
                           .integration = true,
                           .context_isolation = false,
-                          .resources_path = "/res",
                           .app_path = "/res/app",
-                          .electron_version = "45.2.1",
                           .env = {{"HOME", "/home/a"}}}));
   // Electron's defaults: no nodeIntegration, and context isolation.
   EXPECT_EQ(std::get<ElectronOpenWindow>(*bare).node, ElectronNode{});

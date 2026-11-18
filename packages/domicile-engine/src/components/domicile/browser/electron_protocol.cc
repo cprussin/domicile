@@ -95,9 +95,7 @@ base::expected<ElectronNode, std::string> NodeIn(const base::Value& node) {
   ElectronNode made;
   for (auto [key, out] :
        {std::pair<const char*, std::string*>{"preload", &made.preload},
-        {"resources_path", &made.resources_path},
-        {"app_path", &made.app_path},
-        {"electron_version", &made.electron_version}}) {
+        {"app_path", &made.app_path}}) {
     const base::Value* value = dict.Find(key);
     if (value == nullptr) {
       continue;
@@ -439,6 +437,8 @@ base::expected<ElectronRequest, std::string> ParseHello(
   const std::optional<int> version = request.FindInt("version");
   const std::string* app_id = request.FindString("app_id");
   const std::string* partition = request.FindString("partition");
+  const std::string* electron_version = request.FindString("electron_version");
+  const std::string* resources_path = request.FindString("resources_path");
   if (version != kElectronProtocolVersion) {
     return base::unexpected(
         base::StrCat({"this engine speaks version ",
@@ -454,8 +454,18 @@ base::expected<ElectronRequest, std::string> ParseHello(
     return base::unexpected(parsed.error());
   } else if (!parsed->has_value()) {
     return base::unexpected("an app cannot use the profile's own partition");
+  } else if (electron_version == nullptr || electron_version->empty()) {
+    return base::unexpected(
+        "\"electron_version\" must be a string that is not empty: the "
+        "Electron the app's pages are told they run on");
+  } else if (resources_path == nullptr ||
+             !base::FilePath(*resources_path).IsAbsolute()) {
+    return base::unexpected("\"resources_path\" must be an absolute path");
   } else {
-    return ElectronHello{.app_id = *app_id, .partition = std::move(**parsed)};
+    return ElectronHello{.app_id = *app_id,
+                         .partition = std::move(**parsed),
+                         .electron_version = *electron_version,
+                         .resources_path = *resources_path};
   }
 }
 

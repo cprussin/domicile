@@ -24,7 +24,6 @@ import type { MessagePortMain } from "./message-port-main";
 import { createPagePorts } from "./message-port-main";
 import type { createSessions, Session } from "./session";
 import { sessionPartition } from "./session";
-import { ELECTRON_VERSION } from "./version";
 
 export type WebPreferences = {
   readonly preload?: string | undefined;
@@ -40,22 +39,16 @@ export type WebPreferences = {
 };
 
 /** What every page with Node.js gets alike: the app's, not the window's. */
-export type PageNodeBase = Pick<
-  PageNode,
-  "resources_path" | "electron_version" | "env"
->;
+export type PageNodeBase = Pick<PageNode, "env">;
 
 /** The host's own, which its app's pages get, as Electron's renderers do. */
 const hostNodeBase = (): PageNodeBase => ({
-  electron_version: ELECTRON_VERSION,
   env: Object.fromEntries(
     // biome-ignore lint/style/noProcessEnv: the app's environment, which Electron's renderers inherit
     Object.entries(process.env).filter(
       (entry): entry is [string, string] => typeof entry[1] === "string",
     ),
   ),
-  // Set on the host's process before the app's code runs; see main.ts.
-  resources_path: String(Reflect.get(process, "resourcesPath") ?? ""),
 });
 
 export type BrowserWindowOptions = {

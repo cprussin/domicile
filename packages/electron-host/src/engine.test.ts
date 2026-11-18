@@ -14,14 +14,15 @@ afterEach(async () => {
   fake = undefined;
 });
 
+const NOTES = {
+  app_id: "com.example.Notes",
+  electron_version: "45.2.1",
+  partition: "persist:electron-notes",
+  resources_path: "/cache/notes/resources",
+};
+
 const connected = async (fakeEngine: FakeEngine) =>
-  (
-    await connectEngine(
-      fakeEngine.path,
-      "com.example.Notes",
-      "persist:electron-notes",
-    )
-  ).match({
+  (await connectEngine(fakeEngine.path, NOTES)).match({
     Err: (why): Engine => {
       throw new Error(why);
     },
@@ -29,7 +30,7 @@ const connected = async (fakeEngine: FakeEngine) =>
   });
 
 describe(connectEngine, () => {
-  it("says hello with the app's id and partition, and is ready once answered", async () => {
+  it("says hello with the app's id, partition and Electron, and is ready once answered", async () => {
     fake = await startFakeEngine();
 
     await connected(fake);
@@ -37,7 +38,9 @@ describe(connectEngine, () => {
     expect(fake.heard).toEqual([
       {
         app_id: "com.example.Notes",
+        electron_version: "45.2.1",
         partition: "persist:electron-notes",
+        resources_path: "/cache/notes/resources",
         type: "hello",
         version: 1,
       },
@@ -61,13 +64,13 @@ describe(connectEngine, () => {
       { type: "refused", why: "this engine speaks version 2" },
     ]);
 
-    expect(await connectEngine(fake.path, "a", "persist:a")).toEqual(
+    expect(await connectEngine(fake.path, NOTES)).toEqual(
       Err("the engine refused this app: this engine speaks version 2"),
     );
   });
 
   it("says where it looked when there is no engine", async () => {
-    const result = await connectEngine("/nonexistent/electron.sock", "a", "b");
+    const result = await connectEngine("/nonexistent/electron.sock", NOTES);
 
     expect(
       result.match({ Err: (why) => why, Ok: () => "connected" }),

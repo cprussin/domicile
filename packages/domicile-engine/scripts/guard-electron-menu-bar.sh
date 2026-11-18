@@ -188,7 +188,8 @@ except OSError as failure:
 connection.settimeout(None)
 
 send({"type": "hello", "version": 1, "app_id": "guard.electron.menu",
-      "partition": "persist:electron-guard-menu"})
+      "partition": "persist:electron-guard-menu",
+      "electron_version": "45.2.1", "resources_path": "/opt/guard/resources"})
 ready = hear_until(lambda e: e["type"] in ("ready", "refused"))
 send({"type": "open_window", "window": 1, "url": page})
 hear_until(lambda e: e.get("type") == "window_loaded")

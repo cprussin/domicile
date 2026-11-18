@@ -246,6 +246,7 @@ bool IsElectronNodeRenderer() {
 std::unique_ptr<ElectronNodeEnvironment> ElectronNodeEnvironment::Start(
     v8::Isolate* isolate,
     v8::Local<v8::Context> context,
+    const mojom::ElectronAppFacts& app,
     const mojom::ElectronNode& node,
     const std::vector<std::string>& arguments,
     v8::Local<v8::Object> electron) {
@@ -307,9 +308,9 @@ std::unique_ptr<ElectronNodeEnvironment> ElectronNodeEnvironment::Start(
   set("preload", gin::StringToV8(isolate, node.preload_path));
   set("integration", v8::Boolean::New(isolate, node.integration));
   set("contextIsolated", v8::Boolean::New(isolate, node.context_isolation));
-  set("resourcesPath", gin::StringToV8(isolate, node.resources_path));
+  set("resourcesPath", gin::StringToV8(isolate, app.resources_path));
   set("appPath", gin::StringToV8(isolate, node.app_path));
-  set("electronVersion", gin::StringToV8(isolate, node.electron_version));
+  set("electronVersion", gin::StringToV8(isolate, app.electron_version));
   set("chromeVersion",
       gin::StringToV8(isolate, std::string(version_info::GetVersionNumber())));
   set("env", env);

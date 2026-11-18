@@ -33,9 +33,7 @@ export type PageNode = {
   /** `nodeIntegration`: Node in the page's own world too, without isolation. */
   readonly integration: boolean;
   readonly context_isolation: boolean;
-  readonly resources_path: string;
   readonly app_path: string;
-  readonly electron_version: string;
   /** The app's environment, which the page's `process.env` has. */
   readonly env: Readonly<Record<string, string>>;
 };
@@ -72,17 +70,19 @@ export type OpenKeys = {
   readonly node?: PageNode;
 };
 
+/** What an app says of itself as it connects, which its pages are told. */
+export type EngineHello = {
+  readonly app_id: string;
+  readonly partition: string;
+  /** `process.versions.electron` in its pages. */
+  readonly electron_version: string;
+  /** `process.resourcesPath` in its pages. */
+  readonly resources_path: string;
+};
+
 export type EngineRequest =
-  | {
-      readonly type: "hello";
-      readonly version: number;
-      readonly app_id: string;
-      readonly partition: string;
-    }
-  | ({
-      readonly type: "open_window";
-      readonly url: string;
-    } & OpenKeys)
+  | ({ readonly type: "hello"; readonly version: number } & EngineHello)
+  | ({ readonly type: "open_window"; readonly url: string } & OpenKeys)
   /** The app's answer to a page's `window_open`: its handler denied it. */
   | {
       readonly type: "window_open_answer";
@@ -365,13 +365,13 @@ export type Engine = {
 };
 
 /**
- * Connects to the engine at `path` and says hello for `appId`, whose pages
- * keep their data in `partition`. Ready once the engine answers.
+ * Connects to the engine at `path` and says `hello`: the app's id, the
+ * partition its pages keep their data in, and what its pages are told of their
+ * Electron. Ready once the engine answers.
  */
 export const connectEngine = (
   path: string,
-  appId: string,
-  partition: string,
+  hello: EngineHello,
 ): Promise<Result<Engine, string>> =>
   new Promise((resolve) => {
     const socket = createConnection(path);
@@ -453,12 +453,7 @@ export const connectEngine = (
         resolve(Err(`the engine at ${path} closed before answering`));
       }
     });
-    engine.send({
-      app_id: appId,
-      partition,
-      type: "hello",
-      version: PROTOCOL_VERSION,
-    });
+    engine.send({ ...hello, type: "hello", version: PROTOCOL_VERSION });
   });
 
 const parseJson = (text: string): unknown => {

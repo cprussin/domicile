@@ -49,6 +49,12 @@ const std::string& ElectronSession::user_agent() const {
   return user_agent_.empty() ? app_->user_agent_fallback_ : user_agent_;
 }
 
+const ElectronHello& ElectronSession::hello() const {
+  CHECK(app_->hello_.has_value())
+      << "domicile: an Electron session was made before its app's hello";
+  return *app_->hello_;
+}
+
 bool ElectronSession::Handles(std::string_view scheme) const {
   return schemes_.contains(std::string(scheme));
 }
