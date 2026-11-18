@@ -31,6 +31,11 @@ def in_the_session(argv, log):
     the one-time link stays out of the log, which prints every command.
     """
     quoted = " ".join('"$(cat /tmp/slack-link)"' if arg == "@LINK@" else f"'{arg}'" for arg in argv)
+    # Root reads it: Hyprland's /proc/<pid>/environ isn't readable by alice.
+    machine.succeed(
+        f"cp /proc/$(pgrep -u alice -o -f '{DESKTOP['compositor']}')/environ /tmp/session-environ"
+        " && chmod 644 /tmp/session-environ"
+    )
     machine.succeed(f"runuser -u alice -- in-session {quoted} >{log} 2>&1 &")
 
 

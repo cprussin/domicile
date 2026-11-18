@@ -76,17 +76,18 @@ let
   };
 
   # Runs a command in the environment the desktop gives its apps: the
-  # compositor's own, its Wayland socket and the user bus.
-  inSession = compositor: pkgs.writeShellApplication {
+  # compositor's own, which root copies to /tmp/session-environ first
+  # (Hyprland's isn't readable by its own user), its Wayland socket and the
+  # user bus.
+  inSession = pkgs.writeShellApplication {
     name = "in-session";
-    runtimeInputs = [ pkgs.procps pkgs.coreutils ];
+    runtimeInputs = [ pkgs.coreutils ];
     text = ''
-      pid=$(pgrep -u alice -o -f '${compositor}')
       while IFS= read -r -d "" var; do
         case "$var" in
           DOMICILE_* | XDG_* | DBUS_* | WAYLAND_*) export "''${var?}" ;;
         esac
-      done <"/proc/$pid/environ"
+      done </tmp/session-environ
       export XDG_RUNTIME_DIR=/run/user/1000
       # A tty login says `tty`, and Chromium's ozone hint then picks X11:
       # the apps would run in Xwayland rather than on the desktop.
@@ -246,7 +247,7 @@ let
     ]
     # For proof of what draws: `eglinfo` names the GL renderer.
     ++ lib.optional gpu pkgs.mesa-demos
-    ++ lib.optional (desktop.compositor != null) (inSession desktop.compositor);
+    ++ lib.optional (desktop.compositor != null) inSession;
     fonts.enableDefaultPackages = true;
     system.name = "benchmark-${name}";
   };
