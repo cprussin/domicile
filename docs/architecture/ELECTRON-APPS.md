@@ -181,6 +181,25 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 - **`loadFile`** loads from the mirror, so the engine reads plain files.
 - **Storage:** each app gets its own partition, named by its `package.json`
   name. Apps share no cookies with each other or with the browser.
+- **Browser profile:** an app runs in one, with its extensions (a password
+  manager fills the app's sign-in window): `electron.profiles` in the config,
+  which the entries `electron.apps` writes pass as
+  `domicile open --electron --profile <id>`. `electron-host` reads it from
+  `DOMICILE_ELECTRON_PROFILE` and names it in `hello`'s `profile`; none is
+  the default profile.
+  - The engine answers `ready` once the profile can hold windows: after the
+    compositor's profiles reach it (an app started with the desktop can beat
+    them) and the profile loads
+    (`BrowserProfileRegistry::WhenAppProfileReady`). A profile the desk has
+    not got, or a private one, is `refused`.
+  - The app's partition, windows and session storage calls are in that
+    profile.
+- **Links:** a page's noopener window at an http(s) address (a
+  `target="_blank"` link, `window.open(url, "", "noopener")`, a middle click)
+  opens as a browser window, in the profile its site opens in, with the
+  user's sign-ins (patch 0239, `WebViewGuest::OpenLinksInTheBrowser`). A
+  window the page keeps a handle on, such as a sign-in popup, stays the
+  app's. `setWindowOpenHandler` is still not asked.
 
 ### Preload and IPC
 

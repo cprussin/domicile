@@ -71,17 +71,19 @@ bool OpenAppWindow(const GURL& url,
 bool OpenAppModuleWindow(const GURL& url, const std::string& app_host);
 
 // Opens an app window at `url` for an Electron app, with `app_id`, in its own
-// `partition`, whose pages run `preload` (none when empty) in a renderer told
-// `arguments`, as Electron's additionalArguments, and make `calls`.
-// A `node` page has Node.js, in a renderer of its own that isn't sandboxed.
-// A `view` is a WebContentsView's page, listed only while a window holds it.
-// A window shows `title` instead of its page's when it isn't empty, and opens
-// `hidden` when asked.
-// Returns the window's id. Nothing when there is no shell to own it. See
+// `partition` of browser profile `profile` (the default one when empty, and
+// loaded already: BrowserProfileRegistry::WhenAppProfileReady), whose pages run
+// `preload` (none when empty) in a renderer told `arguments`, as Electron's
+// additionalArguments, and make `calls`. A `node` page has Node.js, in a
+// renderer of its own that isn't sandboxed. A `view` is a WebContentsView's
+// page, listed only while a window holds it. A window shows `title` instead of
+// its page's when it isn't empty, and opens `hidden` when asked. Returns the
+// window's id. Nothing when there is no shell to own it. See
 // docs/architecture/ELECTRON-APPS.md.
 std::optional<std::string> OpenElectronWindow(
     const GURL& url,
     const std::string& app_id,
+    const std::string& profile,
     const WebViewPartition& partition,
     const std::string& preload,
     const std::vector<std::string>& arguments,

@@ -53,7 +53,7 @@ use domicile_launch::control_socket::{
     PATIENCE as ANSWER_WITHIN, VARIABLE,
 };
 use domicile_launch::dev::{dev_socket, going_back, loading};
-use domicile_launch::electron_app::{app_name, electron_app, UNSUPPORTED_EXIT};
+use domicile_launch::electron_app::{app_name, electron_app, PROFILE_VARIABLE, UNSUPPORTED_EXIT};
 use domicile_launch::electron_schemes::{self, schemes_switch, with_known};
 use domicile_launch::electron_wrapper::{record, through_wrappers, WrapperError, RECORD};
 use domicile_launch::graphical_session;
@@ -172,7 +172,11 @@ fn run() -> Result<ExitCode, String> {
             }
             Ok(ExitCode::SUCCESS)
         }
-        Invocation::OpenElectron { target, command } => electron_opened(&target, &command),
+        Invocation::OpenElectron {
+            target,
+            profile,
+            command,
+        } => electron_opened(&target, profile.as_deref(), &command),
         Invocation::OpenAsApp {
             target,
             id,
@@ -304,7 +308,11 @@ fn opened(target: &str, profile: Option<String>) -> Result<ExitCode, String> {
 /// How long an app's wrappers may take to reach its program.
 const WRAPPERS_WAIT: std::time::Duration = std::time::Duration::from_secs(10);
 
-fn electron_opened(target: &str, command: &[String]) -> Result<ExitCode, String> {
+fn electron_opened(
+    target: &str,
+    profile: Option<&str>,
+    command: &[String],
+) -> Result<ExitCode, String> {
     let applications: Vec<PathBuf> = places()
         .data_dirs
         .iter()
@@ -343,6 +351,10 @@ fn electron_opened(target: &str, command: &[String]) -> Result<ExitCode, String>
             eprintln!("domicile: {target} runs on the engine without what its wrappers set: {why}");
             run.args(&app.args);
         }
+    }
+    // After the wrappers' variables, which replace the rest.
+    if let Some(profile) = profile {
+        run.env(PROFILE_VARIABLE, profile);
     }
     let status = run
         .status()

@@ -2887,6 +2887,14 @@ std::unique_ptr<content::WebContents> WebViewGuest::CreateNewGuestWindow(
   return Host().MakeOpenedWindow(create_params);
 }
 
+bool WebViewGuest::OpenedNoopenerWindowOutside(const GURL& target_url) {
+  if (!OpensInTheBrowser(target_url)) {
+    return false;
+  }
+  OpenInTheBrowser(target_url);
+  return true;
+}
+
 content::WebContents* WebViewGuest::AddNewContents(
     content::WebContents* source,
     std::unique_ptr<content::WebContents> new_contents,
@@ -2978,6 +2986,11 @@ void WebViewGuest::ReportNewWindow(const GURL& target_url) {
   if (!target_url.is_valid()) {
     LOG(WARNING) << "domicile: a <webview>'s page asked for a window with no "
                     "address to open; refused, and no window is opened.";
+    return;
+  }
+
+  if (OpensInTheBrowser(target_url)) {
+    OpenInTheBrowser(target_url);
     return;
   }
 
@@ -3186,6 +3199,22 @@ void WebViewGuest::Focused() {
 void WebViewGuest::KeepFullFrameRate() {
   full_frame_rate_ = true;
   UnfocusedWebViews::Get().Untrack(this);
+}
+
+void WebViewGuest::OpenLinksInTheBrowser() {
+  links_in_the_browser_ = true;
+}
+
+bool WebViewGuest::OpensInTheBrowser(const GURL& url) const {
+  return links_in_the_browser_ && url.SchemeIsHTTPOrHTTPS();
+}
+
+void WebViewGuest::OpenInTheBrowser(const GURL& url) {
+  // guard-electron-profile.sh greps for this.
+  LOG(INFO) << "domicile: an app's page opened " << url.possibly_invalid_spec()
+            << " in the desk's browser.";
+  Host().Open(*guest_contents_->GetBrowserContext(), url,
+              /*partition=*/std::nullopt);
 }
 
 base::CallbackListSubscription WebViewGuest::AddZoomChangedCallback(

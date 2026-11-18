@@ -201,6 +201,9 @@ struct ElectronHello {
   std::string app_id;
   // Where the app's pages keep their data. Never the profile's own.
   WebViewPartition partition;
+  // The browser profile its pages are in, with that profile's extensions:
+  // the default profile when empty.
+  std::string profile;
 };
 
 // Node.js in a window's page, as Electron gives a window that isn't

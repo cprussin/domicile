@@ -13,8 +13,11 @@
 
 #include "base/check_op.h"
 #include "base/functional/bind.h"
+#include "base/logging.h"
 #include "base/time/time.h"
+#include "chrome/browser/domicile/domicile_browser_profiles.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
+#include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/storage_partition_config.h"
@@ -32,14 +35,25 @@
 namespace domicile {
 namespace {
 
-// The storage of `partition`, as WebViewGuest makes it for a window there,
-// or none without a shell.
-content::StoragePartition* StorageOf(const WebViewPartition& partition) {
+// The storage of `partition` in browser profile `profile`, as WebViewGuest
+// makes it for a window there, or none without a shell or the profile.
+content::StoragePartition* StorageOf(const std::string& profile,
+                                     const WebViewPartition& partition) {
   content::WebContents* shell = DeskShellContents();
   if (shell == nullptr) {
     return nullptr;
   }
-  content::BrowserContext* context = shell->GetBrowserContext();
+  Profile& shell_profile =
+      *Profile::FromBrowserContext(shell->GetBrowserContext());
+  content::BrowserContext* context =
+      profile.empty()
+          ? &shell_profile
+          : BrowserProfileRegistry::Get().ContextOf(shell_profile, profile);
+  if (context == nullptr) {
+    LOG(ERROR) << "domicile: an Electron app's storage is in browser profile "
+               << profile << ", which is not loaded.";
+    return nullptr;
+  }
   return context->GetStoragePartition(content::StoragePartitionConfig::Create(
       context, kWebViewPartitionDomain, partition.name, !partition.persist));
 }
@@ -118,10 +132,11 @@ uint32_t RemoveMaskOf(const std::set<std::string>& storages) {
 }  // namespace
 
 void GetElectronCookies(
+    const std::string& profile,
     const WebViewPartition& partition,
     const std::optional<GURL>& url,
     base::OnceCallback<void(std::vector<ElectronCookie>)> done) {
-  content::StoragePartition* storage = StorageOf(partition);
+  content::StoragePartition* storage = StorageOf(profile, partition);
   if (storage == nullptr) {
     std::move(done).Run({});
     return;
@@ -160,10 +175,11 @@ void GetElectronCookies(
 }
 
 void SetElectronCookie(
+    const std::string& profile,
     const WebViewPartition& partition,
     const ElectronCookieDetails& details,
     base::OnceCallback<void(std::optional<std::string> why)> done) {
-  content::StoragePartition* storage = StorageOf(partition);
+  content::StoragePartition* storage = StorageOf(profile, partition);
   if (storage == nullptr) {
     std::move(done).Run("there is no shell to keep it");
     return;
@@ -197,11 +213,12 @@ void SetElectronCookie(
           std::move(done)));
 }
 
-void RemoveElectronCookie(const WebViewPartition& partition,
+void RemoveElectronCookie(const std::string& profile,
+                          const WebViewPartition& partition,
                           const GURL& url,
                           const std::string& name,
                           base::OnceClosure done) {
-  content::StoragePartition* storage = StorageOf(partition);
+  content::StoragePartition* storage = StorageOf(profile, partition);
   if (storage == nullptr) {
     std::move(done).Run();
     return;
@@ -216,9 +233,10 @@ void RemoveElectronCookie(const WebViewPartition& partition,
                      std::move(done)));
 }
 
-void FlushElectronCookies(const WebViewPartition& partition,
+void FlushElectronCookies(const std::string& profile,
+                          const WebViewPartition& partition,
                           base::OnceClosure done) {
-  content::StoragePartition* storage = StorageOf(partition);
+  content::StoragePartition* storage = StorageOf(profile, partition);
   if (storage == nullptr) {
     std::move(done).Run();
     return;
@@ -227,10 +245,11 @@ void FlushElectronCookies(const WebViewPartition& partition,
       std::move(done));
 }
 
-void ClearElectronStorage(const WebViewPartition& partition,
+void ClearElectronStorage(const std::string& profile,
+                          const WebViewPartition& partition,
                           const ElectronClearStorage& clear,
                           base::OnceClosure done) {
-  content::StoragePartition* storage = StorageOf(partition);
+  content::StoragePartition* storage = StorageOf(profile, partition);
   if (storage == nullptr) {
     std::move(done).Run();
     return;
@@ -247,9 +266,10 @@ void ClearElectronStorage(const WebViewPartition& partition,
                      base::Time::Max(), std::move(done));
 }
 
-void ClearElectronCache(const WebViewPartition& partition,
+void ClearElectronCache(const std::string& profile,
+                        const WebViewPartition& partition,
                         base::OnceClosure done) {
-  content::StoragePartition* storage = StorageOf(partition);
+  content::StoragePartition* storage = StorageOf(profile, partition);
   if (storage == nullptr) {
     std::move(done).Run();
     return;

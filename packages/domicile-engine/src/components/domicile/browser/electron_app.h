@@ -195,7 +195,14 @@ class ElectronDesk {
  public:
   virtual ~ElectronDesk() = default;
 
-  // Opens an app window at `url` for app `app_id`, in `partition`, whose
+  // Runs `ready` once browser profile `profile` can hold an app's windows,
+  // or with why it can't: one the desk doesn't have, or a private one, which
+  // would keep nothing the app signs in to.
+  virtual void WhenProfileReady(
+      const std::string& profile,
+      base::OnceCallback<void(base::expected<void, std::string>)> ready) = 0;
+  // Opens an app window at `url` for app `app_id`, in browser profile
+  // `profile` (the default one when empty) and its `partition`, whose
   // pages run `preload` (none when empty) in a renderer told `arguments`,
   // make `calls` and load through
   // `session`. A `view` is a WebContentsView's page, listed only while a
@@ -205,6 +212,7 @@ class ElectronDesk {
   virtual std::optional<std::string> Open(
       const GURL& url,
       const std::string& app_id,
+      const std::string& profile,
       const WebViewPartition& partition,
       const std::string& preload,
       const std::vector<std::string>& arguments,
@@ -271,32 +279,38 @@ class ElectronDesk {
   virtual void SetUserAgent(const std::string& id,
                             const std::string& user_agent) = 0;
 
-  // An app session's storage, in `partition`. Each runs `done` once, which
-  // may be after the app has gone.
+  // An app session's storage, in browser profile `profile`'s `partition`.
+  // Each runs `done` once, which may be after the app has gone.
   //
   // The cookies a request to `url` would send, or every cookie without one.
   virtual void GetCookies(
+      const std::string& profile,
       const WebViewPartition& partition,
       const std::optional<GURL>& url,
       base::OnceCallback<void(std::vector<ElectronCookie>)> done) = 0;
   // Sets a cookie, or says why it could not.
   virtual void SetCookie(
+      const std::string& profile,
       const WebViewPartition& partition,
       const ElectronCookieDetails& details,
       base::OnceCallback<void(std::optional<std::string> why)> done) = 0;
   // Removes cookie `name` that a request to `url` would send.
-  virtual void RemoveCookie(const WebViewPartition& partition,
+  virtual void RemoveCookie(const std::string& profile,
+                            const WebViewPartition& partition,
                             const GURL& url,
                             const std::string& name,
                             base::OnceClosure done) = 0;
   // Writes the cookies to disk.
-  virtual void FlushCookies(const WebViewPartition& partition,
+  virtual void FlushCookies(const std::string& profile,
+                            const WebViewPartition& partition,
                             base::OnceClosure done) = 0;
-  virtual void ClearStorage(const WebViewPartition& partition,
+  virtual void ClearStorage(const std::string& profile,
+                            const WebViewPartition& partition,
                             const ElectronClearStorage& clear,
                             base::OnceClosure done) = 0;
   // The HTTP cache.
-  virtual void ClearCache(const WebViewPartition& partition,
+  virtual void ClearCache(const std::string& profile,
+                          const WebViewPartition& partition,
                           base::OnceClosure done) = 0;
 };
 
@@ -438,6 +452,8 @@ class ElectronApp {
 
   // Applies app.userAgentFallback to the sessions without their own.
   void SetUserAgentFallback(const ElectronSetUserAgentFallback& fallback);
+  // Answers the app's hello once its profile is ready.
+  void Greeted(ElectronHello hello, base::expected<void, std::string> ready);
 
   const raw_ref<ElectronDesk> desk_;
   const Send send_;
@@ -445,8 +461,10 @@ class ElectronApp {
   const std::vector<ElectronScheme> schemes_;
   // app.userAgentFallback; empty leaves pages the engine's.
   std::string user_agent_fallback_;
-  // Set by the app's hello.
+  // Set by the app's hello, once its profile is ready.
   std::optional<ElectronHello> hello_;
+  // Whether the app said hello, ready or not.
+  bool greeted_ = false;
   // The app's open windows, by the numbers it gave them.
   std::map<ElectronWindow, Window> windows_;
   // The pages' invokes waiting on the app's handlers, by number.

@@ -56,6 +56,8 @@ export type EngineRequest =
       readonly version: number;
       readonly app_id: string;
       readonly partition: string;
+      /** The browser profile its windows open in; the default when left out. */
+      readonly profile?: string;
     }
   | {
       readonly type: "open_window";
@@ -339,12 +341,15 @@ export type Engine = {
 
 /**
  * Connects to the engine at `path` and says hello for `appId`, whose pages
- * keep their data in `partition`. Ready once the engine answers.
+ * keep their data in `partition` of browser profile `profile`, the default
+ * one when there is none. Ready once the engine answers, which waits for the
+ * profile.
  */
 export const connectEngine = (
   path: string,
   appId: string,
   partition: string,
+  profile?: string,
 ): Promise<Result<Engine, string>> =>
   new Promise((resolve) => {
     const socket = createConnection(path);
@@ -429,6 +434,7 @@ export const connectEngine = (
     engine.send({
       app_id: appId,
       partition,
+      ...(profile === undefined ? {} : { profile }),
       type: "hello",
       version: PROTOCOL_VERSION,
     });

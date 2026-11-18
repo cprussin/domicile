@@ -321,7 +321,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=897
+FLOOR=903
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

@@ -1,0 +1,106 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 18 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: an Electron app's links open in the desk's browser
+
+A link Claude Desktop's page opened (target="_blank", rel="noopener")
+opened in a browser window in the app's own partition, so it had none of
+the user's sign-ins: GitHub showed signed out. Content keeps a guest's
+StoragePartition for its noopener windows.
+
+A guest's delegate may now open a noopener window itself, outside its
+partition (BrowserPluginGuestDelegate::OpenedNoopenerWindowOutside), and
+content then makes none: a noopener window.open() answers null anyway.
+WebViewGuest does so for an Electron app's page, whose noopener window
+opens as a browser window at its address, in the profile its site opens
+in. A window the page keeps a handle on (a sign-in popup) stays the app's.
+---
+ content/browser/browser_plugin/browser_plugin_guest.cc |  4 ++++
+ content/browser/browser_plugin/browser_plugin_guest.h  |  3 +++
+ content/browser/web_contents/web_contents_impl.cc      | 10 ++++++++++
+ .../public/browser/browser_plugin_guest_delegate.cc    |  5 +++++
+ content/public/browser/browser_plugin_guest_delegate.h |  5 +++++
+ 5 files changed, 27 insertions(+)
+
+diff --git a/content/browser/browser_plugin/browser_plugin_guest.cc b/content/browser/browser_plugin/browser_plugin_guest.cc
+index 791474a5..42d0bc55 100644
+--- a/content/browser/browser_plugin/browser_plugin_guest.cc
++++ b/content/browser/browser_plugin/browser_plugin_guest.cc
+@@ -48,6 +48,10 @@ std::unique_ptr<WebContentsImpl> BrowserPluginGuest::CreateNewGuestWindow(
+       static_cast<WebContentsImpl*>(new_contents.release()));
+ }
+ 
++bool BrowserPluginGuest::OpenedNoopenerWindowOutside(const GURL& target_url) {
++  return delegate_->OpenedNoopenerWindowOutside(target_url);
++}
++
+ void BrowserPluginGuest::InitInternal(WebContentsImpl* owner_web_contents) {
+   RenderWidgetHostImpl* rwhi =
+       GetWebContents()->GetPrimaryMainFrame()->GetRenderWidgetHost();
+diff --git a/content/browser/browser_plugin/browser_plugin_guest.h b/content/browser/browser_plugin/browser_plugin_guest.h
+index 91c9f60d..1ae541c2 100644
+--- a/content/browser/browser_plugin/browser_plugin_guest.h
++++ b/content/browser/browser_plugin/browser_plugin_guest.h
+@@ -58,6 +58,9 @@ class BrowserPluginGuest : public WebContentsObserver {
+   std::unique_ptr<WebContentsImpl> CreateNewGuestWindow(
+       const WebContents::CreateParams& params);
+ 
++  // DOMICILE: see BrowserPluginGuestDelegate::OpenedNoopenerWindowOutside.
++  bool OpenedNoopenerWindowOutside(const GURL& target_url);
++
+   // WebContentsObserver implementation.
+   void DidStartNavigation(NavigationHandle* navigation_handle) override;
+   void DidFinishNavigation(NavigationHandle* navigation_handle) override;
+diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
+index ba8a904a..d0d00508 100644
+--- a/content/browser/web_contents/web_contents_impl.cc
++++ b/content/browser/web_contents/web_contents_impl.cc
+@@ -5828,6 +5828,16 @@ FrameTree* WebContentsImpl::CreateNewWindow(
+       source_site_instance->GetSecurityPrincipal().IsGuest();
+   CHECK(!guest_site_instance || is_guest);
+ 
++  // DOMICILE: a guest may open a noopener window outside itself, as a link
++  // from an Electron app's page opens in the desk's browser rather than the
++  // app's partition. A noopener window.open() answers null anyway.
++  if (is_guest && params.opener_suppressed &&
++      !base::FeatureList::IsEnabled(features::kGuestViewMPArch) &&
++      GetBrowserPluginGuest()->OpenedNoopenerWindowOutside(
++          params.target_url)) {
++    return nullptr;
++  }
++
+   // We usually create the new window in the same BrowsingInstance (group of
+   // script-related windows), by passing in the current SiteInstance.  However,
+   // if the opener is being suppressed, we need to ensure that the new
+diff --git a/content/public/browser/browser_plugin_guest_delegate.cc b/content/public/browser/browser_plugin_guest_delegate.cc
+index b6f34433..725a95f9 100644
+--- a/content/public/browser/browser_plugin_guest_delegate.cc
++++ b/content/public/browser/browser_plugin_guest_delegate.cc
+@@ -11,6 +11,11 @@ std::unique_ptr<WebContents> BrowserPluginGuestDelegate::CreateNewGuestWindow(
+   NOTREACHED();
+ }
+ 
++bool BrowserPluginGuestDelegate::OpenedNoopenerWindowOutside(
++    const GURL& target_url) {
++  return false;
++}
++
+ WebContents* BrowserPluginGuestDelegate::GetOwnerWebContents() {
+   return nullptr;
+ }
+diff --git a/content/public/browser/browser_plugin_guest_delegate.h b/content/public/browser/browser_plugin_guest_delegate.h
+index 7c312d38..30c963ab 100644
+--- a/content/public/browser/browser_plugin_guest_delegate.h
++++ b/content/public/browser/browser_plugin_guest_delegate.h
+@@ -21,6 +21,11 @@ class CONTENT_EXPORT BrowserPluginGuestDelegate {
+   virtual std::unique_ptr<WebContents> CreateNewGuestWindow(
+       const WebContents::CreateParams& create_params);
+ 
++  // DOMICILE: whether the guest opened a noopener window at `target_url`
++  // itself, somewhere other than its own StoragePartition. Content then makes
++  // none.
++  virtual bool OpenedNoopenerWindowOutside(const GURL& target_url);
++
+   // Returns the WebContents that currently owns this guest.
+   virtual WebContents* GetOwnerWebContents();
+ 

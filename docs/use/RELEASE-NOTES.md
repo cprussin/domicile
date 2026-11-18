@@ -25,6 +25,7 @@ Work and personal, apart: each profile has its own sign-ins and extensions, and 
 [Profiles](BROWSER.md#profiles) · [#2212](https://github.com/cprussin/domicile/pull/2212) · [#2231](https://github.com/cprussin/domicile/pull/2231) · [#2234](https://github.com/cprussin/domicile/pull/2234) · [#2236](https://github.com/cprussin/domicile/pull/2236) · [#2259](https://github.com/cprussin/domicile/pull/2259)
 
 ### Also new
+- Put an app such as Slack in a browser profile, so that profile's password manager fills its sign-in window: `electron.profiles`. Links you click in an app such as Claude open in your browser, signed in. [Electron apps](ELECTRON-APPS.md)
 
 - Let Claude Code and other agents use your desktop, all of it or only the windows you pick. A violet pill in the bar shows the agent while it's in, with what it did last, a Change button and a Stop button. Remember one you trust, and forget it again in Settings. Turn on Connect from the web in Settings › Agents to use your desktop from claude.ai: copy your desktop's address into it as a connector, and enter the code your desktop shows. [Agents](../AGENTS.md)
 - Pop a video out of its page to float it over everything. [#2077](https://github.com/cprussin/domicile/pull/2077) · [#2116](https://github.com/cprussin/domicile/pull/2116) · [#2177](https://github.com/cprussin/domicile/pull/2177)

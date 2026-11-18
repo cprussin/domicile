@@ -120,6 +120,15 @@ class BrowserProfileRegistry final
   void WhenLoaded(Profile& shell, const std::string& id,
                   base::OnceClosure ready);
 
+  // Runs `ready` once an Electron app's windows can open in profile `id`:
+  // after the compositor's first profiles, which an app started with the
+  // desktop can beat, and the profile's load. Says why not for a profile the
+  // desk does not have, or a private one, which keeps nothing the app signs
+  // in to.
+  void WhenAppProfileReady(
+      const std::string& id,
+      base::OnceCallback<void(base::expected<void, std::string>)> ready);
+
   // One extension in a profile, for a shell's switches.
   struct ExtensionSwitch {
     std::string id;
@@ -289,6 +298,10 @@ class BrowserProfileRegistry final
   std::map<std::string, Loaded> loaded_;
   // What waits on each profile that is loading (WhenLoaded), by id.
   std::map<std::string, std::vector<base::OnceClosure>> waiting_;
+  // Whether the compositor's profiles have come (Configure).
+  bool configured_ = false;
+  // What waits on them.
+  std::vector<base::OnceClosure> waiting_for_config_;
   base::ScopedMultiSourceObservation<Profile, ProfileObserver> observations_{
       this};
   // Every profile's that InstallExtensionsOf installed into.

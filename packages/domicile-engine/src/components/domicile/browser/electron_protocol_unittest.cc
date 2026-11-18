@@ -38,6 +38,29 @@ TEST(ElectronProtocolTest, HelloNamesTheAppAndItsPartition) {
             (WebViewPartition{.name = "electron-claude", .persist = true}));
 }
 
+TEST(ElectronProtocolTest, HelloWithoutAProfileRunsInTheDefaultOne) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"hello","version":1,"app_id":"a","partition":"persist:a"})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(std::get<ElectronHello>(*request).profile, "");
+}
+
+TEST(ElectronProtocolTest, HelloNamesTheAppsBrowserProfile) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"hello","version":1,"app_id":"a","partition":"persist:a",)"
+      R"("profile":"work"})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(std::get<ElectronHello>(*request).profile, "work");
+}
+
+TEST(ElectronProtocolTest, HelloNeedsAProfileWithAName) {
+  EXPECT_EQ(WhyRefused(R"({"type":"hello","version":1,"app_id":"a",)"
+                       R"("partition":"persist:a","profile":""})"),
+            "\"profile\" must be a string that is not empty");
+}
+
 TEST(ElectronProtocolTest, HelloFromAnotherVersionIsRefusedWithOurs) {
   EXPECT_EQ(WhyRefused(R"({"type":"hello","version":2,"app_id":"a",)"
                        R"("partition":"persist:a"})"),
