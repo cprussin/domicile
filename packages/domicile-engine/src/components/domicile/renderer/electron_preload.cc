@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/command_line.h"
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
@@ -18,8 +19,10 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/domicile/renderer/context_bridge.h"
 #include "components/domicile/renderer/electron_node.h"
+#include "components/version_info/version_info.h"
 #include "content/public/renderer/render_frame.h"
 #include "gin/converter.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
@@ -30,11 +33,14 @@
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/web/web_console_message.h"
+#include "third_party/blink/public/web/web_css_origin.h"
 #include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_script_execution_callback.h"
 #include "third_party/blink/public/web/web_script_source.h"
 #include "url/gurl.h"
+#include "v8/include/v8-container.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-exception.h"
 #include "v8/include/v8-function-callback.h"
@@ -52,13 +58,33 @@ namespace {
 // above both and below Blink's kEmbedderWorldIdLimit (1 << 29).
 constexpr int32_t kElectronPreloadWorld = 1 << 20;
 
+// process.arch, in Node's names.
+#if defined(ARCH_CPU_X86_64)
+constexpr char kArch[] = "x64";
+#elif defined(ARCH_CPU_ARM64)
+constexpr char kArch[] = "arm64";
+#elif defined(ARCH_CPU_X86)
+constexpr char kArch[] = "ia32";
+#elif defined(ARCH_CPU_ARMEL)
+constexpr char kArch[] = "arm";
+#else
+#error "an Electron preload's process.arch needs Node's name for this CPU"
+#endif
+
+// webFrame.routingId: each Electron page's frame in a renderer has its own.
+int NextRoutingId() {
+  static int next = 1;
+  return next++;
+}
+
 // Run in the preload's world with the natives and the preload, as a function
-// of Node's module arguments, or null when Node loads the preload. Gives back
+// of Node's module arguments, or null when Node loads the preload, and what
+// the renderer knows of itself and its frame (Facts in Run). Gives back
 // the functions the browser's messages call, and `electron` for Node's
 // require. Everything Electron-shaped lives here; the natives only move
 // strings and values.
 constexpr char kBootstrap[] = R"JS(
-(function (native, preload, contextIsolated) {
+(function (native, preload, contextIsolated, facts) {
   'use strict';
   const listeners = new Map();
   const answers = new Map();
@@ -209,8 +235,100 @@ constexpr char kBootstrap[] = R"JS(
       native.expose(String(key), api);
     },
     exposeInIsolatedWorld: unsupported('contextBridge.exposeInIsolatedWorld'),
+    executeInMainWorld: unsupported('contextBridge.executeInMainWorld'),
   };
-  const electron = Object.freeze({ contextBridge, ipcRenderer });
+  // Electron's webFrame for this frame, the window's main frame: the only
+  // frame a preload runs in on Domicile, so it is its own top.
+  const inserted = new Map();
+  const webFrame = {
+    routingId: facts.routingId,
+    frameToken: facts.frameToken,
+    parent: null,
+    opener: null,
+    firstChild: null,
+    nextSibling: null,
+    insertCSS(css, options = {}) {
+      const origin = options?.cssOrigin ?? 'author';
+      if (origin !== 'author' && origin !== 'user') {
+        throw new TypeError(
+            "webFrame.insertCSS's cssOrigin must be 'author' or 'user'");
+      }
+      const key = native.insertCSS(String(css), origin === 'user');
+      inserted.set(key, origin === 'user');
+      return key;
+    },
+    removeInsertedCSS(key) {
+      const user = inserted.get(String(key));
+      if (user === undefined) return;
+      inserted.delete(String(key));
+      native.removeInsertedCSS(String(key), user);
+    },
+    // The page's zoom, which Chromium folds into its devicePixelRatio over
+    // the screen's own scale.
+    getZoomFactor() {
+      return globalThis.devicePixelRatio / native.deviceScale();
+    },
+    getZoomLevel() {
+      // Chromium's zoom levels: each one is 1.2 times the last.
+      return Math.log(webFrame.getZoomFactor()) / Math.log(1.2);
+    },
+    findFrameByRoutingId(id) {
+      return id === webFrame.routingId ? webFrame : null;
+    },
+    findFrameByToken(token) {
+      return token === webFrame.frameToken ? webFrame : null;
+    },
+    setZoomFactor: unsupported('webFrame.setZoomFactor'),
+    setZoomLevel: unsupported('webFrame.setZoomLevel'),
+    setVisualZoomLevelLimits: unsupported('webFrame.setVisualZoomLevelLimits'),
+    setSpellCheckProvider: unsupported('webFrame.setSpellCheckProvider'),
+    isWordMisspelled: unsupported('webFrame.isWordMisspelled'),
+    getWordSuggestions: unsupported('webFrame.getWordSuggestions'),
+    executeJavaScript: unsupported('webFrame.executeJavaScript'),
+    executeJavaScriptInIsolatedWorld:
+        unsupported('webFrame.executeJavaScriptInIsolatedWorld'),
+    setIsolatedWorldInfo: unsupported('webFrame.setIsolatedWorldInfo'),
+    getResourceUsage: unsupported('webFrame.getResourceUsage'),
+    clearCache: unsupported('webFrame.clearCache'),
+    getFrameForSelector: unsupported('webFrame.getFrameForSelector'),
+    findFrameByName: unsupported('webFrame.findFrameByName'),
+  };
+  webFrame.top = webFrame;
+  const webUtils = {
+    getPathForFile: unsupported('webUtils.getPathForFile'),
+  };
+  // What a crash report would carry. Domicile sends none, so these are only
+  // the app's to read back.
+  const crashParameters = new Map();
+  const crashReporter = {
+    addExtraParameter(key, value) {
+      crashParameters.set(String(key), String(value));
+    },
+    removeExtraParameter(key) {
+      crashParameters.delete(String(key));
+    },
+    getParameters() {
+      return Object.fromEntries(crashParameters);
+    },
+  };
+  const nativeImage = {
+    createEmpty: unsupported('nativeImage.createEmpty'),
+    createFromPath: unsupported('nativeImage.createFromPath'),
+    createFromBitmap: unsupported('nativeImage.createFromBitmap'),
+    createFromBuffer: unsupported('nativeImage.createFromBuffer'),
+    createFromDataURL: unsupported('nativeImage.createFromDataURL'),
+    createFromNamedImage: unsupported('nativeImage.createFromNamedImage'),
+    createThumbnailFromPath: unsupported('nativeImage.createThumbnailFromPath'),
+  };
+  // A sandboxed preload's electron module, as Electron's has it.
+  const electron = Object.freeze({
+    contextBridge,
+    crashReporter,
+    ipcRenderer,
+    nativeImage,
+    webFrame,
+    webUtils,
+  });
   const require = (name) => {
     if (name === 'electron' || name === 'electron/renderer') return electron;
     throw new Error(
@@ -222,9 +340,16 @@ constexpr char kBootstrap[] = R"JS(
     type: 'renderer',
     sandboxed: true,
     contextIsolated: true,
+    // A preload runs only in a window's main frame on Domicile. Claude's
+    // preloads set up nothing of theirs without this.
+    isMainFrame: true,
     env: {},
-    argv: [],
-    versions: {},
+    // The renderer's program, then what the window asked for: an app looks
+    // there for the switches it gave webPreferences.additionalArguments.
+    argv: [...facts.argv],
+    execPath: facts.argv[0],
+    arch: facts.arch,
+    versions: { chrome: facts.chromeVersion },
   };
   const module = { exports: {} };
   if (preload !== null) {
@@ -302,7 +427,8 @@ void ElectronPreload::Attach(content::RenderFrame* frame) {
 
 ElectronPreload::ElectronPreload(content::RenderFrame* frame)
     : content::RenderFrameObserver(frame),
-      content::RenderFrameObserverTracker<ElectronPreload>(frame) {
+      content::RenderFrameObserverTracker<ElectronPreload>(frame),
+      routing_id_(NextRoutingId()) {
   frame->GetAssociatedInterfaceRegistry()->AddInterface<mojom::ElectronFrame>(
       base::BindRepeating(&ElectronPreload::Bind, weak_factory_.GetWeakPtr()));
 }
@@ -354,9 +480,12 @@ void ElectronPreload::OnDestruct() {
 
 void ElectronPreload::Preload(
     const std::string& source,
+    const std::vector<std::string>& arguments,
     mojom::ElectronNodePtr node,
     mojo::PendingAssociatedRemote<mojom::ElectronFrameHost> host) {
-  next_ = Next{.preload = {.source = source, .node = std::move(node)},
+  next_ = Next{.preload = {.source = source,
+                           .arguments = arguments,
+                           .node = std::move(node)},
                .host = std::move(host)};
 }
 
@@ -495,8 +624,31 @@ bool ElectronPreload::Run(ToRun to_run) {
   add("post", &ElectronPreload::Post);
   add("portPost", &ElectronPreload::PortPost);
   add("portClose", &ElectronPreload::PortClose);
+  add("insertCSS", &ElectronPreload::InsertCss);
+  add("removeInsertedCSS", &ElectronPreload::RemoveInsertedCss);
+  add("deviceScale", &ElectronPreload::DeviceScale);
+  // What the renderer knows of itself and this frame, for process and
+  // webFrame.
+  v8::Local<v8::Object> facts = v8::Object::New(isolate);
+  const auto fact = [&](const char* name, v8::Local<v8::Value> value) {
+    facts->CreateDataProperty(world, gin::StringToSymbol(isolate, name), value)
+        .Check();
+  };
+  std::vector<v8::Local<v8::Value>> process_argv = {gin::StringToV8(
+      isolate, base::CommandLine::ForCurrentProcess()->GetProgram().value())};
+  for (const std::string& argument : to_run.arguments) {
+    process_argv.push_back(gin::StringToV8(isolate, argument));
+  }
+  fact("argv",
+       v8::Array::New(isolate, process_argv.data(), process_argv.size()));
+  fact("arch", gin::StringToV8(isolate, kArch));
+  fact("chromeVersion",
+       gin::StringToV8(isolate, std::string(version_info::GetVersionNumber())));
+  fact("frameToken",
+       gin::StringToV8(isolate, frame.GetLocalFrameToken().ToString()));
+  fact("routingId", v8::Integer::New(isolate, routing_id_));
   v8::Local<v8::Value> argv[] = {natives, preload,
-                                 v8::Boolean::New(isolate, isolated)};
+                                 v8::Boolean::New(isolate, isolated), facts};
   v8::Local<v8::Value> made;
   // The preload is the app's script, and may end the frame, this with it.
   base::WeakPtr<ElectronPreload> alive = weak_factory_.GetWeakPtr();
@@ -534,6 +686,7 @@ bool ElectronPreload::Run(ToRun to_run) {
     // Node runs the app's preload, which may end the frame, this with it.
     std::unique_ptr<ElectronNodeEnvironment> node =
         ElectronNodeEnvironment::Start(isolate, world, *to_run.node,
+                                       to_run.arguments,
                                        electron.As<v8::Object>());
     if (!alive) {
       return false;
@@ -690,6 +843,60 @@ void ElectronPreload::PortClose(
   if (self != nullptr && self->host_.is_bound()) {
     self->host_->PortClosed(port);
   }
+}
+
+// static
+void ElectronPreload::InsertCss(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  ElectronPreload* self = Of(isolate);
+  std::string css;
+  // The bootstrap is the only caller: the CSS, and whether it is the user's.
+  CHECK(gin::ConvertFromV8(isolate, info[0], &css) && info[1]->IsBoolean());
+  if (self == nullptr) {
+    isolate->ThrowException(v8::Exception::Error(gin::StringToV8(
+        isolate, "this window's page is gone, so webFrame.insertCSS fails")));
+    return;
+  }
+  const blink::WebStyleSheetKey key =
+      self->render_frame()->GetWebFrame()->GetDocument().InsertStyleSheet(
+          blink::WebString::FromUtf8(css), /*key=*/nullptr,
+          info[1].As<v8::Boolean>()->Value() ? blink::WebCssOrigin::kUser
+                                             : blink::WebCssOrigin::kAuthor);
+  info.GetReturnValue().Set(gin::StringToV8(isolate, key.Utf8()));
+}
+
+// static
+void ElectronPreload::RemoveInsertedCss(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  ElectronPreload* self = Of(isolate);
+  std::string key;
+  CHECK(gin::ConvertFromV8(isolate, info[0], &key) && info[1]->IsBoolean());
+  // A page that went took its style sheets with it.
+  if (self == nullptr) {
+    return;
+  }
+  self->render_frame()->GetWebFrame()->GetDocument().RemoveInsertedStyleSheet(
+      blink::WebString::FromUtf8(key), info[1].As<v8::Boolean>()->Value()
+                                           ? blink::WebCssOrigin::kUser
+                                           : blink::WebCssOrigin::kAuthor);
+}
+
+// static
+void ElectronPreload::DeviceScale(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  ElectronPreload* self = Of(isolate);
+  blink::WebFrameWidget* widget =
+      self ? self->render_frame()->GetWebFrame()->FrameWidget() : nullptr;
+  if (widget == nullptr) {
+    isolate->ThrowException(v8::Exception::Error(gin::StringToV8(
+        isolate, "this window's page is gone, so it has no zoom")));
+    return;
+  }
+  info.GetReturnValue().Set(
+      v8::Number::New(isolate, widget->GetOriginalDeviceScaleFactor()));
 }
 
 // static

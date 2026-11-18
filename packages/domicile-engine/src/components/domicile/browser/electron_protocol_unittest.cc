@@ -381,6 +381,25 @@ TEST(ElectronProtocolTest, OpenWindowMayGiveItsPageNode) {
             "\"node\"'s \"preload\", not from \"preload\"");
 }
 
+TEST(ElectronProtocolTest, OpenWindowMayGiveItsRendererArguments) {
+  const auto plain = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  const auto given = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+      R"("arguments":["--desktop-features={}","--x"]})");
+
+  ASSERT_TRUE(plain.has_value() && given.has_value());
+  EXPECT_TRUE(std::get<ElectronOpenWindow>(*plain).arguments.empty());
+  EXPECT_EQ(std::get<ElectronOpenWindow>(*given).arguments,
+            (std::vector<std::string>{"--desktop-features={}", "--x"}));
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"https://a.test/","arguments":"--x"})"),
+            "\"arguments\" must be a list of strings");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":1,)"
+                       R"("url":"https://a.test/","arguments":[1]})"),
+            "\"arguments\" must be a list of strings");
+}
+
 TEST(ElectronProtocolTest, SetTitleAndSetHiddenNameTheirWindow) {
   const auto title = ParseElectronRequest(
       R"({"type":"set_title","window":2,"title":"Slack"})");

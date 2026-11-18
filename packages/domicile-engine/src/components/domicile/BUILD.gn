@@ -936,6 +936,7 @@ source_set("electron_preload") {
     ":context_bridge",
     ":electron_node",
     "//base",
+    "//components/version_info",
     "//gin",
     "//third_party/blink/public:blink",
     "//url",

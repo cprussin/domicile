@@ -69,15 +69,16 @@ class ChromeElectronDesk final : public ElectronDesk {
                                   const std::string& app_id,
                                   const WebViewPartition& partition,
                                   const std::string& preload,
+                                  const std::vector<std::string>& arguments,
                                   const std::optional<ElectronNode>& node,
                                   ElectronPageCalls calls,
                                   base::WeakPtr<ElectronSession> session,
                                   bool view,
                                   const std::string& title,
                                   bool hidden) override {
-    return OpenElectronWindow(url, app_id, partition, preload, node,
-                              std::move(calls), std::move(session), view,
-                              title, hidden);
+    return OpenElectronWindow(url, app_id, partition, preload, arguments, node,
+                              std::move(calls), std::move(session), view, title,
+                              hidden);
   }
   void SetViews(const std::string& id,
                 std::vector<ElectronDeskView> views) override {

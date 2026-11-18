@@ -47,12 +47,14 @@ class ElectronPage final : public content::WebContentsObserver,
   ~ElectronPage() override;
 
   // Makes `contents` an Electron window's page whose documents run `preload`,
-  // make `calls` and load through `session`. Before its first navigation, so
+  // with `arguments` in its process.argv, make `calls` and load through
+  // `session`. Before its first navigation, so
   // a `node` page's first renderer starts as one. A `node` page has Node.js,
   // as a window that isn't sandboxed has in Electron, and its preload is a
   // file, `node->preload`, rather than `preload`.
   static void Attach(content::WebContents& contents,
                      std::string preload,
+                     std::vector<std::string> arguments,
                      std::optional<ElectronNode> node,
                      ElectronPageCalls calls,
                      base::WeakPtr<ElectronSession> session);
@@ -156,6 +158,7 @@ class ElectronPage final : public content::WebContentsObserver,
 
   ElectronPage(content::WebContents* contents,
                std::string preload,
+               std::vector<std::string> arguments,
                std::optional<ElectronNode> node,
                ElectronPageCalls calls,
                base::WeakPtr<ElectronSession> session);
@@ -175,6 +178,9 @@ class ElectronPage final : public content::WebContentsObserver,
   bool HasPreload() const;
 
   const std::string preload_;
+  // webPreferences.additionalArguments, which the preload sees in
+  // process.argv.
+  const std::vector<std::string> arguments_;
   const std::optional<ElectronNode> node_;
   const ElectronPageCalls calls_;
   const base::WeakPtr<ElectronSession> session_;

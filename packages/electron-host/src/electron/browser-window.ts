@@ -34,6 +34,8 @@ export type WebPreferences = {
   readonly contextIsolation?: boolean | undefined;
   /** Left out, a page is sandboxed unless it asks for nodeIntegration. */
   readonly sandbox?: boolean | undefined;
+  /** Added to the page's renderer's command line: its process.argv. */
+  readonly additionalArguments?: readonly string[] | undefined;
 };
 
 /** What every page with Node.js gets alike: the app's, not the window's. */
@@ -475,6 +477,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       { resolve: (result: unknown) => void; reject: (why: Error) => void }
     >();
     readonly #preload: string | undefined;
+    readonly #arguments: readonly string[];
     /** Node.js in its page, for a window that isn't sandboxed. */
     readonly #node: PageNode | undefined;
     readonly #view: boolean;
@@ -494,6 +497,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         sandboxed && preferences.preload !== undefined
           ? readPreload(preferences.preload)
           : undefined;
+      this.#arguments = preferences.additionalArguments ?? [];
       // Node in the page loads the preload from its file.
       this.#node = sandboxed
         ? undefined
@@ -564,6 +568,9 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           url,
           window: this.id,
           ...(this.#preload === undefined ? {} : { preload: this.#preload }),
+          ...(this.#arguments.length === 0
+            ? {}
+            : { arguments: this.#arguments }),
           ...(this.#node === undefined ? {} : { node: this.#node }),
           ...(session === "" ? {} : { session }),
           ...(this.#view ? { view: true } : {}),

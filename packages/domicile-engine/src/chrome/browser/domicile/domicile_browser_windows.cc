@@ -237,6 +237,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
       const std::string& app_id,
       const WebViewPartition& partition,
       const std::string& preload,
+      const std::vector<std::string>& arguments,
       const std::optional<ElectronNode>& node,
       ElectronPageCalls calls,
       base::WeakPtr<ElectronSession> session,
@@ -252,7 +253,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
           if (session && !session->user_agent().empty()) {
             UseUserAgent(guest.contents(), session->user_agent());
           }
-          ElectronPage::Attach(guest.contents(), preload, node,
+          ElectronPage::Attach(guest.contents(), preload, arguments, node,
                                std::move(calls), std::move(session));
           guest.Navigate(url);
         },
@@ -1486,6 +1487,7 @@ std::optional<std::string> OpenElectronWindow(
     const std::string& app_id,
     const WebViewPartition& partition,
     const std::string& preload,
+    const std::vector<std::string>& arguments,
     const std::optional<ElectronNode>& node,
     ElectronPageCalls calls,
     base::WeakPtr<ElectronSession> session,
@@ -1496,7 +1498,7 @@ std::optional<std::string> OpenElectronWindow(
   if (windows == nullptr) {
     return std::nullopt;
   }
-  return windows->OpenElectron(url, app_id, partition, preload, node,
+  return windows->OpenElectron(url, app_id, partition, preload, arguments, node,
                                std::move(calls), std::move(session), view,
                                title, hidden);
 }

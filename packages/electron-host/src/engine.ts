@@ -63,6 +63,8 @@ export type EngineRequest =
       readonly url: string;
       /** The preload's source, run before each page's own scripts. */
       readonly preload?: string;
+      /** webPreferences.additionalArguments, in the page's process.argv. */
+      readonly arguments?: readonly string[];
       /** Its session's Electron partition; the app's own when left out. */
       readonly session?: string;
       /** A view (`WebContentsView`), shown only as part of a window. */

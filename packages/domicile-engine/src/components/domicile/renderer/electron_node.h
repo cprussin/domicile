@@ -6,6 +6,8 @@
 
 #include <atomic>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
@@ -44,12 +46,15 @@ bool IsElectronNodeRenderer();
 class ElectronNodeEnvironment final {
  public:
   // Starts Node in `context`, the preload's world, and loads `node`'s
-  // preload. `electron` is what `require("electron")` gives. Node failing to
+  // preload. Its process.argv is the renderer's program and `arguments`, the
+  // window's additionalArguments. `electron` is what `require("electron")`
+  // gives. Node failing to
   // start is the engine's bug, so it ends the renderer.
   static std::unique_ptr<ElectronNodeEnvironment> Start(
       v8::Isolate* isolate,
       v8::Local<v8::Context> context,
       const mojom::ElectronNode& node,
+      const std::vector<std::string>& arguments,
       v8::Local<v8::Object> electron);
 
   ElectronNodeEnvironment(const ElectronNodeEnvironment&) = delete;

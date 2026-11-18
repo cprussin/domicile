@@ -1090,14 +1090,26 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
       const base::Value* title = request->Find("title");
       const base::Value* hidden = request->Find("hidden");
       const base::Value* node = request->Find("node");
+      const base::Value* arguments = request->Find("arguments");
       base::expected<std::string, std::string> session =
           SessionIn(*request, /*optional=*/true);
       std::optional<base::expected<ElectronNode, std::string>> node_in;
       if (node != nullptr) {
         node_in = NodeIn(*node);
       }
+      std::vector<std::string> arguments_in;
+      if (arguments != nullptr && arguments->is_list()) {
+        for (const base::Value& argument : arguments->GetList()) {
+          if (!argument.is_string()) {
+            return Refuse("\"arguments\" must be a list of strings", *window);
+          }
+          arguments_in.push_back(argument.GetString());
+        }
+      }
       if (preload != nullptr && !preload->is_string()) {
         return Refuse("\"preload\" must be a string", *window);
+      } else if (arguments != nullptr && !arguments->is_list()) {
+        return Refuse("\"arguments\" must be a list of strings", *window);
       } else if (node_in.has_value() && !node_in->has_value()) {
         return Refuse(std::move(node_in->error()), *window);
       } else if (node != nullptr && preload != nullptr) {
@@ -1126,6 +1138,7 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
           .node = node_in.has_value()
                       ? std::optional<ElectronNode>(std::move(**node_in))
                       : std::nullopt,
+          .arguments = std::move(arguments_in),
           .session = std::move(*session),
           .view = view != nullptr && view->GetBool(),
           .title = title ? title->GetString() : std::string(),

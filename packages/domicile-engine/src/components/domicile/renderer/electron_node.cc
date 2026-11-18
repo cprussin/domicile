@@ -247,6 +247,7 @@ std::unique_ptr<ElectronNodeEnvironment> ElectronNodeEnvironment::Start(
     v8::Isolate* isolate,
     v8::Local<v8::Context> context,
     const mojom::ElectronNode& node,
+    const std::vector<std::string>& arguments,
     v8::Local<v8::Object> electron) {
   // The browser sends a Node page only to a renderer it started for one:
   // anything else is the engine's bug, and this one is sandboxed.
@@ -276,11 +277,13 @@ std::unique_ptr<ElectronNodeEnvironment> ElectronNodeEnvironment::Start(
                          node::EnvironmentFlags::kNoBrowserGlobals |
                          node::EnvironmentFlags::kNoCreateInspector |
                          node::EnvironmentFlags::kNoStartDebugSignalHandler;
+  std::vector<std::string> argv = {
+      base::CommandLine::ForCurrentProcess()->GetProgram().value()};
+  argv.insert(argv.end(), arguments.begin(), arguments.end());
   {
     v8::TryCatch try_catch(isolate);
     self->environment_ = node::CreateEnvironment(
-        self->isolate_data_, context,
-        {base::CommandLine::ForCurrentProcess()->GetProgram().value()}, {},
+        self->isolate_data_, context, argv, {},
         static_cast<node::EnvironmentFlags::Flags>(flags));
     CHECK(self->environment_)
         << "domicile: Node.js did not start in an Electron page: "
