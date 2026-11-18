@@ -1,4 +1,5 @@
 ---
+"@domicile-desktop/engine": minor
 "domicile": minor
 "@domicile-desktop/sdk": minor
 "@domicile-desktop/component-library": minor
