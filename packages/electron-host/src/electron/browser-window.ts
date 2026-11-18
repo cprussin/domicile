@@ -505,6 +505,15 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       pages.set(this.id, this);
     }
 
+    /** Electron's web-contents-created, which each subclass's constructor ends with. */
+    protected created() {
+      app.emit(
+        "web-contents-created",
+        { ...eventObject(), sender: this.webContents },
+        this.webContents,
+      );
+    }
+
     /**
      * Runs `code` in the page's main world, after any load under way, as
      * Electron's executeJavaScript waits for one.
@@ -587,6 +596,9 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           for (const run of this.#toRun.splice(0)) {
             run();
           }
+          // The engine says only when the page has loaded, which is after
+          // its DOM is.
+          this.webContents.emit("dom-ready", eventObject());
           this.webContents.emit("did-finish-load");
           this.wasLoaded();
           for (const load of this.#loads.splice(0)) {
@@ -805,6 +817,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
 
     constructor(options: ViewOptions = {}) {
       super(options.webPreferences ?? {}, "", true);
+      this.created();
     }
 
     /** Where the app asks for it in its window, in CSS pixels. */
@@ -996,6 +1009,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       this.#menuBarAutoHide = options.autoHideMenuBar ?? false;
       this.#menu?.on("changed", this.#showMenuBar);
       windows.set(this.id, this);
+      this.created();
     }
 
     /** Shows the window if the app hid it, and focuses it. */

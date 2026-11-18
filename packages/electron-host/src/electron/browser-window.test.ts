@@ -111,6 +111,40 @@ describe(createBrowserWindow, () => {
     expect(window.isVisible()).toBe(true);
   });
 
+  it("tells the app of each page as it makes it, as Electron's web-contents-created", () => {
+    const { app, BrowserWindow, WebContentsView } = setUp();
+    const created: unknown[] = [];
+    app.on("web-contents-created", (event, webContents) => {
+      created.push(event.sender, webContents);
+    });
+
+    const window = new BrowserWindow();
+    const view = new WebContentsView();
+
+    expect(created).toEqual([
+      window.webContents,
+      window.webContents,
+      view.webContents,
+      view.webContents,
+    ]);
+  });
+
+  it("is dom-ready before it finishes loading", async () => {
+    const { BrowserWindow, say } = setUp();
+    const window = new BrowserWindow();
+    const heard: string[] = [];
+    window.webContents.on("dom-ready", () => heard.push("dom-ready"));
+    window.webContents.on("did-finish-load", () =>
+      heard.push("did-finish-load"),
+    );
+
+    const loading = window.loadURL("https://notes.test/");
+    say({ type: "window_loaded", window: 1 });
+    await loading;
+
+    expect(heard).toEqual(["dom-ready", "did-finish-load"]);
+  });
+
   it("rejects a load the engine refused, with why", async () => {
     const { BrowserWindow, say } = setUp();
     const window = new BrowserWindow();
