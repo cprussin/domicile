@@ -1,6 +1,7 @@
 import { Button } from "@domicile-desktop/component-library/Button";
 import type { Point } from "@domicile-desktop/component-library/ContextMenu";
 import { ContextMenu } from "@domicile-desktop/component-library/ContextMenu";
+import { newTabClick } from "@domicile-desktop/component-library/new-tab-click";
 import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ClockCounterClockwise";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
 import type { MouseEvent, ReactNode } from "react";
@@ -12,9 +13,6 @@ import { useLongPress } from "./useLongPress";
 /** How many pages a menu lists, as Chrome's. */
 const MENU_LENGTH = 12;
 
-/** `MouseEvent.button` for the middle button. */
-const MIDDLE_BUTTON = 1;
-
 type Props = {
   /** The arrow. */
   children: ReactNode;
@@ -24,7 +22,7 @@ type Props = {
   label: "Back" | "Forward";
   /** Takes one step, for a click. */
   onStep: () => void;
-  /** Takes one step in a new window, for a middle click. */
+  /** Takes one step in a new window, for a middle click or a Ctrl+click. */
   onStepInNewWindow: () => void;
   /** Opens the History app. */
   onShowAllHistory: () => void;
@@ -73,18 +71,15 @@ export const HistoryButton = ({
     }
   };
 
-  const press = useLongPress(openMenu, onStep);
+  const step = newTabClick(onStep, onStepInNewWindow);
+  const press = useLongPress(openMenu, step.onClick);
 
   return (
     <>
       <Button
         disabled={disabled}
         label={label}
-        onAuxClick={(event: MouseEvent) => {
-          if (event.button === MIDDLE_BUTTON) {
-            onStepInNewWindow();
-          }
-        }}
+        onAuxClick={step.onAuxClick}
         onContextMenu={(event: MouseEvent) => {
           event.preventDefault();
           openMenu();
@@ -115,15 +110,15 @@ export const HistoryButton = ({
             <ContextMenu.Item
               icon={<PageIcon page={page} />}
               key={page.id}
-              onAuxClick={(event: MouseEvent) => {
-                if (event.button === MIDDLE_BUTTON) {
+              {...newTabClick(
+                () => {
+                  history.go(page.id);
+                },
+                () => {
                   setMenu(undefined);
                   history.goInNewWindow(page.id);
-                }
-              }}
-              onClick={() => {
-                history.go(page.id);
-              }}
+                },
+              )}
             >
               {page.title}
             </ContextMenu.Item>

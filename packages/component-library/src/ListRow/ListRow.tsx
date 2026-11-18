@@ -8,6 +8,7 @@ import { flex } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
 import type { RowMotion } from "../LeavingRows/LeavingRow";
 import { LeavingRow } from "../LeavingRows/LeavingRow";
+import { newTabClick } from "../new-tab-click";
 import "../stylesheet";
 
 export const SURFACES = ["plain", "filled"] as const;
@@ -62,22 +63,19 @@ type Props = Common &
         /** Makes the whole row one button. Its `end` must not be a control. */
         onPress: () => void;
         /**
-         * A middle-click on the row, for the row's thing elsewhere, as a
-         * link opens in a new tab.
+         * A middle click or a Ctrl+click on the row, for the row's thing
+         * elsewhere, as a link opens in a new tab.
          */
-        onMiddlePress?: (() => void) | undefined;
+        onPressInNew?: (() => void) | undefined;
       }
     | {
         actions?: undefined;
         busy?: undefined;
         name?: undefined;
         onPress?: undefined;
-        onMiddlePress?: undefined;
+        onPressInNew?: undefined;
       }
   );
-
-/** `MouseEvent.button` for the middle button. */
-const MIDDLE_BUTTON = 1;
 
 /**
  * One row of a panel's list: an icon, a label over a detail, and something
@@ -99,8 +97,8 @@ export const ListRow = ({
   label,
   motion,
   name,
-  onMiddlePress,
   onPress,
+  onPressInNew,
   surface = "plain",
 }: Props) => {
   const below = Children.toArray(children).length > 0;
@@ -162,17 +160,10 @@ export const ListRow = ({
             aria-busy={busy === true ? true : undefined}
             aria-label={name}
             className={rowStyles({ pressable: true })}
-            onAuxClick={
-              onMiddlePress === undefined
-                ? undefined
-                : (event) => {
-                    if (event.button === MIDDLE_BUTTON) {
-                      onMiddlePress();
-                    }
-                  }
-            }
-            onClick={onPress}
             type="button"
+            {...(onPressInNew === undefined
+              ? { onClick: onPress }
+              : newTabClick(onPress, onPressInNew))}
           >
             {face}
           </button>
