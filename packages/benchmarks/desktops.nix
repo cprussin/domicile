@@ -194,6 +194,15 @@ let
         # First-run screens a user dismisses once.
         services.gnome.gnome-initial-setup.enable = false;
         environment.gnome.excludePackages = [ pkgs.gnome-tour ];
+        # Never blank or lock the idle screen mid-run: the other desktops
+        # here don't, and a lock screen would be what we measure.
+        programs.dconf.profiles.user.databases = [{
+          settings = {
+            "org/gnome/desktop/session".idle-delay = lib.gvariant.mkUint32 0;
+            "org/gnome/desktop/screensaver".lock-enabled = false;
+            "org/gnome/settings-daemon/plugins/power".sleep-inactive-ac-type = "nothing";
+          };
+        }];
       };
     };
 
@@ -207,6 +216,25 @@ let
         services.desktopManager.plasma6.enable = true;
         # A first-run screen a user dismisses once.
         environment.plasma6.excludePackages = [ pkgs.kdePackages.plasma-welcome ];
+        # Never dim, blank or lock the idle screen mid-run: the other
+        # desktops here don't, and a lock screen would be what we measure.
+        environment.etc."xdg/kscreenlockerrc".text = lib.generators.toINI { } {
+          Daemon = { Autolock = false; LockOnResume = false; };
+        };
+        environment.etc."xdg/powerdevilrc".text = ''
+          [AC][Display]
+          DimDisplayWhenIdle=false
+          TurnOffDisplayWhenIdle=false
+
+          [AC][SuspendAndShutdown]
+          AutoSuspendAction=0
+        '';
+        # With autologin there's no password to open the wallet, so KWallet
+        # asks for one, and Slack waits on that dialog forever to store its
+        # sign-in. Someone typing their password at login never sees it.
+        environment.etc."xdg/kwalletrc".text = lib.generators.toINI { } {
+          Wallet = { Enabled = false; };
+        };
       };
     };
   };
