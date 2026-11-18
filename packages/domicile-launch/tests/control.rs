@@ -1292,6 +1292,9 @@ fn nothing_dialed() -> Desktop<'static> {
         shell_commands: &|| panic!("only shell_commands lists the shell's commands"),
         shell_bindings: &|| panic!("only shell_bindings lists the shell's bindings"),
         inputs: &|| panic!("only inputs lists the input devices"),
+        agents: &|| panic!("only agents lists the agents"),
+        stop_agent: &|_| panic!("only stop_agent stops an agent"),
+        forget_agent: &|_| panic!("only forget_agent forgets an agent"),
         record: &|| panic!("only screen_record records anything"),
         send: &|_| panic!("only send_shell sends anything"),
         site_data: &|| panic!("only site_data lists site data"),
@@ -1545,4 +1548,39 @@ fn devtools_is_refused_while_the_desktop_is_locked() {
             why: "the desktop is locked".to_string()
         }
     );
+}
+
+#[test]
+fn agents_are_listed_stopped_and_forgotten_through_the_compositor() {
+    use domicile_protocol::KnownAgents;
+    let stopped = Cell::new(None);
+    let forgot = std::cell::RefCell::new(None);
+    let desktop = Desktop {
+        agents: &|| Ok(KnownAgents::default()),
+        stop_agent: &|session| {
+            stopped.set(Some(session));
+            Ok(())
+        },
+        forget_agent: &|agent| {
+            *forgot.borrow_mut() = Some(agent.to_string());
+            Ok(())
+        },
+        ..nothing_dialed()
+    };
+    assert_eq!(
+        reply_to("{\"type\":\"agents\"}", &desktop),
+        Response::Agents {
+            agents: KnownAgents::default()
+        }
+    );
+    assert_eq!(
+        reply_to("{\"type\":\"stop_agent\",\"session\":4}", &desktop),
+        Response::Done
+    );
+    assert_eq!(stopped.get(), Some(4));
+    assert_eq!(
+        reply_to("{\"type\":\"forget_agent\",\"agent\":\"Codex\"}", &desktop),
+        Response::Done
+    );
+    assert_eq!(forgot.borrow().as_deref(), Some("Codex"));
 }

@@ -78,6 +78,44 @@ const siteDataSchema = z.object({
 /** What one host stores: its cookies, and its bytes on disk of every kind. */
 export type SiteData = z.infer<typeof siteDataSchema>;
 
+const agentReachSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("desk") }),
+  z.object({
+    type: z.literal("windows"),
+    windows: z.array(z.object({ id: z.string(), title: z.string() })),
+  }),
+]);
+
+/** What an agent reaches: the whole desk, or these windows. */
+export type AgentReach = z.infer<typeof agentReachSchema>;
+
+const knownAgentsSchema = z
+  .object({
+    connected: z.array(
+      z.object({
+        agent: z.string(),
+        reach: agentReachSchema,
+        session: z.number(),
+      }),
+    ),
+    remembered: z.array(
+      z.object({ agent: z.string(), last_used_ms: z.number() }),
+    ),
+  })
+  .transform(({ connected, remembered }) => ({
+    connected,
+    remembered: remembered.map(({ agent, last_used_ms }) => ({
+      agent,
+      lastUsedMs: last_used_ms,
+    })),
+  }));
+
+/**
+ * The agents in now, each by its session, and those let reach the whole
+ * desk without asking, most recently used first.
+ */
+export type KnownAgents = z.output<typeof knownAgentsSchema>;
+
 const mediaDeviceSchema = z.object({ id: z.string(), name: z.string() });
 
 /** A camera or microphone. */
@@ -259,6 +297,12 @@ export type SettingsHost = {
   monitors: () => Promise<Monitor[]>;
   /** Gives device `id` to sites that ask for a `kind` without naming one. */
   setMediaDevice: (kind: MediaKind, id: string) => Promise<void>;
+  /** The agents in now, and those remembered. */
+  agents: () => Promise<KnownAgents>;
+  /** Ends agent session `session`, as the bar's Stop does. */
+  stopAgent: (session: number) => Promise<void>;
+  /** Makes remembered agent `agent` ask again next time. */
+  forgetAgent: (agent: string) => Promise<void>;
   /** Calls `listener` when a file changes on disk. Returns an unsubscribe. */
   onChange: (listener: () => void) => () => void;
 };
@@ -325,6 +369,14 @@ export const spawnedHost = (
     });
 
   return {
+    agents: async () => {
+      const reply = await ask({ type: "agents" });
+      if (reply.type === "agents") {
+        return reply.agents;
+      } else {
+        throw unexpected(reply, "agents");
+      }
+    },
     browserProfiles: async () => {
       const reply = await ask({ type: "browser_profiles" });
       if (reply.type === "browser_profiles") {
@@ -376,6 +428,12 @@ export const spawnedHost = (
         return reply.extensions;
       } else {
         throw unexpected(reply, "extensions");
+      }
+    },
+    forgetAgent: async (agent) => {
+      const reply = await ask({ agent, type: "forget_agent" });
+      if (reply.type !== "done") {
+        throw unexpected(reply, "done");
       }
     },
     loadUnpacked: async (directory) => {
@@ -476,6 +534,12 @@ export const spawnedHost = (
         throw unexpected(reply, "site_permissions");
       }
     },
+    stopAgent: async (session) => {
+      const reply = await ask({ session, type: "stop_agent" });
+      if (reply.type !== "done") {
+        throw unexpected(reply, "done");
+      }
+    },
     uninstallExtension: async (extension) => {
       const reply = await ask({ extension, type: "uninstall_extension" });
       if (reply.type !== "uninstalled") {
@@ -557,6 +621,12 @@ const replySchema = z.discriminatedUnion("type", [
     type: z.literal("site_data"),
   }),
   z.object({ id: z.number(), type: z.literal("cleared") }),
+  z.object({
+    agents: knownAgentsSchema,
+    id: z.number(),
+    type: z.literal("agents"),
+  }),
+  z.object({ id: z.number(), type: z.literal("done") }),
   z.object({ id: z.number(), type: z.literal("refused"), why: z.string() }),
   z.object({ type: z.literal("changed") }),
 ]);

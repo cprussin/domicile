@@ -453,8 +453,10 @@ screen-record`, the Screen Record launcher entry and the SDK's
 
 An agent connected through `domicile mcp` asks to see and use the desk with an
 `agent` dialog, and is listed as an `agent` capturing session while it's in.
-No portal asks: the `agent` system call puts it in the same queue. See
-[AGENTS.md](AGENTS.md).
+No portal asks: the `agent` system call puts it in the same queue. The answer
+can ask to remember the agent, with the whole desk only. `PortalAnswer::Change`
+on its session puts the dialog up again, with `current` set to what it reaches
+now. See [AGENTS.md](AGENTS.md).
 
 ## Interfaces
 

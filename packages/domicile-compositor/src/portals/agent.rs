@@ -4,22 +4,33 @@
 //! The shell asks the user with a [`PortalKind::Agent`] dialog: the whole
 //! desk, or only some windows. An agent let in is listed as a
 //! [`CapturingKind::Agent`], with what it did last, until its caller lets
-//! go or the shell stops it.
+//! go or the shell stops it. The shell's [`PortalAnswer::Change`] asks the
+//! user again.
+//!
+//! An agent the user let reach the whole desk and asked to remember is let
+//! in without asking, until forgotten. Remembered agents are kept in
+//! `$XDG_STATE_HOME/domicile/agents.json`.
 //!
 //! Domicile's own, not a portal's: no application asks over D-Bus. See
 //! `docs/AGENTS.md`.
 
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::channel;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::thread;
 use std::time::Duration;
 
-use domicile_host::system::{AgentLease, AgentStopped, LetIn};
+use domicile_host::system::{AgentChanged, AgentLease, AgentStopped, AgentTold, LetIn};
 use domicile_protocol::{
-    AgentAction, AgentDialog, AgentReach, AgentSession, AgentWindow, CapturingKind, ListedWindow,
-    PortalAnswer, PortalKind, SystemError, SystemErrorKind, AGENT_ACTIONS,
+    AgentAction, AgentDialog, AgentReach, AgentSession, AgentWindow, CapturingKind, ConnectedAgent,
+    KnownAgents, ListedWindow, PortalAnswer, PortalKind, RememberedAgent, SystemError,
+    SystemErrorKind, AGENT_ACTIONS,
 };
-use tracing::debug;
+use serde::{Deserialize, Serialize};
+use tracing::{debug, warn};
 
 use super::queue::{ask_noting, Queue};
 
@@ -30,20 +41,262 @@ pub const PATIENCE: Duration = Duration::from_secs(60);
 /// is not an application the desk knows. The shell names it by its body.
 const NO_APP: &str = "";
 
-/// Asks the user whether `agent` may see and use the desk, offering `open`
-/// but private browser windows, and lists it while it may. Blocks until the
-/// user answers, or `patience` passes. `clock` is the time in milliseconds
-/// since the Unix epoch, for its actions. `stop` runs if the shell stops it.
-pub fn let_in(
-    queue: &Arc<Queue>,
-    agent: String,
-    open: Vec<ListedWindow>,
-    clock: Arc<dyn Fn() -> u64 + Send + Sync>,
+/// The windows open now, as `list-windows` lists them.
+pub type OpenWindows = Arc<dyn Fn() -> Vec<ListedWindow> + Send + Sync>;
+
+/// The time in milliseconds since the Unix epoch.
+pub type Clock = Arc<dyn Fn() -> u64 + Send + Sync>;
+
+/// Where remembered agents live, from `XDG_STATE_HOME` and `HOME`. `None`
+/// without either, and then they last as long as the compositor.
+pub fn path(state_home: Option<PathBuf>, home: Option<PathBuf>) -> Option<PathBuf> {
+    state_home
+        .or_else(|| home.map(|home| home.join(".local/state")))
+        .map(|state| state.join("domicile/agents.json"))
+}
+
+/// Every agent the desk lets in: those in now, and those remembered.
+pub struct Door {
+    queue: Arc<Queue>,
+    clock: Clock,
     patience: Duration,
-    stop: AgentStopped,
-) -> Result<LetIn, SystemError> {
-    let offered: Vec<AgentWindow> = open
-        .into_iter()
+    remembered: Mutex<Remembered>,
+    /// Each agent in now, by its session's id, oldest first.
+    connected: Mutex<Vec<(u32, Arc<Mutex<AgentSession>>)>>,
+}
+
+impl Door {
+    /// Agents asked about through `queue`, given `patience` to answer, and
+    /// remembered at `path`. `clock` times their actions.
+    pub fn new(
+        queue: Arc<Queue>,
+        path: Option<PathBuf>,
+        clock: Clock,
+        patience: Duration,
+    ) -> Arc<Door> {
+        Arc::new(Door {
+            queue,
+            clock,
+            patience,
+            remembered: Mutex::new(Remembered::load(path)),
+            connected: Mutex::new(Vec::new()),
+        })
+    }
+
+    /// Lets `agent` in: at once when it is remembered, else when the user
+    /// allows it, offering `windows` but private browser windows. Blocks
+    /// until the user answers, or the patience passes.
+    pub fn let_in(
+        self: &Arc<Self>,
+        agent: String,
+        windows: OpenWindows,
+        told: AgentTold,
+    ) -> Result<LetIn, SystemError> {
+        let remembered = self.remembered.lock().unwrap().has(&agent);
+        let (reach, remember) = if remembered {
+            (AgentReach::Desk, true)
+        } else {
+            let offered = offered(windows());
+            let kind = PortalKind::Agent(AgentDialog {
+                agent: agent.clone(),
+                windows: offered.clone(),
+                current: None,
+                remembered: false,
+            });
+            match asked(&self.queue, kind, self.patience) {
+                PortalAnswer::Agent { reach, remember } => {
+                    (offered_only(reach, &offered)?, remember)
+                }
+                PortalAnswer::Canceled => return Err(canceled("the user did not let it in")),
+                PortalAnswer::Refused => return Err(canceled(
+                    "nobody answered: no shell showed the dialog, or the user left it for a minute",
+                )),
+                answer => unreachable!("the queue gives an agent's dialog no {answer:?}"),
+            }
+        };
+        if remember {
+            self.remembered.lock().unwrap().used(&agent, (self.clock)());
+        }
+        debug!(%agent, ?reach, remembered, "an agent was let in");
+        let session = Arc::new(Mutex::new(AgentSession {
+            agent: agent.clone(),
+            reach: reach.clone(),
+            actions: Vec::new(),
+        }));
+        let listed = Arc::new(OnceLock::new());
+        let control = Controls {
+            door: Arc::downgrade(self),
+            listed: listed.clone(),
+            agent,
+            session: session.clone(),
+            windows,
+            stopped: Mutex::new(Some(told.stopped)),
+            changed: Arc::new(told.changed),
+            changing: Arc::new(AtomicBool::new(false)),
+        };
+        let id = self.queue.begin_controlled(
+            NO_APP.into(),
+            CapturingKind::Agent(session.lock().unwrap().clone()),
+            move |answer| control.take(answer),
+        );
+        listed.set(id).expect("a session is listed once");
+        self.connected
+            .lock()
+            .unwrap()
+            .push((id, Arc::clone(&session)));
+        Ok(LetIn {
+            reach,
+            lease: Box::new(Lease {
+                id,
+                door: Arc::clone(self),
+                session,
+            }),
+        })
+    }
+
+    /// The agents in now, and those remembered.
+    pub fn known(&self) -> KnownAgents {
+        KnownAgents {
+            connected: self
+                .connected
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|(id, session)| {
+                    let session = session.lock().unwrap();
+                    ConnectedAgent {
+                        session: *id,
+                        agent: session.agent.clone(),
+                        reach: session.reach.clone(),
+                    }
+                })
+                .collect(),
+            remembered: self.remembered.lock().unwrap().agents.clone(),
+        }
+    }
+
+    /// Ends agent session `session`, as the shell's stop does.
+    pub fn stop(&self, session: u32) -> Result<(), SystemError> {
+        let known = self
+            .connected
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(id, _)| *id == session);
+        if !known {
+            return Err(SystemError {
+                kind: SystemErrorKind::NotFound,
+                message: format!("no agent is in as session {session}"),
+            });
+        }
+        // Outside the lock: the stop drops the lease, which takes it off.
+        self.queue.answer(session, PortalAnswer::Stop);
+        Ok(())
+    }
+
+    /// Makes `agent` ask again next time.
+    pub fn forget(&self, agent: &str) {
+        self.remembered.lock().unwrap().forget(agent);
+    }
+
+    /// Asks the user again what agent session `id` may reach, unless they
+    /// are being asked already.
+    fn change(self: Arc<Self>, id: u32, controls: &Controls) {
+        if controls.changing.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let (agent, session, windows, changed, changing) = (
+            controls.agent.clone(),
+            controls.session.clone(),
+            controls.windows.clone(),
+            controls.changed.clone(),
+            controls.changing.clone(),
+        );
+        thread::spawn(move || {
+            let offered = offered(windows());
+            let current = session.lock().unwrap().reach.clone();
+            let remembered = self.remembered.lock().unwrap().has(&agent);
+            let kind = PortalKind::Agent(AgentDialog {
+                agent: agent.clone(),
+                windows: offered.clone(),
+                current: Some(current),
+                remembered,
+            });
+            let answer = asked(&self.queue, kind, self.patience);
+            changing.store(false, Ordering::SeqCst);
+            // Canceled or unanswered, it keeps what it has.
+            let PortalAnswer::Agent { reach, remember } = answer else {
+                return;
+            };
+            let reach = match offered_only(reach, &offered) {
+                Ok(reach) => reach,
+                Err(why) => {
+                    warn!(%agent, %why.message, "the shell changed an agent to a window it did not offer");
+                    return;
+                }
+            };
+            {
+                let mut remembered = self.remembered.lock().unwrap();
+                if remember {
+                    remembered.used(&agent, (self.clock)());
+                } else {
+                    remembered.forget(&agent);
+                }
+            }
+            let listed = {
+                let mut session = session.lock().unwrap();
+                session.reach = reach.clone();
+                session.clone()
+            };
+            // Gone already when the agent left meanwhile.
+            if self
+                .queue
+                .revise_session(id, move |kind| *kind = CapturingKind::Agent(listed))
+                .is_ok()
+            {
+                debug!(%agent, ?reach, "an agent's reach was changed");
+                changed(reach);
+            }
+        });
+    }
+}
+
+/// What an agent's session takes from the shell.
+struct Controls {
+    door: Weak<Door>,
+    /// The session's id, once listed.
+    listed: Arc<OnceLock<u32>>,
+    agent: String,
+    session: Arc<Mutex<AgentSession>>,
+    windows: OpenWindows,
+    stopped: Mutex<Option<AgentStopped>>,
+    changed: Arc<AgentChanged>,
+    /// Whether the user is being asked to change it now.
+    changing: Arc<AtomicBool>,
+}
+
+impl Controls {
+    /// The shell's stop or change.
+    fn take(&self, answer: &PortalAnswer) {
+        match answer {
+            PortalAnswer::Stop => {
+                if let Some(stopped) = self.stopped.lock().unwrap().take() {
+                    stopped();
+                }
+            }
+            PortalAnswer::Change => {
+                if let (Some(door), Some(id)) = (self.door.upgrade(), self.listed.get()) {
+                    door.change(*id, self);
+                }
+            }
+            answer => unreachable!("the queue gives an agent's session no {answer:?}"),
+        }
+    }
+}
+
+/// `open` but private browser windows, as a dialog offers them.
+fn offered(open: Vec<ListedWindow>) -> Vec<AgentWindow> {
+    open.into_iter()
         .filter(|window| !window.private)
         .map(|window| AgentWindow {
             id: window.id,
@@ -51,41 +304,7 @@ pub fn let_in(
             title: window.title,
             app: window.app,
         })
-        .collect();
-    let kind = PortalKind::Agent(AgentDialog {
-        agent: agent.clone(),
-        windows: offered.clone(),
-    });
-    let reach = match asked(queue, kind, patience) {
-        PortalAnswer::Agent { reach } => offered_only(reach, &offered)?,
-        PortalAnswer::Canceled => return Err(canceled("the user did not let it in")),
-        PortalAnswer::Refused => {
-            return Err(canceled(
-                "nobody answered: no shell showed the dialog, or the user left it for a minute",
-            ))
-        }
-        answer => unreachable!("the queue gives an agent's dialog no {answer:?}"),
-    };
-    debug!(%agent, ?reach, "an agent was let in");
-    let session = Arc::new(Mutex::new(AgentSession {
-        agent,
-        reach: reach.clone(),
-        actions: Vec::new(),
-    }));
-    let id = queue.begin(
-        NO_APP.into(),
-        CapturingKind::Agent(session.lock().unwrap().clone()),
-        stop,
-    );
-    Ok(LetIn {
-        reach,
-        lease: Box::new(Lease {
-            id,
-            queue: Arc::clone(queue),
-            session,
-            clock,
-        }),
-    })
+        .collect()
 }
 
 /// Puts `kind` to the shell and waits for its answer, withdrawing it after
@@ -145,9 +364,8 @@ fn canceled(why: &str) -> SystemError {
 /// An agent's listing, which ends when dropped.
 struct Lease {
     id: u32,
-    queue: Arc<Queue>,
+    door: Arc<Door>,
     session: Arc<Mutex<AgentSession>>,
-    clock: Arc<dyn Fn() -> u64 + Send + Sync>,
 }
 
 impl AgentLease for Lease {
@@ -157,13 +375,13 @@ impl AgentLease for Lease {
             0,
             AgentAction {
                 said,
-                at_ms: (self.clock)(),
+                at_ms: (self.door.clock)(),
             },
         );
         session.actions.truncate(AGENT_ACTIONS);
         let listed = session.clone();
         // Gone already when the shell stopped it meanwhile.
-        let _ = self.queue.revise_session(self.id, move |kind| {
+        let _ = self.door.queue.revise_session(self.id, move |kind| {
             *kind = CapturingKind::Agent(listed);
         });
     }
@@ -171,8 +389,95 @@ impl AgentLease for Lease {
 
 impl Drop for Lease {
     fn drop(&mut self) {
-        self.queue.end(self.id);
+        self.door
+            .connected
+            .lock()
+            .unwrap()
+            .retain(|(id, _)| *id != self.id);
+        self.door.queue.end(self.id);
     }
+}
+
+/// The agents let in without asking, as kept on disk.
+struct Remembered {
+    path: Option<PathBuf>,
+    /// Most recently used first.
+    agents: Vec<RememberedAgent>,
+}
+
+/// `agents.json`.
+#[derive(Default, Serialize, Deserialize)]
+struct Kept {
+    agents: Vec<RememberedAgent>,
+}
+
+impl Remembered {
+    /// The agents remembered at `path`. A file that cannot be read is logged
+    /// and read as none, so each agent asks again.
+    fn load(path: Option<PathBuf>) -> Remembered {
+        let agents = path.as_deref().map(read).unwrap_or_default();
+        Remembered { path, agents }
+    }
+
+    fn has(&self, agent: &str) -> bool {
+        self.agents.iter().any(|kept| kept.agent == agent)
+    }
+
+    /// Remembers `agent`, as last used at `at_ms`.
+    fn used(&mut self, agent: &str, at_ms: u64) {
+        self.agents.retain(|kept| kept.agent != agent);
+        self.agents.insert(
+            0,
+            RememberedAgent {
+                agent: agent.into(),
+                last_used_ms: at_ms,
+            },
+        );
+        self.save();
+    }
+
+    fn forget(&mut self, agent: &str) {
+        let before = self.agents.len();
+        self.agents.retain(|kept| kept.agent != agent);
+        if self.agents.len() != before {
+            self.save();
+        }
+    }
+
+    /// Writes them. A failure is logged: they are still remembered while the
+    /// compositor runs.
+    fn save(&self) {
+        if let Some(path) = &self.path {
+            if let Err(why) = write(path, &self.agents) {
+                warn!(%why, path = %path.display(), "could not save the remembered agents");
+            }
+        }
+    }
+}
+
+fn read(path: &Path) -> Vec<RememberedAgent> {
+    let parsed = fs::read(path)
+        .map_err(|why| why.to_string())
+        .and_then(|bytes| serde_json::from_slice::<Kept>(&bytes).map_err(|why| why.to_string()));
+    match parsed {
+        Ok(kept) => kept.agents,
+        Err(why) => {
+            if path.exists() {
+                warn!(%why, path = %path.display(), "remembered agents unreadable; each asks again");
+            }
+            Vec::new()
+        }
+    }
+}
+
+fn write(path: &Path, agents: &[RememberedAgent]) -> io::Result<()> {
+    if let Some(directory) = path.parent() {
+        fs::create_dir_all(directory)?;
+    }
+    let kept = Kept {
+        agents: agents.to_vec(),
+    };
+    fs::write(path, serde_json::to_vec(&kept)?)
 }
 
 #[cfg(test)]
@@ -215,17 +520,15 @@ mod tests {
     /// What a queue publishes: its dialogs and its sessions.
     type Published = Receiver<(Vec<PortalRequest>, Vec<Capturing>)>;
 
-    /// What [`let_in_answering`] ends with: the agent let in or why not, the
-    /// queue, what it published, and the shell's stops.
-    type Answered = (
-        Result<LetIn, SystemError>,
-        Arc<Queue>,
-        Published,
-        Receiver<()>,
-    );
+    /// A door whose queue a shell listens to, what it publishes, and its
+    /// clock's time.
+    struct Desk {
+        door: Arc<Door>,
+        queue: Arc<Queue>,
+        published: Published,
+    }
 
-    /// A queue a shell listens to, and what it publishes.
-    fn listened() -> (Arc<Queue>, Published) {
+    fn desk(path: Option<PathBuf>, patience: Duration) -> Desk {
         let queue = Arc::new(Queue::default());
         let (publish, published) = channel();
         queue.listen(
@@ -235,46 +538,82 @@ mod tests {
             || true,
             |_| None,
         );
-        (queue, published)
+        Desk {
+            door: Door::new(queue.clone(), path, Arc::new(|| 7), patience),
+            queue,
+            published,
+        }
     }
 
-    /// Lets `agent` in on a thread with `open` windows, and answers its dialog
-    /// with `answer` once it is up.
-    fn let_in_answering(
-        open: Vec<ListedWindow>,
-        answer: impl FnOnce(&PortalRequest) -> PortalAnswer + Send + 'static,
-    ) -> Answered {
-        let (queue, published) = listened();
+    /// What the caller of a let-in heard: the stop and each change.
+    struct Heard {
+        stopped: Receiver<()>,
+        changed: Receiver<AgentReach>,
+    }
+
+    fn told() -> (AgentTold, Heard) {
         let (stop, stopped) = channel();
-        let asking = Arc::clone(&queue);
-        let letting = thread::spawn(move || {
-            let_in(
-                &asking,
-                "Claude Code".into(),
-                open,
-                Arc::new(|| 7),
-                PATIENCE,
-                Box::new(move || stop.send(()).expect("the test listens")),
-            )
-        });
-        let request = loop {
-            let (items, _) = published.recv().expect("the dialog is published");
+        let (change, changed) = channel();
+        let change = Mutex::new(change);
+        (
+            AgentTold {
+                stopped: Box::new(move || stop.send(()).expect("the test listens")),
+                changed: Box::new(move |reach| {
+                    let _ = change.lock().unwrap().send(reach);
+                }),
+            },
+            Heard { stopped, changed },
+        )
+    }
+
+    /// The next dialog `desk` publishes.
+    fn next_dialog(desk: &Desk) -> PortalRequest {
+        loop {
+            let (items, _) = desk.published.recv().expect("the dialog is published");
             if let Some(request) = items.into_iter().next() {
                 break request;
             }
-        };
-        queue.answer(request.id, answer(&request));
-        (
-            letting.join().expect("letting in does not panic"),
-            queue,
-            published,
-            stopped,
-        )
+        }
+    }
+
+    /// The sessions `desk` published last.
+    fn sessions(desk: &Desk) -> Vec<Capturing> {
+        desk.published
+            .try_iter()
+            .last()
+            .expect("the queue was published")
+            .1
+    }
+
+    /// Lets `agent` in on a thread with `open` windows, and answers its
+    /// dialog with `answer` once it is up.
+    fn let_in_answering(
+        desk: &Desk,
+        open: Vec<ListedWindow>,
+        answer: impl FnOnce(&PortalRequest) -> PortalAnswer,
+    ) -> (Result<LetIn, SystemError>, Heard) {
+        let (told, heard) = told();
+        let door = Arc::clone(&desk.door);
+        let letting = thread::spawn(move || {
+            door.let_in("Claude Code".into(), Arc::new(move || open.clone()), told)
+        });
+        let request = next_dialog(desk);
+        desk.queue.answer(request.id, answer(&request));
+        (letting.join().expect("letting in does not panic"), heard)
+    }
+
+    fn allow(reach: AgentReach) -> PortalAnswer {
+        PortalAnswer::Agent {
+            reach,
+            remember: false,
+        }
     }
 
     #[test]
     fn the_dialog_offers_every_window_but_private_ones() {
-        let (let_in, ..) = let_in_answering(
+        let desk = desk(None, PATIENCE);
+        let (let_in, _) = let_in_answering(
+            &desk,
             vec![window("a", false), window("b", true), window("c", false)],
             |request| {
                 assert_eq!(
@@ -282,6 +621,8 @@ mod tests {
                     PortalKind::Agent(AgentDialog {
                         agent: "Claude Code".into(),
                         windows: vec![offered("a"), offered("c")],
+                        current: None,
+                        remembered: false,
                     })
                 );
                 PortalAnswer::Canceled
@@ -295,12 +636,12 @@ mod tests {
 
     #[test]
     fn an_agent_let_in_is_listed_with_what_it_did_until_its_lease_drops() {
-        let (let_in, queue, published, _stopped) =
-            let_in_answering(vec![window("a", false)], |_| PortalAnswer::Agent {
-                reach: AgentReach::Windows {
-                    windows: vec![offered("a")],
-                },
-            });
+        let desk = desk(None, PATIENCE);
+        let (let_in, _) = let_in_answering(&desk, vec![window("a", false)], |_| {
+            allow(AgentReach::Windows {
+                windows: vec![offered("a")],
+            })
+        });
         let let_in = let_in.expect("the user let it in");
         assert_eq!(
             let_in.reach,
@@ -309,9 +650,8 @@ mod tests {
             }
         );
         let_in.lease.did("Clicked \"Save\" in Notes".into());
-        let (_, capturing) = published.try_iter().last().expect("the session is listed");
         assert_eq!(
-            capturing[0].kind,
+            sessions(&desk)[0].kind,
             CapturingKind::Agent(AgentSession {
                 agent: "Claude Code".into(),
                 reach: let_in.reach.clone(),
@@ -321,25 +661,22 @@ mod tests {
                 }],
             })
         );
+        assert_eq!(desk.door.known().connected.len(), 1);
         drop(let_in.lease);
-        let (_, capturing) = published.try_iter().last().expect("the end is published");
-        assert!(capturing.is_empty());
-        drop(queue);
+        assert!(sessions(&desk).is_empty());
+        assert!(desk.door.known().connected.is_empty());
     }
 
     #[test]
     fn an_agent_lists_only_its_last_few_actions() {
-        let (let_in, _queue, published, _stopped) =
-            let_in_answering(vec![], |_| PortalAnswer::Agent {
-                reach: AgentReach::Desk,
-            });
+        let desk = desk(None, PATIENCE);
+        let (let_in, _) = let_in_answering(&desk, vec![], |_| allow(AgentReach::Desk));
         let let_in = let_in.expect("the user let it in");
         for done in 0..AGENT_ACTIONS + 2 {
             let_in.lease.did(format!("did {done}"));
         }
-        let (_, capturing) = published.try_iter().last().expect("the session is listed");
-        let CapturingKind::Agent(session) = &capturing[0].kind else {
-            panic!("an agent's session is listed, not {capturing:?}");
+        let CapturingKind::Agent(session) = &sessions(&desk)[0].kind else {
+            panic!("an agent's session is listed");
         };
         assert_eq!(session.actions.len(), AGENT_ACTIONS);
         assert_eq!(
@@ -350,22 +687,35 @@ mod tests {
 
     #[test]
     fn the_shell_stopping_an_agent_tells_its_caller() {
-        let (let_in, queue, published, stopped) =
-            let_in_answering(vec![], |_| PortalAnswer::Agent {
-                reach: AgentReach::Desk,
-            });
+        let desk = desk(None, PATIENCE);
+        let (let_in, heard) = let_in_answering(&desk, vec![], |_| allow(AgentReach::Desk));
         let _let_in = let_in.expect("the user let it in");
-        let (_, capturing) = published.try_iter().last().expect("the session is listed");
-        queue.answer(capturing[0].id, PortalAnswer::Stop);
-        assert_eq!(stopped.try_recv(), Ok(()));
+        let id = sessions(&desk)[0].id;
+        desk.queue.answer(id, PortalAnswer::Stop);
+        assert_eq!(heard.stopped.try_recv(), Ok(()));
+    }
+
+    #[test]
+    fn settings_stopping_an_agent_tells_its_caller() {
+        let desk = desk(None, PATIENCE);
+        let (let_in, heard) = let_in_answering(&desk, vec![], |_| allow(AgentReach::Desk));
+        let _let_in = let_in.expect("the user let it in");
+        let session = desk.door.known().connected[0].session;
+        desk.door.stop(session).expect("it is in");
+        assert_eq!(heard.stopped.try_recv(), Ok(()));
+        assert_eq!(
+            desk.door.stop(session + 1).err().map(|error| error.kind),
+            Some(SystemErrorKind::NotFound)
+        );
     }
 
     #[test]
     fn a_window_the_dialog_did_not_offer_is_refused() {
-        let (let_in, ..) = let_in_answering(vec![window("a", false)], |_| PortalAnswer::Agent {
-            reach: AgentReach::Windows {
+        let desk = desk(None, PATIENCE);
+        let (let_in, _) = let_in_answering(&desk, vec![window("a", false)], |_| {
+            allow(AgentReach::Windows {
                 windows: vec![offered("z")],
-            },
+            })
         });
         assert_eq!(
             let_in.err().map(|error| error.kind),
@@ -375,23 +725,151 @@ mod tests {
 
     #[test]
     fn a_dialog_nobody_answers_is_withdrawn_and_canceled() {
-        let (queue, published) = listened();
-        let refused = let_in(
-            &queue,
-            "Claude Code".into(),
-            vec![],
-            Arc::new(|| 0),
-            Duration::from_millis(50),
-            Box::new(|| {}),
-        );
+        let desk = desk(None, Duration::from_millis(50));
+        let (told_it, _) = told();
+        let refused = desk
+            .door
+            .let_in("Claude Code".into(), Arc::new(Vec::new), told_it);
         assert_eq!(
             refused.err().map(|error| error.kind),
             Some(SystemErrorKind::Canceled)
         );
-        let (items, _) = published
+        let (items, _) = desk
+            .published
             .try_iter()
             .last()
             .expect("the queue was published");
         assert!(items.is_empty(), "{items:?}");
+    }
+
+    #[test]
+    fn a_remembered_agent_comes_in_without_asking_until_forgotten() {
+        let state = tempfile::tempdir().expect("a temporary directory");
+        let path = state.path().join("domicile/agents.json");
+        {
+            let desk = desk(Some(path.clone()), PATIENCE);
+            let (let_in, _) = let_in_answering(&desk, vec![], |_| PortalAnswer::Agent {
+                reach: AgentReach::Desk,
+                remember: true,
+            });
+            let_in.expect("the user let it in");
+        }
+        // A compositor started later reads it back.
+        let desk = desk(Some(path.clone()), Duration::from_millis(50));
+        assert_eq!(
+            desk.door.known().remembered,
+            vec![RememberedAgent {
+                agent: "Claude Code".into(),
+                last_used_ms: 7,
+            }]
+        );
+        let (told_it, _) = told();
+        let let_in = desk
+            .door
+            .let_in("Claude Code".into(), Arc::new(Vec::new), told_it)
+            .expect("a remembered agent is let in");
+        assert_eq!(let_in.reach, AgentReach::Desk);
+        drop(let_in);
+
+        desk.door.forget("Claude Code");
+
+        assert!(desk.door.known().remembered.is_empty());
+        let (told_it, _) = told();
+        let asked = desk
+            .door
+            .let_in("Claude Code".into(), Arc::new(Vec::new), told_it);
+        assert_eq!(
+            asked.err().map(|error| error.kind),
+            Some(SystemErrorKind::Canceled),
+            "a forgotten agent asks again"
+        );
+        assert_eq!(
+            fs::read_to_string(&path).expect("the file is kept"),
+            r#"{"agents":[]}"#
+        );
+    }
+
+    #[test]
+    fn an_unreadable_file_remembers_nobody() {
+        let state = tempfile::tempdir().expect("a temporary directory");
+        let path = state.path().join("agents.json");
+        fs::write(&path, "not json").expect("written");
+        let desk = desk(Some(path), PATIENCE);
+        assert!(desk.door.known().remembered.is_empty());
+    }
+
+    #[test]
+    fn changing_an_agent_asks_again_and_tells_its_caller() {
+        let desk = desk(None, PATIENCE);
+        let (let_in, heard) =
+            let_in_answering(&desk, vec![window("a", false)], |_| allow(AgentReach::Desk));
+        let _let_in = let_in.expect("the user let it in");
+        let id = sessions(&desk)[0].id;
+
+        desk.queue.answer(id, PortalAnswer::Change);
+
+        let request = next_dialog(&desk);
+        let PortalKind::Agent(dialog) = &request.kind else {
+            panic!("an agent's dialog, not {:?}", request.kind);
+        };
+        assert_eq!(dialog.current, Some(AgentReach::Desk));
+        let narrowed = AgentReach::Windows {
+            windows: vec![offered("a")],
+        };
+        desk.queue.answer(request.id, allow(narrowed.clone()));
+        assert_eq!(
+            heard.changed.recv_timeout(Duration::from_secs(5)),
+            Ok(narrowed.clone())
+        );
+        assert_eq!(desk.door.known().connected[0].reach, narrowed);
+    }
+
+    #[test]
+    fn canceling_a_change_keeps_what_it_has() {
+        let desk = desk(None, PATIENCE);
+        let (let_in, heard) = let_in_answering(&desk, vec![], |_| allow(AgentReach::Desk));
+        let _let_in = let_in.expect("the user let it in");
+        let id = sessions(&desk)[0].id;
+
+        desk.queue.answer(id, PortalAnswer::Change);
+        let request = next_dialog(&desk);
+        desk.queue.answer(request.id, PortalAnswer::Canceled);
+
+        assert!(heard
+            .changed
+            .recv_timeout(Duration::from_millis(200))
+            .is_err());
+        assert_eq!(desk.door.known().connected[0].reach, AgentReach::Desk);
+    }
+
+    #[test]
+    fn narrowing_a_remembered_agent_forgets_it() {
+        let desk = desk(None, PATIENCE);
+        let (let_in, heard) =
+            let_in_answering(&desk, vec![window("a", false)], |_| PortalAnswer::Agent {
+                reach: AgentReach::Desk,
+                remember: true,
+            });
+        let _let_in = let_in.expect("the user let it in");
+        let id = sessions(&desk)[0].id;
+
+        desk.queue.answer(id, PortalAnswer::Change);
+        let request = next_dialog(&desk);
+        let PortalKind::Agent(dialog) = &request.kind else {
+            panic!("an agent's dialog");
+        };
+        assert!(dialog.remembered);
+        desk.queue.answer(
+            request.id,
+            allow(AgentReach::Windows {
+                windows: vec![offered("a")],
+            }),
+        );
+        heard
+            .changed
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the change is told");
+
+        assert!(desk.door.known().remembered.is_empty());
     }
 }

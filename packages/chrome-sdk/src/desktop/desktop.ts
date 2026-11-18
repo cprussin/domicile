@@ -126,7 +126,7 @@ const build = (host: DomicileHost): Domicile => {
     }),
     pictureInPicture: pictureInPicture(host),
     pointer: pointer(host),
-    portals: portals(host),
+    portals: portals(host, calls),
     processes: processes(host, calls),
     session: session(host, calls),
     shell: shell(host, calls),

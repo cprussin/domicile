@@ -734,6 +734,9 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
         "list-shell-commands",
         "list-bindings",
         "list-inputs",
+        "list-agents",
+        "stop-agent",
+        "forget-agent",
         "subscribe",
         "lock",
         "focus-window",
@@ -1372,6 +1375,46 @@ fn agent_takes_one_name() {
         })
     );
     for refused in [&["agent"][..], &["agent", " "], &["agent", "a", "b"]] {
+        assert!(
+            matches!(run(refused), Err(CliError::NotOne { .. })),
+            "{refused:?}"
+        );
+    }
+}
+
+#[test]
+fn agents_are_listed_stopped_by_session_and_forgotten_by_name() {
+    use domicile_launch::control::Request;
+    assert_eq!(
+        run(&["list-agents", "--json"]),
+        Ok(Invocation::List {
+            listing: Listing::Agents,
+            json: true
+        })
+    );
+    assert_eq!(
+        run(&["stop-agent", "12"]),
+        Ok(Invocation::Ask {
+            request: Request::StopAgent { session: 12 }
+        })
+    );
+    assert!(matches!(
+        run(&["stop-agent", "Claude"]),
+        Err(CliError::NotASession { .. })
+    ));
+    assert_eq!(
+        run(&["forget-agent", "Claude Code"]),
+        Ok(Invocation::Ask {
+            request: Request::ForgetAgent {
+                agent: "Claude Code".into()
+            }
+        })
+    );
+    for refused in [
+        &["stop-agent"][..],
+        &["forget-agent"],
+        &["forget-agent", "a", "b"],
+    ] {
         assert!(
             matches!(run(refused), Err(CliError::NotOne { .. })),
             "{refused:?}"

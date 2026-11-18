@@ -8,6 +8,7 @@ import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGl
 import { MonitorIcon } from "@phosphor-icons/react/dist/ssr/Monitor";
 import { PaletteIcon } from "@phosphor-icons/react/dist/ssr/Palette";
 import { PuzzlePieceIcon } from "@phosphor-icons/react/dist/ssr/PuzzlePiece";
+import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
 import { RocketLaunchIcon } from "@phosphor-icons/react/dist/ssr/RocketLaunch";
 import { ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
@@ -73,6 +74,8 @@ const PageIcon = ({ page }: { page: PageId }) => {
       return <PuzzlePieceIcon size={18} />;
     case PageId.Profiles:
       return <UserCircleIcon size={18} />;
+    case PageId.Agents:
+      return <RobotIcon size={18} />;
     case PageId.Permissions:
       return <HandPalmIcon size={18} />;
     case PageId.SiteData:
