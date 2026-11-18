@@ -403,6 +403,13 @@ that the test can't make an object to measure ("unmeasured").
 list is off either way, so a gap a new Electron opens, or one a change
 closes, is seen. Update it with `UPDATE_COVERAGE=1 bun test coverage`.
 
+A member that answers a constant, such as `isFocused() => false`, is a stub.
+The same test finds each one from its source and holds it against
+`src/__integration__/stubs.json`, which files it under `lies` (an app acts
+on a wrong answer, such as `getFocusedWindow()` always `null`) or `honest`
+(right on Domicile, such as `setPosition`, since the desktop places
+windows), with why. A new stub, or one that went, fails until it is filed.
+
 What the host has is real where the engine can do it and a stated answer
 where the shell owns it: window state reads as shown and normal, because
 the shell lays windows out, and `globalShortcut` refuses with a warning,
