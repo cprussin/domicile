@@ -6,7 +6,8 @@
 //! ([`Request::SettingsFiles`]) rather than taking a path from the page,
 //! refuses a config whose `shell_options` the shell's declaration refuses, and
 //! forwards site permissions, site data, extensions, media devices and
-//! addresses to open to the engine through the desktop. For History, it forwards history
+//! addresses to open to the engine through the desktop, and lists, stops and
+//! forgets agents through the compositor. For History, it forwards history
 //! searches, deletions and clearing browsing data. See `docs/SETTINGS.md` and
 //! `docs/HISTORY.md`.
 //!
@@ -58,6 +59,12 @@
 //!   {"id":18,"type":"cleared"}
 //! {"id":19,"type":"monitors"}
 //!   {"id":19,"type":"monitors","monitors":[{"names":["drm-1","DEL DELL U3219Q 2ZLS413",…],"hdr":"unsupported"}]}
+//! {"id":20,"type":"agents"}
+//!   {"id":20,"type":"agents","agents":{"connected":[{"session":4,"agent":"Claude Code","reach":{"type":"desk"}}],"remembered":[{"agent":"Codex","last_used_ms":…}]}}
+//! {"id":21,"type":"stop_agent","session":4}
+//!   {"id":21,"type":"done"}
+//! {"id":22,"type":"forget_agent","agent":"Codex"}
+//!   {"id":22,"type":"done"}
 //! any request
 //!   {"id":…,"type":"refused","why":"…"}
 //! pushed when a file changes on disk
@@ -210,6 +217,13 @@ enum AppRequest {
         host: String,
     },
     Monitors,
+    Agents,
+    StopAgent {
+        session: u32,
+    },
+    ForgetAgent {
+        agent: String,
+    },
 }
 
 /// Which file a write replaces.
@@ -392,6 +406,18 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
             Response::Monitors { monitors } => {
                 Ok(json!({"type": "monitors", "monitors": monitors}))
             }
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::Agents => match (host.ask)(&Request::Agents)? {
+            Response::Agents { agents } => Ok(json!({"type": "agents", "agents": agents})),
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::StopAgent { session } => match (host.ask)(&Request::StopAgent { session })? {
+            Response::Done => Ok(json!({"type": "done"})),
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::ForgetAgent { agent } => match (host.ask)(&Request::ForgetAgent { agent })? {
+            Response::Done => Ok(json!({"type": "done"})),
             other => Err(refusal_or_surprise(other)),
         },
     }

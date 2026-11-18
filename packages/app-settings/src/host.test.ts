@@ -228,6 +228,47 @@ describe(spawnedHost, () => {
       expect(await asked).toEqual(monitors);
     });
 
+    it("lists, stops and forgets agents", async () => {
+      const { asked, host, processes } = await started((host) => host.agents());
+      expect(processes[0]?.sent.at(-1)).toEqual({ id: 1, type: "agents" });
+      processes[0]?.answer({
+        agents: {
+          connected: [
+            { agent: "Claude Code", reach: { type: "desk" }, session: 4 },
+          ],
+          remembered: [{ agent: "Codex", last_used_ms: 9 }],
+        },
+        id: 1,
+        type: "agents",
+      });
+      expect(await asked).toEqual({
+        connected: [
+          { agent: "Claude Code", reach: { type: "desk" }, session: 4 },
+        ],
+        remembered: [{ agent: "Codex", lastUsedMs: 9 }],
+      });
+
+      const stopped = host.stopAgent(4);
+      await settled();
+      expect(processes[0]?.sent.at(-1)).toEqual({
+        id: 2,
+        session: 4,
+        type: "stop_agent",
+      });
+      processes[0]?.answer({ id: 2, type: "done" });
+      await stopped;
+
+      const forgot = host.forgetAgent("Codex");
+      await settled();
+      expect(processes[0]?.sent.at(-1)).toEqual({
+        agent: "Codex",
+        id: 3,
+        type: "forget_agent",
+      });
+      processes[0]?.answer({ id: 3, type: "done" });
+      await forgot;
+    });
+
     it("lists media devices and prefers one", async () => {
       const { asked, host, processes } = await started((host) =>
         host.mediaDevices(),

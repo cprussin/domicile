@@ -8,11 +8,13 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
-use domicile_host::system::{locked_out, reach, refused_to_an_app, Handled, System};
+use domicile_host::system::{
+    locked_out, reach, refused_to_an_app, AgentTold, Agents, Handled, LetIn, System,
+};
 use domicile_launch::handshake::Handshake;
 use domicile_protocol::{
-    negotiate, ChromeMessage, DeskShot, DisplayChange, EmulatedInput, HostMessage, SystemError,
-    SystemErrorKind, SystemRequest, Theme, WindowAct, PROTOCOL_VERSION,
+    negotiate, ChromeMessage, DeskShot, DisplayChange, EmulatedInput, HostMessage, KnownAgents,
+    SystemError, SystemErrorKind, SystemRequest, Theme, WindowAct, PROTOCOL_VERSION,
 };
 use tracing::{debug, error, warn};
 
@@ -25,6 +27,7 @@ use crate::keymap::Keyboard;
 use crate::lock::Asked;
 use crate::locking::say_what_the_lock_refused;
 use crate::peer_process::peer_pid;
+use crate::portals::agent::OpenWindows;
 use crate::scale::output_scale;
 use crate::spawning::{desktop_environment, home_directory, terminal_variable};
 use crate::theme_turnover::chrome_key;
@@ -168,6 +171,36 @@ fn chrome_connection(
 }
 
 /// The pinch, swipe or hold a connection began ends with it.
+/// The desk's agents, offered the windows `hub`'s host lists.
+struct HubAgents {
+    hub: Arc<ChromeHub>,
+}
+
+impl Agents for HubAgents {
+    fn let_in(&self, agent: String, told: AgentTold) -> Result<LetIn, SystemError> {
+        let hub = self.hub.clone();
+        let windows: OpenWindows =
+            Arc::new(move || match hub.host.lock().unwrap().list_windows() {
+                HostMessage::WindowList { windows } => windows,
+                listed => unreachable!("the host lists windows as a window list, not {listed:?}"),
+            });
+        self.hub.portals.agents().let_in(agent, windows, told)
+    }
+
+    fn known(&self) -> KnownAgents {
+        self.hub.portals.agents().known()
+    }
+
+    fn stop(&self, session: u32) -> Result<(), SystemError> {
+        self.hub.portals.agents().stop(session)
+    }
+
+    fn forget(&self, agent: &str) -> Result<(), SystemError> {
+        self.hub.portals.agents().forget(agent);
+        Ok(())
+    }
+}
+
 struct GestureOwner<'a> {
     hub: &'a ChromeHub,
     id: usize,
@@ -234,16 +267,7 @@ fn read_chrome_messages(
         let portals = hub.portals.clone();
         move || portals.screen_record()
     })
-    .letting_agents_in_with({
-        let hub = hub.clone();
-        move |agent, stop| {
-            let open = match hub.host.lock().unwrap().list_windows() {
-                HostMessage::WindowList { windows } => windows,
-                listed => unreachable!("the host lists windows as a window list, not {listed:?}"),
-            };
-            hub.portals.let_agent(agent, open, stop)
-        }
-    })
+    .letting_agents_in(HubAgents { hub: hub.clone() })
     .previewing_with({
         let portals = hub.portals.clone();
         move |window| portals.preview(window)

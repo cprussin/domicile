@@ -14,9 +14,9 @@ use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    AgentReach, DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage, ListedDisplay,
-    ListedInput, ListedWindow, MonitorInfo, Scale, ShellBinding, ShellCommandHelp, Theme,
-    WatchTopic, WindowAct, WindowKind,
+    AgentReach, DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage, KnownAgents,
+    ListedDisplay, ListedInput, ListedWindow, MonitorInfo, Scale, ShellBinding, ShellCommandHelp,
+    Theme, WatchTopic, WindowAct, WindowKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -174,6 +174,13 @@ pub enum Request {
     ShellBindings,
     /// Report the keyboards, pointers and touch devices the engine reads.
     Inputs,
+    /// Report the agents let in now and those remembered. Asked by
+    /// `domicile-app-host` for Settings › Agents.
+    Agents,
+    /// End agent session `session`, as the bar's Stop does.
+    StopAgent { session: u32 },
+    /// Make the remembered agent `agent` ask again next time.
+    ForgetAgent { agent: String },
     /// Turn every monitor off until input or [`Request::WakeDisplays`], or
     /// only `display`, by any name a profile matches it by, until it is woken. The
     /// compositor owns the monitors, so this works with any shell. See
@@ -414,11 +421,14 @@ pub enum Response {
     /// Answers `inputs`.
     Inputs { inputs: Vec<ListedInput> },
 
+    /// Answers `agents`.
+    Agents { agents: KnownAgents },
+
     /// The compositor turned the monitors off or on.
     Powered,
 
-    /// The compositor did what was asked: locked the desktop, or acted on a
-    /// window.
+    /// The compositor did what was asked: locked the desktop, acted on a
+    /// window, or stopped or forgot an agent.
     Done,
 
     /// What a [`Request::Subscribe`] heard: the compositor's answer for one
@@ -683,6 +693,22 @@ pub type ListShellBindings<'a> = &'a dyn Fn() -> Result<Vec<ShellBinding>, Strin
 /// [`crate::compositor_socket::inputs`] in a desktop; a closure in tests.
 pub type ListInputs<'a> = &'a dyn Fn() -> Result<Vec<ListedInput>, String>;
 
+/// Asks the compositor for the agents it knows.
+///
+/// [`crate::compositor_socket::agents`] in a desktop; a closure in tests.
+pub type ListAgents<'a> = &'a dyn Fn() -> Result<KnownAgents, String>;
+
+/// Asks the compositor to end an agent's session.
+///
+/// [`crate::compositor_socket::stop_agent`] in a desktop; a closure in tests.
+pub type StoppingAgents<'a> = &'a dyn Fn(u32) -> Result<(), String>;
+
+/// Asks the compositor to forget a remembered agent.
+///
+/// [`crate::compositor_socket::forget_agent`] in a desktop; a closure in
+/// tests.
+pub type ForgettingAgents<'a> = &'a dyn Fn(&str) -> Result<(), String>;
+
 /// What a request can learn about or do to the running desktop.
 ///
 /// The dials reach the engine and the compositor; they are injected so
@@ -732,6 +758,9 @@ pub struct Desktop<'a> {
     pub shell_commands: ListShellCommands<'a>,
     pub shell_bindings: ListShellBindings<'a>,
     pub inputs: ListInputs<'a>,
+    pub agents: ListAgents<'a>,
+    pub stop_agent: StoppingAgents<'a>,
+    pub forget_agent: ForgettingAgents<'a>,
 }
 
 /// A [`Request::VirtualMonitor`] and the connection it came on, which
@@ -992,6 +1021,18 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::Inputs) => to_line(&match (desktop.inputs)() {
             Ok(inputs) => Response::Inputs { inputs },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::Agents) => to_line(&match (desktop.agents)() {
+            Ok(agents) => Response::Agents { agents },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::StopAgent { session }) => to_line(&match (desktop.stop_agent)(session) {
+            Ok(()) => Response::Done,
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::ForgetAgent { agent }) => to_line(&match (desktop.forget_agent)(&agent) {
+            Ok(()) => Response::Done,
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::Lock) => to_line(&match (desktop.lock)() {

@@ -16,6 +16,7 @@ import type { SettingsFiles, SettingsHost, Target } from "./host";
 import { Notice } from "./Notice";
 import { Page } from "./Page";
 import { PAGES, PageId } from "./pages";
+import { AgentsPage } from "./pages/AgentsPage";
 import { AppearancePage } from "./pages/AppearancePage";
 import { CodePage } from "./pages/CodePage";
 import { DisplaysPage } from "./pages/DisplaysPage";
@@ -190,6 +191,8 @@ const PageContent = ({
       );
     case PageId.SiteData:
       return <SiteDataPage {...named} host={host} report={report} />;
+    case PageId.Agents:
+      return <AgentsPage {...named} host={host} report={report} />;
     case PageId.Code:
       return files === undefined ? (
         <Page {...named} />

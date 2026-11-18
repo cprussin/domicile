@@ -9,12 +9,15 @@ use std::time::Duration;
 use domicile_host::system::DisplayPower;
 use domicile_launch::cli::MonitorMode;
 use domicile_launch::compositor_socket::{
-    act_on_window, displays, inputs, lock, monitors, power_displays, screen_record, screenshot,
-    send_shell, shell_bindings, shell_commands, status, theme, virtual_monitor, windows,
-    CompositorError,
+    act_on_window, agent, agents, displays, forget_agent, inputs, lock, monitors, power_displays,
+    screen_record, screenshot, send_shell, shell_bindings, shell_commands, status, stop_agent,
+    theme, virtual_monitor, windows, CompositorError,
 };
 use domicile_launch::control::Shot;
-use domicile_protocol::{DisplayHdr, MonitorInfo, Scale, Theme, WindowAct};
+use domicile_protocol::{
+    AgentReach, ConnectedAgent, DisplayHdr, KnownAgents, MonitorInfo, RememberedAgent, Scale,
+    Theme, WindowAct,
+};
 
 /// Reply timeout: long enough for a loaded machine, short enough for a fast
 /// suite.
@@ -683,4 +686,78 @@ fn a_lock_is_taken_when_the_status_after_it_is_answered() {
     assert_eq!(lock(&path, Some(BRIEFLY)), Ok(()));
     let asked = heard.join().expect("the compositor was listening");
     assert!(asked[0].contains("\"lock\""), "{asked:?}");
+}
+
+#[test]
+fn the_compositor_is_asked_its_agents_and_says_them() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked(
+        &path,
+        "\"agents\"",
+        "{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"agents\",\
+         \"connected\":[{\"session\":4,\"agent\":\"Claude Code\",\"reach\":{\"type\":\"desk\"}}],\
+         \"remembered\":[{\"agent\":\"Codex\",\"last_used_ms\":9}]}}\n",
+    );
+
+    assert_eq!(
+        agents(&path, Some(BRIEFLY)),
+        Ok(KnownAgents {
+            connected: vec![ConnectedAgent {
+                session: 4,
+                agent: "Claude Code".into(),
+                reach: AgentReach::Desk,
+            }],
+            remembered: vec![RememberedAgent {
+                agent: "Codex".into(),
+                last_used_ms: 9,
+            }],
+        })
+    );
+    heard.join().expect("the compositor was listening");
+}
+
+#[test]
+fn the_compositor_is_told_to_stop_and_forget_agents() {
+    let set = "{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"set\"}}\n";
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked(&path, "stop_agent", set);
+    assert_eq!(stop_agent(&path, 4, Some(BRIEFLY)), Ok(()));
+    assert!(heard.join().expect("the compositor was listening")[0].contains("\"session\":4"));
+
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked(&path, "forget_agent", set);
+    assert_eq!(forget_agent(&path, "Codex", Some(BRIEFLY)), Ok(()));
+    assert!(heard.join().expect("the compositor was listening")[0].contains("\"Codex\""));
+}
+
+#[test]
+fn a_held_agent_hears_each_change_then_its_end() {
+    let (_scratch, path) = scratch();
+    let listener = UnixListener::bind(&path).expect("the compositor binds its chrome socket");
+    let compositor = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().expect("a supervisor dialed");
+        let mut reader = BufReader::new(stream.try_clone().expect("the connection is readable"));
+        reader
+            .read_line(&mut String::new())
+            .expect("the supervisor asked");
+        let mut answering = stream;
+        answering
+            .write_all(
+                b"{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"agent\",\
+                  \"reach\":{\"type\":\"desk\"}}}\n\
+                  {\"type\":\"system_event\",\"id\":1,\"event\":{\"kind\":\"agent_reach\",\
+                  \"reach\":{\"type\":\"windows\",\"windows\":[]}}}\n\
+                  {\"type\":\"system_end\",\"id\":1,\"end\":{\"kind\":\"stopped\"}}\n",
+            )
+            .expect("the compositor answers");
+    });
+    let held = agent(&path, "Claude Code", Some(BRIEFLY)).expect("the user let it in");
+    compositor.join().expect("the compositor answered");
+
+    assert_eq!(held.reach(), &AgentReach::Desk);
+    assert_eq!(
+        held.changed(),
+        Some(AgentReach::Windows { windows: vec![] })
+    );
+    assert_eq!(held.changed(), None);
 }
