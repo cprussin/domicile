@@ -162,7 +162,10 @@ claude.ai ── TLS for <label>.<zone> ──▶ relay :443 ──── splice
   quiet connection isn't dropped. Each connection's TLS ends on the desk, and
   what's inside goes to the HTTP server on 127.0.0.1.
 - **Domicile's own relay is `mcp.domicile-desktop.com`,** on fly.io
-  (`packages/domicile-relay/fly.toml`). Anyone can run another: it needs
+  (`packages/domicile-relay/fly.toml`), deployed by `.github/workflows/relay.yml`
+  each time main changes it. Set up once: `fly apps create domicile-relay`,
+  `fly ips allocate-v4`, and the repository secret `FLY_API_TOKEN` from `fly
+  tokens create deploy -a domicile-relay`. Anyone can run another: it needs
   two plain TCP ports, a wildcard DNS name for the zone, and one process,
   since a desk and the agents reaching it must meet on the same relay.
 

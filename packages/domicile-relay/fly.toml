@@ -1,5 +1,6 @@
-# domicile-relay on fly.io, for mcp.domicile-desktop.com. From the
-# repository's root:
+# domicile-relay on fly.io, for mcp.domicile-desktop.com. Deployed by
+# .github/workflows/relay.yml each time main changes the relay; by hand, from
+# the repository's root:
 #
 #   fly deploy . --config packages/domicile-relay/fly.toml --dockerfile packages/domicile-relay/Dockerfile
 #
