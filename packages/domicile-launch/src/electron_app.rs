@@ -216,3 +216,55 @@ fn named_paths(script: &str) -> impl Iterator<Item = &str> + '_ {
         .filter(|word| word.starts_with('/') && word.len() > 1)
         .map(|word| word.trim_end_matches('/'))
 }
+
+/// The name the app in `resources` gives itself: its package's
+/// `productName`, else its `name`, as Electron's `app.getName()` does.
+pub fn app_name(resources: &Path) -> Result<String, String> {
+    let unpacked = resources.join("app").join("package.json");
+    let package = if unpacked.is_file() {
+        fs::read(&unpacked).map_err(|why| format!("cannot read {}: {why}", unpacked.display()))?
+    } else {
+        let asar = resources.join("app.asar");
+        asar_package(&asar).map_err(|why| format!("cannot read {}: {why}", asar.display()))?
+    };
+    let package: serde_json::Value =
+        serde_json::from_slice(&package).map_err(|why| format!("its package.json: {why}"))?;
+    ["productName", "name"]
+        .iter()
+        .find_map(|key| package.get(key).and_then(serde_json::Value::as_str))
+        .map(str::to_string)
+        .ok_or_else(|| "its package.json has no productName or name".to_string())
+}
+
+/// The `package.json` an `app.asar` holds. The archive opens with a pickle
+/// giving its header's size, then the header, a pickle holding a JSON
+/// index whose offsets count from the header's end.
+fn asar_package(asar: &Path) -> Result<Vec<u8>, String> {
+    let bytes = fs::read(asar).map_err(|why| why.to_string())?;
+    let word = |at: usize| -> Result<usize, String> {
+        bytes
+            .get(at..at + 4)
+            .map(|word| u32::from_le_bytes(word.try_into().expect("four bytes")) as usize)
+            .ok_or_else(|| "it ends inside its header".to_string())
+    };
+    let header_size = word(4)?;
+    let json_size = word(12)?;
+    let json = bytes
+        .get(16..16 + json_size)
+        .ok_or_else(|| "it ends inside its index".to_string())?;
+    let index: serde_json::Value =
+        serde_json::from_slice(json).map_err(|why| format!("its index: {why}"))?;
+    let entry = &index["files"]["package.json"];
+    let offset: usize = entry["offset"]
+        .as_str()
+        .and_then(|offset| offset.parse().ok())
+        .ok_or_else(|| "its index has no package.json".to_string())?;
+    let size = entry["size"]
+        .as_u64()
+        .ok_or_else(|| "its index gives package.json no size".to_string())? as usize;
+    let start = 8 + header_size + offset;
+    bytes
+        .get(start..start + size)
+        .map(<[u8]>::to_vec)
+        .ok_or_else(|| "it ends inside package.json".to_string())
+}

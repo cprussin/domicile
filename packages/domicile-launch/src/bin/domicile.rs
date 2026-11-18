@@ -53,7 +53,7 @@ use domicile_launch::control_socket::{
     PATIENCE as ANSWER_WITHIN, VARIABLE,
 };
 use domicile_launch::dev::{dev_socket, going_back, loading};
-use domicile_launch::electron_app::{electron_app, UNSUPPORTED_EXIT};
+use domicile_launch::electron_app::{app_name, electron_app, UNSUPPORTED_EXIT};
 use domicile_launch::electron_schemes::{self, schemes_switch, with_known};
 use domicile_launch::electron_wrapper::{record, through_wrappers, WrapperError, RECORD};
 use domicile_launch::graphical_session;
@@ -350,10 +350,15 @@ fn electron_opened(target: &str, command: &[String]) -> Result<ExitCode, String>
     match (status.code(), app.fallback) {
         (Some(UNSUPPORTED_EXIT), Some(fallback)) => {
             // The host said why on stderr, which the desktop's log keeps.
+            // The app by its own name: `target` may be a store path.
+            let name = app_name(&app.resources).unwrap_or_else(|why| {
+                eprintln!("domicile: {target} names itself nothing readable: {why}");
+                target.to_string()
+            });
             let said = notification::session_bus().and_then(|bus| {
                 notification::notify(
                     &bus,
-                    &format!("{target} runs on its own Electron"),
+                    &format!("{name} runs on its own Electron"),
                     "It needs something Domicile's engine doesn't do yet, so its \
                      windows aren't the desktop's own this time.",
                 )

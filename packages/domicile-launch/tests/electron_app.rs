@@ -4,7 +4,7 @@ use std::fs;
 use std::os::unix::fs::{symlink, PermissionsExt as _};
 use std::path::{Path, PathBuf};
 
-use domicile_launch::electron_app::{electron_app, ElectronApp, ElectronError};
+use domicile_launch::electron_app::{app_name, electron_app, ElectronApp, ElectronError};
 
 /// Writes `text` at `path` under `root`, making its directories.
 fn write(root: &Path, path: &str, text: &str) -> PathBuf {
@@ -319,4 +319,74 @@ fn compiled_wrappers_are_followed_to_the_app_they_run() {
         found.resources,
         canonical(root.path().join("chatgpt/lib/chatgpt/resources"))
     );
+}
+
+/// An `app.asar` holding `files`, laid out as Electron's asar writes it.
+fn asar(root: &Path, path: &str, files: &[(&str, &str)]) {
+    let mut entries = serde_json::Map::new();
+    let mut body = Vec::new();
+    for (name, text) in files {
+        entries.insert(
+            (*name).to_string(),
+            serde_json::json!({ "size": text.len(), "offset": body.len().to_string() }),
+        );
+        body.extend_from_slice(text.as_bytes());
+    }
+    let json = serde_json::json!({ "files": entries }).to_string();
+    // A pickle holding the JSON string, padded to 4 bytes, inside a pickle
+    // holding its size.
+    let padded = json.len().div_ceil(4) * 4;
+    let mut header = Vec::new();
+    header.extend_from_slice(&u32::try_from(padded + 4).unwrap().to_le_bytes());
+    header.extend_from_slice(&u32::try_from(json.len()).unwrap().to_le_bytes());
+    header.extend_from_slice(json.as_bytes());
+    header.resize(padded + 8, 0);
+    let mut out = Vec::new();
+    out.extend_from_slice(&4u32.to_le_bytes());
+    out.extend_from_slice(&u32::try_from(header.len()).unwrap().to_le_bytes());
+    out.extend_from_slice(&header);
+    out.extend_from_slice(&body);
+    let at = root.join(path);
+    fs::create_dir_all(at.parent().unwrap()).unwrap();
+    fs::write(at, out).unwrap();
+}
+
+#[test]
+fn an_apps_name_is_its_product_name_from_its_asar() {
+    let root = tempfile::tempdir().unwrap();
+    asar(
+        root.path(),
+        "resources/app.asar",
+        &[
+            ("main.js", "x"),
+            (
+                "package.json",
+                r#"{"name":"element-desktop","productName":"Element"}"#,
+            ),
+        ],
+    );
+
+    assert_eq!(app_name(&root.path().join("resources")).unwrap(), "Element");
+}
+
+#[test]
+fn an_unpacked_apps_name_is_its_package_name_without_a_product_name() {
+    let root = tempfile::tempdir().unwrap();
+    write(
+        root.path(),
+        "resources/app/package.json",
+        r#"{"name":"codium"}"#,
+    );
+
+    assert_eq!(app_name(&root.path().join("resources")).unwrap(), "codium");
+}
+
+#[test]
+fn an_app_whose_package_cannot_be_read_says_why() {
+    let root = tempfile::tempdir().unwrap();
+    write(root.path(), "resources/app.asar", "asar");
+
+    let why = app_name(&root.path().join("resources")).unwrap_err();
+
+    assert!(why.contains("app.asar"), "{why}");
 }
