@@ -42,6 +42,12 @@ struct Told {
   // giving it.
   bool hold_open = false;
   WindowOpened held_open;
+  // Set to hold `media_devices`'s and `set_media_device`'s answers, as until
+  // the devices are listed, in `held_devices` and `held_device` instead of
+  // giving them.
+  bool hold_devices = false;
+  MediaDevicesFound held_devices;
+  CommandDone held_device;
   // The last reply, which a held command gives after Answer returns.
   std::string reply;
   bool asked = false;
@@ -308,22 +314,31 @@ std::string Answer(std::string_view line,
     }
     return base::ok();
   };
-  auto list_media_devices = [has_window]() -> std::optional<MediaDeviceList> {
-    if (!has_window) {
-      return std::nullopt;
+  auto list_media_devices = [told, has_window](MediaDevicesFound found) {
+    if (told->hold_devices) {
+      told->held_devices = std::move(found);
+      return;
     }
-    return ConnectedDevices();
+    if (!has_window) {
+      std::move(found).Run(std::nullopt);
+      return;
+    }
+    std::move(found).Run(ConnectedDevices());
   };
-  auto set_media_device =
-      [told, has_window](
-          MediaDeviceKind kind,
-          const std::string& id) -> base::expected<void, std::string> {
+  auto set_media_device = [told, has_window](MediaDeviceKind kind,
+                                             const std::string& id,
+                                             CommandDone done) {
     told->device_kind = kind;
     told->device = id;
-    if (!has_window) {
-      return base::unexpected("no shell");
+    if (told->hold_devices) {
+      told->held_device = std::move(done);
+      return;
     }
-    return base::ok();
+    if (!has_window) {
+      std::move(done).Run(base::unexpected("no shell"));
+      return;
+    }
+    std::move(done).Run(base::ok());
   };
   auto search_history = [told, has_window](const HistorySearch& search,
                                            HistoryFound found) {
@@ -951,6 +966,29 @@ TEST(CommandProtocolTest, ListsEachKindsMediaDevicesInTheOrderGiven) {
                 R"("microphones":[{"id":"default","name":"Default"},)"
                 R"({"id":"alsa_input.usb","name":"USB Microphone"}]})",
                 base::JSON_PARSE_RFC));
+}
+
+TEST(CommandProtocolTest, AnswersMediaDevicesOnceTheyAreListed) {
+  // Nothing lists devices before the first ask, so the first answer waits for
+  // the list rather than giving an empty one.
+  Told told;
+  told.hold_devices = true;
+  EXPECT_EQ(Answer(R"({"type":"media_devices","version":1})", &told), "");
+
+  std::move(told.held_devices).Run(ConnectedDevices());
+  EXPECT_EQ(TypeOf(told.reply), "media_devices");
+}
+
+TEST(CommandProtocolTest, PrefersAMediaDeviceOnceTheyAreListed) {
+  Told told;
+  told.hold_devices = true;
+  EXPECT_EQ(Answer(R"({"type":"set_media_device","version":1,)"
+                   R"("kind":"camera","id":"/dev/video2"})",
+                   &told),
+            "");
+
+  std::move(told.held_device).Run(base::ok());
+  EXPECT_EQ(TypeOf(told.reply), "set");
 }
 
 TEST(CommandProtocolTest, PrefersTheMediaDeviceARequestNames) {

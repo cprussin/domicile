@@ -273,6 +273,10 @@ class ChromeMediaAccess : public MediaAccess {
         ->CheckMediaAccessPermission(&frame, origin, type);
   }
 
+  void WhenDevicesListed(base::OnceClosure listed) override {
+    WhenMediaDevicesListed(std::move(listed));
+  }
+
   mojom::WebViewMediaDevicesPtr ListDevices(
       content::BrowserContext& context) override {
     const MediaDeviceList list = RankedMediaDevices(PrefsOf(context));
@@ -328,7 +332,7 @@ void AttachPermissionPrompts(content::WebContents& guest) {
 void UseChromeForGuestMedia() {
   static base::NoDestructor<ChromeMediaAccess> access;
   WebViewGuest::SetMediaAccess(access.get());
-  StartListingMediaDevices();
+  HearMediaDeviceLists();
 }
 
 }  // namespace domicile

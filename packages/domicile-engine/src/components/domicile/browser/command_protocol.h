@@ -420,18 +420,23 @@ struct MediaDeviceList {
 
 enum class MediaDeviceKind { kCamera, kMicrophone };
 
-// Carries out `media_devices`. Returns nothing if there is no shell, and so
-// no profile whose preference ranks them.
-using ListMediaDevices = base::FunctionRef<std::optional<MediaDeviceList>()>;
-
-// Carries out `set_media_device`: sites that ask for a `kind` without naming a
-// device get `id`. Says why not when there is no such device.
-using SetMediaDevice =
-    base::FunctionRef<base::expected<void, std::string>(MediaDeviceKind kind,
-                                                        const std::string& id)>;
-
 // Runs once when a command that answers later is done, or with why it is not.
 using CommandDone = base::OnceCallback<void(base::expected<void, std::string>)>;
+
+// Runs once with what `media_devices` lists, or nothing if there is no shell,
+// and so no profile whose preference ranks them.
+using MediaDevicesFound =
+    base::OnceCallback<void(std::optional<MediaDeviceList>)>;
+
+// Carries out `media_devices`: runs `found` once the devices are listed,
+// possibly after returning, as nothing lists them before the first ask.
+using ListMediaDevices = base::FunctionRef<void(MediaDevicesFound found)>;
+
+// Carries out `set_media_device`: sites that ask for a `kind` without naming a
+// device get `id`. Runs `done` once the devices are listed, with why not when
+// there is no such device.
+using SetMediaDevice = base::FunctionRef<
+    void(MediaDeviceKind kind, const std::string& id, CommandDone done)>;
 
 // What `history` looks for: like `chrome.history.search` from the start of
 // time.

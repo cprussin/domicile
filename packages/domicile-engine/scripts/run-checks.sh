@@ -84,6 +84,7 @@ TOGETHER=(
   guard-webview-wake-lock
   guard-webview-device-request
   guard-webview-media-devices
+  guard-media-services-at-rest
   guard-webview-count-matches
   guard-webview-click-match
   guard-webview-dialog

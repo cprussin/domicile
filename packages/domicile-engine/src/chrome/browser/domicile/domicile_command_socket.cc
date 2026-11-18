@@ -525,26 +525,38 @@ base::expected<void, std::string> ConfigureShellExtension(
   return ConfigureExtensionIn(*profile, id, settings);
 }
 
-// The cameras and microphones, ranked by the shell profile's preference.
-std::optional<MediaDeviceList> ListShellMediaDevices() {
+// The cameras and microphones, ranked by the shell profile's preference, once
+// Chrome has listed them. The profile is looked up then, as it may be gone.
+void ListShellMediaDevices(MediaDevicesFound found) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  Profile* profile = ShellProfile();
-  if (profile == nullptr) {
-    return std::nullopt;
-  }
-  return RankedMediaDevices(*profile->GetPrefs());
+  WhenMediaDevicesListed(base::BindOnce(
+      [](MediaDevicesFound found) {
+        Profile* profile = ShellProfile();
+        if (profile == nullptr) {
+          std::move(found).Run(std::nullopt);
+          return;
+        }
+        std::move(found).Run(RankedMediaDevices(*profile->GetPrefs()));
+      },
+      std::move(found)));
 }
 
-base::expected<void, std::string> PreferShellMediaDevice(
-    MediaDeviceKind kind,
-    const std::string& id) {
+void PreferShellMediaDevice(MediaDeviceKind kind,
+                            const std::string& id,
+                            CommandDone done) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  Profile* profile = ShellProfile();
-  if (profile == nullptr) {
-    return base::unexpected(
-        "this engine has no shell, and so no profile to store the device in");
-  }
-  return PreferMediaDevice(*profile->GetPrefs(), kind, id);
+  WhenMediaDevicesListed(base::BindOnce(
+      [](MediaDeviceKind kind, const std::string& id, CommandDone done) {
+        Profile* profile = ShellProfile();
+        if (profile == nullptr) {
+          std::move(done).Run(
+              base::unexpected("this engine has no shell, and so no profile "
+                               "to store the device in"));
+          return;
+        }
+        std::move(done).Run(PreferMediaDevice(*profile->GetPrefs(), kind, id));
+      },
+      kind, id, std::move(done)));
 }
 
 constexpr char kNoHistory[] =

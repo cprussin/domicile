@@ -2013,19 +2013,35 @@ void WebViewGuest::SetSitePermission(
 
 void WebViewGuest::ListMediaDevices(ListMediaDevicesCallback callback) {
   CHECK(guest_contents_);
-  std::move(callback).Run(
-      Media().ListDevices(*guest_contents_->GetBrowserContext()));
+  Media().WhenDevicesListed(base::BindOnce(
+      [](base::WeakPtr<WebViewGuest> guest, ListMediaDevicesCallback callback) {
+        // A guest gone since closed its pipe, which drops the callback.
+        if (guest && guest->guest_contents_) {
+          std::move(callback).Run(Media().ListDevices(
+              *guest->guest_contents_->GetBrowserContext()));
+        }
+      },
+      weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void WebViewGuest::SetMediaDevice(mojom::WebViewMediaDeviceKind kind,
                                   const std::string& id,
                                   SetMediaDeviceCallback callback) {
   CHECK(guest_contents_);
-  const base::expected<void, std::string> preferred =
-      Media().PreferDevice(*guest_contents_->GetBrowserContext(), kind, id);
-  std::move(callback).Run(preferred.has_value()
-                              ? std::nullopt
-                              : std::make_optional(preferred.error()));
+  Media().WhenDevicesListed(base::BindOnce(
+      [](base::WeakPtr<WebViewGuest> guest, mojom::WebViewMediaDeviceKind kind,
+         const std::string& id, SetMediaDeviceCallback callback) {
+        // A guest gone since closed its pipe, which drops the callback.
+        if (guest && guest->guest_contents_) {
+          const base::expected<void, std::string> preferred =
+              Media().PreferDevice(*guest->guest_contents_->GetBrowserContext(),
+                                   kind, id);
+          std::move(callback).Run(preferred.has_value()
+                                      ? std::nullopt
+                                      : std::make_optional(preferred.error()));
+        }
+      },
+      weak_factory_.GetWeakPtr(), kind, id, std::move(callback)));
 }
 
 void WebViewGuest::CopyAddress(const GURL& url) {

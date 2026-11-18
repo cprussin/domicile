@@ -100,9 +100,12 @@ void AnswerBrowserProfiles(ListBrowserProfiles list_browser_profiles,
                            CommandReply reply);
 std::string AnswerPinBrowserSite(const base::DictValue& request,
                                  PinBrowserSite pin_browser_site);
-std::string AnswerMediaDevices(ListMediaDevices list_media_devices);
-std::string AnswerSetMediaDevice(const base::DictValue& request,
-                                 SetMediaDevice set_media_device);
+CommandDone ReplyWhenDone(std::string_view type, CommandReply reply);
+void AnswerMediaDevices(ListMediaDevices list_media_devices,
+                        CommandReply reply);
+void AnswerSetMediaDevice(const base::DictValue& request,
+                          SetMediaDevice set_media_device,
+                          CommandReply reply);
 void AnswerHistory(const base::DictValue& request,
                    SearchHistory search_history,
                    CommandReply reply);
@@ -267,12 +270,11 @@ void AnswerCommand(std::string_view line,
     return;
   }
   if (*type == kMediaDevices) {
-    std::move(reply).Run(AnswerMediaDevices(actions.list_media_devices));
+    AnswerMediaDevices(actions.list_media_devices, std::move(reply));
     return;
   }
   if (*type == kSetMediaDevice) {
-    std::move(reply).Run(
-        AnswerSetMediaDevice(*request, actions.set_media_device));
+    AnswerSetMediaDevice(*request, actions.set_media_device, std::move(reply));
     return;
   }
   if (*type == kHistory) {
@@ -821,8 +823,7 @@ base::ListValue DeviceEntries(const std::vector<MediaDevice>& devices) {
   return entries;
 }
 
-std::string AnswerMediaDevices(ListMediaDevices list_media_devices) {
-  const std::optional<MediaDeviceList> list = list_media_devices();
+std::string MediaDevicesLine(const std::optional<MediaDeviceList>& list) {
   if (!list) {
     return RefusedCommand(
         "this engine has no shell, and so no profile whose media devices to "
@@ -835,6 +836,15 @@ std::string AnswerMediaDevices(ListMediaDevices list_media_devices) {
   return Line(std::move(reply));
 }
 
+void AnswerMediaDevices(ListMediaDevices list_media_devices,
+                        CommandReply reply) {
+  list_media_devices(base::BindOnce(
+      [](CommandReply reply, std::optional<MediaDeviceList> list) {
+        std::move(reply).Run(MediaDevicesLine(list));
+      },
+      std::move(reply)));
+}
+
 std::optional<MediaDeviceKind> MediaDeviceKindNamed(std::string_view name) {
   if (name == "camera") {
     return MediaDeviceKind::kCamera;
@@ -845,27 +855,26 @@ std::optional<MediaDeviceKind> MediaDeviceKindNamed(std::string_view name) {
   return std::nullopt;
 }
 
-std::string AnswerSetMediaDevice(const base::DictValue& request,
-                                 SetMediaDevice set_media_device) {
+void AnswerSetMediaDevice(const base::DictValue& request,
+                          SetMediaDevice set_media_device,
+                          CommandReply reply) {
   const std::string* kind_name = request.FindString("kind");
   const std::string* id = request.FindString("id");
   if (kind_name == nullptr || id == nullptr) {
-    return RefusedCommand(
+    std::move(reply).Run(RefusedCommand(
         "set_media_device needs a \"kind\" and an \"id\": the device sites "
-        "get when they name none");
+        "get when they name none"));
+    return;
   }
   const std::optional<MediaDeviceKind> kind = MediaDeviceKindNamed(*kind_name);
   if (!kind) {
-    return RefusedCommand(
+    std::move(reply).Run(RefusedCommand(
         base::StrCat({"\"", *kind_name,
                       "\" is not a kind of device; it is \"camera\" or "
-                      "\"microphone\""}));
+                      "\"microphone\""})));
+    return;
   }
-  const base::expected<void, std::string> set = set_media_device(*kind, *id);
-  if (!set.has_value()) {
-    return RefusedCommand(set.error());
-  }
-  return Done("set");
+  set_media_device(*kind, *id, ReplyWhenDone("set", std::move(reply)));
 }
 
 // The time `ms` milliseconds after the Unix epoch, to the nearest microsecond.

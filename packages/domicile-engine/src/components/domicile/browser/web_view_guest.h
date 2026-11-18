@@ -234,12 +234,18 @@ class MediaAccess {
                      const url::Origin& origin,
                      blink::mojom::MediaStreamType type) = 0;
 
+  // Runs `listed` once the cameras and microphones are listed, at once if
+  // they are. Nothing lists them before the first ask, as listing starts an
+  // audio service that then stays up.
+  virtual void WhenDevicesListed(base::OnceClosure listed) = 0;
+
   // The cameras and microphones, ranked by `context`'s profile's preference.
+  // Complete only once WhenDevicesListed has run.
   virtual mojom::WebViewMediaDevicesPtr ListDevices(
       content::BrowserContext& context) = 0;
 
   // Ranks device `id` first among `kind`'s for `context`'s profile, or says
-  // why not.
+  // why not. Finds `id` only once WhenDevicesListed has run.
   virtual base::expected<void, std::string> PreferDevice(
       content::BrowserContext& context,
       mojom::WebViewMediaDeviceKind kind,
