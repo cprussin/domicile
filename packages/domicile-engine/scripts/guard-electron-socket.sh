@@ -16,6 +16,8 @@
 #   window_opened      the window opened as an app window of the app
 #   window_loaded      its page finished loading
 #   title_changed      its page's title reached the app
+#   walked             page_state listed its page's history, with its
+#                      renderer's pid, and go_to_index went back in it
 #   window_closed      destroy_window closed it, and the app heard
 #   chrome:// refused  the control: a page the app may not open stays shut
 set -u
@@ -157,7 +159,7 @@ try:
     connection.connect(path)
 except OSError as failure:
     print("no socket: %s" % failure, flush=True)
-    print("measured: 0 0 0 0 0 0", flush=True)
+    print("measured: 0 0 0 0 0 0 0", flush=True)
     sys.exit(0)
 reader = connection.makefile("r", encoding="utf-8")
 
@@ -174,34 +176,53 @@ titled = any(e == {"type": "title_changed", "window": 1,
                    "title": "Electron guard"} for e in heard) or \
     hear_until(lambda e: e.get("type") == "title_changed" and
                e.get("title") == "Electron guard") is not None
+def state_of(window, entries, index):
+    """A page_state of `window` with `entries` entries, showing `index`."""
+    return lambda e: (e.get("type") == "page_state" and
+                      e.get("window") == window and
+                      len(e.get("entries", [])) == entries and
+                      e.get("index") == index and not e.get("loading") and
+                      e.get("pid", 0) > 0)
+
+second = page + "?second"
+walked = None
+if loaded is not None:
+    send({"type": "load_url", "window": 1, "url": second})
+    if hear_until(state_of(1, 2, 1)) is not None:
+        send({"type": "go_to_index", "window": 1, "index": 0})
+        walked = hear_until(state_of(1, 2, 0))
 send({"type": "destroy_window", "window": 1})
 closed = hear_until(lambda e: e == {"type": "window_closed", "window": 1})
 send({"type": "open_window", "window": 2, "url": "chrome://settings"})
 control = hear_until(lambda e: e.get("window") == 2)
 
-print("measured: %d %d %d %d %d %d" % (
+print("measured: %d %d %d %d %d %d %d" % (
     ready is not None and ready["type"] == "ready",
     opened is not None and opened["type"] == "window_opened",
     loaded is not None,
     bool(titled),
     closed is not None,
-    control is not None and control["type"] == "window_refused"), flush=True)
+    control is not None and control["type"] == "window_refused",
+    walked is not None and
+    walked["entries"][0]["url"] == page and
+    walked["entries"][1]["url"] == second), flush=True)
 PY
 
 MEASURED="$(sed -n 's/^measured: //p' "$APP_LOG")"
 echo
 echo "measured: $MEASURED"
-echo "  (ready opened loaded titled closed chrome-refused)"
+echo "  (ready opened loaded titled closed chrome-refused walked)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-electron-socket-guard.sh`
 # runs this block directly. MEASURED is "<ready> <opened> <loaded> <titled>
-# <closed> <chrome-refused>".
+# <closed> <chrome-refused> <walked>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"1 1 1 1 1 1")
+"1 1 1 1 1 1 1")
   PASSED="an Electron app's window opened over the Electron socket, loaded, \
-took its title, and closed, and a chrome:// page was refused"
+took its title, listed its history and went back in it, and closed, and a \
+chrome:// page was refused"
   ;;
 "0 "*)
   FAILURE="the Electron socket did not take the app's hello: it was not \
@@ -224,7 +245,13 @@ not hear the desk's listing change"
   FAILURE="destroy_window did not close the window, or the app never heard: \
 CloseBrowserWindow, or the listing that drops it"
   ;;
-"1 1 1 1 1 0")
+"1 1 1 1 1 1 0")
+  FAILURE="the page's history never reached the app, or go_to_index did not \
+go back in it: ElectronPage::ReportState (NavigationEntryCommitted, \
+DidStopLoading) and page_state, or ElectronPage::GoToIndex -- the app's log \
+has every page_state it heard"
+  ;;
+"1 1 1 1 1 0 "*)
   FAILURE="A CHROME:// PAGE WAS NOT REFUSED AS ITS WINDOW'S: \
 ParseElectronRequest must refuse every scheme but http and https, and \
 ElectronApp send that as window_refused for the window, or the app never \

@@ -284,6 +284,24 @@ TEST(ElectronProtocolTest, EachWindowRequestIsItsOwnKind) {
   EXPECT_TRUE(std::holds_alternative<ElectronDestroyWindow>(*destroy));
 }
 
+TEST(ElectronProtocolTest, AWindowsHistoryMovesToAnIndexOrIsCleared) {
+  const auto go =
+      ParseElectronRequest(R"({"type":"go_to_index","window":2,"index":1})");
+  const auto clear =
+      ParseElectronRequest(R"({"type":"clear_history","window":2})");
+
+  ASSERT_TRUE(go.has_value() && clear.has_value());
+  EXPECT_EQ(std::get<ElectronGoToIndex>(*go).window, 2);
+  EXPECT_EQ(std::get<ElectronGoToIndex>(*go).index, 1);
+  EXPECT_EQ(std::get<ElectronClearHistory>(*clear).window, 2);
+  for (const char* line :
+       {R"({"type":"go_to_index","window":2})",
+        R"({"type":"go_to_index","window":2,"index":-1})",
+        R"({"type":"go_to_index","window":2,"index":"1"})"}) {
+    EXPECT_EQ(WhyRefused(line), "\"index\" must be a whole number from 0");
+  }
+}
+
 TEST(ElectronProtocolTest, AnUnknownRequestIsNamed) {
   EXPECT_EQ(WhyRefused(R"({"type":"fly"})"), "no request is named fly");
 }
@@ -611,6 +629,21 @@ TEST(ElectronProtocolTest, EventsAreOneLineEach) {
   EXPECT_EQ(ElectronWindowClosed(5),
             "{\"type\":\"window_closed\",\"window\":5}\n");
   EXPECT_EQ(ElectronCloseAsked(6), "{\"type\":\"close_asked\",\"window\":6}\n");
+  EXPECT_EQ(
+      ElectronPageStateChanged(
+          2,
+          ElectronPageState{
+              .entries = {{.url = "https://a.test/", .title = "A"},
+                          {.url = "https://b.test/", .title = ""}},
+              .index = 1,
+              .loading = true,
+              .focused = true,
+              .pid = 77,
+              .crashed = false}),
+      "{\"crashed\":false,\"entries\":[{\"title\":\"A\",\"url\":"
+      "\"https://a.test/\"},{\"title\":\"\",\"url\":\"https://b.test/\"}],"
+      "\"focused\":true,\"index\":1,\"loading\":true,\"pid\":77,"
+      "\"type\":\"page_state\",\"window\":2}\n");
   EXPECT_EQ(ElectronMenuClicked(7, 12),
             "{\"command\":12,\"type\":\"menu_clicked\",\"window\":7}\n");
   EXPECT_EQ(ElectronMessageBoxAnswered(3, 9, 1, true),

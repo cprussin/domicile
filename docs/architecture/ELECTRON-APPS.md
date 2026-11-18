@@ -164,6 +164,17 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
     only if no listener prevents it does the host ask with `close_window`.
     An app that closes to its tray, as Slack and Element do, prevents it and
     hides the window.
+  - **Page state:** the engine sends `page_state {window, entries, index,
+    loading, focused, pid, crashed}` whenever any of it changes
+    (`ElectronPage::ReportState`). The host answers `navigationHistory` (and
+    `canGoBack` and the rest), `isLoading`, `isFocused`, `isCrashed`,
+    `getOSProcessId`, `BrowserWindow.getFocusedWindow` and
+    `webContents.getFocusedWebContents` from it, and emits
+    `did-start-loading`, `did-stop-loading`, `focus`, `blur` and
+    `render-process-gone`. `goBack`, `goForward` and `goToIndex` send
+    `go_to_index {window, index}` for an index the history has;
+    `navigationHistory.clear` sends `clear_history {window}`. A window is
+    focused when its page has the keyboard focus.
   - **Hide and show:** `hide()`, `show()`, `showInactive()` and `show:
     false` send `set_hidden {window, hidden}` (`hidden` with `open_window`).
     A hidden window stays open, its page running; the engine lists it with
@@ -582,6 +593,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: `webContents.executeJavaScript` and `mainFrame` (a `WebFrameMain` for the page's one frame), which Claude calls at start: the code runs in the page's main world after any load under way, a promise it gives is awaited, and what it gives comes back as JSON carries it (`execute_javascript` and `javascript_result` in `electron_protocol.h`). A throw rejects with a generic reason; the page's console has the exception
 - [x] engine: the rest of a sandboxed preload's `electron` module (`webFrame`, `webUtils`, `crashReporter`, `nativeImage`), `process.isMainFrame`, and `additionalArguments` in its `process.argv`, without which Claude's preloads expose nothing and claude.ai shows its web layout (`guard-electron-preload.sh`)
 - [x] engine: a sandboxed preload's `process.versions.electron` and `process.resourcesPath`, from `hello`, and the rest of Electron's renderer `process`, `webFrame.insertText` and `setVisualZoomLevelLimits`, each there or saying it doesn't work yet (`guard-electron-preload.sh`, `preload-coverage.test.ts`)
+- [x] engine: a page's history, loading, focus, renderer pid and crash reach the app (`page_state`), and it walks the history (`go_to_index`, `clear_history`), for `navigationHistory`, `getFocusedWindow` and the rest (`guard-electron-socket.sh`)
 - [ ] engine: a message box before any window has a page, which Element shows when there's no keyring and hands itself back on
 - [ ] phase 2, engine: Electron's Node built into the engine, and the engine run as Node
 - [x] phase 2, engine: Node in the pages of windows that ask for it (`guard-electron-node.sh`)

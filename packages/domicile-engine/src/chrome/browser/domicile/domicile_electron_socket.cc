@@ -109,6 +109,16 @@ class ChromeElectronDesk final : public ElectronDesk {
     LoadBrowserWindow(id, url);
   }
   void Focus(const std::string& id) override { FocusBrowserWindow(id); }
+  void GoToIndex(const std::string& id, int index) override {
+    if (ElectronPage* page = ElectronPageOf(id)) {
+      page->GoToIndex(index);
+    }
+  }
+  void ClearHistory(const std::string& id) override {
+    if (ElectronPage* page = ElectronPageOf(id)) {
+      page->ClearHistory();
+    }
+  }
   void SetTitle(const std::string& id, const std::string& title) override {
     SetElectronTitle(id, title);
   }

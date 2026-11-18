@@ -120,6 +120,12 @@ class ElectronPage final : public content::WebContentsObserver,
   void MenuClicked(int command);
   // The user asked to close the window: the app decides.
   void CloseAsked();
+  // navigationHistory.goToIndex: shows entry `index`, as the app last heard
+  // the history. An index the history no longer has does nothing, as in
+  // Electron.
+  void GoToIndex(int index);
+  // navigationHistory.clear: forgets every entry but the one shown.
+  void ClearHistory();
 
   // A message on a port, and the main process closing one:
   void DeliverToPort(const std::string& port, const std::string& data_json);
@@ -137,6 +143,22 @@ class ElectronPage final : public content::WebContentsObserver,
                         const gfx::Size& frame_size) override;
   void PrimaryPageChanged(content::Page& page) override;
   void DidFinishLoad(content::RenderFrameHost* frame, const GURL& url) override;
+  // Each may change what the app hears of the page's state.
+  void NavigationEntryCommitted(
+      const content::LoadCommittedDetails& details) override;
+  void NavigationListPruned(
+      const content::PrunedDetails& pruned_details) override;
+  void NavigationEntriesDeleted() override;
+  void NavigationEntryChanged(
+      const content::EntryChangedDetails& change_details) override;
+  void DidStartLoading() override;
+  void DidStopLoading() override;
+  void OnWebContentsFocused(
+      content::RenderWidgetHost* render_widget_host) override;
+  void OnWebContentsLostFocus(
+      content::RenderWidgetHost* render_widget_host) override;
+  void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus status) override;
 
   // mojom::ElectronFrameHost:
   void Send(const std::string& channel, const std::string& args_json) override;
@@ -193,8 +215,14 @@ class ElectronPage final : public content::WebContentsObserver,
   // Sends the page's view size to the app if it changed. `heard` names what
   // said so, for the log.
   void ReportSize(std::string_view heard);
+  // Sends the page's state to the app if it changed.
+  void ReportState();
 
   gfx::Size size_;
+  // The state last told to the app; nothing before the first.
+  std::optional<ElectronPageState> state_;
+  // Whether the page has the keyboard focus, as Chromium last said.
+  bool focused_ = false;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };

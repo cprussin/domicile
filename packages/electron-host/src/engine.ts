@@ -104,6 +104,12 @@ export type EngineRequest =
   | { readonly type: "load_url"; readonly window: number; readonly url: string }
   | { readonly type: "focus_window"; readonly window: number }
   | {
+      readonly type: "go_to_index";
+      readonly window: number;
+      readonly index: number;
+    }
+  | { readonly type: "clear_history"; readonly window: number }
+  | {
       readonly type: "set_title";
       readonly window: number;
       readonly title: string;
@@ -205,6 +211,17 @@ const engineEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("window_closed"), window: z.number() }),
   // The user asked to close the window: the app's `close` listeners decide.
   z.object({ type: z.literal("close_asked"), window: z.number() }),
+  // What the page is now, each time any of it changes.
+  z.object({
+    crashed: z.boolean(),
+    entries: z.array(z.object({ title: z.string(), url: z.string() })),
+    focused: z.boolean(),
+    index: z.number(),
+    loading: z.boolean(),
+    pid: z.number(),
+    type: z.literal("page_state"),
+    window: z.number(),
+  }),
   z.object({
     args: z.array(z.unknown()),
     channel: z.string(),
@@ -330,6 +347,12 @@ export type EngineEvent = z.infer<typeof engineEvent>;
 
 /** What the engine says about one window. */
 export type WindowEvent = Extract<EngineEvent, { window: number }>;
+
+/** What the engine last said of a page: its history, loading and focus. */
+export type PageState = Omit<
+  Extract<EngineEvent, { type: "page_state" }>,
+  "type" | "window"
+>;
 
 /** The engine's own user agent and Chrome's full version, from its `ready`. */
 export type EngineBrowser = {
