@@ -23,20 +23,29 @@ if [ "$desktop" != console ]; then
   slack-magic-link >/dev/null
 fi
 
+# On a host with a GPU, BENCH_RENDER_NODE (e.g. /dev/dri/renderD128) is the
+# card that virgl draws the VM on. DISPLAY keeps the driver from adding
+# -nographic, which would override that -display; nothing opens it.
+gpu_env=()
+if [ -n "${BENCH_RENDER_NODE:-}" ]; then
+  # The VNC display: egl-headless alone keeps no picture of the screen, so
+  # screendump has "no surface"; a VNC display, nobody connected, makes one.
+  # `-vnc none` doesn't. Its socket is under $machines, made fresh per run.
+  gpu_env=(DISPLAY=none "QEMU_OPTS=-display egl-headless,rendernode=$BENCH_RENDER_NODE -vnc unix:$machines/vnc")
+fi
+
 # A failed run is reported at the end, so the other runs still measure.
 failed=()
 for workload in "${workloads[@]}"; do
   for run in $(seq "$runs"); do
     name="$desktop-$workload-$run"
-    # A file, so the one-time link stays out of the log.
+    # Where the VM script writes the one-time link it fetches, so the link
+    # stays out of the log.
     link="$machines.link"
-    if [ "$workload" != rest ]; then
-      slack-magic-link >"$link"
-    fi
     echo "=== $name"
     mkdir -p "$out/$name"
     rm -rf "$machines" && mkdir -p "$machines"
-    if ! XDG_RUNTIME_DIR="$machines" BENCH_SLACK_LINK_FILE="$link" BENCH_WORKLOAD="$workload" BENCH_RUN="$run" \
+    if ! env "${gpu_env[@]}" XDG_RUNTIME_DIR="$machines" BENCH_SLACK_LINK_FILE="$link" BENCH_WORKLOAD="$workload" BENCH_RUN="$run" \
       BENCH_RESULT="$out/$name.run.json" \
       "$driver/bin/nixos-test-driver" --output_directory "$out/$name"; then
       failed+=("$name")

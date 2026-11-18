@@ -5,6 +5,9 @@
 import datetime as dt
 import json
 import os
+import shutil
+import subprocess
+import time
 
 DESKTOP = json.loads(r"""@DESKTOP@""")
 WORKLOAD = os.environ["BENCH_WORKLOAD"]
@@ -31,6 +34,14 @@ def in_the_session(argv, log):
     machine.succeed(f"runuser -u alice -- in-session {quoted} >{log} 2>&1 &")
 
 
+def cdp_urls():
+    """Every DevTools page's address, its query left off, which can hold tokens."""
+    return machine.execute(
+        "curl -s http://127.0.0.1:9222/json/list http://127.0.0.1:9223/json/list"
+        " | grep -o '\"url\": \"[^\"?]*' | cut -c9-120"
+    )[1].split()
+
+
 def cdp_targets(port):
     return machine.succeed(f"curl -sf http://127.0.0.1:{port}/json/list || echo '[]'")
 
@@ -43,12 +54,31 @@ def the_desktop_is_up():
     machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
 
 
-def start_slack():
-    machine.copy_from_host(os.environ["BENCH_SLACK_LINK_FILE"], "/tmp/slack-link")
+def fresh_slack_link():
+    """A new one-time link, fetched on the host right before it's used: the
+    links expire within minutes, and a boot and settle take several."""
+    link = os.environ["BENCH_SLACK_LINK_FILE"]
+    with open(link, "w") as file:
+        subprocess.run(["slack-magic-link"], check=True, stdout=file)
+    machine.copy_from_host(link, "/tmp/slack-link")
     machine.succeed("chmod 644 /tmp/slack-link")
-    in_the_session(DESKTOP["slack"], "/tmp/slack.log")
+
+
+def start_slack():
     port = DESKTOP["slackDevtoolsPort"]
+    fresh_slack_link()
+    in_the_session(DESKTOP["slack"], "/tmp/slack.log")
     # Signed in: the workspace's client page loaded, not the sign-in screen.
+    try:
+        retry(lambda _: "app.slack.com/client" in cdp_targets(port), timeout=dt.timedelta(seconds=90))
+        return
+    except Exception:
+        pass
+    # A link given to Slack as it starts can be lost to its first-run
+    # screen; given to the running app, it signs in.
+    print(f"Slack isn't signed in yet: {cdp_urls()}; giving it a new link")
+    fresh_slack_link()
+    in_the_session(DESKTOP["slack"], "/tmp/slack-again.log")
     retry(lambda _: "app.slack.com/client" in cdp_targets(port), timeout=WAIT)
 
 
@@ -64,11 +94,81 @@ def start_editor():
     machine.wait_until_succeeds("pgrep -u alice -f codium", timeout=WAIT)
 
 
+# Every list of processes: the one-time Slack link is on Slack's command
+# line, and the log and the artifact are public.
+PROCESSES = "ps -u alice -o pid=,rss=,args= | sed 's,magic-login/[^ ]*,magic-login/…,' | cut -c1-200"
+
 STARTS = {"slack": start_slack, "browser": start_browser, "editor": start_editor}
 
 
+def qemu_pid():
+    """QEMU, the driver's child or a descendant of it."""
+    parents = {}
+    for entry in os.listdir("/proc"):
+        if entry.isdigit():
+            try:
+                with open(f"/proc/{entry}/stat") as file:
+                    parents[int(entry)] = int(file.read().rsplit(")", 1)[1].split()[1])
+            except OSError:
+                continue
+    assert machine.process, "the machine isn't running"
+    pids = [machine.process.pid]
+    while pids:
+        pid = pids.pop()
+        with open(f"/proc/{pid}/comm") as file:
+            # nixpkgs wraps it: `.qemu-system-x8`, its name cut to 15.
+            if "qemu-system" in file.read():
+                return pid
+        pids += [child for child, parent in parents.items() if parent == pid]
+    raise RuntimeError("no QEMU under the driver")
+
+
+# The CI runner's PATH leaves out the system's programs, where NixOS puts it.
+NVIDIA_SMI = shutil.which("nvidia-smi") or "/run/current-system/sw/bin/nvidia-smi"
+
+
+def host_sample(pid):
+    """QEMU's CPU ticks and its share of the host's NVIDIA card."""
+    with open(f"/proc/{pid}/stat") as file:
+        fields = file.read().rsplit(")", 1)[1].split()
+    # pmon's columns vary by driver, so they're found by the header's names.
+    lines = subprocess.run(
+        [NVIDIA_SMI, "pmon", "-c", "1", "-s", "um"], check=True, capture_output=True, text=True
+    ).stdout.splitlines()
+    header = lines[0].lstrip("#").split()
+    rows = [dict(zip(header, line.split())) for line in lines if not line.startswith("#")]
+    mine = [row for row in rows if row.get("pid") == str(pid)]
+
+    def total(column):
+        return sum(int(row[column]) for row in mine if row.get(column, "-").isdigit())
+
+    return {
+        "gpuMib": total("fb"),
+        "gpuPercent": total("sm"),
+        # utime and stime, every thread's.
+        "qemuTicks": int(fields[11]) + int(fields[12]),
+        "seconds": time.monotonic(),
+    }
+
+
+def screenshot(name):
+    """A picture of the screen, for a person to check the run by.
+
+    Not a measure, so a run doesn't fail without one. With virgl, QEMU's
+    `screendump` can come back empty; its answer is logged.
+    """
+    try:
+        machine.screenshot(name)
+    except Exception as error:
+        answer = machine.send_monitor_command("screendump /dev/null")
+        print(f"!!! no screenshot {name}: {error}; screendump says {answer!r}")
+
+
 def sample():
-    return json.loads(machine.succeed("bench-sample"))
+    reading = json.loads(machine.succeed("bench-sample"))
+    if DESKTOP["gpu"]:
+        reading["host"] = host_sample(qemu_pid())
+    return reading
 
 
 def measure():
@@ -87,13 +187,19 @@ try:
         STARTS[app]()
     if WORKLOADS[WORKLOAD]:
         machine.sleep(SETTLE_SECONDS)
-    machine.screenshot(f"{DESKTOP['name']}-{WORKLOAD}-{RUN}")
+    if DESKTOP["gpu"]:
+        # Proof the desktop draws on the card and not in software: the
+        # guest's GL renderer, and the engines' GPU processes' flags.
+        print(machine.execute("eglinfo -B -p surfaceless 2>&1 | grep -i renderer")[1])
+        print(machine.execute("ps -u alice -o args= | grep -- --type=gpu-process | grep -o -- '--use-[^ ]*\\|--disable-gpu[^ ]*\\|--ozone-platform=[^ ]*' | sort | uniq -c")[1])
+    screenshot(f"{DESKTOP['name']}-{WORKLOAD}-{RUN}")
     samples = measure()
-    machine.screenshot(f"{DESKTOP['name']}-{WORKLOAD}-{RUN}-end")
+    screenshot(f"{DESKTOP['name']}-{WORKLOAD}-{RUN}-end")
     result = {
         "cores": int(machine.succeed("nproc").strip()),
         "desktop": DESKTOP["name"],
-        "processes": machine.succeed("ps -u alice -o pid=,rss=,args= | cut -c1-200"),
+        **({"hostTicksPerSecond": os.sysconf("SC_CLK_TCK")} if DESKTOP["gpu"] else {}),
+        "processes": machine.succeed(PROCESSES),
         "run": RUN,
         "samples": samples,
         "top": json.loads(machine.succeed("bench-top")),
@@ -104,13 +210,16 @@ try:
     # The run in the job's log too, readable without the artifact.
     print(f"result: {json.dumps({**result, 'processes': None})}")
 except Exception:
-    machine.screenshot(f"{DESKTOP['name']}-{WORKLOAD}-{RUN}-failed")
+    print(f"DevTools pages: {cdp_urls()}")
     for command in [
-        "tail -20 /tmp/slack.log /tmp/browser-*.log /tmp/editor.log /tmp/desktop.log 2>/dev/null | cut -c1-200",
-        "ps -u alice -o pid=,rss=,args= | cut -c1-160",
+        "dmesg | grep -iE 'virgl|drm|gpu' | tail -10",
+        "ls -la /tmp/*.log",
+        "for log in /tmp/*.log; do echo \"== $log\"; tail -20 \"$log\" | sed 's,magic-login/[^ ]*,magic-login/…,' | cut -c1-200; done",
+        PROCESSES,
     ]:
         print(f"$ {command}")
         print(machine.execute(f"{command} 2>&1")[1])
+    screenshot(f"{DESKTOP['name']}-{WORKLOAD}-{RUN}-failed")
     raise
 finally:
     # Not shutdown(): some desktops take half an hour to power off, and
