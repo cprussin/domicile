@@ -24,7 +24,7 @@ const QUESTIONS: readonly {
   },
   {
     answer:
-      "They can. List an app in the config and it runs on the desktop's engine, with its menus and dialogs drawn by your shell. Apps you don't list, and apps whose pages need Node.js, bring their own Chromium as on any desktop.",
+      "They can. List an app in the config and it runs on the desktop's engine, with its menus and dialogs drawn by your shell. Apps you don't list bring their own Chromium, as on any desktop.",
     link: { href: "/docs/manganese/electron-apps", label: "Electron apps" },
     question: "Do Electron apps share the desktop's Chromium?",
   },

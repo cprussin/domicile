@@ -51,8 +51,9 @@ export const Electron = () => (
         <CodeBlock code={CONFIG} language="json" />
         <div className={noteStyles}>
           <p className={mutedStyles}>
-            Apps whose pages need Node.js, such as Signal, still run on their
-            own Chromium for now.
+            Pages that ask for Node.js get it, as Electron gives it. A few apps,
+            such as Signal, still run on their own Chromium until each is
+            checked.
           </p>
           <div className={actionsStyles}>
             <LinkButton href="/docs/shells/browser-windows#menu-bars">

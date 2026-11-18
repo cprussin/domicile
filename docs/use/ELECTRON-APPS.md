@@ -32,9 +32,9 @@ To try an app once without listing it, run
 
 - **Sign in again.** An app starts with nothing saved the first time it runs
   here.
-- **Some apps still use their own Chromium.** Apps whose pages need Node.js,
-  such as Signal, Joplin, Teams for Linux and Zulip, start on their own
-  Chromium for now, and a notification says so.
+- **A few apps still use their own Chromium.** Signal, Joplin, Teams for Linux
+  and Zulip start on their own Chromium until each is checked here, and a
+  notification says so.
 - **An app may run on its own Chromium once.** An app that brings a new kind
   of link the first time it runs here starts on its own Chromium, and on the
   desktop's from your next login.
