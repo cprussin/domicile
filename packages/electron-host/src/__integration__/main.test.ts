@@ -8,14 +8,20 @@ import { fileURLToPath } from "node:url";
 import { writeAsar } from "../asar-fixture";
 import { startFakeDesktopBus } from "../desktop-bus-fixture";
 import type { FakeEngine } from "../engine-fixture";
-import { startFakeEngine } from "../engine-fixture";
+import { READY, startFakeEngine } from "../engine-fixture";
 
 const MAIN = join(import.meta.dir, "../main.ts");
 
 const MAIN_JS = `
-const { app, nativeTheme } = require("electron");
+const { app, nativeTheme, session } = require("electron");
 app.whenReady().then(() => {
+  const userAgent = app.userAgentFallback;
+  const sessionUserAgent = session.defaultSession.getUserAgent();
+  app.userAgentFallback = "Custom/1";
   console.log(JSON.stringify({
+    userAgent,
+    sessionUserAgent,
+    setUserAgent: session.defaultSession.getUserAgent(),
     appPath: app.getAppPath(),
     argv: process.argv.slice(1),
     dark: nativeTheme.shouldUseDarkColors,
@@ -111,14 +117,28 @@ describe("electron-host", () => {
       engine,
     );
     const seen = JSON.parse(stdout);
+    const electronUserAgent =
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Notes/1.2.3 Chrome/160.0.8155.0 Electron/45.2.1 Safari/537.36";
 
     expect(code).toBe(0);
+    // Pages get Electron's user agent unless the app sets its own.
+    expect(engine.heard).toContainEqual({
+      type: "set_user_agent_fallback",
+      user_agent: electronUserAgent,
+    });
+    expect(engine.heard).toContainEqual({
+      type: "set_user_agent_fallback",
+      user_agent: "Custom/1",
+    });
     expect(seen).toMatchObject({
       argv: ["--open", "x.txt"],
       dark: true,
       electron: "45.2.1",
       name: "Notes",
+      sessionUserAgent: electronUserAgent,
+      setUserAgent: "Custom/1",
       type: "browser",
+      userAgent: electronUserAgent,
       userData: join(home, ".config/Notes"),
     });
     expect(seen.appPath).toStartWith(join(home, ".cache/domicile/electron/"));
@@ -172,7 +192,7 @@ describe("electron-host", () => {
     });
     engine = await startFakeEngine((request) => {
       if (request.type === "hello") {
-        return [{ schemes: [], type: "ready" }];
+        return [READY];
       } else if (request.type === "open_window") {
         return [
           { type: "window_opened", window: 1 },
@@ -209,8 +229,10 @@ describe("electron-host", () => {
       session: "",
       type: "handle_protocol",
     });
-    expect(engine.heard[2]).toMatchObject({ type: "open_window", window: 1 });
-    const { url } = engine.heard[2] as { url: string };
+    // The app's fallback user agent, before its first window.
+    expect(engine.heard[2]).toMatchObject({ type: "set_user_agent_fallback" });
+    expect(engine.heard[3]).toMatchObject({ type: "open_window", window: 1 });
+    const { url } = engine.heard[3] as { url: string };
     expect(url).toEndWith("/app.asar/index.html");
     // loadFile's page comes from the app's mirror, read by the engine.
     expect(engine.heard).toContainEqual({

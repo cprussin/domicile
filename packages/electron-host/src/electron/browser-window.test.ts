@@ -129,7 +129,7 @@ describe(createBrowserWindow, () => {
     ]);
   });
 
-  it("is dom-ready before it finishes loading", async () => {
+  it("is dom-ready when the engine says its DOM is, before it finishes loading", async () => {
     const { BrowserWindow, say } = setUp();
     const window = new BrowserWindow();
     const heard: string[] = [];
@@ -139,6 +139,8 @@ describe(createBrowserWindow, () => {
     );
 
     const loading = window.loadURL("https://notes.test/");
+    say({ type: "window_dom_ready", window: 1 });
+    expect(heard).toEqual(["dom-ready"]);
     say({ type: "window_loaded", window: 1 });
     await loading;
 

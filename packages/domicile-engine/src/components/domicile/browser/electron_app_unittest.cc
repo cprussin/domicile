@@ -202,7 +202,9 @@ class ElectronAppTest : public testing::Test {
                  [](std::vector<std::string>* sent, std::string line) {
                    sent->push_back(std::move(line));
                  },
-                 &sent_)) {}
+                 &sent_),
+             ElectronEngineInfo{.user_agent = "Mozilla/5.0 Chrome/160.0.0.0",
+                                .chrome_version = "160.0.8155.0"}) {}
 
   // Says hello and forgets the reply.
   void Hello() {
@@ -220,7 +222,9 @@ using Lines = std::vector<std::string>;
 TEST_F(ElectronAppTest, HelloIsAnsweredReady) {
   app_->Take(kHello);
 
-  EXPECT_EQ(sent_, Lines{"{\"schemes\":[],\"type\":\"ready\"}\n"});
+  EXPECT_EQ(sent_, Lines{"{\"chrome_version\":\"160.0.8155.0\","
+                         "\"schemes\":[],\"type\":\"ready\",\"user_agent\":"
+                         "\"Mozilla/5.0 Chrome/160.0.0.0\"}\n"});
 }
 
 TEST_F(ElectronAppTest, ReadySaysWhichSchemesTheEngineRegistered) {
@@ -230,12 +234,14 @@ TEST_F(ElectronAppTest, ReadySaysWhichSchemesTheEngineRegistered) {
                      sent->push_back(std::move(line));
                    },
                    &sent_),
+               ElectronEngineInfo{},
                std::vector<ElectronScheme>{{.scheme = "app", .secure = true}});
 
   app_->Take(kHello);
 
-  EXPECT_EQ(sent_, Lines{"{\"schemes\":[{\"privileges\":[\"secure\"],"
-                         "\"scheme\":\"app\"}],\"type\":\"ready\"}\n"});
+  EXPECT_EQ(sent_, Lines{"{\"chrome_version\":\"\",\"schemes\":[{"
+                         "\"privileges\":[\"secure\"],\"scheme\":\"app\"}],"
+                         "\"type\":\"ready\",\"user_agent\":\"\"}\n"});
 }
 
 TEST_F(ElectronAppTest, NothingOpensBeforeHello) {
@@ -366,6 +372,18 @@ TEST_F(ElectronAppTest, OnlyItsOwnWindowsLoadsAreReported) {
   app_->Loaded("11");
 
   EXPECT_EQ(sent_, Lines{"{\"type\":\"window_loaded\",\"window\":2}\n"});
+}
+
+TEST_F(ElectronAppTest, OnlyItsOwnWindowsDomReadiesAreReported) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  sent_.clear();
+
+  app_->DomReady("10");
+  app_->DomReady("11");
+
+  EXPECT_EQ(sent_,
+            Lines{"{\"type\":\"window_dom_ready\",\"window\":2}\n"});
 }
 
 TEST_F(ElectronAppTest, AnAppThatGoesClosesItsWindows) {
@@ -1328,6 +1346,43 @@ TEST_F(ElectronAppTest, AUserAgentReachesTheSessionsWindowsAndItsNewOnes) {
   // A window opened later finds it on its session, before it loads.
   EXPECT_EQ(desk_.sessions.at("10")->user_agent(), "Claude/1");
   EXPECT_EQ(desk_.sessions.at("11")->user_agent(), "");
+}
+
+TEST_F(ElectronAppTest, TheFallbackReachesSessionsWithoutTheirOwnUserAgent) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+             R"("session":"persist:work"})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"session_call","call":5,"session":"persist:work",)"
+             R"("method":"set_user_agent","user_agent":"Claude/1"})");
+  desk_.calls.clear();
+  sent_.clear();
+
+  app_->Take(
+      R"({"type":"set_user_agent_fallback","user_agent":"Slack/4 Electron/45"})");
+
+  EXPECT_EQ(desk_.calls, Lines{"user agent 11 Slack/4 Electron/45"});
+  EXPECT_EQ(sent_, Lines{});
+  EXPECT_EQ(desk_.sessions.at("10")->user_agent(), "Claude/1");
+  EXPECT_EQ(desk_.sessions.at("11")->user_agent(), "Slack/4 Electron/45");
+}
+
+TEST_F(ElectronAppTest, ASessionsEmptyUserAgentGivesItsWindowsTheFallback) {
+  Hello();
+  app_->Take(
+      R"({"type":"set_user_agent_fallback","user_agent":"Slack/4 Electron/45"})");
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+             R"("session":"persist:work"})");
+  app_->Take(R"({"type":"session_call","call":5,"session":"persist:work",)"
+             R"("method":"set_user_agent","user_agent":"Claude/1"})");
+  desk_.calls.clear();
+
+  app_->Take(R"({"type":"session_call","call":6,"session":"persist:work",)"
+             R"("method":"set_user_agent","user_agent":""})");
+
+  // As a window opened now would.
+  EXPECT_EQ(desk_.calls, Lines{"user agent 10 Slack/4 Electron/45"});
+  EXPECT_EQ(desk_.sessions.at("10")->user_agent(), "Slack/4 Electron/45");
 }
 
 TEST_F(ElectronAppTest, ABadSessionCallIsAnsweredWithWhy) {

@@ -28,9 +28,13 @@ namespace domicile {
 //   {"type":"hello","version":1,"app_id":"com.anthropic.Claude",
 //    "partition":"persist:electron-claude"}
 //   -> {"type":"ready","schemes":[{"scheme":"app",
-//                                  "privileges":["standard","secure"]}]}
+//                                  "privileges":["standard","secure"]}],
+//       "user_agent":"Mozilla/5.0 ... Chrome/160.0.0.0 Safari/537.36",
+//       "chrome_version":"160.0.8155.0"}
 //        (the apps' own schemes the engine registered as it started; see
-//        components/domicile/common/electron_schemes.h)
+//        components/domicile/common/electron_schemes.h. The engine's own
+//        user agent and Chrome version, which Electron's user agent is
+//        made from.)
 //   -> {"type":"refused","why":"..."}
 //
 //   {"type":"open_window","window":1,"url":"https://claude.ai/",
@@ -56,6 +60,10 @@ namespace domicile {
 //   {"type":"set_title","window":1,"title":"Claude"}
 //                                          (win.setTitle, and a page title
 //                                           the app let through)
+//   {"type":"set_user_agent_fallback","user_agent":"..."}
+//                                          (app.userAgentFallback: the user
+//                                           agent of each session without
+//                                           its own)
 //   {"type":"set_hidden","window":1,"hidden":true}
 //                                          (win.hide, and win.show with
 //                                           false)
@@ -97,6 +105,8 @@ namespace domicile {
 //
 // The engine also says, on its own:
 //
+//   {"type":"window_dom_ready","window":1}  (its main frame's
+//                                           DOMContentLoaded)
 //   {"type":"window_loaded","window":1}
 //   {"type":"title_changed","window":1,"title":"Claude"}
 //   {"type":"window_closed","window":1}
@@ -174,6 +184,14 @@ inline constexpr int kElectronProtocolVersion = 1;
 
 // A window's number, from 1. The host counts them up from 1, so an int lasts.
 using ElectronWindow = int;
+
+// What the engine tells each app of itself as it says ready.
+struct ElectronEngineInfo {
+  // The engine's own user agent, its pages' by default.
+  std::string user_agent;
+  // Chrome's full version, which Electron's user agent names.
+  std::string chrome_version;
+};
 
 struct ElectronHello {
   // The app's desktop id, never empty.
@@ -302,6 +320,12 @@ struct ElectronSetTitle {
 struct ElectronSetHidden {
   ElectronWindow window;
   bool hidden = false;
+};
+
+// app.userAgentFallback: the user agent of the pages of each session that
+// has none of its own.
+struct ElectronSetUserAgentFallback {
+  std::string user_agent;
 };
 
 struct ElectronDestroyWindow {
@@ -657,7 +681,8 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronShowMessageBox,
                                      ElectronExecuteJavaScript,
                                      ElectronSetTitle,
-                                     ElectronSetHidden>;
+                                     ElectronSetHidden,
+                                     ElectronSetUserAgentFallback>;
 
 // Why a line is not a request, and which window or protocol request it was
 // for when it names one, so the app hears of it as that window's and the
@@ -686,7 +711,8 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
 
 // The lines the engine sends, each ending in a newline.
 // `schemes` are the apps' own schemes the engine registered as it started.
-std::string ElectronReady(const std::vector<ElectronScheme>& schemes);
+std::string ElectronReady(const std::vector<ElectronScheme>& schemes,
+                          const ElectronEngineInfo& engine);
 // The answer to window `window`'s executeJavaScript `call`: what the code
 // gave, or why it gave nothing.
 std::string ElectronJavaScriptResult(
@@ -705,6 +731,7 @@ std::string ElectronRefused(std::string_view why);
 std::string ElectronWindowOpened(ElectronWindow window);
 std::string ElectronWindowRefused(ElectronWindow window, std::string_view why);
 std::string ElectronWindowLoaded(ElectronWindow window);
+std::string ElectronWindowDomReady(ElectronWindow window);
 std::string ElectronTitleChanged(ElectronWindow window, std::string_view title);
 std::string ElectronWindowClosed(ElectronWindow window);
 // The user asked to close `window`, which closes only if the app closes it.
