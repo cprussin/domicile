@@ -28,18 +28,32 @@ let
       busy=$((user + nice + system + irq + softirq + steal))
       total=$((busy + idle + iowait))
       load=$(cut -d' ' -f1 /proc/loadavg)
-      # A process can exit between the glob and the read; it is skipped.
+      # Kernel threads have no memory to read, and a process can exit
+      # between the glob and the read: getline skips both, where reading
+      # them as awk's input files would end awk at the first.
       read -r all mine < <(
         {
           stat -c '%n %u' /proc/[0-9]* 2>/dev/null || true
           echo ---
-          awk '/^Pss:/ { print FILENAME, $2 }' /proc/[0-9]*/smaps_rollup 2>/dev/null || true
+          awk 'BEGIN {
+            for (i = 1; i < ARGC; i++) {
+              while ((getline line < ARGV[i]) > 0) {
+                if (line ~ /^Pss:/) { split(line, field); print ARGV[i], field[2] }
+              }
+              close(ARGV[i])
+            }
+            exit
+          }' /proc/[0-9]*/smaps_rollup
         } | awk '
           $1 == "---" { pss = 1; next }
           !pss { uid[$1] = $2; next }
           { dir = $1; sub("/smaps_rollup", "", dir); all += $2; if (uid[dir] == 1000) mine += $2 }
           END { printf "%d %d\n", all, mine }'
       )
+      if [ "$all" -le 0 ]; then
+        echo "bench-sample: read no process's memory" >&2
+        exit 1
+      fi
       printf '{"busyTicks":%d,"totalTicks":%d,"usedKib":%d,"load1":%s,"pssKib":%d,"sessionPssKib":%d}\n' \
         "$busy" "$total" "$used" "$load" "$all" "$mine"
     '';
@@ -75,7 +89,8 @@ let
       done <"/proc/$pid/environ"
       export XDG_RUNTIME_DIR=/run/user/1000
       export DBUS_SESSION_BUS_ADDRESS="''${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/1000/bus}"
-      WAYLAND_DISPLAY=$(basename "$(ls -d /run/user/1000/wayland-[0-9] | head -1)")
+      sockets=(/run/user/1000/wayland-[0-9])
+      WAYLAND_DISPLAY=$(basename "''${sockets[0]}")
       export WAYLAND_DISPLAY
       # nixpkgs' Chromium, Slack and VSCodium wrappers run on Wayland with it.
       export NIXOS_OZONE_WL=1

@@ -50,8 +50,7 @@ jobs:
       - run: nix run .#benchmarks.run -- ${{ matrix.desktop }} ./driver results ${{ inputs.runs }}
         env:
           BENCH_SLACK_WORKSPACE: ${{ secrets.BENCH_SLACK_WORKSPACE }}
-          BENCH_SLACK_EMAIL: ${{ secrets.BENCH_SLACK_EMAIL }}
-          BENCH_SLACK_PASSWORD: ${{ secrets.BENCH_SLACK_PASSWORD }}
+          BENCH_SLACK_COOKIE: ${{ secrets.BENCH_SLACK_COOKIE }}
           BENCH_SLACK_DEBUG: results/slack-debug
 
       - uses: actions/upload-artifact@v7
@@ -72,7 +71,7 @@ jobs:
         with:
           pattern: benchmark-*
           path: results
-      - run: bun packages/benchmarks/src/main.ts results >>"$GITHUB_STEP_SUMMARY"
+      - run: bun packages/benchmarks/src/main.ts results | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
           name: benchmark-summary

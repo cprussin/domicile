@@ -41,7 +41,10 @@ Slack's Electron and VSCodium's Electron run on their own.
 
 ## Slack
 
-`bin/slack-magic-link.py` signs in to the test workspace on the web with
-`BENCH_SLACK_WORKSPACE` (its subdomain), `BENCH_SLACK_EMAIL` and
-`BENCH_SLACK_PASSWORD`, then fetches the one-time `slack://` link that signs
-the desktop app in. On failure it saves the page to `BENCH_SLACK_DEBUG`.
+`bin/slack-magic-link.py` takes the test workspace's subdomain in
+`BENCH_SLACK_WORKSPACE` and a signed-in browser's `d` cookie in
+`BENCH_SLACK_COOKIE`, then fetches the one-time `slack://` link that signs the
+desktop app in. A password sign-in from a fresh machine asks for an emailed
+code, so the cookie stands in for it. On failure it prints the page's text
+and saves a screenshot to `BENCH_SLACK_DEBUG`, never its HTML, which holds the
+session's tokens.

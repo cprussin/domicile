@@ -1,8 +1,8 @@
 # Runs one desktop's benchmark: every workload, a fresh boot per run.
 # Usage: benchmark <desktop> <driver> <output directory> [runs]
 # Writes <output directory>/<desktop>-<workload>-<run>.run.json and each
-# run's screenshots. Slack's workloads need BENCH_SLACK_WORKSPACE,
-# BENCH_SLACK_EMAIL and BENCH_SLACK_PASSWORD.
+# run's screenshots. Slack's workloads need BENCH_SLACK_WORKSPACE and
+# BENCH_SLACK_COOKIE.
 desktop=$1
 driver=$2
 out=$(realpath -m "$3")
@@ -14,24 +14,34 @@ if [ "$desktop" = console ]; then
 fi
 
 mkdir -p "$out"
-BENCH_SLACK_STATE="$(mktemp -d)/slack-state.json"
-export BENCH_SLACK_STATE
+# The driver keeps each VM's disk and store image under XDG_RUNTIME_DIR, a
+# tmpfs too small for a desktop's store; this puts them on disk.
+machines="$out/.machines"
+
+# Slack's sign-in fails here, minutes in, rather than after the rest runs.
+if [ "$desktop" != console ]; then
+  slack-magic-link >/dev/null
+fi
 
 # A failed run is reported at the end, so the other runs still measure.
 failed=()
 for workload in "${workloads[@]}"; do
   for run in $(seq "$runs"); do
     name="$desktop-$workload-$run"
-    link=""
+    # A file, so the one-time link stays out of the log.
+    link="$machines.link"
     if [ "$workload" != rest ]; then
-      link=$(slack-magic-link)
+      slack-magic-link >"$link"
     fi
     echo "=== $name"
-    if ! BENCH_SLACK_LINK="$link" BENCH_WORKLOAD="$workload" BENCH_RUN="$run" \
+    mkdir -p "$out/$name"
+    rm -rf "$machines" && mkdir -p "$machines"
+    if ! XDG_RUNTIME_DIR="$machines" BENCH_SLACK_LINK_FILE="$link" BENCH_WORKLOAD="$workload" BENCH_RUN="$run" \
       BENCH_RESULT="$out/$name.run.json" \
       "$driver/bin/nixos-test-driver" --output_directory "$out/$name"; then
       failed+=("$name")
     fi
+    rm -rf "$machines" "$link"
   done
 done
 
