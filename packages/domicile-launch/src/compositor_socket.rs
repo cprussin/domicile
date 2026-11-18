@@ -14,9 +14,9 @@ use std::time::Duration;
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    ChromeMessage, DesktopStatus, DisplayChange, HostMessage, ListedDisplay, ListedInput,
-    ListedWindow, MonitorInfo, ShellBinding, ShellCommandHelp, SystemError, SystemErrorKind,
-    SystemReply, SystemRequest, Theme, WatchTopic, WindowAct,
+    ChromeMessage, DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage,
+    ListedDisplay, ListedInput, ListedWindow, MonitorInfo, ShellBinding, ShellCommandHelp,
+    SystemError, SystemErrorKind, SystemReply, SystemRequest, Theme, WatchTopic, WindowAct,
 };
 
 use crate::cli::MonitorMode;
@@ -176,6 +176,62 @@ pub fn act_on_window(
     )?;
     match serde_json::from_str::<HostMessage>(&said) {
         Ok(HostMessage::WindowActed { refused }) => Ok(refused.map_or(Ok(()), Err)),
+        _ => Err(CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said,
+        }),
+    }
+}
+
+/// Tells the compositor at `socket` to write a PNG of the desk to the
+/// absolute path `file`, its longer side at most `fit` pixels. The outer error
+/// is the compositor's; the inner, why it refused.
+pub fn shoot_desk(
+    socket: &Path,
+    file: &Path,
+    fit: u32,
+    patience: Option<Duration>,
+) -> Result<Result<DeskShot, String>, CompositorError> {
+    let said = exchanged(
+        socket,
+        &[ChromeMessage::ShootDesk {
+            file: file.display().to_string(),
+            fit,
+        }],
+        patience,
+    )?;
+    match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::DeskShot {
+            shot: Some(shot),
+            refused: None,
+        }) => Ok(Ok(shot)),
+        Ok(HostMessage::DeskShot {
+            shot: None,
+            refused: Some(why),
+        }) => Ok(Err(why)),
+        _ => Err(CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said,
+        }),
+    }
+}
+
+/// Tells the compositor at `socket` to send `input` to the desk. The outer
+/// error is the compositor's; the inner, why it refused.
+pub fn emulate(
+    socket: &Path,
+    input: &[EmulatedInput],
+    patience: Option<Duration>,
+) -> Result<Result<(), String>, CompositorError> {
+    let said = exchanged(
+        socket,
+        &[ChromeMessage::Emulate {
+            input: input.to_vec(),
+        }],
+        patience,
+    )?;
+    match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::Emulated { refused }) => Ok(refused.map_or(Ok(()), Err)),
         _ => Err(CompositorError::Unreadable {
             path: socket.display().to_string(),
             said,

@@ -15,12 +15,12 @@ use std::sync::Arc;
 
 use domicile_host::data_url::data_url;
 use domicile_host::screenshot::{
-    color_at, crop, encode, file_name, save, screenshots_dir, Shot, Taken,
+    color_at, crop, encode, file_name, fit, save, screenshots_dir, Shot, Taken,
 };
 use domicile_host::system::Kept;
 use domicile_protocol::{
-    AccessDialog, DeskRect, FrozenDesk, PortalAnswer, PortalKind, PreviewedWindow, ShotRect,
-    SystemError, SystemErrorKind, SHELL_APP_ID,
+    AccessDialog, DeskRect, DeskShot, FrozenDesk, PortalAnswer, PortalKind, PreviewedWindow,
+    ShotRect, SystemError, SystemErrorKind, SHELL_APP_ID,
 };
 use tracing::warn;
 use zbus::object_server::ObjectServer;
@@ -347,6 +347,25 @@ pub async fn for_the_shell(
     }
 }
 
+/// Writes a PNG of the whole desk to `file`, its longer side at most `fit`
+/// pixels, for `domicile screenshot --fit`, and says what it shows.
+pub async fn for_an_agent(shots: &Shots, file: PathBuf, fit_into: u32) -> Result<DeskShot, String> {
+    let desk = (shots.shoot)()
+        .await
+        .map_err(|why| format!("the desk could not be shot: {why}"))?;
+    let shot = fit(&desk.shot, fit_into);
+    std::fs::write(&file, encode(&shot))
+        .map_err(|why| format!("the screenshot could not be written: {why}"))?;
+    Ok(DeskShot {
+        place: DeskRect {
+            position: (desk.place.0, desk.place.1),
+            size: (desk.place.2, desk.place.3),
+        },
+        width: shot.width,
+        height: shot.height,
+    })
+}
+
 /// Draws `window` as it last drew itself, for the shell's picker to preview,
 /// as `SystemRequest::PreviewWindow` describes.
 pub async fn preview(shots: &Shots, window: PreviewedWindow) -> Result<String, SystemError> {
@@ -611,6 +630,31 @@ mod tests {
     #[zbus(prefix = "org.freedesktop.portal.Error")]
     enum NotFound {
         NotFound(String),
+    }
+
+    #[test]
+    fn an_agents_shot_is_the_desk_fit_into_its_file_and_says_where_it_is() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("desk.png");
+        let shots = Shots {
+            shoot: shot_of(Ok(desk())),
+            ..Shots::none()
+        };
+
+        let shot = zbus::block_on(for_an_agent(&shots, file.clone(), 1)).unwrap();
+
+        assert_eq!(
+            shot,
+            DeskShot {
+                place: DeskRect {
+                    position: (-1, 0),
+                    size: (2, 1),
+                },
+                width: 1,
+                height: 1,
+            }
+        );
+        assert_eq!(png_of(std::fs::read(&file).unwrap()).0, (1, 1));
     }
 
     /// A 2x1 desk: an orange pixel on monitor `left`, then a half-transparent

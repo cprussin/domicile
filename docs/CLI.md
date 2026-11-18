@@ -99,6 +99,45 @@ With no file, open the shell's screenshot picker. The picture goes in
 it instead. With a file, write every monitor to it as a PNG, without asking.
 Exits 1 if the picker is dismissed.
 
+## `domicile screenshot --fit <px> <file>`
+
+Write a PNG of every monitor to `<file>`, shrunk so neither side is over
+`<px>` pixels, without asking. Print what it shows as JSON: the desktop it
+covers in logical pixels, and its size.
+
+```
+$ domicile screenshot --fit 1280 desk.png
+{"place":{"position":[0,0],"size":[3840,1080]},"width":1280,"height":360}
+```
+
+A point in the PNG is a point for `pointer`, scaled by `place.size` over
+`width` and `height`.
+
+## `domicile pointer <x>,<y> [click|double-click|right-click|middle-click|press|release]`
+
+Move the pointer to `<x>,<y>`, in logical pixels from the desk's top-left
+corner, then click or press the left button there, or click the right or
+middle one. `press` and `release` with moves between them drag.
+
+## `domicile scroll <dx>,<dy>`
+
+Scroll where the pointer is, in logical pixels: positive is right and down.
+
+## `domicile key <chord>`
+
+Press the keys of a chord in order, then release them in reverse. Each key is
+an XKB keysym name, such as `Return`, `Tab`, `l` or `F4`, in any case;
+`ctrl`, `shift`, `alt` and `super` name the left modifiers.
+
+```
+domicile key ctrl+shift+Tab
+```
+
+## `domicile type <text>`
+
+Type `<text>` on the desk's keyboard, holding Shift where a character needs
+it. Refused, typing nothing, when no key types a character without AltGr.
+
 ## `domicile screen-record`
 
 Open the shell's screen cast picker and record what is picked, with its sound,
@@ -400,7 +439,10 @@ Each tool runs a verb and answers what it printed, or its error:
 | `open` | `open [--app] [--profile <id>] <target>` |
 | `focus_window`, `close_window` | that verb with the window's id |
 | `theme` | `theme [light\|dark\|toggle]` |
-| `screenshot` | `screenshot <file>`, answered as a PNG of every monitor |
+| `screenshot` | `screenshot --fit 1280 <file>`, answered as the PNG |
+| `click`, `move_pointer`, `drag` | `pointer`, with the point scaled from the last screenshot's pixels to the desk's |
+| `scroll` | `pointer`, then `scroll` |
+| `key`, `type_text` | `key <chord>`, `type <text>` |
 
 Tools the lock refuses are refused while the desktop is locked.
 
@@ -434,8 +476,9 @@ shell.
 
 ## While locked
 
-`screenshot`, `screen-record`, `send-shell`, `focus-window`, `close-window`
-and `kill-window` are refused while the desktop is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
+`screenshot`, `screen-record`, `send-shell`, `focus-window`, `close-window`,
+`kill-window`, `pointer`, `scroll`, `key` and `type` are refused while the
+desktop is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
 `wake-displays`, `lock`, `inhibit-idle`, `list-displays`, `list-windows`,
 `list-inputs`, `status`, `subscribe`, `configure-display`,
 `list-shell-commands` and `list-bindings` work, and a `monitor` added before keeps resizing.

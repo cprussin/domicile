@@ -18,9 +18,9 @@ use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 use domicile_protocol::{
-    AdaptiveSync, DesktopStatus, DisplayChange, DisplayHdr, DisplayInfo, DisplayTransform,
-    InputConnection, InputKind, ListedDisplay, ListedInput, ListedWindow, MonitorInfo,
-    ShellBinding, ShellCommandHelp, Theme, WindowAct, WindowKind,
+    AdaptiveSync, DeskRect, DeskShot, DesktopStatus, DisplayChange, DisplayHdr, DisplayInfo,
+    DisplayTransform, EmulatedInput, InputConnection, InputKind, ListedDisplay, ListedInput,
+    ListedWindow, MonitorInfo, ShellBinding, ShellCommandHelp, Theme, WindowAct, WindowKind,
 };
 
 #[test]
@@ -1280,6 +1280,8 @@ fn nothing_dialed() -> Desktop<'static> {
         power_displays: &|_, _| panic!("only sleep_displays and wake_displays power them"),
         lock: &|| panic!("only lock locks the desktop"),
         act_on_window: &|_, _| panic!("only act_on_window acts on a window"),
+        shoot_desk: &|_, _| panic!("only shoot_desk shoots the desk"),
+        emulate: &|_| panic!("only emulate sends input"),
         configure_display: &|_, _| panic!("only configure_display configures a display"),
         monitors: &|| panic!("only monitors lists the monitors"),
         displays: &|| panic!("only displays lists the displays"),
@@ -1386,4 +1388,48 @@ fn a_resize_with_no_monitor_held_is_refused() {
         &|_| panic!("a resize reaches no engine"),
     );
     assert!(matches!(refused, Response::Refused { .. }), "{refused:?}");
+}
+
+#[test]
+fn a_desk_shot_says_what_it_shows() {
+    let shot = DeskShot {
+        place: DeskRect {
+            position: (0, 0),
+            size: (3840, 1080),
+        },
+        width: 1280,
+        height: 360,
+    };
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"shoot_desk\",\"file\":\"/tmp/desk.png\",\"fit\":1280}",
+            &Desktop {
+                shoot_desk: &|file, fit| {
+                    assert_eq!((file, fit), (Path::new("/tmp/desk.png"), 1280));
+                    Ok(shot)
+                },
+                ..nothing_dialed()
+            },
+        ),
+        Response::DeskShot { shot }
+    );
+}
+
+#[test]
+fn emulated_input_is_sent_or_refused_with_why() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"emulate\",\"input\":[{\"kind\":\"point_to\",\"x\":1.0,\"y\":2.0}]}",
+            &Desktop {
+                emulate: &|input| {
+                    assert_eq!(input, [EmulatedInput::PointTo { x: 1.0, y: 2.0 }]);
+                    Err("the desktop is locked".to_string())
+                },
+                ..nothing_dialed()
+            },
+        ),
+        Response::Refused {
+            why: "the desktop is locked".to_string()
+        }
+    );
 }

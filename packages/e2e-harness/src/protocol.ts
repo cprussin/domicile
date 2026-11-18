@@ -691,6 +691,30 @@ const displayConfiguredSchema = z.looseObject({
   type: z.literal("display_configured"),
 });
 
+// Answers `shoot_desk` on the asking connection only, for `domicile
+// screenshot --fit`: what the PNG shows, or why there is none.
+const deskShotSchema = z.looseObject({
+  refused: z.string().optional(),
+  shot: z
+    .looseObject({
+      height: z.number(),
+      place: z.looseObject({
+        position: z.tuple([z.number(), z.number()]),
+        size: z.tuple([z.number(), z.number()]),
+      }),
+      width: z.number(),
+    })
+    .optional(),
+  type: z.literal("desk_shot"),
+});
+
+// Answers `emulate` on the asking connection only, for `domicile pointer`,
+// `key` and `type`: why not, or nothing.
+const emulatedSchema = z.looseObject({
+  refused: z.string().optional(),
+  type: z.literal("emulated"),
+});
+
 const boundShortcutSchema = z.looseObject({
   app_id: z.string(),
   chord: z.string(),
@@ -951,6 +975,8 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   inputListSchema,
   windowActedSchema,
   displayConfiguredSchema,
+  deskShotSchema,
+  emulatedSchema,
   browserToplevelIdsSchema,
   keymapSchema,
   browserProfilesSchema,

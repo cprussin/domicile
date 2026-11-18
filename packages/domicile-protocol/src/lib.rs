@@ -444,6 +444,18 @@ pub enum ChromeMessage {
     /// `kill-window`.
     ActOnWindow { id: String, act: WindowAct },
 
+    /// Write a PNG of the whole desk to the absolute path `file`, shrunk so
+    /// its longer side is at most `fit` pixels. Answered with
+    /// [`HostMessage::DeskShot`] on this connection only. Sent by `domicile
+    /// screenshot --fit`.
+    ShootDesk { file: String, fit: u32 },
+
+    /// Send `input` to the desk, in order, as one emulated device would; it
+    /// lets go of what it held once done. Answered with
+    /// [`HostMessage::Emulated`] on this connection only. Sent by `domicile
+    /// pointer`, `key` and `type`.
+    Emulate { input: Vec<EmulatedInput> },
+
     /// Change how the monitor `display` is set up until the desktop restarts,
     /// over what its config's profile says, like `swaymsg output`. `display`
     /// is a name `domicile list-displays` prints or a profile matches.
@@ -899,6 +911,22 @@ pub enum HostMessage {
     /// Answers [`ChromeMessage::ConfigureDisplay`] on the asking connection
     /// only: why it was not done, or nothing when the desktop took it.
     DisplayConfigured {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        refused: Option<String>,
+    },
+
+    /// Answers [`ChromeMessage::ShootDesk`] on the asking connection only:
+    /// what the PNG shows, or why there is none.
+    DeskShot {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        shot: Option<DeskShot>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        refused: Option<String>,
+    },
+
+    /// Answers [`ChromeMessage::Emulate`] on the asking connection only: why
+    /// it was not sent, or nothing when it was.
+    Emulated {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         refused: Option<String>,
     },
@@ -1707,6 +1735,45 @@ pub struct ShotWindow {
     pub title: String,
     /// Its Wayland app id, which names its desktop entry; empty if unset.
     pub app_id: String,
+}
+
+/// What a [`HostMessage::DeskShot`]'s PNG shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeskShot {
+    /// The desktop the PNG covers: every monitor.
+    pub place: DeskRect,
+    /// The PNG's size, in pixels.
+    pub width: u32,
+    pub height: u32,
+}
+
+/// One event of a [`ChromeMessage::Emulate`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum EmulatedInput {
+    /// Move the pointer to `x`, `y`: logical pixels from the top-left corner
+    /// of the desk, which is a [`DeskShot`]'s `place`.
+    PointTo { x: f64, y: f64 },
+    Button {
+        button: PointerButton,
+        pressed: bool,
+    },
+    /// Smooth scrolling, in logical pixels; positive is down and right.
+    Scroll { dx: f64, dy: f64 },
+    /// Press or release the key that types the XKB keysym named `key`, such
+    /// as `Return` or `Control_L`.
+    Key { key: String, pressed: bool },
+    /// Type `text`, a key for each character.
+    Text { text: String },
+}
+
+/// A pointer button.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PointerButton {
+    Left,
+    Right,
+    Middle,
 }
 
 /// A rectangle of the desktop, in logical pixels.

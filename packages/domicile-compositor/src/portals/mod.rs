@@ -300,6 +300,16 @@ impl Portals {
         ))
     }
 
+    /// Writes a PNG of the desk for an agent. Blocks until then. See
+    /// [`screenshot::for_an_agent`].
+    pub fn shoot_desk(
+        &self,
+        file: PathBuf,
+        fit: u32,
+    ) -> Result<domicile_protocol::DeskShot, String> {
+        zbus::block_on(screenshot::for_an_agent(&self.shots, file, fit))
+    }
+
     /// Records what the shell picks until it stops the recording, and
     /// returns the file. Blocks until then. See [`recording::for_the_shell`].
     pub fn screen_record(&self) -> Result<PathBuf, SystemError> {

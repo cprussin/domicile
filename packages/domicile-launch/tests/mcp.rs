@@ -124,6 +124,12 @@ fn tools_list_describes_each_tool() {
             "close_window",
             "theme",
             "screenshot",
+            "click",
+            "move_pointer",
+            "drag",
+            "scroll",
+            "key",
+            "type_text",
         ]
     );
     for tool in tools {
@@ -205,19 +211,93 @@ fn theme_with_no_change_prints_it() {
     );
 }
 
+/// What `domicile screenshot --fit` prints for a 3840x1080 desk fit into
+/// 1280 pixels: a third of its size.
+const THIRD: &str =
+    "{\"place\":{\"position\":[0,0],\"size\":[3840,1080]},\"width\":1280,\"height\":360}\n";
+
+/// Stands in for `domicile`: writes a PNG for `screenshot` and records every
+/// other run in `ran`.
+fn desk<'a>(ran: &'a mut Vec<Vec<String>>) -> impl FnMut(&[String]) -> io::Result<Ran> + 'a {
+    move |args| {
+        if args[0] == "screenshot" {
+            assert_eq!(args[1..3], ["--fit", "1280"]);
+            std::fs::write(&args[3], b"\x89PNG").unwrap();
+            printed(THIRD)
+        } else {
+            ran.push(args.to_vec());
+            printed("")
+        }
+    }
+}
+
 #[test]
-fn screenshot_answers_the_png_domicile_wrote() {
-    let replies = served(&[call("screenshot", json!({}))], |args| {
-        assert_eq!(args[0], "screenshot");
-        std::fs::write(&args[1], b"\x89PNG").unwrap();
-        printed("")
-    });
+fn screenshot_answers_the_desk_shrunk_to_fit_and_what_it_shows() {
+    let mut ran = Vec::new();
+    let replies = served(&[call("screenshot", json!({}))], desk(&mut ran));
     assert_eq!(
-        replies[0]["result"],
-        json!({
-            "content": [{"type": "image", "data": "iVBORw==", "mimeType": "image/png"}],
-            "isError": false
-        })
+        replies[0]["result"]["content"][0],
+        json!({"type": "image", "data": "iVBORw==", "mimeType": "image/png"})
+    );
+    assert!(replies[0]["result"]["content"][1]["text"]
+        .as_str()
+        .unwrap()
+        .contains("1280x360"));
+}
+
+#[test]
+fn pointing_before_a_screenshot_is_a_tool_error_asking_for_one() {
+    let replies = served(&[call("click", json!({"x": 1, "y": 1}))], never_run);
+    assert_eq!(replies[0]["result"]["isError"], true);
+    assert!(replies[0]["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap()
+        .contains("screenshot"));
+}
+
+#[test]
+fn pointer_tools_take_the_last_screenshots_pixels_to_the_desks() {
+    let mut ran = Vec::new();
+    served(
+        &[
+            call("screenshot", json!({})),
+            call("click", json!({"x": 100, "y": 50})),
+            call("click", json!({"x": 100, "y": 50, "button": "right"})),
+            call("click", json!({"x": 100, "y": 50, "count": 2})),
+            call("move_pointer", json!({"x": 1, "y": 2})),
+            call("drag", json!({"from": [10, 10], "to": [20, 20.5]})),
+            call("scroll", json!({"x": 1, "y": 1, "dx": 0, "dy": 40})),
+        ],
+        desk(&mut ran),
+    );
+    let ran: Vec<Vec<&str>> = ran
+        .iter()
+        .map(|args| args.iter().map(String::as_str).collect())
+        .collect();
+    assert_eq!(
+        ran,
+        [
+            vec!["pointer", "300,150", "click"],
+            vec!["pointer", "300,150", "right-click"],
+            vec!["pointer", "300,150", "double-click"],
+            vec!["pointer", "3,6"],
+            vec!["pointer", "30,30", "press"],
+            vec!["pointer", "60,61.5", "release"],
+            vec!["pointer", "3,3"],
+            vec!["scroll", "0,120"],
+        ]
+    );
+}
+
+#[test]
+fn keys_and_text_go_to_key_and_type() {
+    assert_eq!(
+        ran_for("key", json!({"chord": "ctrl+l"})),
+        ["key", "ctrl+l"]
+    );
+    assert_eq!(
+        ran_for("type_text", json!({"text": "Hi there"})),
+        ["type", "Hi there"]
     );
 }
 

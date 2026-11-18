@@ -26,7 +26,7 @@ Profiles with their own sign-ins, site data and extensions; each site opens in i
 
 ### Let agents drive the desktop
 
-`domicile mcp` serves the Model Context Protocol, so Claude Code and other agents can list windows, open things, run shell commands and take screenshots: `claude mcp add domicile -- domicile mcp`.
+`domicile mcp` serves the Model Context Protocol, so Claude Code and other agents can list windows, open things, run shell commands, see the desk and click and type on it: `claude mcp add domicile -- domicile mcp`. `domicile pointer`, `scroll`, `key`, `type` and `screenshot --fit` do the same from scripts.
 
 [`domicile mcp`](CLI.md#domicile-mcp)
 

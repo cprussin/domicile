@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    DesktopStatus, DisplayChange, HostMessage, ListedDisplay, ListedInput, ListedWindow,
-    MonitorInfo, Scale, ShellBinding, ShellCommandHelp, Theme, WatchTopic, WindowAct,
+    DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage, ListedDisplay, ListedInput,
+    ListedWindow, MonitorInfo, Scale, ShellBinding, ShellCommandHelp, Theme, WatchTopic, WindowAct,
 };
 use serde::{Deserialize, Serialize};
 
@@ -202,6 +202,11 @@ pub enum Request {
     /// Focus, close or kill the native window `id`, as `domicile
     /// list-windows` prints it.
     ActOnWindow { id: String, act: WindowAct },
+    /// Write a PNG of the desk to `file`, its longer side at most `fit`
+    /// pixels. See `domicile screenshot --fit`.
+    ShootDesk { file: PathBuf, fit: u32 },
+    /// Send `input` to the desk. See `domicile pointer`, `key` and `type`.
+    Emulate { input: Vec<EmulatedInput> },
     /// Change how the monitor `display` is set up until the desktop
     /// restarts. See `domicile configure-display`.
     ConfigureDisplay {
@@ -292,6 +297,9 @@ pub enum Response {
 
     /// The compositor wrote the screenshot or the recording to this file.
     Captured { file: PathBuf },
+
+    /// Answers `shoot_desk`: what the PNG shows.
+    DeskShot { shot: DeskShot },
 
     /// The user dismissed the shell's screenshot or recording dialog, or
     /// discarded the recording.
@@ -588,6 +596,16 @@ pub type Locking<'a> = &'a dyn Fn() -> Result<(), String>;
 /// tests.
 pub type ActingOnWindows<'a> = &'a dyn Fn(&str, WindowAct) -> Result<(), String>;
 
+/// Asks the compositor for a PNG of the desk, shrunk to fit.
+///
+/// [`crate::compositor_socket::shoot_desk`] in a desktop; a closure in tests.
+pub type ShootingTheDesk<'a> = &'a dyn Fn(&Path, u32) -> Result<DeskShot, String>;
+
+/// Asks the compositor to send input to the desk.
+///
+/// [`crate::compositor_socket::emulate`] in a desktop; a closure in tests.
+pub type Emulating<'a> = &'a dyn Fn(&[EmulatedInput]) -> Result<(), String>;
+
 /// Asks the compositor to change how a monitor is set up.
 ///
 /// [`crate::compositor_socket::configure_display`] in a desktop; a closure in
@@ -669,6 +687,8 @@ pub struct Desktop<'a> {
     pub power_displays: PowerDisplays<'a>,
     pub lock: Locking<'a>,
     pub act_on_window: ActingOnWindows<'a>,
+    pub shoot_desk: ShootingTheDesk<'a>,
+    pub emulate: Emulating<'a>,
     pub configure_display: ConfiguringDisplays<'a>,
     pub monitors: ListMonitors<'a>,
     pub displays: ListDisplays<'a>,
@@ -933,6 +953,14 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::ActOnWindow { id, act }) => to_line(&match (desktop.act_on_window)(&id, act) {
+            Ok(()) => Response::Done,
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::ShootDesk { file, fit }) => to_line(&match (desktop.shoot_desk)(&file, fit) {
+            Ok(shot) => Response::DeskShot { shot },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::Emulate { input }) => to_line(&match (desktop.emulate)(&input) {
             Ok(()) => Response::Done,
             Err(why) => Response::Refused { why },
         }),

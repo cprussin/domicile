@@ -1166,6 +1166,8 @@ impl Host {
             | ChromeMessage::Watch { .. }
             | ChromeMessage::ActOnWindow { .. }
             | ChromeMessage::ConfigureDisplay { .. }
+            | ChromeMessage::ShootDesk { .. }
+            | ChromeMessage::Emulate { .. }
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerRelative { .. }

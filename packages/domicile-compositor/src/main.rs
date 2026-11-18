@@ -89,6 +89,7 @@ mod dmabuf_descriptor;
 mod dmabuf_import;
 mod eis;
 mod electron_apps;
+mod emulated_input;
 mod engine;
 mod engine_buffers;
 mod engine_damage;

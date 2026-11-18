@@ -6,7 +6,9 @@
 
 use std::path::PathBuf;
 
-use domicile_protocol::{DisplayChange, DisplayTransform, Scale, WatchTopic, WindowAct};
+use domicile_protocol::{
+    DisplayChange, DisplayTransform, EmulatedInput, PointerButton, Scale, WatchTopic, WindowAct,
+};
 
 use crate::control::{AppReuse, Request, Switch, ThemeChange};
 use crate::power::Power;
@@ -46,6 +48,18 @@ Ask the running desktop:
                                         desktop's engine; <command> is its own,
                                         which runs it if the engine can't
   domicile screenshot [file]            Take the shell's screenshot, or write a PNG
+  domicile screenshot --fit <px> <file> Write a PNG of the desk no wider or
+                                        taller than <px>, and print what it
+                                        shows as JSON
+  domicile pointer <x>,<y> [click|double-click|right-click|middle-click|press|release]
+                                        Move the pointer to a point of the desk,
+                                        in logical pixels from its top-left
+                                        corner, then click or press there
+  domicile scroll <dx>,<dy>             Scroll where the pointer is, in logical
+                                        pixels; positive is right and down
+  domicile key <chord>                  Press and release a chord such as
+                                        ctrl+shift+Tab or Return
+  domicile type <text>                  Type text on the desk's keyboard
   domicile screen-record                Record the screen until the toolbar stops it
   domicile send-shell <word>...         Run a shell command, as a keybinding does,
                                         and print what it answers
@@ -202,6 +216,31 @@ pub enum CliError {
     #[error("screenshot takes one file, and it was given {extra} as well.")]
     ExtraToSave { extra: String },
     #[error(
+        "screenshot --fit takes the most pixels the picture may be across or \
+         down, then the file to write:\n\n    \
+         domicile screenshot --fit 1280 desk.png\n"
+    )]
+    NotAFit,
+    #[error(
+        "{said} is not a point. pointer takes x,y in logical pixels from the \
+         desk's top-left corner, as screenshot --fit places them:\n\n    \
+         domicile pointer 640,360 click\n"
+    )]
+    NotAPoint { said: String },
+    #[error(
+        "{said} is not something pointer does: click, double-click, \
+         right-click, middle-click, press or release."
+    )]
+    NotAPointerAction { said: String },
+    #[error("{said} is not a distance like 0,120 to scroll across and down.")]
+    NotADistance { said: String },
+    #[error("{verb} takes one {what}, and was given {said}.")]
+    NotOne {
+        verb: String,
+        what: String,
+        said: String,
+    },
+    #[error(
         "send-shell takes the command to send the shell, and was given \
          nothing:\n\n    \
          domicile send-shell focus right\n"
@@ -354,6 +393,11 @@ pub enum Invocation {
     ///
     /// Kept as typed; the client makes it absolute.
     Screenshot { file: Option<String> },
+    /// Tell the running desktop to write a PNG of the desk to this file, its
+    /// longer side at most `fit` pixels, and print what it shows.
+    ///
+    /// Kept as typed; the client makes it absolute.
+    ShootDesk { file: String, fit: u32 },
     /// Check that the compositor takes this config, without running a desktop.
     Check { config: PathBuf },
     /// Power off or reboot the computer, or log out, after a yes in the
@@ -584,6 +628,16 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 },
             },
             Verb::Capturing => match (args.next(), args.next()) {
+                (Some(flag), fit) if flag == "--fit" => {
+                    match (
+                        fit.and_then(|fit| fit.parse().ok()),
+                        args.next(),
+                        args.next(),
+                    ) {
+                        (Some(fit), Some(file), None) => Ok(Invocation::ShootDesk { file, fit }),
+                        _ => Err(CliError::NotAFit),
+                    }
+                }
                 (Some(_), Some(extra)) => Err(CliError::ExtraToSave { extra }),
                 (file, _) => Ok(Invocation::Screenshot { file }),
             },
@@ -645,6 +699,41 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     request: Request::ConfigureDisplay { display, change },
                 })
             }
+            Verb::Pointing => {
+                let point = args.next().ok_or(CliError::NotAPoint {
+                    said: "nothing".to_string(),
+                })?;
+                let (x, y) = pair(&point).ok_or_else(|| CliError::NotAPoint {
+                    said: point.clone(),
+                })?;
+                let then = match (args.next(), args.next()) {
+                    (None, _) => Vec::new(),
+                    (Some(action), None) => pointer_action(&action)
+                        .ok_or(CliError::NotAPointerAction { said: action })?,
+                    (Some(action), Some(extra)) => {
+                        return Err(CliError::Extra {
+                            verb: format!("{first} {point} {action}"),
+                            extra,
+                        })
+                    }
+                };
+                emulated([vec![EmulatedInput::PointTo { x, y }], then].concat())
+            }
+            Verb::Scrolling => match (args.next(), args.next()) {
+                (Some(said), None) => match pair(&said) {
+                    Some((dx, dy)) => emulated(vec![EmulatedInput::Scroll { dx, dy }]),
+                    None => Err(CliError::NotADistance { said }),
+                },
+                (said, _) => Err(one(&first, "distance", said)),
+            },
+            Verb::Keying => match (args.next(), args.next()) {
+                (Some(chord), None) => emulated(chord_input(&chord)),
+                (said, _) => Err(one(&first, "chord", said)),
+            },
+            Verb::Typing => match (args.next(), args.next()) {
+                (Some(text), None) => emulated(vec![EmulatedInput::Text { text }]),
+                (said, _) => Err(one(&first, "text, quoted", said)),
+            },
             Verb::Serving => match args.next() {
                 None => Ok(Invocation::Mcp),
                 Some(extra) => Err(CliError::Extra { extra, verb: first }),
@@ -808,6 +897,14 @@ enum Verb {
     Powering(Power),
     /// `mcp`, which takes no arguments.
     Serving,
+    /// `pointer`, which takes a point and maybe what to do there.
+    Pointing,
+    /// `scroll`, which takes a distance.
+    Scrolling,
+    /// `key`, which takes a chord.
+    Keying,
+    /// `type`, which takes text.
+    Typing,
     /// `monitor`, which takes a name, a size and maybe a scale.
     Monitoring,
     /// `subscribe`, which takes topics or nothing.
@@ -829,6 +926,66 @@ enum Verb {
 /// The verb `word` names, if any.
 ///
 /// Every [`Request`] variant needs a verb here, or nobody can send it.
+/// Asks the running desktop to send `input`.
+fn emulated(input: Vec<EmulatedInput>) -> Result<Invocation, CliError> {
+    Ok(Invocation::Ask {
+        request: Request::Emulate { input },
+    })
+}
+
+/// A [`CliError::NotOne`] for `verb`, given nothing or `said` and more.
+fn one(verb: &str, what: &str, said: Option<String>) -> CliError {
+    CliError::NotOne {
+        verb: verb.to_string(),
+        what: what.to_string(),
+        said: said.map_or("nothing".to_string(), |said| format!("{said} and more")),
+    }
+}
+
+/// Two numbers written `a,b`.
+fn pair(said: &str) -> Option<(f64, f64)> {
+    let (a, b) = said.split_once(',')?;
+    Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+}
+
+/// What `pointer` does after moving, by the word for it.
+fn pointer_action(word: &str) -> Option<Vec<EmulatedInput>> {
+    let button = |button, pressed| EmulatedInput::Button { button, pressed };
+    let click = |pointer| vec![button(pointer, true), button(pointer, false)];
+    match word {
+        "click" => Some(click(PointerButton::Left)),
+        "double-click" => Some([click(PointerButton::Left), click(PointerButton::Left)].concat()),
+        "right-click" => Some(click(PointerButton::Right)),
+        "middle-click" => Some(click(PointerButton::Middle)),
+        "press" => Some(vec![button(PointerButton::Left, true)]),
+        "release" => Some(vec![button(PointerButton::Left, false)]),
+        _ => None,
+    }
+}
+
+/// Presses each key of `chord`, such as `ctrl+shift+Tab`, in order, then
+/// releases them in reverse. The compositor refuses a key no keysym names.
+fn chord_input(chord: &str) -> Vec<EmulatedInput> {
+    let keys: Vec<&str> = chord
+        .split('+')
+        .map(|key| match key {
+            "ctrl" | "control" => "Control_L",
+            "shift" => "Shift_L",
+            "alt" => "Alt_L",
+            "super" | "meta" => "Super_L",
+            key => key,
+        })
+        .collect();
+    let key = |key: &&str, pressed| EmulatedInput::Key {
+        key: (*key).to_string(),
+        pressed,
+    };
+    keys.iter()
+        .map(|name| key(name, true))
+        .chain(keys.iter().rev().map(|name| key(name, false)))
+        .collect()
+}
+
 fn verb(word: &str) -> Option<Verb> {
     match word {
         "which-shell" => Some(Verb::Asking(Request::WhichShell)),
@@ -863,6 +1020,10 @@ fn verb(word: &str) -> Option<Verb> {
         "list-bindings" => Some(Verb::Listing(Listing::Bindings)),
         "list-inputs" => Some(Verb::Listing(Listing::Inputs)),
         "mcp" => Some(Verb::Serving),
+        "pointer" => Some(Verb::Pointing),
+        "scroll" => Some(Verb::Scrolling),
+        "key" => Some(Verb::Keying),
+        "type" => Some(Verb::Typing),
         _ => None,
     }
 }

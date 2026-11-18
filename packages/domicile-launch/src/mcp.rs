@@ -7,6 +7,7 @@
 
 use std::io::{self, BufRead, Write};
 
+use domicile_protocol::DeskShot;
 use serde_json::{json, Map, Value};
 
 /// The protocol versions this server speaks, newest first.
@@ -33,13 +34,15 @@ pub fn serve(
     mut output: impl Write,
     mut domicile: impl FnMut(&[String]) -> io::Result<Ran>,
 ) -> io::Result<()> {
+    // The last screenshot, whose pixels the pointer tools take.
+    let mut view = None;
     for line in input.lines() {
         let line = line?;
         if line.trim().is_empty() {
             continue;
         }
         let reply = match serde_json::from_str::<Value>(&line) {
-            Ok(message) => answer(&message, &mut domicile)?,
+            Ok(message) => answer(&message, &mut domicile, &mut view)?,
             Err(why) => Some(error(&Value::Null, PARSE_ERROR, &why.to_string())),
         };
         if let Some(reply) = reply {
@@ -54,6 +57,7 @@ pub fn serve(
 fn answer(
     message: &Value,
     domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
+    view: &mut Option<View>,
 ) -> io::Result<Option<Value>> {
     let Some(id) = message.get("id") else {
         return Ok(None);
@@ -64,7 +68,7 @@ fn answer(
         Some("ping") => result(id, json!({})),
         Some("tools/list") => result(id, json!({"tools": listed_tools()})),
         Some("tools/call") => match params["name"].as_str().and_then(tool) {
-            Some(tool) => result(id, called(&tool, &params["arguments"], domicile)?),
+            Some(tool) => result(id, called(tool, &params["arguments"], domicile, view)?),
             None => error(id, INVALID_PARAMS, &format!("no tool {}", params["name"])),
         },
         _ => error(
@@ -110,10 +114,28 @@ enum Tool {
     WindowAct(&'static str),
     Theme,
     Screenshot,
+    Click,
+    MovePointer,
+    Drag,
+    Scroll,
+    Key,
+    TypeText,
 }
 
+/// How many pixels of the desk each pixel of the last screenshot is, across
+/// and down. Its top-left corner is the desk's.
+#[derive(Debug, Clone, Copy)]
+struct View {
+    across: f64,
+    down: f64,
+}
+
+/// The longest side of a screenshot, in pixels. Models see larger images
+/// shrunk, which would move every point they read off one.
+const FIT: u32 = 1280;
+
 /// Each tool, by name, in the order `tools/list` gives them.
-const TOOLS: [(&str, Tool); 12] = [
+const TOOLS: [(&str, Tool); 18] = [
     ("list_windows", Tool::Listing("list-windows")),
     ("list_displays", Tool::Listing("list-displays")),
     ("list_inputs", Tool::Listing("list-inputs")),
@@ -126,6 +148,12 @@ const TOOLS: [(&str, Tool); 12] = [
     ("close_window", Tool::WindowAct("close-window")),
     ("theme", Tool::Theme),
     ("screenshot", Tool::Screenshot),
+    ("click", Tool::Click),
+    ("move_pointer", Tool::MovePointer),
+    ("drag", Tool::Drag),
+    ("scroll", Tool::Scroll),
+    ("key", Tool::Key),
+    ("type_text", Tool::TypeText),
 ];
 
 fn tool(name: &str) -> Option<Tool> {
@@ -157,6 +185,8 @@ fn listed_tools() -> Vec<Value> {
 fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
     let window_id =
         json!({"id": {"type": "string", "description": "The window's id, from list_windows."}});
+    let coordinate = json!({"type": "number", "description": "In the last screenshot's pixels."});
+    let point = json!({"type": "array", "items": coordinate, "minItems": 2, "maxItems": 2});
     match tool {
         Tool::Listing("list-windows") => (
             "List the windows, native and browser, as JSON: id, kind, title, app, pid, size, focused, url, private.",
@@ -214,18 +244,54 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec![],
         ),
         Tool::Screenshot => (
-            "Take a PNG of every monitor.",
+            "Take a PNG of every monitor, at most 1280 pixels across. The pointer tools take points in its pixels.",
             json!({}),
             vec![],
+        ),
+        Tool::Click => (
+            "Click at a point of the last screenshot.",
+            json!({
+                "x": coordinate,
+                "y": coordinate,
+                "button": {"type": "string", "enum": ["left", "right", "middle"]},
+                "count": {"type": "integer", "enum": [1, 2], "description": "2 double-clicks the left button."},
+            }),
+            vec!["x", "y"],
+        ),
+        Tool::MovePointer => (
+            "Move the pointer to a point of the last screenshot.",
+            json!({"x": coordinate, "y": coordinate}),
+            vec!["x", "y"],
+        ),
+        Tool::Drag => (
+            "Press the left button at one point of the last screenshot and release it at another.",
+            json!({"from": point, "to": point}),
+            vec!["from", "to"],
+        ),
+        Tool::Scroll => (
+            "Scroll at a point of the last screenshot, by dx and dy of its pixels; positive is right and down.",
+            json!({"x": coordinate, "y": coordinate, "dx": coordinate, "dy": coordinate}),
+            vec!["x", "y", "dx", "dy"],
+        ),
+        Tool::Key => (
+            "Press a chord of XKB keysym names, such as ctrl+l, Return or alt+Tab.",
+            json!({"chord": {"type": "string"}}),
+            vec!["chord"],
+        ),
+        Tool::TypeText => (
+            "Type text on the keyboard, where the focus is.",
+            json!({"text": {"type": "string"}}),
+            vec!["text"],
         ),
     }
 }
 
 /// `tools/call`'s result for `tool` with `arguments`.
 fn called(
-    tool: &Tool,
+    tool: Tool,
     arguments: &Value,
     domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
+    view: &mut Option<View>,
 ) -> io::Result<Value> {
     // A call with no arguments may leave them out.
     let none = Map::new();
@@ -234,39 +300,46 @@ fn called(
         Value::Object(arguments) => arguments,
         other => return Ok(said(false, format!("arguments are an object, not {other}"))),
     };
-    let args = match command(tool, arguments) {
-        Ok(args) => args,
+    if let Tool::Screenshot = tool {
+        return screenshot(domicile, view);
+    }
+    let runs = match commands(tool, arguments, *view) {
+        Ok(runs) => runs,
         Err(why) => return Ok(said(false, why)),
     };
-    match tool {
-        Tool::Screenshot => screenshot(args, domicile),
-        _ => {
-            let ran = domicile(&args)?;
-            Ok(if ran.success {
-                said(true, ran.stdout)
-            } else {
-                said(false, ran.stderr)
-            })
+    // Each run in turn, up to the first that fails.
+    let mut printed = String::new();
+    for args in runs {
+        let ran = domicile(&args)?;
+        if !ran.success {
+            return Ok(said(false, ran.stderr));
         }
+        printed.push_str(&ran.stdout);
     }
+    Ok(said(true, printed))
 }
 
-/// The arguments `domicile` runs with for `tool`, or why `arguments` don't
-/// make a command.
-fn command(tool: &Tool, arguments: &Map<String, Value>) -> Result<Vec<String>, String> {
+/// The runs of `domicile` that carry out `tool`, or why `arguments` don't
+/// make any.
+fn commands(
+    tool: Tool,
+    arguments: &Map<String, Value>,
+    view: Option<View>,
+) -> Result<Vec<Vec<String>>, String> {
+    let words = |words: &[&str]| words.iter().map(|word| word.to_string()).collect();
     match tool {
-        Tool::Listing(verb) => Ok(vec![verb.to_string(), "--json".to_string()]),
+        Tool::Listing(verb) => Ok(vec![words(&[verb, "--json"])]),
         Tool::SendShell => {
-            let words = arguments
+            let said = arguments
                 .get("words")
                 .and_then(Value::as_array)
                 .ok_or("send_shell takes words, an array of strings")?;
-            let words = words
+            let said = said
                 .iter()
                 .map(|word| word.as_str().map(str::to_string))
                 .collect::<Option<Vec<_>>>()
                 .ok_or("send_shell's words are strings")?;
-            Ok([vec!["send-shell".to_string()], words].concat())
+            Ok(vec![[words(&["send-shell"]), said].concat()])
         }
         Tool::Open => {
             let target = string(arguments, "target")?.ok_or("open takes a target")?;
@@ -275,26 +348,92 @@ fn command(tool: &Tool, arguments: &Map<String, Value>) -> Result<Vec<String>, S
                 Some(app) => app.as_bool().ok_or("open's app is true or false")?,
             };
             let profile = string(arguments, "profile")?;
-            Ok([
-                vec!["open".to_string()],
+            Ok(vec![[
+                words(&["open"]),
                 app.then(|| "--app".to_string()).into_iter().collect(),
                 profile
                     .map(|profile| vec!["--profile".to_string(), profile])
                     .unwrap_or_default(),
                 vec![target],
             ]
-            .concat())
+            .concat()])
         }
         Tool::WindowAct(verb) => {
             let id = string(arguments, "id")?.ok_or("this tool takes a window id")?;
-            Ok(vec![verb.to_string(), id])
+            Ok(vec![vec![verb.to_string(), id]])
         }
-        Tool::Theme => Ok([
-            vec!["theme".to_string()],
+        Tool::Theme => Ok(vec![[
+            words(&["theme"]),
             string(arguments, "change")?.into_iter().collect(),
         ]
-        .concat()),
-        Tool::Screenshot => Ok(vec!["screenshot".to_string()]),
+        .concat()]),
+        Tool::Screenshot => unreachable!("screenshot answers an image, not a run"),
+        Tool::Click => {
+            let at = on_the_desk(view, number(arguments, "x")?, number(arguments, "y")?)?;
+            let action = match (string(arguments, "button")?.as_deref(), arguments.get("count")) {
+                (None | Some("left"), None) => "click",
+                (None | Some("left"), Some(count)) if count == 1 => "click",
+                (None | Some("left"), Some(count)) if count == 2 => "double-click",
+                (Some("right"), None) => "right-click",
+                (Some("middle"), None) => "middle-click",
+                _ => return Err("click takes a left, right or middle button, and a count of 1 or 2 for the left one".to_string()),
+            };
+            Ok(vec![words(&["pointer", &at, action])])
+        }
+        Tool::MovePointer => {
+            let at = on_the_desk(view, number(arguments, "x")?, number(arguments, "y")?)?;
+            Ok(vec![words(&["pointer", &at])])
+        }
+        Tool::Drag => {
+            let (from, to) = (pair(arguments, "from")?, pair(arguments, "to")?);
+            Ok(vec![
+                words(&["pointer", &on_the_desk(view, from.0, from.1)?, "press"]),
+                words(&["pointer", &on_the_desk(view, to.0, to.1)?, "release"]),
+            ])
+        }
+        Tool::Scroll => {
+            let at = on_the_desk(view, number(arguments, "x")?, number(arguments, "y")?)?;
+            let by = on_the_desk(view, number(arguments, "dx")?, number(arguments, "dy")?)?;
+            Ok(vec![words(&["pointer", &at]), words(&["scroll", &by])])
+        }
+        Tool::Key => {
+            let chord = string(arguments, "chord")?.ok_or("key takes a chord")?;
+            Ok(vec![vec!["key".to_string(), chord]])
+        }
+        Tool::TypeText => {
+            let text = string(arguments, "text")?.ok_or("type_text takes text")?;
+            Ok(vec![vec!["type".to_string(), text]])
+        }
+    }
+}
+
+/// `x`, `y` in the last screenshot's pixels as `x,y` in the desk's, as
+/// `domicile pointer` and `scroll` take them.
+fn on_the_desk(view: Option<View>, x: f64, y: f64) -> Result<String, String> {
+    let view = view.ok_or("take a screenshot first: points are in its pixels")?;
+    Ok(format!("{},{}", x * view.across, y * view.down))
+}
+
+/// Argument `name`, a number.
+fn number(arguments: &Map<String, Value>, name: &str) -> Result<f64, String> {
+    arguments
+        .get(name)
+        .and_then(Value::as_f64)
+        .ok_or_else(|| format!("{name} is a number"))
+}
+
+/// Argument `name`, a point as `[x, y]`.
+fn pair(arguments: &Map<String, Value>, name: &str) -> Result<(f64, f64), String> {
+    match arguments
+        .get(name)
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+    {
+        Some([x, y]) => match (x.as_f64(), y.as_f64()) {
+            (Some(x), Some(y)) => Ok((x, y)),
+            _ => Err(format!("{name} is two numbers, [x, y]")),
+        },
+        _ => Err(format!("{name} is two numbers, [x, y]")),
     }
 }
 
@@ -307,23 +446,41 @@ fn string(arguments: &Map<String, Value>, name: &str) -> Result<Option<String>, 
     }
 }
 
-/// Runs `domicile screenshot` into a temporary file and answers the PNG.
+/// Runs `domicile screenshot --fit` into a temporary file, answers the PNG,
+/// and keeps how its pixels map to the desk's in `view`.
 fn screenshot(
-    args: Vec<String>,
     domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
+    view: &mut Option<View>,
 ) -> io::Result<Value> {
     let directory = tempfile::tempdir()?;
     let file = directory.path().join("screenshot.png");
-    let ran = domicile(&[args, vec![file.to_string_lossy().into_owned()]].concat())?;
-    if ran.success {
-        let png = std::fs::read(&file)?;
-        Ok(json!({
-            "content": [{"type": "image", "data": base64(&png), "mimeType": "image/png"}],
-            "isError": false,
-        }))
-    } else {
-        Ok(said(false, ran.stderr))
+    let ran = domicile(&[
+        "screenshot".to_string(),
+        "--fit".to_string(),
+        FIT.to_string(),
+        file.to_string_lossy().into_owned(),
+    ])?;
+    if !ran.success {
+        return Ok(said(false, ran.stderr));
     }
+    let shot: DeskShot = serde_json::from_str(&ran.stdout).map_err(|why| {
+        io::Error::other(format!(
+            "domicile screenshot --fit printed {:?}, which is not what a shot shows: {why}",
+            ran.stdout
+        ))
+    })?;
+    *view = Some(View {
+        across: f64::from(shot.place.size.0) / f64::from(shot.width),
+        down: f64::from(shot.place.size.1) / f64::from(shot.height),
+    });
+    let png = std::fs::read(&file)?;
+    Ok(json!({
+        "content": [
+            {"type": "image", "data": base64(&png), "mimeType": "image/png"},
+            {"type": "text", "text": format!("{}x{} pixels; the pointer tools take points in them.", shot.width, shot.height)},
+        ],
+        "isError": false,
+    }))
 }
 
 /// A tool result of text.

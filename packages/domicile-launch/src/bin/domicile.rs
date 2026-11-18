@@ -35,8 +35,9 @@ use domicile_launch::components::{
     builder, components, electron_host, engine as engine_path, our_shell, version_file, Components,
 };
 use domicile_launch::compositor_socket::{
-    act_on_window, configure_display, displays, inputs, lock, monitors, power_displays,
-    screen_record, screenshot, send_shell, shell_bindings, shell_commands, status, theme, windows,
+    act_on_window, configure_display, displays, emulate, inputs, lock, monitors, power_displays,
+    screen_record, screenshot, send_shell, shell_bindings, shell_commands, shoot_desk, status,
+    theme, windows,
 };
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
@@ -198,6 +199,12 @@ fn run() -> Result<ExitCode, String> {
                         .map_err(|why| format!("cannot tell where {file} is: {why}"))
                 })
                 .transpose()?,
+        }),
+        // Absolute here, as for `Screenshot`.
+        Invocation::ShootDesk { file, fit } => asked(&Request::ShootDesk {
+            file: std::path::absolute(&file)
+                .map_err(|why| format!("cannot tell where {file} is: {why}"))?,
+            fit,
         }),
         Invocation::Check { config } => check(&config).map(|()| ExitCode::SUCCESS),
         Invocation::Power { power } => powered(power),
@@ -826,6 +833,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         // did not run reaches this terminal rather than a timeout.
         Request::LoadShell { .. } => Some(LOAD_WITHIN + ANSWER_WITHIN),
         Request::ConfigureDisplay { .. } => Some(CONFIGURE_WITHIN + ANSWER_WITHIN),
+        Request::ShootDesk { .. } => Some(CAPTURE_WITHIN + ANSWER_WITHIN),
         _ => Some(ANSWER_WITHIN),
     };
     let answer = ask(&socket, request, patience).map_err(|why| why.to_string())?;
@@ -858,6 +866,13 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         }
         Response::Captured { file } => {
             println!("{}", file.display());
+            Ok(ExitCode::SUCCESS)
+        }
+        Response::DeskShot { shot } => {
+            println!(
+                "{}",
+                serde_json::to_string(&shot).expect("a desk shot serializes")
+            );
             Ok(ExitCode::SUCCESS)
         }
         // Nothing on stdout: there is no file.
@@ -1737,6 +1752,14 @@ fn answer_a_command(
                     lock: &|| lock(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string()),
                     act_on_window: &|id, act| {
                         act_on_window(chrome, id, act, Some(ANSWER_WITHIN))
+                            .map_err(|why| why.to_string())?
+                    },
+                    shoot_desk: &|file, fit| {
+                        shoot_desk(chrome, file, fit, Some(CAPTURE_WITHIN))
+                            .map_err(|why| why.to_string())?
+                    },
+                    emulate: &|input| {
+                        emulate(chrome, input, Some(ANSWER_WITHIN))
                             .map_err(|why| why.to_string())?
                     },
                     // The compositor waits up to 5s for the desktop to be laid

@@ -7,7 +7,9 @@ use domicile_launch::cli::{
 };
 use domicile_launch::control::{AppReuse, Request, Switch, ThemeChange};
 use domicile_launch::power::Power;
-use domicile_protocol::{DisplayChange, DisplayTransform, Scale, WatchTopic, WindowAct};
+use domicile_protocol::{
+    DisplayChange, DisplayTransform, EmulatedInput, PointerButton, Scale, WatchTopic, WindowAct,
+};
 
 fn run(args: &[&str]) -> Result<Invocation, CliError> {
     invocation(args.iter().map(|arg| (*arg).to_string()))
@@ -1169,4 +1171,124 @@ fn mcp_is_the_verb_that_serves_agents_and_takes_nothing() {
             extra: "extra".to_string()
         })
     );
+}
+
+#[test]
+fn screenshot_fit_shrinks_the_desk_into_a_file() {
+    assert_eq!(
+        run(&["screenshot", "--fit", "1280", "desk.png"]),
+        Ok(Invocation::ShootDesk {
+            file: "desk.png".to_string(),
+            fit: 1280
+        })
+    );
+    assert!(run(&["screenshot", "--fit", "1280"]).is_err());
+    assert!(run(&["screenshot", "--fit", "big", "desk.png"]).is_err());
+}
+
+fn emulated(input: Vec<EmulatedInput>) -> Result<Invocation, CliError> {
+    Ok(Invocation::Ask {
+        request: Request::Emulate { input },
+    })
+}
+
+fn left(pressed: bool) -> EmulatedInput {
+    EmulatedInput::Button {
+        button: PointerButton::Left,
+        pressed,
+    }
+}
+
+#[test]
+fn pointer_moves_then_clicks_presses_or_releases() {
+    let to = EmulatedInput::PointTo { x: 10.0, y: 20.5 };
+    assert_eq!(run(&["pointer", "10,20.5"]), emulated(vec![to.clone()]));
+    assert_eq!(
+        run(&["pointer", "10,20.5", "click"]),
+        emulated(vec![to.clone(), left(true), left(false)])
+    );
+    assert_eq!(
+        run(&["pointer", "10,20.5", "double-click"]),
+        emulated(vec![
+            to.clone(),
+            left(true),
+            left(false),
+            left(true),
+            left(false)
+        ])
+    );
+    assert_eq!(
+        run(&["pointer", "10,20.5", "right-click"]),
+        emulated(vec![
+            to.clone(),
+            EmulatedInput::Button {
+                button: PointerButton::Right,
+                pressed: true
+            },
+            EmulatedInput::Button {
+                button: PointerButton::Right,
+                pressed: false
+            },
+        ])
+    );
+    assert_eq!(
+        run(&["pointer", "10,20.5", "press"]),
+        emulated(vec![to.clone(), left(true)])
+    );
+    assert_eq!(
+        run(&["pointer", "10,20.5", "release"]),
+        emulated(vec![to, left(false)])
+    );
+    assert!(run(&["pointer", "ten,20"]).is_err());
+    assert!(run(&["pointer", "10,20", "poke"]).is_err());
+    assert!(run(&["pointer"]).is_err());
+}
+
+#[test]
+fn scroll_takes_a_distance_across_and_down() {
+    assert_eq!(
+        run(&["scroll", "0,-30"]),
+        emulated(vec![EmulatedInput::Scroll { dx: 0.0, dy: -30.0 }])
+    );
+}
+
+#[test]
+fn key_presses_a_chord_in_order_and_releases_it_in_reverse() {
+    let key = |key: &str, pressed| EmulatedInput::Key {
+        key: key.to_string(),
+        pressed,
+    };
+    assert_eq!(
+        run(&["key", "ctrl+shift+Tab"]),
+        emulated(vec![
+            key("Control_L", true),
+            key("Shift_L", true),
+            key("Tab", true),
+            key("Tab", false),
+            key("Shift_L", false),
+            key("Control_L", false),
+        ])
+    );
+    assert_eq!(
+        run(&["key", "alt+super+F4"]),
+        emulated(vec![
+            key("Alt_L", true),
+            key("Super_L", true),
+            key("F4", true),
+            key("F4", false),
+            key("Super_L", false),
+            key("Alt_L", false),
+        ])
+    );
+}
+
+#[test]
+fn type_types_its_text_as_given() {
+    assert_eq!(
+        run(&["type", "Hello, world"]),
+        emulated(vec![EmulatedInput::Text {
+            text: "Hello, world".to_string()
+        }])
+    );
+    assert!(run(&["type"]).is_err());
 }
