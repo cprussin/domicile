@@ -282,6 +282,7 @@ Callbacks (engine → compositor):
 | `compositing(in_memory)` | none: the browser composites in memory, or on the GPU. Sent once known and on every change ([Software output](A-DESKTOP-ON-A-TTY.md#software-output)) |
 | `browser_windows(windows, count)` | `ext_foreign_toplevel_list_v1.toplevel`: the browser's windows, each a `DomicileBrowserWindow` (id, title, app id), in open order. Sent on connect and when one opens, closes, navigates or is retitled ([Wayland capture](../PORTALS.md#wayland-capture)) |
 | `listed_browser_windows(windows, count)` | Called instead of `browser_windows` when set: each window a `DomicileListedBrowserWindow`, adding its address and whether it is private. `domicile list-windows` reads it too. An older engine ignores it |
+| `viewed_browser_windows(windows, count, views, view_count)` | Called instead of `listed_browser_windows` when set: adds the views each window holds and shows, each a `DomicileBrowserWindowView` (id, window index, place in the window's page), bottom first. A shot of the window draws them ([PORTALS.md](../PORTALS.md)). An older engine ignores it |
 | `input_devices(devices, count)` | The keyboards, pointers and touch devices the browser reads, each a `DomicileInputDevice` (name, `/sys` path, id, USB or Bluetooth ids, kind, connection), from `ui::DeviceDataManager`. Sent on connect and when one is plugged or unplugged; `domicile list-inputs` reads it. An older engine ignores it |
 
 - Only `crop` fills the `<app>` box, so client-side shadows are not drawn. An

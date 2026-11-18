@@ -37,6 +37,16 @@ struct ListedBrowserWindow {
   // Whether it is an Electron app's window the app hid: open, its page
   // running, but out of sight, so a capture tool doesn't list it.
   bool hidden = false;
+  // For a view a window holds and shows: that window's id, where the app
+  // placed the view in the window's page, in its CSS pixels, and `stack`
+  // from the bottom of the window's views. A capture of the window draws it
+  // there. Empty and zero for anything else.
+  std::string parent;
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
+  int stack = 0;
 
   friend bool operator==(const ListedBrowserWindow&,
                          const ListedBrowserWindow&) = default;

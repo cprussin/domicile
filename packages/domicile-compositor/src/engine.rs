@@ -549,6 +549,23 @@ pub struct BrowserWindow {
     pub url: String,
     /// Whether it is a private window.
     pub private: bool,
+    /// The views it holds and shows, bottom first: an Electron app's
+    /// `WebContentsView`s, which a shot of the window draws over its page.
+    /// An older engine lists none.
+    pub views: Vec<BrowserView>,
+}
+
+/// An Electron app's view a [`BrowserWindow`] holds: a page of its own,
+/// placed by the app in the window's page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BrowserView {
+    /// Its id, as [`Engine::start_browser_window_capture`] takes it.
+    pub id: String,
+    /// Where it is in the window's page, in that page's CSS pixels.
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
 }
 
 /// When and how a frame reached the screen.
@@ -623,6 +640,15 @@ struct Callbacks {
     listed_browser_windows: Option<extern "C" fn(*mut c_void, *const RawListedBrowserWindow, u32)>,
     input_devices: Option<extern "C" fn(*mut c_void, *const RawInputDevice, u32)>,
     capture_failed: Option<extern "C" fn(*mut c_void, CaptureId, *const c_char)>,
+    viewed_browser_windows: Option<
+        extern "C" fn(
+            *mut c_void,
+            *const RawListedBrowserWindow,
+            u32,
+            *const RawBrowserWindowView,
+            u32,
+        ),
+    >,
 }
 
 /// `DomicileInputDevice`, laid out as in the C header. Its strings are
@@ -658,6 +684,18 @@ struct RawListedBrowserWindow {
     app_id: *const c_char,
     url: *const c_char,
     off_the_record: u8,
+}
+
+/// `DomicileBrowserWindowView`, laid out as in the C header: a view the
+/// window at index `window` of the same call holds.
+#[repr(C)]
+struct RawBrowserWindowView {
+    id: *const c_char,
+    window: u32,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
 }
 
 /// `DomicileClipboardItem`, laid out as in the C header: one type a copy can be
@@ -2077,6 +2115,7 @@ fn join(
         listed_browser_windows: Some(on_listed_browser_windows),
         input_devices: Some(on_input_devices),
         capture_failed: Some(on_capture_failed),
+        viewed_browser_windows: Some(on_viewed_browser_windows),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -2443,6 +2482,44 @@ extern "C" fn on_listed_browser_windows(
     );
 }
 
+/// As [`on_listed_browser_windows`], with the views each window holds.
+/// Called instead of it by an engine that reports them.
+extern "C" fn on_viewed_browser_windows(
+    user_data: *mut c_void,
+    windows: *const RawListedBrowserWindow,
+    count: u32,
+    views: *const RawBrowserWindowView,
+    view_count: u32,
+) {
+    let records = if count == 0 {
+        &[][..]
+    } else {
+        // SAFETY: as for `on_browser_windows`.
+        unsafe { std::slice::from_raw_parts(windows, count as usize) }
+    };
+    let views = if view_count == 0 {
+        &[][..]
+    } else {
+        // SAFETY: as for `windows`.
+        unsafe { std::slice::from_raw_parts(views, view_count as usize) }
+    };
+    let mut listed = listed_browser_windows_from(records);
+    for view in views {
+        let window = listed
+            .get_mut(view.window as usize)
+            .unwrap_or_else(|| panic!("the engine placed a view in window {}", view.window));
+        window.views.push(BrowserView {
+            // SAFETY: the ABI's strings are non-null and valid for the call.
+            id: unsafe { copied(view.id) },
+            x: view.x,
+            y: view.y,
+            width: view.width,
+            height: view.height,
+        });
+    }
+    push(user_data, Event::BrowserWindows(listed));
+}
+
 /// Copies the browser windows out of their records.
 fn browser_windows_from(records: &[RawBrowserWindow]) -> Vec<BrowserWindow> {
     records
@@ -2457,6 +2534,7 @@ fn browser_windows_from(records: &[RawBrowserWindow]) -> Vec<BrowserWindow> {
             // An older engine says neither.
             url: String::new(),
             private: false,
+            views: Vec::new(),
         })
         .collect()
 }
@@ -2474,6 +2552,7 @@ fn listed_browser_windows_from(records: &[RawListedBrowserWindow]) -> Vec<Browse
             // SAFETY: as for `id`.
             url: unsafe { copied(record.url) },
             private: record.off_the_record != 0,
+            views: Vec::new(),
         })
         .collect()
 }
@@ -2973,10 +3052,10 @@ mod tests {
     }
 
     #[test]
-    fn the_callbacks_are_the_user_data_and_twenty_four_pointers_the_c_header_declares() {
-        // `released` follows `configure`, and `capture_failed` is last, as in
-        // the header.
-        assert_eq!(std::mem::size_of::<Callbacks>(), 25 * 8);
+    fn the_callbacks_are_the_user_data_and_twenty_five_pointers_the_c_header_declares() {
+        // `released` follows `configure`, and `viewed_browser_windows` is
+        // last, as in the header.
+        assert_eq!(std::mem::size_of::<Callbacks>(), 26 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, copied_items), 9 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, frame_done), 10 * 8);
@@ -2997,6 +3076,10 @@ mod tests {
         );
         assert_eq!(std::mem::offset_of!(Callbacks, input_devices), 23 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, capture_failed), 24 * 8);
+        assert_eq!(
+            std::mem::offset_of!(Callbacks, viewed_browser_windows),
+            25 * 8
+        );
     }
 
     #[test]
@@ -3420,6 +3503,7 @@ mod tests {
                         app_id: "mail".into(),
                         url: "https://mail.example/".into(),
                         private: true,
+                        views: Vec::new(),
                     },
                     BrowserWindow {
                         id: "5".into(),
@@ -3427,6 +3511,7 @@ mod tests {
                         app_id: String::new(),
                         url: "about:blank".into(),
                         private: false,
+                        views: Vec::new(),
                     },
                 ]),
                 Event::BrowserWindows(Vec::new()),
@@ -3453,7 +3538,81 @@ mod tests {
                 app_id: "mail".into(),
                 url: String::new(),
                 private: false,
+                views: Vec::new(),
             }])]
+        );
+    }
+
+    #[test]
+    fn a_browser_window_view_is_a_string_an_index_and_four_numbers_as_in_the_c_header() {
+        assert_eq!(std::mem::size_of::<RawBrowserWindowView>(), 4 * 8);
+        assert_eq!(std::mem::offset_of!(RawBrowserWindowView, window), 8);
+        assert_eq!(std::mem::offset_of!(RawBrowserWindowView, x), 12);
+        assert_eq!(std::mem::offset_of!(RawBrowserWindowView, height), 24);
+    }
+
+    #[test]
+    fn each_view_is_copied_into_the_window_that_holds_it_bottom_first() {
+        let events = RefCell::new(Vec::new());
+        let queue = (&events as *const RefCell<Vec<Event>>) as *mut c_void;
+        let windows = [
+            RawListedBrowserWindow {
+                id: c"3".as_ptr(),
+                title: c"Inbox".as_ptr(),
+                app_id: c"".as_ptr(),
+                url: c"https://mail.example/".as_ptr(),
+                off_the_record: 0,
+            },
+            RawListedBrowserWindow {
+                id: c"5".as_ptr(),
+                title: c"Claude".as_ptr(),
+                app_id: c"claude-desktop".as_ptr(),
+                url: c"app://claude/".as_ptr(),
+                off_the_record: 0,
+            },
+        ];
+        let views = [
+            RawBrowserWindowView {
+                id: c"7".as_ptr(),
+                window: 1,
+                x: 0,
+                y: 0,
+                width: 200,
+                height: 600,
+            },
+            RawBrowserWindowView {
+                id: c"6".as_ptr(),
+                window: 1,
+                x: 0,
+                y: 40,
+                width: 800,
+                height: 560,
+            },
+        ];
+        on_viewed_browser_windows(queue, windows.as_ptr(), 2, views.as_ptr(), 2);
+
+        let Event::BrowserWindows(listed) = &events.borrow()[0] else {
+            panic!("no browser windows were listed");
+        };
+        assert_eq!(listed[0].views, []);
+        assert_eq!(
+            listed[1].views,
+            [
+                BrowserView {
+                    id: "7".into(),
+                    x: 0,
+                    y: 0,
+                    width: 200,
+                    height: 600,
+                },
+                BrowserView {
+                    id: "6".into(),
+                    x: 0,
+                    y: 40,
+                    width: 800,
+                    height: 560,
+                },
+            ]
         );
     }
 

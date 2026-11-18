@@ -904,12 +904,15 @@ class DeskWindows final : public base::SupportsUserData::Data,
     ListBrowserWindows(this, Listing());
   }
 
-  // The windows as a capture tool lists them.
+  // The windows as a capture tool lists them, each view a window holds and
+  // shows with where the app placed it.
   std::vector<ListedBrowserWindow> Listing() const {
     std::vector<ListedBrowserWindow> listing;
     for (const Window& window : windows_) {
       content::WebContents& contents = window.guest->contents();
       const GURL& committed = contents.GetLastCommittedURL();
+      const bool placed =
+          window.view && !window.hidden && !window.parent.empty();
       listing.push_back(ListedBrowserWindow{
           .id = window.id,
           .title = base::UTF16ToUTF8(contents.GetTitle()),
@@ -919,7 +922,13 @@ class DeskWindows final : public base::SupportsUserData::Data,
                      .possibly_invalid_spec(),
           .off_the_record = contents.GetBrowserContext()->IsOffTheRecord(),
           .view = window.view,
-          .hidden = !window.view && window.hidden});
+          .hidden = !window.view && window.hidden,
+          .parent = placed ? window.parent : std::string(),
+          .x = placed ? window.x : 0,
+          .y = placed ? window.y : 0,
+          .width = placed ? window.width : 0,
+          .height = placed ? window.height : 0,
+          .stack = placed ? window.stack : 0});
     }
     return listing;
   }

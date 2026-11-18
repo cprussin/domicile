@@ -977,12 +977,22 @@ class BrowserWindows : public mojom::BrowserWindowListObserver {
     EngineEvent event{.type = EngineEvent::Type::kBrowserWindows};
     event.browser_windows.reserve(windows.size());
     for (mojom::ListedBrowserWindowPtr& window : windows) {
+      std::vector<EngineBrowserView> views;
+      views.reserve(window->views.size());
+      for (mojom::ListedBrowserViewPtr& view : window->views) {
+        views.push_back(EngineBrowserView{.id = std::move(view->id),
+                                          .x = view->x,
+                                          .y = view->y,
+                                          .width = view->width,
+                                          .height = view->height});
+      }
       event.browser_windows.push_back(
           EngineBrowserWindow{.id = std::move(window->id),
                               .title = std::move(window->title),
                               .app_id = std::move(window->app_id),
                               .url = std::move(window->url),
-                              .off_the_record = window->off_the_record});
+                              .off_the_record = window->off_the_record,
+                              .views = std::move(views)});
     }
     queue_->Push(event);
   }
@@ -1408,7 +1418,34 @@ struct DomicileEngine {
         case domicile::EngineEvent::Type::kBrowserWindows:
           // `event` owns the strings until the loop ends, as for display
           // names.
-          if (callbacks_.listed_browser_windows) {
+          if (callbacks_.viewed_browser_windows) {
+            std::vector<DomicileListedBrowserWindow> records;
+            std::vector<DomicileBrowserWindowView> views;
+            records.reserve(event.browser_windows.size());
+            for (const domicile::EngineBrowserWindow& window :
+                 event.browser_windows) {
+              for (const domicile::EngineBrowserView& view : window.views) {
+                views.push_back(DomicileBrowserWindowView{
+                    .id = view.id.c_str(),
+                    .window = static_cast<uint32_t>(records.size()),
+                    .x = view.x,
+                    .y = view.y,
+                    .width = view.width,
+                    .height = view.height});
+              }
+              records.push_back(DomicileListedBrowserWindow{
+                  .id = window.id.c_str(),
+                  .title = window.title.c_str(),
+                  .app_id = window.app_id.c_str(),
+                  .url = window.url.c_str(),
+                  .off_the_record =
+                      static_cast<uint8_t>(window.off_the_record ? 1 : 0)});
+            }
+            callbacks_.viewed_browser_windows(
+                callbacks_.user_data, records.data(),
+                static_cast<uint32_t>(records.size()), views.data(),
+                static_cast<uint32_t>(views.size()));
+          } else if (callbacks_.listed_browser_windows) {
             std::vector<DomicileListedBrowserWindow> records;
             records.reserve(event.browser_windows.size());
             for (const domicile::EngineBrowserWindow& window :

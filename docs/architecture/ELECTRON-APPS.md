@@ -133,7 +133,9 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   - The engine lists a view to the shell only while a window holds it, right
     after that window, with `parent` and the app's bounds
     (`DomicileBrowserWindow.parent`, `x`, `y`, `width`, `height`,
-    `isHidden`). It is never a capture source of its own.
+    `isHidden`). It is never a capture source of its own: a screenshot or
+    screen cast of its window draws it over the window's page where the app
+    placed it ([PORTALS.md](../PORTALS.md)).
   - **The shell lays views out.** The app's bounds are what it asks for:
     Manganese draws each view there, over its window, and another shell may
     put views in tabs or a split instead (user's decision, 2026-11-14).

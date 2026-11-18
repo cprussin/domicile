@@ -21,6 +21,34 @@
 
 namespace domicile {
 
+std::vector<mojom::ListedBrowserWindowPtr> ForCaptureTools(
+    const std::vector<ListedBrowserWindow>& listing) {
+  std::vector<mojom::ListedBrowserWindowPtr> windows;
+  for (const ListedBrowserWindow& window : listing) {
+    if (window.view || window.hidden) {
+      continue;
+    }
+    std::vector<const ListedBrowserWindow*> held;
+    for (const ListedBrowserWindow& view : listing) {
+      // A view placed with no area draws nothing, and can't be captured.
+      if (view.view && view.parent == window.id && view.width > 0 &&
+          view.height > 0) {
+        held.push_back(&view);
+      }
+    }
+    std::ranges::stable_sort(held, {}, &ListedBrowserWindow::stack);
+    std::vector<mojom::ListedBrowserViewPtr> views;
+    for (const ListedBrowserWindow* view : held) {
+      views.push_back(mojom::ListedBrowserView::New(
+          view->id, view->x, view->y, view->width, view->height));
+    }
+    windows.push_back(mojom::ListedBrowserWindow::New(
+        window.id, window.app_title.empty() ? window.title : window.app_title,
+        window.app_id, window.url, window.off_the_record, std::move(views)));
+  }
+  return windows;
+}
+
 FrameSinkBroker::PendingEmbed::PendingEmbed(
     uint64_t requester,
     const std::string& app_id,
