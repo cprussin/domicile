@@ -172,9 +172,10 @@ button, and their controls in one panel, each labeled in words.
 - Scroll over the button to step the volume by 5%. Middle-click to mute or
   unmute it.
 - **The panel**, a `Drilldown` in a popover:
-  - Tiles (`QuickTile`): Wi-Fi, Wired (with a cable in, or without Wi-Fi),
-    Bluetooth, Keep awake, Night light, Dark mode. A press switches the tile.
-    An arrow opens its details.
+  - Tiles (`QuickTile`): Wi-Fi, Wired (with a cable in, or without Wi-Fi)
+    and Bluetooth. Each icon is lit in the accent color while connected. A
+    press opens the tile's details.
+  - Toggles (`QuickToggle`): Keep awake, Night light, Dark mode.
   - The brightness slider, and the volume slider with an arrow to the mixer.
   - The battery in words, such as `Battery 78%, about 3 h 20 min left`. Red
     while low.

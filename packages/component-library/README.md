@@ -52,7 +52,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Popover` | Non-modal panel anchored to the control that opened it. `tone="overPhoto"` is a see-through panel for the bar, dark in either theme. |
 | `PopupBoundary` | Keeps every popup inside it (tooltips, popovers, menus, lists) within a box, such as a window's frame. Outside one, popups stay on their `Screen`. `Popover` and `Tooltip` take `spansWindows` to leave it. |
 | `Provider` | base-ui `DirectionProvider` wrapper. Every app roots its tree in it. |
-| `QuickTile` | Quick settings tile into the details of something nearly always on, such as Wi-Fi: one button with an arrow, or only its state without details. Drawn in `currentcolor`. |
+| `QuickTile` | Quick settings tile into the details of something nearly always on, such as Wi-Fi: one button with an arrow, or only its state without details. Its icon's circle is lit in the accent color while `lit`. |
 | `QuickToggle` | Quick settings switch for something turned on and off often: an icon in a circle, in the accent color while on, over its label. |
 | `Screen` | Renders its children once per selected display. |
 | `DisplayProvider` | Supplies the host's displays to `Screen`. |

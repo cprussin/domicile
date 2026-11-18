@@ -95,6 +95,7 @@ export const BluetoothTile = ({
           />
         }
         label="Bluetooth"
+        lit={connected.length > 0}
         onMore={locked ? undefined : onMore}
       />
     );
@@ -109,6 +110,7 @@ export const BluetoothTile = ({
         })}
         icon={<AnimatedBluetoothIcon size={15} state="off" />}
         label="Bluetooth"
+        lit={false}
       />
     );
   }
