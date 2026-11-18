@@ -1,6 +1,6 @@
 # Electron apps
 
-Electron apps, such as Slack, Element, Claude and ChatGPT, can run on the
+Electron apps, such as Slack, Element and Claude, can run on the
 browser built into the desktop instead of the copy of Chromium each one
 bundles. Then:
 
@@ -34,7 +34,8 @@ To try an app once without listing it, run
   here.
 - **A few apps still use their own Chromium.** Signal, Joplin, Teams for Linux
   and Zulip start on their own Chromium until each is checked here, and a
-  notification says so.
+  notification says so. ChatGPT always does: it only starts on OpenAI's own
+  Chromium.
 - **An app may run on its own Chromium once.** An app that brings a new kind
   of link the first time it runs here starts on its own Chromium, and on the
   desktop's from your next login.

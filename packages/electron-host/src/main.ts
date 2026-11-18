@@ -82,11 +82,9 @@ const main = async ([resources, ...args]: string[]) => {
       Err: fail,
       Ok: (value) => value,
     });
-    const { needsNodeInPages } = quirksOf(pkg.name);
-    if (needsNodeInPages !== undefined) {
-      unsupported(
-        `${pkg.productName} needs Node in its pages, which Domicile's engine doesn't run yet: ${needsNodeInPages}`,
-      );
+    const { needsOwnElectron } = quirksOf(pkg.name);
+    if (needsOwnElectron !== undefined) {
+      unsupported(`${pkg.productName} ${needsOwnElectron}`);
     }
     const configHome = env.XDG_CONFIG_HOME ?? join(home, ".config");
     // How this host was started, so `app.relaunch` can start it again.

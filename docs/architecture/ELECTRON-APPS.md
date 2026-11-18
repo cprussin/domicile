@@ -97,8 +97,10 @@ A bun workspace package, `packages/electron-host`, run by Bun.
 - **Quirks table:** per-app overrides inside the package, keyed by the
   app's `package.json` name
   ([`quirks.ts`](../../packages/electron-host/src/quirks.ts)). Today it names
-  the phase-2 apps inspected (below); Node instead of Bun and an updater to
-  skip go there when an app needs them.
+  the apps that need their own Electron: the phase-2 apps inspected (below),
+  and ChatGPT, which refuses to start on anything but OpenAI's Electron fork,
+  Owl. Node instead of Bun and an updater to skip go there when an app needs
+  them.
 
 Bun over Node because the desktop already ships Bun for the builder. Node is
 the fallback for an app Bun can't run, and becomes required in phase 2.
@@ -358,8 +360,9 @@ whatever the app catches; a window with Node in its page runs on the engine
 shows a notification naming the app and runs its own command: the one given
 after `--`, else the entry's `Exec`. An app named by its path alone has no
 command to fall back to, and the status is passed on. An app the quirks
-table names as needing Node exits with status 3 before its main runs, so its
-own Electron starts without a window opening on the engine first.
+table names as needing its own Electron exits with status 3 before its main
+runs, so its own Electron starts without a window opening on the engine
+first.
 
 ### Every API
 
@@ -440,6 +443,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 | Teams for Linux 2.29.0 | 2 | Preload uses Node, `contextIsolation: false` |
 | Zulip 5.14.2 | 2 | `@electron/remote`, `<webview>`, `sandbox: false` |
 | Joplin 3.7.22 | 2 | `nodeIntegration: true`, `@electron/remote` |
+| ChatGPT 26.1103.60933 | none | Needs Owl, OpenAI's Electron fork: throws at start without `app.showTaskManager`, then calls Owl's own APIs |
 
 ## Key decisions
 

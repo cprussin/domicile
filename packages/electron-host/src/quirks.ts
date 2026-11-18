@@ -4,26 +4,41 @@
 
 export type Quirks = {
   /**
-   * Why the app's pages need Node, which the engine doesn't give pages yet:
-   * the host gives up before its main runs, and the app runs on its own
-   * Electron.
+   * Why the app can't run on the engine, following its name: the host gives
+   * up before its main runs, and the app runs on its own Electron.
    */
-  readonly needsNodeInPages?: string;
+  readonly needsOwnElectron?: string;
 };
+
+/** The reason for an app whose pages need Node, given `why`. */
+const needsNode = (why: string) =>
+  `needs Node in its pages, which Domicile's engine doesn't run yet: ${why}`;
 
 const QUIRKS: Readonly<Record<string, Quirks>> = {
   "@joplin/app-desktop": {
-    needsNodeInPages:
+    needsOwnElectron: needsNode(
       "its windows ask for nodeIntegration and use @electron/remote",
+    ),
+  },
+  // ChatGPT throws at start unless `app.showTaskManager` exists, and goes on
+  // to call Owl's own APIs (`app.isRuntimeFeatureEnabled`,
+  // `webContents.setAgentActive`, `_createWebViewAdoptionLease`).
+  "openai-codex-electron": {
+    needsOwnElectron:
+      "needs OpenAI's own build of Electron, Owl, and refuses to start on any other",
   },
   "signal-desktop": {
-    needsNodeInPages: "its pages load libsignal and ringrtc",
+    needsOwnElectron: needsNode("its pages load libsignal and ringrtc"),
   },
   "teams-for-linux": {
-    needsNodeInPages: "its preload uses Node with contextIsolation off",
+    needsOwnElectron: needsNode(
+      "its preload uses Node with contextIsolation off",
+    ),
   },
   zulip: {
-    needsNodeInPages: "it uses @electron/remote and <webview> with sandbox off",
+    needsOwnElectron: needsNode(
+      "it uses @electron/remote and <webview> with sandbox off",
+    ),
   },
 };
 

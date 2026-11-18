@@ -11,7 +11,7 @@ _Unreleased_
 
 ![Element on the desktop's browser, with its menu bar under its tab](../media/release-electron.png)
 
-Slack, Element, Claude and ChatGPT run on the desktop's browser instead of their own Chromium, with menus and dialogs in the desktop's style. Apps whose windows use Node.js can run there too.
+Slack, Element and Claude run on the desktop's browser instead of their own Chromium, with menus and dialogs in the desktop's style. Apps whose windows use Node.js can run there too. ChatGPT only starts on OpenAI's own Chromium, so it stays there.
 
 [How to turn it on](ELECTRON-APPS.md) · [#2091](https://github.com/cprussin/domicile/pull/2091) · [#2162](https://github.com/cprussin/domicile/pull/2162) · [#2173](https://github.com/cprussin/domicile/pull/2173) · [#2243](https://github.com/cprussin/domicile/pull/2243) · [#2256](https://github.com/cprussin/domicile/pull/2256)
 
