@@ -79,6 +79,7 @@ fn windows_print_as_one_table_whoever_draws_them() {
         urgent: false,
         url: None,
         private: false,
+        engine_id: None,
     };
     let terminal = ListedWindow {
         id: "nW1zT5yB8vC2xF6hJ9pL4sR0gAkD3mQ7".to_string(),
@@ -100,6 +101,7 @@ fn windows_print_as_one_table_whoever_draws_them() {
         urgent: false,
         url: Some("https://mail.example/".to_string()),
         private: true,
+        engine_id: Some("3".to_string()),
     };
 
     assert_eq!(

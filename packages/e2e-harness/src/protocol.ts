@@ -365,6 +365,8 @@ const windowListSchema = z.looseObject({
   windows: z.array(
     z.looseObject({
       app: z.string().nullable(),
+      // A browser window's id in the engine, for `domicile devtools`.
+      engine_id: z.string().nullable(),
       focused: z.boolean(),
       // The window's `ext-foreign-toplevel-list-v1` identifier.
       id: z.string().min(1),

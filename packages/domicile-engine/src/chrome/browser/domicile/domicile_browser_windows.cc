@@ -1537,6 +1537,12 @@ void LoadBrowserWindow(const std::string& id, const GURL& url) {
   }
 }
 
+content::WebContents* BrowserWindowContents(const std::string& id) {
+  DeskWindows* windows = ShellDeskWindows();
+  WebViewGuest* guest = windows == nullptr ? nullptr : windows->Find(id);
+  return guest == nullptr ? nullptr : &guest->contents();
+}
+
 void FocusBrowserWindow(const std::string& id) {
   DeskWindows* windows = ShellDeskWindows();
   WebViewGuest* guest = windows == nullptr ? nullptr : windows->Find(id);

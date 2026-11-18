@@ -450,6 +450,7 @@ fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
         urgent: false,
         url: None,
         private: false,
+        engine_id: Some("3".to_string()),
     };
     assert_eq!(
         reply_to(
@@ -1282,6 +1283,7 @@ fn nothing_dialed() -> Desktop<'static> {
         act_on_window: &|_, _| panic!("only act_on_window acts on a window"),
         shoot_desk: &|_, _| panic!("only shoot_desk shoots the desk"),
         emulate: &|_| panic!("only emulate sends input"),
+        devtools: &|_, _, _| panic!("only devtools sends DevTools methods"),
         configure_display: &|_, _| panic!("only configure_display configures a display"),
         monitors: &|| panic!("only monitors lists the monitors"),
         displays: &|| panic!("only displays lists the displays"),
@@ -1425,6 +1427,117 @@ fn emulated_input_is_sent_or_refused_with_why() {
                     assert_eq!(input, [EmulatedInput::PointTo { x: 1.0, y: 2.0 }]);
                     Err("the desktop is locked".to_string())
                 },
+                ..nothing_dialed()
+            },
+        ),
+        Response::Refused {
+            why: "the desktop is locked".to_string()
+        }
+    );
+}
+
+/// The desk's windows for `devtools`: a native one, a browser window and a
+/// private one.
+fn three_windows() -> Result<Vec<ListedWindow>, String> {
+    let native = ListedWindow {
+        id: "kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA".to_string(),
+        kind: WindowKind::Native,
+        title: "notes.org".to_string(),
+        app: Some("emacs".to_string()),
+        pid: Some(4242),
+        size: Some([640.0, 480.0]),
+        focused: true,
+        urgent: false,
+        url: None,
+        private: false,
+        engine_id: None,
+    };
+    let mail = ListedWindow {
+        id: "Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE".to_string(),
+        kind: WindowKind::Browser,
+        title: "Inbox".to_string(),
+        app: None,
+        pid: None,
+        size: None,
+        focused: false,
+        url: Some("https://mail.example/".to_string()),
+        engine_id: Some("3".to_string()),
+        ..native.clone()
+    };
+    let private = ListedWindow {
+        id: "aU2iO9pE4rT7yW1qZ5xC8vB3nM6lK0jH".to_string(),
+        private: true,
+        engine_id: Some("7".to_string()),
+        ..mail.clone()
+    };
+    Ok(vec![native, mail, private])
+}
+
+#[test]
+fn devtools_sends_to_a_browser_window_by_its_listed_id() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"devtools\",\"window\":\"Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE\",\"method\":\"DOM.getBoxModel\",\"params\":{\"backendNodeId\":4}}",
+            &Desktop {
+                windows: &three_windows,
+                status: &|| status(false),
+                devtools: &|window, method, params| {
+                    assert_eq!(
+                        (window, method, params),
+                        ("3", "DOM.getBoxModel", &serde_json::json!({"backendNodeId": 4}))
+                    );
+                    Ok(serde_json::json!({"model": {}}))
+                },
+                ..nothing_dialed()
+            },
+        ),
+        Response::DevTools {
+            result: serde_json::json!({"model": {}})
+        }
+    );
+}
+
+#[test]
+fn devtools_refuses_a_window_it_does_not_drive_saying_why() {
+    for (window, why) in [
+        ("kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA", "native"),
+        ("aU2iO9pE4rT7yW1qZ5xC8vB3nM6lK0jH", "private"),
+        ("nope", "no window nope"),
+    ] {
+        let reply = reply_to(
+            &format!("{{\"type\":\"devtools\",\"window\":\"{window}\",\"method\":\"Page.reload\",\"params\":{{}}}}"),
+            &Desktop {
+                windows: &three_windows,
+                status: &|| status(false),
+                ..nothing_dialed()
+            },
+        );
+        match reply {
+            Response::Refused { why: refused } => assert!(refused.contains(why), "{refused}"),
+            other => panic!("{window} was not refused: {other:?}"),
+        }
+    }
+}
+
+fn status(locked: bool) -> Result<DesktopStatus, String> {
+    Ok(DesktopStatus {
+        theme: Theme::Light,
+        locked,
+        keymap: None,
+        screens_off: false,
+        held_awake_by: Vec::new(),
+        capturing: Vec::new(),
+    })
+}
+
+#[test]
+fn devtools_is_refused_while_the_desktop_is_locked() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"devtools\",\"window\":\"Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE\",\"method\":\"Page.reload\",\"params\":{}}",
+            &Desktop {
+                windows: &three_windows,
+                status: &|| status(true),
                 ..nothing_dialed()
             },
         ),

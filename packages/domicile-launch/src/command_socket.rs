@@ -14,11 +14,11 @@ use std::time::Duration;
 use crate::browser_profiles::BrowserProfileList;
 use crate::command::{
     browser_profiles_line, clear_browsing_data_line, clear_site_data_line, config_extensions_line,
-    configure_extension_line, delete_history_line, disable_while_typing_line, extensions_line,
-    history_line, load_shell_line, load_unpacked_line, media_devices_line, open_app_line,
-    open_url_line, pin_browser_site_line, reply, run_app_line, set_extension_enabled_line,
-    set_media_device_line, set_site_permission_line, site_data_line, site_permissions_line,
-    uninstall_extension_line, visits_line, Reply, NO_SHELL_WINDOW,
+    configure_extension_line, delete_history_line, devtools_line, disable_while_typing_line,
+    extensions_line, history_line, load_shell_line, load_unpacked_line, media_devices_line,
+    open_app_line, open_url_line, pin_browser_site_line, reply, run_app_line,
+    set_extension_enabled_line, set_media_device_line, set_site_permission_line, site_data_line,
+    site_permissions_line, uninstall_extension_line, visits_line, Reply, NO_SHELL_WINDOW,
 };
 use crate::control::AppReuse;
 use crate::extensions::{ExtensionSettings, InstalledExtension};
@@ -350,6 +350,22 @@ pub fn disable_while_typing(
 ) -> Result<bool, CommandError> {
     match answered(socket, &disable_while_typing_line(enabled), patience)? {
         Reply::DisableWhileTyping { enabled } => Ok(enabled),
+        other => Err(unexpected(socket, &other)),
+    }
+}
+
+/// Sends DevTools Protocol `method` with `params` to browser window `window`
+/// of the engine at `socket`, by its id there, and returns the method's
+/// result.
+pub fn devtools(
+    socket: &Path,
+    window: &str,
+    method: &str,
+    params: &serde_json::Value,
+    patience: Duration,
+) -> Result<serde_json::Value, CommandError> {
+    match answered(socket, &devtools_line(window, method, params), patience)? {
+        Reply::DevTools { result } => Ok(result),
         other => Err(unexpected(socket, &other)),
     }
 }

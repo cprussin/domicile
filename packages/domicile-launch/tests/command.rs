@@ -5,11 +5,11 @@ use std::path::{Path, PathBuf};
 
 use domicile_launch::command::{
     browser_profiles_line, clear_browsing_data_line, clear_site_data_line, config_extensions_line,
-    configure_extension_line, delete_history_line, disable_while_typing_line, extensions_line,
-    history_line, load_shell_line, load_unpacked_line, media_devices_line, open_app_line,
-    open_url_line, pin_browser_site_line, reply, run_app_line, set_extension_enabled_line,
-    set_media_device_line, set_site_permission_line, site_data_line, site_permissions_line,
-    uninstall_extension_line, visits_line, Reply,
+    configure_extension_line, delete_history_line, devtools_line, disable_while_typing_line,
+    extensions_line, history_line, load_shell_line, load_unpacked_line, media_devices_line,
+    open_app_line, open_url_line, pin_browser_site_line, reply, run_app_line,
+    set_extension_enabled_line, set_media_device_line, set_site_permission_line, site_data_line,
+    site_permissions_line, uninstall_extension_line, visits_line, Reply,
 };
 use domicile_launch::control::AppReuse;
 use domicile_launch::extensions::{
@@ -479,5 +479,19 @@ fn an_open_app_names_its_browser_profile_when_it_has_one() {
     assert_eq!(
         open_app_line("https://example.com/", Some("mail"), AppReuse::Focus, Some("work")),
         "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/\",\"profile\":\"work\",\"app\":true,\"app_id\":\"mail\",\"reuse\":\"focus\"}\n"
+    );
+}
+
+#[test]
+fn devtools_sends_a_method_to_a_browser_window() {
+    assert_eq!(
+        devtools_line("w7", "DOM.getBoxModel", &serde_json::json!({"backendNodeId": 4})),
+        "{\"type\":\"devtools\",\"version\":1,\"window\":\"w7\",\"method\":\"DOM.getBoxModel\",\"params\":{\"backendNodeId\":4}}\n"
+    );
+    assert_eq!(
+        reply("{\"type\":\"devtools\",\"result\":{\"nodes\":[]}}").unwrap(),
+        Reply::DevTools {
+            result: serde_json::json!({"nodes": []})
+        }
     );
 }

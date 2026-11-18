@@ -324,6 +324,9 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 
 {"type":"disable_while_typing","version":1,"enabled":false}
 {"type":"disable_while_typing","enabled":false}   |   {"type":"refused","why":"…"}
+
+{"type":"devtools","version":1,"window":"3","method":"DOM.getContentQuads","params":{"backendNodeId":42}}
+{"type":"devtools","result":{"quads":[[10,20,110,20,110,40,10,40]]}}   |   {"type":"refused","why":"…"}
 ```
 
 - Without the switch, the engine binds nothing. Every desktop `domicile`
@@ -427,6 +430,14 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
   It sets whether the touchpads rest while a keyboard types when `enabled` is
   given, and replies with whether they do. Off a tty it is refused: the host
   compositor reads the touchpad.
+- `devtools` is `domicile devtools`
+  ([CLI.md](/docs/CLI.md#domicile-devtools-window-method-params)), which
+  `domicile mcp` drives browser windows with. `window` is the engine's id for
+  a browser window. It attaches a DevTools client of its own for the one
+  method and detaches once answered, so DevTools the user has open keeps
+  working. Only `kDevToolsMethods` in `command_protocol.h` go through, and
+  `Page.navigate` only to http and https; a private window is refused, and so
+  is a page that does not answer within 10 seconds.
 - It is its own socket because the compositor has no part in choosing the
   shell. The supervisor also passes it at
   launch as `--domicile-shell-root` and `--domicile-shell-module`. See

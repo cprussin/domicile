@@ -14,6 +14,7 @@ use domicile_host::system::DisplayPower;
 use domicile_protocol::{
     DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage, ListedDisplay, ListedInput,
     ListedWindow, MonitorInfo, Scale, ShellBinding, ShellCommandHelp, Theme, WatchTopic, WindowAct,
+    WindowKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -207,6 +208,15 @@ pub enum Request {
     ShootDesk { file: PathBuf, fit: u32 },
     /// Send `input` to the desk. See `domicile pointer`, `key` and `type`.
     Emulate { input: Vec<EmulatedInput> },
+    /// Send DevTools Protocol `method` with `params` to browser window
+    /// `window`, as `domicile list-windows` prints it. See `domicile
+    /// devtools`.
+    #[serde(rename = "devtools")]
+    DevTools {
+        window: String,
+        method: String,
+        params: serde_json::Value,
+    },
     /// Change how the monitor `display` is set up until the desktop
     /// restarts. See `domicile configure-display`.
     ConfigureDisplay {
@@ -300,6 +310,10 @@ pub enum Response {
 
     /// Answers `shoot_desk`: what the PNG shows.
     DeskShot { shot: DeskShot },
+
+    /// Answers `devtools`: the method's result.
+    #[serde(rename = "devtools")]
+    DevTools { result: serde_json::Value },
 
     /// The user dismissed the shell's screenshot or recording dialog, or
     /// discarded the recording.
@@ -606,6 +620,13 @@ pub type ShootingTheDesk<'a> = &'a dyn Fn(&Path, u32) -> Result<DeskShot, String
 /// [`crate::compositor_socket::emulate`] in a desktop; a closure in tests.
 pub type Emulating<'a> = &'a dyn Fn(&[EmulatedInput]) -> Result<(), String>;
 
+/// Sends a DevTools Protocol method to a browser window, by its id in the
+/// engine, and returns its result.
+///
+/// [`crate::command_socket::devtools`] in a desktop; a closure in tests.
+pub type SendDevTools<'a> =
+    &'a dyn Fn(&str, &str, &serde_json::Value) -> Result<serde_json::Value, String>;
+
 /// Asks the compositor to change how a monitor is set up.
 ///
 /// [`crate::compositor_socket::configure_display`] in a desktop; a closure in
@@ -689,6 +710,7 @@ pub struct Desktop<'a> {
     pub act_on_window: ActingOnWindows<'a>,
     pub shoot_desk: ShootingTheDesk<'a>,
     pub emulate: Emulating<'a>,
+    pub devtools: SendDevTools<'a>,
     pub configure_display: ConfiguringDisplays<'a>,
     pub monitors: ListMonitors<'a>,
     pub displays: ListDisplays<'a>,
@@ -964,6 +986,14 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(()) => Response::Done,
             Err(why) => Response::Refused { why },
         }),
+        Ok(Request::DevTools {
+            window,
+            method,
+            params,
+        }) => to_line(&match driven(desktop, &window, &method, &params) {
+            Ok(result) => Response::DevTools { result },
+            Err(why) => Response::Refused { why },
+        }),
         Ok(Request::ConfigureDisplay { display, change }) => {
             to_line(&match (desktop.configure_display)(&display, &change) {
                 Ok(()) => Response::Done,
@@ -1012,6 +1042,39 @@ fn powered(power: DisplayPower, display: Option<String>, set: PowerDisplays) -> 
 
 /// Carries out `to` with `set`. A toggle asks first, since the engine keeps the
 /// setting.
+/// Sends `method` to the browser window `domicile list-windows` lists as
+/// `window`, which must be neither native nor private, while the desktop is
+/// unlocked.
+fn driven(
+    desktop: &Desktop,
+    window: &str,
+    method: &str,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    if (desktop.status)()?.locked {
+        return Err("the desktop is locked".to_string());
+    }
+    let windows = (desktop.windows)()?;
+    let listed = windows
+        .iter()
+        .find(|listed| listed.id == window)
+        .ok_or_else(|| format!("there is no window {window}; list-windows lists them"))?;
+    if listed.private {
+        return Err(format!(
+            "window {window} is private, and agents do not drive private windows"
+        ));
+    }
+    match (&listed.kind, &listed.engine_id) {
+        (WindowKind::Browser, Some(engine_id)) => (desktop.devtools)(engine_id, method, params),
+        (WindowKind::Browser, None) => Err(format!(
+            "the compositor listed browser window {window} without its id in the engine"
+        )),
+        (WindowKind::Native, _) => Err(format!(
+            "window {window} is a native window; devtools drives browser windows"
+        )),
+    }
+}
+
 fn switched(to: Option<Switch>, set: DisableWhileTyping) -> Result<bool, String> {
     match to {
         None => set(None),

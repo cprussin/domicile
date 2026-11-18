@@ -123,6 +123,10 @@ void SetBrowserWindowUserAgent(const std::string& id,
                                const std::string& user_agent);
 void LoadBrowserWindow(const std::string& id, const GURL& url);
 
+// Browser window `id`'s page, or null when there is no shell or no such
+// window.
+content::WebContents* BrowserWindowContents(const std::string& id);
+
 // Asks the shell to focus browser window `id` of the shell's profile.
 void FocusBrowserWindow(const std::string& id);
 

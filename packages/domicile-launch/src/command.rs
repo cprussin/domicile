@@ -144,6 +144,9 @@ pub enum Reply {
     SiteData { sites: Vec<SiteData> },
     /// Whether the touchpads rest while a keyboard types.
     DisableWhileTyping { enabled: bool },
+    /// A DevTools Protocol method's result.
+    #[serde(rename = "devtools")]
+    DevTools { result: serde_json::Value },
     /// The engine refused, with its reason.
     Refused { why: String },
 }
@@ -356,6 +359,17 @@ pub fn disable_while_typing_line(enabled: Option<bool>) -> String {
     })
 }
 
+/// The request to send DevTools Protocol `method` with `params` to browser
+/// window `window`, by its id in the engine.
+pub fn devtools_line(window: &str, method: &str, params: &serde_json::Value) -> String {
+    line(&Command::DevTools {
+        version: VERSION,
+        window,
+        method,
+        params,
+    })
+}
+
 /// Parses one reply line, without its trailing newline.
 ///
 /// An unparseable reply is an error, not a [`Reply::Refused`]: it comes from
@@ -486,6 +500,13 @@ enum Command<'a> {
         // Left out to ask.
         #[serde(skip_serializing_if = "Option::is_none")]
         enabled: Option<bool>,
+    },
+    #[serde(rename = "devtools")]
+    DevTools {
+        version: u32,
+        window: &'a str,
+        method: &'a str,
+        params: &'a serde_json::Value,
     },
 }
 

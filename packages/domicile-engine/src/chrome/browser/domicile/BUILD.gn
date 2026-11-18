@@ -13,6 +13,8 @@
 # hosts. Code that does not is in //components/domicile, with the tests.
 source_set("domicile") {
   sources = [
+    "domicile_agent_devtools.cc",
+    "domicile_agent_devtools.h",
     "domicile_browser_profiles.cc",
     "domicile_browser_profiles.h",
     "domicile_browser_windows.cc",

@@ -24,6 +24,7 @@
 #include "base/strings/strcat.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
+#include "chrome/browser/domicile/domicile_agent_devtools.h"
 #include "chrome/browser/domicile/domicile_browser_profiles.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_extension_installer.h"
@@ -640,7 +641,8 @@ base::expected<bool, std::string> DisableTouchpadsWhileTyping(
 // Runs on the UI thread because `ShellSource` is unlocked and UI-thread only,
 // and loading a shell navigates a window. `reply` is bound to the IO thread,
 // so it may be called from any thread, and later for `load_shell`, `run_app`,
-// `open_url`, `load_unpacked`, the History app's commands and site data.
+// `open_url`, `load_unpacked`, the History app's commands, site data and
+// `devtools`.
 void AnswerOnUIThread(const std::string& line, CommandReply reply) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   AnswerCommand(line,
@@ -667,7 +669,8 @@ void AnswerOnUIThread(const std::string& line, CommandReply reply) {
                  .clear_browsing_data = &ClearShellBrowsingData,
                  .list_site_data = &ListShellSiteData,
                  .clear_site_data = &ClearShellSiteData,
-                 .disable_while_typing = &DisableTouchpadsWhileTyping},
+                 .disable_while_typing = &DisableTouchpadsWhileTyping,
+                 .send_devtools = &SendDevToolsToBrowserWindow},
                 std::move(reply));
 }
 

@@ -2984,6 +2984,9 @@ pub struct ListedWindow {
     pub url: Option<String>,
     /// A browser window in the off-the-record profile.
     pub private: bool,
+    /// A browser window's id in the engine, which `domicile devtools` sends
+    /// to.
+    pub engine_id: Option<String>,
 }
 
 /// What a [`ChromeMessage::ActOnWindow`] does to a window.

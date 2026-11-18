@@ -130,6 +130,12 @@ fn tools_list_describes_each_tool() {
             "scroll",
             "key",
             "type_text",
+            "browser_snapshot",
+            "browser_click",
+            "browser_type",
+            "browser_key",
+            "browser_navigate",
+            "browser_screenshot",
         ]
     );
     for tool in tools {
@@ -340,4 +346,215 @@ fn a_line_that_is_not_json_is_a_parse_error() {
 fn arguments_that_are_not_an_object_are_a_tool_error() {
     let replies = served(&[call("list_windows", json!("all"))], never_run);
     assert_eq!(replies[0]["result"]["isError"], true);
+}
+
+/// Stands in for `domicile devtools` on browser window `w1`: answers each
+/// method from `answers` and records every run in `ran`.
+fn page<'a>(
+    answers: &'a [(&'a str, Value)],
+    ran: &'a mut Vec<(String, Value)>,
+) -> impl FnMut(&[String]) -> io::Result<Ran> + 'a {
+    move |args| {
+        assert_eq!(args[..2], ["devtools", "w1"]);
+        let params: Value = serde_json::from_str(&args[3]).unwrap();
+        ran.push((args[2].clone(), params));
+        let answer = answers
+            .iter()
+            .find(|(method, _)| *method == args[2])
+            .map_or(json!({}), |(_, answer)| answer.clone());
+        printed(&format!("{answer}\n"))
+    }
+}
+
+#[test]
+fn a_browser_snapshot_is_the_pages_accessibility_tree_with_refs() {
+    let tree = json!({"nodes": [
+        {"nodeId": "1", "ignored": false, "role": {"value": "RootWebArea"}, "name": {"value": "Inbox"}, "childIds": ["2", "3"], "backendDOMNodeId": 1},
+        {"nodeId": "2", "ignored": true, "role": {"value": "none"}, "childIds": ["4"], "backendDOMNodeId": 5},
+        {"nodeId": "4", "ignored": false, "role": {"value": "button"}, "name": {"value": "Compose"}, "childIds": ["6"], "backendDOMNodeId": 12},
+        {"nodeId": "6", "ignored": false, "role": {"value": "StaticText"}, "name": {"value": "Compose"}, "childIds": [], "backendDOMNodeId": 13},
+        {"nodeId": "3", "ignored": false, "role": {"value": "generic"}, "childIds": ["7"], "backendDOMNodeId": 20},
+        {"nodeId": "7", "ignored": false, "role": {"value": "textbox"}, "name": {"value": "Search"}, "value": {"value": "from:ana"},
+         "properties": [{"name": "focused", "value": {"value": true}}], "childIds": [], "backendDOMNodeId": 21}
+    ]});
+    let mut ran = Vec::new();
+    let replies = served(
+        &[call("browser_snapshot", json!({"window": "w1"}))],
+        page(&[("Accessibility.getFullAXTree", tree)], &mut ran),
+    );
+    assert_eq!(
+        ran,
+        [("Accessibility.getFullAXTree".to_string(), json!({}))]
+    );
+    assert_eq!(replies[0]["result"]["isError"], false);
+    assert_eq!(
+        replies[0]["result"]["content"][0]["text"],
+        "- RootWebArea \"Inbox\" [ref=1]\n  \
+         - button \"Compose\" [ref=12]\n  \
+         - textbox \"Search\" [ref=21] value=\"from:ana\" focused\n"
+    );
+}
+
+#[test]
+fn a_browser_click_scrolls_the_element_into_view_and_clicks_its_middle() {
+    let mut ran = Vec::new();
+    let replies = served(
+        &[call("browser_click", json!({"window": "w1", "ref": 12}))],
+        page(
+            &[(
+                "DOM.getContentQuads",
+                json!({"quads": [[10, 20, 110, 20, 110, 40, 10, 40]]}),
+            )],
+            &mut ran,
+        ),
+    );
+    assert_eq!(replies[0]["result"]["isError"], false);
+    let mouse = |kind: &str| {
+        (
+            "Input.dispatchMouseEvent".to_string(),
+            json!({"type": kind, "x": 60.0, "y": 30.0, "button": "left", "clickCount": 1}),
+        )
+    };
+    assert_eq!(
+        ran,
+        [
+            (
+                "DOM.scrollIntoViewIfNeeded".to_string(),
+                json!({"backendNodeId": 12})
+            ),
+            (
+                "DOM.getContentQuads".to_string(),
+                json!({"backendNodeId": 12})
+            ),
+            mouse("mouseMoved"),
+            mouse("mousePressed"),
+            mouse("mouseReleased"),
+        ]
+    );
+}
+
+#[test]
+fn a_browser_click_on_an_element_with_no_box_says_so() {
+    let mut ran = Vec::new();
+    let replies = served(
+        &[call("browser_click", json!({"window": "w1", "ref": 12}))],
+        page(&[("DOM.getContentQuads", json!({"quads": []}))], &mut ran),
+    );
+    assert_eq!(replies[0]["result"]["isError"], true);
+    assert!(replies[0]["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap()
+        .contains("12"));
+}
+
+#[test]
+fn browser_type_focuses_the_element_then_inserts_the_text() {
+    let mut ran = Vec::new();
+    served(
+        &[
+            call(
+                "browser_type",
+                json!({"window": "w1", "ref": 21, "text": "hi"}),
+            ),
+            call("browser_type", json!({"window": "w1", "text": "there"})),
+        ],
+        page(&[], &mut ran),
+    );
+    assert_eq!(
+        ran,
+        [
+            ("DOM.focus".to_string(), json!({"backendNodeId": 21})),
+            ("Input.insertText".to_string(), json!({"text": "hi"})),
+            ("Input.insertText".to_string(), json!({"text": "there"})),
+        ]
+    );
+}
+
+#[test]
+fn browser_key_presses_and_releases_a_named_key() {
+    let mut ran = Vec::new();
+    served(
+        &[call("browser_key", json!({"window": "w1", "key": "Enter"}))],
+        page(&[], &mut ran),
+    );
+    assert_eq!(
+        ran,
+        [
+            (
+                "Input.dispatchKeyEvent".to_string(),
+                json!({"type": "keyDown", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13, "text": "\r"})
+            ),
+            (
+                "Input.dispatchKeyEvent".to_string(),
+                json!({"type": "keyUp", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13})
+            ),
+        ]
+    );
+    let replies = served(
+        &[call(
+            "browser_key",
+            json!({"window": "w1", "key": "Hyperdrive"}),
+        )],
+        never_run,
+    );
+    assert_eq!(replies[0]["result"]["isError"], true);
+}
+
+#[test]
+fn browser_navigate_goes_to_the_address() {
+    let mut ran = Vec::new();
+    served(
+        &[call(
+            "browser_navigate",
+            json!({"window": "w1", "url": "https://example.com/"}),
+        )],
+        page(&[], &mut ran),
+    );
+    assert_eq!(
+        ran,
+        [(
+            "Page.navigate".to_string(),
+            json!({"url": "https://example.com/"})
+        )]
+    );
+}
+
+#[test]
+fn a_browser_screenshot_is_a_small_webp_of_the_page() {
+    let mut ran = Vec::new();
+    let replies = served(
+        &[call("browser_screenshot", json!({"window": "w1"}))],
+        page(
+            &[("Page.captureScreenshot", json!({"data": "UklGRg=="}))],
+            &mut ran,
+        ),
+    );
+    assert_eq!(
+        ran,
+        [(
+            "Page.captureScreenshot".to_string(),
+            json!({"format": "webp", "quality": 70})
+        )]
+    );
+    assert_eq!(
+        replies[0]["result"]["content"][0],
+        json!({"type": "image", "data": "UklGRg==", "mimeType": "image/webp"})
+    );
+}
+
+#[test]
+fn a_browser_tool_passes_on_why_devtools_refused() {
+    let replies = served(&[call("browser_snapshot", json!({"window": "w9"}))], |_| {
+        Ok(Ran {
+            success: false,
+            stdout: String::new(),
+            stderr: "domicile: window w9 is private, and agents do not drive private windows\n"
+                .to_string(),
+        })
+    });
+    assert_eq!(replies[0]["result"]["isError"], true);
+    assert!(replies[0]["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap()
+        .contains("private"));
 }

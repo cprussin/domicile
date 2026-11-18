@@ -143,6 +143,7 @@ fn every_window_is_listed_native_and_browser_alike() {
                     urgent: false,
                     url: None,
                     private: false,
+                    engine_id: None,
                 },
                 ListedWindow {
                     id: "Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE".into(),
@@ -155,6 +156,7 @@ fn every_window_is_listed_native_and_browser_alike() {
                     urgent: false,
                     url: Some("https://mail.example/".into()),
                     private: false,
+                    engine_id: Some("3".into()),
                 },
                 ListedWindow {
                     id: "aU2iO9pE4rT7yW1qZ5xC8vB3nM6lK0jH".into(),
@@ -167,6 +169,7 @@ fn every_window_is_listed_native_and_browser_alike() {
                     urgent: false,
                     url: Some("https://example.com/".into()),
                     private: true,
+                    engine_id: Some("7".into()),
                 },
             ]
         }

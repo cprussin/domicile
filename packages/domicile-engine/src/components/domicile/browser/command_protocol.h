@@ -16,6 +16,7 @@
 #include "base/functional/function_ref.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
+#include "base/values.h"
 #include "components/domicile/browser/extension_settings.h"
 #include "components/domicile/browser/shell_source.h"
 #include "components/domicile/mojom/browser_windows.mojom-shared.h"
@@ -152,6 +153,17 @@ namespace domicile {
 //   -> {"type":"disable_while_typing","enabled":false}
 //   -> {"type":"refused","why":"..."}
 //
+//   {"type":"devtools","version":1,"window":"<browser window id>",
+//    "method":"Accessibility.getFullAXTree","params":{"depth":4}}
+//   -> {"type":"devtools","result":{"nodes":[...]}}
+//   -> {"type":"refused","why":"..."}
+//
+// `devtools` is how `domicile mcp` drives a browser window for an agent: one
+// Chrome DevTools Protocol method sent to the window's page, answered with
+// the method's result. Only the methods kDevToolsMethods names go through:
+// enough to read the page's accessibility tree, click, type, scroll and
+// navigate, and nothing that reads cookies or storage or runs script. A
+// private window is never driven. `params` defaults to {}.
 // `disable_while_typing` is `domicile disable-while-typing`: whether the
 // touchpads rest while a keyboard types, set when the request says.
 // The site permissions, extensions and media devices are the Settings app's,
@@ -534,6 +546,39 @@ using DisableWhileTyping =
     base::FunctionRef<base::expected<bool, std::string>(
         std::optional<bool> enabled)>;
 
+// The Chrome DevTools Protocol methods `devtools` sends. Page.navigate goes
+// only to http and https addresses.
+inline constexpr std::string_view kDevToolsMethods[] = {
+    "Accessibility.getFullAXTree",
+    "Accessibility.getPartialAXTree",
+    "Accessibility.queryAXTree",
+    "DOM.focus",
+    "DOM.getBoxModel",
+    "DOM.getContentQuads",
+    "DOM.scrollIntoViewIfNeeded",
+    "Input.dispatchKeyEvent",
+    "Input.dispatchMouseEvent",
+    "Input.insertText",
+    "Page.captureScreenshot",
+    "Page.getLayoutMetrics",
+    "Page.getNavigationHistory",
+    "Page.navigate",
+    "Page.navigateToHistoryEntry",
+    "Page.reload",
+};
+
+// Runs once with a `devtools` method's result, or why there is none: no such
+// window, a private one, or the method's own error.
+using DevToolsAnswered =
+    base::OnceCallback<void(base::expected<base::DictValue, std::string>)>;
+
+// Carries out `devtools`: sends `method` with `params` to browser window
+// `window`'s page. Runs `answered` once, possibly after returning.
+using SendDevTools = base::FunctionRef<void(const std::string& window,
+                                            const std::string& method,
+                                            base::DictValue params,
+                                            DevToolsAnswered answered)>;
+
 // What each command does, injected so this file can be tested with strings.
 struct CommandActions {
   LoadShell load_shell;
@@ -559,6 +604,7 @@ struct CommandActions {
   ListSiteData list_site_data;
   ClearSiteData clear_site_data;
   DisableWhileTyping disable_while_typing;
+  SendDevTools send_devtools;
 };
 
 // Receives the reply line, including its trailing newline.
@@ -567,8 +613,8 @@ using CommandReply = base::OnceCallback<void(std::string)>;
 // Answers one request line (without its newline). `reply` runs once: before
 // this returns, except for `load_shell`, `run_app`, `open_url`,
 // `load_unpacked`, `browser_profiles`, `history`, `visits`, `delete_history`,
-// `clear_browsing_data`, `site_data` and `clear_site_data`, which answer once
-// their action is done.
+// `clear_browsing_data`, `site_data`, `clear_site_data` and `devtools`, which
+// answer once their action is done.
 void AnswerCommand(std::string_view line,
                    const CommandActions& actions,
                    CommandReply reply);

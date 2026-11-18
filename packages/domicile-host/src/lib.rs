@@ -354,6 +354,7 @@ impl Host {
                 // An older engine says no address.
                 url: (!window.url.is_empty()).then(|| window.url.clone()),
                 private: window.private,
+                engine_id: Some(window.id.clone()),
             })
         });
         HostMessage::WindowList {
@@ -370,6 +371,7 @@ impl Host {
                     urgent: app.urgent,
                     url: None,
                     private: false,
+                    engine_id: None,
                 })
                 .chain(browser)
                 .collect(),

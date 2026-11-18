@@ -20,6 +20,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "base/values.h"
@@ -51,6 +52,7 @@ constexpr char kClearBrowsingData[] = "clear_browsing_data";
 constexpr char kSiteData[] = "site_data";
 constexpr char kClearSiteData[] = "clear_site_data";
 constexpr char kDisableWhileTyping[] = "disable_while_typing";
+constexpr char kDevTools[] = "devtools";
 
 std::string Line(base::DictValue reply) {
   std::string line;
@@ -119,6 +121,9 @@ void AnswerClearSiteData(const base::DictValue& request,
                          CommandReply reply);
 std::string AnswerDisableWhileTyping(const base::DictValue& request,
                                      DisableWhileTyping disable_while_typing);
+void AnswerDevTools(const base::DictValue& request,
+                    SendDevTools send_devtools,
+                    CommandReply reply);
 
 }  // namespace
 
@@ -300,6 +305,10 @@ void AnswerCommand(std::string_view line,
         AnswerDisableWhileTyping(*request, actions.disable_while_typing));
     return;
   }
+  if (*type == kDevTools) {
+    AnswerDevTools(*request, actions.send_devtools, std::move(reply));
+    return;
+  }
   std::move(reply).Run(RefusedCommand(base::StrCat(
       {"\"", *type, "\" is not a command this engine knows; it takes \"",
        kLoadShell, "\", \"", kRunApp, "\", \"", kOpenUrl, "\", \"",
@@ -310,8 +319,8 @@ void AnswerCommand(std::string_view line,
        kConfigureExtension, "\", \"",
        kMediaDevices, "\", \"", kSetMediaDevice, "\", \"", kHistory, "\", \"",
        kVisits, "\", \"", kDeleteHistory, "\", \"", kClearBrowsingData,
-       "\", \"", kSiteData, "\", \"", kClearSiteData, "\" and \"",
-       kDisableWhileTyping, "\""})));
+       "\", \"", kSiteData, "\", \"", kClearSiteData, "\", \"",
+       kDisableWhileTyping, "\" and \"", kDevTools, "\""})));
 }
 
 namespace {
@@ -1161,6 +1170,61 @@ std::string AnswerDisableWhileTyping(const base::DictValue& request,
   reply.Set("type", kDisableWhileTyping);
   reply.Set("enabled", rests.value());
   return Line(std::move(reply));
+}
+
+void AnswerDevTools(const base::DictValue& request,
+                    SendDevTools send_devtools,
+                    CommandReply reply) {
+  const std::string* window = request.FindString("window");
+  if (window == nullptr || window->empty()) {
+    std::move(reply).Run(RefusedCommand(
+        "devtools needs a \"window\": the id of the browser window to send "
+        "to"));
+    return;
+  }
+  const std::string* method = request.FindString("method");
+  if (method == nullptr) {
+    std::move(reply).Run(RefusedCommand(
+        "devtools needs a \"method\": the DevTools Protocol method to send"));
+    return;
+  }
+  if (!std::ranges::contains(kDevToolsMethods, *method)) {
+    std::move(reply).Run(RefusedCommand(base::StrCat(
+        {"\"", *method, "\" is not a method agents get; devtools sends ",
+         base::JoinString(kDevToolsMethods, ", ")})));
+    return;
+  }
+  const base::Value* given = request.Find("params");
+  if (given != nullptr && !given->is_dict()) {
+    std::move(reply).Run(
+        RefusedCommand("devtools's \"params\" is an object, or left out"));
+    return;
+  }
+  base::DictValue params =
+      given != nullptr ? given->GetDict().Clone() : base::DictValue();
+  if (*method == "Page.navigate") {
+    const std::string* url = params.FindString("url");
+    if (url == nullptr || !GURL(*url).SchemeIsHTTPOrHTTPS()) {
+      std::move(reply).Run(RefusedCommand(
+          "Page.navigate takes a \"url\" that is an http or https address"));
+      return;
+    }
+  }
+  send_devtools(
+      *window, *method, std::move(params),
+      base::BindOnce(
+          [](CommandReply reply,
+             base::expected<base::DictValue, std::string> answered) {
+            if (!answered.has_value()) {
+              std::move(reply).Run(RefusedCommand(answered.error()));
+              return;
+            }
+            base::DictValue done;
+            done.Set("type", kDevTools);
+            done.Set("result", std::move(answered.value()));
+            std::move(reply).Run(Line(std::move(done)));
+          },
+          std::move(reply)));
 }
 
 }  // namespace

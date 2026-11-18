@@ -138,6 +138,27 @@ domicile key ctrl+shift+Tab
 Type `<text>` on the desk's keyboard, holding Shift where a character needs
 it. Refused, typing nothing, when no key types a character without AltGr.
 
+## `domicile devtools <window> <method> [params]`
+
+Send one [DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/)
+method to a browser window's page, with its params as a JSON object, and print
+its result as JSON. `<window>` is an id `list-windows` prints. `domicile mcp`
+drives browser windows with it.
+
+```
+$ domicile devtools Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE DOM.getContentQuads '{"backendNodeId":42}'
+{"quads":[[10,20,110,20,110,40,10,40]]}
+```
+
+Only the methods an agent needs to read and drive a page go through:
+`Accessibility.getFullAXTree`, `getPartialAXTree` and `queryAXTree`;
+`DOM.focus`, `getBoxModel`, `getContentQuads` and `scrollIntoViewIfNeeded`;
+`Input.dispatchKeyEvent`, `dispatchMouseEvent` and `insertText`; and `Page.captureScreenshot`,
+`getLayoutMetrics`, `getNavigationHistory`, `navigate` (to http and https
+only), `navigateToHistoryEntry` and `reload`. Nothing reads cookies or
+storage or runs script. Private windows and native windows are refused. A page
+that does not answer in 10 seconds is refused too.
+
 ## `domicile screen-record`
 
 Open the shell's screen cast picker and record what is picked, with its sound,
@@ -289,7 +310,8 @@ Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox (private)
 
 `--json` prints a JSON array instead, for scripts, with `kind`, `title`,
 `app`, `pid`, `size`, `focused`, `urgent`, `url` (a browser window's address,
-`null` for a native window) and `private` per window.
+`null` for a native window), `private` and `engine_id` (a browser window's
+id in the engine, `null` for a native window) per window.
 
 ## `domicile list-inputs [--json]`
 
@@ -443,8 +465,14 @@ Each tool runs a verb and answers what it printed, or its error:
 | `click`, `move_pointer`, `drag` | `pointer`, with the point scaled from the last screenshot's pixels to the desk's |
 | `scroll` | `pointer`, then `scroll` |
 | `key`, `type_text` | `key <chord>`, `type <text>` |
+| `browser_snapshot` | `devtools <window> Accessibility.getFullAXTree`, answered as an outline of the page, one element a line with its ref |
+| `browser_click` | `devtools` scrolling the element into view, finding its box, and clicking its middle |
+| `browser_type` | `devtools` focusing the element, if given a ref, then `Input.insertText` |
+| `browser_key` | `devtools` pressing and releasing Enter, Tab, Escape, an arrow or another named key |
+| `browser_navigate` | `devtools <window> Page.navigate` |
+| `browser_screenshot` | `devtools <window> Page.captureScreenshot`, answered as a WebP |
 
-Tools the lock refuses are refused while the desktop is locked.
+The browser tools work on a window the desk hides and need no screenshot, so prefer them for browser windows. Tools the lock refuses are refused while the desktop is locked.
 
 ## `domicile check-config <file>`
 
@@ -477,7 +505,7 @@ shell.
 ## While locked
 
 `screenshot`, `screen-record`, `send-shell`, `focus-window`, `close-window`,
-`kill-window`, `pointer`, `scroll`, `key` and `type` are refused while the
+`kill-window`, `pointer`, `scroll`, `key`, `type` and `devtools` are refused while the
 desktop is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
 `wake-displays`, `lock`, `inhibit-idle`, `list-displays`, `list-windows`,
 `list-inputs`, `status`, `subscribe`, `configure-display`,

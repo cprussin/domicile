@@ -1292,3 +1292,32 @@ fn type_types_its_text_as_given() {
     );
     assert!(run(&["type"]).is_err());
 }
+
+#[test]
+fn devtools_sends_a_method_and_its_params_to_a_window() {
+    let devtools = |params| {
+        Ok(Invocation::Ask {
+            request: Request::DevTools {
+                window: "Xy7p".to_string(),
+                method: "DOM.getBoxModel".to_string(),
+                params,
+            },
+        })
+    };
+    assert_eq!(
+        run(&[
+            "devtools",
+            "Xy7p",
+            "DOM.getBoxModel",
+            "{\"backendNodeId\":4}"
+        ]),
+        devtools(serde_json::json!({"backendNodeId": 4}))
+    );
+    assert_eq!(
+        run(&["devtools", "Xy7p", "DOM.getBoxModel"]),
+        devtools(serde_json::json!({}))
+    );
+    assert!(run(&["devtools", "Xy7p"]).is_err());
+    assert!(run(&["devtools", "Xy7p", "Page.reload", "[1]"]).is_err());
+    assert!(run(&["devtools", "Xy7p", "Page.reload", "{", "more"]).is_err());
+}

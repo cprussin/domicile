@@ -78,6 +78,9 @@ struct Told {
   std::string cleared_host;
   // Whether the recording `disable_while_typing` has the pads rest.
   bool typing_rests = true;
+  std::string devtools_window;
+  std::string devtools_method;
+  std::optional<base::DictValue> devtools_params;
 };
 
 // The id the recording `load_unpacked` gives what it loads, and the one the
@@ -386,6 +389,22 @@ std::string Answer(std::string_view line,
     }
     return told->typing_rests;
   };
+  // Answers with the method it was sent, so a test can see it went through.
+  auto send_devtools = [told, has_window](const std::string& window,
+                                          const std::string& method,
+                                          base::DictValue params,
+                                          DevToolsAnswered answered) {
+    told->devtools_window = window;
+    told->devtools_method = method;
+    told->devtools_params = std::move(params);
+    if (!has_window) {
+      std::move(answered).Run(base::unexpected("no browser window " + window));
+      return;
+    }
+    base::DictValue result;
+    result.Set("sent", method);
+    std::move(answered).Run(base::ok(std::move(result)));
+  };
   told->reply.clear();
   AnswerCommand(line,
                 {.load_shell = load_shell,
@@ -410,7 +429,8 @@ std::string Answer(std::string_view line,
                  .clear_browsing_data = clear_browsing_data,
                  .list_site_data = list_site_data,
                  .clear_site_data = clear_site_data,
-                 .disable_while_typing = disable_while_typing},
+                 .disable_while_typing = disable_while_typing,
+                 .send_devtools = send_devtools},
                 base::BindOnce([](std::string* out,
                                   std::string line) { *out = std::move(line); },
                                &told->reply));
@@ -1445,6 +1465,100 @@ TEST(CommandProtocolTest, ClearsTheSiteDataOfTheHostARequestNames) {
     EXPECT_THAT(WhyOf(no_host), HasSubstr("\"host\""));
   }
   EXPECT_TRUE(told.cleared_host.empty());
+}
+
+TEST(CommandProtocolTest, SendsADevToolsMethodToABrowserWindow) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"devtools","version":1,"window":"w1",)"
+      R"("method":"DOM.getBoxModel","params":{"backendNodeId":7}})",
+      &told);
+  EXPECT_EQ(base::JSONReader::ReadDict(reply, base::JSON_PARSE_RFC),
+            base::JSONReader::ReadDict(
+                R"({"type":"devtools","result":{"sent":"DOM.getBoxModel"}})",
+                base::JSON_PARSE_RFC));
+  EXPECT_EQ(told.devtools_window, "w1");
+  EXPECT_EQ(told.devtools_method, "DOM.getBoxModel");
+  EXPECT_EQ(told.devtools_params,
+            base::JSONReader::ReadDict(R"({"backendNodeId":7})",
+                                       base::JSON_PARSE_RFC));
+}
+
+TEST(CommandProtocolTest, SendsADevToolsMethodWithoutParamsAsAnEmptyObject) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"devtools","version":1,"window":"w1",)"
+                          R"("method":"Accessibility.getFullAXTree"})",
+                          &told)),
+            "devtools");
+  EXPECT_EQ(told.devtools_params, base::DictValue());
+}
+
+TEST(CommandProtocolTest, PassesOnWhyABrowserWindowCouldNotAnswer) {
+  Told told;
+  const std::string refused =
+      Answer(R"({"type":"devtools","version":1,"window":"w9",)"
+             R"("method":"Page.reload"})",
+             &told, /*has_window=*/false);
+  EXPECT_EQ(TypeOf(refused), "refused");
+  EXPECT_THAT(WhyOf(refused), HasSubstr("no browser window w9"));
+}
+
+// An agent drives pages, but reads no cookies and runs no script of its own.
+TEST(CommandProtocolTest, RefusesADevToolsMethodAgentsDoNotGet) {
+  Told told;
+  for (const char* method :
+       {"Runtime.evaluate", "Network.getCookies", "Storage.getCookies",
+        "Target.createTarget", "Browser.close", "page.reload"}) {
+    const std::string refused =
+        Answer(base::StrCat({R"({"type":"devtools","version":1,)",
+                             R"("window":"w1","method":")",
+                             method, R"("})"}),
+               &told);
+    EXPECT_EQ(TypeOf(refused), "refused") << method;
+    EXPECT_THAT(WhyOf(refused), HasSubstr(method));
+    EXPECT_THAT(WhyOf(refused), HasSubstr("Accessibility.getFullAXTree"));
+  }
+  EXPECT_TRUE(told.devtools_method.empty());
+}
+
+TEST(CommandProtocolTest, NavigatesABrowserWindowOnlyToTheWeb) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"devtools","version":1,"window":"w1",)"
+                          R"("method":"Page.navigate",)"
+                          R"("params":{"url":"https://example.com/"}})",
+                          &told)),
+            "devtools");
+
+  told.devtools_method.clear();
+  for (const char* url :
+       {"file:///etc/passwd", "javascript:alert(1)", "chrome://settings",
+        "not a url"}) {
+    const std::string refused =
+        Answer(base::StrCat({R"({"type":"devtools","version":1,)",
+                             R"("window":"w1","method":"Page.navigate",)",
+                             R"("params":{"url":")", url, R"("}})"}),
+               &told);
+    EXPECT_EQ(TypeOf(refused), "refused") << url;
+    EXPECT_THAT(WhyOf(refused), HasSubstr("http"));
+  }
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"devtools","version":1,"window":"w1",)"
+                          R"("method":"Page.navigate","params":{}})",
+                          &told)),
+            "refused");
+  EXPECT_TRUE(told.devtools_method.empty());
+}
+
+TEST(CommandProtocolTest, RefusesADevToolsRequestMissingAField) {
+  Told told;
+  for (const char* line :
+       {R"({"type":"devtools","version":1,"method":"Page.reload"})",
+        R"({"type":"devtools","version":1,"window":"","method":"Page.reload"})",
+        R"({"type":"devtools","version":1,"window":"w1"})",
+        R"({"type":"devtools","version":1,"window":"w1",)"
+        R"("method":"Page.reload","params":[1]})"}) {
+    EXPECT_EQ(TypeOf(Answer(line, &told)), "refused") << line;
+  }
+  EXPECT_TRUE(told.devtools_method.empty());
 }
 
 }  // namespace

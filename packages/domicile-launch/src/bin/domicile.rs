@@ -26,7 +26,7 @@ use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation, Listing, MonitorMode, USAGE};
 use domicile_launch::command_socket::{
     browser_profiles, clear_browsing_data, clear_site_data, config_extensions, configure_extension,
-    delete_history, disable_while_typing, extensions, history, load_shell, load_unpacked,
+    delete_history, devtools, disable_while_typing, extensions, history, load_shell, load_unpacked,
     media_devices, open_app, open_url, pin_browser_site, run_app, set_extension_enabled,
     set_media_device, set_site_permission, site_data, site_permissions, uninstall_extension,
     visits,
@@ -104,6 +104,10 @@ const LOAD_WITHIN: Duration = Duration::from_secs(10);
 /// How long a screenshot may take: the compositor reads back every monitor
 /// and encodes a PNG, which for several 4K monitors takes seconds.
 const CAPTURE_WITHIN: Duration = Duration::from_secs(10);
+
+/// How long the engine has to answer `devtools`: past the 10s it gives the
+/// page, so its own refusal arrives rather than a timeout.
+const DEVTOOLS_WITHIN: Duration = Duration::from_secs(12);
 
 /// How long the supervisor waits for the compositor to lay the desktop out
 /// again after `configure-display`. Longer than the compositor's own 5s, so
@@ -834,6 +838,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         Request::LoadShell { .. } => Some(LOAD_WITHIN + ANSWER_WITHIN),
         Request::ConfigureDisplay { .. } => Some(CONFIGURE_WITHIN + ANSWER_WITHIN),
         Request::ShootDesk { .. } => Some(CAPTURE_WITHIN + ANSWER_WITHIN),
+        Request::DevTools { .. } => Some(DEVTOOLS_WITHIN + ANSWER_WITHIN),
         _ => Some(ANSWER_WITHIN),
     };
     let answer = ask(&socket, request, patience).map_err(|why| why.to_string())?;
@@ -852,6 +857,10 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         Response::Opened | Response::Powered | Response::Done => Ok(ExitCode::SUCCESS),
         Response::DisableWhileTyping { enabled } => {
             println!("{}", if enabled { "on" } else { "off" });
+            Ok(ExitCode::SUCCESS)
+        }
+        Response::DevTools { result } => {
+            println!("{result}");
             Ok(ExitCode::SUCCESS)
         }
         Response::Theme { theme } => {
@@ -1761,6 +1770,10 @@ fn answer_a_command(
                     emulate: &|input| {
                         emulate(chrome, input, Some(ANSWER_WITHIN))
                             .map_err(|why| why.to_string())?
+                    },
+                    devtools: &|window, method, params| {
+                        devtools(engine, window, method, params, DEVTOOLS_WITHIN)
+                            .map_err(|why| why.to_string())
                     },
                     // The compositor waits up to 5s for the desktop to be laid
                     // out again.

@@ -60,6 +60,11 @@ Ask the running desktop:
   domicile key <chord>                  Press and release a chord such as
                                         ctrl+shift+Tab or Return
   domicile type <text>                  Type text on the desk's keyboard
+  domicile devtools <window> <method> [params]
+                                        Send a DevTools Protocol method, with
+                                        its params as a JSON object, to a
+                                        browser window's page and print its
+                                        result
   domicile screen-record                Record the screen until the toolbar stops it
   domicile send-shell <word>...         Run a shell command, as a keybinding does,
                                         and print what it answers
@@ -234,6 +239,13 @@ pub enum CliError {
     NotAPointerAction { said: String },
     #[error("{said} is not a distance like 0,120 to scroll across and down.")]
     NotADistance { said: String },
+    #[error("{said} is not a JSON object of a DevTools method's params.")]
+    NotParams { said: String },
+    #[error(
+        "devtools takes a browser window's id, as list-windows prints it, and \
+         a DevTools Protocol method such as Accessibility.getFullAXTree."
+    )]
+    NotDevTools,
     #[error("{verb} takes one {what}, and was given {said}.")]
     NotOne {
         verb: String,
@@ -734,6 +746,26 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (Some(text), None) => emulated(vec![EmulatedInput::Text { text }]),
                 (said, _) => Err(one(&first, "text, quoted", said)),
             },
+            Verb::DevTooling => match (args.next(), args.next(), args.next(), args.next()) {
+                (Some(window), Some(method), params, None) => {
+                    let params = match params {
+                        None => serde_json::json!({}),
+                        Some(params) => match serde_json::from_str(&params) {
+                            Ok(params @ serde_json::Value::Object(_)) => params,
+                            _ => return Err(CliError::NotParams { said: params }),
+                        },
+                    };
+                    Ok(Invocation::Ask {
+                        request: Request::DevTools {
+                            window,
+                            method,
+                            params,
+                        },
+                    })
+                }
+                (_, _, _, Some(extra)) => Err(CliError::Extra { extra, verb: first }),
+                _ => Err(CliError::NotDevTools),
+            },
             Verb::Serving => match args.next() {
                 None => Ok(Invocation::Mcp),
                 Some(extra) => Err(CliError::Extra { extra, verb: first }),
@@ -905,6 +937,8 @@ enum Verb {
     Keying,
     /// `type`, which takes text.
     Typing,
+    /// `devtools`, which takes a window, a method and maybe its params.
+    DevTooling,
     /// `monitor`, which takes a name, a size and maybe a scale.
     Monitoring,
     /// `subscribe`, which takes topics or nothing.
@@ -1024,6 +1058,7 @@ fn verb(word: &str) -> Option<Verb> {
         "scroll" => Some(Verb::Scrolling),
         "key" => Some(Verb::Keying),
         "type" => Some(Verb::Typing),
+        "devtools" => Some(Verb::DevTooling),
         _ => None,
     }
 }

@@ -22,7 +22,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 56,
 # WindowDiff 7, EngineEventQueue 9, ShortcutRegistry 17, ShellURLLoaderFactory
-# 16, ShellDocument 13, ShellSource 6, CursorShape 3, CommandProtocol 66,
+# 16, ShellDocument 13, ShellSource 6, CursorShape 3, CommandProtocol 72,
 # DomicileDisplayList 13, DomicileKeyboardLayout 3, ShellWindows 10,
 # ShellWindowPlaces 8, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # SurfaceTransform 3, SurfaceAlpha 2, BufferColor 4, ExtensionInstaller 3,
@@ -48,6 +48,8 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # BrowserProfiles 12, UnfocusedWebViews 7, HistoryMenu 2, ShellDevServer 7,
 # ShellDevServerLoad 4, ShellDevServerGone 1.
 #
+# 891, and it was 885 — an agent's DevTools methods to a browser window are
+# six CommandProtocol cases. Before that
 # 884, and it was 867 — serving a shell from `domicile dev`'s dev server is
 # twelve ShellDevServer cases, two ShellSource, one ShellSwap and two
 # CommandProtocol. Before that
@@ -316,7 +318,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=885
+FLOOR=891
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

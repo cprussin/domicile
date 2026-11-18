@@ -5,7 +5,11 @@
 //! desktop goes through the CLI, so a tool and its verb cannot disagree. See
 //! `docs/CLI.md#domicile-mcp`.
 
+mod browser;
+
 use std::io::{self, BufRead, Write};
+
+use browser::Browser;
 
 use domicile_protocol::DeskShot;
 use serde_json::{json, Map, Value};
@@ -120,6 +124,8 @@ enum Tool {
     Scroll,
     Key,
     TypeText,
+    /// A browser window driven through `domicile devtools`.
+    Browser(Browser),
 }
 
 /// How many pixels of the desk each pixel of the last screenshot is, across
@@ -135,7 +141,7 @@ struct View {
 const FIT: u32 = 1280;
 
 /// Each tool, by name, in the order `tools/list` gives them.
-const TOOLS: [(&str, Tool); 18] = [
+const TOOLS: [(&str, Tool); 24] = [
     ("list_windows", Tool::Listing("list-windows")),
     ("list_displays", Tool::Listing("list-displays")),
     ("list_inputs", Tool::Listing("list-inputs")),
@@ -154,6 +160,12 @@ const TOOLS: [(&str, Tool); 18] = [
     ("scroll", Tool::Scroll),
     ("key", Tool::Key),
     ("type_text", Tool::TypeText),
+    ("browser_snapshot", Tool::Browser(Browser::Snapshot)),
+    ("browser_click", Tool::Browser(Browser::Click)),
+    ("browser_type", Tool::Browser(Browser::Type)),
+    ("browser_key", Tool::Browser(Browser::Key)),
+    ("browser_navigate", Tool::Browser(Browser::Navigate)),
+    ("browser_screenshot", Tool::Browser(Browser::Screenshot)),
 ];
 
 fn tool(name: &str) -> Option<Tool> {
@@ -283,6 +295,7 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             json!({"text": {"type": "string"}}),
             vec!["text"],
         ),
+        Tool::Browser(browser) => browser::described(browser),
     }
 }
 
@@ -300,8 +313,10 @@ fn called(
         Value::Object(arguments) => arguments,
         other => return Ok(said(false, format!("arguments are an object, not {other}"))),
     };
-    if let Tool::Screenshot = tool {
-        return screenshot(domicile, view);
+    match tool {
+        Tool::Screenshot => return screenshot(domicile, view),
+        Tool::Browser(browser) => return browser::called(browser, arguments, domicile),
+        _ => {}
     }
     let runs = match commands(tool, arguments, *view) {
         Ok(runs) => runs,
@@ -367,7 +382,9 @@ fn commands(
             string(arguments, "change")?.into_iter().collect(),
         ]
         .concat()]),
-        Tool::Screenshot => unreachable!("screenshot answers an image, not a run"),
+        Tool::Screenshot | Tool::Browser(_) => {
+            unreachable!("screenshot and the browser tools are not single runs")
+        }
         Tool::Click => {
             let at = on_the_desk(view, number(arguments, "x")?, number(arguments, "y")?)?;
             let action = match (string(arguments, "button")?.as_deref(), arguments.get("count")) {
