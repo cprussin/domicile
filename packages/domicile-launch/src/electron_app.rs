@@ -272,3 +272,59 @@ fn asar_package(asar: &Path) -> Result<Vec<u8>, String> {
         .map(<[u8]>::to_vec)
         .ok_or_else(|| "it ends inside package.json".to_string())
 }
+
+/// The sizes an icon is looked for at in a package's own `hicolor` theme,
+/// best first: big enough for a notification, small enough for the desktop
+/// to take as a file.
+const ICON_SIZES: [&str; 6] = ["128x128", "256x256", "96x96", "64x64", "48x48", "scalable"];
+
+/// The icon a notification about the app `target` names draws, as `Notify`'s
+/// `app_icon` takes it.
+///
+/// - An entry id's is its entry's `Icon`, under `application_dirs`.
+/// - A path's is the `Icon` of the entry named like its program in the
+///   nearest `share/applications` above it, else above `resources`: the
+///   app's own package. It is that package's icon file when the package has
+///   one, so it is drawn even where the desktop's icon theme lacks it.
+pub fn app_icon(target: &str, resources: &Path, application_dirs: &[PathBuf]) -> String {
+    let named_by_path = target.contains('/');
+    if !named_by_path {
+        let id = target.strip_suffix(".desktop").unwrap_or(target);
+        return domicile_host::app_names::app(id, application_dirs).icon;
+    }
+    let program = Path::new(target).file_name().map_or_else(
+        || target.to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    let package = Path::new(target)
+        .ancestors()
+        .chain(resources.ancestors())
+        .find(|dir| dir.join("share/applications").is_dir());
+    match package {
+        Some(package) => {
+            let icon =
+                domicile_host::app_names::app(&program, &[package.join("share/applications")]).icon;
+            icon_file(package, &icon).unwrap_or(icon)
+        }
+        None => program,
+    }
+}
+
+/// `icon`'s file in `package`'s own `hicolor` theme or `pixmaps`, if it has
+/// one. An absolute `icon` is a file already.
+fn icon_file(package: &Path, icon: &str) -> Option<String> {
+    if Path::new(icon).is_absolute() {
+        return Some(icon.to_string());
+    }
+    let themed = ICON_SIZES.iter().flat_map(|size| {
+        ["png", "svg"].map(|extension| {
+            package.join(format!(
+                "share/icons/hicolor/{size}/apps/{icon}.{extension}"
+            ))
+        })
+    });
+    themed
+        .chain([package.join(format!("share/pixmaps/{icon}.png"))])
+        .find(|file| file.is_file())
+        .map(|file| file.display().to_string())
+}

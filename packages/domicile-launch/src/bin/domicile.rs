@@ -53,7 +53,9 @@ use domicile_launch::control_socket::{
     PATIENCE as ANSWER_WITHIN, VARIABLE,
 };
 use domicile_launch::dev::{dev_socket, going_back, loading};
-use domicile_launch::electron_app::{app_name, electron_app, PROFILE_VARIABLE, UNSUPPORTED_EXIT};
+use domicile_launch::electron_app::{
+    app_icon, app_name, electron_app, PROFILE_VARIABLE, UNSUPPORTED_EXIT,
+};
 use domicile_launch::electron_schemes::{self, schemes_switch, with_known};
 use domicile_launch::electron_wrapper::{record, through_wrappers, WrapperError, RECORD};
 use domicile_launch::graphical_session;
@@ -370,6 +372,7 @@ fn electron_opened(
             let said = notification::session_bus().and_then(|bus| {
                 notification::notify(
                     &bus,
+                    &app_icon(target, &app.resources, &applications),
                     &format!("{name} runs on its own Electron"),
                     "It needs something Domicile's engine doesn't do yet, so its \
                      windows aren't the desktop's own this time.",
@@ -1092,7 +1095,7 @@ fn agents_served_at(listener: std::net::TcpListener, base: String) -> Result<Exi
             let body =
                 format!("Enter {code} to let it sign in. If you didn't start this, ignore it.");
             let shown = notification::session_bus()
-                .and_then(|bus| notification::notify(&bus, &summary, &body));
+                .and_then(|bus| notification::notify(&bus, "", &summary, &body));
             if let Err(why) = shown {
                 eprintln!("domicile: could not show the code ({why}); it is {code}");
             }
@@ -2162,7 +2165,7 @@ fn say_on_the_desk(config: &Path, why: &str) {
         .unwrap_or(config.as_os_str())
         .to_string_lossy();
     let said = notification::session_bus()
-        .and_then(|bus| notification::notify(&bus, &format!("{name} did not reload"), why));
+        .and_then(|bus| notification::notify(&bus, "", &format!("{name} did not reload"), why));
     if let Err(unsaid) = said {
         eprintln!("domicile: cannot say so on the desk: {unsaid}");
     }

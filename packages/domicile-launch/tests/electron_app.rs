@@ -4,7 +4,7 @@ use std::fs;
 use std::os::unix::fs::{symlink, PermissionsExt as _};
 use std::path::{Path, PathBuf};
 
-use domicile_launch::electron_app::{app_name, electron_app, ElectronApp, ElectronError};
+use domicile_launch::electron_app::{app_icon, app_name, electron_app, ElectronApp, ElectronError};
 
 /// Writes `text` at `path` under `root`, making its directories.
 fn write(root: &Path, path: &str, text: &str) -> PathBuf {
@@ -389,4 +389,73 @@ fn an_app_whose_package_cannot_be_read_says_why() {
     let why = app_name(&root.path().join("resources")).unwrap_err();
 
     assert!(why.contains("app.asar"), "{why}");
+}
+
+#[test]
+fn an_entrys_icon_is_its_icon() {
+    let root = tempfile::tempdir().unwrap();
+    write(
+        root.path(),
+        "share/applications/element-desktop.desktop",
+        "[Desktop Entry]\nType=Application\nName=Element\nIcon=element\nExec=element-desktop\n",
+    );
+
+    assert_eq!(
+        app_icon(
+            "element-desktop.desktop",
+            &root.path().join("lib/resources"),
+            &[root.path().join("share/applications")],
+        ),
+        "element"
+    );
+}
+
+#[test]
+fn an_apps_icon_by_path_is_its_packages_icon_file() {
+    let root = tempfile::tempdir().unwrap();
+    write(
+        root.path(),
+        "element/share/applications/element-desktop.desktop",
+        "[Desktop Entry]\nType=Application\nName=Element\nIcon=element\nExec=element-desktop\n",
+    );
+    let icon = write(
+        root.path(),
+        "element/share/icons/hicolor/128x128/apps/element.png",
+        "png",
+    );
+    write(
+        root.path(),
+        "element/share/icons/hicolor/16x16/apps/element.png",
+        "png",
+    );
+    let program = script(root.path(), "element/bin/element-desktop", "\x7fELF");
+
+    assert_eq!(
+        app_icon(
+            program.to_str().unwrap(),
+            &root.path().join("unwrapped/lib/resources"),
+            &[],
+        ),
+        icon.to_str().unwrap()
+    );
+}
+
+#[test]
+fn an_apps_icon_by_path_is_found_beside_its_resources_too() {
+    let root = tempfile::tempdir().unwrap();
+    let program = script(root.path(), "wrapper/bin/slack", "#!/bin/sh\n");
+    write(
+        root.path(),
+        "slack/share/applications/slack.desktop",
+        "[Desktop Entry]\nType=Application\nName=Slack\nIcon=slack\nExec=slack\n",
+    );
+
+    assert_eq!(
+        app_icon(
+            program.to_str().unwrap(),
+            &root.path().join("slack/lib/slack/resources"),
+            &[],
+        ),
+        "slack"
+    );
 }
