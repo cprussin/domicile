@@ -480,6 +480,13 @@ const dragOnScreen = (
  * A browser window's `<webview>`, focused as when its page has the keyboard.
  * Keys sent to a focused page never reach the document.
  */
+/** Ends `element`'s transition of `propertyName`. */
+const transitionEnd = (element: Element, propertyName: string): void => {
+  const event = new Event("transitionend", { bubbles: true });
+  Object.defineProperty(event, "propertyName", { value: propertyName });
+  fireEvent(element, event);
+};
+
 const focusedPage = (): HTMLElement => {
   const page = document.createElement("webview");
   page.tabIndex = -1;
@@ -886,6 +893,22 @@ describe("PortalDialogs", () => {
 
       await waitFor(() => {
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      });
+    });
+
+    it("animates out as the request goes", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([access(1)]);
+      host.push([]);
+
+      expect(screen.getByRole("dialog", { hidden: true })).toHaveAttribute(
+        "data-closed",
+      );
+      await waitFor(() => {
+        expect(
+          screen.queryByRole("dialog", { hidden: true }),
+        ).not.toBeInTheDocument();
       });
     });
 
@@ -2284,6 +2307,17 @@ describe("PortalDialogs", () => {
       ]);
     });
 
+    it("copies nothing more with Ctrl+C as it animates out", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([frozen(1, "screenshot")]);
+      await userEvent.keyboard("{Control>}c{/Control}");
+      host.push([]);
+      fireEvent.keyDown(document, { ctrlKey: true, key: "c" });
+
+      expect(host.answers).toHaveLength(1);
+    });
+
     it("copies an area dragged on the desk with Ctrl+C", async () => {
       const host = new FakeHost();
       render(<PortalDialogs domicile={host.domicile} />);
@@ -2437,6 +2471,94 @@ describe("PortalDialogs", () => {
         expect(
           screen.getByRole("application", { name: "Drag to select an area" }),
         ).toHaveFocus();
+        page.remove();
+      });
+
+      it("fades the dialog out as the picker comes up", () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([frozen(1, "screenshot")]);
+        fireEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+
+        expect(screen.getByRole("dialog", { hidden: true })).toHaveAttribute(
+          "data-closed",
+        );
+        expect(
+          screen.getByRole("application", { name: "Drag to select an area" }),
+        ).toBeInTheDocument();
+      });
+
+      it("fades out on Escape, then shows the dialog", async () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([frozen(1, "screenshot")]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        await userEvent.keyboard("{Escape}");
+        const picker = screen.getByRole("application", {
+          hidden: true,
+          name: "Drag to select an area",
+        });
+
+        expect(picker).toHaveAttribute("data-leaving");
+        transitionEnd(picker, "opacity");
+        expect(picker).not.toBeInTheDocument();
+        expect(
+          await screen.findByRole("button", { name: "Select on screen" }),
+        ).toBeInTheDocument();
+      });
+
+      it("fades out once answered", async () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([frozen(1, "screenshot")]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        host.push([]);
+        const picker = screen.getByRole("application", {
+          hidden: true,
+          name: "Drag to select an area",
+        });
+
+        expect(picker).toHaveAttribute("data-leaving");
+        transitionEnd(picker, "opacity");
+        expect(picker).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole("dialog", { hidden: true }),
+        ).not.toBeInTheDocument();
+      });
+
+      it("copies nothing more with Ctrl+C as it fades out", async () => {
+        const host = new FakeHost();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([frozen(1, "screenshot")]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        dragOnScreen([0, 10], [40, 30]);
+        await userEvent.keyboard("{Control>}c{/Control}");
+        host.push([]);
+        fireEvent.keyDown(document, { ctrlKey: true, key: "c" });
+
+        expect(host.answers).toHaveLength(1);
+      });
+
+      it("lets a window's page have the keyboard back as it fades out", async () => {
+        const host = new FakeHost();
+        const page = focusedPage();
+        render(<PortalDialogs domicile={host.domicile} />);
+        host.push([frozen(1, "screenshot")]);
+        await userEvent.click(
+          screen.getByRole("button", { name: "Select on screen" }),
+        );
+        host.push([]);
+        page.focus();
+
+        expect(page).toHaveFocus();
         page.remove();
       });
 

@@ -16,12 +16,15 @@ import { CheckboxRow, ChoiceList, RadioRow } from "../ChoiceRow/ChoiceRow";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
 import { Switch } from "../Switch/Switch";
 import type { App } from "../useApps/useApps";
+import type { Presence } from "./presence";
 import { WindowIcon } from "./WindowIcon";
 
 type Props = {
   answer: (answer: PortalAnswer) => void;
   apps: (appId: string) => App;
   body: AgentBody;
+  /** Whether it is up; see {@link Presence}. */
+  presence: Presence;
   screen: string | undefined;
 };
 
@@ -37,7 +40,13 @@ type Reach = "desk" | "windows";
  * Asked to change what an agent reaches, it starts from what it reaches
  * now, and dismissing it keeps that.
  */
-export const AgentDialog = ({ answer, apps, body, screen }: Props) => {
+export const AgentDialog = ({
+  answer,
+  apps,
+  body,
+  presence,
+  screen,
+}: Props) => {
   const changing = body.current !== undefined;
   const [reach, setReach] = useState<Reach>(
     body.current?.kind === "windows" ? "windows" : "desk",
@@ -90,7 +99,7 @@ export const AgentDialog = ({ answer, apps, body, screen }: Props) => {
           answer(Answer.Canceled());
         }
       }}
-      open
+      {...presence}
       screen={screen}
       title={
         changing

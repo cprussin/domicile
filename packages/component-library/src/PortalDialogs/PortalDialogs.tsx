@@ -19,9 +19,10 @@ import {
   PortalKind,
   SHELL_APP_ID,
 } from "@domicile-desktop/sdk/portal";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import type { Folders } from "../FilePicker/folders";
 import { desktopFolders } from "../FilePicker/folders";
+import { useLeavingRows } from "../LeavingRows/useLeavingRows";
 import type { App } from "../useApps/useApps";
 import { useApps } from "../useApps/useApps";
 import { AccessDialog } from "./AccessDialog";
@@ -36,6 +37,7 @@ import { LauncherDialog } from "./LauncherDialog";
 import { PickColorDialog } from "./PickColorDialog";
 import { PrintDialog } from "./PrintDialog";
 import { pageIcon } from "./page-icon";
+import type { Presence } from "./presence";
 import type { Recording } from "./RecordingToolbar";
 import { RecordingToolbar } from "./RecordingToolbar";
 import { RemoteDesktopDialog } from "./RemoteDesktopDialog";
@@ -175,11 +177,29 @@ export const PortalDialogs = memo(
       }
     }, [portals, requests]);
 
-    const dialogs = stacked(
-      requests.filter(
-        (request) => claims.get(request.id)?.kind !== CastClaimKind.Answered,
-      ),
+    const dialogs = useMemo(
+      () =>
+        stacked(
+          requests.filter(
+            (request) =>
+              claims.get(request.id)?.kind !== CastClaimKind.Answered,
+          ),
+        ),
+      [claims, requests],
     );
+    // A dialog stays, closed, until it has animated out. One a cast to a TV
+    // answered never showed, so it goes at once, before paint.
+    const { onLeft, rows } = useLeavingRows(dialogs, idOf, true);
+    useLayoutEffect(() => {
+      for (const { item, leaving } of rows) {
+        if (
+          leaving !== undefined &&
+          claims.get(item.id)?.kind === CastClaimKind.Answered
+        ) {
+          onLeft(item.id);
+        }
+      }
+    }, [claims, onLeft, rows]);
     const asking = dialogs.length > 0;
     useEffect(
       () => (asking ? holdKeyboard?.() : undefined),
@@ -224,7 +244,7 @@ export const PortalDialogs = memo(
             }}
           />
         ))}
-        {dialogs.map((shown) => (
+        {rows.map(({ item: shown, leaving }) => (
           <Dialog
             answer={(answer) => {
               portals.answer(shown.id, answer);
@@ -238,6 +258,14 @@ export const PortalDialogs = memo(
             domicile={domicile}
             folders={folders}
             key={shown.id}
+            presence={{
+              onOpenChangeComplete: (open) => {
+                if (!open) {
+                  onLeft(shown.id);
+                }
+              },
+              open: leaving === undefined,
+            }}
             request={shown}
             screen={screenFor(shown, screen, screenOf)}
             shellChords={shellChords}
@@ -248,6 +276,8 @@ export const PortalDialogs = memo(
     );
   },
 );
+
+const idOf = (request: PortalRequest): number => request.id;
 
 /** The windows this page draws. */
 const drawnOnPage = () => drawnWindows(document);
@@ -266,6 +296,7 @@ const Dialog = ({
   browserWindows,
   claim,
   folders,
+  presence,
   request,
   screen,
   shellChords,
@@ -279,6 +310,7 @@ const Dialog = ({
   /** What a cast to a TV that asked for `request` makes of it. */
   claim: CastClaim | undefined;
   folders: Folders;
+  presence: Presence;
   request: PortalRequest;
   screen: string | undefined;
   shellChords: readonly string[];
@@ -292,6 +324,7 @@ const Dialog = ({
           answer={answer}
           asker={request.appId === SHELL_APP_ID ? undefined : asker}
           body={request.body}
+          presence={presence}
           screen={screen}
         />
       );
@@ -301,6 +334,7 @@ const Dialog = ({
           answer={answer}
           asker={asker}
           body={request.body}
+          presence={presence}
           screen={screen}
         />
       );
@@ -310,6 +344,7 @@ const Dialog = ({
           answer={answer}
           asker={asker}
           body={request.body}
+          presence={presence}
           screen={screen}
         />
       );
@@ -320,6 +355,7 @@ const Dialog = ({
           asker={asker}
           body={request.body}
           domicile={domicile}
+          presence={presence}
           screen={screen}
         />
       );
@@ -329,6 +365,7 @@ const Dialog = ({
           answer={answer}
           body={request.body}
           folders={folders}
+          presence={presence}
           screen={screen}
         />
       );
@@ -339,6 +376,7 @@ const Dialog = ({
           asker={asker}
           body={request.body}
           files={domicile.files}
+          presence={presence}
           screen={screen}
         />
       );
@@ -349,6 +387,7 @@ const Dialog = ({
           apps={apps}
           asker={asker}
           body={request.body}
+          presence={presence}
           screen={screen}
           shellChords={shellChords}
         />
@@ -360,6 +399,7 @@ const Dialog = ({
           asker={asker}
           body={request.body}
           files={domicile.files}
+          presence={presence}
           screen={screen}
         />
       );
@@ -369,6 +409,7 @@ const Dialog = ({
           answer={answer}
           asker={asker}
           body={request.body}
+          presence={presence}
           screen={screen}
         />
       );
@@ -378,6 +419,7 @@ const Dialog = ({
           answer={answer}
           asker={asker}
           body={request.body}
+          presence={presence}
           screen={screen}
         />
       );
@@ -391,6 +433,7 @@ const Dialog = ({
           browserWindows={browserWindows}
           castTo={claim?.kind === CastClaimKind.Pick ? claim.to : undefined}
           pageIcon={pageIconOnPage}
+          presence={presence}
           previewWindow={domicile.capture.preview}
           record={request.appId === SHELL_APP_ID}
           screen={screen}
@@ -404,6 +447,7 @@ const Dialog = ({
           asker={asker}
           body={request.body}
           folders={folders}
+          presence={presence}
           screen={screen}
         />
       );
@@ -416,6 +460,7 @@ const Dialog = ({
           body={request.body}
           browserWindows={browserWindows}
           pageIcon={pageIconOnPage}
+          presence={presence}
           previewWindow={domicile.capture.preview}
           screen={screen}
           shownWindows={shownWindows}
@@ -427,6 +472,7 @@ const Dialog = ({
           answer={answer}
           asker={asker}
           body={request.body}
+          presence={presence}
           screen={screen}
         />
       );
@@ -436,6 +482,7 @@ const Dialog = ({
           answer={answer}
           apps={apps}
           body={request.body}
+          presence={presence}
           screen={screen}
         />
       );

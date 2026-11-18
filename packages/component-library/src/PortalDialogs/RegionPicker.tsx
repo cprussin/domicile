@@ -30,6 +30,12 @@ type Props = {
   cancel: () => void;
   /** The desk to draw under the selection; the live desk shows without it. */
   frozen?: FrozenDesk | undefined;
+  /**
+   * Whether it is up. Turned off, it fades out, out of reach, then calls
+   * `onOpenChangeComplete(false)`.
+   */
+  open: boolean;
+  onOpenChangeComplete: (open: boolean) => void;
 };
 
 enum GrabKind {
@@ -54,9 +60,17 @@ type Grab = ReturnType<(typeof Grab)[keyof typeof Grab]>;
  * Covers the whole page, which spans the desk, and lets the user select a
  * rectangle on it. The rectangle stays, with a corner to drag at each corner
  * and the buttons that take it below; dragging inside moves it, and dragging
- * outside draws a new one. A click that drags nothing selects nothing.
+ * outside draws a new one. A click that drags nothing selects nothing. It
+ * fades in and out.
  */
-export const RegionPicker = ({ actions, back, cancel, frozen }: Props) => {
+export const RegionPicker = ({
+  actions,
+  back,
+  cancel,
+  frozen,
+  onOpenChangeComplete,
+  open,
+}: Props) => {
   const [selected, setSelected] = useState<Region | undefined>(undefined);
   const [grab, setGrab] = useState<Grab | undefined>(undefined);
   const desk = useRef<HTMLDivElement>(null);
@@ -67,11 +81,12 @@ export const RegionPicker = ({ actions, back, cancel, frozen }: Props) => {
   // window under the desk, and the engine refocuses the last page when the
   // shell regains the keyboard. Focus elsewhere in the shell, such as the lock
   // screen's field, stays where it is.
+  // Fading out, it lets the keyboard go.
   useEffect(() => {
     const root = desk.current;
     if (root === null) {
       throw new Error("region picker: no desk to focus");
-    } else {
+    } else if (open) {
       const keep = (event: FocusEvent) => {
         if (
           event.target instanceof Element &&
@@ -85,8 +100,10 @@ export const RegionPicker = ({ actions, back, cancel, frozen }: Props) => {
       return () => {
         document.removeEventListener("focusin", keep);
       };
+    } else {
+      return undefined;
     }
-  }, []);
+  }, [open]);
 
   useEffect(() => {
     const press = (event: KeyboardEvent) => {
@@ -98,17 +115,21 @@ export const RegionPicker = ({ actions, back, cancel, frozen }: Props) => {
         pressed.pick(selected);
       }
     };
-    document.addEventListener("keydown", press);
+    if (open) {
+      document.addEventListener("keydown", press);
+    }
     return () => {
       document.removeEventListener("keydown", press);
     };
-  }, [actions, back, selected]);
+  }, [actions, back, open, selected]);
 
   return (
     <div
       aria-label="Drag to select an area"
       className={deskStyles}
+      data-leaving={open ? undefined : ""}
       data-selected={selected === undefined ? undefined : ""}
+      inert={!open}
       onPointerDown={(event) => {
         const point = pointAt(event);
         setGrab(Grab.Corner(point));
@@ -126,6 +147,15 @@ export const RegionPicker = ({ actions, back, cancel, frozen }: Props) => {
           setSelected(
             region.size[0] > 0 && region.size[1] > 0 ? region : undefined,
           );
+        }
+      }}
+      onTransitionEnd={(event) => {
+        if (
+          !open &&
+          event.target === event.currentTarget &&
+          event.propertyName === "opacity"
+        ) {
+          onOpenChangeComplete(false);
         }
       }}
       ref={desk}
@@ -227,13 +257,20 @@ const CORNERS = [
 type Corner = (typeof CORNERS)[number];
 
 const deskStyles = css({
+  _starting: { opacity: 0 },
+  "&[data-leaving]": {
+    opacity: 0,
+    transition: "opacity {durations.fast} {easings.in}",
+  },
   "&[data-selected]": { backgroundColor: "transparent" },
   backgroundColor: "backdrop",
   cursor: "crosshair",
   inset: 0,
+  opacity: 1,
   overflow: "hidden",
   position: "fixed",
   touchAction: "none",
+  transition: "opacity {durations.normal} {easings.out}",
   userSelect: "none",
   zIndex: "modal",
 });
