@@ -30,11 +30,17 @@ jobs:
       - uses: actions/checkout@v7
       - uses: superfly/flyctl-actions/setup-flyctl@v1
       # Built on fly's builder from the repository's root, which holds the
-      # Cargo workspace.
+      # Cargo workspace. Exactly one machine: a desk's connection lives on the
+      # machine it dialed, so a second machine would answer half the clients
+      # with no desk to reach.
       - run: >-
           flyctl deploy .
           --config packages/domicile-relay/fly.toml
           --dockerfile packages/domicile-relay/Dockerfile
           --remote-only
+          --ha=false
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - run: flyctl scale count 1 --yes --config packages/domicile-relay/fly.toml
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
