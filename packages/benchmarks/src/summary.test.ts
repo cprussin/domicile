@@ -56,6 +56,24 @@ describe("summarize", () => {
     expect(row?.usedMib).toEqual({ max: 5, median: 4, min: 3 });
   });
 
+  test("takes steal apart from busy, when the runs read it", () => {
+    const stolen = {
+      ...run("sway", "rest", 4096),
+      samples: [
+        { ...sample(0, 1000, 4096), stealTicks: 0 },
+        { ...sample(250, 2000, 4096), stealTicks: 125 },
+      ],
+    };
+    const [row] = summarize([stolen]);
+    expect(row?.cpuPercent.median).toBe(100);
+    // 125 of 1000 ticks on 4 cores is half a core.
+    expect(row?.stealPercent?.median).toBe(50);
+    expect(markdown([row].flatMap((r) => (r ? [r] : [])))).toContain("steal");
+    expect(summarize([run("sway", "rest", 4096)])[0]?.stealPercent).toBe(
+      undefined,
+    );
+  });
+
   test("keeps desktops and workloads apart", () => {
     expect(
       summarize([run("sway", "rest", 4096), run("gnome", "rest", 4096)]),

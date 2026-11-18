@@ -25,8 +25,11 @@ let
     text = ''
       used=$(awk '/^MemTotal:/ { t = $2 } /^MemAvailable:/ { a = $2 } END { print t - a }' /proc/meminfo)
       read -r _ user nice system idle iowait irq softirq steal _ </proc/stat
-      busy=$((user + nice + system + irq + softirq + steal))
-      total=$((busy + idle + iowait))
+      # Steal is time the host gave to its other work (crux runs CI beside
+      # the benchmark): not the desktop's, so not busy, but kept apart to
+      # show how contended a run was.
+      busy=$((user + nice + system + irq + softirq))
+      total=$((busy + idle + iowait + steal))
       load=$(cut -d' ' -f1 /proc/loadavg)
       # Kernel threads have no memory to read, and a process can exit
       # between the glob and the read: getline skips both, where reading
@@ -54,8 +57,8 @@ let
         echo "bench-sample: read no process's memory" >&2
         exit 1
       fi
-      printf '{"busyTicks":%d,"totalTicks":%d,"usedKib":%d,"load1":%s,"pssKib":%d,"sessionPssKib":%d}\n' \
-        "$busy" "$total" "$used" "$load" "$all" "$mine"
+      printf '{"busyTicks":%d,"stealTicks":%d,"totalTicks":%d,"usedKib":%d,"load1":%s,"pssKib":%d,"sessionPssKib":%d}\n' \
+        "$busy" "$steal" "$total" "$used" "$load" "$all" "$mine"
     '';
   };
 
@@ -95,6 +98,33 @@ let
             "$((fields[11] + fields[12]))"
         done
       done
+    '';
+  };
+
+  # The errors and warnings a DevTools page has logged so far, given its
+  # WebSocket address: one line each, its message cut short and its first
+  # frame's file (query left off, which can hold tokens) and line. Enabling
+  # Runtime and Log replays what the page logged before anyone listened.
+  console = pkgs.writeShellApplication {
+    name = "bench-console";
+    runtimeInputs = [ pkgs.coreutils pkgs.jq pkgs.websocat ];
+    text = ''
+      { printf '%s\n' '{"id":1,"method":"Runtime.enable"}' '{"id":2,"method":"Log.enable"}'; sleep 3; } |
+        timeout 10 websocat -t -B 16777216 "$1" |
+        jq -r '
+          def where(url; line): " at \((url // "?") | sub("\\?.*"; "")):\(line // "?")";
+          def short: tostring | split("\n")[0] | .[0:200];
+          if .method == "Runtime.exceptionThrown" then
+            .params.exceptionDetails
+            | "exception: \((.exception.description // .text) | short)"
+              + where(.stackTrace.callFrames[0].url // .url; .stackTrace.callFrames[0].lineNumber // .lineNumber)
+          elif .method == "Runtime.consoleAPICalled" and (.params.type == "error" or .params.type == "warning") then
+            .params
+            | "console.\(.type): \(.args | map(.value // .description // "" | short) | join(" ") | .[0:200])"
+              + where(.stackTrace.callFrames[0].url; .stackTrace.callFrames[0].lineNumber)
+          elif .method == "Log.entryAdded" and (.params.entry.level == "error" or .params.entry.level == "warning") then
+            .params.entry | "log.\(.level): \(.text | short)" + where(.url; .lineNumber)
+          else empty end' || true
     '';
   };
 
@@ -294,6 +324,7 @@ let
       sample
       top
       threads
+      console
       pkgs.curl
       pkgs.chromium
       unfree.slack

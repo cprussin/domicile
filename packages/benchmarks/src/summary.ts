@@ -19,6 +19,8 @@ const sampleSchema = z.object({
   // Every process's memory: never none.
   pssKib: z.number().positive(),
   sessionPssKib: z.number(),
+  /** Time the host gave its other work; not in `busyTicks`. */
+  stealTicks: z.number().optional(),
   totalTicks: z.number(),
   usedKib: z.number(),
 });
@@ -52,6 +54,8 @@ export type Row = {
   load1: Spread;
   runs: number;
   sessionPssMib: Spread;
+  /** CPU the host took for its other work, for runs that read it. */
+  stealPercent?: Spread;
   usedMib: Spread;
   workload: string;
 };
@@ -98,6 +102,18 @@ const cpuPercent = (run: Run): number => {
   const busy =
     (last.busyTicks - first.busyTicks) / (last.totalTicks - first.totalTicks);
   return Math.round(busy * run.cores * 100);
+};
+
+/** CPU the host took for its other work, as a percentage of one core. */
+const stealPercent = (run: Run): number | undefined => {
+  const first = run.samples[0];
+  const last = run.samples.at(-1);
+  if (first?.stealTicks === undefined || last?.stealTicks === undefined) {
+    return undefined;
+  }
+  const stolen =
+    (last.stealTicks - first.stealTicks) / (last.totalTicks - first.totalTicks);
+  return Math.round(stolen * run.cores * 100);
 };
 
 /** The host's readings, which a run has on every sample or on none. */
@@ -178,8 +194,19 @@ const perRun = (run: Run) => ({
   host: hostMeasures(run),
   load1: median(run.samples.map((sample) => sample.load1)),
   sessionPssMib: mib(median(run.samples.map((s) => s.sessionPssKib))),
+  stealPercent: stealPercent(run),
   usedMib: mib(median(run.samples.map((sample) => sample.usedKib))),
 });
+
+/** Steal across a group's runs, when every run read it. */
+const stealSpread = (
+  stolen: readonly (number | undefined)[],
+): Pick<Row, "stealPercent"> => {
+  const read = stolen.flatMap((s) => (s === undefined ? [] : [s]));
+  return read.length === stolen.length && read.length > 0
+    ? { stealPercent: spread(read) }
+    : {};
+};
 
 /** Groups runs by desktop and workload, in the order each first appears. */
 export const summarize = (runs: readonly Run[]): Row[] =>
@@ -202,6 +229,7 @@ export const summarize = (runs: readonly Run[]): Row[] =>
         load1: spread(measured.map((m) => m.load1)),
         runs: measured.length,
         sessionPssMib: spread(measured.map((m) => m.sessionPssMib)),
+        ...stealSpread(measured.map((m) => m.stealPercent)),
         usedMib: spread(measured.map((m) => m.usedMib)),
         workload: first.workload,
       };
@@ -257,6 +285,18 @@ export const markdown = (rows: readonly Row[]): string =>
     ),
     table(rows, "CPU (% of one core)", (row) => ranged(row.cpuPercent, "%")),
     table(rows, "Load average (1 min)", (row) => ranged(row.load1, "")),
+    ...(rows.some((row) => row.stealPercent !== undefined)
+      ? [
+          table(
+            rows,
+            "CPU the host took for its other work (steal, % of one core)",
+            (row) =>
+              row.stealPercent === undefined
+                ? "–"
+                : ranged(row.stealPercent, "%"),
+          ),
+        ]
+      : []),
     ...(rows.some((row) => row.host !== undefined)
       ? [
           table(

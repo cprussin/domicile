@@ -243,11 +243,23 @@ try:
     print(f"result: {json.dumps({**result, 'processes': None})}")
 except Exception:
     print(f"DevTools pages: {cdp_urls()}")
+    # Why a Slack page stalled: what it logged, errors and warnings only, with
+    # the workspace's name masked (GitHub masks secrets in the log too).
+    workspace = os.environ.get("BENCH_SLACK_WORKSPACE") or "\0"
+    for port in (9222, 9223):
+        for target in json.loads(cdp_targets(port)):
+            if "slack.com" in target.get("url", "") and "webSocketDebuggerUrl" in target:
+                page = target["url"].split("?")[0]
+                logged = machine.execute(f"bench-console '{target['webSocketDebuggerUrl']}'")[1]
+                print(f"== console of {page}".replace(workspace, "…"))
+                print(logged.replace(workspace, "…"))
     for command in [
         "dmesg | grep -iE 'virgl|drm|gpu' | tail -10",
         "ls -la /tmp/*.log",
         # Whether Slack got as far as writing its profile.
         "ls -la /home/alice/.config/Slack",
+        # A link left here is one Slack's first instance never read.
+        "ls -la /home/alice/.config/Slack/DomicileSingletonInbox",
         "for log in /tmp/*.log; do echo \"== $log\"; tail -20 \"$log\" | sed 's,magic-login/[^ ]*,magic-login/…,' | cut -c1-200; done",
         PROCESSES,
     ]:
