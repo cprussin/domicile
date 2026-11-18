@@ -3,7 +3,7 @@
 // `electron-host <install>/resources [app arguments…]`.
 
 import { statSync } from "node:fs";
-import { access, readFile } from "node:fs/promises";
+import { access, mkdir, readFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { readAppPackage } from "./app-package";
@@ -360,6 +360,9 @@ const main = async ([resources, ...args]: string[]) => {
     Object.assign(process, electronProcess(mirror));
     Object.assign(process.versions, { electron: ELECTRON_VERSION });
     process.argv = [process.execPath, ...args];
+    // Electron's Chromium has made it before the app's main runs, and apps
+    // write there at once: Slack's first local settings did not save.
+    await mkdir(app.getPath("userData"), { recursive: true });
     await import(pkg.main);
     // Before the app's windows, under the name its main gave it.
     userAgentFallback.announce();

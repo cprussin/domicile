@@ -14,6 +14,8 @@ const MAIN = join(import.meta.dir, "../main.ts");
 
 const MAIN_JS = `
 const { app, nativeTheme, session } = require("electron");
+// Electron has made it before the app's main runs.
+const userDataMade = require("node:fs").existsSync(app.getPath("userData"));
 app.whenReady().then(() => {
   const userAgent = app.userAgentFallback;
   const sessionUserAgent = session.defaultSession.getUserAgent();
@@ -30,6 +32,7 @@ app.whenReady().then(() => {
     resourcesPath: process.resourcesPath,
     type: process.type,
     userData: app.getPath("userData"),
+    userDataMade,
   }));
   app.quit();
 });
@@ -140,6 +143,7 @@ describe("electron-host", () => {
       type: "browser",
       userAgent: electronUserAgent,
       userData: join(home, ".config/Notes"),
+      userDataMade: true,
     });
     expect(seen.appPath).toStartWith(join(home, ".cache/domicile/electron/"));
     expect(seen.appPath).toBe(join(seen.resourcesPath, "app.asar"));
