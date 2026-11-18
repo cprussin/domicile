@@ -1,5 +1,75 @@
 # @domicile-desktop/manganese-bar-module-google-messages
 
+## 1.0.3
+
+### Patch Changes
+
+- Updated dependencies [9478a19]
+- Updated dependencies [8a2777f]
+- Updated dependencies [d0fbc5b]
+- Updated dependencies [9478a19]
+- Updated dependencies [c454256]
+- Updated dependencies [7680c50]
+- Updated dependencies [fb07c3f]
+- Updated dependencies [d566f68]
+- Updated dependencies [4acd3cd]
+- Updated dependencies [6aad1fa]
+- Updated dependencies [87ac040]
+- Updated dependencies [d3978bb]
+- Updated dependencies [3600d3b]
+- Updated dependencies [cd75f9a]
+- Updated dependencies [5c11ddc]
+- Updated dependencies [e4f3394]
+- Updated dependencies [adb0ef5]
+- Updated dependencies [24b88fb]
+- Updated dependencies [81215c5]
+- Updated dependencies [3977a25]
+- Updated dependencies [057faa5]
+- Updated dependencies [3e37020]
+- Updated dependencies [3bdac3b]
+- Updated dependencies [4799f21]
+- Updated dependencies [2a1913f]
+- Updated dependencies [0e71fa1]
+- Updated dependencies [94e5909]
+- Updated dependencies [52e71af]
+- Updated dependencies [14704ae]
+- Updated dependencies [133ce8a]
+- Updated dependencies [f5fbd04]
+- Updated dependencies [da632d6]
+- Updated dependencies [a5ade39]
+- Updated dependencies [756c1bd]
+- Updated dependencies [0a4d218]
+- Updated dependencies [befeb71]
+- Updated dependencies [382819f]
+- Updated dependencies [03dcccf]
+- Updated dependencies [e7b707c]
+- Updated dependencies [ebfad4b]
+- Updated dependencies [9c805c4]
+- Updated dependencies [8c477cc]
+- Updated dependencies [8f74f44]
+- Updated dependencies [996cc29]
+- Updated dependencies [5ef4689]
+- Updated dependencies [85ad296]
+- Updated dependencies [b95da52]
+- Updated dependencies [69247ca]
+- Updated dependencies [9bd54ab]
+- Updated dependencies [09a3ad4]
+- Updated dependencies [8ff882e]
+- Updated dependencies [5315b06]
+- Updated dependencies [25522ef]
+- Updated dependencies [e821d1f]
+- Updated dependencies [a85afe8]
+- Updated dependencies [19cc2c5]
+- Updated dependencies [4a4f057]
+- Updated dependencies [5a70826]
+- Updated dependencies [d2a68f5]
+  - @domicile-desktop/sdk@3.0.0
+  - @domicile-desktop/component-library@2.2.0
+  - @domicile-desktop/react@0.2.0
+  - @domicile-desktop/manganese-page-requests@1.3.0
+  - @domicile-desktop/manganese-host@2.0.3
+  - @domicile-desktop/manganese-bar@1.1.3
+
 ## 1.0.2
 
 ### Patch Changes

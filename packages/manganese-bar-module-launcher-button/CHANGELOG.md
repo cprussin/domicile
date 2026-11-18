@@ -1,5 +1,25 @@
 # @domicile-desktop/manganese-bar-module-launcher-button
 
+## 1.1.1
+
+### Patch Changes
+
+- Updated dependencies [3600d3b]
+- Updated dependencies [adb0ef5]
+- Updated dependencies [3977a25]
+- Updated dependencies [4799f21]
+- Updated dependencies [14704ae]
+- Updated dependencies [133ce8a]
+- Updated dependencies [befeb71]
+- Updated dependencies [382819f]
+- Updated dependencies [a9b83d4]
+- Updated dependencies [b95da52]
+- Updated dependencies [69247ca]
+- Updated dependencies [9bd54ab]
+- Updated dependencies [4a4f057]
+  - @domicile-desktop/component-library@2.2.0
+  - @domicile-desktop/manganese-launcher@1.2.0
+
 ## 1.1.0
 
 ### Minor Changes
