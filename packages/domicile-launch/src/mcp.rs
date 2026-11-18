@@ -11,11 +11,14 @@
 //! See `docs/AGENTS.md`.
 
 mod browser;
+mod http;
+mod oauth;
 
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
 
 use browser::Browser;
+pub use http::{serve_http, Web, IDLE_MS};
 
 use domicile_protocol::{AgentReach, DeskShot};
 use serde_json::{json, Map, Value};
@@ -62,32 +65,75 @@ struct Session {
     view: Option<View>,
 }
 
+/// Runs the `domicile` binary with the arguments it is given.
+type Runs<'a> = dyn FnMut(&[String]) -> io::Result<Ran> + 'a;
+
+/// Asks the user to let the agent it names in.
+type Admits<'a> = dyn FnMut(&str) -> Result<Grant, String> + 'a;
+
+/// One agent's conversation with this server: what it is called, what the
+/// user let it do, and the `domicile` it drives. Each transport keeps one per
+/// session.
+pub struct Agent<'a> {
+    session: Session,
+    domicile: Box<Runs<'a>>,
+    admit: Box<Admits<'a>>,
+}
+
+impl<'a> Agent<'a> {
+    /// `domicile` runs the `domicile` binary with the arguments it is given.
+    /// `admit` asks the user to let the agent it names in, and holds it in
+    /// until this is dropped.
+    pub fn new(
+        domicile: impl FnMut(&[String]) -> io::Result<Ran> + 'a,
+        admit: impl FnMut(&str) -> Result<Grant, String> + 'a,
+    ) -> Agent<'a> {
+        Agent {
+            session: Session {
+                name: UNNAMED.to_string(),
+                grant: None,
+                titles: HashMap::new(),
+                view: None,
+            },
+            domicile: Box::new(domicile),
+            admit: Box::new(admit),
+        }
+    }
+
+    /// The reply to one JSON-RPC message, or `None` for a notification.
+    pub fn answer(&mut self, message: &Value) -> io::Result<Option<Value>> {
+        answer(
+            message,
+            &mut self.domicile,
+            &mut self.admit,
+            &mut self.session,
+        )
+    }
+
+    /// The reply to one line of JSON-RPC, which may not parse.
+    pub fn answer_line(&mut self, line: &str) -> io::Result<Option<Value>> {
+        match serde_json::from_str::<Value>(line) {
+            Ok(message) => self.answer(&message),
+            Err(why) => Ok(Some(error(&Value::Null, PARSE_ERROR, &why.to_string()))),
+        }
+    }
+}
+
 /// Answers each JSON-RPC message on `input`, one per line, on `output`, until
-/// `input` ends. `domicile` runs the `domicile` binary with the arguments it
-/// is given. `admit` asks the user to let the agent it names in, and holds
-/// it in until this returns.
+/// `input` ends, as one [`Agent`].
 pub fn serve(
     input: impl BufRead,
     mut output: impl Write,
-    mut domicile: impl FnMut(&[String]) -> io::Result<Ran>,
-    mut admit: impl FnMut(&str) -> Result<Grant, String>,
+    domicile: impl FnMut(&[String]) -> io::Result<Ran>,
+    admit: impl FnMut(&str) -> Result<Grant, String>,
 ) -> io::Result<()> {
-    let mut session = Session {
-        name: UNNAMED.to_string(),
-        grant: None,
-        titles: HashMap::new(),
-        view: None,
-    };
+    let mut agent = Agent::new(domicile, admit);
     for line in input.lines() {
         let line = line?;
         if line.trim().is_empty() {
             continue;
         }
-        let reply = match serde_json::from_str::<Value>(&line) {
-            Ok(message) => answer(&message, &mut domicile, &mut admit, &mut session)?,
-            Err(why) => Some(error(&Value::Null, PARSE_ERROR, &why.to_string())),
-        };
-        if let Some(reply) = reply {
+        if let Some(reply) = agent.answer_line(&line)? {
             writeln!(output, "{reply}")?;
             output.flush()?;
         }

@@ -17,7 +17,7 @@ type Timer = ReturnType<typeof setTimeout> | undefined;
  */
 export const useLongPress = (
   onLongPress: () => boolean,
-  onClick: () => void,
+  onClick: (event: MouseEvent) => void,
 ) => {
   const timer = useRef<Timer>(undefined);
   // Whether the press in progress went long, so its click is dropped.
@@ -40,7 +40,7 @@ export const useLongPress = (
       const dropped = pressedLong.current && event.detail !== 0;
       pressedLong.current = false;
       if (!dropped) {
-        onClick();
+        onClick(event);
       }
     },
     onPointerCancel: stop,

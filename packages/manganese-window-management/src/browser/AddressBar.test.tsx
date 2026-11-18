@@ -182,15 +182,12 @@ describe("AddressBar", () => {
       expect(calls).toStrictEqual(["open personal"]);
     });
 
-    it("opens the page in a new window of a profile middle-clicked", async () => {
+    it("opens the page in a new window of a profile Ctrl+clicked", async () => {
       const calls: string[] = [];
       render(<AddressBar {...BAR} profile={withProfiles(calls)} />);
 
       await userEvent.click(control("Browser profile: Work"));
-      await userEvent.pointer({
-        keys: "[MouseMiddle]",
-        target: control("Move this page to Personal"),
-      });
+      fireEvent.click(control("Move this page to Personal"), { ctrlKey: true });
 
       expect(calls).toStrictEqual(["open personal"]);
     });
@@ -407,7 +404,7 @@ describe("AddressBar", () => {
     });
 
     // As a middle click on Chrome's back button opens a tab.
-    it("goes back and forward in a new window on a middle click", () => {
+    it("goes back and forward in a new window on a middle click or a Ctrl+click", () => {
       const calls: string[] = [];
       render(
         <AddressBar
@@ -430,7 +427,7 @@ describe("AddressBar", () => {
       );
 
       fireEvent(control("Back"), middleClick());
-      fireEvent(control("Forward"), middleClick());
+      fireEvent.click(control("Forward"), { ctrlKey: true });
 
       expect(calls).toStrictEqual([
         "back in a new window",
@@ -602,7 +599,7 @@ describe("AddressBar", () => {
       expect(await menuItems()).toHaveLength(13);
     });
 
-    it("goes to a picked page, or opens it in a new window on a middle click", async () => {
+    it("goes to a picked page, or opens it in a new window on a middle click or a Ctrl+click", async () => {
       const went: string[] = [];
       render(
         <AddressBar
@@ -617,9 +614,14 @@ describe("AddressBar", () => {
       fireEvent(screen.getByRole("menuitem", { name: "Two" }), middleClick());
       fireEvent.contextMenu(control("Back"));
       await menuItems();
+      fireEvent.click(screen.getByRole("menuitem", { name: "Two" }), {
+        ctrlKey: true,
+      });
+      fireEvent.contextMenu(control("Back"));
+      await menuItems();
       await userEvent.click(screen.getByRole("menuitem", { name: "One" }));
 
-      expect(went).toStrictEqual(["new window 2", "go 1"]);
+      expect(went).toStrictEqual(["new window 2", "new window 2", "go 1"]);
     });
 
     it("opens the History app from Show full history", async () => {

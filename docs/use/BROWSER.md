@@ -41,7 +41,7 @@ The button at the start of the address bar shows the page's profile. Click it
 to:
 
 - Move the page to another profile, or open it in a new window of one.
-  Middle-click a profile to open the page in a new window of it.
+  Middle-click or Ctrl+click a profile to open the page in a new window of it.
 - Open this site in a profile from now on.
 - Switch the profile's extensions on and off.
 

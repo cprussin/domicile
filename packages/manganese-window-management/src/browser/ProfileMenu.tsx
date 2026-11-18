@@ -140,16 +140,16 @@ export const ProfileMenu = ({
                     ? `${each.name}, this page's profile`
                     : `Move this page to ${each.name}`
                 }
-                // As a middle-click on a link: a copy, in a new window.
-                onMiddlePress={() => {
-                  setOpen(false);
-                  onOpenInNew(each.id);
-                }}
                 onPress={() => {
                   setOpen(false);
                   if (!current) {
                     onMove(each.id);
                   }
+                }}
+                // As a link opened in a new tab: a copy, in a new window.
+                onPressInNew={() => {
+                  setOpen(false);
+                  onOpenInNew(each.id);
                 }}
               />
             );

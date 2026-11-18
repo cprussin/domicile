@@ -63,6 +63,54 @@ describe("summarize", () => {
   });
 });
 
+describe("host measures", () => {
+  // QEMU's CPU and its share of the host's GPU, read on the host.
+  const withHost = (desktop: string) => ({
+    ...run(desktop, "rest", 4096),
+    hostTicksPerSecond: 100,
+    samples: [
+      {
+        ...sample(0, 1000, 4096),
+        host: { gpuMib: 100, gpuPercent: 10, qemuTicks: 0, seconds: 0 },
+      },
+      {
+        ...sample(250, 2000, 4096),
+        host: { gpuMib: 300, gpuPercent: 30, qemuTicks: 1500, seconds: 10 },
+      },
+    ],
+  });
+
+  test("takes QEMU's CPU from its ticks over the window", () => {
+    const [row] = summarize([withHost("sway")]);
+    // 1500 ticks at 100 a second over 10 seconds is one and a half cores.
+    expect(row?.host?.qemuCpuPercent.median).toBe(150);
+  });
+
+  test("takes the GPU's medians", () => {
+    const [row] = summarize([withHost("sway")]);
+    expect(row?.host?.gpuPercent.median).toBe(20);
+    expect(row?.host?.gpuMib.median).toBe(200);
+  });
+
+  test("leaves them out of runs measured without a GPU", () => {
+    const [row] = summarize([run("sway", "rest", 4096)]);
+    expect(row?.host).toBeUndefined();
+    expect(markdown([row].filter((r) => r !== undefined))).not.toContain("GPU");
+  });
+
+  test("throws on a group that mixes the two", () => {
+    expect(() =>
+      summarize([withHost("sway"), run("sway", "rest", 4096)]),
+    ).toThrow();
+  });
+
+  test("tables them", () => {
+    expect(markdown(summarize([withHost("sway")]))).toContain(
+      "| sway | 20% (20–20) |",
+    );
+  });
+});
+
 describe("markdown", () => {
   test("gives a row per desktop and a column per workload", () => {
     const table = markdown(

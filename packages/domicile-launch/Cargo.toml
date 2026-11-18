@@ -20,8 +20,12 @@ oxc_parser.workspace = true
 oxc_span.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# PKCE challenges and refresh token hashes, for `domicile mcp --http`.
+sha2 = "0.10"
 tempfile.workspace = true
 thiserror.workspace = true
+# `domicile mcp --http`. Blocking, as the rest of `domicile` is.
+tiny_http = "0.12"
 # Session bus, for reporting a failed reload as a notification. Features match
 # the compositor's so the workspace builds zbus once.
 zbus = { version = "5.0", default-features = false, features = [

@@ -28,6 +28,16 @@ sees it in the bar the whole time it's in, and can stop it.
 
 Agents are refused while the desktop is locked.
 
+### Agents that sign in
+
+An agent that connects to a URL, rather than running `domicile mcp` itself,
+uses `domicile mcp --http 127.0.0.1:7465`
+([CLI.md](CLI.md#over-http)). The first time it connects, it opens a page
+asking for a code, and the desktop shows the code in a notification: entering
+it signs the agent in. It still asks, as above, before it uses anything.
+Reaching it from the web, as claude.ai does, waits for a relay (see
+[KNOWN-GAPS.md](KNOWN-GAPS.md)).
+
 ## Design
 
 ```
@@ -89,6 +99,52 @@ agent ── MCP (stdio) ── domicile mcp ── domicile agent <name> ──
   socket. All three are refused while the desk is locked, and to apps.
 - **Private windows are never offered.** The dialog lists every window but
   private browser windows, and the engine refuses DevTools on them anyway.
+- **Signing in proves the user sees the desk; the dialog still decides.**
+  `domicile mcp --http` is its own OAuth 2.1 authorization server
+  (`mcp::oauth`): dynamic registration, PKCE S256 only, and an authorization
+  page that asks for a code the desk shows in a notification, so someone who
+  merely has the URL can't sign in. A token only reaches `/mcp`; each session
+  is an `Agent`, as on stdio, on a thread of its own, and asks at its first
+  tool call. Codes are one use and change after five misses; access tokens
+  last an hour and refresh tokens rotate. The `Host` and `Origin` checks keep
+  a web page on another site from reaching a server on `localhost`.
+
+## The relay
+
+Agents on the web, such as claude.ai, connect from the internet, and most
+desks are behind a router. `domicile-relay` (`packages/domicile-relay`, `nix
+run .#relay`) runs on a server and passes their connections to the desk
+without being able to read them:
+
+```
+claude.ai ── TLS for <label>.<zone> ──▶ relay :443 ──── spliced ────▶ desk
+                                          │  reads only the            ▲
+                                          │  ClientHello's name        │ dials out; opens one
+                                          └── "open <token>" ──────────┘ connection per client
+```
+
+- **A desk's address is named for its key.** The desk dials the relay's desk
+  port (7444), sends its Ed25519 public key and signs a challenge; its
+  address is `<label>.<zone>`, the label 16 base32 letters of the key's
+  SHA-256. Nobody can take an address without its key. A desk dialing in
+  again replaces its old connection.
+- **TLS ends on the desk.** The relay reads the server name from the
+  ClientHello, which is sent in the clear, asks the desk on its connection to
+  open one back with a one-time token, and splices the two, the ClientHello
+  first. A client for no desk, or for a name outside the zone, is hung up on.
+  So the relay holds no key that decrypts what the agent and desk say; the
+  desk holds the certificate for its address.
+- **Its operator could still get a certificate for an address,** since they
+  run the zone's DNS. Certificate Transparency logs would show it, and
+  signing in still needs the code the desk shows, so they could not sign an
+  agent in unseen.
+- **Each address needs its own certificate.** Let's Encrypt allows 50 a week
+  per registered domain, so a zone shared by many desks needs to be on the
+  Public Suffix List.
+- **Domicile's own relay is `mcp.domicile-desktop.com`,** on fly.io
+  (`packages/domicile-relay/fly.toml`). Anyone can run another: it needs
+  two plain TCP ports, a wildcard DNS name for the zone, and one process,
+  since a desk and the agents reaching it must meet on the same relay.
 
 ## Shells
 

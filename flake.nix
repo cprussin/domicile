@@ -637,6 +637,26 @@
         (name: _: builtins.pathExists (./packages + "/${name}/Cargo.toml"))
         (builtins.readDir ./packages));
 
+      # The relay that passes web agents' connections to desks
+      # (packages/domicile-relay). It runs on a server, not a desk.
+      domicileRelay = pkgs.rustPlatform.buildRustPackage {
+        pname = "domicile-relay";
+        version = "0.0.0";
+        src = pkgs.lib.fileset.toSource {
+          root = ./.;
+          fileset = pkgs.lib.fileset.unions
+            ([ ./Cargo.toml ./Cargo.lock ]
+              ++ map (name: ./packages + "/${name}") rustCrates);
+        };
+        cargoLock = {
+          lockFile = ./Cargo.lock;
+          outputHashes."smithay-0.7.0" = "sha256-hWXiFYCSzXoUxQtF9mA1T+GH9pjAWlTcS1t2uG1gJy8=";
+        };
+        cargoBuildFlags = [ "-p" "domicile-relay" "--bin" "domicile-relay" ];
+        doCheck = false;
+        meta.mainProgram = "domicile-relay";
+      };
+
       # The Rust binaries. Not an output: `domicile-compositor` is only started
       # by `domicile`, and `domicile` must be installed in `domicilePackage`'s
       # layout to find its siblings.
@@ -814,7 +834,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-qhGY30ICbOqI5IlIbpogj9MFTI3ku0Kel00aO5PoSWE=";
+        outputHash = "sha256-U5Ad9hLpEAB2rOSmjSvXY81bR56z0n5CBlj1xn4nXiE=";
       };
 
 
@@ -944,6 +964,8 @@
         builder = domicileBuilder;
         # Domicile running examples/dioxus-shell, a shell written in Rust.
         dioxus-shell-example = dioxusShellDesktop;
+        # The relay for agents on the web, for a server.
+        relay = domicileRelay;
       };
 
       # The nixpkgs this flake builds with, so scripts take tools such as

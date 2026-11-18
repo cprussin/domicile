@@ -523,6 +523,27 @@ Each tool runs a verb and answers what it printed, or its error:
 
 The browser and app tools work on a window the desk hides and need no screenshot, so prefer them for browser windows and for native apps that support accessibility. Tools the lock refuses are refused while the desktop is locked.
 
+### Over HTTP
+
+`domicile mcp --http <address> [--url <url>]` serves the same tools over
+[Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http)
+at `/mcp`, for agents that connect to a URL and sign in, such as Claude Code
+with `claude mcp add --transport http domicile http://127.0.0.1:7465/mcp`.
+`<url>` is the address agents reach it at, if not `http://<address>`.
+
+- **Signing in** is OAuth 2.1, served by `domicile mcp` itself: the agent
+  registers, opens a page asking for a code, and the desktop shows the code in
+  a notification. Entering it lets that agent sign in; a code works once, and
+  five wrong ones change it. Signed-in agents are kept in
+  `$XDG_STATE_HOME/domicile/signed-in-agents.json`, refresh tokens only as
+  hashes, so they stay signed in when it restarts.
+- **Each session asks on the desk** at its first tool call, as on stdio. A
+  session ends when the agent ends it or after 30 minutes unused, which lets
+  the agent go.
+- Requests naming another host, or a web page's origin other than this
+  server's, are refused, so a page can't reach it by renaming its own host.
+- It answers each message as JSON and opens no event stream.
+
 ## `domicile agent <name>`
 
 Ask, in Domicile's dialog, to let the agent `name` see and use the desktop,

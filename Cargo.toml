@@ -11,6 +11,7 @@ members = [
     "packages/domicile-compositor",
     "packages/domicile-miracast",
     "packages/domicile-recorder",
+    "packages/domicile-relay",
 ]
 
 # domicile-compositor needs Smithay and native Wayland libraries, so plain
@@ -26,6 +27,7 @@ default-members = [
     "packages/domicile-test-chrome",
     "packages/domicile-test-client",
     "packages/domicile-miracast",
+    "packages/domicile-relay",
 ]
 
 [workspace.package]
