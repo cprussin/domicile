@@ -225,6 +225,7 @@ fn run() -> Result<ExitCode, String> {
         }
         Invocation::Mcp { http: None } => agents_served(),
         Invocation::Mcp { http: Some(http) } => agents_served_over_http(http),
+        Invocation::McpRelay { relay } => agents_served_through_relay(relay),
         Invocation::Agent { name } => admitted(name),
         Invocation::Accessibility { window } => {
             let (pid, title) = native_window(&window)?;
@@ -1023,12 +1024,45 @@ fn agents_served() -> Result<ExitCode, String> {
 /// Serves the Model Context Protocol over HTTP at `http`, each session's
 /// tools running this binary, signed in as [`mcp::Web`] describes.
 fn agents_served_over_http(http: domicile_launch::cli::McpHttp) -> Result<ExitCode, String> {
-    let binary = myself()?;
     let listener = std::net::TcpListener::bind(http.listen)
         .map_err(|why| format!("mcp: could not listen on {}: {why}", http.listen))?;
     let base = http
         .url
         .unwrap_or_else(|| format!("http://{}", http.listen));
+    agents_served_at(listener, base)
+}
+
+/// Serves agents on the web through the relay at `relay`, or Domicile's: an
+/// HTTP server on this computer, which the relay's connections reach once
+/// the desk ends their TLS; see `domicile_launch::mcp::web`.
+fn agents_served_through_relay(relay: Option<String>) -> Result<ExitCode, String> {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .map_err(|why| format!("mcp: could not listen on this computer: {why}"))?;
+    let local = listener.local_addr().map_err(|why| format!("mcp: {why}"))?;
+    let relay = relay.unwrap_or_else(|| mcp::web::RELAY.to_string());
+    let host = mcp::web::reach(mcp::web::Reach {
+        relay: relay.clone(),
+        state: state_directory(&|name| std::env::var(name).ok())
+            .map(|directory| directory.join("relay.json")),
+        directory: mcp::web::LETS_ENCRYPT.to_string(),
+        local,
+        clock: Arc::new(milliseconds_now),
+    })
+    .map_err(|why| format!("mcp: could not reach the relay at {relay}: {why}"))?;
+    agents_served_at(listener, format!("https://{host}"))
+}
+
+fn milliseconds_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| {
+            u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+        })
+}
+
+/// Serves agents on `listener`, which they reach at `base`.
+fn agents_served_at(listener: std::net::TcpListener, base: String) -> Result<ExitCode, String> {
+    let binary = myself()?;
     eprintln!("domicile: serving agents at {base}/mcp");
     let web = mcp::Web {
         listener,
@@ -1045,13 +1079,7 @@ fn agents_served_over_http(http: domicile_launch::cli::McpHttp) -> Result<ExitCo
                 eprintln!("domicile: could not show the code ({why}); it is {code}");
             }
         }),
-        clock: Arc::new(|| {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |since| {
-                    u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
-                })
-        }),
+        clock: Arc::new(milliseconds_now),
         random: Box::new(|| {
             let mut bytes = [0; 32];
             std::fs::File::open("/dev/urandom")

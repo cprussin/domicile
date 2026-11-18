@@ -35,8 +35,14 @@ uses `domicile mcp --http 127.0.0.1:7465`
 ([CLI.md](CLI.md#over-http)). The first time it connects, it opens a page
 asking for a code, and the desktop shows the code in a notification: entering
 it signs the agent in. It still asks, as above, before it uses anything.
-Reaching it from the web, as claude.ai does, waits for a relay (see
-[KNOWN-GAPS.md](KNOWN-GAPS.md)).
+
+### Agents on the web
+
+An agent on the web, such as claude.ai, can't reach a desk behind a router.
+`domicile mcp --relay` ([CLI.md](CLI.md#through-the-relay)) dials out to a
+relay (below) and prints the desk's address,
+`https://<label>.mcp.domicile-desktop.com/mcp`, to add as a custom connector.
+Signing in and asking work as above.
 
 ## Design
 
@@ -141,6 +147,16 @@ claude.ai ── TLS for <label>.<zone> ──▶ relay :443 ──── splice
 - **Each address needs its own certificate.** Let's Encrypt allows 50 a week
   per registered domain, so a zone shared by many desks needs to be on the
   Public Suffix List.
+- **The desk's side** (`domicile mcp --relay`, `mcp::web`) keeps its key,
+  its ACME account and its certificate in
+  `$XDG_STATE_HOME/domicile/relay.json`, readable only by its user. It gets
+  the certificate from Let's Encrypt with TLS-ALPN-01: the authority connects
+  to the address through the relay, and the desk answers `acme-tls/1` with
+  the challenge's certificate, so nothing about the zone's DNS is needed. It
+  renews after 60 days, retries hourly, dials again when the relay hangs up,
+  waiting up to five minutes, and sends a blank line every 30 seconds so a
+  quiet connection isn't dropped. Each connection's TLS ends on the desk, and
+  what's inside goes to the HTTP server on 127.0.0.1.
 - **Domicile's own relay is `mcp.domicile-desktop.com`,** on fly.io
   (`packages/domicile-relay/fly.toml`). Anyone can run another: it needs
   two plain TCP ports, a wildcard DNS name for the zone, and one process,

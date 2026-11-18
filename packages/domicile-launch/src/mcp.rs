@@ -10,9 +10,11 @@
 //! against what they allowed, and listed in the shell as what the agent did.
 //! See `docs/AGENTS.md`.
 
+mod acme;
 mod browser;
 mod http;
 mod oauth;
+pub mod web;
 
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};

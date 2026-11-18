@@ -1169,6 +1169,17 @@ fn configure_display_names_what_it_could_not_read() {
 fn mcp_serves_agents_on_stdio_or_over_http() {
     assert_eq!(run(&["mcp"]), Ok(Invocation::Mcp { http: None }));
     assert_eq!(
+        run(&["mcp", "--relay"]),
+        Ok(Invocation::McpRelay { relay: None })
+    );
+    assert_eq!(
+        run(&["mcp", "--relay", "relay.example:7444"]),
+        Ok(Invocation::McpRelay {
+            relay: Some("relay.example:7444".into())
+        })
+    );
+    assert!(run(&["mcp", "--relay", "relay.example:7444", "more"]).is_err());
+    assert_eq!(
         run(&["mcp", "--http", "127.0.0.1:7465"]),
         Ok(Invocation::Mcp {
             http: Some(McpHttp {

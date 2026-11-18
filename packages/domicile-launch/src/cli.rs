@@ -121,6 +121,8 @@ Ask the running desktop:
   domicile mcp --http <address> [--url <url>]
                                         Serve it over HTTP, for agents that
                                         sign in, reached at url
+  domicile mcp --relay [<relay>]        Serve it to agents on the web, such as
+                                        claude.ai, through a relay
   domicile agent <name>                 Ask to let an agent in; print what the
                                         user allowed and each change, then
                                         list each line read as what it did,
@@ -463,6 +465,9 @@ pub enum Invocation {
     /// Serve the Model Context Protocol on stdio until it ends, or with
     /// `http` over HTTP; see [`crate::mcp`].
     Mcp { http: Option<McpHttp> },
+    /// `domicile mcp --relay [<relay>]`: served over HTTP to agents on the
+    /// web, through the relay at `relay`, or Domicile's when `None`.
+    McpRelay { relay: Option<String> },
     /// Ask the user to let agent `name` in, print what they allowed, then
     /// list each line of stdin as what it did, until either side ends it;
     /// see [`crate::agent_lending`].
@@ -864,6 +869,10 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
             },
             Verb::Serving => match args.next().as_deref() {
                 None => Ok(Invocation::Mcp { http: None }),
+                Some("--relay") => match (args.next(), args.next()) {
+                    (relay, None) => Ok(Invocation::McpRelay { relay }),
+                    (_, Some(extra)) => Err(CliError::Extra { extra, verb: first }),
+                },
                 Some("--http") => {
                     let said = args.next();
                     let listen = said

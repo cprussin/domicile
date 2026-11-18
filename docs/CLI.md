@@ -544,6 +544,17 @@ with `claude mcp add --transport http domicile http://127.0.0.1:7465/mcp`.
   server's, are refused, so a page can't reach it by renaming its own host.
 - It answers each message as JSON and opens no event stream.
 
+### Through the relay
+
+`domicile mcp --relay [<relay>]` serves the same, signed in the same way, to
+agents on the web, such as claude.ai, through Domicile's relay at
+`mcp.domicile-desktop.com:7444`, or the one at `<relay>`. It prints the
+address to add as a connector, `https://<label>.mcp.domicile-desktop.com/mcp`,
+which stays the same as long as `$XDG_STATE_HOME/domicile/relay.json` is
+kept. The desk gets its own certificate for that address, so the relay
+passes the connection along without being able to read it; the first one
+takes a minute or so. See [AGENTS.md](AGENTS.md#agents-on-the-web).
+
 ## `domicile agent <name>`
 
 Ask, in Domicile's dialog, to let the agent `name` see and use the desktop,
