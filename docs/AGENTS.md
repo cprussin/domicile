@@ -20,8 +20,9 @@ sees it in the bar the whole time it's in, and can stop it.
 3. While it's in, a violet pill with its name sits in the bar. Click it to see
    what it can reach and what it did last, **Change** to give it more or less,
    and **Stop** to end it. Canceling a change keeps what it has.
-4. An agent you cancel or stop is refused from then on. Its next session asks
-   again, unless it is remembered.
+4. An agent you cancel or stop is refused from then on, until you ask it to
+   try again: its `ask_to_use_desktop` tool, or its next session, asks again.
+   After a stop it asks even when it is remembered.
 5. **Settings › Agents** lists each agent connected now or remembered, with
    what it reaches and when it was last used. **Stop** ends its sessions;
    **Forget** makes it ask again.

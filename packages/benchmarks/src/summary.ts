@@ -30,6 +30,10 @@ const runSchema = z.object({
   hostTicksPerSecond: z.number().positive().optional(),
   run: z.number().int(),
   samples: z.array(sampleSchema).min(2),
+  /** The busiest threads over the window, as % of one core. */
+  threads: z
+    .array(z.object({ cpuPercent: z.number(), name: z.string() }))
+    .optional(),
   top: z.array(z.object({ name: z.string(), pssKib: z.number() })),
   workload: z.string(),
 });

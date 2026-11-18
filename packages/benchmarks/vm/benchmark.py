@@ -176,12 +176,38 @@ def sample():
     return reading
 
 
+def thread_ticks():
+    ticks = {}
+    for line in machine.succeed("bench-threads").splitlines():
+        path, label, count = line.split("\t")
+        ticks[path] = (label, int(count))
+    return ticks
+
+
+def busiest(before, after, seconds):
+    """The threads that spent the most CPU between two readings, by label,
+    as a percentage of one core. A thread that started in between counts
+    from zero; one that ended doesn't count."""
+    tick = int(machine.succeed("getconf CLK_TCK"))
+    spent = {}
+    for path, (label, count) in after.items():
+        spent[label] = spent.get(label, 0) + count - before.get(path, (label, 0))[1]
+    ranked = sorted(spent.items(), key=lambda item: -item[1])[:25]
+    return [
+        {"name": label, "cpuPercent": round(100 * count / tick / seconds, 2)}
+        for label, count in ranked
+        if count > 0
+    ]
+
+
 def measure():
+    start, before = time.monotonic(), thread_ticks()
     samples = [sample()]
     for _ in range(WINDOW_SECONDS // INTERVAL_SECONDS):
         machine.sleep(INTERVAL_SECONDS)
         samples.append(sample())
-    return samples
+    threads = busiest(before, thread_ticks(), time.monotonic() - start)
+    return samples, threads
 
 
 machine.start()
@@ -198,7 +224,7 @@ try:
         print(machine.execute("eglinfo -B -p surfaceless 2>&1 | grep -i renderer")[1])
         print(machine.execute("ps -u alice -o args= | grep -- --type=gpu-process | grep -o -- '--use-[^ ]*\\|--disable-gpu[^ ]*\\|--ozone-platform=[^ ]*' | sort | uniq -c")[1])
     screenshot(f"{DESKTOP['name']}-{WORKLOAD}-{RUN}")
-    samples = measure()
+    samples, threads = measure()
     screenshot(f"{DESKTOP['name']}-{WORKLOAD}-{RUN}-end")
     result = {
         "cores": int(machine.succeed("nproc").strip()),
@@ -207,6 +233,7 @@ try:
         "processes": machine.succeed(PROCESSES),
         "run": RUN,
         "samples": samples,
+        "threads": threads,
         "top": json.loads(machine.succeed("bench-top")),
         "workload": WORKLOAD,
     }

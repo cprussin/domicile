@@ -378,11 +378,15 @@ first.
 An app must never find a plain `undefined` where Electron has an API: that
 is a `TypeError` in the app's main, which takes the app down with no reason
 given and no fallback. `scripts/electron-surface.ts` reads `electron.d.ts`
-from Electron 45.2.1 and the newest release of each of the twelve majors
-before it, and writes `src/electron/surface.ts`: every module, its methods
-and properties, which exist only on macOS or Windows, and each instance
-class's members with its parents'. Regenerate it with
-`bun scripts/electron-surface.ts` when Electron ships a major.
+from the newest release of each Electron major, from the latest down to
+twelve before 45.2.1's, and from 45.2.1, and writes
+`src/electron/surface.ts`: every module, its methods and properties, which
+exist only on macOS or Windows, and each instance class's members with its
+parents'. `electron-surface.yml` runs it every Monday and, when a new
+Electron changes the surface, opens a pull request with coverage.json
+measured against it, listing each gap it adds
+(`.github/scripts/electron-surface-refresh.sh`). That pull request isn't set
+to merge itself: close each new gap, or merge to accept it as listed.
 
 At start the host fills what it lacks from the surface
 (`src/electron/complete.ts`):
@@ -402,6 +406,13 @@ that the test can't make an object to measure ("unmeasured").
 `coverage.test.ts` measures them on the running host and fails when the
 list is off either way, so a gap a new Electron opens, or one a change
 closes, is seen. Update it with `UPDATE_COVERAGE=1 bun test coverage`.
+
+A member that answers a constant, such as `isFocused() => false`, is a stub.
+The same test finds each one from its source and holds it against
+`src/__integration__/stubs.json`, which files it under `lies` (an app acts
+on a wrong answer, such as `getFocusedWindow()` always `null`) or `honest`
+(right on Domicile, such as `setPosition`, since the desktop places
+windows), with why. A new stub, or one that went, fails until it is filed.
 
 What the host has is real where the engine can do it and a stated answer
 where the shell owns it: window state reads as shown and normal, because

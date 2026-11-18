@@ -153,6 +153,7 @@ fn tools_list_describes_each_tool() {
             "app_click",
             "app_focus",
             "app_set_text",
+            "ask_to_use_desktop",
         ]
     );
     for tool in tools {
@@ -696,6 +697,84 @@ fn an_agent_the_user_stopped_is_refused() {
     });
     let text = replies[0]["result"]["content"][0]["text"].as_str().unwrap();
     assert!(text.contains("stopped"), "{text}");
+}
+
+#[test]
+fn a_stopped_agent_asks_again_only_through_ask_to_use_desktop() {
+    let asked = Rc::new(Cell::new(0));
+    let asking = Rc::clone(&asked);
+    let replies = served_letting(
+        &[
+            call("status", json!({})),
+            call("status", json!({})),
+            call("ask_to_use_desktop", json!({})),
+            call("status", json!({})),
+            call("ask_to_use_desktop", json!({})),
+        ],
+        |_| printed("{}"),
+        move |_| {
+            asking.set(asking.get() + 1);
+            // The first grant the user stops at once; the second holds.
+            let stopped = asking.get() == 1;
+            Ok(Grant {
+                reach: Box::new(|| AgentReach::Desk),
+                stopped: Box::new(move || stopped),
+                did: Box::new(|_| ()),
+            })
+        },
+    );
+    let text = |reply: &Value| {
+        reply["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    for reply in &replies[..2] {
+        assert_eq!(reply["result"]["isError"], true);
+        assert!(
+            text(reply).contains("call ask_to_use_desktop"),
+            "{}",
+            text(reply)
+        );
+    }
+    assert_eq!(replies[2]["result"]["isError"], false);
+    assert!(
+        text(&replies[2]).contains("let An agent use"),
+        "{}",
+        text(&replies[2])
+    );
+    assert_eq!(replies[3]["result"]["isError"], false);
+    assert!(
+        text(&replies[4]).contains("already"),
+        "{}",
+        text(&replies[4])
+    );
+    assert_eq!(asked.get(), 2, "it asks once more, when asked to");
+}
+
+#[test]
+fn an_agent_turned_away_can_ask_again() {
+    let asked = Cell::new(0);
+    let replies = served_letting(
+        &[
+            call("status", json!({})),
+            call("ask_to_use_desktop", json!({})),
+            call("status", json!({})),
+        ],
+        |_| printed("{}"),
+        |_| {
+            asked.set(asked.get() + 1);
+            if asked.get() == 1 {
+                Err("the user did not let it in".to_string())
+            } else {
+                Ok(reaching(AgentReach::Desk).0)
+            }
+        },
+    );
+    assert_eq!(replies[0]["result"]["isError"], true);
+    assert_eq!(replies[1]["result"]["isError"], false);
+    assert_eq!(replies[2]["result"]["isError"], false);
+    assert_eq!(asked.get(), 2);
 }
 
 #[test]

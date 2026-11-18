@@ -75,6 +75,29 @@ let
     '';
   };
 
+  # Every thread's CPU ticks so far, one per line: its /proc path, a label
+  # (program, Chromium's process type, thread), and utime + stime. Read at
+  # each end of the window, it says which threads spent the CPU.
+  threads = pkgs.writeShellApplication {
+    name = "bench-threads";
+    runtimeInputs = [ pkgs.coreutils pkgs.gnused ];
+    text = ''
+      for dir in /proc/[0-9]*; do
+        program=$(cat "$dir/comm" 2>/dev/null) || continue
+        type=$(tr '\0' '\n' <"$dir/cmdline" 2>/dev/null | sed -n 's/^--type=//p' | head -1) || true
+        for task in "$dir"/task/[0-9]*; do
+          stat=$(cat "$task/stat" 2>/dev/null) || continue
+          thread=$(cat "$task/comm" 2>/dev/null) || continue
+          # The fields after the name, which can hold spaces: state is the
+          # first, so utime and stime are the 12th and 13th.
+          read -r -a fields <<<"''${stat##*) }"
+          printf '%s\t%s%s/%s\t%d\n' "$task" "$program" "''${type:+[$type]}" "$thread" \
+            "$((fields[11] + fields[12]))"
+        done
+      done
+    '';
+  };
+
   # Runs a command in the environment the desktop gives its apps: the
   # compositor's own, which root copies to /tmp/session-environ first
   # (Hyprland's isn't readable by its own user), its Wayland socket and the
@@ -270,6 +293,7 @@ let
     environment.systemPackages = [
       sample
       top
+      threads
       pkgs.curl
       pkgs.chromium
       unfree.slack

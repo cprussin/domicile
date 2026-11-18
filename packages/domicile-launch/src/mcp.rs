@@ -235,6 +235,8 @@ enum Tool {
     AppSnapshot,
     /// `accessibility-act` with this act, which takes no text but `set-text`.
     AppAct(&'static str),
+    /// Asks the user again, after they stopped the agent or turned it away.
+    AskToUse,
 }
 
 /// How many pixels of the desk each pixel of the last screenshot is, across
@@ -250,7 +252,7 @@ struct View {
 const FIT: u32 = 1280;
 
 /// Each tool, by name, in the order `tools/list` gives them.
-const TOOLS: [(&str, Tool); 28] = [
+const TOOLS: [(&str, Tool); 29] = [
     ("list_windows", Tool::Listing("list-windows")),
     ("list_displays", Tool::Listing("list-displays")),
     ("list_inputs", Tool::Listing("list-inputs")),
@@ -279,6 +281,7 @@ const TOOLS: [(&str, Tool); 28] = [
     ("app_click", Tool::AppAct("click")),
     ("app_focus", Tool::AppAct("focus")),
     ("app_set_text", Tool::AppAct("set-text")),
+    ("ask_to_use_desktop", Tool::AskToUse),
 ];
 
 fn tool(name: &str) -> Option<Tool> {
@@ -433,6 +436,11 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             json!({"window": native, "ref": app_element, "text": {"type": "string"}}),
             vec!["window", "ref", "text"],
         ),
+        Tool::AskToUse => (
+            "Ask the user again to let you use the desktop, after they stopped you or turned you away. Only when the user asks you to: it shows them a dialog.",
+            json!({}),
+            vec![],
+        ),
     }
 }
 
@@ -453,22 +461,15 @@ fn guarded(
         other => return Ok(said(false, format!("arguments are an object, not {other}"))),
     };
     let name = session.name.clone();
-    let grant = match session.grant.get_or_insert_with(|| {
-        admit(&name).map_err(|why| {
-            format!(
-                "The user did not let {name} use this desktop ({}). Start a new session to ask again.",
-                why.trim()
-            )
-        })
-    }) {
+    if let Tool::AskToUse = tool {
+        return Ok(asked_again(admit, session));
+    }
+    let grant = match session.grant.get_or_insert_with(|| admitted(admit, &name)) {
         Ok(grant) => grant,
         Err(why) => return Ok(said(false, why.clone())),
     };
     if (grant.stopped)() {
-        return Ok(said(
-            false,
-            format!("The user stopped {name} from the desktop. Start a new session to ask again."),
-        ));
+        return Ok(said(false, stopped(&name)));
     }
     // Read once per call: a change the user makes applies from the next.
     let reach = (grant.reach)();
@@ -491,6 +492,52 @@ fn guarded(
         (grant.did)(&what_it_did(tool, arguments, &session.titles));
     }
     Ok(answered)
+}
+
+/// The grant the user gives agent `name` when asked, or why there is none.
+fn admitted(
+    admit: &mut impl FnMut(&str) -> Result<Grant, String>,
+    name: &str,
+) -> Result<Grant, String> {
+    admit(name).map_err(|why| {
+        format!(
+            "The user did not let {name} use this desktop ({}). If they ask you to try again, \
+             call ask_to_use_desktop.",
+            why.trim()
+        )
+    })
+}
+
+fn stopped(name: &str) -> String {
+    format!(
+        "The user stopped {name} from the desktop. If they ask you to use it again, call \
+         ask_to_use_desktop."
+    )
+}
+
+/// `ask_to_use_desktop`'s result: asks the user again unless the agent is in
+/// now, dropping a grant they stopped first.
+fn asked_again(
+    admit: &mut impl FnMut(&str) -> Result<Grant, String>,
+    session: &mut Session,
+) -> Value {
+    let name = session.name.clone();
+    if let Some(Ok(grant)) = &session.grant {
+        if !(grant.stopped)() {
+            return said(
+                true,
+                format!("The user already lets {name} use this desktop."),
+            );
+        }
+    }
+    session.grant = None;
+    let grant = admitted(admit, &name);
+    let answer = match &grant {
+        Ok(_) => said(true, format!("The user let {name} use this desktop.")),
+        Err(why) => said(false, why.clone()),
+    };
+    session.grant = Some(grant);
+    answer
 }
 
 fn tool_is_listing_windows(tool: Tool) -> bool {
@@ -606,6 +653,7 @@ fn what_it_did(
         Tool::Browser(Browser::Navigate) => format!("Loaded a page in {}", window("window")),
         Tool::Browser(Browser::Screenshot) => format!("Took a screenshot of {}", window("window")),
         Tool::AppAct(_) => format!("Moved the focus in {}", window("window")),
+        Tool::AskToUse => unreachable!("guarded answers ask_to_use_desktop itself"),
     }
 }
 
@@ -742,6 +790,7 @@ fn commands(
             ]
             .concat()])
         }
+        Tool::AskToUse => unreachable!("guarded answers ask_to_use_desktop itself"),
     }
 }
 

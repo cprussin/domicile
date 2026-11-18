@@ -35,7 +35,9 @@ Slack's Electron and VSCodium's Electron run on their own.
 - The desktop settles for 2 minutes, the apps start, then settle 2 more.
 - Every 10 seconds for 5 minutes the VM records memory in use
   (`MemTotal - MemAvailable`), the PSS of every process and of the user's,
-  CPU ticks and the load average.
+  CPU ticks and the load average. Over the same window it records each
+  thread's CPU, so a run's `threads` names the 25 busiest (program,
+  Chromium's process type, thread) as a percentage of one core.
 - The apps load live pages, so the network adds variance.
 
 `src/main.ts` reports the median run of each and its range.
