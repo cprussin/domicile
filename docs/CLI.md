@@ -553,7 +553,10 @@ address to add as a connector, `https://<label>.mcp.domicile-desktop.com/mcp`,
 which stays the same as long as `$XDG_STATE_HOME/domicile/relay.json` is
 kept. The desk gets its own certificate for that address, so the relay
 passes the connection along without being able to read it; the first one
-takes a minute or so. See [AGENTS.md](AGENTS.md#agents-on-the-web).
+takes a minute or so. It writes how it is doing to
+`$XDG_RUNTIME_DIR/domicile/web-agents.json`, which Settings shows. The
+desktop runs it while `agents.web` is set, so this is for running it by hand.
+See [AGENTS.md](AGENTS.md#agents-on-the-web).
 
 ## `domicile agent <name>`
 

@@ -10,6 +10,18 @@
       "pattern": "^#[0-9a-fA-F]{6}$",
       "type": "string"
     },
+    "AgentsConfig": {
+      "additionalProperties": false,
+      "description": "Agents that drive the desktop, such as Claude Code. See\n`docs/AGENTS.md`.",
+      "properties": {
+        "web": {
+          "default": false,
+          "description": "Whether agents on the web, such as claude.ai, can reach the desktop\nthrough Domicile's relay: while it is set, the compositor runs\n`domicile mcp --relay`. Each agent still signs in with a code the\ndesktop shows, and asks before it uses anything. Off by default. See\n`docs/AGENTS.md#agents-on-the-web`.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "BrowserConfig": {
       "additionalProperties": false,
       "description": "Browser profiles: sets of sign-ins, site data and extensions, and the\nsites each opens. See `docs/architecture/BROWSER-PROFILES.md`.",
@@ -990,6 +1002,12 @@
       "default": null,
       "description": "Where editors find this file's JSON Schema. Domicile ignores it.",
       "type": ["string", "null"]
+    },
+    "agents": {
+      "$ref": "#/$defs/AgentsConfig",
+      "default": {
+        "web": false
+      }
     },
     "browser": {
       "$ref": "#/$defs/BrowserConfig",

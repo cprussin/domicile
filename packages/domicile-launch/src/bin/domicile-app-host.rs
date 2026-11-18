@@ -48,6 +48,10 @@ fn run() -> Result<(), String> {
     let _watching = watching(&asking, Arc::clone(&output))?;
 
     let home = std::env::var_os("HOME").map(PathBuf::from);
+    let env = |name: &str| std::env::var(name).ok();
+    let web_status = domicile_launch::mcp::web::status_file(&env);
+    let signed_in = domicile_launch::profile_path::state_directory(&env)
+        .map(|directory| directory.join(domicile_launch::mcp::SIGNED_IN_FILE));
     let host = Host {
         ask: &asking,
         home: home.as_deref(),
@@ -60,6 +64,8 @@ fn run() -> Result<(), String> {
         read_bytes: &|path| std::fs::read(path),
         writable: &writable,
         write: &|path, text| std::fs::write(path, text),
+        web_status: web_status.as_deref(),
+        signed_in: signed_in.as_deref(),
     };
     let mut input = std::io::stdin().lock();
     while let Some(message) =

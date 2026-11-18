@@ -384,6 +384,60 @@ fn secret() -> [u8; 32] {
     bytes
 }
 
+/// How the desk's relay address is doing, for Settings to show; see
+/// [`Reach::status`].
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WebStatus {
+    /// Where agents reach it, once the relay has said.
+    pub address: Option<String>,
+    /// Whether it has a certificate, so agents can connect.
+    pub ready: bool,
+    /// What keeps agents from reaching it, if anything.
+    pub problem: Option<String>,
+}
+
+impl WebStatus {
+    /// What `path` says, if anything readable.
+    pub fn load(path: &Path) -> Option<WebStatus> {
+        serde_json::from_slice(&fs::read(path).ok()?).ok()
+    }
+}
+
+/// Where `domicile mcp --relay` writes its [`WebStatus`]:
+/// `$XDG_RUNTIME_DIR/domicile/web-agents.json`.
+pub fn status_file(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
+    env("XDG_RUNTIME_DIR").map(|runtime| {
+        PathBuf::from(runtime)
+            .join("domicile")
+            .join("web-agents.json")
+    })
+}
+
+/// The status, and where it is written each time it changes.
+struct Told {
+    path: Option<PathBuf>,
+    status: Mutex<WebStatus>,
+}
+
+impl Told {
+    fn update(&self, change: impl FnOnce(&mut WebStatus)) {
+        let mut status = self.status.lock().unwrap();
+        change(&mut status);
+        let Some(path) = &self.path else { return };
+        let written = path
+            .parent()
+            .map_or(Ok(()), fs::create_dir_all)
+            .and_then(|()| {
+                let fresh = path.with_extension("json.new");
+                fs::write(&fresh, serde_json::to_vec(&*status).expect("it serializes"))?;
+                fs::rename(&fresh, path)
+            });
+        if let Err(why) = written {
+            eprintln!("domicile: could not write {}: {why}", path.display());
+        }
+    }
+}
+
 /// Where and how the desk is reached through a relay.
 pub struct Reach {
     /// The relay's desk port, such as [`RELAY`].
@@ -396,6 +450,8 @@ pub struct Reach {
     pub local: SocketAddr,
     /// Milliseconds since the epoch.
     pub clock: Arc<dyn Fn() -> u64 + Send + Sync>,
+    /// Where [`WebStatus`] is written, if anywhere.
+    pub status: Option<PathBuf>,
 }
 
 /// Dials in to `reach.relay` and keeps the desk reachable there, in the
@@ -404,7 +460,13 @@ pub struct Reach {
 pub fn reach(reach: Reach) -> io::Result<String> {
     let mut kept = Kept::load(reach.state.as_deref());
     let seed = kept.seed().expect("a kept seed reads back");
-    let dialed = dial(&reach.relay, &seed)?;
+    let told = Arc::new(Told {
+        path: reach.status.clone(),
+        status: Mutex::new(WebStatus::default()),
+    });
+    let dialed = dial(&reach.relay, &seed).inspect_err(|why| {
+        told.update(|status| status.problem = Some(format!("Can't reach the relay: {why}")));
+    })?;
     let host = dialed.host.clone();
     if kept.account.is_none() {
         kept.account = Some(hex(AccountKey::generate().pkcs8()));
@@ -420,14 +482,21 @@ pub fn reach(reach: Reach) -> io::Result<String> {
             );
         }
     }
+    told.update(|status| {
+        *status = WebStatus {
+            address: Some(format!("https://{host}/mcp")),
+            ready: certificates.ready(),
+            problem: None,
+        };
+    });
     let config = server_config(Arc::clone(&certificates));
     {
-        let (relay, local) = (reach.relay.clone(), reach.local);
-        thread::spawn(move || kept_dialed(dialed, &relay, &seed, &config, local));
+        let (relay, local, told) = (reach.relay.clone(), reach.local, Arc::clone(&told));
+        thread::spawn(move || kept_dialed(dialed, &relay, &seed, &config, local, &told));
     }
     {
         let host = host.clone();
-        thread::spawn(move || kept_certified(&certificates, kept, &reach, &host));
+        thread::spawn(move || kept_certified(&certificates, kept, &reach, &host, &told));
     }
     Ok(host)
 }
@@ -440,6 +509,7 @@ fn kept_dialed(
     seed: &[u8; 32],
     config: &Arc<ServerConfig>,
     local: SocketAddr,
+    told: &Told,
 ) {
     let host = dialed.host.clone();
     let mut backoff = Duration::from_secs(1);
@@ -447,6 +517,7 @@ fn kept_dialed(
         let started = Instant::now();
         let ended = serve(dialed, relay, config, local);
         eprintln!("domicile: the relay hung up ({ended:?}), dialing again");
+        told.update(|status| status.problem = Some("Lost the relay; reconnecting".into()));
         if started.elapsed() > MOST_BACKOFF {
             backoff = Duration::from_secs(1);
         }
@@ -455,21 +526,36 @@ fn kept_dialed(
             backoff = (backoff * 2).min(MOST_BACKOFF);
             match dial(relay, seed) {
                 Ok(dialed) => break dialed,
-                Err(why) => eprintln!("domicile: could not reach the relay at {relay}: {why}"),
+                Err(why) => {
+                    eprintln!("domicile: could not reach the relay at {relay}: {why}");
+                    told.update(|status| {
+                        status.problem = Some(format!("Can't reach the relay: {why}"));
+                    });
+                }
             }
         };
         if dialed.host != host {
+            // Its certificate and the address agents have are for the old
+            // one; starting over gets both for the new.
             eprintln!(
-                "domicile: the relay moved the desk from {host} to {}; agents signed in at {host} need to sign in again",
+                "domicile: the relay moved the desk from {host} to {}; starting over",
                 dialed.host
             );
+            std::process::exit(1);
         }
+        told.update(|status| status.problem = None);
     }
 }
 
 /// Gets a certificate for `host` when there is none or it is due renewal,
 /// and keeps it, forever.
-fn kept_certified(certificates: &Certificates, mut kept: Kept, reach: &Reach, host: &str) {
+fn kept_certified(
+    certificates: &Certificates,
+    mut kept: Kept,
+    reach: &Reach,
+    host: &str,
+    told: &Told,
+) {
     let account = kept
         .account
         .as_deref()
@@ -504,6 +590,10 @@ fn kept_certified(certificates: &Certificates, mut kept: Kept, reach: &Reach, ho
         match issued {
             Ok(issued) => {
                 eprintln!("domicile: got a certificate for {host}");
+                told.update(|status| {
+                    status.ready = true;
+                    status.problem = None;
+                });
                 kept.certificate = Some(KeptCertificate {
                     host: host.to_string(),
                     chain_pem: issued.chain_pem,
@@ -521,6 +611,14 @@ fn kept_certified(certificates: &Certificates, mut kept: Kept, reach: &Reach, ho
             }
             Err(why) => {
                 eprintln!("domicile: could not get a certificate for {host}, trying again in an hour: {why}");
+                // A renewal that fails leaves the current one working.
+                if !certificates.ready() {
+                    told.update(|status| {
+                        status.problem = Some(format!(
+                            "Couldn't get a certificate, trying again in an hour: {why}"
+                        ));
+                    });
+                }
                 thread::sleep(RETRY_ISSUE);
             }
         }

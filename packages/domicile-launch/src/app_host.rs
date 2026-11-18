@@ -7,7 +7,9 @@
 //! refuses a config whose `shell_options` the shell's declaration refuses, and
 //! forwards site permissions, site data, extensions, media devices and
 //! addresses to open to the engine through the desktop, and lists, stops and
-//! forgets agents through the compositor. For History, it forwards history
+//! forgets agents through the compositor, and
+//! reads and signs out agents on the web from the files `domicile mcp`
+//! keeps. For History, it forwards history
 //! searches, deletions and clearing browsing data. See `docs/SETTINGS.md` and
 //! `docs/HISTORY.md`.
 //!
@@ -65,6 +67,10 @@
 //!   {"id":21,"type":"done"}
 //! {"id":22,"type":"forget_agent","agent":"Codex"}
 //!   {"id":22,"type":"done"}
+//! {"id":23,"type":"web_agents"}
+//!   {"id":23,"type":"web_agents","status":{"address":"https://….mcp.domicile-desktop.com/mcp","ready":true,"problem":null},"signed_in":[{"client":"…","name":"claude.ai","last_used_ms":…}]}   (status null until `domicile mcp --relay` runs)
+//! {"id":24,"type":"sign_out_web_agent","client":"…"}
+//!   {"id":24,"type":"done"}
 //! any request
 //!   {"id":…,"type":"refused","why":"…"}
 //! pushed when a file changes on disk
@@ -106,6 +112,12 @@ pub struct Host<'a> {
     pub writable: &'a dyn Fn(&Path) -> bool,
     /// Replaces the file's contents in place, so a link stays a link.
     pub write: &'a dyn Fn(&Path, &str) -> std::io::Result<()>,
+    /// Where `domicile mcp --relay` says how it is doing
+    /// ([`crate::mcp::web::status_file`]), if anywhere.
+    pub web_status: Option<&'a Path>,
+    /// Where `domicile mcp` keeps signed-in agents
+    /// ([`crate::mcp::SIGNED_IN_FILE`]), if anywhere.
+    pub signed_in: Option<&'a Path>,
 }
 
 /// Answers one message from the app. The reply carries the request's `id`.
@@ -223,6 +235,10 @@ enum AppRequest {
     },
     ForgetAgent {
         agent: String,
+    },
+    WebAgents,
+    SignOutWebAgent {
+        client: String,
     },
 }
 
@@ -420,6 +436,19 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
             Response::Done => Ok(json!({"type": "done"})),
             other => Err(refusal_or_surprise(other)),
         },
+        AppRequest::WebAgents => Ok(json!({
+            "type": "web_agents",
+            "status": host.web_status.and_then(crate::mcp::web::WebStatus::load),
+            "signed_in": host.signed_in.map(crate::mcp::signed_in).unwrap_or_default(),
+        })),
+        AppRequest::SignOutWebAgent { client } => {
+            let path = host
+                .signed_in
+                .ok_or("there is no state directory to sign agents out of")?;
+            crate::mcp::sign_out(path, &client)
+                .map_err(|why| format!("could not sign {client} out: {why}"))?;
+            Ok(json!({"type": "done"}))
+        }
     }
 }
 

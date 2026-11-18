@@ -1047,6 +1047,7 @@ fn agents_served_through_relay(relay: Option<String>) -> Result<ExitCode, String
         directory: mcp::web::LETS_ENCRYPT.to_string(),
         local,
         clock: Arc::new(milliseconds_now),
+        status: mcp::web::status_file(&|name| std::env::var(name).ok()),
     })
     .map_err(|why| format!("mcp: could not reach the relay at {relay}: {why}"))?;
     agents_served_at(listener, format!("https://{host}"))
@@ -1068,7 +1069,7 @@ fn agents_served_at(listener: std::net::TcpListener, base: String) -> Result<Exi
         listener,
         base,
         state: state_directory(&|name| std::env::var(name).ok())
-            .map(|directory| directory.join("signed-in-agents.json")),
+            .map(|directory| directory.join(mcp::SIGNED_IN_FILE)),
         show: Box::new(|client: &str, code: &str| {
             let summary = format!("Connecting {client} to your desktop");
             let body =

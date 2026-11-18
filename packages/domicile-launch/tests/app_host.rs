@@ -279,6 +279,46 @@ fn agents_are_listed_stopped_and_forgotten_on_the_desktop() {
 }
 
 #[test]
+fn agents_on_the_web_are_read_and_signed_out_from_mcps_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut host = a_host(FILES.clone());
+    host.web_status = Some(dir.path().join("web-agents.json"));
+    host.signed_in = Some(dir.path().join("signed-in-agents.json"));
+    assert_eq!(
+        host.answer(&json!({"id": 23, "type": "web_agents"})),
+        json!({"id": 23, "type": "web_agents", "status": null, "signed_in": []})
+    );
+
+    std::fs::write(
+        dir.path().join("web-agents.json"),
+        r#"{"address":"https://desk.relay.example/mcp","ready":true,"problem":null}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("signed-in-agents.json"),
+        r#"{"clients":[{"id":"c1","name":"claude.ai","redirect_uris":[]}],"refresh":[{"hash":"h","client":"c1","used_ms":5}]}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        host.answer(&json!({"id": 23, "type": "web_agents"})),
+        json!({
+            "id": 23,
+            "type": "web_agents",
+            "status": {"address": "https://desk.relay.example/mcp", "ready": true, "problem": null},
+            "signed_in": [{"client": "c1", "name": "claude.ai", "last_used_ms": 5}],
+        })
+    );
+    assert_eq!(
+        host.answer(&json!({"id": 24, "type": "sign_out_web_agent", "client": "c1"})),
+        json!({"id": 24, "type": "done"})
+    );
+    assert_eq!(
+        host.answer(&json!({"id": 25, "type": "web_agents"}))["signed_in"],
+        json!([])
+    );
+}
+
+#[test]
 fn a_media_device_is_preferred_on_the_desktop() {
     let host = a_host(FILES.clone());
     assert_eq!(
@@ -670,6 +710,8 @@ struct Fake {
     refuse: bool,
     asked: RefCell<Vec<Request>>,
     written: RefCell<Vec<(PathBuf, String)>>,
+    web_status: Option<PathBuf>,
+    signed_in: Option<PathBuf>,
 }
 
 fn a_host(files: SettingsFiles) -> Fake {
@@ -684,6 +726,8 @@ impl Fake {
             refuse: false,
             asked: RefCell::new(Vec::new()),
             written: RefCell::new(Vec::new()),
+            web_status: None,
+            signed_in: None,
         }
     }
 
@@ -836,6 +880,8 @@ impl Fake {
                         .push((path.to_path_buf(), text.to_string()));
                     Ok(())
                 },
+                web_status: self.web_status.as_deref(),
+                signed_in: self.signed_in.as_deref(),
             },
         )
     }

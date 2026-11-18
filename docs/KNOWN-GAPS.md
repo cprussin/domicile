@@ -66,9 +66,6 @@ the detail, when there is one. Remove a gap when it's fixed.
 
 ## Session and portals
 
-- **Reaching the desk from the web takes a command.** `domicile mcp
-  --relay` has to be run by hand, and nothing in Settings shows the address
-  to give claude.ai. [AGENTS.md](/docs/AGENTS.md#agents-on-the-web).
 - **The session portal setup is only checked at evaluation.** Nothing here
   runs a user manager, an unclean exit leaves stale environment variables,
   and a nested desktop doesn't register.

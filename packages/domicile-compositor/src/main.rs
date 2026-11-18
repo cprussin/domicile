@@ -164,6 +164,7 @@ mod uploads;
 mod viewport;
 mod virtual_monitors;
 mod watchers;
+mod web_agents;
 mod which_engine;
 mod window_geometry;
 mod windows;
@@ -677,6 +678,8 @@ struct DomicileCompositor {
     /// surface is [`StillThere`] and among
     /// [`surfaces_on_the_desktop`](DomicileCompositor::surfaces_on_the_desktop).
     idle: Idle<WlSurface>,
+    /// `domicile mcp --relay`, while `agents.web` is set.
+    web_agents: crate::web_agents::WebAgents,
     /// Whether somebody put the screens to sleep. Independent of `idle`,
     /// so it works on a desktop with no timeout.
     display_sleep: crate::display_sleep::DisplaySleep,
@@ -1480,6 +1483,28 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         engine_process: None,
         engine_disconnected: false,
         idle: Idle::after(&config.idle, Instant::now()),
+        web_agents: crate::web_agents::WebAgents::new({
+            let display = socket_name.clone();
+            std::sync::Arc::new(move || {
+                // Beside the compositor, or from the `PATH`.
+                let domicile = std::env::current_exe()
+                    .ok()
+                    .and_then(|exe| Some(exe.parent()?.join("domicile")))
+                    .filter(|binary| binary.exists())
+                    .map_or_else(
+                        || "domicile".to_string(),
+                        |binary| binary.display().to_string(),
+                    );
+                crate::spawning::client_command(
+                    &[domicile, "mcp".into(), "--relay".into()],
+                    &display,
+                    std::env::var_os("LD_LIBRARY_PATH").as_deref(),
+                    None,
+                    0,
+                    None,
+                )
+            })
+        }),
         display_sleep: crate::display_sleep::DisplaySleep::default(),
         held_by_portal_apps: Vec::new(),
         held_by_screen_saver: Vec::new(),
@@ -1783,6 +1808,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             None,
         );
     }
+    data.state.web_agents.set(config.agents.web);
     for command in &left.lost {
         info!(
             ?command,

@@ -582,6 +582,20 @@ in {
             };
           };
 
+          # Agents on the web, such as claude.ai, reach the desk through
+          # Domicile's relay while this is set: the compositor runs
+          # `domicile mcp --relay`. Applied on reload.
+          agents.web = lib.mkOption {
+            description = ''
+              Whether agents on the web, such as claude.ai, can reach the
+              desktop through Domicile's relay. Each still signs in with a code
+              the desktop shows, and asks before it uses anything. Settings ›
+              Agents › Connect from the web sets it.
+            '';
+            type = lib.types.bool;
+            default = false;
+          };
+
           # Applications enforce these themselves; the compositor reports them
           # through the Lockdown portal. Applied on reload.
           lockdown = {

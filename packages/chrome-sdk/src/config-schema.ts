@@ -15,6 +15,14 @@ export const accentColorSchema = z
   .string()
   .regex(new RegExp("^#[0-9a-fA-F]{6}$"));
 
+/**
+ * Agents that drive the desktop, such as Claude Code. See
+ * `docs/AGENTS.md`.
+ */
+export const agentsConfigSchema = z.strictObject({
+  web: z.boolean().prefault(false),
+});
+
 /** One browser profile. See [`BrowserConfig::profiles`]. */
 export const browserProfileSchema = z.strictObject({
   color: accentColorSchema,
@@ -502,6 +510,7 @@ export const configSchema = z.strictObject({
     .string()
     .nullish()
     .transform((value) => value ?? undefined),
+  agents: agentsConfigSchema.prefault({ web: false }),
   browser: browserConfigSchema.prefault({
     default_private_profile: "private",
     default_profile: "default",

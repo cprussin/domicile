@@ -192,7 +192,9 @@ const PageContent = ({
     case PageId.SiteData:
       return <SiteDataPage {...named} host={host} report={report} />;
     case PageId.Agents:
-      return <AgentsPage {...named} host={host} report={report} />;
+      return (
+        <AgentsPage {...named} editor={editor} host={host} report={report} />
+      );
     case PageId.Code:
       return files === undefined ? (
         <Page {...named} />

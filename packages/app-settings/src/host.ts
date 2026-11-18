@@ -116,6 +116,46 @@ const knownAgentsSchema = z
  */
 export type KnownAgents = z.output<typeof knownAgentsSchema>;
 
+const webAgentsSchema = z
+  .object({
+    signed_in: z.array(
+      z.object({
+        client: z.string(),
+        last_used_ms: z.number(),
+        name: z.string(),
+      }),
+    ),
+    status: z
+      .object({
+        address: z.string().nullable(),
+        problem: z.string().nullable(),
+        ready: z.boolean(),
+      })
+      .nullable(),
+  })
+  .transform(({ signed_in, status }) => ({
+    signedIn: signed_in.map(({ client, last_used_ms, name }) => ({
+      client,
+      lastUsedMs: last_used_ms,
+      name,
+    })),
+    status:
+      status === null
+        ? undefined
+        : {
+            address: status.address ?? undefined,
+            problem: status.problem ?? undefined,
+            ready: status.ready,
+          },
+  }));
+
+/**
+ * Agents on the web: how the desk's relay address is doing, `undefined`
+ * until `domicile mcp --relay` first runs, and the agents signed in, most
+ * recently used first.
+ */
+export type WebAgents = z.output<typeof webAgentsSchema>;
+
 const mediaDeviceSchema = z.object({ id: z.string(), name: z.string() });
 
 /** A camera or microphone. */
@@ -303,6 +343,10 @@ export type SettingsHost = {
   stopAgent: (session: number) => Promise<void>;
   /** Makes remembered agent `agent` ask again next time. */
   forgetAgent: (agent: string) => Promise<void>;
+  /** Agents on the web: the relay address, and who is signed in. */
+  webAgents: () => Promise<WebAgents>;
+  /** Signs agent `client` on the web out, so it needs a new code. */
+  signOutWebAgent: (client: string) => Promise<void>;
   /** Calls `listener` when a file changes on disk. Returns an unsubscribe. */
   onChange: (listener: () => void) => () => void;
 };
@@ -518,6 +562,12 @@ export const spawnedHost = (
         throw unexpected(reply, "stored");
       }
     },
+    signOutWebAgent: async (client) => {
+      const reply = await ask({ client, type: "sign_out_web_agent" });
+      if (reply.type !== "done") {
+        throw unexpected(reply, "done");
+      }
+    },
     siteData: async () => {
       const reply = await ask({ type: "site_data" });
       if (reply.type === "site_data") {
@@ -544,6 +594,14 @@ export const spawnedHost = (
       const reply = await ask({ extension, type: "uninstall_extension" });
       if (reply.type !== "uninstalled") {
         throw unexpected(reply, "uninstalled");
+      }
+    },
+    webAgents: async () => {
+      const reply = await ask({ type: "web_agents" });
+      if (reply.type === "web_agents") {
+        return reply.webAgents;
+      } else {
+        throw unexpected(reply, "web_agents");
       }
     },
     write: async (file, text) => {
@@ -626,6 +684,18 @@ const replySchema = z.discriminatedUnion("type", [
     id: z.number(),
     type: z.literal("agents"),
   }),
+  z
+    .object({
+      id: z.number(),
+      signed_in: z.unknown(),
+      status: z.unknown(),
+      type: z.literal("web_agents"),
+    })
+    .transform(({ id, signed_in, status, type }) => ({
+      id,
+      type,
+      webAgents: webAgentsSchema.parse({ signed_in, status }),
+    })),
   z.object({ id: z.number(), type: z.literal("done") }),
   z.object({ id: z.number(), type: z.literal("refused"), why: z.string() }),
   z.object({ type: z.literal("changed") }),

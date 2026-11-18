@@ -21,6 +21,7 @@ use std::io::{self, BufRead, Write};
 
 use browser::Browser;
 pub use http::{serve_http, Web, IDLE_MS};
+pub use oauth::{sign_out, signed_in, SignedIn, SIGNED_IN_FILE};
 
 use domicile_protocol::{AgentReach, DeskShot};
 use serde_json::{json, Map, Value};

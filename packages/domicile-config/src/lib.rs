@@ -1212,6 +1212,21 @@ fn under_home(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, ConfigError
     }
 }
 
+/// Agents that drive the desktop, such as Claude Code. See
+/// `docs/AGENTS.md`.
+// `PartialEq` lets a reload detect a change; see the compositor's
+// `Restatement`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct AgentsConfig {
+    /// Whether agents on the web, such as claude.ai, can reach the desktop
+    /// through Domicile's relay: while it is set, the compositor runs
+    /// `domicile mcp --relay`. Each agent still signs in with a code the
+    /// desktop shows, and asks before it uses anything. Off by default. See
+    /// `docs/AGENTS.md#agents-on-the-web`.
+    pub web: bool,
+}
+
 /// What applications are told not to do, through the
 /// `org.freedesktop.impl.portal.Lockdown` portal. Every switch defaults to
 /// off.
@@ -1266,6 +1281,7 @@ impl ElectronConfig {
 #[derive(Debug, Clone, Default, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub agents: AgentsConfig,
     pub browser: BrowserConfig,
     pub electron: ElectronConfig,
     pub extensions: ExtensionsConfig,

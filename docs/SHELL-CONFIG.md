@@ -357,6 +357,19 @@ display the pointer is on.
   an EDID description.
 - Details: [DISPLAYS.md](DISPLAYS.md#tablets-and-touchscreens).
 
+## Agents
+
+```json
+{ "agents": { "web": true } }
+```
+
+`agents.web` lets agents on the web, such as claude.ai, reach the desktop
+through Domicile's relay. While it is `true`, the compositor runs `domicile
+mcp --relay`, and runs it again if it exits; setting it back to `false`
+stops it. Each agent still signs in with a code the desktop shows, and asks
+before it uses anything. Defaults to `false`. Settings › Agents › Connect
+from the web sets it ([AGENTS.md](AGENTS.md#agents-on-the-web)).
+
 ## Idle
 
 `idle.blank_after_seconds` is how long the desktop goes without input before

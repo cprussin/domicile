@@ -27,6 +27,7 @@
 //! | `extensions.*` | sent to every chrome, whose browser installs them (`hand_over_the_extensions`) |
 //! | `browser.*` | sent to every chrome, whose browser takes up the profiles (`hand_over_the_browser_profiles`) |
 //! | `lock.*` | the verifier replaced; the desktop stays as locked as it was (`rekey_the_lock`, `Lock::rekeyed`) |
+//! | `agents.web` | runs or stops `domicile mcp --relay` (`WebAgents::set`) |
 //! | `lockdown.*` | sent to the Lockdown portal, which signals the change (`Portals::lock_down`) |
 //! | `keybindings` | resolved on the keyboard and sent to every chrome (`rebind_the_keys`) |
 //! | `modes` | the same, with `keybindings` |
@@ -51,8 +52,8 @@
 //! restated and an unchanged one is not.
 
 use domicile_config::{
-    BrowserConfig, Config, ExtensionsConfig, IdleConfig, KeyRepeat, KeyboardConfig, LockConfig,
-    LockdownConfig, Omit, ThemeConfig, ThemeMode,
+    AgentsConfig, BrowserConfig, Config, ExtensionsConfig, IdleConfig, KeyRepeat, KeyboardConfig,
+    LockConfig, LockdownConfig, Omit, ThemeConfig, ThemeMode,
 };
 
 /// What a reloaded config asks the compositor to restate.
@@ -89,6 +90,8 @@ pub struct Restatement {
     pub extensions: Option<ExtensionsConfig>,
     /// The browser profiles, or `None` if unchanged.
     pub browser: Option<BrowserConfig>,
+    /// Agents that drive the desktop, or `None` if unchanged.
+    pub agents: Option<AgentsConfig>,
     /// What applications are asked not to do, or `None` if unchanged.
     pub lockdown: Option<LockdownConfig>,
     /// What opens the lock, or `None` if unchanged.
@@ -130,6 +133,7 @@ impl Restatement {
             electron_apps: (was.electron != now.electron).then(|| now.electron.apps.clone()),
             extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
             browser: (was.browser != now.browser).then(|| now.browser.clone()),
+            agents: (was.agents != now.agents).then(|| now.agents.clone()),
             lockdown: (was.lockdown != now.lockdown).then(|| now.lockdown.clone()),
             lock: (was.lock != now.lock).then(|| now.lock.clone()),
             shell_config: keymap_moved || was.shell_options != now.shell_options,
@@ -341,6 +345,20 @@ mod tests {
                 .disable_camera,
             "the switches handed back are the new ones, not the ones being replaced"
         );
+    }
+
+    #[test]
+    fn agents_on_the_web_turned_on_are_restated() {
+        let was = parsed(A_DVORAK_DESK);
+        let now = parsed(r#"{ "agents": { "web": true } }"#);
+
+        assert!(
+            Restatement::between(&was, &now)
+                .agents
+                .expect("agents moved")
+                .web
+        );
+        assert_eq!(Restatement::between(&now, &now).agents, None);
     }
 
     #[test]

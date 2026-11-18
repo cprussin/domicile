@@ -12,6 +12,7 @@ import type {
   SiteData,
   SiteSettings,
   Target,
+  WebAgents,
 } from "./host";
 
 /** What a fake host starts with. */
@@ -31,6 +32,8 @@ export type FakeHostState = {
   monitors?: Monitor[] | undefined;
   /** The agents in now and remembered; none by default. */
   agents?: KnownAgents | undefined;
+  /** Agents on the web; no status and nobody signed in by default. */
+  webAgents?: WebAgents | undefined;
   /** The browser profiles the engine runs; one default profile if unset. */
   profiles?: BrowserProfiles | undefined;
   /** The reason every write is refused, if any. */
@@ -170,6 +173,14 @@ export const fakeHost = (state: FakeHostState) => {
       };
       return Promise.resolve();
     },
+    signOutWebAgent: (client) => {
+      if (state.webAgents !== undefined) {
+        state.webAgents.signedIn = state.webAgents.signedIn.filter(
+          (signedIn) => signedIn.client !== client,
+        );
+      }
+      return Promise.resolve();
+    },
     siteData: () => Promise.resolve(structuredClone(state.siteData)),
     sitePermissions: () => Promise.resolve(structuredClone(state.sites)),
     stopAgent: (session) => {
@@ -184,6 +195,10 @@ export const fakeHost = (state: FakeHostState) => {
       uninstalled.push(id);
       return Promise.resolve();
     },
+    webAgents: () =>
+      Promise.resolve(
+        structuredClone(state.webAgents ?? { signedIn: [], status: undefined }),
+      ),
     write: (file, text) => {
       if (state.refuse === undefined) {
         writes.push({ file, text });

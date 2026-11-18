@@ -13,6 +13,7 @@
 export type Config = {
   /** Where editors find this file's JSON Schema. Domicile ignores it. */
   $schema?: string | null;
+  agents?: AgentsConfig;
   browser?: BrowserConfig;
   electron?: ElectronConfig;
   extensions?: ExtensionsConfig;
@@ -50,6 +51,21 @@ export type AccelProfile = "adaptive" | "flat";
 
 /** An sRGB color, written `"#rrggbb"`. */
 export type AccentColor = string;
+
+/**
+ * Agents that drive the desktop, such as Claude Code. See
+ * `docs/AGENTS.md`.
+ */
+export type AgentsConfig = {
+  /**
+   * Whether agents on the web, such as claude.ai, can reach the desktop
+   * through Domicile's relay: while it is set, the compositor runs
+   * `domicile mcp --relay`. Each agent still signs in with a code the
+   * desktop shows, and asks before it uses anything. Off by default. See
+   * `docs/AGENTS.md#agents-on-the-web`.
+   */
+  web?: boolean;
+};
 
 /**
  * Browser profiles: sets of sign-ins, site data and extensions, and the

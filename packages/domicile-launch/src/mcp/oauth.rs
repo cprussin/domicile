@@ -10,7 +10,9 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -20,6 +22,9 @@ use super::base64;
 
 /// A request's query or form fields.
 pub(super) type Params = HashMap<String, String>;
+
+/// The file in the state directory that keeps signed-in clients.
+pub const SIGNED_IN_FILE: &str = "signed-in-agents.json";
 
 /// How long an authorization code may wait to be exchanged.
 const CODE_LIFETIME_MS: u64 = 2 * 60 * 1000;
@@ -65,7 +70,51 @@ struct Code {
 
 struct Access {
     token: String,
+    client: String,
     expires_ms: u64,
+}
+
+/// A client signed in to the desk: one holding a refresh token.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SignedIn {
+    pub client: String,
+    /// What it calls itself.
+    pub name: String,
+    /// When it last got tokens.
+    pub last_used_ms: u64,
+}
+
+/// The clients signed in, as kept at `path`, most recently used first.
+pub fn signed_in(path: &Path) -> Vec<SignedIn> {
+    let saved = load(path);
+    let mut signed_in: Vec<SignedIn> = saved
+        .clients
+        .iter()
+        .filter_map(|client| {
+            let last_used_ms = saved
+                .refresh
+                .iter()
+                .filter(|refresh| refresh.client == client.id)
+                .map(|refresh| refresh.used_ms)
+                .max()?;
+            Some(SignedIn {
+                client: client.id.clone(),
+                name: client.name.clone(),
+                last_used_ms,
+            })
+        })
+        .collect();
+    signed_in.sort_by_key(|signed_in| std::cmp::Reverse(signed_in.last_used_ms));
+    signed_in
+}
+
+/// Signs `client` out, as kept at `path`: its refresh tokens are dropped, and
+/// a running server drops its access tokens when it sees the file change. It
+/// signs in again with a new code.
+pub fn sign_out(path: &Path, client: &str) -> io::Result<()> {
+    let mut saved = load(path);
+    saved.refresh.retain(|refresh| refresh.client != client);
+    write(path, &saved)
 }
 
 /// What `/authorize` answers.
@@ -93,6 +142,9 @@ pub(super) struct Auth {
     access: Vec<Access>,
     pairing: String,
     misses: u32,
+    /// When the kept file was last read or written, to see another process
+    /// change it.
+    seen: Option<(SystemTime, u64)>,
     clock: Box<dyn Fn() -> u64 + Send>,
     random: Box<dyn FnMut() -> [u8; 32] + Send>,
     told: Box<Shows>,
@@ -110,7 +162,8 @@ impl Auth {
         random: impl FnMut() -> [u8; 32] + Send + 'static,
         told: impl Fn(&str, &str) + Send + 'static,
     ) -> Auth {
-        let saved = path.as_ref().map(load).unwrap_or_default();
+        let saved = path.as_deref().map(load).unwrap_or_default();
+        let seen = path.as_deref().and_then(modified);
         let mut auth = Auth {
             issuer,
             path,
@@ -119,6 +172,7 @@ impl Auth {
             access: Vec::new(),
             pairing: String::new(),
             misses: 0,
+            seen,
             clock: Box::new(clock),
             random: Box::new(random),
             told: Box::new(told),
@@ -279,6 +333,7 @@ impl Auth {
         }
         let client = field("client_id").to_string();
         let now = (self.clock)();
+        self.reread();
         match field("grant_type") {
             "authorization_code" => {
                 let at = self
@@ -324,6 +379,7 @@ impl Auth {
     /// Whether `token` is an access token this server issued that is still
     /// good.
     pub(super) fn allows(&mut self, token: &str) -> bool {
+        self.reread();
         let now = (self.clock)();
         self.access.retain(|access| access.expires_ms > now);
         self.access.iter().any(|access| access.token == token)
@@ -334,6 +390,7 @@ impl Auth {
         let refresh = self.secret();
         self.access.push(Access {
             token: access.clone(),
+            client: client.clone(),
             expires_ms: now + ACCESS_LIFETIME_MS,
         });
         self.saved.refresh.push(Refresh {
@@ -368,17 +425,30 @@ impl Auth {
         base64url(&(self.random)())
     }
 
-    fn save(&self) {
+    /// Takes up what another process, such as Settings signing a client
+    /// out, wrote to the kept file: a client with no refresh token left loses
+    /// its access tokens too.
+    fn reread(&mut self) {
         let Some(path) = &self.path else { return };
-        let written = path
-            .parent()
-            .map_or(Ok(()), fs::create_dir_all)
-            .and_then(|()| {
-                fs::write(
-                    path,
-                    serde_json::to_vec_pretty(&self.saved).expect("it serializes"),
-                )
-            });
+        let modified = modified(path);
+        if modified == self.seen {
+            return;
+        }
+        self.seen = modified;
+        self.saved = load(path);
+        let saved = &self.saved;
+        self.access.retain(|access| {
+            saved
+                .refresh
+                .iter()
+                .any(|refresh| refresh.client == access.client)
+        });
+    }
+
+    fn save(&mut self) {
+        let Some(path) = &self.path else { return };
+        let written = write(path, &self.saved);
+        self.seen = modified(path);
         if let Err(why) = written {
             eprintln!(
                 "domicile: could not save signed-in agents to {}: {why}",
@@ -388,7 +458,26 @@ impl Auth {
     }
 }
 
-fn load(path: &PathBuf) -> Saved {
+/// When `path` changed, and its length, which tells two writes apart within
+/// one tick of a coarse clock.
+fn modified(path: &Path) -> Option<(SystemTime, u64)> {
+    let metadata = fs::metadata(path).ok()?;
+    Some((metadata.modified().ok()?, metadata.len()))
+}
+
+fn write(path: &Path, saved: &Saved) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let fresh = path.with_extension("json.new");
+    fs::write(
+        &fresh,
+        serde_json::to_vec_pretty(saved).expect("it serializes"),
+    )?;
+    fs::rename(&fresh, path)
+}
+
+fn load(path: &Path) -> Saved {
     match fs::read(path) {
         Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_else(|why| {
             eprintln!(
@@ -766,6 +855,38 @@ mod tests {
         assert!(second.auth.allows(tokens["access_token"].as_str().unwrap()));
         assert_eq!(
             second.auth.token(&refreshing).unwrap_err()["error"],
+            "invalid_grant"
+        );
+    }
+
+    #[test]
+    fn signing_a_client_out_ends_its_tokens_in_a_running_server() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("signed-in.json");
+        let mut desk = desk(Some(path.clone()));
+        let client = desk.registered();
+        let code = desk.code(&client);
+        let tokens = desk.exchanged(&client, &code).unwrap();
+        let access = tokens["access_token"].as_str().unwrap().to_string();
+        assert_eq!(
+            signed_in(&path),
+            vec![SignedIn {
+                client: client.clone(),
+                name: "Claude".into(),
+                last_used_ms: 1_000,
+            }]
+        );
+
+        sign_out(&path, &client).unwrap();
+        assert_eq!(signed_in(&path), Vec::new());
+        assert!(!desk.auth.allows(&access));
+        let refreshing = params(&[
+            ("grant_type", "refresh_token"),
+            ("client_id", &client),
+            ("refresh_token", tokens["refresh_token"].as_str().unwrap()),
+        ]);
+        assert_eq!(
+            desk.auth.token(&refreshing).unwrap_err()["error"],
             "invalid_grant"
         );
     }

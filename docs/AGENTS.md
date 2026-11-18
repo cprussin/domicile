@@ -39,10 +39,14 @@ it signs the agent in. It still asks, as above, before it uses anything.
 ### Agents on the web
 
 An agent on the web, such as claude.ai, can't reach a desk behind a router.
-`domicile mcp --relay` ([CLI.md](CLI.md#through-the-relay)) dials out to a
-relay (below) and prints the desk's address,
-`https://<label>.mcp.domicile-desktop.com/mcp`, to add as a custom connector.
-Signing in and asking work as above.
+Turning on **Connect from the web** in Settings › Agents (`agents.web`,
+[SHELL-CONFIG.md](SHELL-CONFIG.md#agents)) has the desktop run `domicile mcp
+--relay` ([CLI.md](CLI.md#through-the-relay)), which dials out to a relay
+(below). Settings then shows the desk's address,
+`https://<label>.mcp.domicile-desktop.com/mcp`, with a Copy button, to add to
+the agent as a custom connector, and whether it is ready. Signing in and
+asking work as above. Each agent signed in is listed there too: **Sign out**
+drops its tokens, so it needs a new code.
 
 ## Design
 

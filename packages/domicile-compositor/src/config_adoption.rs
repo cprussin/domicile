@@ -173,6 +173,9 @@ impl DomicileCompositor {
             };
             self.hub.broadcast(told);
         }
+        if let Some(agents) = &restated.agents {
+            self.web_agents.set(agents.web);
+        }
         if let Some(lockdown) = &restated.lockdown {
             self.hub.portals.lock_down(lockdown.clone());
         }

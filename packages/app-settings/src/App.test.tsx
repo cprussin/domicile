@@ -20,6 +20,7 @@ import type {
   KnownAgents,
   Monitor,
   SettingsFiles,
+  WebAgents,
 } from "./host";
 
 const CONFIG_PATH = "/home/me/.config/domicile/domicile.json";
@@ -125,8 +126,11 @@ const renderApp = async (
     options,
     profiles,
     refuse,
+    webAgents,
     writable = true,
   }: {
+    /** Agents on the web; none by default. */
+    webAgents?: WebAgents;
     /** The agents in now and remembered; none by default. */
     agents?: KnownAgents;
     /** The browser profiles the engine runs. */
@@ -155,6 +159,7 @@ const renderApp = async (
     refuse,
     siteData: structuredClone(SITE_DATA),
     sites: structuredClone(SITES),
+    webAgents: structuredClone(webAgents),
   });
   const user = userEvent.setup();
   render(<App extensions={hostExtensions(host.host)} host={host.host} />);
@@ -1114,6 +1119,51 @@ describe(App, () => {
       expect(
         screen.getByText(/No agent is connected or remembered/u),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe("agents on the web", () => {
+    const ADDRESS = "https://desk.mcp.domicile-desktop.com/mcp";
+    const WEB: WebAgents = {
+      signedIn: [{ client: "c1", lastUsedMs: Date.now(), name: "claude.ai" }],
+      status: { address: ADDRESS, problem: undefined, ready: true },
+    };
+
+    it("turns connecting from the web on in the config", async () => {
+      const { host, user } = await renderApp("Agents");
+      expect(screen.queryByText("Your desktop's address")).toBeNull();
+      await user.click(
+        await screen.findByRole("switch", { name: "Connect from the web" }),
+      );
+      await waitFor(() => {
+        expect(written(host.writes).agents).toEqual({ web: true });
+      });
+    });
+
+    it("shows the address to copy once the relay gives it", async () => {
+      await renderApp("Agents", {
+        config: { agents: { web: true } },
+        webAgents: WEB,
+      });
+      expect(await screen.findByText(ADDRESS)).toBeInTheDocument();
+      expect(
+        screen.getByText("Add it to the agent as a connector."),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    });
+
+    it("signs an agent on the web out", async () => {
+      const { host, user } = await renderApp("Agents", {
+        config: { agents: { web: true } },
+        webAgents: WEB,
+      });
+      await user.click(
+        await screen.findByRole("button", { name: "Sign out claude.ai" }),
+      );
+      await waitFor(() => {
+        expect(screen.queryByText("claude.ai")).toBeNull();
+      });
+      expect(host.state.webAgents?.signedIn).toEqual([]);
     });
   });
 
