@@ -493,8 +493,9 @@ ends it. Every call after is checked against what you allowed:
   `send_shell`, `focus_window`, `theme` and the other listings) are refused.
   Private browser windows are never offered.
 
-An agent you cancel or stop is refused from then on; its next session asks
-again. If you turn on **Remember** with the entire desktop, it comes in
+An agent you cancel or stop is refused from then on, until it calls
+`ask_to_use_desktop`, which asks again, or its next session does. After a stop
+it asks even when remembered. If you turn on **Remember** with the entire desktop, it comes in
 without asking until you forget it in Settings › Agents or with
 `forget-agent`. **Change** in the bar asks again; what you pick applies from
 the agent's next call. See [AGENTS.md](AGENTS.md).
@@ -520,6 +521,7 @@ Each tool runs a verb and answers what it printed, or its error:
 | `browser_screenshot` | `devtools <window> Page.captureScreenshot`, answered as a WebP |
 | `app_snapshot` | `accessibility <window>` |
 | `app_click`, `app_focus`, `app_set_text` | `accessibility-act <window> <ref> click\|focus\|set-text <text>` |
+| `ask_to_use_desktop` | nothing: asks the user again, after they stopped the agent or turned it away |
 
 The browser and app tools work on a window the desk hides and need no screenshot, so prefer them for browser windows and for native apps that support accessibility. Tools the lock refuses are refused while the desktop is locked.
 

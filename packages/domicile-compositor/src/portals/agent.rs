@@ -14,6 +14,7 @@
 //! Domicile's own, not a portal's: no application asks over D-Bus. See
 //! `docs/AGENTS.md`.
 
+use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -63,6 +64,9 @@ pub struct Door {
     remembered: Mutex<Remembered>,
     /// Each agent in now, by its session's id, oldest first.
     connected: Mutex<Vec<(u32, Arc<Mutex<AgentSession>>)>>,
+    /// Agents the user stopped since they last answered its dialog: each
+    /// asks next time, remembered or not, so a stop holds until they say.
+    stopped: Mutex<HashSet<String>>,
 }
 
 impl Door {
@@ -80,6 +84,7 @@ impl Door {
             patience,
             remembered: Mutex::new(Remembered::load(path)),
             connected: Mutex::new(Vec::new()),
+            stopped: Mutex::new(HashSet::new()),
         })
     }
 
@@ -92,7 +97,8 @@ impl Door {
         windows: OpenWindows,
         told: AgentTold,
     ) -> Result<LetIn, SystemError> {
-        let remembered = self.remembered.lock().unwrap().has(&agent);
+        let stopped = self.stopped.lock().unwrap().contains(&agent);
+        let remembered = !stopped && self.remembered.lock().unwrap().has(&agent);
         let (reach, remember) = if remembered {
             (AgentReach::Desk, true)
         } else {
@@ -105,7 +111,9 @@ impl Door {
             });
             match asked(&self.queue, kind, self.patience) {
                 PortalAnswer::Agent { reach, remember } => {
-                    (offered_only(reach, &offered)?, remember)
+                    let reach = offered_only(reach, &offered)?;
+                    self.stopped.lock().unwrap().remove(&agent);
+                    (reach, remember)
                 }
                 PortalAnswer::Canceled => return Err(canceled("the user did not let it in")),
                 PortalAnswer::Refused => return Err(canceled(
@@ -280,6 +288,9 @@ impl Controls {
     fn take(&self, answer: &PortalAnswer) {
         match answer {
             PortalAnswer::Stop => {
+                if let Some(door) = self.door.upgrade() {
+                    door.stopped.lock().unwrap().insert(self.agent.clone());
+                }
                 if let Some(stopped) = self.stopped.lock().unwrap().take() {
                     stopped();
                 }
@@ -787,6 +798,37 @@ mod tests {
             fs::read_to_string(&path).expect("the file is kept"),
             r#"{"agents":[]}"#
         );
+    }
+
+    #[test]
+    fn a_stopped_agent_asks_next_time_though_it_is_remembered() {
+        let desk = desk(None, PATIENCE);
+        let (let_in, heard) = let_in_answering(&desk, vec![], |_| PortalAnswer::Agent {
+            reach: AgentReach::Desk,
+            remember: true,
+        });
+        let let_in = let_in.expect("the user let it in");
+        let session = desk.door.known().connected[0].session;
+        desk.door.stop(session).expect("it is in");
+        assert_eq!(heard.stopped.try_recv(), Ok(()));
+        drop(let_in);
+
+        // Still remembered, but the stop holds: it asks, and a refusal
+        // leaves it asking.
+        assert_eq!(desk.door.known().remembered.len(), 1);
+        let (refused, _) = let_in_answering(&desk, vec![], |_| PortalAnswer::Canceled);
+        assert_eq!(
+            refused.err().map(|error| error.kind),
+            Some(SystemErrorKind::Canceled)
+        );
+        let (let_in, _) = let_in_answering(&desk, vec![], |_| allow(AgentReach::Desk));
+        drop(let_in.expect("the user let it in again"));
+
+        // Once they let it in, it is remembered as before.
+        let (told_it, _) = told();
+        desk.door
+            .let_in("Claude Code".into(), Arc::new(Vec::new), told_it)
+            .expect("a remembered agent is let in without asking");
     }
 
     #[test]
