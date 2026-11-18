@@ -209,10 +209,11 @@ fn run() -> Result<ExitCode, String> {
                 .transpose()?,
         }),
         // Absolute here, as for `Screenshot`.
-        Invocation::ShootDesk { file, fit } => asked(&Request::ShootDesk {
+        Invocation::ShootDesk { file, fit, area } => asked(&Request::ShootDesk {
             file: std::path::absolute(&file)
                 .map_err(|why| format!("cannot tell where {file} is: {why}"))?,
             fit,
+            area,
         }),
         Invocation::Check { config } => check(&config).map(|()| ExitCode::SUCCESS),
         Invocation::Power { power } => powered(power),
@@ -1003,7 +1004,7 @@ fn native_window(id: &str) -> Result<(u32, String), String> {
             Err(format!("the desktop does not know window {id}'s process"))
         }
         (WindowKind::Browser, _) => Err(format!(
-            "window {id} is a browser window; devtools reads and drives those"
+            "window {id} is a browser window; devtools, and an agent's browser_ tools, read and drive those"
         )),
     }
 }
@@ -2047,8 +2048,8 @@ fn answer_a_command(
                         act_on_window(chrome, id, act, Some(ANSWER_WITHIN))
                             .map_err(|why| why.to_string())?
                     },
-                    shoot_desk: &|file, fit| {
-                        shoot_desk(chrome, file, fit, Some(CAPTURE_WITHIN))
+                    shoot_desk: &|file, fit, area| {
+                        shoot_desk(chrome, file, fit, area, Some(CAPTURE_WITHIN))
                             .map_err(|why| why.to_string())?
                     },
                     emulate: &|input| {

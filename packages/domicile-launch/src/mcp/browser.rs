@@ -1,9 +1,12 @@
-//! `domicile mcp`'s browser tools: a browser window's page read as its
-//! accessibility tree and driven by the elements in it, through `domicile
-//! devtools`. They need no screenshot and work on a window the desk hides.
+//! `domicile mcp`'s browser tools: a browser window's page, and each view it
+//! holds, read as its accessibility tree and driven by the elements in it,
+//! through `domicile devtools`. They need no screenshot and work on a window
+//! the desk hides.
 
 use std::io;
 
+use domicile_protocol::ListedView;
+use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
 use super::{said, string, Ran};
@@ -28,26 +31,27 @@ pub(super) fn described(tool: Browser) -> (&'static str, Value, Vec<&'static str
     let window =
         json!({"type": "string", "description": "A browser window's id, from list_windows."});
     let element =
-        json!({"type": "integer", "description": "An element's ref, from browser_snapshot."});
+        json!({"type": "string", "description": "An element's ref, from browser_snapshot."});
+    let view = json!({"type": "string", "description": "One of the window's views, from browser_snapshot or list_windows. Left out, the window's own page."});
     match tool {
         Browser::Snapshot => (
-            "Read a browser window's page as its accessibility tree: one element a line, with the ref the other browser tools take. Works on hidden windows; private ones are refused.",
+            "Read a browser window's page, then each view it holds, as accessibility trees: one element a line, with the ref the other browser tools take. An Electron app such as Claude or Slack draws its page in views. Works on hidden windows; private ones are refused.",
             json!({"window": window}),
             vec!["window"],
         ),
         Browser::Click => (
-            "Click an element of a browser window's page by its ref, scrolling it into view first.",
+            "Click an element of a browser window's page or view by its ref, scrolling it into view first.",
             json!({"window": window, "ref": element}),
             vec!["window", "ref"],
         ),
         Browser::Type => (
-            "Type text into a browser window's page: into the element with ref, focusing it first, or where its focus is.",
-            json!({"window": window, "ref": element, "text": {"type": "string"}}),
+            "Type text into a browser window's page or view: into the element with ref, focusing it first, or where its focus is.",
+            json!({"window": window, "ref": element, "view": view, "text": {"type": "string"}}),
             vec!["window", "text"],
         ),
         Browser::Key => (
-            "Press and release a key in a browser window's page.",
-            json!({"window": window, "key": {"type": "string", "enum": KEYS.iter().map(|key| key.0).collect::<Vec<_>>()}}),
+            "Press and release a key in a browser window's page or view.",
+            json!({"window": window, "view": view, "key": {"type": "string", "enum": KEYS.iter().map(|key| key.0).collect::<Vec<_>>()}}),
             vec!["window", "key"],
         ),
         Browser::Navigate => (
@@ -56,8 +60,8 @@ pub(super) fn described(tool: Browser) -> (&'static str, Value, Vec<&'static str
             vec!["window", "url"],
         ),
         Browser::Screenshot => (
-            "Take a WebP of a browser window's page as it draws, hidden or not.",
-            json!({"window": window}),
+            "Take a WebP of a browser window's page or view as it draws, hidden or not.",
+            json!({"window": window, "view": view}),
             vec!["window"],
         ),
     }
@@ -74,28 +78,42 @@ pub(super) fn called(
         Ok(None) => return Ok(said(false, "this tool takes a window id".to_string())),
         Err(why) => return Ok(said(false, why)),
     };
-    let mut page = Page { window, domicile };
-    Ok(match carried_out(tool, arguments, &mut page)? {
+    let (view, element) = match aimed(arguments) {
+        Ok(aim) => aim,
+        Err(why) => return Ok(said(false, why)),
+    };
+    let mut page = Page {
+        window,
+        view,
+        domicile,
+    };
+    Ok(match carried_out(tool, arguments, element, &mut page)? {
         Ok(answer) => answer,
         Err(why) => said(false, why),
     })
 }
 
-/// A browser window's page, which `domicile devtools` sends methods to.
+/// A browser window's page, or its view `view`, which `domicile devtools`
+/// sends methods to.
 struct Page<'a, D> {
     window: String,
+    view: Option<String>,
     domicile: &'a mut D,
 }
 
 impl<D: FnMut(&[String]) -> io::Result<Ran>> Page<'_, D> {
     /// `method`'s result, or why there is none.
     fn send(&mut self, method: &str, params: Value) -> io::Result<Result<Value, String>> {
-        let ran = (self.domicile)(&[
-            "devtools".to_string(),
-            self.window.clone(),
-            method.to_string(),
-            params.to_string(),
-        ])?;
+        let view = self
+            .view
+            .iter()
+            .flat_map(|view| ["--view".to_string(), view.clone()]);
+        let ran = (self.domicile)(
+            &std::iter::once("devtools".to_string())
+                .chain(view)
+                .chain([self.window.clone(), method.to_string(), params.to_string()])
+                .collect::<Vec<_>>(),
+        )?;
         if !ran.success {
             return Ok(Err(ran.stderr));
         }
@@ -106,6 +124,33 @@ impl<D: FnMut(&[String]) -> io::Result<Ran>> Page<'_, D> {
             ))
         })
     }
+
+    /// The views the window holds, as `domicile list-windows` lists them, or
+    /// why there are none.
+    fn views(&mut self) -> io::Result<Result<Vec<ListedView>, String>> {
+        let ran = (self.domicile)(&["list-windows".to_string(), "--json".to_string()])?;
+        if !ran.success {
+            return Ok(Err(ran.stderr));
+        }
+        let windows: Vec<Listed> = serde_json::from_str(&ran.stdout).map_err(|why| {
+            io::Error::other(format!(
+                "domicile list-windows printed {:?}, which is not its windows: {why}",
+                ran.stdout
+            ))
+        })?;
+        Ok(windows
+            .into_iter()
+            .find(|listed| listed.id == self.window)
+            .map(|listed| listed.views)
+            .ok_or_else(|| format!("window {} closed", self.window)))
+    }
+}
+
+/// What the browser tools read of a window `domicile list-windows` lists.
+#[derive(Deserialize)]
+struct Listed {
+    id: String,
+    views: Vec<ListedView>,
 }
 
 /// Sends `$method` with `$params`, returning the tool's refusal if it fails.
@@ -121,16 +166,29 @@ macro_rules! sent {
 fn carried_out<D: FnMut(&[String]) -> io::Result<Ran>>(
     tool: Browser,
     arguments: &Map<String, Value>,
+    element: Option<u64>,
     page: &mut Page<'_, D>,
 ) -> io::Result<Result<Value, String>> {
-    let element = match element(arguments) {
-        Ok(element) => element,
-        Err(why) => return Ok(Err(why)),
-    };
     match tool {
         Browser::Snapshot => {
             let tree = sent!(page, "Accessibility.getFullAXTree", json!({}));
-            Ok(Ok(said(true, outline(&tree))))
+            let mut lines = outline(&tree, 0, "");
+            let views = match page.views()? {
+                Ok(views) => views,
+                Err(why) => return Ok(Err(why)),
+            };
+            for view in views {
+                page.view = Some(view.id.clone());
+                let tree = sent!(page, "Accessibility.getFullAXTree", json!({}));
+                let [x, y] = view.position;
+                let [width, height] = view.size;
+                lines.push_str(&format!(
+                    "- view {}, at {x},{y}, {width}x{height}\n",
+                    view.id
+                ));
+                lines.push_str(&outline(&tree, 1, &format!("{}:", view.id)));
+            }
+            Ok(Ok(said(true, lines)))
         }
         Browser::Click => {
             let Some(element) = element else {
@@ -236,13 +294,42 @@ const KEYS: [(&str, &str, u32, Option<&str>); 14] = [
     ("PageDown", "PageDown", 34, None),
 ];
 
-/// Argument `ref`, an element's ref from a snapshot, if given.
-fn element(arguments: &Map<String, Value>) -> Result<Option<u64>, String> {
-    match arguments.get("ref") {
-        None => Ok(None),
-        Some(element) => element.as_u64().map(Some).ok_or_else(|| {
-            format!("ref is an element's number from browser_snapshot, not {element}")
-        }),
+/// The view a tool acts in and the element argument `ref` names, if given.
+/// A ref from a view, `<view>:<element>`, names its view; argument `view`
+/// names one for a tool given no ref.
+fn aimed(arguments: &Map<String, Value>) -> Result<(Option<String>, Option<u64>), String> {
+    let view = string(arguments, "view")?;
+    let not_a_ref =
+        |element: &Value| format!("ref is an element's ref from browser_snapshot, not {element}");
+    let (in_view, element) = match arguments.get("ref") {
+        None => (None, None),
+        Some(Value::Number(element)) => (
+            None,
+            Some(
+                element
+                    .as_u64()
+                    .ok_or_else(|| not_a_ref(&Value::Number(element.clone())))?,
+            ),
+        ),
+        Some(Value::String(said)) => {
+            let (in_view, element) = match said.split_once(':') {
+                Some((in_view, element)) => (Some(in_view.to_string()), element),
+                None => (None, said.as_str()),
+            };
+            let element = element
+                .parse()
+                .map_err(|_| not_a_ref(&Value::String(said.clone())))?;
+            (in_view, Some(element))
+        }
+        Some(other) => return Err(not_a_ref(other)),
+    };
+    match (in_view, view) {
+        (Some(in_view), Some(view)) if in_view != view => Err(format!(
+            "ref {in_view}:{} is in view {in_view}, not view {view}",
+            element.expect("a ref names its view")
+        )),
+        (Some(in_view), _) => Ok((Some(in_view), element)),
+        (None, view) => Ok((view, element)),
     }
 }
 
@@ -270,11 +357,11 @@ const GROUPING: [&str; 5] = [
     "LineBreak",
 ];
 
-/// Accessibility.getFullAXTree's nodes as an indented outline, one element a
-/// line: its role, name, ref, value and states. Ignored and unnamed grouping
-/// nodes give their place to their children, and text that repeats its
-/// parent's name is left out.
-fn outline(tree: &Value) -> String {
+/// Accessibility.getFullAXTree's nodes as an outline indented from `depth`,
+/// one element a line: its role, name, ref after `prefix`, value and states.
+/// Ignored and unnamed grouping nodes give their place to their children, and
+/// text that repeats its parent's name is left out.
+fn outline(tree: &Value, depth: usize, prefix: &str) -> String {
     let nodes: Vec<&Value> = tree["nodes"]
         .as_array()
         .map_or(Vec::new(), |nodes| nodes.iter().collect());
@@ -284,7 +371,7 @@ fn outline(tree: &Value) -> String {
         .collect();
     let mut lines = String::new();
     if let Some(root) = nodes.first() {
-        write_node(root, &by_id, 0, "", &mut lines);
+        write_node(root, &by_id, depth, "", prefix, &mut lines);
     }
     lines
 }
@@ -294,6 +381,7 @@ fn write_node(
     by_id: &std::collections::HashMap<&str, &Value>,
     depth: usize,
     parent_name: &str,
+    prefix: &str,
     lines: &mut String,
 ) {
     let role = node["role"]["value"].as_str().unwrap_or("");
@@ -310,7 +398,7 @@ fn write_node(
             lines.push_str(&format!(" {:?}", shortened(name)));
         }
         if let Some(element) = node["backendDOMNodeId"].as_u64() {
-            lines.push_str(&format!(" [ref={element}]"));
+            lines.push_str(&format!(" [ref={prefix}{element}]"));
         }
         if let Some(value) = node["value"]["value"]
             .as_str()
@@ -339,7 +427,7 @@ fn write_node(
     };
     for child in node["childIds"].as_array().into_iter().flatten() {
         if let Some(child) = child.as_str().and_then(|id| by_id.get(id)) {
-            write_node(child, by_id, depth_below, name_below, lines);
+            write_node(child, by_id, depth_below, name_below, prefix, lines);
         }
     }
 }

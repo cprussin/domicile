@@ -516,6 +516,7 @@ mod tests {
             url: None,
             private,
             engine_id: None,
+            views: Vec::new(),
         }
     }
 

@@ -378,6 +378,15 @@ const windowListSchema = z.looseObject({
       urgent: z.boolean(),
       // A browser window's address.
       url: z.string().nullable(),
+      // The views a browser window holds and shows, bottom first: an
+      // Electron app's `WebContentsView`s, for `domicile devtools --view`.
+      views: z.array(
+        z.looseObject({
+          id: z.string().min(1),
+          position: z.tuple([z.int(), z.int()]),
+          size: z.tuple([z.int(), z.int()]),
+        }),
+      ),
     }),
   ),
 });

@@ -8,7 +8,8 @@ use crate::accessibility::Act;
 use std::path::PathBuf;
 
 use domicile_protocol::{
-    DisplayChange, DisplayTransform, EmulatedInput, PointerButton, Scale, WatchTopic, WindowAct,
+    DeskRect, DisplayChange, DisplayTransform, EmulatedInput, PointerButton, Scale, WatchTopic,
+    WindowAct,
 };
 
 use crate::control::{AppReuse, Request, Switch, ThemeChange};
@@ -49,7 +50,9 @@ Ask the running desktop:
                                         desktop's engine; <command> is its own,
                                         which runs it if the engine can't
   domicile screenshot [file]            Take the shell's screenshot, or write a PNG
-  domicile screenshot --fit <px> <file> Write a PNG of the desk no wider or
+  domicile screenshot --fit <px> [--area <x>,<y>,<w>x<h>] <file>
+                                        Write a PNG of the desk, or an area
+                                        of it in logical pixels, no wider or
                                         taller than <px>, and print what it
                                         shows as JSON
   domicile pointer <x>,<y> [click|double-click|right-click|middle-click|press|release]
@@ -66,11 +69,11 @@ Ask the running desktop:
   domicile accessibility-act <window> <ref> click|focus|set-text <text>
                                         Click, focus or set the text of an
                                         element of a native window
-  domicile devtools <window> <method> [params]
+  domicile devtools [--view <view>] <window> <method> [params]
                                         Send a DevTools Protocol method, with
                                         its params as a JSON object, to a
-                                        browser window's page and print its
-                                        result
+                                        browser window's page, or one of its
+                                        views, and print its result
   domicile screen-record                Record the screen until the toolbar stops it
   domicile send-shell <word>...         Run a shell command, as a keybinding does,
                                         and print what it answers
@@ -242,8 +245,8 @@ pub enum CliError {
     ExtraToSave { extra: String },
     #[error(
         "screenshot --fit takes the most pixels the picture may be across or \
-         down, then the file to write:\n\n    \
-         domicile screenshot --fit 1280 desk.png\n"
+         down, maybe --area and an area of the desk, then the file to write:\n\n    \
+         domicile screenshot --fit 1280 --area 0,0,1920x1080 desk.png\n"
     )]
     NotAFit,
     #[error(
@@ -268,8 +271,9 @@ pub enum CliError {
     #[error("{said} is not a JSON object of a DevTools method's params.")]
     NotParams { said: String },
     #[error(
-        "devtools takes a browser window's id, as list-windows prints it, and \
-         a DevTools Protocol method such as Accessibility.getFullAXTree."
+        "devtools takes a browser window's id, as list-windows prints it, \
+         maybe --view and one of its views, and a DevTools Protocol method \
+         such as Accessibility.getFullAXTree."
     )]
     NotDevTools,
     #[error(
@@ -445,7 +449,11 @@ pub enum Invocation {
     /// longer side at most `fit` pixels, and print what it shows.
     ///
     /// Kept as typed; the client makes it absolute.
-    ShootDesk { file: String, fit: u32 },
+    ShootDesk {
+        file: String,
+        fit: u32,
+        area: Option<DeskRect>,
+    },
     /// Check that the compositor takes this config, without running a desktop.
     Check { config: PathBuf },
     /// Power off or reboot the computer, or log out, after a yes in the
@@ -695,12 +703,24 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
             },
             Verb::Capturing => match (args.next(), args.next()) {
                 (Some(flag), fit) if flag == "--fit" => {
+                    let mut args = args.peekable();
+                    let area = match args.next_if(|said| said == "--area") {
+                        Some(_) => Some(
+                            args.next()
+                                .as_deref()
+                                .and_then(desk_area)
+                                .ok_or(CliError::NotAFit)?,
+                        ),
+                        None => None,
+                    };
                     match (
                         fit.and_then(|fit| fit.parse().ok()),
                         args.next(),
                         args.next(),
                     ) {
-                        (Some(fit), Some(file), None) => Ok(Invocation::ShootDesk { file, fit }),
+                        (Some(fit), Some(file), None) => {
+                            Ok(Invocation::ShootDesk { file, fit, area })
+                        }
                         _ => Err(CliError::NotAFit),
                     }
                 }
@@ -800,26 +820,34 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (Some(text), None) => emulated(vec![EmulatedInput::Text { text }]),
                 (said, _) => Err(one(&first, "text, quoted", said)),
             },
-            Verb::DevTooling => match (args.next(), args.next(), args.next(), args.next()) {
-                (Some(window), Some(method), params, None) => {
-                    let params = match params {
-                        None => serde_json::json!({}),
-                        Some(params) => match serde_json::from_str(&params) {
-                            Ok(params @ serde_json::Value::Object(_)) => params,
-                            _ => return Err(CliError::NotParams { said: params }),
-                        },
-                    };
-                    Ok(Invocation::Ask {
-                        request: Request::DevTools {
-                            window,
-                            method,
-                            params,
-                        },
-                    })
+            Verb::DevTooling => {
+                let mut args = args.peekable();
+                let view = match args.next_if(|said| said == "--view") {
+                    Some(_) => Some(args.next().ok_or(CliError::NotDevTools)?),
+                    None => None,
+                };
+                match (args.next(), args.next(), args.next(), args.next()) {
+                    (Some(window), Some(method), params, None) => {
+                        let params = match params {
+                            None => serde_json::json!({}),
+                            Some(params) => match serde_json::from_str(&params) {
+                                Ok(params @ serde_json::Value::Object(_)) => params,
+                                _ => return Err(CliError::NotParams { said: params }),
+                            },
+                        };
+                        Ok(Invocation::Ask {
+                            request: Request::DevTools {
+                                window,
+                                view,
+                                method,
+                                params,
+                            },
+                        })
+                    }
+                    (_, _, _, Some(extra)) => Err(CliError::Extra { extra, verb: first }),
+                    _ => Err(CliError::NotDevTools),
                 }
-                (_, _, _, Some(extra)) => Err(CliError::Extra { extra, verb: first }),
-                _ => Err(CliError::NotDevTools),
-            },
+            }
             Verb::Reading => match (args.next(), args.next()) {
                 (Some(window), None) => Ok(Invocation::Accessibility { window }),
                 (said, _) => Err(one(&first, "window id", said)),
@@ -1369,6 +1397,17 @@ const REFRESH_MHZ: u32 = 60_000;
 
 /// The size `said` names, `<width>x<height>` with an optional `@<hertz>`, and
 /// its refresh rate in millihertz. None for anything else, or a zero.
+/// `<x>,<y>,<width>x<height>`, an area of the desk in logical pixels.
+fn desk_area(said: &str) -> Option<DeskRect> {
+    let (x, rest) = said.split_once(',')?;
+    let (y, size) = rest.split_once(',')?;
+    let (width, height) = size.split_once('x')?;
+    Some(DeskRect {
+        position: (x.parse().ok()?, y.parse().ok()?),
+        size: (width.parse().ok()?, height.parse().ok()?),
+    })
+}
+
 pub fn monitor_size(said: &str) -> Option<((u32, u32), u32)> {
     let (size, hertz) = match said.split_once('@') {
         Some((size, hertz)) => (size, Some(hertz)),

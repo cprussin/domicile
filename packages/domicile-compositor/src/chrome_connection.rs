@@ -13,8 +13,8 @@ use domicile_host::system::{
 };
 use domicile_launch::handshake::Handshake;
 use domicile_protocol::{
-    negotiate, ChromeMessage, DeskShot, DisplayChange, EmulatedInput, HostMessage, KnownAgents,
-    SystemError, SystemErrorKind, SystemRequest, Theme, WindowAct, PROTOCOL_VERSION,
+    negotiate, ChromeMessage, DeskRect, DeskShot, DisplayChange, EmulatedInput, HostMessage,
+    KnownAgents, SystemError, SystemErrorKind, SystemRequest, Theme, WindowAct, PROTOCOL_VERSION,
 };
 use tracing::{debug, error, warn};
 
@@ -517,8 +517,8 @@ fn read_chrome_messages(
             }
             // Waits for a frame of every monitor. Only `domicile screenshot
             // --fit` sends it, on a connection of its own.
-            Ok(ChromeMessage::ShootDesk { file, fit }) => {
-                let shot = shoot_desk(hub, file, fit);
+            Ok(ChromeMessage::ShootDesk { file, fit, area }) => {
+                let shot = shoot_desk(hub, file, fit, area);
                 vec![HostMessage::DeskShot {
                     shot: shot.as_ref().ok().copied(),
                     refused: shot.err(),
@@ -926,13 +926,18 @@ fn act_on_window(hub: &ChromeHub, id: &str, act: WindowAct) -> Result<(), String
     Ok(())
 }
 
-/// Write a PNG of the desk to `file` for `domicile screenshot --fit`, or say
+/// Write a PNG of the desk, or its `area`, to `file` for `domicile screenshot --fit`, or say
 /// why not. Refused while locked, like the shell's own screenshot.
-fn shoot_desk(hub: &ChromeHub, file: String, fit: u32) -> Result<DeskShot, String> {
+fn shoot_desk(
+    hub: &ChromeHub,
+    file: String,
+    fit: u32,
+    area: Option<DeskRect>,
+) -> Result<DeskShot, String> {
     if hub.the_desk_is_locked() {
         return Err("the desktop is locked".to_string());
     }
-    hub.portals.shoot_desk(file.into(), fit)
+    hub.portals.shoot_desk(file.into(), fit, area)
 }
 
 /// Send `input` to the desk for `domicile pointer`, `key` and `type`, or say
