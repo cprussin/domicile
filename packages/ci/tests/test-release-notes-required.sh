@@ -83,6 +83,15 @@ commit "Change a file"
 commit "$(printf 'Tidy\n\nRelease-notes: none\n')"
 expect "passes" 0
 
+# The older trailer outgrows a pipe's buffer, so a reader that stops at the
+# first match leaves `git log` writing into a closed pipe.
+echo "== a trailer on the newest commit, with a long one before it =="
+reset
+echo b >file
+commit "$(printf 'Change a file\n\nRelease-notes: %s\n' "$(head -c 100000 /dev/zero | tr '\0' a)")"
+commit "$(printf 'Tidy\n\nRelease-notes: none\n')"
+expect "passes" 0
+
 echo "== the words in a subject, not a trailer =="
 reset
 echo b >file
