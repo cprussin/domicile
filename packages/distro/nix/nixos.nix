@@ -92,6 +92,11 @@ in {
     # docs/RUNNING-A-DESKTOP.md#thread-priorities.
     security.rtkit.enable = lib.mkDefault true;
 
+    # The accessibility bus: screen readers, and `domicile accessibility`,
+    # which agents read and drive native apps with. NixOS enables it only for
+    # desktops that ask.
+    services.gnome.at-spi2-core.enable = lib.mkDefault true;
+
     # `domicile-miracast`: the TV opens RTSP to this computer, and LAN TVs are
     # found over mDNS.
     networking.firewall.allowedTCPPorts = lib.mkIf cfg.miracast [7236];

@@ -4,6 +4,7 @@
 //! running one. `--config` is optional; [`crate::config_path`] finds the
 //! default.
 
+use crate::accessibility::Act;
 use std::path::PathBuf;
 
 use domicile_protocol::{
@@ -60,6 +61,11 @@ Ask the running desktop:
   domicile key <chord>                  Press and release a chord such as
                                         ctrl+shift+Tab or Return
   domicile type <text>                  Type text on the desk's keyboard
+  domicile accessibility <window>       Print a native window's accessibility
+                                        tree, one element a line with its ref
+  domicile accessibility-act <window> <ref> click|focus|set-text <text>
+                                        Click, focus or set the text of an
+                                        element of a native window
   domicile devtools <window> <method> [params]
                                         Send a DevTools Protocol method, with
                                         its params as a JSON object, to a
@@ -246,6 +252,11 @@ pub enum CliError {
          a DevTools Protocol method such as Accessibility.getFullAXTree."
     )]
     NotDevTools,
+    #[error(
+        "accessibility-act takes a native window's id, an element's ref from \
+         accessibility, and click, focus or set-text <text>."
+    )]
+    NotAnAct,
     #[error("{verb} takes one {what}, and was given {said}.")]
     NotOne {
         verb: String,
@@ -429,6 +440,15 @@ pub enum Invocation {
     /// Serve the Model Context Protocol on stdio until it ends; see
     /// [`crate::mcp`].
     Mcp,
+    /// Print native window `window`'s accessibility tree; see
+    /// [`crate::accessibility`].
+    Accessibility { window: String },
+    /// Act on an element of native window `window`'s accessibility tree.
+    AccessibilityAct {
+        window: String,
+        element: String,
+        act: Act,
+    },
     /// Print [`USAGE`].
     Help,
     /// Print the version, the commit it was built from, and the engine's.
@@ -766,6 +786,31 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (_, _, _, Some(extra)) => Err(CliError::Extra { extra, verb: first }),
                 _ => Err(CliError::NotDevTools),
             },
+            Verb::Reading => match (args.next(), args.next()) {
+                (Some(window), None) => Ok(Invocation::Accessibility { window }),
+                (said, _) => Err(one(&first, "window id", said)),
+            },
+            Verb::Accessing => {
+                let (Some(window), Some(element), Some(act)) =
+                    (args.next(), args.next(), args.next())
+                else {
+                    return Err(CliError::NotAnAct);
+                };
+                let act = match (act.as_str(), args.next()) {
+                    ("click", None) => Act::Click,
+                    ("focus", None) => Act::Focus,
+                    ("set-text", Some(text)) => Act::SetText(text),
+                    _ => return Err(CliError::NotAnAct),
+                };
+                match args.next() {
+                    None => Ok(Invocation::AccessibilityAct {
+                        window,
+                        element,
+                        act,
+                    }),
+                    Some(extra) => Err(CliError::Extra { extra, verb: first }),
+                }
+            }
             Verb::Serving => match args.next() {
                 None => Ok(Invocation::Mcp),
                 Some(extra) => Err(CliError::Extra { extra, verb: first }),
@@ -939,6 +984,10 @@ enum Verb {
     Typing,
     /// `devtools`, which takes a window, a method and maybe its params.
     DevTooling,
+    /// `accessibility`, which takes a window.
+    Reading,
+    /// `accessibility-act`, which takes a window, an element and an act.
+    Accessing,
     /// `monitor`, which takes a name, a size and maybe a scale.
     Monitoring,
     /// `subscribe`, which takes topics or nothing.
@@ -1059,6 +1108,8 @@ fn verb(word: &str) -> Option<Verb> {
         "key" => Some(Verb::Keying),
         "type" => Some(Verb::Typing),
         "devtools" => Some(Verb::DevTooling),
+        "accessibility" => Some(Verb::Reading),
+        "accessibility-act" => Some(Verb::Accessing),
         _ => None,
     }
 }

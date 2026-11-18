@@ -21,6 +21,7 @@ use std::time::{Duration, Instant};
 use domicile_host::data_dirs::data_dirs;
 use domicile_host::desk_terminal;
 use domicile_host::mime_apps::lists;
+use domicile_launch::accessibility::{self, AtSpi, Element};
 use domicile_launch::app_entry::app_entry;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation, Listing, MonitorMode, USAGE};
@@ -89,7 +90,7 @@ use domicile_launch::subscription::follow;
 use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
 use domicile_launch::uninstall_app::uninstall_app;
 use domicile_launch::version::engine as engine_version;
-use domicile_protocol::{Theme, WatchTopic};
+use domicile_protocol::{Theme, WatchTopic, WindowKind};
 
 /// How long each startup milestone may take. A debug build on a loaded
 /// machine takes seconds.
@@ -220,6 +221,25 @@ fn run() -> Result<ExitCode, String> {
             Ok(ExitCode::from(exit_code(status)))
         }
         Invocation::Mcp => agents_served(),
+        Invocation::Accessibility { window } => {
+            let (pid, title) = native_window(&window)?;
+            let mut bus = AtSpi::connected()?;
+            let root = accessibility::window(&mut bus, pid, &title)?;
+            print!("{}", accessibility::outline(&mut bus, &root)?);
+            Ok(ExitCode::SUCCESS)
+        }
+        Invocation::AccessibilityAct {
+            window,
+            element,
+            act,
+        } => {
+            let (pid, _) = native_window(&window)?;
+            let element = Element::named(&element).ok_or_else(|| {
+                format!("{element} is not an element's ref, as accessibility prints them")
+            })?;
+            accessibility::act_on(&mut AtSpi::connected()?, pid, &element, &act)?;
+            Ok(ExitCode::SUCCESS)
+        }
         Invocation::Help => {
             print!("{USAGE}");
             Ok(ExitCode::SUCCESS)
@@ -938,6 +958,41 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
 /// `json` as the JSON array it answered with.
 /// Serves the Model Context Protocol on stdio, each tool running this
 /// binary.
+/// The process and title of native window `id`, as `list-windows` lists it,
+/// while the desktop is unlocked.
+fn native_window(id: &str) -> Result<(u32, String), String> {
+    let socket =
+        advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
+    let asked =
+        |request| ask(&socket, &request, Some(ANSWER_WITHIN)).map_err(|why| why.to_string());
+    match asked(Request::Status)? {
+        Response::Status { status, .. } if status.locked => {
+            return Err("the desktop is locked".to_string())
+        }
+        Response::Status { .. } => {}
+        other => return Err(format!("the desktop answered status with {other:?}")),
+    }
+    let Response::Windows { windows } = asked(Request::Windows)? else {
+        return Err("the desktop did not answer with its windows".to_string());
+    };
+    let window = windows
+        .into_iter()
+        .find(|window| window.id == id)
+        .ok_or_else(|| format!("there is no window {id}; list-windows lists them"))?;
+    match (window.kind, window.pid) {
+        (WindowKind::Native, Some(pid)) => Ok((
+            u32::try_from(pid).map_err(|_| format!("window {id} has process id {pid}"))?,
+            window.title,
+        )),
+        (WindowKind::Native, None) => {
+            Err(format!("the desktop does not know window {id}'s process"))
+        }
+        (WindowKind::Browser, _) => Err(format!(
+            "window {id} is a browser window; devtools reads and drives those"
+        )),
+    }
+}
+
 fn agents_served() -> Result<ExitCode, String> {
     let binary = myself()?;
     mcp::serve(std::io::stdin().lock(), std::io::stdout().lock(), |args| {

@@ -138,6 +138,34 @@ domicile key ctrl+shift+Tab
 Type `<text>` on the desk's keyboard, holding Shift where a character needs
 it. Refused, typing nothing, when no key types a character without AltGr.
 
+## `domicile accessibility <window>`
+
+Print a native window's [AT-SPI](https://gitlab.gnome.org/GNOME/at-spi2-core)
+accessibility tree, one element a line: its role, name, ref, an editable
+text's text, and whether it is focused, checked, pressed, expanded or
+selected. `domicile mcp` reads native windows with it.
+
+```
+$ domicile accessibility kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA
+- frame "notes.txt" [ref=:1.7/org/a11y/atspi/accessible/1]
+  - push button "Save" [ref=:1.7/org/a11y/atspi/accessible/12]
+  - text [ref=:1.7/org/a11y/atspi/accessible/13] text="hello" focused
+```
+
+- The window is found by its process and title, so an app that does not
+  support accessibility, or one sandboxed in another process, is refused.
+- Elements that are not visible are left out, with what is under them, and a
+  password's text is never printed. Past 1,500 elements the outline is cut.
+- It needs the accessibility bus, which at-spi2-core runs
+  (`services.gnome.at-spi2-core.enable` on NixOS).
+
+## `domicile accessibility-act <window> <ref> click|focus|set-text <text>`
+
+Click an element of a native window by its ref from `accessibility`, give it
+the keyboard focus, or replace its text. Clicking runs the element's own
+click, press or activate action, so it works on a window the desk hides. A
+ref of another process is refused.
+
 ## `domicile devtools <window> <method> [params]`
 
 Send one [DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/)
@@ -471,8 +499,10 @@ Each tool runs a verb and answers what it printed, or its error:
 | `browser_key` | `devtools` pressing and releasing Enter, Tab, Escape, an arrow or another named key |
 | `browser_navigate` | `devtools <window> Page.navigate` |
 | `browser_screenshot` | `devtools <window> Page.captureScreenshot`, answered as a WebP |
+| `app_snapshot` | `accessibility <window>` |
+| `app_click`, `app_focus`, `app_set_text` | `accessibility-act <window> <ref> click\|focus\|set-text <text>` |
 
-The browser tools work on a window the desk hides and need no screenshot, so prefer them for browser windows. Tools the lock refuses are refused while the desktop is locked.
+The browser and app tools work on a window the desk hides and need no screenshot, so prefer them for browser windows and for native apps that support accessibility. Tools the lock refuses are refused while the desktop is locked.
 
 ## `domicile check-config <file>`
 
@@ -505,7 +535,8 @@ shell.
 ## While locked
 
 `screenshot`, `screen-record`, `send-shell`, `focus-window`, `close-window`,
-`kill-window`, `pointer`, `scroll`, `key`, `type` and `devtools` are refused while the
+`kill-window`, `pointer`, `scroll`, `key`, `type`, `devtools`, `accessibility`
+and `accessibility-act` are refused while the
 desktop is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
 `wake-displays`, `lock`, `inhibit-idle`, `list-displays`, `list-windows`,
 `list-inputs`, `status`, `subscribe`, `configure-display`,

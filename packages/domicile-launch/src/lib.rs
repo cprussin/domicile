@@ -26,6 +26,8 @@
 //!   ([`uninstall_app`]).
 //! - `domicile mcp`: a Model Context Protocol server that runs the other
 //!   verbs for an agent ([`mcp`]).
+//! - `domicile accessibility`: a native window's AT-SPI tree, and acting on
+//!   its elements ([`accessibility`]).
 //! - Failed runs report the compositor's last output ([`heard`]).
 //! - The compositor's side: its command line ([`arguments`]), the session
 //!   document it publishes ([`session`]), and whether a page connected
@@ -34,6 +36,7 @@
 //! This lives in a library so it can be tested without a GPU or a display. See
 //! `docs/architecture/THE-DOMICILE-BINARY.md`.
 
+pub mod accessibility;
 pub mod address;
 pub mod app_entry;
 pub mod app_host;

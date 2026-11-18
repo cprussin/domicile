@@ -1321,3 +1321,44 @@ fn devtools_sends_a_method_and_its_params_to_a_window() {
     assert!(run(&["devtools", "Xy7p", "Page.reload", "[1]"]).is_err());
     assert!(run(&["devtools", "Xy7p", "Page.reload", "{", "more"]).is_err());
 }
+
+#[test]
+fn accessibility_reads_a_windows_tree_and_acts_on_its_elements() {
+    use domicile_launch::accessibility::Act;
+    assert_eq!(
+        run(&["accessibility", "kD3m"]),
+        Ok(Invocation::Accessibility {
+            window: "kD3m".to_string()
+        })
+    );
+    let act = |act| {
+        Ok(Invocation::AccessibilityAct {
+            window: "kD3m".to_string(),
+            element: ":1.7/w/1".to_string(),
+            act,
+        })
+    };
+    assert_eq!(
+        run(&["accessibility-act", "kD3m", ":1.7/w/1", "click"]),
+        act(Act::Click)
+    );
+    assert_eq!(
+        run(&["accessibility-act", "kD3m", ":1.7/w/1", "focus"]),
+        act(Act::Focus)
+    );
+    assert_eq!(
+        run(&[
+            "accessibility-act",
+            "kD3m",
+            ":1.7/w/1",
+            "set-text",
+            "hi there"
+        ]),
+        act(Act::SetText("hi there".to_string()))
+    );
+    assert!(run(&["accessibility"]).is_err());
+    assert!(run(&["accessibility-act", "kD3m", ":1.7/w/1"]).is_err());
+    assert!(run(&["accessibility-act", "kD3m", ":1.7/w/1", "explode"]).is_err());
+    assert!(run(&["accessibility-act", "kD3m", ":1.7/w/1", "set-text"]).is_err());
+    assert!(run(&["accessibility-act", "kD3m", ":1.7/w/1", "click", "more"]).is_err());
+}

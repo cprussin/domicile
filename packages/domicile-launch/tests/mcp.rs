@@ -136,6 +136,10 @@ fn tools_list_describes_each_tool() {
             "browser_key",
             "browser_navigate",
             "browser_screenshot",
+            "app_snapshot",
+            "app_click",
+            "app_focus",
+            "app_set_text",
         ]
     );
     for tool in tools {
@@ -557,4 +561,29 @@ fn a_browser_tool_passes_on_why_devtools_refused() {
         .as_str()
         .unwrap()
         .contains("private"));
+}
+
+#[test]
+fn app_tools_read_and_act_on_a_native_windows_accessibility_tree() {
+    assert_eq!(
+        ran_for("app_snapshot", json!({"window": "kD3m"})),
+        ["accessibility", "kD3m"]
+    );
+    assert_eq!(
+        ran_for("app_click", json!({"window": "kD3m", "ref": ":1.7/w/1"})),
+        ["accessibility-act", "kD3m", ":1.7/w/1", "click"]
+    );
+    assert_eq!(
+        ran_for("app_focus", json!({"window": "kD3m", "ref": ":1.7/w/1"})),
+        ["accessibility-act", "kD3m", ":1.7/w/1", "focus"]
+    );
+    assert_eq!(
+        ran_for(
+            "app_set_text",
+            json!({"window": "kD3m", "ref": ":1.7/w/1", "text": "hi"})
+        ),
+        ["accessibility-act", "kD3m", ":1.7/w/1", "set-text", "hi"]
+    );
+    let replies = served(&[call("app_click", json!({"window": "kD3m"}))], never_run);
+    assert_eq!(replies[0]["result"]["isError"], true);
 }

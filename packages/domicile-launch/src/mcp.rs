@@ -126,6 +126,10 @@ enum Tool {
     TypeText,
     /// A browser window driven through `domicile devtools`.
     Browser(Browser),
+    /// `accessibility`: a native window's tree.
+    AppSnapshot,
+    /// `accessibility-act` with this act, which takes no text but `set-text`.
+    AppAct(&'static str),
 }
 
 /// How many pixels of the desk each pixel of the last screenshot is, across
@@ -141,7 +145,7 @@ struct View {
 const FIT: u32 = 1280;
 
 /// Each tool, by name, in the order `tools/list` gives them.
-const TOOLS: [(&str, Tool); 24] = [
+const TOOLS: [(&str, Tool); 28] = [
     ("list_windows", Tool::Listing("list-windows")),
     ("list_displays", Tool::Listing("list-displays")),
     ("list_inputs", Tool::Listing("list-inputs")),
@@ -166,6 +170,10 @@ const TOOLS: [(&str, Tool); 24] = [
     ("browser_key", Tool::Browser(Browser::Key)),
     ("browser_navigate", Tool::Browser(Browser::Navigate)),
     ("browser_screenshot", Tool::Browser(Browser::Screenshot)),
+    ("app_snapshot", Tool::AppSnapshot),
+    ("app_click", Tool::AppAct("click")),
+    ("app_focus", Tool::AppAct("focus")),
+    ("app_set_text", Tool::AppAct("set-text")),
 ];
 
 fn tool(name: &str) -> Option<Tool> {
@@ -199,6 +207,10 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
         json!({"id": {"type": "string", "description": "The window's id, from list_windows."}});
     let coordinate = json!({"type": "number", "description": "In the last screenshot's pixels."});
     let point = json!({"type": "array", "items": coordinate, "minItems": 2, "maxItems": 2});
+    let native =
+        json!({"type": "string", "description": "A native window's id, from list_windows."});
+    let app_element =
+        json!({"type": "string", "description": "An element's ref, from app_snapshot."});
     match tool {
         Tool::Listing("list-windows") => (
             "List the windows, native and browser, as JSON: id, kind, title, app, pid, size, focused, url, private.",
@@ -296,6 +308,26 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec!["text"],
         ),
         Tool::Browser(browser) => browser::described(browser),
+        Tool::AppSnapshot => (
+            "Read a native window's accessibility tree: one element a line, with the ref the other app tools take. Needs an app that supports accessibility; works on hidden windows.",
+            json!({"window": native}),
+            vec!["window"],
+        ),
+        Tool::AppAct("click") => (
+            "Click an element of a native window by its ref, running its own click or press action.",
+            json!({"window": native, "ref": app_element}),
+            vec!["window", "ref"],
+        ),
+        Tool::AppAct("focus") => (
+            "Give an element of a native window the keyboard focus, by its ref.",
+            json!({"window": native, "ref": app_element}),
+            vec!["window", "ref"],
+        ),
+        Tool::AppAct(_) => (
+            "Replace the text of an editable element of a native window, by its ref.",
+            json!({"window": native, "ref": app_element, "text": {"type": "string"}}),
+            vec!["window", "ref", "text"],
+        ),
     }
 }
 
@@ -420,6 +452,24 @@ fn commands(
         Tool::TypeText => {
             let text = string(arguments, "text")?.ok_or("type_text takes text")?;
             Ok(vec![vec!["type".to_string(), text]])
+        }
+        Tool::AppSnapshot => {
+            let window = string(arguments, "window")?.ok_or("app_snapshot takes a window id")?;
+            Ok(vec![vec!["accessibility".to_string(), window]])
+        }
+        Tool::AppAct(act) => {
+            let window = string(arguments, "window")?.ok_or("this tool takes a window id")?;
+            let element = string(arguments, "ref")?.ok_or("this tool takes an element's ref")?;
+            let text = match act {
+                "set-text" => vec![string(arguments, "text")?.ok_or("app_set_text takes text")?],
+                _ => Vec::new(),
+            };
+            Ok(vec![[
+                words(&["accessibility-act"]),
+                vec![window, element, act.to_string()],
+                text,
+            ]
+            .concat()])
         }
     }
 }
