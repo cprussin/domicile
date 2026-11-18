@@ -1,6 +1,7 @@
 # The relay's image for fly.io; built from the repository's root, which
 # holds the Cargo workspace. See fly.toml.
-FROM rust:1.89-slim-bookworm AS build
+# The newest Rust 1.x, which meets the workspace's `rust-version` as it moves.
+FROM rust:1-slim-bookworm AS build
 WORKDIR /src
 COPY . .
 RUN cargo build --release --locked -p domicile-relay
