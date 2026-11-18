@@ -10,8 +10,8 @@ use domicile_host::{AppId, Appearances, BrowserWindow, Host, Mapped};
 use domicile_protocol::{
     AdaptiveSync, AppFrame, Appearance, Capturing, CapturingKind, ChromeMessage, CursorTheme,
     DesktopStatus, Devices, DisplayHdr, DisplayInfo, DisplayTransform, HostMessage,
-    InputConnection, InputKind, ListedDisplay, ListedInput, ListedWindow, MonitorInfo, Owner,
-    Theme, WindowKind, PROTOCOL_VERSION,
+    InputConnection, InputKind, ListedDisplay, ListedInput, ListedView, ListedWindow, MonitorInfo,
+    Owner, Theme, WindowKind, PROTOCOL_VERSION,
 };
 use domicile_scene::KeyboardTarget;
 
@@ -108,6 +108,7 @@ fn every_window_is_listed_native_and_browser_alike() {
             app_id: "mail".into(),
             url: "https://mail.example/".into(),
             private: false,
+            views: Vec::new(),
         },
         BrowserWindow {
             id: "7".into(),
@@ -115,6 +116,7 @@ fn every_window_is_listed_native_and_browser_alike() {
             app_id: String::new(),
             url: "https://example.com/".into(),
             private: true,
+            views: Vec::new(),
         },
     ]);
     host.browser_toplevel_ids(BTreeMap::from([
@@ -144,6 +146,7 @@ fn every_window_is_listed_native_and_browser_alike() {
                     url: None,
                     private: false,
                     engine_id: None,
+                    views: Vec::new(),
                 },
                 ListedWindow {
                     id: "Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE".into(),
@@ -157,6 +160,7 @@ fn every_window_is_listed_native_and_browser_alike() {
                     url: Some("https://mail.example/".into()),
                     private: false,
                     engine_id: Some("3".into()),
+                    views: Vec::new(),
                 },
                 ListedWindow {
                     id: "aU2iO9pE4rT7yW1qZ5xC8vB3nM6lK0jH".into(),
@@ -170,10 +174,45 @@ fn every_window_is_listed_native_and_browser_alike() {
                     url: Some("https://example.com/".into()),
                     private: true,
                     engine_id: Some("7".into()),
+                    views: Vec::new(),
                 },
             ]
         }
     );
+}
+
+#[test]
+fn a_browser_window_lists_the_views_it_holds() {
+    // An Electron app such as Claude draws its whole page in views, so an
+    // agent reads and drives them, not the window's empty page.
+    let mut host = Host::new();
+    let sidebar = ListedView {
+        id: "8".into(),
+        position: [0, 0],
+        size: [200, 600],
+    };
+    let chat = ListedView {
+        id: "9".into(),
+        position: [200, 40],
+        size: [600, 560],
+    };
+    host.browser_windows(vec![BrowserWindow {
+        id: "5".into(),
+        title: "Claude".into(),
+        app_id: "claude-desktop".into(),
+        url: "app://claude/".into(),
+        private: false,
+        views: vec![sidebar.clone(), chat.clone()],
+    }]);
+    host.browser_toplevel_ids(BTreeMap::from([(
+        "5".to_string(),
+        "Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE".to_string(),
+    )]));
+
+    let HostMessage::WindowList { windows } = host.list_windows() else {
+        unreachable!("list_windows answers with a window list")
+    };
+    assert_eq!(windows[0].views, [sidebar, chat]);
 }
 
 #[test]

@@ -315,8 +315,9 @@ impl Portals {
         &self,
         file: PathBuf,
         fit: u32,
+        area: Option<domicile_protocol::DeskRect>,
     ) -> Result<domicile_protocol::DeskShot, String> {
-        zbus::block_on(screenshot::for_an_agent(&self.shots, file, fit))
+        zbus::block_on(screenshot::for_an_agent(&self.shots, file, fit, area))
     }
 
     /// Records what the shell picks until it stops the recording, and

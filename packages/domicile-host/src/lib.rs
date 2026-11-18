@@ -11,8 +11,9 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{
     AppFrame, Appearance, BoundShortcut, BrowserProfile, Capturing, ChromeMessage, DesktopStatus,
-    DisplayInfo, ExtensionSettings, HostMessage, ListedDisplay, ListedInput, ListedWindow,
-    MonitorInfo, Notification, Owner, PortalRequest, PortalWallpaper, Theme, TrayItem, WindowKind,
+    DisplayInfo, ExtensionSettings, HostMessage, ListedDisplay, ListedInput, ListedView,
+    ListedWindow, MonitorInfo, Notification, Owner, PortalRequest, PortalWallpaper, Theme,
+    TrayItem, WindowKind,
 };
 
 pub mod app_names;
@@ -160,6 +161,8 @@ pub struct BrowserWindow {
     pub url: String,
     /// Whether it is a private window.
     pub private: bool,
+    /// The views it holds and shows, bottom first.
+    pub views: Vec<ListedView>,
 }
 
 /// Which monitors are off. See [`Host::describe_darkness`].
@@ -355,6 +358,7 @@ impl Host {
                 url: (!window.url.is_empty()).then(|| window.url.clone()),
                 private: window.private,
                 engine_id: Some(window.id.clone()),
+                views: window.views.clone(),
             })
         });
         HostMessage::WindowList {
@@ -372,6 +376,7 @@ impl Host {
                     url: None,
                     private: false,
                     engine_id: None,
+                    views: Vec::new(),
                 })
                 .chain(browser)
                 .collect(),
