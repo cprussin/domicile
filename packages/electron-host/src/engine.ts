@@ -26,6 +26,20 @@ import type {
 
 export const PROTOCOL_VERSION = 1;
 
+/** What a page with Node.js needs: Electron's renderer's own settings. */
+export type PageNode = {
+  /** The preload's file, for Node's require; left out for none. */
+  readonly preload?: string;
+  /** `nodeIntegration`: Node in the page's own world too, without isolation. */
+  readonly integration: boolean;
+  readonly context_isolation: boolean;
+  readonly resources_path: string;
+  readonly app_path: string;
+  readonly electron_version: string;
+  /** The app's environment, which the page's `process.env` has. */
+  readonly env: Readonly<Record<string, string>>;
+};
+
 /** Where the app asks for one of a window's views, in its page's CSS pixels. */
 export type ViewPlacement = {
   readonly window: number;
@@ -57,6 +71,11 @@ export type EngineRequest =
       readonly title?: string;
       /** A window that opens hidden, as `show: false`. */
       readonly hidden?: true;
+      /**
+       * Node.js in the page of a window that isn't sandboxed. Its preload is
+       * a file Node loads, so `preload` is left out.
+       */
+      readonly node?: PageNode;
     }
   | {
       readonly type: "set_views";

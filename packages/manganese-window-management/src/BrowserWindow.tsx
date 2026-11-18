@@ -338,9 +338,11 @@ export const BrowserWindow = ({
     () => foldersOf(domicile.files),
     [domicile, foldersOf],
   );
-  // A pending file request from the page. The engine draws no dialog; see
-  // `useFileRequest`.
-  const asking = useFileRequest(view, folders);
+  // A pending file request from the page, or from one of an Electron app's
+  // views over it, as an upload or a download in either asks for a path. The
+  // request bubbles, so the element around them all hears it. The engine
+  // draws no dialog; see `useFileRequest`.
+  const asking = useFileRequest(page, folders);
   // The file picker's input. While open it takes the window's keyboard.
   const [pickerBox, setPickerBox] = useState<HTMLInputElement | null>(null);
   // Whether the find bar is open, and its input.

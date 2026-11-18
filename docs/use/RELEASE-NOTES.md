@@ -11,9 +11,9 @@ _Unreleased_
 
 ![Element on the desktop's browser, with its menu bar under its tab](../media/release-electron.png)
 
-Slack, Element, Claude and ChatGPT run on the desktop's browser instead of their own Chromium, with menus and dialogs in the desktop's style.
+Slack, Element, Claude and ChatGPT run on the desktop's browser instead of their own Chromium, with menus and dialogs in the desktop's style. Apps whose windows use Node.js can run there too.
 
-[How to turn it on](ELECTRON-APPS.md) · [#2091](https://github.com/cprussin/domicile/pull/2091) · [#2162](https://github.com/cprussin/domicile/pull/2162) · [#2173](https://github.com/cprussin/domicile/pull/2173) · [#2243](https://github.com/cprussin/domicile/pull/2243)
+[How to turn it on](ELECTRON-APPS.md) · [#2091](https://github.com/cprussin/domicile/pull/2091) · [#2162](https://github.com/cprussin/domicile/pull/2162) · [#2173](https://github.com/cprussin/domicile/pull/2173) · [#2243](https://github.com/cprussin/domicile/pull/2243) · [#2256](https://github.com/cprussin/domicile/pull/2256)
 
 ### Browser profiles
 
@@ -22,7 +22,7 @@ Slack, Element, Claude and ChatGPT run on the desktop's browser instead of their
 
 Work and personal, apart: each profile has its own sign-ins and extensions, and opens the sites you give it.
 
-[Profiles](BROWSER.md#profiles) · [#2212](https://github.com/cprussin/domicile/pull/2212) · [#2231](https://github.com/cprussin/domicile/pull/2231) · [#2234](https://github.com/cprussin/domicile/pull/2234) · [#2236](https://github.com/cprussin/domicile/pull/2236)
+[Profiles](BROWSER.md#profiles) · [#2212](https://github.com/cprussin/domicile/pull/2212) · [#2231](https://github.com/cprussin/domicile/pull/2231) · [#2234](https://github.com/cprussin/domicile/pull/2234) · [#2236](https://github.com/cprussin/domicile/pull/2236) · [#2259](https://github.com/cprussin/domicile/pull/2259)
 
 ### Also new
 

@@ -36,6 +36,7 @@ class FakeDesk final : public ElectronDesk {
                                   const std::string& app_id,
                                   const WebViewPartition& partition,
                                   const std::string& preload,
+                                  const std::optional<ElectronNode>& node,
                                   ElectronPageCalls page_calls,
                                   base::WeakPtr<ElectronSession> session,
                                   bool view,
@@ -47,6 +48,7 @@ class FakeDesk final : public ElectronDesk {
     calls.push_back(
         std::string(view ? "open view " : "open ") + url.spec() + " as " +
         app_id + (preload.empty() ? "" : " with " + preload) +
+        (node.has_value() ? " with node" : "") +
         (title.empty() ? "" : " titled " + title) + (hidden ? " hidden" : ""));
     const std::string id = base::NumberToString(next_id++);
     pages.emplace(id, std::move(page_calls));
@@ -385,6 +387,16 @@ TEST_F(ElectronAppTest, AWindowsPreloadReachesTheDesk) {
 
   EXPECT_EQ(desk_.calls, Lines{"open https://a.test/ as com.anthropic.Claude "
                                "with window.x = 1"});
+}
+
+TEST_F(ElectronAppTest, AWindowsNodeReachesTheDesk) {
+  Hello();
+
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+             R"("node":{"preload":"/a/preload.js"}})");
+
+  EXPECT_EQ(desk_.calls,
+            Lines{"open https://a.test/ as com.anthropic.Claude with node"});
 }
 
 using Answer = std::optional<base::expected<base::Value, std::string>>;

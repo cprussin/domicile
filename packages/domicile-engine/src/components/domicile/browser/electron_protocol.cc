@@ -85,6 +85,63 @@ base::expected<ElectronRequest, ElectronRefusal> RefuseRequest(std::string why,
       ElectronRefusal{.why = std::move(why), .request = request});
 }
 
+// An open_window's "node", which `request` has.
+base::expected<ElectronNode, std::string> NodeIn(const base::Value& node) {
+  if (!node.is_dict()) {
+    return base::unexpected(
+        "\"node\" must be an object: what the page's Node.js needs");
+  }
+  const base::DictValue& dict = node.GetDict();
+  ElectronNode made;
+  for (auto [key, out] :
+       {std::pair<const char*, std::string*>{"preload", &made.preload},
+        {"resources_path", &made.resources_path},
+        {"app_path", &made.app_path},
+        {"electron_version", &made.electron_version}}) {
+    const base::Value* value = dict.Find(key);
+    if (value == nullptr) {
+      continue;
+    }
+    if (!value->is_string()) {
+      return base::unexpected(
+          base::StrCat({"\"node\"'s \"", key, "\" must be a string"}));
+    }
+    *out = value->GetString();
+  }
+  for (auto [key, out] :
+       {std::pair<const char*, bool*>{"integration", &made.integration},
+        {"context_isolation", &made.context_isolation}}) {
+    const base::Value* value = dict.Find(key);
+    if (value == nullptr) {
+      continue;
+    }
+    if (!value->is_bool()) {
+      return base::unexpected(base::StrCat(
+          {"\"node\"'s \"", key, "\" must be true or false"}));
+    }
+    *out = value->GetBool();
+  }
+  if (!made.preload.empty() &&
+      !base::FilePath(made.preload).IsAbsolute()) {
+    return base::unexpected(
+        "\"node\"'s \"preload\" must be an absolute path");
+  }
+  if (const base::Value* env = dict.Find("env")) {
+    if (!env->is_dict()) {
+      return base::unexpected(
+          "\"node\"'s \"env\" must be an object of strings");
+    }
+    for (const auto [name, value] : env->GetDict()) {
+      if (!value.is_string()) {
+        return base::unexpected(
+            "\"node\"'s \"env\" must be an object of strings");
+      }
+      made.env.emplace_back(name, value.GetString());
+    }
+  }
+  return made;
+}
+
 // The "session" a request names: "" when it names none and may leave it out.
 base::expected<std::string, std::string> SessionIn(
     const base::DictValue& request,
@@ -1026,10 +1083,22 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
       const base::Value* view = request->Find("view");
       const base::Value* title = request->Find("title");
       const base::Value* hidden = request->Find("hidden");
+      const base::Value* node = request->Find("node");
       base::expected<std::string, std::string> session =
           SessionIn(*request, /*optional=*/true);
+      std::optional<base::expected<ElectronNode, std::string>> node_in;
+      if (node != nullptr) {
+        node_in = NodeIn(*node);
+      }
       if (preload != nullptr && !preload->is_string()) {
         return Refuse("\"preload\" must be a string", *window);
+      } else if (node_in.has_value() && !node_in->has_value()) {
+        return Refuse(std::move(node_in->error()), *window);
+      } else if (node != nullptr && preload != nullptr) {
+        return Refuse(
+            "a page with Node.js loads its preload from a file, "
+            "\"node\"'s \"preload\", not from \"preload\"",
+            *window);
       } else if (view != nullptr && !view->is_bool()) {
         return Refuse("\"view\" must be true or false", *window);
       } else if (title != nullptr && !title->is_string()) {
@@ -1048,6 +1117,9 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
           .window = *window,
           .url = std::move(*url),
           .preload = preload ? preload->GetString() : std::string(),
+          .node = node_in.has_value()
+                      ? std::optional<ElectronNode>(std::move(**node_in))
+                      : std::nullopt,
           .session = std::move(*session),
           .view = view != nullptr && view->GetBool(),
           .title = title ? title->GetString() : std::string(),

@@ -100,7 +100,9 @@ and `chrome.tabs.create` behave the same.
   a site the config names keeps the config's profile and shows locked. Pinning
   to the default profile removes the pin.
 - **New windows** with no opener open in `profileFor(url)`, unless the caller
-  names a profile.
+  names a profile. A window at an address that isn't a web address, such as an
+  extension's own page from `chrome.tabs.create`, opens in the profile that
+  asked for it, where that extension is switched on.
 - **Top-level navigations the user starts** (link clicks, the address bar,
   back and forward) move the page to `profileFor(target)` when it differs from
   `profileFor(current)`. Comparing both ends keeps a page the user moved by
