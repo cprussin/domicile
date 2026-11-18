@@ -45,6 +45,9 @@ namespace domicile {
 //                                           the desktop shows over its
 //                                           page's; left out for none)
 //    "hidden":true,                        (show: false; left out is shown)
+//    "arguments":["--a=1"],                (additionalArguments, in the
+//                                           page's process.argv; left out
+//                                           for none)
 //    "node":{"preload":"/abs/preload.js",  (a window that isn't sandboxed:
 //            "integration":false,           Node.js in its page; see
 //            "context_isolation":true,      ElectronNode. Left out, the
@@ -234,6 +237,9 @@ struct ElectronOpenWindow {
   std::string preload;
   // Node.js in the page, for a window that isn't sandboxed; none when it is.
   std::optional<ElectronNode> node;
+  // webPreferences.additionalArguments: what Electron adds to the page's
+  // renderer's command line, which its preload reads from process.argv.
+  std::vector<std::string> arguments;
   // Its Electron partition; empty for the app's own session.
   std::string session;
   // A WebContentsView's page rather than a BrowserWindow: listed to the shell

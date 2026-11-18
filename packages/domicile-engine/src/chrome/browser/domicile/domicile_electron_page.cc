@@ -95,12 +95,14 @@ mojom::ElectronNodePtr ToMojom(const ElectronNode& node) {
 
 ElectronPage::ElectronPage(content::WebContents* contents,
                            std::string preload,
+                           std::vector<std::string> arguments,
                            std::optional<ElectronNode> node,
                            ElectronPageCalls calls,
                            base::WeakPtr<ElectronSession> session)
     : content::WebContentsObserver(contents),
       content::WebContentsUserData<ElectronPage>(*contents),
       preload_(std::move(preload)),
+      arguments_(std::move(arguments)),
       node_(std::move(node)),
       calls_(std::move(calls)),
       session_(std::move(session)) {
@@ -113,12 +115,13 @@ ElectronPage::~ElectronPage() = default;
 // static
 void ElectronPage::Attach(content::WebContents& contents,
                           std::string preload,
+                          std::vector<std::string> arguments,
                           std::optional<ElectronNode> node,
                           ElectronPageCalls calls,
                           base::WeakPtr<ElectronSession> session) {
   CHECK(!FromWebContents(&contents));
-  CreateForWebContents(&contents, std::move(preload), std::move(node),
-                       std::move(calls), std::move(session));
+  CreateForWebContents(&contents, std::move(preload), std::move(arguments),
+                       std::move(node), std::move(calls), std::move(session));
 }
 
 // static
@@ -387,7 +390,8 @@ void ElectronPage::ReadyToCommitNavigation(
       process->Shutdown(content::RESULT_CODE_KILLED);
       return;
     }
-    frame_->Preload(preload_, node_.has_value() ? ToMojom(*node_) : nullptr,
+    frame_->Preload(preload_, arguments_,
+                    node_.has_value() ? ToMojom(*node_) : nullptr,
                     receiver_.BindNewEndpointAndPassRemote());
   }
 }

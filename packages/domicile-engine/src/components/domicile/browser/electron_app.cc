@@ -367,10 +367,10 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
       .close_asked = base::BindRepeating(
           &ElectronApp::CloseAsked, weak_factory_.GetWeakPtr(), open.window),
   };
-  const std::optional<std::string> id =
-      desk_->Open(open.url, hello_->app_id, *partition, open.preload, open.node,
-                  std::move(calls), SessionNamed(open.session).GetWeakPtr(),
-                  open.view, open.title, open.hidden);
+  const std::optional<std::string> id = desk_->Open(
+      open.url, hello_->app_id, *partition, open.preload, open.arguments,
+      open.node, std::move(calls), SessionNamed(open.session).GetWeakPtr(),
+      open.view, open.title, open.hidden);
   if (!id.has_value()) {
     send_.Run(
         ElectronWindowRefused(open.window, "there is no shell to open it in"));

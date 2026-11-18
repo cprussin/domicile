@@ -17,6 +17,7 @@
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -36,6 +37,7 @@ class FakeDesk final : public ElectronDesk {
                                   const std::string& app_id,
                                   const WebViewPartition& partition,
                                   const std::string& preload,
+                                  const std::vector<std::string>& arguments,
                                   const std::optional<ElectronNode>& node,
                                   ElectronPageCalls page_calls,
                                   base::WeakPtr<ElectronSession> session,
@@ -48,6 +50,9 @@ class FakeDesk final : public ElectronDesk {
     calls.push_back(
         std::string(view ? "open view " : "open ") + url.spec() + " as " +
         app_id + (preload.empty() ? "" : " with " + preload) +
+        (arguments.empty()
+             ? ""
+             : " with arguments " + base::JoinString(arguments, " ")) +
         (node.has_value() ? " with node" : "") +
         (title.empty() ? "" : " titled " + title) + (hidden ? " hidden" : ""));
     const std::string id = base::NumberToString(next_id++);
@@ -405,6 +410,16 @@ TEST_F(ElectronAppTest, AWindowsPreloadReachesTheDesk) {
 
   EXPECT_EQ(desk_.calls, Lines{"open https://a.test/ as com.anthropic.Claude "
                                "with window.x = 1"});
+}
+
+TEST_F(ElectronAppTest, AWindowsArgumentsReachTheDesk) {
+  Hello();
+
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+             R"("arguments":["--a=1","--b"]})");
+
+  EXPECT_EQ(desk_.calls, Lines{"open https://a.test/ as com.anthropic.Claude "
+                               "with arguments --a=1 --b"});
 }
 
 TEST_F(ElectronAppTest, AWindowsNodeReachesTheDesk) {

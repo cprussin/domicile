@@ -71,7 +71,8 @@ bool OpenAppWindow(const GURL& url,
 bool OpenAppModuleWindow(const GURL& url, const std::string& app_host);
 
 // Opens an app window at `url` for an Electron app, with `app_id`, in its own
-// `partition`, whose pages run `preload` (none when empty) and make `calls`.
+// `partition`, whose pages run `preload` (none when empty) in a renderer told
+// `arguments`, as Electron's additionalArguments, and make `calls`.
 // A `node` page has Node.js, in a renderer of its own that isn't sandboxed.
 // A `view` is a WebContentsView's page, listed only while a window holds it.
 // A window shows `title` instead of its page's when it isn't empty, and opens
@@ -83,6 +84,7 @@ std::optional<std::string> OpenElectronWindow(
     const std::string& app_id,
     const WebViewPartition& partition,
     const std::string& preload,
+    const std::vector<std::string>& arguments,
     const std::optional<ElectronNode>& node,
     ElectronPageCalls calls,
     base::WeakPtr<ElectronSession> session,

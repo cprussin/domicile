@@ -23,6 +23,10 @@
 #   ported       a port the app posted, and one the preload posted, each
 #                carried a message to the preload and its answer back
 #   unpreloaded  the control: window 2, opened without a preload, has no API
+#   shaped       the preload's electron module has Electron's webFrame (its own
+#                top, by frameToken; insertCSS and removeInsertedCSS),
+#                webUtils and crashReporter, process.isMainFrame, and
+#                process.argv has the window's additionalArguments
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -182,17 +186,19 @@ try:
     connection.connect(path)
 except OSError as failure:
     print("no socket: %s" % failure, flush=True)
-    print("measured: 0 0 0 0 0 0 0 0", flush=True)
+    print("measured: 0 0 0 0 0 0 0 0 0", flush=True)
     sys.exit(0)
 reader = connection.makefile("r", encoding="utf-8")
 
 send({"type": "hello", "version": 1, "app_id": "guard.electron",
       "partition": "persist:electron-guard"})
 ready = hear_until(lambda e: e["type"] in ("ready", "refused"))
-send({"type": "open_window", "window": 1, "url": page, "preload": preload})
+send({"type": "open_window", "window": 1, "url": page, "preload": preload,
+      "arguments": ["--guard-argument=1"]})
 said = hear_until(message(1, "page"))
 seen = said["args"][0] if said and said.get("args") else {}
 answered = hear_until(message(1, "answered"))
+shaped = hear_until(message(1, "shaped"))
 synced = hear_until(message(1, "synced"))
 send({"type": "ipc_send", "window": 1, "channel": "ping", "args": ["back"]})
 pinged = hear_until(lambda e: e.get("type") == "title_changed" and
@@ -217,7 +223,7 @@ send({"type": "open_window", "window": 2, "url": page})
 control = hear_until(lambda e: e.get("type") == "title_changed" and
                      e.get("window") == 2 and e.get("title") == "no preload")
 
-print("measured: %d %d %d %d %d %d %d %d" % (
+print("measured: %d %d %d %d %d %d %d %d %d" % (
     ready is not None and ready["type"] == "ready",
     said is not None,
     seen == {"require": "undefined", "secret": "undefined", "kept": True,
@@ -228,25 +234,31 @@ print("measured: %d %d %d %d %d %d %d %d" % (
     from_mine is not None and from_mine.get("data") == 2 and
     posted is not None and posted.get("message") == "a port" and
     from_theirs is not None and from_theirs.get("data") == 50,
-    control is not None), flush=True)
+    control is not None,
+    shaped is not None and shaped.get("args") == [{
+        "argv": True, "crash": "kept", "mainFrame": True,
+        "routingId": True, "token": True,
+        "top": True, "webUtils": "function", "zoom": 1,
+        "styled": True, "unstyled": True}]), flush=True)
 PY
 
 MEASURED="$(sed -n 's/^measured: //p' "$APP_LOG")"
 echo
 echo "measured: $MEASURED"
-echo "  (ready preloaded isolated invoked synced delivered ported unpreloaded)"
+echo "  (ready preloaded isolated invoked synced delivered ported unpreloaded shaped)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-electron-preload-guard.sh`
 # runs this block directly. MEASURED is "<ready> <preloaded> <isolated>
-# <invoked> <synced> <delivered> <ported> <unpreloaded>".
+# <invoked> <synced> <delivered> <ported> <unpreloaded> <shaped>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"1 1 1 1 1 1 1 1")
+"1 1 1 1 1 1 1 1 1")
   PASSED="an Electron window's preload ran before its page in its own world, \
 its exposed API reached the app with send, invoke and sendSync, the app's \
-send reached the page, ports carried messages both ways, and a window \
-without a preload had none"
+send reached the page, ports carried messages both ways, a window \
+without a preload had none, and the preload had Electron's webFrame, \
+webUtils, crashReporter and the window's additionalArguments"
   ;;
 "0 "*)
   FAILURE="the Electron socket did not take the app's hello -- \
@@ -286,10 +298,18 @@ ElectronPage::DeliverPost, the bootstrap's relay, port_post and \
 ElectronPreload::DeliverToPort, or ElectronFrameHost PostToPort -- the app's \
 log has what it heard"
   ;;
-"1 1 1 1 1 1 1 0")
+"1 1 1 1 1 1 1 0 "*)
   FAILURE="A WINDOW OPENED WITHOUT A PRELOAD GOT ONE, or its page never \
 loaded: ElectronPage must send Preload only for its own window, and only \
 when the app gave one"
+  ;;
+"1 1 1 1 1 1 1 1 0")
+  FAILURE="the preload's electron module is not shaped as Electron's: \
+webFrame (its frameToken, top, insertCSS and removeInsertedCSS, \
+getZoomFactor), webUtils, crashReporter or process.isMainFrame in the \
+bootstrap in electron_preload.cc, or process.argv without the window's \
+\"arguments\" (ElectronOpenWindow, ElectronPage, Preload's arguments) -- \
+the app's log has what the preload saw"
   ;;
 *)
   FAILURE="there is no measurement here this guard can place ($MEASURED)"

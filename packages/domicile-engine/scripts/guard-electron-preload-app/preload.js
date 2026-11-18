@@ -1,7 +1,10 @@
 // The preload guard-electron-preload.sh gives window 1, as an Electron app's
 // sandboxed preload would be written.
 // biome-ignore lint/style/noCommonJs: a preload is CommonJS, as Electron runs it.
-const { contextBridge, ipcRenderer } = require("electron");
+const electron = require("electron");
+
+const { contextBridge, crashReporter, ipcRenderer, webFrame, webUtils } =
+  electron;
 
 // The preload's own world: the page must not see this.
 window.secret = "the preload's";
@@ -14,6 +17,26 @@ ipcRenderer.once("local", (value) => {
 });
 ipcRenderer.emit("local", 7);
 
+// The rest of Electron's sandboxed electron module, as apps use it: Claude's
+// preloads expose nothing unless process.isMainFrame and the frame is its own
+// top, by frameToken, and read the window's additionalArguments from
+// process.argv.
+crashReporter.addExtraParameter("guard", "kept");
+const styled = webFrame.insertCSS("p { color: rgb(1, 2, 3); }");
+const shaped = {
+  argv: process.argv.includes("--guard-argument=1"),
+  crash: crashReporter.getParameters().guard,
+  mainFrame: process.isMainFrame,
+  routingId: Number.isInteger(webFrame.routingId),
+  token: typeof webFrame.frameToken === "string" && webFrame.frameToken !== "",
+  top:
+    "frameToken" in webFrame &&
+    webFrame.top !== null &&
+    webFrame.top.frameToken === webFrame.frameToken,
+  webUtils: typeof webUtils.getPathForFile,
+  zoom: webFrame.getZoomFactor(),
+};
+
 contextBridge.exposeInMainWorld("guard", {
   ask: (n) => ipcRenderer.invoke("double", n),
   askNow: (n) => ipcRenderer.sendSync("triple", n),
@@ -21,6 +44,8 @@ contextBridge.exposeInMainWorld("guard", {
   onPing: (callback) =>
     ipcRenderer.on("ping", (_event, value) => callback(value)),
   send: (channel, value) => ipcRenderer.send(channel, value),
+  shaped,
+  unstyle: () => webFrame.removeInsertedCSS(styled),
 });
 
 // A port the app hands over: each number on it comes back one more.

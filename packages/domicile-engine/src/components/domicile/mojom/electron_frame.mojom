@@ -35,8 +35,11 @@ interface ElectronFrame {
   // Runs the window's preload in the next document this frame commits,
   // before the page's own scripts: `source` in an isolated world when the
   // page is sandboxed, or, with `node`, the file Node loads, in the world
-  // `node` says. Its ipcRenderer talks to `host`.
+  // `node` says. Its ipcRenderer talks to `host`. Its process.argv has
+  // `arguments`, the window's webPreferences.additionalArguments, after the
+  // renderer's own.
   Preload(string source,
+          array<string> arguments,
           ElectronNode? node,
           pending_associated_remote<ElectronFrameHost> host);
 
