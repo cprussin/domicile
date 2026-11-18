@@ -439,6 +439,7 @@ base::expected<ElectronRequest, std::string> ParseHello(
   const std::optional<int> version = request.FindInt("version");
   const std::string* app_id = request.FindString("app_id");
   const std::string* partition = request.FindString("partition");
+  const base::Value* profile = request.Find("profile");
   if (version != kElectronProtocolVersion) {
     return base::unexpected(
         base::StrCat({"this engine speaks version ",
@@ -447,6 +448,9 @@ base::expected<ElectronRequest, std::string> ParseHello(
     return base::unexpected("\"app_id\" must be a string that is not empty");
   } else if (partition == nullptr) {
     return base::unexpected("\"partition\" must be a string");
+  } else if (profile != nullptr &&
+             (!profile->is_string() || profile->GetString().empty())) {
+    return base::unexpected("\"profile\" must be a string that is not empty");
   }
   base::expected<std::optional<WebViewPartition>, std::string> parsed =
       ParseWebViewPartition(*partition);
@@ -455,7 +459,10 @@ base::expected<ElectronRequest, std::string> ParseHello(
   } else if (!parsed->has_value()) {
     return base::unexpected("an app cannot use the profile's own partition");
   } else {
-    return ElectronHello{.app_id = *app_id, .partition = std::move(**parsed)};
+    return ElectronHello{
+        .app_id = *app_id,
+        .partition = std::move(**parsed),
+        .profile = profile == nullptr ? std::string() : profile->GetString()};
   }
 }
 

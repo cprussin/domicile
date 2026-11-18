@@ -235,6 +235,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
   std::optional<std::string> OpenElectron(
       const GURL& url,
       const std::string& app_id,
+      const std::string& profile,
       const WebViewPartition& partition,
       const std::string& preload,
       const std::optional<ElectronNode>& node,
@@ -247,6 +248,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
         [&](WebViewGuest& guest) {
           // An app, not a page: Energy Saver leaves it at full rate.
           guest.KeepFullFrameRate();
+          // Its links are the user's, with their sign-ins.
+          guest.OpenLinksInTheBrowser();
           // Before the first navigation, which runs the preload and loads
           // through the session too.
           if (session && !session->user_agent().empty()) {
@@ -257,11 +260,17 @@ class DeskWindows final : public base::SupportsUserData::Data,
           guest.Navigate(url);
         },
         /*popup_window=*/std::nullopt, 0, 0,
-        /*private_browsing=*/false, /*profile=*/std::string(), /*app=*/true,
-        partition, /*app_host=*/std::string(), app_id, view, title, hidden);
+        /*private_browsing=*/false, profile, /*app=*/true, partition,
+        /*app_host=*/std::string(), app_id, view, title, hidden);
     if (made == nullptr) {
       return std::nullopt;
     }
+    // guard-electron-profile.sh greps for this.
+    LOG(INFO) << "domicile: opened Electron app " << app_id << "'s window "
+              << made->window_id() << " in browser profile "
+              << BrowserProfileRegistry::Get().IdOf(
+                     *made->contents().GetBrowserContext())
+              << ".";
     return made->window_id();
   }
 
@@ -1484,6 +1493,7 @@ DeskWindows* ShellDeskWindows() {
 std::optional<std::string> OpenElectronWindow(
     const GURL& url,
     const std::string& app_id,
+    const std::string& profile,
     const WebViewPartition& partition,
     const std::string& preload,
     const std::optional<ElectronNode>& node,
@@ -1496,7 +1506,7 @@ std::optional<std::string> OpenElectronWindow(
   if (windows == nullptr) {
     return std::nullopt;
   }
-  return windows->OpenElectron(url, app_id, partition, preload, node,
+  return windows->OpenElectron(url, app_id, profile, partition, preload, node,
                                std::move(calls), std::move(session), view,
                                title, hidden);
 }

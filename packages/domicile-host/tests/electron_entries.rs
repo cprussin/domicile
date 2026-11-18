@@ -1,5 +1,6 @@
 //! The desktop entries that start `electron.apps` on the engine.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
@@ -25,7 +26,7 @@ fn write(dir: &Path, id: &str, text: &str) {
 #[test]
 fn every_exec_runs_through_domicile_open_electron() {
     assert_eq!(
-        on_the_engine(SLACK, "slack.desktop"),
+        on_the_engine(SLACK, "slack.desktop", None),
         "[Desktop Entry]\n\
          X-Domicile-Electron=true\n\
          Type=Application\n\
@@ -40,6 +41,34 @@ fn every_exec_runs_through_domicile_open_electron() {
 }
 
 #[test]
+fn an_app_with_a_profile_runs_in_it() {
+    assert!(on_the_engine(SLACK, "slack.desktop", Some("work"))
+        .contains("Exec=domicile open --electron --profile work slack.desktop -- /opt/slack/slack -s %U\n"));
+}
+
+#[test]
+fn an_app_is_written_with_the_profile_it_is_listed_with() {
+    let root = tempfile::tempdir().unwrap();
+    let apps = root.path().join("apps/applications");
+    write(&apps, "slack.desktop", SLACK);
+    let out = root.path().join("out");
+
+    write_electron_entries(
+        &["slack".to_string()],
+        &BTreeMap::from([("slack".to_string(), "work".to_string())]),
+        &[apps],
+        None,
+        &out,
+    )
+    .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(out.join("applications/slack.desktop")).unwrap(),
+        on_the_engine(SLACK, "slack.desktop", Some("work"))
+    );
+}
+
+#[test]
 fn listed_apps_are_copied_from_the_first_directory_that_has_them() {
     let root = tempfile::tempdir().unwrap();
     let first = root.path().join("first/applications");
@@ -50,6 +79,7 @@ fn listed_apps_are_copied_from_the_first_directory_that_has_them() {
 
     let written = write_electron_entries(
         &["slack".to_string(), "element.desktop".to_string()],
+        &BTreeMap::new(),
         &[first, second],
         None,
         &out,
@@ -66,7 +96,7 @@ fn listed_apps_are_copied_from_the_first_directory_that_has_them() {
     );
     assert_eq!(
         fs::read_to_string(out.join("applications/slack.desktop")).unwrap(),
-        on_the_engine(SLACK, "slack.desktop")
+        on_the_engine(SLACK, "slack.desktop", None)
     );
 }
 
@@ -78,6 +108,7 @@ fn copies_of_apps_no_longer_listed_are_removed_and_nothing_else() {
     let out = root.path().join("out");
     write_electron_entries(
         &["slack.desktop".to_string()],
+        &BTreeMap::new(),
         std::slice::from_ref(&apps),
         None,
         &out,
@@ -89,7 +120,7 @@ fn copies_of_apps_no_longer_listed_are_removed_and_nothing_else() {
         "[Desktop Entry]\n",
     );
 
-    write_electron_entries(&[], &[apps], None, &out).unwrap();
+    write_electron_entries(&[], &BTreeMap::new(), &[apps], None, &out).unwrap();
 
     assert!(!out.join("applications/slack.desktop").exists());
     assert!(out.join("applications/other.desktop").exists());
@@ -104,6 +135,7 @@ fn an_app_whose_entry_is_in_the_data_home_is_shadowed() {
 
     let written = write_electron_entries(
         &["slack.desktop".to_string()],
+        &BTreeMap::new(),
         std::slice::from_ref(&home),
         Some(&home),
         &out,

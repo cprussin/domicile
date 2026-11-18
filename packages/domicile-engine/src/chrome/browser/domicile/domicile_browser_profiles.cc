@@ -166,6 +166,11 @@ void BrowserProfileRegistry::Configure(Profile& shell,
       observer.OnBrowserProfilesChanged();
     }
   }
+  configured_ = true;
+  std::vector<base::OnceClosure> waiting = std::move(waiting_for_config_);
+  for (base::OnceClosure& ready : waiting) {
+    std::move(ready).Run();
+  }
 }
 
 bool BrowserProfileRegistry::IsConfigSite(const std::string& site) const {
@@ -274,6 +279,36 @@ void BrowserProfileRegistry::WhenLoaded(Profile& shell,
     // ProfileManager answers every load of one directory, so a second start
     // while Configure's is under way only adds an answer.
     StartLoading(id);
+  }
+}
+
+void BrowserProfileRegistry::WhenAppProfileReady(
+    const std::string& id,
+    base::OnceCallback<void(base::expected<void, std::string>)> ready) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!configured_) {
+    waiting_for_config_.push_back(
+        base::BindOnce(&BrowserProfileRegistry::WhenAppProfileReady,
+                       weak_factory_.GetWeakPtr(), id, std::move(ready)));
+    return;
+  }
+  const BrowserProfile* profile = profiles_.Find(id);
+  if (profile == nullptr) {
+    std::move(ready).Run(base::unexpected(
+        base::StrCat({"the desk has no browser profile ", id})));
+  } else if (profile->is_private) {
+    std::move(ready).Run(base::unexpected(
+        base::StrCat({"browser profile ", id,
+                      " is private, so it would keep nothing the app signs "
+                      "in to"})));
+  } else {
+    // Configure set the shell.
+    WhenLoaded(
+        *shell_, id,
+        base::BindOnce(
+            [](base::OnceCallback<void(base::expected<void, std::string>)>
+                   ready) { std::move(ready).Run(base::ok()); },
+            std::move(ready)));
   }
 }
 

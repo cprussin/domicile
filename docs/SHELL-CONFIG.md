@@ -145,7 +145,7 @@ An edit applies to the running desktop, and windows stay open:
 | `theme.force_dark` | Those sites are drawn dark from their next load |
 | `theme.icon_theme` | Shell and windows that read the settings portal follow; tray icons redrawn and later notifications drawn in it; manganese on the next menu or launcher opening, and title bars when a new app id appears |
 | `files.omit` | Launcher file index rebuilt |
-| `electron.apps` | Starting a newly listed app runs it on the engine; apps already running stay as they are |
+| `electron.apps`, `electron.profiles` | Starting a newly listed app runs it on the engine, in its profile; apps already running stay as they are |
 | `extensions` | Extensions installed or removed ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)) |
 | `lockdown` | Applications told through the Lockdown portal |
 | `terminal` | Processes started from then on get the new terminal: the launcher's next opening, the next `domicile open` from a new window, and Meta+Return |
@@ -182,6 +182,10 @@ An edit applies to the running desktop, and windows stay open:
   `domicile open --electron`. An entry in `~/.local/share/applications`
   can't be overridden, and is logged. See
   [ELECTRON-APPS.md](architecture/ELECTRON-APPS.md).
+- `electron.profiles`: the browser profile each of `electron.apps` runs in,
+  by the same id: `{ "slack.desktop": "work" }`. Its windows get that
+  profile's extensions and keep their sign-ins there. Not a private profile.
+  Unlisted apps run in `browser.default_profile`.
 - `browser`: browser profiles and the profile each site opens in. Each
   profile has its own sign-ins, site data and extensions, and a private one
   keeps nothing past its last page. A page the user takes to a listed site

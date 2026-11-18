@@ -134,6 +134,7 @@ TOGETHER=(
   guard-pdf-after-hiding
   guard-app-module
   guard-electron-socket
+  guard-electron-profile
   guard-electron-preload
   guard-electron-node
   guard-electron-protocol
@@ -175,6 +176,7 @@ ONCE=(
   guard-electron-schemes
   guard-electron-session
   guard-electron-socket
+  guard-electron-profile
   guard-electron-views
   guard-electron-web-request
   guard-held-moments
