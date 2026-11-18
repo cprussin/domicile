@@ -45,8 +45,11 @@ const HEARTBEAT: Duration = Duration::from_secs(30);
 /// The longest the desk waits before dialing a relay that hung up again.
 const MOST_BACKOFF: Duration = Duration::from_secs(5 * 60);
 
-/// How long the desk waits to ask for a certificate again after failing.
-const RETRY_ISSUE: Duration = Duration::from_secs(60 * 60);
+/// How long the desk first waits to ask for a certificate again after
+/// failing; it doubles each time, up to [`MOST_RETRY_ISSUE`]. Kept well
+/// inside Let's Encrypt's limit of five failed validations an hour.
+const RETRY_ISSUE: Duration = Duration::from_secs(2 * 60);
+const MOST_RETRY_ISSUE: Duration = Duration::from_secs(60 * 60);
 
 /// The ALPN protocol an ACME authority checks a TLS-ALPN-01 challenge with.
 const ACME_TLS: &[u8] = b"acme-tls/1";
@@ -413,6 +416,52 @@ pub fn status_file(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
     })
 }
 
+/// The file beside the status file `status` that asks the desk to try for a
+/// certificate again now, rather than when it would: [`retry_now`] touches
+/// it.
+fn retry_file(status: &Path) -> PathBuf {
+    status.with_file_name("web-agents.retry")
+}
+
+/// Asks the desk whose status is at `status` to try for its certificate
+/// again now, as Settings' Try again does.
+pub fn retry_now(status: &Path) -> io::Result<()> {
+    let retry = retry_file(status);
+    if let Some(directory) = retry.parent() {
+        fs::create_dir_all(directory)?;
+    }
+    fs::write(&retry, format!("{:?}\n", std::time::SystemTime::now()))
+}
+
+/// When the file `retry` last changed, if it is there.
+fn touched(retry: &Path) -> Option<std::time::SystemTime> {
+    fs::metadata(retry)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+}
+
+/// Waits `wait`, or until `retry` is touched after `since`.
+fn waited(wait: Duration, retry: Option<&Path>, since: Option<std::time::SystemTime>) {
+    let started = Instant::now();
+    while started.elapsed() < wait {
+        if let Some(retry) = retry {
+            if touched(retry) != since {
+                return;
+            }
+        }
+        thread::sleep(Duration::from_secs(1).min(wait - started.elapsed()));
+    }
+}
+
+/// `wait` as people read it: "a minute", "4 minutes", "an hour".
+fn in_words(wait: Duration) -> String {
+    match wait.as_secs() / 60 {
+        0 | 1 => "a minute".to_string(),
+        60 => "an hour".to_string(),
+        minutes => format!("{minutes} minutes"),
+    }
+}
+
 /// The status, and where it is written each time it changes.
 struct Told {
     path: Option<PathBuf>,
@@ -563,6 +612,8 @@ fn kept_certified(
         .and_then(|pkcs8| AccountKey::from_pkcs8(&pkcs8))
         .unwrap_or_else(AccountKey::generate);
     let mut http = Ureq::new();
+    let retry = told.path.as_deref().map(retry_file);
+    let mut wait = RETRY_ISSUE;
     loop {
         let now = (reach.clock)();
         if let Some(current) = kept.current(host, now) {
@@ -590,6 +641,7 @@ fn kept_certified(
         match issued {
             Ok(issued) => {
                 eprintln!("domicile: got a certificate for {host}");
+                wait = RETRY_ISSUE;
                 told.update(|status| {
                     status.ready = true;
                     status.problem = None;
@@ -610,16 +662,24 @@ fn kept_certified(
                 }
             }
             Err(why) => {
-                eprintln!("domicile: could not get a certificate for {host}, trying again in an hour: {why}");
+                let when = in_words(wait);
+                eprintln!(
+                    "domicile: could not get a certificate for {host}, trying again in {when}: {why}"
+                );
                 // A renewal that fails leaves the current one working.
                 if !certificates.ready() {
                     told.update(|status| {
                         status.problem = Some(format!(
-                            "Couldn't get a certificate, trying again in an hour: {why}"
+                            "Couldn't get a certificate, trying again in {when}: {why}"
                         ));
                     });
                 }
-                thread::sleep(RETRY_ISSUE);
+                let since = retry.as_deref().and_then(touched);
+                waited(wait, retry.as_deref(), since);
+                wait = (wait * 2).min(MOST_RETRY_ISSUE);
+                if !certificates.ready() {
+                    told.update(|status| status.problem = None);
+                }
             }
         }
     }
@@ -754,5 +814,26 @@ mod tests {
         assert!(!certificates.ready());
         certificates.challenge(None).unwrap();
         assert!(certificates.challenge.read().unwrap().is_none());
+    }
+
+    #[test]
+    fn a_retry_ends_the_wait_at_once() {
+        let state = tempfile::tempdir().expect("a temporary directory");
+        let status = state.path().join("domicile/web-agents.json");
+        let retry = retry_file(&status);
+        retry_now(&status).expect("written");
+        let since = touched(&retry);
+        let started = Instant::now();
+        let waiting = thread::spawn(move || waited(Duration::from_secs(60), Some(&retry), since));
+        thread::sleep(Duration::from_millis(1100));
+        retry_now(&status).expect("written again");
+        waiting.join().expect("waiting does not panic");
+        assert!(started.elapsed() < Duration::from_secs(10));
+    }
+
+    #[test]
+    fn waits_read_in_words() {
+        assert_eq!(in_words(RETRY_ISSUE), "2 minutes");
+        assert_eq!(in_words(MOST_RETRY_ISSUE), "an hour");
     }
 }

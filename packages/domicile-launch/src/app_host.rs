@@ -240,6 +240,7 @@ enum AppRequest {
     SignOutWebAgent {
         client: String,
     },
+    RetryWebAgents,
 }
 
 /// Which file a write replaces.
@@ -447,6 +448,14 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
                 .ok_or("there is no state directory to sign agents out of")?;
             crate::mcp::sign_out(path, &client)
                 .map_err(|why| format!("could not sign {client} out: {why}"))?;
+            Ok(json!({"type": "done"}))
+        }
+        AppRequest::RetryWebAgents => {
+            let path = host
+                .web_status
+                .ok_or("XDG_RUNTIME_DIR is not set, so there is no desk to ask")?;
+            crate::mcp::web::retry_now(path)
+                .map_err(|why| format!("could not ask the desk to try again: {why}"))?;
             Ok(json!({"type": "done"}))
         }
     }

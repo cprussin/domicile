@@ -35,5 +35,11 @@ export const useWebAgents = (host: SettingsHost, report: Report) => {
     [host, reload, report],
   );
 
-  return { signOut, webAgents };
+  const retry = useCallback(() => {
+    host
+      .retryWebAgents()
+      .then(reload, report("Couldn't ask your desktop to try again"));
+  }, [host, reload, report]);
+
+  return { retry, signOut, webAgents };
 };

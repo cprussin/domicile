@@ -44,7 +44,8 @@ Turning on **Connect from the web** in Settings › Agents (`agents.web`,
 --relay` ([CLI.md](CLI.md#through-the-relay)), which dials out to a relay
 (below). Settings then shows the desk's address,
 `https://<label>.mcp.domicile-desktop.com/mcp`, with a Copy button, to add to
-the agent as a custom connector, and whether it is ready. Signing in and
+the agent as a custom connector, and whether it is ready. When it can't get
+ready it says why, with **Try again**. Signing in and
 asking work as above. Each agent signed in is listed there too: **Sign out**
 drops its tokens, so it needs a new code.
 

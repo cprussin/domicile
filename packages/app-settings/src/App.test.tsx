@@ -1152,6 +1152,24 @@ describe(App, () => {
       expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
     });
 
+    it("asks the desk to try again when it couldn't get ready", async () => {
+      const { host, user } = await renderApp("Agents", {
+        config: { agents: { web: true } },
+        webAgents: {
+          signedIn: [],
+          status: {
+            address: ADDRESS,
+            problem: "Couldn't get a certificate, trying again in 2 minutes",
+            ready: false,
+          },
+        },
+      });
+      await user.click(
+        await screen.findByRole("button", { name: "Try again" }),
+      );
+      expect(host.retried.times).toBe(1);
+    });
+
     it("signs an agent on the web out", async () => {
       const { host, user } = await renderApp("Agents", {
         config: { agents: { web: true } },

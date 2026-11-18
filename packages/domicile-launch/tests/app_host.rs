@@ -279,6 +279,18 @@ fn agents_are_listed_stopped_and_forgotten_on_the_desktop() {
 }
 
 #[test]
+fn try_again_touches_the_retry_file_beside_the_status() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut host = a_host(FILES.clone());
+    host.web_status = Some(dir.path().join("domicile/web-agents.json"));
+    assert_eq!(
+        host.answer(&json!({"id": 24, "type": "retry_web_agents"})),
+        json!({"id": 24, "type": "done"})
+    );
+    assert!(dir.path().join("domicile/web-agents.retry").exists());
+}
+
+#[test]
 fn agents_on_the_web_are_read_and_signed_out_from_mcps_files() {
     let dir = tempfile::tempdir().unwrap();
     let mut host = a_host(FILES.clone());

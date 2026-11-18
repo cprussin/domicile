@@ -347,6 +347,8 @@ export type SettingsHost = {
   webAgents: () => Promise<WebAgents>;
   /** Signs agent `client` on the web out, so it needs a new code. */
   signOutWebAgent: (client: string) => Promise<void>;
+  /** Has the desk try for its certificate again now, not when it would. */
+  retryWebAgents: () => Promise<void>;
   /** Calls `listener` when a file changes on disk. Returns an unsubscribe. */
   onChange: (listener: () => void) => () => void;
 };
@@ -537,6 +539,12 @@ export const spawnedHost = (
         };
       } else {
         throw unexpected(reply, "files");
+      }
+    },
+    retryWebAgents: async () => {
+      const reply = await ask({ type: "retry_web_agents" });
+      if (reply.type !== "done") {
+        throw unexpected(reply, "done");
       }
     },
     setExtensionEnabled: async (extension, enabled, profile) => {

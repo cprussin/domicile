@@ -38,12 +38,13 @@ export const AgentsPage = ({
   title,
 }: Props) => {
   const { agents, failure, forget, stop } = useAgents(host, report);
-  const { signOut, webAgents } = useWebAgents(host, report);
+  const { retry, signOut, webAgents } = useWebAgents(host, report);
   return (
     <Page description={description} title={title}>
       <FromTheWeb
         editor={editor}
         report={report}
+        retry={retry}
         signOut={signOut}
         webAgents={webAgents}
       />
@@ -111,11 +112,13 @@ export const AgentsPage = ({
 const FromTheWeb = ({
   editor,
   report,
+  retry,
   signOut,
   webAgents,
 }: {
   editor: ConfigEditor | undefined;
   report: Report;
+  retry: () => void;
   signOut: (client: string, name: string) => void;
   webAgents: WebAgents | undefined;
 }) => {
@@ -137,8 +140,14 @@ const FromTheWeb = ({
           hint={addressHint(webAgents?.status)}
           title="Your desktop's address"
         >
-          {address !== undefined && (
-            <CopyButton report={report} text={address} />
+          {webAgents?.status?.problem === undefined ? (
+            address !== undefined && (
+              <CopyButton report={report} text={address} />
+            )
+          ) : (
+            <Button onClick={retry} size="sm" variant="outline">
+              Try again
+            </Button>
           )}
         </SettingRow>
       )}

@@ -58,6 +58,8 @@ export const fakeHost = (state: FakeHostState) => {
   const switched: { id: string; enabled: boolean; profile: string }[] = [];
   /** Each site pinned to a profile. */
   const pinned: { site: string; profile: string }[] = [];
+  /** How many times Try again asked the desk for a certificate now. */
+  const retried = { times: 0 };
   const host: SettingsHost = {
     agents: () =>
       Promise.resolve(
@@ -131,6 +133,10 @@ export const fakeHost = (state: FakeHostState) => {
       return Promise.resolve();
     },
     read: () => Promise.resolve(structuredClone(state.files)),
+    retryWebAgents: () => {
+      retried.times += 1;
+      return Promise.resolve();
+    },
     setExtensionEnabled: (id, enabled, profile) => {
       if (profile !== undefined) {
         switched.push({ enabled, id, profile });
@@ -228,6 +234,7 @@ export const fakeHost = (state: FakeHostState) => {
     loaded,
     opened,
     pinned,
+    retried,
     state,
     switched,
     uninstalled,

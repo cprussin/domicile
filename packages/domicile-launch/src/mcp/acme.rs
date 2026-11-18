@@ -259,8 +259,14 @@ fn prove(
 /// A new key for `host`'s certificate, as PEM, and a CSR for it, as DER.
 fn request(host: &str) -> Result<(String, Vec<u8>), String> {
     let key = rcgen::KeyPair::generate().map_err(|why| why.to_string())?;
-    let params =
+    let mut params =
         rcgen::CertificateParams::new(vec![host.to_string()]).map_err(|why| why.to_string())?;
+    // rcgen names a certificate "rcgen self signed cert" by default, which an
+    // authority reads as one more name to certify and refuses.
+    params.distinguished_name = rcgen::DistinguishedName::new();
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, host);
     let csr = params
         .serialize_request(&key)
         .map_err(|why| why.to_string())?;
@@ -583,7 +589,12 @@ mod tests {
         let issued = issued.unwrap();
         assert!(issued.chain_pem.contains("BEGIN CERTIFICATE"));
         assert!(issued.key_pem.contains("PRIVATE KEY"));
-        assert!(!authority.csr.unwrap().is_empty());
+        let csr = authority.csr.unwrap();
+        let has = |text: &[u8]| csr.windows(text.len()).any(|window| window == text);
+        // Its only name is the host, as its subject and its one SAN; an
+        // authority refuses any other.
+        assert!(has(b"abc.relay.example"));
+        assert!(!has(b"rcgen"), "rcgen's default subject is gone");
         assert_eq!(told.len(), 2);
         assert_eq!(told.last(), Some(&None), "the challenge is dropped after");
     }
