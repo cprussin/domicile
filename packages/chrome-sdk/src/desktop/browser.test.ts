@@ -275,6 +275,19 @@ describe("browser", () => {
     ]);
   });
 
+  it("clicks a match in a window's page", () => {
+    const fake = new FakeDomicileHost();
+    desktop(fake.host)
+      .browser.clickMatch("1", "tr [data-id='7']")
+      .catch(() => {
+        /* never answered */
+      });
+
+    expect(fake.calls).toStrictEqual([
+      ["clickBrowserWindowMatch", "1", "tr [data-id='7']"],
+    ]);
+  });
+
   it("fetches with the browser's cookies", () => {
     const fake = new FakeDomicileHost();
     const { browser } = desktop(fake.host);

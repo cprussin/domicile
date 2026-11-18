@@ -675,6 +675,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Counts in the primary main frame, as ReadDescription reads.
   void CountMatches(const std::string& selector,
                     CountMatchesCallback callback) override;
+  // Clicks in the primary main frame, as CountMatches counts.
+  void ClickMatch(const std::string& selector,
+                  ClickMatchCallback callback) override;
 
   // content::BrowserPluginGuestDelegate:
   content::WebContents* GetOwnerWebContents() override;

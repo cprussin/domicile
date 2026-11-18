@@ -13,7 +13,6 @@ import type { Mail } from "./gmail-api";
 import { heldBus } from "./held-bus";
 import { EMAIL } from "./held-google";
 import { mailNotices } from "./mail-notices";
-import { threadToken } from "./thread-token";
 
 const ACCOUNT = { email: EMAIL, nickname: "Work" };
 
@@ -58,19 +57,19 @@ const pressed = (id: number) => ({
 
 /**
  * A desk whose bus answers `replies`; `opened` settles on the first press,
- * with the account and the Gmail place it opens.
+ * with the account and the thread it opens, or `undefined` for the inbox.
  */
 const desk = (...replies: Parameters<typeof heldBus>[0]) => {
   const bus = heldBus(replies);
-  const opened = Promise.withResolvers<[string, string]>();
+  const opened = Promise.withResolvers<[string, string | undefined]>();
   return {
     bus,
     desk: {
       browser: new FakeDomicileHost().domicile.browser,
       dbus: bus.dbus,
     },
-    open: (_: unknown, email: string, place: string) => {
-      opened.resolve([email, place]);
+    open: (_: unknown, email: string, thread: string | undefined) => {
+      opened.resolve([email, thread]);
       return () => undefined;
     },
     opened: opened.promise,
@@ -140,23 +139,23 @@ describe("mailNotices", () => {
     await bus.send(pressed(6));
     await bus.send(pressed(7));
 
-    expect(await opened).toStrictEqual([EMAIL, `#inbox/${threadToken("a1")}`]);
+    expect(await opened).toStrictEqual([EMAIL, "a1"]);
     await notify(ACCOUNT, read("m1"));
     expect(closes(bus.calls)).toStrictEqual([]);
   });
 
   it("stops an earlier press's wait for Gmail on a later press", async () => {
     const { bus, desk: held } = desk(notified(7), notified(8));
-    const stopped = Promise.withResolvers<string>();
-    const notify = mailNotices(held, NO_ICON, (_, __, place) => () => {
-      stopped.resolve(place);
+    const stopped = Promise.withResolvers<string | undefined>();
+    const notify = mailNotices(held, NO_ICON, (_, __, thread) => () => {
+      stopped.resolve(thread);
     });
 
     await notify(ACCOUNT, arrived([mail(2), mail(1)]));
     await bus.send(pressed(7));
     await bus.send(pressed(8));
 
-    expect(await stopped.promise).toBe(`#inbox/${threadToken("a1")}`);
+    expect(await stopped.promise).toBe("a1");
   });
 
   it("closes a message's notification once it is read, and no other", async () => {
@@ -194,7 +193,7 @@ describe("mailNotices", () => {
     expect(bus.calls.map(({ body }) => body?.slice(3, 5))).toStrictEqual([
       ["4 new emails", "Sender 4, Sender 3, Sender 2, and 1 more"],
     ]);
-    expect(await opened).toStrictEqual([EMAIL, "#inbox"]);
+    expect(await opened).toStrictEqual([EMAIL, undefined]);
   });
 
   it("names each sender once", async () => {
@@ -218,7 +217,7 @@ describe("mailNotices", () => {
     await notify(ACCOUNT, arrived([mail(2)]));
     await bus.send(pressed(8));
 
-    expect(await opened).toStrictEqual([EMAIL, `#inbox/${threadToken("a2")}`]);
+    expect(await opened).toStrictEqual([EMAIL, "a2"]);
   });
 
   it("fails when the notification server refuses", async () => {

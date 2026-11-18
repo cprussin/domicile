@@ -1231,6 +1231,17 @@ class BrowserWindowsService final
     guest->CountMatches(selector, std::move(callback));
   }
 
+  void ClickMatch(const std::string& id,
+                  const std::string& selector,
+                  ClickMatchCallback callback) override {
+    WebViewGuest* guest = windows_->Find(id);
+    if (guest == nullptr) {
+      std::move(callback).Run(std::nullopt);
+      return;
+    }
+    guest->ClickMatch(selector, std::move(callback));
+  }
+
   void Close(const std::string& id) override { windows_->UserAskedToClose(id); }
 
   void ClickMenu(const std::string& id, int32_t command) override {
