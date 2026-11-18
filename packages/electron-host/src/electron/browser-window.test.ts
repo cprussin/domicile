@@ -69,6 +69,28 @@ describe(createBrowserWindow, () => {
     ]);
   });
 
+  it("has Electron's older history methods, as its navigationHistory", () => {
+    const { BrowserWindow } = setUp();
+    const { webContents } = new BrowserWindow();
+
+    expect(webContents.canGoBack()).toBe(
+      webContents.navigationHistory.canGoBack(),
+    );
+    expect(webContents.canGoForward()).toBe(
+      webContents.navigationHistory.canGoForward(),
+    );
+    expect(webContents.canGoToOffset(-1)).toBe(
+      webContents.navigationHistory.canGoToOffset(-1),
+    );
+    expect(webContents.goBack).toBe(webContents.navigationHistory.goBack);
+    expect(webContents.goForward).toBe(webContents.navigationHistory.goForward);
+    expect(webContents.goToIndex).toBe(webContents.navigationHistory.goToIndex);
+    expect(webContents.goToOffset).toBe(
+      webContents.navigationHistory.goToOffset,
+    );
+    expect(webContents.clearHistory).toBe(webContents.navigationHistory.clear);
+  });
+
   it("numbers windows from 1 and finds them by number", () => {
     const { BrowserWindow } = setUp();
     const first = new BrowserWindow();

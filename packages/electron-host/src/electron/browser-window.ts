@@ -334,6 +334,15 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       goToOffset: (_offset: number) => undefined,
       length: () => 1,
     };
+    // Electron's older names for the same, which apps such as Element call.
+    readonly canGoBack = this.navigationHistory.canGoBack;
+    readonly canGoForward = this.navigationHistory.canGoForward;
+    readonly canGoToOffset = this.navigationHistory.canGoToOffset;
+    readonly clearHistory = this.navigationHistory.clear;
+    readonly goBack = this.navigationHistory.goBack;
+    readonly goForward = this.navigationHistory.goForward;
+    readonly goToIndex = this.navigationHistory.goToIndex;
+    readonly goToOffset = this.navigationHistory.goToOffset;
     zoomFactor = 1;
     zoomLevel = 0;
     readonly isFocused = () => false;
