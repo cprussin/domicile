@@ -41,6 +41,7 @@ Profiles with their own sign-ins, site data and extensions, each opening the sit
 - HDR and 10-bit color. [`hdr`](SHELL-CONFIG.md#hdr) · [Design](architecture/COLOR.md) · [#1974](https://github.com/cprussin/domicile/issues/1974)
 - `<app picture-in-picture>` floats a page's video as a shell window. [Picture-in-picture](SHELL-BROWSER-WINDOWS.md#picture-in-picture-video) · [#2077](https://github.com/cprussin/domicile/pull/2077) · [#2177](https://github.com/cprussin/domicile/pull/2177)
 - `system-network`: saved Wi-Fi networks in `Wifi.saved`, with `setWifiAutoJoin()` and `forgetWifi()`, from NetworkManager or iwd. [Libraries](SHELL-SYSTEM-ACCESS.md#libraries) · [#2334](https://github.com/cprussin/domicile/pull/2334)
+- `EmptyState` takes `tone="warning"` for something that couldn't be read, with `detail` as its tooltip, and `layout="inline"` for a faint caption under a panel's rows.
 - `clickMatch()` clicks a selector's first match in a page. [Browser windows](SHELL-BROWSER-WINDOWS.md) · [#2284](https://github.com/cprussin/domicile/pull/2284)
 - `<webview>.history()` for a Back and Forward history menu. [Browser windows](SHELL-BROWSER-WINDOWS.md) · [#2251](https://github.com/cprussin/domicile/pull/2251)
 - Pointer lock, confinement and relative motion. [Windows](WRITING-A-SHELL.md#windows) · [#2054](https://github.com/cprussin/domicile/pull/2054) · [#2057](https://github.com/cprussin/domicile/pull/2057) · [#2123](https://github.com/cprussin/domicile/pull/2123)

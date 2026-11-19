@@ -1,4 +1,5 @@
 import { Button } from "@domicile-desktop/component-library/Button";
+import { EmptyState } from "@domicile-desktop/component-library/EmptyState";
 import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import { Input } from "@domicile-desktop/component-library/Input";
 import { Select } from "@domicile-desktop/component-library/Select";
@@ -307,7 +308,7 @@ const ProfileCard = ({
         <div className={extensionsRowStyles}>
           <span className={rowTitleStyles}>Extensions</span>
           {profile.extensions.length === 0 ? (
-            <p className={hintStyles}>No extensions yet.</p>
+            <EmptyState layout="inline" title="No extensions yet" />
           ) : (
             <ul className={extensionListStyles}>
               {profile.extensions.map(({ enabled, id, locked }) => {

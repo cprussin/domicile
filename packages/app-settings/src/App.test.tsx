@@ -1055,9 +1055,7 @@ describe(App, () => {
       expect(screen.getByText("notes.example")).toBeInTheDocument();
       expect(screen.queryByText("mail.example")).not.toBeInTheDocument();
       await user.type(screen.getByRole("searchbox"), "zzz");
-      expect(
-        screen.getByText("No site with data matches."),
-      ).toBeInTheDocument();
+      expect(screen.getByText("No site matches")).toBeInTheDocument();
     });
 
     it("removes a site's data once asked", async () => {

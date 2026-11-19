@@ -361,7 +361,7 @@ describe("Network", () => {
       );
 
       await userEvent.click(
-        screen.getByRole("button", { name: "Saved networks" }),
+        screen.getByRole("button", { name: /^\d+ saved$/ }),
       );
 
       expect(

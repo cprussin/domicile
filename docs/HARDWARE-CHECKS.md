@@ -447,7 +447,7 @@ from a page, such as a wallet extension's "connect Ledger".
 
 - No `asked for a device; asking the shell` line: the request never reached
   patch 0110's override.
-- The chooser says `No compatible devices found`: the device is unplugged, or
+- The chooser says `No devices found`: the device is unplugged, or
   the page's filters exclude it.
 - `answered with 1 device(s)` and the page cannot open the device: the session
   cannot open its `/dev/hidraw*` node. Check `getfacl /dev/hidraw*`.

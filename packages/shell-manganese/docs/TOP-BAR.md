@@ -222,15 +222,16 @@ button, and their controls in one panel, each labeled in words.
     panel is open.
   - The Wi-Fi panel, from NetworkManager or iwd. With wpa_supplicant alone it
     says there is no Wi-Fi device.
-    - A switch turns the radio on or off.
-    - Opening it scans. The arrow scans again.
+    - A switch turns the radio on or off. Beside it, **N saved** opens
+      Saved networks, and the arrow scans again.
+    - Opening it scans.
     - The connection: signal, frequency, speed, addresses, gateway, DNS,
       interface and hardware address, and **Disconnect**. iwd reports no
       addresses.
     - The other networks, strongest first, marked saved and secured. A click
       joins a saved or open network. A new secured one asks for its
       passphrase.
-    - **Saved networks** opens a page of every saved network, in range or
+    - **Saved networks** is a page of every saved network, in range or
       not, radio on or off: the connected one, then those in range, then the
       rest by when they were last used. Each shows its security, a **Join
       automatically** switch and **Forget**.

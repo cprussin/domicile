@@ -324,6 +324,14 @@ describe("WifiPanel", () => {
       );
     });
 
+    it("counts the saved networks on their button", async () => {
+      await shown(Ok(Some(WIFI)));
+
+      expect(
+        screen.getByRole("button", { name: "1 saved" }),
+      ).toBeInTheDocument();
+    });
+
     it("says what to try when nothing at all is in range", async () => {
       await shown(Ok(Some({ ...WIFI, connection: undefined, networks: [] })));
 
@@ -463,7 +471,7 @@ describe("WifiPanel", () => {
       await shown(Ok(Some(WIFI)));
 
       await userEvent.click(
-        screen.getByRole("button", { name: "Saved networks" }),
+        screen.getByRole("button", { name: /^\d+ saved$/ }),
       );
 
       expect(
@@ -485,17 +493,13 @@ describe("WifiPanel", () => {
         ),
       );
 
-      expect(
-        screen.getByRole("button", { name: "Saved networks" }),
-      ).toBeVisible();
+      expect(screen.getByRole("button", { name: /^\d+ saved$/ })).toBeVisible();
     });
 
     it("leaves the way in out when nothing is saved", async () => {
       await shown(Ok(Some({ ...WIFI, saved: [] })));
 
-      expect(
-        screen.queryByRole("button", { name: "Saved networks" }),
-      ).toBeNull();
+      expect(screen.queryByRole("button", { name: /^\d+ saved$/ })).toBeNull();
     });
   });
 

@@ -9,7 +9,6 @@ import { Input } from "@domicile-desktop/component-library/Input";
 import { List, ListRow } from "@domicile-desktop/component-library/ListRow";
 import { Loading } from "@domicile-desktop/component-library/Loading";
 import { PanelFooter } from "@domicile-desktop/component-library/PanelFooter";
-import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
 import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import { Switch } from "@domicile-desktop/component-library/Switch";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
@@ -52,9 +51,9 @@ type Props = {
 /**
  * The Wi-Fi section: a switch for the radio on its heading, the connection
  * with its details folded away, then the other networks in range, each
- * joined with a click. At its foot, a page of the saved networks, radio on or
- * off. Nothing without a Wi-Fi device. Goes in a `Drilldown`, which shows the
- * page.
+ * joined with a click. A button on the heading opens a page of the saved
+ * networks, radio on or off. Nothing without a Wi-Fi device. Goes in a
+ * `Drilldown`, which shows the page.
  *
  * Scans when shown. A refusal shows plainly where it was asked, with the
  * service's words in its tooltip; the service's state shows the rest.
@@ -70,9 +69,12 @@ export const WifiPanel = ({ actions, addresses, host, wifi }: Props) => {
     return wifi.match({
       Err: (error) => (
         <PanelSection label="Wi-Fi">
-          <PanelNote detail={error.message} tone="warning">
-            Couldn't read Wi-Fi
-          </PanelNote>
+          <EmptyState
+            detail={error.message}
+            hint="Close this and open it again in a moment."
+            title="Couldn't read Wi-Fi"
+            tone="warning"
+          />
         </PanelSection>
       ),
       Ok: (found) =>
@@ -119,6 +121,19 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
     <PanelSection
       action={
         <span className={headStyles}>
+          {wifi.saved.length > 0 && (
+            <Button
+              afterIcon={<CaretRightIcon aria-hidden size={10} weight="bold" />}
+              onClick={() => {
+                setSavedOpen(true);
+              }}
+              rounded
+              size="xs"
+              variant="ghost"
+            >
+              {`${wifi.saved.length} saved`}
+            </Button>
+          )}
           {wifi.enabled && (scanning || !empty) && (
             <Tooltip
               content="Scan"
@@ -215,7 +230,7 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
           {!scanning &&
             others.length === 0 &&
             wifi.connection !== undefined && (
-              <PanelNote>No other networks nearby</PanelNote>
+              <EmptyState layout="inline" title="No other networks nearby" />
             )}
           <Failure error={requests.failed("disconnect")}>
             Couldn't disconnect
@@ -230,17 +245,6 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
           icon={WifiSlashIcon}
           title="Wi-Fi is off"
         />
-      )}
-      {wifi.saved.length > 0 && (
-        <List>
-          <ListRow
-            end={<CaretRightIcon aria-hidden size={14} weight="bold" />}
-            label="Saved networks"
-            onPress={() => {
-              setSavedOpen(true);
-            }}
-          />
-        </List>
       )}
       {savedOpen && (
         <DrilldownPage

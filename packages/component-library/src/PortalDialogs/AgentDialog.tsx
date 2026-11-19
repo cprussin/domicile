@@ -13,6 +13,7 @@ import { css } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
 import { CheckboxRow, ChoiceList, RadioRow } from "../ChoiceRow/ChoiceRow";
+import { EmptyState } from "../EmptyState/EmptyState";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
 import { Switch } from "../Switch/Switch";
 import type { App } from "../useApps/useApps";
@@ -152,11 +153,10 @@ export const AgentDialog = ({
               value={window.id}
             />
           ))}
-          <p className={noteStyles}>
-            {body.windows.length === 0
-              ? "No windows are open. Private windows are never shared."
-              : "Private windows are never shared."}
-          </p>
+          {body.windows.length === 0 && (
+            <EmptyState layout="inline" title="No windows are open" />
+          )}
+          <p className={noteStyles}>Private windows are never shared.</p>
         </CheckboxGroup>
       )}
     </ModalDialog>
