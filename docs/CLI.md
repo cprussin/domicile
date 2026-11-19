@@ -564,7 +564,7 @@ Each tool runs a verb and answers what it printed, or its error:
 | `app_click`, `app_focus`, `app_set_text` | `accessibility-act <window> <ref> click\|focus\|set-text <text>` |
 | `ask_to_use_desktop` | nothing: asks the user again, after they stopped the agent or turned it away |
 
-The browser and app tools work on a window the desk hides and need no screenshot, so prefer them for browser windows and for native apps that support accessibility. `initialize`'s instructions tell the agent so. An Electron app such as Claude or Slack draws its page in views: `browser_click` acts in the view its ref names, and `browser_type`, `browser_key` and `browser_screenshot` take a `view`. Tools the lock refuses are refused while the desktop is locked.
+The browser and app tools work on a window the desk hides and need no screenshot, so prefer them for browser windows and for native apps that support accessibility. `initialize`'s instructions tell the agent so. Each browser and app act answers what it changed in the window since the agent last read it, or all of it, read a quarter second after. An Electron app such as Claude or Slack draws its page in views: `browser_click` acts in the view its ref names, and `browser_type`, `browser_key` and `browser_screenshot` take a `view`. Tools the lock refuses are refused while the desktop is locked.
 
 ### Over HTTP
 

@@ -3,12 +3,14 @@
 //! through `domicile devtools`. They need no screenshot and work on a window
 //! the desk hides.
 
+use std::collections::HashMap;
 use std::io;
 
 use domicile_protocol::ListedView;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
+use super::changes::{changed, SETTLE};
 use super::{said, string, Ran};
 
 /// A browser tool.
@@ -40,22 +42,22 @@ pub(super) fn described(tool: Browser) -> (&'static str, Value, Vec<&'static str
             vec!["window"],
         ),
         Browser::Click => (
-            "Click an element of a browser window's page or view by its ref, scrolling it into view first.",
+            "Click an element of a browser window's page or view by its ref, scrolling it into view first. Answers what it changed in the window.",
             json!({"window": window, "ref": element}),
             vec!["window", "ref"],
         ),
         Browser::Type => (
-            "Type text into a browser window's page or view: into the element with ref, focusing it first, or where its focus is.",
+            "Type text into a browser window's page or view: into the element with ref, focusing it first, or where its focus is. Answers what it changed in the window.",
             json!({"window": window, "ref": element, "view": view, "text": {"type": "string"}}),
             vec!["window", "text"],
         ),
         Browser::Key => (
-            "Press and release a key in a browser window's page or view.",
+            "Press and release a key in a browser window's page or view. Answers what it changed in the window.",
             json!({"window": window, "view": view, "key": {"type": "string", "enum": KEYS.iter().map(|key| key.0).collect::<Vec<_>>()}}),
             vec!["window", "key"],
         ),
         Browser::Navigate => (
-            "Load an http or https address in a browser window.",
+            "Load an http or https address in a browser window. Answers what it changed in the window.",
             json!({"window": window, "url": {"type": "string"}}),
             vec!["window", "url"],
         ),
@@ -67,11 +69,13 @@ pub(super) fn described(tool: Browser) -> (&'static str, Value, Vec<&'static str
     }
 }
 
-/// `tools/call`'s result for browser tool `tool` with `arguments`.
+/// `tools/call`'s result for browser tool `tool` with `arguments`. A read
+/// keeps the window's outline in `read`; an act answers what it changed.
 pub(super) fn called(
     tool: Browser,
     arguments: &Map<String, Value>,
     domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
+    read: &mut HashMap<String, String>,
 ) -> io::Result<Value> {
     let window = match string(arguments, "window") {
         Ok(Some(window)) => window,
@@ -87,10 +91,39 @@ pub(super) fn called(
         view,
         domicile,
     };
-    Ok(match carried_out(tool, arguments, element, &mut page)? {
+    let answer = match carried_out(tool, arguments, element, &mut page)? {
         Ok(answer) => answer,
-        Err(why) => said(false, why),
-    })
+        Err(why) => return Ok(said(false, why)),
+    };
+    match tool {
+        Browser::Snapshot => {
+            let outline = answer["content"][0]["text"]
+                .as_str()
+                .expect("a browser tool answers text");
+            read.insert(page.window.clone(), outline.to_string());
+            Ok(answer)
+        }
+        Browser::Screenshot => Ok(answer),
+        Browser::Click | Browser::Type | Browser::Key | Browser::Navigate => {
+            let did = answer["content"][0]["text"]
+                .as_str()
+                .expect("a browser tool answers text");
+            std::thread::sleep(SETTLE);
+            page.view = None;
+            let after = match outline_of(&mut page)? {
+                Ok(after) => after,
+                Err(why) => {
+                    return Ok(said(
+                        true,
+                        format!("{did}\nIt could not be read again: {why}"),
+                    ))
+                }
+            };
+            let changes = changed(read.get(&page.window).map(String::as_str), &after);
+            read.insert(page.window.clone(), after);
+            Ok(said(true, format!("{did}\n{changes}")))
+        }
+    }
 }
 
 /// A browser window's page, or its view `view`, which `domicile devtools`
@@ -163,6 +196,31 @@ macro_rules! sent {
     };
 }
 
+/// The window's page, then each view it holds, as outlines, or why they
+/// can't be read.
+fn outline_of<D: FnMut(&[String]) -> io::Result<Ran>>(
+    page: &mut Page<'_, D>,
+) -> io::Result<Result<String, String>> {
+    let tree = sent!(page, "Accessibility.getFullAXTree", json!({}));
+    let mut lines = outline(&tree, 0, "");
+    let views = match page.views()? {
+        Ok(views) => views,
+        Err(why) => return Ok(Err(why)),
+    };
+    for view in views {
+        page.view = Some(view.id.clone());
+        let tree = sent!(page, "Accessibility.getFullAXTree", json!({}));
+        let [x, y] = view.position;
+        let [width, height] = view.size;
+        lines.push_str(&format!(
+            "- view {}, at {x},{y}, {width}x{height}\n",
+            view.id
+        ));
+        lines.push_str(&outline(&tree, 1, &format!("{}:", view.id)));
+    }
+    Ok(Ok(lines))
+}
+
 fn carried_out<D: FnMut(&[String]) -> io::Result<Ran>>(
     tool: Browser,
     arguments: &Map<String, Value>,
@@ -170,26 +228,7 @@ fn carried_out<D: FnMut(&[String]) -> io::Result<Ran>>(
     page: &mut Page<'_, D>,
 ) -> io::Result<Result<Value, String>> {
     match tool {
-        Browser::Snapshot => {
-            let tree = sent!(page, "Accessibility.getFullAXTree", json!({}));
-            let mut lines = outline(&tree, 0, "");
-            let views = match page.views()? {
-                Ok(views) => views,
-                Err(why) => return Ok(Err(why)),
-            };
-            for view in views {
-                page.view = Some(view.id.clone());
-                let tree = sent!(page, "Accessibility.getFullAXTree", json!({}));
-                let [x, y] = view.position;
-                let [width, height] = view.size;
-                lines.push_str(&format!(
-                    "- view {}, at {x},{y}, {width}x{height}\n",
-                    view.id
-                ));
-                lines.push_str(&outline(&tree, 1, &format!("{}:", view.id)));
-            }
-            Ok(Ok(said(true, lines)))
-        }
+        Browser::Snapshot => Ok(outline_of(page)?.map(|lines| said(true, lines))),
         Browser::Click => {
             let Some(element) = element else {
                 return Ok(Err("browser_click takes the ref of an element".to_string()));

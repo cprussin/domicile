@@ -55,11 +55,13 @@ fn call(name: &str, arguments: Value) -> Value {
     })
 }
 
-/// The arguments one tool call runs `domicile` with.
+/// The arguments one tool call first runs `domicile` with.
 fn ran_for(name: &str, arguments: Value) -> Vec<String> {
     let mut ran = Vec::new();
     served(&[call(name, arguments)], |args| {
-        ran = args.to_vec();
+        if ran.is_empty() {
+            ran = args.to_vec();
+        }
         printed("")
     });
     ran
@@ -517,6 +519,8 @@ fn a_browser_click_scrolls_the_element_into_view_and_clicks_its_middle() {
             mouse("mouseMoved"),
             mouse("mousePressed"),
             mouse("mouseReleased"),
+            // Read again, to answer what it changed.
+            ("Accessibility.getFullAXTree".to_string(), json!({})),
         ]
     );
 }
@@ -553,7 +557,9 @@ fn browser_type_focuses_the_element_then_inserts_the_text() {
         [
             ("DOM.focus".to_string(), json!({"backendNodeId": 21})),
             ("Input.insertText".to_string(), json!({"text": "hi"})),
+            ("Accessibility.getFullAXTree".to_string(), json!({})),
             ("Input.insertText".to_string(), json!({"text": "there"})),
+            ("Accessibility.getFullAXTree".to_string(), json!({})),
         ]
     );
 }
@@ -576,6 +582,7 @@ fn browser_key_presses_and_releases_a_named_key() {
                 "Input.dispatchKeyEvent".to_string(),
                 json!({"type": "keyUp", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13})
             ),
+            ("Accessibility.getFullAXTree".to_string(), json!({})),
         ]
     );
     let replies = served(
@@ -600,10 +607,13 @@ fn browser_navigate_goes_to_the_address() {
     );
     assert_eq!(
         ran,
-        [(
-            "Page.navigate".to_string(),
-            json!({"url": "https://example.com/"})
-        )]
+        [
+            (
+                "Page.navigate".to_string(),
+                json!({"url": "https://example.com/"})
+            ),
+            ("Accessibility.getFullAXTree".to_string(), json!({})),
+        ]
     );
 }
 
@@ -721,8 +731,11 @@ fn browser_tools_act_in_the_view_a_ref_names_or_the_view_given() {
             .all(|reply| reply["result"]["isError"] == false),
         "{replies:?}"
     );
+    // Reading the window again, after each act, reads all of it.
     assert!(
-        ran.iter().all(|(view, _, _)| view.as_deref() == Some("9")),
+        ran.iter()
+            .filter(|(_, method, _)| method != "Accessibility.getFullAXTree")
+            .all(|(view, _, _)| view.as_deref() == Some("9")),
         "{ran:?}"
     );
     assert_eq!(ran[1].2, json!({"backendNodeId": 12}));
@@ -1057,4 +1070,130 @@ fn a_change_the_user_makes_applies_from_the_next_call() {
     );
     assert_eq!(replies[0]["result"]["isError"], false);
     assert_eq!(replies[1]["result"]["isError"], true);
+}
+
+/// An accessibility tree of one button named `named`, ref 12, on page "Inbox".
+fn one_button(named: &str) -> Value {
+    json!({"nodes": [
+        {"nodeId": "1", "ignored": false, "role": {"value": "RootWebArea"}, "name": {"value": "Inbox"}, "childIds": ["2"], "backendDOMNodeId": 1},
+        {"nodeId": "2", "ignored": false, "role": {"value": "button"}, "name": {"value": named}, "childIds": [], "backendDOMNodeId": 12}
+    ]})
+}
+
+/// Stands in for `domicile devtools` on browser window `w1`, whose tree is
+/// each of `trees` in turn, the last one from then on.
+fn changing_page(trees: Vec<Value>) -> impl FnMut(&[String]) -> io::Result<Ran> {
+    let mut read = 0;
+    move |args| {
+        if args == ["list-windows", "--json"] {
+            return printed("[{\"id\": \"w1\", \"views\": []}]\n");
+        }
+        let answer = match args[2].as_str() {
+            "Accessibility.getFullAXTree" => {
+                read += 1;
+                trees[(read - 1).min(trees.len() - 1)].clone()
+            }
+            "DOM.getContentQuads" => json!({"quads": [[10, 20, 110, 20, 110, 40, 10, 40]]}),
+            _ => json!({}),
+        };
+        printed(&format!("{answer}\n"))
+    }
+}
+
+#[test]
+fn a_browser_act_answers_what_changed_since_the_window_was_last_read() {
+    let replies = served(
+        &[
+            call("browser_snapshot", json!({"window": "w1"})),
+            call("browser_click", json!({"window": "w1", "ref": 12})),
+            call("browser_key", json!({"window": "w1", "key": "Tab"})),
+        ],
+        changing_page(vec![one_button("Send"), one_button("Sent")]),
+    );
+    assert_eq!(
+        replies[1]["result"]["content"][0]["text"],
+        "clicked element 12\n\
+         What changed in the window since it was last read:\n\
+         gone: button \"Send\" [ref=12]\n\
+         new: button \"Sent\" [ref=12]\n"
+    );
+    assert_eq!(
+        replies[2]["result"]["content"][0]["text"],
+        "pressed Tab\nNothing in the window changed.\n"
+    );
+}
+
+#[test]
+fn a_browser_act_on_a_window_not_read_yet_answers_all_of_it() {
+    let replies = served(
+        &[call("browser_type", json!({"window": "w1", "text": "hi"}))],
+        changing_page(vec![one_button("Send")]),
+    );
+    assert_eq!(
+        replies[0]["result"]["content"][0]["text"],
+        "typed\nThe window now:\n\
+         - RootWebArea \"Inbox\" [ref=1]\n  \
+         - button \"Send\" [ref=12]\n"
+    );
+}
+
+#[test]
+fn an_app_act_answers_what_changed_since_the_window_was_last_read() {
+    let mut reads = 0;
+    let replies = served(
+        &[
+            call("app_snapshot", json!({"window": "kD3m"})),
+            call("app_click", json!({"window": "kD3m", "ref": ":1.7/w/1"})),
+        ],
+        move |args| match args[0].as_str() {
+            "accessibility" => {
+                reads += 1;
+                printed(match reads {
+                    1 => "- frame \"Notes\" [ref=:1.7/w/0]\n  - push button \"Save\" [ref=:1.7/w/1]\n",
+                    _ => "- frame \"Notes\" [ref=:1.7/w/0]\n  - push button \"Saved\" [ref=:1.7/w/1]\n",
+                })
+            }
+            _ => printed(""),
+        },
+    );
+    assert_eq!(
+        replies[1]["result"]["content"][0]["text"],
+        "What changed in the window since it was last read:\n\
+         gone: push button \"Save\" [ref=:1.7/w/1]\n\
+         new: push button \"Saved\" [ref=:1.7/w/1]\n"
+    );
+}
+
+#[test]
+fn an_act_whose_window_cannot_be_read_again_says_so_and_that_it_acted() {
+    let refused = |stderr: &str| {
+        Ok(Ran {
+            success: false,
+            stdout: String::new(),
+            stderr: stderr.to_string(),
+        })
+    };
+    let replies = served(
+        &[
+            call("browser_key", json!({"window": "w1", "key": "Tab"})),
+            call("app_focus", json!({"window": "kD3m", "ref": ":1.7/w/1"})),
+        ],
+        |args| match (args[0].as_str(), args.get(2).map(String::as_str)) {
+            ("devtools", Some("Accessibility.getFullAXTree")) | ("accessibility", _) => {
+                refused("domicile: the window closed\n")
+            }
+            _ => printed("{}\n"),
+        },
+    );
+    assert_eq!(
+        replies[0]["result"]["content"][0]["text"],
+        "pressed Tab\nIt could not be read again: domicile: the window closed\n"
+    );
+    assert_eq!(
+        replies[1]["result"]["content"][0]["text"],
+        "{}\nIt could not be read again: domicile: the window closed\n"
+    );
+    assert!(replies
+        .iter()
+        .all(|reply| reply["result"]["isError"] == false));
 }

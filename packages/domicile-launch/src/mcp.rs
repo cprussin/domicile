@@ -12,6 +12,7 @@
 
 mod acme;
 mod browser;
+mod changes;
 mod http;
 mod oauth;
 pub mod web;
@@ -66,6 +67,9 @@ struct Session {
     titles: HashMap<String, String>,
     /// The last screenshot, whose pixels the pointer tools take.
     view: Option<View>,
+    /// Each window's outline, by id, as the agent last read it, to answer
+    /// an act with what it changed.
+    read: HashMap<String, String>,
 }
 
 /// Runs the `domicile` binary with the arguments it is given.
@@ -97,6 +101,7 @@ impl<'a> Agent<'a> {
                 grant: None,
                 titles: HashMap::new(),
                 view: None,
+                read: HashMap::new(),
             },
             domicile: Box::new(domicile),
             admit: Box::new(admit),
@@ -197,11 +202,11 @@ fn initialized(params: &Value) -> Value {
 /// How an agent should use the tools, sent in `initialize`. Reading a window
 /// as text takes fewer steps and tokens than looking at the desk.
 const INSTRUCTIONS: &str = "Read and act on windows as text first: list_windows, then \
-    browser_snapshot or app_snapshot, then the browser_ and app_ tools by ref. To see what \
-    an act changed, snapshot again rather than taking a screenshot. Use screenshot only \
-    for what a tree can't show: images, layout, the shell's own bars and panels, or an \
-    app that doesn't support accessibility. Zoom into an area rather than taking the \
-    whole desk again.";
+    browser_snapshot or app_snapshot, then the browser_ and app_ tools by ref. Each act \
+    answers what it changed in the window, so there is no need to look again. Use \
+    screenshot only for what a tree can't show: images, layout, the shell's own bars and \
+    panels, or an app that doesn't support accessibility. Zoom into an area rather than \
+    taking the whole desk again.";
 
 /// What the client calls itself in `initialize`: its title, else its name.
 fn named(params: &Value) -> String {
@@ -441,17 +446,17 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec!["window"],
         ),
         Tool::AppAct("click") => (
-            "Click an element of a native window by its ref, running its own click or press action.",
+            "Click an element of a native window by its ref, running its own click or press action. Answers what it changed in the window.",
             json!({"window": native, "ref": app_element}),
             vec!["window", "ref"],
         ),
         Tool::AppAct("focus") => (
-            "Give an element of a native window the keyboard focus, by its ref.",
+            "Give an element of a native window the keyboard focus, by its ref. Answers what it changed in the window.",
             json!({"window": native, "ref": app_element}),
             vec!["window", "ref"],
         ),
         Tool::AppAct(_) => (
-            "Replace the text of an editable element of a native window, by its ref.",
+            "Replace the text of an editable element of a native window, by its ref. Answers what it changed in the window.",
             json!({"window": native, "ref": app_element, "text": {"type": "string"}}),
             vec!["window", "ref", "text"],
         ),
@@ -503,7 +508,13 @@ fn guarded(
                 .or_insert_with(|| window.title.clone());
         }
     }
-    let mut answered = called(tool, arguments, domicile, &mut session.view)?;
+    let mut answered = called(
+        tool,
+        arguments,
+        domicile,
+        &mut session.view,
+        &mut session.read,
+    )?;
     if answered["isError"] == json!(false) {
         if tool_is_listing_windows(tool) {
             answered = listed_windows(answered, &reach, &mut session.titles);
@@ -683,10 +694,11 @@ fn called(
     arguments: &Map<String, Value>,
     domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
     view: &mut Option<View>,
+    read: &mut HashMap<String, String>,
 ) -> io::Result<Value> {
     match tool {
         Tool::Screenshot => return screenshot(arguments, domicile, view),
-        Tool::Browser(browser) => return browser::called(browser, arguments, domicile),
+        Tool::Browser(browser) => return browser::called(browser, arguments, domicile, read),
         _ => {}
     }
     let runs = match commands(tool, arguments, *view) {
@@ -701,6 +713,26 @@ fn called(
             return Ok(said(false, ran.stderr));
         }
         printed.push_str(&ran.stdout);
+    }
+    let window = string(arguments, "window").ok().flatten();
+    match (tool, window) {
+        (Tool::AppSnapshot, Some(window)) => {
+            read.insert(window, printed.clone());
+        }
+        (Tool::AppAct(_), Some(window)) => {
+            std::thread::sleep(changes::SETTLE);
+            let ran = domicile(&["accessibility".to_string(), window.clone()])?;
+            if !ran.success {
+                printed.push_str(&format!("It could not be read again: {}", ran.stderr));
+                return Ok(said(true, printed));
+            }
+            printed.push_str(&changes::changed(
+                read.get(&window).map(String::as_str),
+                &ran.stdout,
+            ));
+            read.insert(window, ran.stdout);
+        }
+        _ => {}
     }
     Ok(said(true, printed))
 }
