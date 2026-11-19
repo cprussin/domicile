@@ -66,6 +66,8 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 - Sharing your screen or a window in Google Meet asks once, not twice.
 - A site's notifications show the site's icon instead of the browser's.
 - "Open Slack" and other buttons that open an app from a page work again.
+- A key bound to a program that isn't installed says so in a notification instead of doing nothing.
+- Agents can start programs, drag on pages, and press Enter by typing a new line.
 - Extensions keep their sign-ins and settings when the desktop restarts, instead of starting over.
 - A Gmail notification opens its mail beside your inbox, once Gmail has synced it. [Inboxes](NOTIFICATIONS.md#inboxes) · [#2284](https://github.com/cprussin/domicile/pull/2284)
 - PDFs stay sharp and no longer go blank. [#2038](https://github.com/cprussin/domicile/pull/2038) · [#2080](https://github.com/cprussin/domicile/pull/2080) · [#2100](https://github.com/cprussin/domicile/pull/2100)

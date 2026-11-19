@@ -1,6 +1,8 @@
 //! `ChromeMessage::Emulate`: input `domicile pointer`, `key` and `type` send
 //! to the desk, as the events [`crate::eis`] emulates.
 
+use std::time::Duration;
+
 use domicile_protocol::{EmulatedInput, PointerButton};
 use smithay::input::keyboard::xkb;
 
@@ -12,6 +14,7 @@ use crate::keymap::Keyboard;
 pub enum Step {
     Send(Emulated),
     Keysym { keysym: u32, pressed: bool },
+    Wait(Duration),
 }
 
 /// The events that send `input` on `keyboard`, or why one cannot be sent.
@@ -40,12 +43,18 @@ fn steps_of(event: &EmulatedInput, keyboard: &Keyboard) -> Result<Vec<Step>, Str
         EmulatedInput::Text { text } => text.chars().try_fold(Vec::new(), |steps, character| {
             Ok([steps, typed(character, keyboard)?].concat())
         }),
+        EmulatedInput::Wait { ms } => Ok(vec![Step::Wait(Duration::from_millis(u64::from(*ms)))]),
     }
 }
 
-/// The presses that type `character`, holding Shift when its key needs it.
+/// The presses that type `character`, holding Shift when its key needs it. A
+/// line break is Return, as a hand types one; XKB would make `\n` Linefeed,
+/// which no keyboard has.
 fn typed(character: char, keyboard: &Keyboard) -> Result<Vec<Step>, String> {
-    let keysym = xkb::utf32_to_keysym(u32::from(character));
+    let keysym = match character {
+        '\n' | '\r' => xkb::Keysym::new(xkb::keysyms::KEY_Return),
+        character => xkb::utf32_to_keysym(u32::from(character)),
+    };
     let tap = [true, false].map(|pressed| Step::Keysym {
         keysym: keysym.raw(),
         pressed,
@@ -165,6 +174,28 @@ mod tests {
                 key(xkb::keysyms::KEY_A, true),
                 key(xkb::keysyms::KEY_A, false),
                 key(xkb::keysyms::KEY_Shift_L, false),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_new_line_in_text_presses_return() {
+        let input = [EmulatedInput::Text {
+            text: "a\nb\r".into(),
+        }];
+        let key = |keysym, pressed| Step::Keysym { keysym, pressed };
+
+        assert_eq!(
+            steps(&input, &us()),
+            Ok(vec![
+                key(xkb::keysyms::KEY_a, true),
+                key(xkb::keysyms::KEY_a, false),
+                key(xkb::keysyms::KEY_Return, true),
+                key(xkb::keysyms::KEY_Return, false),
+                key(xkb::keysyms::KEY_b, true),
+                key(xkb::keysyms::KEY_b, false),
+                key(xkb::keysyms::KEY_Return, true),
+                key(xkb::keysyms::KEY_Return, false),
             ])
         );
     }

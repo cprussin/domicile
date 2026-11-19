@@ -54,11 +54,13 @@ Profiles with their own sign-ins, site data and extensions, each opening the sit
 - Config: `terminal`, `input.keyboard.repeat`, display `mode`, `refresh`, `adaptive_sync`. [The config](SHELL-CONFIG.md) · [#2024](https://github.com/cprussin/domicile/pull/2024) · [#2031](https://github.com/cprussin/domicile/pull/2031) · [#2048](https://github.com/cprussin/domicile/pull/2048) · [#2069](https://github.com/cprussin/domicile/pull/2069)
 - `@domicile-desktop/sdk/config-schema`. [Types and schema](SHELL-CONFIG.md#types-and-schema) · [#2090](https://github.com/cprussin/domicile/pull/2090)
 - A Nix binary cache for `stable`. [Install](INSTALL.md) · [#2217](https://github.com/cprussin/domicile/pull/2217)
+- `domicile exec` and `KeyAction.Exec` start a program for any shell, and say why when it doesn't start; agents get an `exec` tool. `domicile drag` holds the button while it moves, and `domicile type` presses Return for a line break. [The domicile command](CLI.md) · [Keybindings](architecture/KEYBINDINGS.md)
 - Chromium 160. [#2023](https://github.com/cprussin/domicile/pull/2023)
 
 ### Breaking changes
 
 - `extensions.settings.<id>.private` and the SDK's `inPrivate` are gone: a private profile's extensions say what runs there. [Private browsing](SHELL-BROWSER-WINDOWS.md#private-browsing) · [#2237](https://github.com/cprussin/domicile/pull/2237)
+- `domicile pointer` no longer takes `press` and `release`: use `domicile drag`. Manganese's `exec` command is gone: `exec()` builds Domicile's `KeyAction.Exec`, and agents call `exec` instead of `send_shell ["exec", …]`.
 - `session.idleWarnings` and `idle.warn_before_seconds` are gone: use `session.idleAfter`. [Idle after a time](SHELL-IDLE-AND-LOCK.md#idle-after-a-time) · [#2073](https://github.com/cprussin/domicile/pull/2073)
 
 ### Fixes

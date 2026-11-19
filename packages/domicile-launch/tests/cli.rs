@@ -752,6 +752,8 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
         "close-window",
         "kill-window",
         "inhibit-idle",
+        "exec",
+        "drag",
         "configure-display",
         "help",
     ] {
@@ -1083,6 +1085,23 @@ fn inhibit_idle_runs_what_follows_the_dashes() {
 }
 
 #[test]
+fn exec_starts_every_word_after_it_as_argv() {
+    assert_eq!(
+        run(&["exec", "kitty", "--hold", "btop"]),
+        Ok(Invocation::Ask {
+            request: Request::Launch {
+                command: vec![
+                    "kitty".to_string(),
+                    "--hold".to_string(),
+                    "btop".to_string()
+                ]
+            }
+        })
+    );
+    assert_eq!(run(&["exec"]), Err(CliError::NothingToExec));
+}
+
+#[test]
 fn configure_display_reads_every_change() {
     assert_eq!(
         run(&[
@@ -1317,17 +1336,44 @@ fn pointer_moves_then_clicks_presses_or_releases() {
             },
         ])
     );
-    assert_eq!(
-        run(&["pointer", "10,20.5", "press"]),
-        emulated(vec![to.clone(), left(true)])
-    );
-    assert_eq!(
-        run(&["pointer", "10,20.5", "release"]),
-        emulated(vec![to, left(false)])
-    );
     assert!(run(&["pointer", "ten,20"]).is_err());
     assert!(run(&["pointer", "10,20", "poke"]).is_err());
+    // A press would be let go as the command ends; `drag` holds one.
+    assert!(run(&["pointer", "10,20", "press"]).is_err());
     assert!(run(&["pointer"]).is_err());
+}
+
+#[test]
+fn drag_holds_the_left_button_while_moving_there_a_step_at_a_time() {
+    let Ok(Invocation::Ask {
+        request: Request::Emulate { input },
+    }) = run(&["drag", "0,0", "100,50"])
+    else {
+        panic!("drag emulates input");
+    };
+    let moves: Vec<(f64, f64)> = input
+        .iter()
+        .filter_map(|event| match event {
+            EmulatedInput::PointTo { x, y } => Some((*x, *y)),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(
+        input[..2],
+        [EmulatedInput::PointTo { x: 0.0, y: 0.0 }, left(true)]
+    );
+    assert_eq!(input.last(), Some(&left(false)));
+    assert_eq!(moves.last(), Some(&(100.0, 50.0)));
+    assert!(
+        moves.len() > 2,
+        "moves on the way, as a hand does: {moves:?}"
+    );
+    assert!(input
+        .iter()
+        .any(|event| matches!(event, EmulatedInput::Wait { .. })));
+    assert!(run(&["drag", "0,0"]).is_err());
+    assert!(run(&["drag", "0,0", "1,1", "2,2"]).is_err());
 }
 
 #[test]

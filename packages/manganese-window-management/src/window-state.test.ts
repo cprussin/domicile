@@ -1480,14 +1480,6 @@ describe("the keyed commands", () => {
 
     expect(state.mode).toBe("resize");
   });
-
-  it("leaves the state alone for an `exec`, which is the compositor's to spawn", () => {
-    const state = desktop("kitty");
-
-    expect(reduceWindows(state, WindowAction.CommandExecuted(["kitty"]))).toBe(
-      state,
-    );
-  });
 });
 
 describe("what the compositor says about the keyboard", () => {
@@ -2470,7 +2462,7 @@ describe("the launcher", () => {
 
   it("shuts behind the file it opened, and opens no window itself", () => {
     // The file opener is a spawned Wayland client, so its window arrives
-    // through `app_appeared`, as with `CommandExecuted`.
+    // through `app_appeared`.
     const launched = reduce(
       NO_WINDOWS,
       WindowAction.LauncherToggled(),

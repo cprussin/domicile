@@ -131,20 +131,21 @@ listening.listen(4)
 open(session, "w").close()
 
 def first_question(connection):
-    """The first line that asks something. A start is answered with nothing,
-    so it is recorded and the next line read."""
+    """The first line that asks something."""
     for line in connection.makefile("rb"):
         with open("$WORK/compositor-heard", "a") as heard:
             heard.write(line.decode())
-        asked = json.loads(line)
-        if asked["type"] != "spawn":
-            return asked
-        with open("$WORK/compositor-spawned", "a") as spawned:
-            spawned.write(json.dumps(asked["command"]) + "\n")
+        return json.loads(line)
 
 while True:
     connection, _ = listening.accept()
     asked = first_question(connection)
+    if asked["type"] == "exec":
+        with open("$WORK/compositor-spawned", "a") as spawned:
+            spawned.write(json.dumps(asked["command"]) + "\n")
+        connection.sendall((json.dumps({"type": "executed"}) + "\n").encode())
+        connection.close()
+        continue
     if asked["type"] == "which_status":
         connection.sendall((json.dumps(
             {"type": "status", "theme": "dark", "locked": False, "keymap": None,

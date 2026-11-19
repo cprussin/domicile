@@ -114,11 +114,16 @@ $ domicile screenshot --fit 1280 desk.png
 A point in the PNG is a point for `pointer`, scaled by `place.size` over
 `width` and `height`.
 
-## `domicile pointer <x>,<y> [click|double-click|right-click|middle-click|press|release]`
+## `domicile pointer <x>,<y> [click|double-click|right-click|middle-click]`
 
 Move the pointer to `<x>,<y>`, in logical pixels from the desk's top-left
-corner, then click or press the left button there, or click the right or
-middle one. `press` and `release` with moves between them drag.
+corner, then click the left, right or middle button there.
+
+## `domicile drag <x>,<y> <x>,<y>`
+
+Press the left button at the first point, move to the second in steps over
+about a sixth of a second holding it, and let go there. Points are as
+`pointer` takes them.
 
 ## `domicile scroll <dx>,<dy>`
 
@@ -137,7 +142,8 @@ domicile key ctrl+shift+Tab
 ## `domicile type <text>`
 
 Type `<text>` on the desk's keyboard, holding Shift where a character needs
-it. Refused, typing nothing, when no key types a character without AltGr.
+it. A line break presses Return. Refused, typing nothing, when no key types a
+character without AltGr.
 
 ## `domicile accessibility <window>`
 
@@ -396,6 +402,21 @@ that is `xwayland-satellite` and every X11 window.
 `focus-window`, `close-window` and `kill-window` take only native windows.
 The shell shows and closes browser windows.
 
+## `domicile exec <program> [<arg>...]`
+
+Start a program as the desktop starts apps: with the desktop's environment, in
+its own scope, without a shell. A `<program>` with no `/` is found on the
+desktop's `PATH`. Fails saying why when it does not start, such as a program
+not on that `PATH`.
+
+```
+domicile exec kitty --hold btop
+```
+
+Every shell gets it; nothing about it is the shell's. A shell's own starts, such
+as a keybinding's `KeyAction.Exec`, that fail tell the person in a
+notification.
+
 ## `domicile inhibit-idle -- <command>...`
 
 Run a command and keep the screens on, and the desktop unlocked, until it
@@ -508,7 +529,7 @@ ends it. Every call after is checked against what you allowed:
 - **Only these windows**: `list_windows` lists only those windows, and
   `close_window` and the browser and app tools work on them alone. The tools
   that reach the whole desk (screenshots, the pointer and keyboard, `open`,
-  `send_shell`, `focus_window`, `theme` and the other listings) are refused.
+  `send_shell`, `exec`, `focus_window`, `theme` and the other listings) are refused.
   Private browser windows are never offered.
 
 An agent you cancel or stop is refused from then on, until it calls
@@ -524,11 +545,13 @@ Each tool runs a verb and answers what it printed, or its error:
 |---|---|
 | `list_windows`, `list_displays`, `list_inputs`, `status`, `list_shell_commands`, `list_bindings` | that verb with `--json` |
 | `send_shell` | `send-shell <words>...` |
+| `exec` | `exec <argv>...` |
 | `open` | `open [--app] [--profile <id>] <target>` |
 | `focus_window`, `close_window` | that verb with the window's id |
 | `theme` | `theme [light\|dark\|toggle]` |
 | `screenshot` | `screenshot --fit 1280 [--area <area>] <file>`, answered as the PNG; `area` zooms into part of the last screenshot |
-| `click`, `move_pointer`, `drag` | `pointer`, with the point scaled from the last screenshot's pixels to the desk's |
+| `click`, `move_pointer` | `pointer`, with the point scaled from the last screenshot's pixels to the desk's |
+| `drag` | `drag`, with both points scaled the same way |
 | `scroll` | `pointer`, then `scroll` |
 | `key`, `type_text` | `key <chord>`, `type <text>` |
 | `browser_snapshot` | `devtools <window> Accessibility.getFullAXTree`, then the same for each view the window holds, answered as an outline of the page and each view, one element a line with its ref. A view's refs are `<view>:<element>` |
@@ -643,7 +666,7 @@ shell.
 ## While locked
 
 `screenshot`, `screen-record`, `send-shell`, `focus-window`, `close-window`,
-`kill-window`, `pointer`, `scroll`, `key`, `type`, `devtools`, `accessibility`,
+`kill-window`, `exec`, `pointer`, `drag`, `scroll`, `key`, `type`, `devtools`, `accessibility`,
 `accessibility-act`, `agent`, `list-agents`, `stop-agent` and `forget-agent`
 are refused while the desktop is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
 `wake-displays`, `lock`, `inhibit-idle`, `list-displays`, `list-windows`,

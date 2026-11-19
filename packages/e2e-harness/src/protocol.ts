@@ -727,6 +727,13 @@ const deskShotSchema = z.looseObject({
   type: z.literal("desk_shot"),
 });
 
+// Answers `exec` on the asking connection only, for `domicile exec` and
+// `domicile open`: why the program did not start, or nothing.
+const executedSchema = z.looseObject({
+  refused: z.string().optional(),
+  type: z.literal("executed"),
+});
+
 // Answers `emulate` on the asking connection only, for `domicile pointer`,
 // `key` and `type`: why not, or nothing.
 const emulatedSchema = z.looseObject({
@@ -997,6 +1004,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   displayConfiguredSchema,
   deskShotSchema,
   emulatedSchema,
+  executedSchema,
   browserToplevelIdsSchema,
   keymapSchema,
   browserProfilesSchema,

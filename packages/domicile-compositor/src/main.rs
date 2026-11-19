@@ -205,7 +205,7 @@ use crate::outputs::{advertise_output, screens_at_startup, LiveOutput};
 use crate::portals::{shell_appearance, Selection};
 use crate::restatement::Restatement;
 use crate::screens::{Advertised, Screens};
-use crate::spawning::{chrome_display, home_directory, spawn_client};
+use crate::spawning::{chrome_display, home_directory, start_client};
 use crate::subsurfaces::Subsurface;
 use crate::surface_commit::{LastBuffer, Role};
 use crate::windows::SizeLimits;
@@ -1030,7 +1030,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             let scoped = arguments.scope_clients;
             let launched = launched.clone();
             Box::new(move |command, token| {
-                spawn_client(
+                start_client(
                     command,
                     &display,
                     scoped,
@@ -1063,7 +1063,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 let scoped = arguments.scope_clients;
                 let launched = launched.clone();
                 move |command| {
-                    spawn_client(
+                    start_client(
                         command,
                         &display,
                         scoped,
@@ -1799,7 +1799,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Startup commands, once the desktop is live. Not run on reload; see
     // `StartupConfig`. Not recorded in `launched`: every compositor runs them.
     for command in &config.startup.commands {
-        spawn_client(
+        start_client(
             command,
             &socket_name,
             arguments.scope_clients,
@@ -1814,7 +1814,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             ?command,
             "launching again a client the last compositor's crash took"
         );
-        spawn_client(
+        start_client(
             command,
             &socket_name,
             arguments.scope_clients,

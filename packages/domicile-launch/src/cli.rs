@@ -55,10 +55,13 @@ Ask the running desktop:
                                         of it in logical pixels, no wider or
                                         taller than <px>, and print what it
                                         shows as JSON
-  domicile pointer <x>,<y> [click|double-click|right-click|middle-click|press|release]
+  domicile pointer <x>,<y> [click|double-click|right-click|middle-click]
                                         Move the pointer to a point of the desk,
                                         in logical pixels from its top-left
-                                        corner, then click or press there
+                                        corner, then click there
+  domicile drag <x>,<y> <x>,<y>         Press the left button at one point of
+                                        the desk, move to the other holding it,
+                                        and let go there
   domicile scroll <dx>,<dy>             Scroll where the pointer is, in logical
                                         pixels; positive is right and down
   domicile key <chord>                  Press and release a chord such as
@@ -96,6 +99,9 @@ Ask the running desktop:
                                         window, by its list-windows id
   domicile close-window <id>            Ask a window to close
   domicile kill-window <id>             Kill a window's process
+  domicile exec <program> [<arg>...]    Start a program as the desktop starts
+                                        apps, <program> found on its PATH, or
+                                        fail saying why it did not start
   domicile inhibit-idle -- <command>... Run a command, keeping the screens on
                                         until it exits
   domicile configure-display <display> <change>...
@@ -259,9 +265,16 @@ pub enum CliError {
     NotAPoint { said: String },
     #[error(
         "{said} is not something pointer does: click, double-click, \
-         right-click, middle-click, press or release."
+         right-click or middle-click. To hold the button while moving, use \
+         drag."
     )]
     NotAPointerAction { said: String },
+    #[error(
+        "drag takes two points, x,y in logical pixels from the desk's \
+         top-left corner, and was given {said}:\n\n    \
+         domicile drag 640,360 800,360\n"
+    )]
+    NotADrag { said: String },
     #[error("{said} is not a distance like 0,120 to scroll across and down.")]
     NotADistance { said: String },
     #[error(
@@ -332,6 +345,12 @@ pub enum CliError {
          domicile inhibit-idle -- mpv film.mkv\n"
     )]
     NothingToRun,
+    #[error(
+        "exec takes a program to start and its arguments, and was given \
+         nothing:\n\n    \
+         domicile exec kitty --hold btop\n"
+    )]
+    NothingToExec,
     #[error(
         "configure-display takes a display, as domicile list-displays prints it, \
          and what to change, and was given nothing:\n\n    \
@@ -809,6 +828,23 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 };
                 emulated([vec![EmulatedInput::PointTo { x, y }], then].concat())
             }
+            Verb::Dragging => {
+                let said: Vec<String> = args.collect();
+                match said.as_slice() {
+                    [from, to] => match (pair(from), pair(to)) {
+                        (Some(from), Some(to)) => emulated(drag(from, to)),
+                        _ => Err(CliError::NotADrag {
+                            said: said.join(" "),
+                        }),
+                    },
+                    _ => Err(CliError::NotADrag {
+                        said: match said.is_empty() {
+                            true => "nothing".to_string(),
+                            false => said.join(" "),
+                        },
+                    }),
+                }
+            }
             Verb::Scrolling => match (args.next(), args.next()) {
                 (Some(said), None) => match pair(&said) {
                     Some((dx, dy)) => emulated(vec![EmulatedInput::Scroll { dx, dy }]),
@@ -945,6 +981,15 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     Err(CliError::NothingToRun)
                 } else {
                     Ok(Invocation::InhibitIdle { command })
+                }
+            }
+            Verb::Executing => {
+                let command: Vec<String> = args.collect();
+                match command.is_empty() {
+                    true => Err(CliError::NothingToExec),
+                    false => Ok(Invocation::Ask {
+                        request: Request::Launch { command },
+                    }),
                 }
             }
             Verb::Subscribing => {
@@ -1105,6 +1150,8 @@ enum Verb {
     Serving,
     /// `pointer`, which takes a point and maybe what to do there.
     Pointing,
+    /// `drag`, which takes two points.
+    Dragging,
     /// `scroll`, which takes a distance.
     Scrolling,
     /// `key`, which takes a chord.
@@ -1132,6 +1179,8 @@ enum Verb {
     Acting(WindowAct),
     /// `inhibit-idle`, which takes a command.
     Inhibiting,
+    /// `exec`, which takes a program and its arguments.
+    Executing,
     /// `configure-display`, which takes a display and what to change.
     Configuring,
     /// `sleep-displays` or `wake-displays`, which take a display or nothing.
@@ -1175,10 +1224,46 @@ fn pointer_action(word: &str) -> Option<Vec<EmulatedInput>> {
         "double-click" => Some([click(PointerButton::Left), click(PointerButton::Left)].concat()),
         "right-click" => Some(click(PointerButton::Right)),
         "middle-click" => Some(click(PointerButton::Middle)),
-        "press" => Some(vec![button(PointerButton::Left, true)]),
-        "release" => Some(vec![button(PointerButton::Left, false)]),
         _ => None,
     }
+}
+
+/// How many moves a [`drag`] makes on its way, and how long it waits before
+/// each: about a sixth of a second in all, as a hand drags. A page that reads
+/// the press, the moves and the release as one burst sees a click.
+const DRAG_STEPS: u32 = 10;
+const DRAG_STEP_WAIT_MS: u32 = 16;
+
+/// Press the left button at `from`, move to `to` holding it, and let go.
+fn drag(from: (f64, f64), to: (f64, f64)) -> Vec<EmulatedInput> {
+    let button = |pressed| EmulatedInput::Button {
+        button: PointerButton::Left,
+        pressed,
+    };
+    let on_the_way = (1..=DRAG_STEPS).flat_map(|step| {
+        let part = f64::from(step) / f64::from(DRAG_STEPS);
+        [
+            EmulatedInput::Wait {
+                ms: DRAG_STEP_WAIT_MS,
+            },
+            EmulatedInput::PointTo {
+                x: from.0 + (to.0 - from.0) * part,
+                y: from.1 + (to.1 - from.1) * part,
+            },
+        ]
+    });
+    [
+        vec![
+            EmulatedInput::PointTo {
+                x: from.0,
+                y: from.1,
+            },
+            button(true),
+        ],
+        on_the_way.collect(),
+        vec![button(false)],
+    ]
+    .concat()
 }
 
 /// Presses each key of `chord`, such as `ctrl+shift+Tab`, in order, then
@@ -1230,6 +1315,7 @@ fn verb(word: &str) -> Option<Verb> {
         "close-window" => Some(Verb::Acting(WindowAct::Close)),
         "kill-window" => Some(Verb::Acting(WindowAct::Kill)),
         "inhibit-idle" => Some(Verb::Inhibiting),
+        "exec" => Some(Verb::Executing),
         "configure-display" => Some(Verb::Configuring),
         "list-displays" => Some(Verb::Listing(Listing::Displays)),
         "list-windows" => Some(Verb::Listing(Listing::Windows)),
@@ -1244,6 +1330,7 @@ fn verb(word: &str) -> Option<Verb> {
         "mcp" => Some(Verb::Serving),
         "agent" => Some(Verb::Admitting),
         "pointer" => Some(Verb::Pointing),
+        "drag" => Some(Verb::Dragging),
         "scroll" => Some(Verb::Scrolling),
         "key" => Some(Verb::Keying),
         "type" => Some(Verb::Typing),

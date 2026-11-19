@@ -318,16 +318,9 @@ fn a_command_the_compositor_did_not_send_is_carried_back_in_its_own_words() {
 }
 
 #[test]
-fn the_compositor_is_told_to_start_a_program_and_heard_to_have_read_it() {
-    // It answers nothing to a start, so the status after it says the
-    // compositor read it and wasn't locked.
+fn the_compositor_is_told_to_start_a_program_and_heard_to_start_it() {
     let (_scratch, path) = scratch();
-    let heard = a_compositor_asked(
-        &path,
-        "which_status",
-        "{\"type\":\"status\",\"theme\":\"dark\",\"locked\":false,\"keymap\":null,\
-         \"screens_off\":false,\"held_awake_by\":[],\"capturing\":[]}\n",
-    );
+    let heard = a_compositor_asked(&path, "exec", "{\"type\":\"executed\"}\n");
 
     assert_eq!(
         launch(
@@ -340,28 +333,25 @@ fn the_compositor_is_told_to_start_a_program_and_heard_to_have_read_it() {
     assert_eq!(
         heard.join().expect("the compositor was listening"),
         vec![
-            "{\"type\":\"spawn\",\"command\":[\"slack\",\"slack://T1/magic-login/1\"]}\n"
+            "{\"type\":\"exec\",\"command\":[\"slack\",\"slack://T1/magic-login/1\"]}\n"
                 .to_string(),
-            "{\"type\":\"which_status\"}\n".to_string(),
         ]
     );
 }
 
 #[test]
-fn a_locked_desktop_starts_nothing_and_says_so() {
-    // The compositor drops a start while locked, without a word.
+fn a_program_that_did_not_start_says_why() {
     let (_scratch, path) = scratch();
     let heard = a_compositor_asked(
         &path,
-        "which_status",
-        "{\"type\":\"status\",\"theme\":\"dark\",\"locked\":true,\"keymap\":null,\
-         \"screens_off\":false,\"held_awake_by\":[],\"capturing\":[]}\n",
+        "exec",
+        "{\"type\":\"executed\",\"refused\":\"kitty is not on the desktop's PATH\"}\n",
     );
 
     assert_eq!(
-        launch(&path, &["slack".to_string()], Some(BRIEFLY)),
+        launch(&path, &["kitty".to_string()], Some(BRIEFLY)),
         Err(CompositorError::Refused {
-            why: "the desktop is locked, so it started nothing".to_string()
+            why: "kitty is not on the desktop's PATH".to_string()
         })
     );
     heard.join().expect("the compositor was listening");

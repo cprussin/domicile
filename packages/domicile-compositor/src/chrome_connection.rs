@@ -474,9 +474,15 @@ fn read_chrome_messages(
             }
             // Sent to the Wayland thread so a locked desktop can refuse it.
             Ok(ChromeMessage::Spawn { command }) => {
-                hub.send_request(ClientRequest::Spawn { command });
+                hub.send_request(ClientRequest::Spawn {
+                    command,
+                    answer: None,
+                });
                 Vec::new()
             }
+            Ok(ChromeMessage::Exec { command }) => vec![HostMessage::Executed {
+                refused: exec(hub, command).err(),
+            }],
             Ok(ChromeMessage::SetTheme { theme }) => {
                 answer_on_the_connection(hub, ConnectionRequest::SetTheme { theme })
             }
@@ -966,6 +972,7 @@ fn emulate(hub: &ChromeHub, input: &[EmulatedInput]) -> Result<(), String> {
         match step {
             Step::Send(emulated) => emulator.send(emulated),
             Step::Keysym { keysym, pressed } => emulator.keysym(keysym, pressed),
+            Step::Wait(time) => std::thread::sleep(time),
         }
     }
     Ok(())
@@ -974,6 +981,25 @@ fn emulate(hub: &ChromeHub, input: &[EmulatedInput]) -> Result<(), String> {
 /// How long `domicile configure-display` waits for the Wayland thread to lay
 /// the desktop out again.
 const CONFIGURING_A_DISPLAY: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// How long `domicile exec` waits for the Wayland thread to start a program.
+const STARTING_A_PROGRAM: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Start `command` for `domicile exec`, or say why it did not start. Refused
+/// while locked, as the shell's own spawns are.
+fn exec(hub: &ChromeHub, command: Vec<String>) -> Result<(), String> {
+    if hub.the_desk_is_locked() {
+        return Err("the desktop is locked".to_string());
+    }
+    let (answer, answered) = Answer::new();
+    hub.send_request(ClientRequest::Spawn {
+        command,
+        answer: Some(answer),
+    });
+    answered
+        .recv_timeout(STARTING_A_PROGRAM)
+        .map_err(|_| "the desktop did not answer in time".to_string())?
+}
 
 /// Ask the Wayland thread to change a monitor's setup, and wait for its word.
 fn configure_display(

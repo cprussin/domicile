@@ -7,6 +7,7 @@ import { bindKeys } from "./bind-keys";
 import type { Gesture } from "./desktop/gestures";
 import { gestures } from "./desktop/gestures";
 import { keyboard } from "./desktop/keyboard";
+import { processes } from "./desktop/processes";
 import { shell } from "./desktop/shell";
 import { system } from "./desktop/system-calls";
 import type { DomicileHost } from "./domicile-host";
@@ -39,6 +40,11 @@ class FakeHost extends EventTarget {
   readonly grabbedGestures: string[] = [];
   readonly ungrabbedGestures: string[] = [];
   readonly calls: [id: number, request: unknown][] = [];
+  readonly spawned: (readonly string[])[] = [];
+
+  spawn(command: readonly string[]): void {
+    this.spawned.push(command);
+  }
 
   grabShortcut(chord: string, whileInhibited = false): void {
     this.grabbed.push(chord);
@@ -122,6 +128,7 @@ const keysOf = (fake: FakeHost): KeyDesktop => {
   return {
     gestures: gestures(host),
     keyboard: keyboard(host, calls),
+    processes: processes(host, calls),
     shell: shell(host, calls),
   };
 };
@@ -235,6 +242,21 @@ describe("bindKeys", () => {
     host.pressed("Meta+Return");
 
     expect(heard).toStrictEqual([["command", ["terminal"]]]);
+  });
+
+  it("starts the program an exec binding names, without the shell", () => {
+    const { heard, host } = bound({
+      keybindings: {
+        "Meta+Return": KeyAction.Exec(["foot", "--hold"]),
+        "swipe:3:up": KeyAction.Exec(["btop"]),
+      },
+    });
+
+    host.pressed("Meta+Return");
+    host.gestured("swipe", 3, { dy: -200 });
+
+    expect(host.spawned).toStrictEqual([["foot", "--hold"], ["btop"]]);
+    expect(heard).toStrictEqual([]);
   });
 
   it("reports a pressed binding whose command the shell does not run", () => {

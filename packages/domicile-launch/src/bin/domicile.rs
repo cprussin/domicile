@@ -869,7 +869,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         Request::DevTools { .. } => Some(DEVTOOLS_WITHIN + ANSWER_WITHIN),
         // Longer than the supervisor waits for the compositor, so its own
         // failure reaches this terminal rather than a timeout.
-        Request::Launch { .. } => Some(ANSWER_WITHIN + ANSWER_WITHIN),
+        Request::Launch { .. } => Some(ANSWER_WITHIN + ANSWER_WITHIN + ANSWER_WITHIN),
         _ => Some(ANSWER_WITHIN),
     };
     let answer = ask(&socket, request, patience).map_err(|why| why.to_string())?;
@@ -2062,7 +2062,8 @@ fn answer_a_command(
                         run_app(engine, root, module, ANSWER_WITHIN).map_err(|why| why.to_string())
                     },
                     launch: &|command| {
-                        launch(chrome, command, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
+                        launch(chrome, command, Some(ANSWER_WITHIN + ANSWER_WITHIN))
+                            .map_err(|why| why.to_string())
                     },
                     // The interactive one waits for the user, however long that
                     // takes.

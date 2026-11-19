@@ -215,12 +215,14 @@ pub enum ClientRequest {
     CloseApp {
         app_id: String,
     },
-    /// The chrome asked to start a program.
+    /// The chrome, or `domicile exec`, asked to start a program.
     ///
     /// Handled here because the lock state lives here, and a locked desktop
-    /// refuses spawns. See [`crate::lock::refused`].
+    /// refuses spawns. See [`crate::lock::refused`]. With an `answer` the
+    /// asker hears why it did not start; without one the person is told.
     Spawn {
         command: Vec<String>,
+        answer: Option<crate::configured_displays::Answer>,
     },
     /// A chrome's page said `hello`. It holds no pixels yet.
     ///
@@ -736,14 +738,28 @@ impl DomicileCompositor {
             } => answer.give(self.configure_display(&display, &change)),
             // A launch from a key or the launcher, so it may raise the
             // window of an app already running.
-            ClientRequest::Spawn { command } => spawn_client(
-                &command,
-                &self.hub.wayland_display,
-                self.scope_clients,
-                self.hub.child_nice,
-                Some(&activation::mint(&mut self.xdg_activation_state, None)),
-                self.launched.as_ref(),
-            ),
+            ClientRequest::Spawn { command, answer } => {
+                let started = spawn_client(
+                    &command,
+                    &self.hub.wayland_display,
+                    self.scope_clients,
+                    self.hub.child_nice,
+                    Some(&activation::mint(&mut self.xdg_activation_state, None)),
+                    self.launched.as_ref(),
+                );
+                match (started, answer) {
+                    (started, Some(answer)) => answer.give(started),
+                    (Ok(()), None) => {}
+                    (Err(why), None) => {
+                        tracing::error!(why, ?command, "failed to spawn client");
+                        self.hub
+                            .notifications
+                            .get()
+                            .expect("the notification server is handed to the hub before chromes connect")
+                            .warn_that_a_program_did_not_start(&why);
+                    }
+                }
+            }
             ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
                 Some(toplevel) => {
                     debug!(%app_id, "close -> client");

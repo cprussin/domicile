@@ -132,6 +132,7 @@ fn tools_list_describes_each_tool() {
             "list_shell_commands",
             "list_bindings",
             "send_shell",
+            "exec",
             "open",
             "focus_window",
             "close_window",
@@ -200,6 +201,14 @@ fn send_shell_passes_its_words() {
     assert_eq!(
         ran_for("send_shell", json!({"words": ["focus", "left"]})),
         ["send-shell", "focus", "left"]
+    );
+}
+
+#[test]
+fn exec_runs_its_argv() {
+    assert_eq!(
+        ran_for("exec", json!({"argv": ["kitty", "--hold", "btop"]})),
+        ["exec", "kitty", "--hold", "btop"]
     );
 }
 
@@ -317,8 +326,7 @@ fn pointer_tools_take_the_last_screenshots_pixels_to_the_desks() {
             vec!["pointer", "300,150", "right-click"],
             vec!["pointer", "300,150", "double-click"],
             vec!["pointer", "3,6"],
-            vec!["pointer", "30,30", "press"],
-            vec!["pointer", "60,61.5", "release"],
+            vec!["drag", "30,30", "60,61.5"],
             vec!["pointer", "3,3"],
             vec!["scroll", "0,120"],
         ]
@@ -969,6 +977,7 @@ fn with_only_some_windows_the_desk_wide_tools_are_refused() {
         ("type_text", json!({"text": "hi"})),
         ("key", json!({"chord": "ctrl+l"})),
         ("send_shell", json!({"words": ["focus", "left"]})),
+        ("exec", json!({"argv": ["kitty"]})),
         ("open", json!({"target": "https://example.com"})),
         ("focus_window", json!({"id": "n1"})),
         ("status", json!({})),

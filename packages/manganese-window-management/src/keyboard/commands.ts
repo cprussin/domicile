@@ -12,8 +12,11 @@ export type Way = "left" | "down" | "up" | "right";
 /** A manganese command, as the words after `send-shell`. */
 const command = (...words: readonly string[]) => KeyAction.SendShell(words);
 
-/** Run `argv` directly, without a shell. */
-export const exec = (...argv: readonly string[]) => command("exec", ...argv);
+/**
+ * Start `argv` directly, without a shell, as `domicile exec` does. Domicile
+ * runs it, not manganese.
+ */
+export const exec = (...argv: readonly string[]) => KeyAction.Exec(argv);
 /**
  * Open the terminal the desk's config names (`terminal`). Does nothing on a
  * desk that names none.

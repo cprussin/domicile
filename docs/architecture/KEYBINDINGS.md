@@ -7,7 +7,7 @@ each chord by name. The SDK grabs the shell's chords and runs the actions.
 ```ts
 bindKeys(domicile, {
   keybindings: {
-    "Meta+Return": KeyAction.SendShell(["exec", "kitty"]),
+    "Meta+Return": KeyAction.Exec(["kitty"]),
     "Meta+r": KeyAction.Mode("resize"),
   },
   modes: {
@@ -24,7 +24,9 @@ its typed commands (`focus("right")`, `mode("resize")`). With no keybindings it
 binds sway's defaults on Meta.
 
 `domicile send-shell focus right` in a terminal on the desktop runs the same
-command as a `SendShell(["focus", "right"])` binding.
+command as a `SendShell(["focus", "right"])` binding. `Exec` is Domicile's, not
+the shell's: the SDK starts the program as `domicile exec` does, and the desktop
+tells the person when it does not start.
 
 ## Design
 

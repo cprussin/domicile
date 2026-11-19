@@ -1155,6 +1155,7 @@ impl Host {
             // when the client destroys it.
             ChromeMessage::CloseApp { .. }
             | ChromeMessage::Spawn { .. }
+            | ChromeMessage::Exec { .. }
             | ChromeMessage::SearchFiles { .. }
             | ChromeMessage::CopyClipboardEntry { .. }
             | ChromeMessage::ActivateTrayItem { .. }

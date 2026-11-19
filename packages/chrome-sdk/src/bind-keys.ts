@@ -19,6 +19,7 @@ import type { Result } from "@cprussin/option-result";
 
 import type { Gestures } from "./desktop/gestures";
 import type { Keyboard } from "./desktop/keyboard";
+import type { Processes } from "./desktop/processes";
 import type { ShellNamespace } from "./desktop/shell";
 import type { FinishedGesture } from "./gesture-binding";
 import {
@@ -77,6 +78,7 @@ export type KeyBinding = {
 export type KeyDesktop = {
   readonly gestures: Pick<Gestures, "grab" | "on" | "ungrab">;
   readonly keyboard: Pick<Keyboard, "grab" | "on" | "ungrab">;
+  readonly processes: Pick<Processes, "launch">;
   readonly shell: Pick<ShellNamespace, "commands" | "answer">;
 };
 
@@ -126,6 +128,10 @@ export const bindKeys = (
         });
         break;
       }
+      case KeyActionKind.Exec: {
+        domicile.processes.launch(action.argv);
+        break;
+      }
       case KeyActionKind.Mode: {
         enter(action.name);
         break;
@@ -148,6 +154,7 @@ export const bindKeys = (
         break;
       }
       case KeyActionKind.SendShell:
+      case KeyActionKind.Exec:
       case KeyActionKind.Mode:
       case undefined: {
         run(action);
@@ -250,6 +257,7 @@ const gestureAction = (written: string, action: KeyAction): OneKeyAction => {
       );
     }
     case KeyActionKind.SendShell:
+    case KeyActionKind.Exec:
     case KeyActionKind.Mode: {
       return action;
     }
@@ -290,11 +298,17 @@ export const describedBindings = (
     })),
   );
 
-/** `action` as words: `send-shell focus left`, `mode resize`, or a hold. */
+/**
+ * `action` as words: `send-shell focus left`, `exec foot`, `mode resize`, or
+ * a hold.
+ */
 const actionWords = (action: KeyAction): string => {
   switch (action.kind) {
     case KeyActionKind.SendShell: {
       return ["send-shell", ...action.args].join(" ");
+    }
+    case KeyActionKind.Exec: {
+      return ["exec", ...action.argv].join(" ");
     }
     case KeyActionKind.Mode: {
       return `mode ${action.name}`;

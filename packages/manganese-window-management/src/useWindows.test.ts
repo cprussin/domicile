@@ -479,17 +479,6 @@ describe("a command", () => {
     ).toEqual(["kitty", "foot"]);
   });
 
-  it("takes what only the compositor can do with it", () => {
-    // An `exec` is a process the compositor starts.
-    const { host, result } = desktop([LEFT, RIGHT]);
-
-    act(() => {
-      result.current.act(WindowAction.CommandExecuted(["foot", "-e", "htop"]));
-    });
-
-    expect(host.spawned).toEqual([["foot", "-e", "htop"]]);
-  });
-
   it("asks the compositor to lock the desk", () => {
     const { host, result } = desktop([LEFT, RIGHT]);
 

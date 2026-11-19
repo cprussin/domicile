@@ -354,6 +354,25 @@ impl NotificationServer {
         );
     }
 
+    /// Tell the person a program a key, the launcher or the config named did
+    /// not start, and `why`. Not a bug in Domicile, so not urgent and with no
+    /// report button. A later failure replaces an earlier one.
+    pub fn warn_that_a_program_did_not_start(&self, why: &str) {
+        self.add_from_portal(
+            OWN_APP.into(),
+            "program-did-not-start".into(),
+            PortalNotification {
+                title: "A program didn't start".into(),
+                body: format!("{why}."),
+                icon: None,
+                priority: Priority::Normal,
+                default_action: None,
+                buttons: Vec::new(),
+                display_hint: Vec::new(),
+            },
+        );
+    }
+
     /// Remove `app_id`'s notification `id`, if held.
     pub fn remove_from_portal(&self, app_id: &str, id: &str) {
         self.store

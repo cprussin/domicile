@@ -198,10 +198,6 @@ export const COMMAND_HELP: readonly ShellCommandHelp[] = [
     description: "Grow the window that way.",
     usage: "resize grow left|right|up|down",
   },
-  {
-    description: "Run argv from the compositor's PATH, without a shell.",
-    usage: "exec <argv…>",
-  },
   { description: "Open the config's terminal.", usage: "terminal" },
   { description: "Lock the desktop.", usage: "lock" },
   {
@@ -264,8 +260,6 @@ export const parseCommand = (
 ): Result<Action, string> => {
   const [verb, ...argv] = args;
   switch (verb) {
-    case "exec":
-      return parseExec(argv);
     case "keymap":
       return parseKeymap(argv);
     case "virtual-monitor":
@@ -320,12 +314,6 @@ const virtualMonitorUsage = (args: readonly string[]): Result<Action, string> =>
   Err(
     `manganese: no command \`${args.join(" ")}\`; write \`virtual-monitor add [<width>x<height>]\` or \`virtual-monitor remove\``,
   );
-
-/** Parse `exec`'s argv, which must not be empty. */
-const parseExec = (argv: readonly string[]): Result<Action, string> =>
-  argv.length === 0
-    ? Err("manganese: `exec` names nothing to run")
-    : Ok(WindowAction.CommandExecuted(argv));
 
 /** Look up a command in {@link COMMANDS}. */
 const parseNamed = (args: readonly string[]): Result<Action, string> => {

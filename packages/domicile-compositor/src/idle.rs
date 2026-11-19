@@ -1310,6 +1310,7 @@ mod tests {
                 "a program being started",
                 ClientRequest::Spawn {
                     command: vec!["foot".into()],
+                    answer: None,
                 },
             ),
             (

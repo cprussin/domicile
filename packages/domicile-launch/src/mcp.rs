@@ -218,6 +218,7 @@ enum Tool {
     /// A verb whose `--json` listing is the answer.
     Listing(&'static str),
     SendShell,
+    Exec,
     Open,
     /// A verb that takes a `list-windows` id.
     WindowAct(&'static str),
@@ -254,7 +255,7 @@ struct View {
 const FIT: u32 = 1280;
 
 /// Each tool, by name, in the order `tools/list` gives them.
-const TOOLS: [(&str, Tool); 29] = [
+const TOOLS: [(&str, Tool); 30] = [
     ("list_windows", Tool::Listing("list-windows")),
     ("list_displays", Tool::Listing("list-displays")),
     ("list_inputs", Tool::Listing("list-inputs")),
@@ -262,6 +263,7 @@ const TOOLS: [(&str, Tool); 29] = [
     ("list_shell_commands", Tool::Listing("list-shell-commands")),
     ("list_bindings", Tool::Listing("list-bindings")),
     ("send_shell", Tool::SendShell),
+    ("exec", Tool::Exec),
     ("open", Tool::Open),
     ("focus_window", Tool::WindowAct("focus-window")),
     ("close_window", Tool::WindowAct("close-window")),
@@ -356,6 +358,11 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             "Run a shell command, as a keybinding does, and answer what it printed. list_shell_commands lists them.",
             json!({"words": {"type": "array", "items": {"type": "string"}, "description": "The command and its arguments, such as [\"focus\", \"left\"]."}}),
             vec!["words"],
+        ),
+        Tool::Exec => (
+            "Start a program as the desktop starts apps, without a shell, its name found on the desktop's PATH. Fails saying why when it does not start.",
+            json!({"argv": {"type": "array", "items": {"type": "string"}, "minItems": 1, "description": "The program and its arguments, such as [\"kitty\", \"--hold\", \"btop\"]."}}),
+            vec!["argv"],
         ),
         Tool::Open => (
             "Open a file, folder or URL with its default app; a URL opens in a browser window.",
@@ -631,6 +638,7 @@ fn what_it_did(
         Tool::Listing("status") => "Read the desktop's status".to_string(),
         Tool::Listing(_) => "Read the shell's commands".to_string(),
         Tool::SendShell => "Ran a shell command".to_string(),
+        Tool::Exec => "Started a program".to_string(),
         Tool::Open => "Opened something".to_string(),
         Tool::WindowAct("focus-window") => format!("Focused {}", window("id")),
         Tool::WindowAct(_) => format!("Closed {}", window("id")),
@@ -709,6 +717,21 @@ fn commands(
                 .ok_or("send_shell's words are strings")?;
             Ok(vec![[words(&["send-shell"]), said].concat()])
         }
+        Tool::Exec => {
+            let argv = arguments
+                .get("argv")
+                .and_then(Value::as_array)
+                .ok_or("exec takes argv, an array of strings")?;
+            let argv = argv
+                .iter()
+                .map(|word| word.as_str().map(str::to_string))
+                .collect::<Option<Vec<_>>>()
+                .ok_or("exec's argv are strings")?;
+            match argv.is_empty() {
+                true => Err("exec's argv names no program".to_string()),
+                false => Ok(vec![[words(&["exec"]), argv].concat()]),
+            }
+        }
         Tool::Open => {
             let target = string(arguments, "target")?.ok_or("open takes a target")?;
             let app = match arguments.get("app") {
@@ -756,10 +779,11 @@ fn commands(
         }
         Tool::Drag => {
             let (from, to) = (pair(arguments, "from")?, pair(arguments, "to")?);
-            Ok(vec![
-                words(&["pointer", &on_the_desk(view, from.0, from.1)?, "press"]),
-                words(&["pointer", &on_the_desk(view, to.0, to.1)?, "release"]),
-            ])
+            Ok(vec![words(&[
+                "drag",
+                &on_the_desk(view, from.0, from.1)?,
+                &on_the_desk(view, to.0, to.1)?,
+            ])])
         }
         Tool::Scroll => {
             let at = on_the_desk(view, number(arguments, "x")?, number(arguments, "y")?)?;

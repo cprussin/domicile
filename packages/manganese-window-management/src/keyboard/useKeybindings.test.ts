@@ -16,7 +16,7 @@ const KEYS: ShellKeybindings = {
   keybindings: {
     "Meta+l": KeyAction.SendShell(["focus", "right"]),
     "Meta+o": KeyAction.SendShell(["overview"]),
-    "Meta+Return": KeyAction.SendShell(["exec", "foot"]),
+    "Meta+Return": KeyAction.SendShell(["terminal"]),
     "Meta+r": KeyAction.Mode("resize"),
     "Meta+Shift+l": KeyAction.SendShell(["move", "right"]),
     "Meta+space": KeyAction.SendShell(["launcher"]),

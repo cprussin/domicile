@@ -95,9 +95,6 @@ export const useWindows = (
   const act = useCallback(
     (action: WindowAction) => {
       dispatch(action);
-      if (action.kind === WindowActionKind.CommandExecuted) {
-        domicile.processes.launch(action.argv);
-      }
       if (action.kind === WindowActionKind.DeskLocked) {
         domicile.session.lock();
       }

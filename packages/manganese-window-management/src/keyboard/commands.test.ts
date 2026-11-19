@@ -189,10 +189,10 @@ describe("manganese's default keys", () => {
 });
 
 describe("exec", () => {
-  it("is sway's `exec`, with the argv as its words", () => {
+  it("is Domicile's `exec`, which the SDK starts without the shell", () => {
     expect(exec("kitty", "--hold")).toEqual({
-      args: ["exec", "kitty", "--hold"],
-      kind: KeyActionKind.SendShell,
+      argv: ["kitty", "--hold"],
+      kind: KeyActionKind.Exec,
     });
   });
 });

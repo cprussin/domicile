@@ -78,7 +78,6 @@ describe("parseCommand", () => {
     ["workspace prev_on_output", WindowAction.WorkspaceStepped("prev")],
     ["resize grow up", WindowAction.WindowGrown(Direction.Up)],
     ["resize grow right", WindowAction.WindowGrown(Direction.Right)],
-    ["exec kitty --hold", WindowAction.CommandExecuted(["kitty", "--hold"])],
     ["keymap next", WindowAction.KeymapSelected(KeymapChoice.Next())],
     ["keymap us", WindowAction.KeymapSelected(KeymapChoice.Named("us"))],
     [
@@ -118,10 +117,8 @@ describe("parseCommand", () => {
     );
   });
 
-  it("refuses `exec` with nothing to run", () => {
-    expect(parseCommand(["exec"])).toStrictEqual(
-      Err("manganese: `exec` names nothing to run"),
-    );
+  it("leaves `exec` to Domicile, which starts programs for every shell", () => {
+    expect(parseCommand(["exec", "kitty"]).isErr()).toBe(true);
   });
 
   it.each([
@@ -228,7 +225,6 @@ describe("COMMAND_HELP", () => {
       "workspace 1",
       "workspace next_on_output",
       "resize grow up",
-      "exec foot",
       "keymap next",
       "virtual-monitor add 1280x720",
       "virtual-monitor remove",

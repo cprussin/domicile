@@ -849,8 +849,9 @@ bindKeys(
   cannot type is logged, and the other keys still work.
 - `bindKeys` grabs every chord by name (`domicile.keyboard.grab`), handles each
   `shortcut` by its `chord` whether the press landed on the page or in a
-  `<webview>`, handles `Mode` itself, and passes every `SendShell` to
-  `onCommand`.
+  `<webview>`, handles `Mode` itself, starts every `Exec` (as `domicile exec`
+  does; a program that does not start is a notification), and passes every
+  `SendShell` to `onCommand`.
 - `KeyAction.Hold(press, release)` runs `press` on the chord's press and
   `release` on its release, once per press. The release runs whatever mode the
   keys are in by then; `unbind` runs any still armed. Gestures cannot hold an

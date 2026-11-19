@@ -37,6 +37,7 @@
 {"type":"display_configured","refused":"no monitor HDMI-A-9 is plugged in; domicile list-displays lists them"}
 {"type":"desk_shot","shot":{"place":{"position":[-1920,0],"size":[3840,1080]},"width":1568,"height":441}}
 {"type":"emulated","refused":"the desktop is locked"}
+{"type":"executed","refused":"kitty is not on the desktop's PATH; give its full path"}
 {"type":"keymap","keymap":"xkb_keymap {\n  xkb_keycodes { include \"evdev+aliases(qwerty)\" };\n};\n"}
 {"type":"extensions","web_store":["ddkjiahejlhfcafbddmgiahcphecmpfh"],"unpacked":["/home/you/src/my-extension"],"settings":{"ddkjiahejlhfcafbddmgiahcphecmpfh":{"file_access":false,"site_access":["github.com","*.example.com"]},"eimadpbcbfnmbkopoojfekhnkhdbieeh":{"user_scripts":true,"site_access":"on_click"}}}
 {"type":"force_dark","sites":["mail.google.com"]}

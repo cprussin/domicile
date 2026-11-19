@@ -44,7 +44,10 @@ that names none: there is no default terminal.
 Build commands with the exported helpers (`focus`, `move`, `workspace`,
 `moveToWorkspace`, `grow`, `mode`, `exec`, `searchClipboard`, `volume`,
 `micMute`, `brightness`, `keymap`, `notifications`, `clearNotifications`,
-`idleInhibitor`, `nightLight`, `virtualMonitor`, …). They use sway's names:
+`idleInhibitor`, `nightLight`, `virtualMonitor`, …). `exec(...argv)` is
+Domicile's `KeyAction.Exec`, not a manganese command: Domicile starts the
+program, found on the desktop's `PATH`, and says so in a notification when it
+can't. The rest use sway's names:
 
 | Command | Action |
 |---|---|
@@ -60,7 +63,6 @@ Build commands with the exported helpers (`focus`, `move`, `workspace`,
 | `layout stacking/tabbed/toggle split` | Set the container's layout. A split turned into tabs or a stack merges its groups; tabs turned into a split each get a group. A group already tabbed or stacking passes `layout tabbed` or `layout stacking` to the split around it. |
 | `fullscreen toggle [global]` | Fullscreen on this screen, or every screen. |
 | `floating toggle` | Float or tile the window. |
-| `exec <argv…>` | Spawn `argv` from the compositor's `PATH`. |
 
 Manganese-only commands:
 

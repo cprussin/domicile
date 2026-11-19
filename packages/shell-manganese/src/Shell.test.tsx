@@ -407,7 +407,7 @@ const NO_APPLICATIONS: ApplicationsConfig = { bookmarks: [], omit: [] };
 /** The README's sample config. */
 const MANGANESE_KEYS: ShellKeybindings = {
   keybindings: Object.fromEntries([
-    line("Return", false, "send-shell exec kitty"),
+    ["Meta+Return", KeyAction.Exec(["kitty"])],
     line("q", true, "send-shell kill"),
     line("Return", true, "send-shell lock"),
     line("space", false, "send-shell launcher"),

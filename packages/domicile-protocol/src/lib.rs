@@ -279,6 +279,12 @@ pub enum ChromeMessage {
     /// Domicile's Wayland display.
     Spawn { command: Vec<String> },
 
+    /// Start a program (argv) as [`ChromeMessage::Spawn`] does, `argv[0]`
+    /// looked up on the compositor's `PATH`. Answered with
+    /// [`HostMessage::Executed`] on this connection only. Sent by `domicile
+    /// exec` and `domicile open`.
+    Exec { command: Vec<String> },
+
     // Input the chrome captured over an <app> element, for the compositor to
     // inject into the client.
     /// Pointer moved to a surface-local coordinate `(x, y)` over an app.
@@ -938,6 +944,13 @@ pub enum HostMessage {
     DeskShot {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         shot: Option<DeskShot>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        refused: Option<String>,
+    },
+
+    /// Answers [`ChromeMessage::Exec`] on the asking connection only: why
+    /// the program did not start, or nothing when it did.
+    Executed {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         refused: Option<String>,
     },
@@ -1887,8 +1900,11 @@ pub enum EmulatedInput {
     /// Press or release the key that types the XKB keysym named `key`, such
     /// as `Return` or `Control_L`.
     Key { key: String, pressed: bool },
-    /// Type `text`, a key for each character.
+    /// Type `text`, a key for each character; a line break presses Return.
     Text { text: String },
+    /// Wait `ms` milliseconds before the next event, as a hand would between
+    /// the moves of a drag.
+    Wait { ms: u32 },
 }
 
 /// A pointer button.

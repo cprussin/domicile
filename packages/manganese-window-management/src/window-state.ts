@@ -428,7 +428,6 @@ export enum WindowActionKind {
   ClipboardDismissed,
   ClipboardSearched,
   ClipboardToggled,
-  CommandExecuted,
   ContainerSplit,
   DeskLocked,
   FileOpened,
@@ -681,17 +680,6 @@ export const WindowAction = {
    */
   ClipboardToggled: () => ({
     kind: WindowActionKind.ClipboardToggled as const,
-  }),
-
-  /**
-   * `exec <argv…>`: the compositor spawns `argv`.
-   *
-   * Changes no state; the new window arrives as a host announcement. It is an
-   * action so every key command is one.
-   */
-  CommandExecuted: (argv: readonly string[]) => ({
-    argv,
-    kind: WindowActionKind.CommandExecuted as const,
   }),
 
   /** `splith` / `splitv`: moves the focus out of its tab group. */
@@ -1679,10 +1667,6 @@ const reduceAction = (
     case WindowActionKind.KeymapSelected:
     case WindowActionKind.ShortcutsInhibitorSwitched: {
       // The shell switches the keymap or the inhibitor; no window changes.
-      return state;
-    }
-    case WindowActionKind.CommandExecuted: {
-      // The compositor spawns it and the host announces the window it opens.
       return state;
     }
     // A request only. A client may refuse, for example with unsaved work, and
