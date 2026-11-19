@@ -51,6 +51,12 @@ class ElectronPreload final
   // False when the preload ended the frame, which must then not be touched.
   [[nodiscard]] static bool RunAtDocumentStart(content::RenderFrame* frame);
 
+  // Tells `frame`'s preload's process document-end, as Electron's does.
+  // ContentRendererClient::RunScriptsAtDocumentEnd calls this: Blink forbids
+  // script in RenderFrameObserver::DidDispatchDOMContentLoadedEvent. False
+  // when a listener ended the frame, which must then not be touched.
+  [[nodiscard]] static bool RunAtDocumentEnd(content::RenderFrame* frame);
+
   ElectronPreload(const ElectronPreload&) = delete;
   ElectronPreload& operator=(const ElectronPreload&) = delete;
   ~ElectronPreload() override;

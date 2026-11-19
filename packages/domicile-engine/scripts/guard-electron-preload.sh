@@ -26,8 +26,10 @@
 #   shaped       the preload's electron module has Electron's webFrame (its own
 #                top, by frameToken; insertCSS and removeInsertedCSS),
 #                webUtils and crashReporter, process.isMainFrame, the
-#                hello's Electron and resources in process, and
-#                process.argv has the window's additionalArguments
+#                hello's Electron and resources in process,
+#                process.argv has the window's additionalArguments, and
+#                process is an EventEmitter that says loaded,
+#                document-start and document-end
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -242,6 +244,7 @@ print("measured: %d %d %d %d %d %d %d %d %d" % (
         "mainFrame": True, "resources": "/opt/guard/resources",
         "routingId": True, "token": True,
         "top": True, "webUtils": "function", "zoom": 1,
+        "heard": ["loaded", "document-start", "document-end"],
         "styled": True, "unstyled": True}]), flush=True)
 PY
 
@@ -261,7 +264,8 @@ case "$MEASURED" in
 its exposed API reached the app with send, invoke and sendSync, the app's \
 send reached the page, ports carried messages both ways, a window \
 without a preload had none, and the preload had Electron's webFrame, \
-webUtils, crashReporter and the window's additionalArguments"
+webUtils, crashReporter, the window's additionalArguments and process's \
+document events"
   ;;
 "0 "*)
   FAILURE="the Electron socket did not take the app's hello -- \
@@ -312,8 +316,11 @@ webFrame (its frameToken, top, insertCSS and removeInsertedCSS, \
 getZoomFactor), webUtils, crashReporter or process.isMainFrame in the \
 bootstrap in electron_preload.cc, process.versions.electron or \
 process.resourcesPath without the hello's (ElectronHello, ElectronPage, \
-Preload's app), or process.argv without the window's \
-\"arguments\" (ElectronOpenWindow, ElectronPage, Preload's arguments) -- \
+Preload's app), process.argv without the window's \
+\"arguments\" (ElectronOpenWindow, ElectronPage, Preload's arguments), or \
+process not saying loaded, document-start and document-end (the bootstrap's \
+emitter, ElectronPreload::RunAtDocumentEnd from RunScriptsAtDocumentEnd in \
+patch 0218) -- \
 the app's log has what the preload saw"
   ;;
 *)
