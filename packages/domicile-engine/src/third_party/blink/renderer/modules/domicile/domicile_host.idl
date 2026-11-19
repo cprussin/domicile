@@ -542,6 +542,13 @@
   [CallWith=ScriptState, RaisesException] undefined clickBrowserWindowMenu(
       DOMString id, long command);
 
+  // The user chose entry `command` (its `id`) of the popup menu window `id`
+  // shows (DomicileBrowserWindow.popupMenu), or put it away with nothing
+  // chosen for 0. Throws a TypeError for a negative `command`. A window that
+  // closed meanwhile, or shows no popup menu, does nothing.
+  [CallWith=ScriptState, RaisesException] undefined answerBrowserWindowPopupMenu(
+      DOMString id, long command);
+
   // The user answered the message box window `id` shows
   // (DomicileBrowserWindow.messageBox) with button `response`, an index into
   // its `buttons`, leaving its checkbox `checkboxChecked`. Throws a TypeError

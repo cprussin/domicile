@@ -19,6 +19,7 @@ import { desktopCapturer } from "./electron/desktop-capturer";
 import { createDialog } from "./electron/dialog";
 import { createGlobalShortcut } from "./electron/global-shortcut";
 import { createIpcMain } from "./electron/ipc-main";
+import type { MenuEntry } from "./electron/menu";
 import { createMenu } from "./electron/menu";
 import { boxWindow, createMessageBoxes } from "./electron/message-boxes";
 import {
@@ -59,8 +60,18 @@ import { mirrorResources } from "./mirror";
 import { electronPaths } from "./paths";
 import { quirksOf } from "./quirks";
 
-/** A window as the app's menus hand it to a click: one of its BrowserWindows. */
-type MenuWindow = { readonly close: () => void };
+/**
+ * A window as the app's menus hand it to a click and pop up over: one of its
+ * BrowserWindows.
+ */
+type MenuWindow = {
+  readonly close: () => void;
+  readonly popupMenu: (
+    entries: readonly MenuEntry[],
+    at: { x: number; y: number } | undefined,
+    closed: (command: number) => void,
+  ) => () => void;
+};
 
 /**
  * How long an app started with the desktop waits for the engine to listen.
@@ -191,6 +202,8 @@ const main = async ([resources, ...args]: string[]) => {
     const { click, Menu, MenuItem, model } = createMenu<MenuWindow>({
       appName: app.getName,
       focusedWindow: (): MenuWindow | null => BrowserWindow.getFocusedWindow(),
+      popup: (window, entries, at, closed) =>
+        window.popupMenu(entries, at, closed),
       roles: {
         close: (window) => window?.close(),
         quit: () => app.quit(),

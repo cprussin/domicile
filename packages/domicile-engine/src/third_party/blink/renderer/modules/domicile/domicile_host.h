@@ -335,6 +335,10 @@ class MODULES_EXPORT DomicileHost final
                               const String& id,
                               int32_t command,
                               ExceptionState&);
+  void answerBrowserWindowPopupMenu(ScriptState*,
+                                    const String& id,
+                                    int32_t command,
+                                    ExceptionState&);
   void answerBrowserWindowMessageBox(ScriptState*,
                                      const String& id,
                                      int32_t response,

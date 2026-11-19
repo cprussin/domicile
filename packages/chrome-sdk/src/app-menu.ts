@@ -89,6 +89,33 @@ export const appMenu = (menu: string): readonly AppMenuEntry[] => {
   }
 };
 
+/** An Electron app's popup menu over its window, and where it goes. */
+export type AppPopupMenu = {
+  entries: readonly AppMenuEntry[];
+  /** Where it goes, in CSS pixels from the window's page's top left. */
+  at: { x: number; y: number };
+};
+
+/**
+ * A window's `popupMenu`, as the engine lists it: `{menu, x, y}`. Throws for
+ * one the engine should have refused.
+ */
+export const appPopupMenu = (popup: string): AppPopupMenu => {
+  const parsed = z
+    .object({ menu: z.array(writtenSchema), x: z.number(), y: z.number() })
+    .safeParse(JSON.parse(popup));
+  if (parsed.success) {
+    return {
+      at: { x: parsed.data.x, y: parsed.data.y },
+      entries: entriesOf(parsed.data.menu),
+    };
+  } else {
+    throw new Error(
+      `the engine listed a popup menu it should have refused: ${parsed.error.message}`,
+    );
+  }
+};
+
 const entriesOf = (written: readonly Written[]): AppMenuEntry[] =>
   written
     .filter(({ visible }) => visible)

@@ -10,6 +10,9 @@ const setUp = () => {
   const { Menu, MenuItem, model, click } = createMenu({
     appName: () => "Notes",
     focusedWindow: () => null,
+    popup: () => {
+      throw new Error("these menus pop up over nothing");
+    },
     roles: {
       copy: () => did.push("copy"),
       quit: () => did.push("quit"),
@@ -255,5 +258,121 @@ describe("Menu.setApplicationMenu", () => {
 
     expect(shown).toEqual([menu, null]);
     expect(Menu.getApplicationMenu()).toBeNull();
+  });
+});
+
+describe("Menu.popup", () => {
+  /**
+   * A menu module whose windows are names, "main" focused, and the popups
+   * it asked the shell for, each with how to answer it.
+   */
+  const setUp = () => {
+    const popups: {
+      window: string;
+      labels: string[];
+      at: { x: number; y: number } | undefined;
+      closed: (command: number) => void;
+      putAway: number;
+    }[] = [];
+    const { Menu } = createMenu<string>({
+      appName: () => "Claude",
+      focusedWindow: () => "main",
+      popup: (window, entries, at, closed) => {
+        const popup = {
+          at,
+          closed,
+          labels: entries.map((entry) => entry.label),
+          putAway: 0,
+          window,
+        };
+        popups.push(popup);
+        return () => {
+          popup.putAway += 1;
+        };
+      },
+      roles: {},
+      setApplicationMenu: () => undefined,
+    });
+    return { Menu, popups };
+  };
+
+  it("pops the menu up over the focused window, where the user pressed", () => {
+    const { Menu, popups } = setUp();
+    const menu = Menu.buildFromTemplate([{ label: "New Chat" }]);
+
+    menu.popup();
+
+    expect(
+      popups.map(({ at, labels, window }) => [window, labels, at]),
+    ).toEqual([["main", ["New Chat"], undefined]]);
+  });
+
+  it("pops it up over the window and at the point the app names", () => {
+    const { Menu, popups } = setUp();
+    const menu = Menu.buildFromTemplate([{ label: "New Chat" }]);
+
+    menu.popup({ window: "other", x: 10, y: 20 });
+
+    expect(popups.map(({ at, window }) => [window, at])).toEqual([
+      ["other", { x: 10, y: 20 }],
+    ]);
+  });
+
+  it("refuses x without y", () => {
+    const { Menu } = setUp();
+    const menu = Menu.buildFromTemplate([{ label: "New Chat" }]);
+
+    expect(() => {
+      menu.popup({ x: 10 });
+    }).toThrow("Menu.popup takes both x and y, or neither");
+  });
+
+  it("runs the entry chosen, then tells the app it closed", () => {
+    const { Menu, popups } = setUp();
+    const heard: string[] = [];
+    const menu = Menu.buildFromTemplate([
+      { label: "New Chat" },
+      {
+        click: (_item, window) => heard.push(`clicked over ${window}`),
+        label: "Settings",
+      },
+    ]);
+    menu.on("menu-will-show", () => heard.push("will show"));
+    menu.on("menu-will-close", () => heard.push("will close"));
+
+    menu.popup({ callback: () => heard.push("callback") });
+    const command = menu.items[1]?.commandId ?? 0;
+    popups[0]?.closed(command);
+
+    expect(heard).toEqual([
+      "will show",
+      "will close",
+      "clicked over main",
+      "callback",
+    ]);
+  });
+
+  it("runs nothing when it closes with nothing chosen", () => {
+    const { Menu, popups } = setUp();
+    const heard: string[] = [];
+    const menu = Menu.buildFromTemplate([
+      { click: () => heard.push("clicked"), label: "New Chat" },
+    ]);
+
+    menu.popup({ callback: () => heard.push("callback") });
+    popups[0]?.closed(0);
+
+    expect(heard).toEqual(["callback"]);
+  });
+
+  it("puts the popup away on closePopup, and the one before a new popup", () => {
+    const { Menu, popups } = setUp();
+    const menu = Menu.buildFromTemplate([{ label: "New Chat" }]);
+
+    menu.popup();
+    menu.popup();
+    menu.closePopup();
+
+    expect(popups.map(({ putAway }) => putAway)).toEqual([1, 1]);
   });
 });

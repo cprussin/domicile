@@ -3604,3 +3604,104 @@ describe("an Electron app's message box", () => {
     ).not.toBeChecked();
   });
 });
+
+describe("an Electron app's popup menu", () => {
+  /** An entry as the engine lists it, with Electron's defaults. */
+  const entry = (fields: object) => ({
+    checked: false,
+    enabled: true,
+    type: "normal",
+    visible: true,
+    ...fields,
+  });
+
+  const POPUP = JSON.stringify({
+    menu: [
+      entry({ id: 7, label: "New Chat" }),
+      entry({ id: 8, label: "", type: "separator" }),
+      entry({ id: 9, label: "Settings" }),
+    ],
+    x: 12,
+    y: 30,
+  });
+
+  /** A browser window "1" whose app popped `POPUP` up, and its answers. */
+  const appWindow = () => {
+    const host = new FakeDomicileHost();
+    host.openBrowser("https://claude.test/");
+    host.setPopupMenu("1", POPUP);
+    const domicile: Domicile = {
+      ...host.domicile,
+      windows: {
+        ...host.domicile.windows,
+        focus: () => undefined,
+        focusShell: () => undefined,
+      },
+    };
+    render(
+      <BrowserWindow
+        behindPanel={false}
+        clickThrough={false}
+        covered={false}
+        depth={0}
+        domicile={domicile}
+        dragging={false}
+        focused
+        frame={FRAME}
+        fullscreen={false}
+        isApp
+        motion="resting"
+        onDescription={noDescription}
+        onFocusRequest={() => undefined}
+        onIcon={noIcon}
+        onMotionEnded={nothingEnded}
+        onPageFullscreen={noFullscreen}
+        onReach={() => undefined}
+        rect={ON_SCREEN}
+        resizing={false}
+        url="https://claude.test/"
+        window="1"
+      />,
+    );
+    const answers = () =>
+      host.calls.filter(([name]) => name === "answerBrowserWindowPopupMenu");
+    return { answers, host };
+  };
+
+  it("draws the app's menu and answers with the entry chosen", async () => {
+    const { answers } = appWindow();
+
+    const menu = await screen.findByRole("menu", { name: "Application" });
+    const entries = within(menu).getAllByRole("menuitem");
+    expect(entries.map((item) => item.textContent)).toEqual([
+      "New Chat",
+      "Settings",
+    ]);
+    await userEvent.click(entries[1] ?? menu);
+
+    expect(answers()).toEqual([["answerBrowserWindowPopupMenu", "1", 9]]);
+  });
+
+  it("answers 0 when the menu is put away with nothing chosen", async () => {
+    const { answers } = appWindow();
+
+    await screen.findByRole("menu", { name: "Application" });
+    await userEvent.keyboard("{Escape}");
+
+    expect(answers()).toEqual([["answerBrowserWindowPopupMenu", "1", 0]]);
+  });
+
+  it("takes the menu away once the engine lists none", async () => {
+    const { answers, host } = appWindow();
+    await screen.findByRole("menu", { name: "Application" });
+
+    act(() => {
+      host.setPopupMenu("1", null);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
+    expect(answers()).toEqual([]);
+  });
+});

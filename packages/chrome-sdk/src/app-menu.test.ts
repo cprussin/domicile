@@ -5,6 +5,7 @@ import {
   acceleratedBy,
   acceleratorOf,
   appMenu,
+  appPopupMenu,
   MenuEntryKind,
   openedByMnemonic,
   pressesAccelerator,
@@ -54,6 +55,30 @@ const FILE = written([
     type: "submenu",
   }),
 ]);
+
+describe(appPopupMenu, () => {
+  it("reads the entries and where the menu goes", () => {
+    const popup = JSON.stringify({
+      menu: [
+        entry({ id: 2, label: "Settings" }),
+        entry({ id: 3, label: "Hidden", visible: false }),
+      ],
+      x: 12,
+      y: 34,
+    });
+
+    expect(appPopupMenu(popup)).toEqual({
+      at: { x: 12, y: 34 },
+      entries: appMenu(written([entry({ id: 2, label: "Settings" })])),
+    });
+  });
+
+  it("throws for a popup menu the engine should have refused", () => {
+    expect(() =>
+      appPopupMenu(JSON.stringify({ menu: [entry({ id: 2 })], x: 1 })),
+    ).toThrow("the engine listed a popup menu it should have refused");
+  });
+});
 
 describe(appMenu, () => {
   it("reads the entries, leaving hidden ones out", () => {

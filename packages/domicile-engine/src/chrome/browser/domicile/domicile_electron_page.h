@@ -18,6 +18,7 @@
 #include "content/public/browser/web_contents_user_data.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace base {
@@ -25,6 +26,10 @@ class CommandLine;
 }
 
 class GURL;
+
+namespace blink {
+class WebInputEvent;
+}
 
 namespace content {
 class RenderFrameHost;
@@ -126,6 +131,10 @@ class ElectronPage final : public content::WebContentsObserver,
   void GoToIndex(int index);
   // navigationHistory.clear: forgets every entry but the one shown.
   void ClearHistory();
+  // Where the user last pressed in the page, with the pointer or a touch, in
+  // its widget's pixels from the top left; nothing before the first press.
+  // Menu.popup puts a menu there when the app says nowhere.
+  std::optional<gfx::Point> last_press() const { return last_press_; }
 
   // A message on a port, and the main process closing one:
   void DeliverToPort(const std::string& port, const std::string& data_json);
@@ -151,6 +160,7 @@ class ElectronPage final : public content::WebContentsObserver,
   void NavigationEntriesDeleted() override;
   void NavigationEntryChanged(
       const content::EntryChangedDetails& change_details) override;
+  void DidGetUserInteraction(const blink::WebInputEvent& event) override;
   void DidStartLoading() override;
   void DidStopLoading() override;
   void OnWebContentsFocused(
@@ -223,6 +233,8 @@ class ElectronPage final : public content::WebContentsObserver,
   std::optional<ElectronPageState> state_;
   // Whether the page has the keyboard focus, as Chromium last said.
   bool focused_ = false;
+  // See last_press().
+  std::optional<gfx::Point> last_press_;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };

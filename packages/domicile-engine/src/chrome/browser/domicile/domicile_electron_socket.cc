@@ -105,6 +105,14 @@ class ChromeElectronDesk final : public ElectronDesk {
                       base::OnceCallback<void(int, bool)> answered) override {
     ShowElectronMessageBox(id, std::move(box), std::move(answered));
   }
+  void ShowPopupMenu(const std::string& id,
+                     ElectronDeskPopupMenu menu,
+                     base::OnceCallback<void(int)> closed) override {
+    ShowElectronPopupMenu(id, std::move(menu), std::move(closed));
+  }
+  void ClosePopupMenu(const std::string& id) override {
+    CloseElectronPopupMenu(id);
+  }
   void Load(const std::string& id, const GURL& url) override {
     LoadBrowserWindow(id, url);
   }

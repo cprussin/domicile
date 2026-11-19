@@ -35,7 +35,7 @@ export const AppMenuBar = ({ entries, onChoose, onOpen, open }: Props) => (
           }}
           open={open === entry.id}
         >
-          <Entries entries={entry.submenu ?? []} onChoose={onChoose} />
+          <AppMenuEntries entries={entry.submenu ?? []} onChoose={onChoose} />
         </MenuBar.Menu>
       ) : undefined,
     )}
@@ -44,7 +44,8 @@ export const AppMenuBar = ({ entries, onChoose, onOpen, open }: Props) => (
 
 type EntriesProps = Pick<Props, "entries" | "onChoose">;
 
-const Entries = ({ entries, onChoose }: EntriesProps) =>
+/** A menu's entries, for the menu bar's menus and the app's popup menus. */
+export const AppMenuEntries = ({ entries, onChoose }: EntriesProps) =>
   entries.map((entry) =>
     entry.kind === MenuEntryKind.Separator ? (
       <MenuBar.Separator key={entry.id} />
@@ -67,7 +68,7 @@ const Item = ({ item, onChoose }: ItemProps) => {
         label={item.label}
         mnemonic={item.mnemonic}
       >
-        <Entries entries={item.submenu} onChoose={onChoose} />
+        <AppMenuEntries entries={item.submenu} onChoose={onChoose} />
       </MenuBar.Submenu>
     );
   }

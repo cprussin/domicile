@@ -22,6 +22,7 @@ const browser = (
   messageBox: null,
   parent: null,
   partition: "",
+  popupMenu: null,
   popupWindow: null,
   profile: "default",
   title,

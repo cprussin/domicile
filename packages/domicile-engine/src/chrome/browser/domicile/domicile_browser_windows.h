@@ -128,6 +128,16 @@ void ShowElectronMessageBox(const std::string& id,
                             ElectronDeskMessageBox box,
                             base::OnceCallback<void(int, bool)> answered);
 
+// Shows `menu` over Electron window `id`, listed with it for the shell to
+// draw, in place of any it shows, and runs `closed` with the entry the user
+// chose, or 0 once it is put away. With no shell, it closes at once.
+void ShowElectronPopupMenu(const std::string& id,
+                           ElectronDeskPopupMenu menu,
+                           base::OnceCallback<void(int)> closed);
+
+// Puts away the popup menu Electron window `id` shows, if any.
+void CloseElectronPopupMenu(const std::string& id);
+
 // Electron window `id`'s page, for the app's IPC to it, or null after
 // logging when no such window is open or its page has no preload.
 ElectronPage* ElectronPageOf(const std::string& id);

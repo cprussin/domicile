@@ -188,6 +188,12 @@ export type Browser = {
    */
   clickMenu: (id: string, command: number) => void;
   /**
+   * The user chose entry `command` (its `id`) of the popup menu window `id`
+   * shows (its `popupMenu`), or put it away with nothing chosen for 0; its
+   * Electron app runs the entry.
+   */
+  answerPopupMenu: (id: string, command: number) => void;
+  /**
    * The user answered the message box window `id` shows (its `messageBox`)
    * with button `response`, an index into its `buttons`, leaving its checkbox
    * `checkboxChecked`; its Electron app hears the answer.
@@ -210,6 +216,7 @@ export type BrowserHost = Pick<
   DomicileHost,
   | "addEventListener"
   | "answerBrowserWindowMessageBox"
+  | "answerBrowserWindowPopupMenu"
   | "browserProfileFor"
   | "browserProfiles"
   | "browserSiteFor"
@@ -239,6 +246,9 @@ export const browser = (host: BrowserHost): Browser => {
   return {
     answerMessageBox: (id, response, checkboxChecked) => {
       host.answerBrowserWindowMessageBox(id, response, checkboxChecked);
+    },
+    answerPopupMenu: (id, command) => {
+      host.answerBrowserWindowPopupMenu(id, command);
     },
     clickMatch: (id, selector) => host.clickBrowserWindowMatch(id, selector),
     clickMenu: (id, command) => {

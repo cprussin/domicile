@@ -41,7 +41,8 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
                         const String& menu,
                         bool menu_bar_visible,
                         bool menu_bar_auto_hide,
-                        const String& message_box);
+                        const String& message_box,
+                        const String& popup_menu);
   ~DomicileBrowserWindow() override;
 
   const String& id() const { return id_; }
@@ -68,6 +69,8 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   bool menuBarAutoHide() const { return menu_bar_auto_hide_; }
   // Null for none, as the empty string the browser sends.
   const String& messageBox() const { return message_box_; }
+  // Null for none, as the empty string the browser sends.
+  const String& popupMenu() const { return popup_menu_; }
 
   void Trace(Visitor*) const override;
 
@@ -93,6 +96,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   bool menu_bar_visible_ = true;
   bool menu_bar_auto_hide_ = false;
   String message_box_;
+  String popup_menu_;
 };
 
 }  // namespace blink
