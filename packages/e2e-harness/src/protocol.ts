@@ -500,6 +500,15 @@ const forceDarkSchema = z.looseObject({
   type: z.literal("force_dark"),
 });
 
+// Whether the browser checks spelling in pages' text fields, and in which
+// languages: the config's `spellcheck`. Sent with the handshake and on config
+// reload. The browser process reads it.
+const spellcheckSchema = z.looseObject({
+  enabled: z.boolean(),
+  languages: z.array(z.string()),
+  type: z.literal("spellcheck"),
+});
+
 // Whether the desk's input method composes for the browser's focused field.
 // While it does, the browser sends it each key (`key_for_input_method`). The
 // browser process reads these three; see `docs/architecture/TEXT-INPUT.md`.
@@ -1010,6 +1019,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   browserProfilesSchema,
   extensionsSchema,
   forceDarkSchema,
+  spellcheckSchema,
   inputMethodSchema,
   compositionSchema,
   keyPassedSchema,

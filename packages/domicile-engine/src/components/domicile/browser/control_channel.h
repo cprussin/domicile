@@ -25,6 +25,7 @@
 #include "components/domicile/browser/extension_installer.h"
 #include "components/domicile/browser/line_framer.h"
 #include "components/domicile/browser/shortcut_registry.h"
+#include "components/domicile/browser/spellcheck_settings.h"
 #include "components/domicile/browser/system_call.h"
 #include "components/domicile/mojom/control_channel.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -107,6 +108,14 @@ using ForceDarkSink =
 using BrowserProfilesSink =
     base::RepeatingCallback<void(const Page&, const BrowserProfiles&)>;
 void SetBrowserProfilesSink(BrowserProfilesSink sink);
+
+// How the desk's spell checking reaches the browser's profiles. Process-wide
+// as BrowserProfilesSink: //chrome sets it once with SetSpellcheckSink, before
+// any channel; a test sets one and gives it back with a null sink. See
+// chrome/browser/domicile/domicile_spellcheck.h.
+using SpellcheckSink =
+    base::RepeatingCallback<void(const SpellcheckSettings&)>;
+void SetSpellcheckSink(SpellcheckSink sink);
 
 // The shell's control channel, in the browser process.
 //

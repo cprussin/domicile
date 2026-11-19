@@ -1108,6 +1108,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         hand_over_the_browser_profiles(&mut host, &config.browser);
         // Sites the browser draws dark while the theme is dark.
         host.set_force_dark(config.theme.force_dark.clone());
+        // Whether and in which languages the browser checks spelling.
+        host.set_spellcheck(
+            config.spellcheck.enabled,
+            config.spellcheck.languages.clone(),
+        );
         // The theme, so the page paints correctly the first time. Set, not
         // `take_up_the_theme`, since there is nobody to broadcast to yet.
         host.set_theme(theme_on_the_wire(config.theme.mode));

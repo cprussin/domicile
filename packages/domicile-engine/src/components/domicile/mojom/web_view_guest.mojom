@@ -124,6 +124,11 @@ struct WebViewContextMenu {
   bool can_paste;
   bool can_delete;
   bool can_select_all;
+
+  // The misspelled word under the click, empty for none, and the dictionary's
+  // suggestions for it, best first. See ReplaceMisspelling.
+  string misspelled_word;
+  array<string> spelling_suggestions;
 };
 
 // What a shell's context menu can ask the browser to do.
@@ -149,6 +154,9 @@ enum WebViewContextMenuAction {
   kPictureInPicture,
   // Open DevTools on the element under the click. See WebViewGuest.Inspect.
   kInspect,
+  // Add the misspelled word to the profile's own dictionary, so it is no
+  // longer underlined anywhere.
+  kAddToDictionary,
 };
 
 // A permission a site asks for, and the shell shows in its site permissions.
@@ -983,6 +991,12 @@ interface WebViewGuest {
   // - An unknown id, or an action the menu does not offer (e.g. a link action
   //   with no link), is a bad message. The element rejects both first.
   RunContextMenuAction(int32 menu, WebViewContextMenuAction action);
+
+  // Replaces the misspelled word under context menu `menu` with `word`,
+  // usually one of its suggestions. Ids as RunContextMenuAction's; a menu
+  // with no misspelled word is a bad message, which the element rejects
+  // first.
+  ReplaceMisspelling(int32 menu, string word);
 
   // Opens DevTools for the page in a new browser window. If DevTools is
   // already open, its window's element gets FocusRequested instead. See

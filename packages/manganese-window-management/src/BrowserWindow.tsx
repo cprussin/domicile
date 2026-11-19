@@ -1022,8 +1022,8 @@ export const BrowserWindow = ({
                 canGoForward,
                 zoom,
               })}
-              onChoose={(command) => {
-                choosePageCommand(command, menu.context, {
+              onChoose={(item) => {
+                choosePageCommand(item, menu.context, {
                   browse: run,
                   openWindow,
                 });

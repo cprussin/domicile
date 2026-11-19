@@ -209,6 +209,13 @@ using InspectCallback =
     base::RepeatingCallback<void(content::RenderFrameHost& frame,
                                  std::optional<gfx::Point> root_point)>;
 
+// Adds `word` to `context`'s own spelling dictionary, for a menu's
+// kAddToDictionary. Provided by //chrome, which owns spell checking: see
+// //chrome/browser/domicile/domicile_spellcheck.h.
+using AddToDictionaryCallback =
+    base::RepeatingCallback<void(content::BrowserContext& context,
+                                 const std::string& word)>;
+
 // Prints `guest`'s page through the desktop's print dialog. Provided by
 // //chrome, which owns printing: see
 // //chrome/browser/domicile/domicile_printing.h.
@@ -374,6 +381,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Set once by //chrome, before any guest exists. Runs for Print. See
   // PrintCallback.
   static void SetPrint(PrintCallback print);
+
+  // Set once by //chrome, before any guest exists. Runs for a menu's
+  // kAddToDictionary. See AddToDictionaryCallback.
+  static void SetAddToDictionary(AddToDictionaryCallback add);
 
   // Set once by //chrome, before any guest exists. See MediaAccess.
   static void SetMediaAccess(MediaAccess* access);
@@ -684,6 +695,7 @@ class WebViewGuest : public mojom::WebViewGuest,
   // click. See HandleContextMenu.
   void RunContextMenuAction(int32_t menu,
                             mojom::WebViewContextMenuAction action) override;
+  void ReplaceMisspelling(int32_t menu, const std::string& word) override;
   void Inspect() override;
   void Print() override;
 
@@ -1054,7 +1066,11 @@ class WebViewGuest : public mojom::WebViewGuest,
                std::optional<int> popup_window);
 
   // One of WebContents' edit commands, which act on the focused frame.
-  using EditCommand = void (content::WebContents::*)();
+  using EditCommand = base::RepeatingCallback<void(content::WebContents*)>;
+
+  // Whether `menu` is the newest context menu, which an action acts on. Reports
+  // a bad message for an id the element was never sent.
+  bool IsNewestContextMenu(int32_t menu);
 
   // Runs `command` once this guest has focus, retrying up to `tries` times.
   //

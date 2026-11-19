@@ -153,6 +153,33 @@ TEST(ContextMenuTest, EditingAndInspectingAreOfferedEverywhere) {
   }
 }
 
+TEST(ContextMenuTest, TheMenuOverAMisspellingSaysTheWordAndSuggestions) {
+  content::ContextMenuParams params;
+  params.is_editable = true;
+  params.misspelled_word = u"recieve";
+  params.dictionary_suggestions = {u"receive", u"relieve"};
+
+  const mojom::WebViewContextMenuPtr menu =
+      AsWebViewContextMenu(1, params, gfx::Point());
+  EXPECT_EQ(menu->misspelled_word, "recieve");
+  EXPECT_EQ(menu->spelling_suggestions,
+            (std::vector<std::string>{"receive", "relieve"}));
+  EXPECT_TRUE(Offers(params, Action::kAddToDictionary));
+  EXPECT_TRUE(OffersSpellingFixes(params));
+}
+
+TEST(ContextMenuTest, OnlyAMisspellingIsAddedToTheDictionaryOrReplaced) {
+  content::ContextMenuParams params;
+  params.is_editable = true;
+
+  const mojom::WebViewContextMenuPtr menu =
+      AsWebViewContextMenu(1, params, gfx::Point());
+  EXPECT_EQ(menu->misspelled_word, "");
+  EXPECT_TRUE(menu->spelling_suggestions.empty());
+  EXPECT_FALSE(Offers(params, Action::kAddToDictionary));
+  EXPECT_FALSE(OffersSpellingFixes(params));
+}
+
 TEST(ContextMenuTest, ALinksActionsNeedALink) {
   const content::ContextMenuParams nothing;
   EXPECT_FALSE(Offers(nothing, Action::kCopyLinkAddress));

@@ -260,6 +260,11 @@
               exit 1
             }
           done
+          # The spelling dictionaries, which the engine never downloads.
+          ls "$out"/dictionaries/*.bdic >/dev/null 2>&1 || {
+            echo "the published engine has no spelling dictionaries" >&2
+            exit 1
+          }
           # Run through the wrapper, as every caller does.
           "$out/chrome" --version
           # Check `chrome` is the wrapper. If the `mv` failed, the unwrapped

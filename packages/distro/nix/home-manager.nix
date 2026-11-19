@@ -763,6 +763,26 @@ in {
             example = ["mail.google.com"];
           };
 
+          spellcheck = {
+            enabled = lib.mkOption {
+              description = ''
+                Whether text fields in browser tabs, web apps and Electron apps
+                underline misspelled words and offer fixes in their menu.
+              '';
+              type = lib.types.bool;
+              default = true;
+            };
+            languages = lib.mkOption {
+              description = ''
+                The languages words are checked in, as language tags. The
+                dictionaries ship with the engine; none is downloaded.
+              '';
+              type = lib.types.nonEmptyListOf lib.types.str;
+              default = ["en-US"];
+              example = ["en-US" "de-DE"];
+            };
+          };
+
           input.keyboard = {
             xkb_rules = lib.mkOption {
               description = "Passed to xkb as is. Empty uses the libxkbcommon default.";

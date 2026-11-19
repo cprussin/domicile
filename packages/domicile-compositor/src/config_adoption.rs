@@ -173,6 +173,17 @@ impl DomicileCompositor {
             };
             self.hub.broadcast(told);
         }
+        if let Some(spellcheck) = &restated.spellcheck {
+            // Store then broadcast, like the extensions.
+            let told = {
+                let mut host = self.hub.host.lock().unwrap();
+                host.set_spellcheck(spellcheck.enabled, spellcheck.languages.clone());
+                host.describe_spellcheck()
+            };
+            self.hub.broadcast(
+                told.expect("a host that has just been told how to check spelling has it to state"),
+            );
+        }
         if let Some(agents) = &restated.agents {
             self.web_agents.set(agents.web);
         }

@@ -46,6 +46,12 @@ BrowserProfilesSink& BrowserProfilesSlot() {
   return *sink;
 }
 
+// Storage for SetSpellcheckSink's callback.
+SpellcheckSink& SpellcheckSlot() {
+  static base::NoDestructor<SpellcheckSink> sink;
+  return *sink;
+}
+
 // The read buffer. One message is a line of JSON; this is sized for a batch of
 // them rather than for the largest one, because the remainder is carried across
 // reads anyway.
@@ -1342,6 +1348,30 @@ void ControlChannel::DispatchLine(const std::string& line,
     return;
   }
 
+  // For this process too, like `force_dark`: how the browser's profiles check
+  // spelling. See chrome/browser/domicile/domicile_spellcheck.h.
+  if (*type == "spellcheck") {
+    const std::optional<bool> enabled = message.FindBool("enabled");
+    std::optional<std::vector<std::string>> languages =
+        Strings(message, "languages");
+    if (!enabled || !languages) {
+      LOG(ERROR) << "domicile: the compositor sent a `spellcheck` message "
+                    "whose `enabled` is not true or false, or whose "
+                    "`languages` is not a list of strings. Spelling is "
+                    "checked as it was.";
+    } else if (SpellcheckSlot().is_null()) {
+      // //chrome sets the sink before the shell can bind a channel, as
+      // `browser_profiles`'.
+      LOG(ERROR) << "domicile: the compositor sent `spellcheck` and this "
+                    "engine has nowhere to put it. Spelling is checked as it "
+                    "was.";
+    } else {
+      SpellcheckSlot().Run(SpellcheckSettings{
+          .enabled = *enabled, .languages = std::move(*languages)});
+    }
+    return;
+  }
+
   // THE INPUT METHOD'S, for this process like `keymap`: the compositor is
   // the editor of the field focused in it on the desk's input method. Every
   // page's channel hears these, and the desk's input method keeps the first
@@ -2028,6 +2058,11 @@ void ControlChannel::DispatchLine(const std::string& line,
 void SetBrowserProfilesSink(BrowserProfilesSink sink) {
   CHECK(BrowserProfilesSlot().is_null() || sink.is_null());
   BrowserProfilesSlot() = std::move(sink);
+}
+
+void SetSpellcheckSink(SpellcheckSink sink) {
+  CHECK(SpellcheckSlot().is_null() || sink.is_null());
+  SpellcheckSlot() = std::move(sink);
 }
 
 void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,

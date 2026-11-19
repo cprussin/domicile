@@ -1036,6 +1036,14 @@ pub enum HostMessage {
         sites: BTreeMap<String, String>,
     },
 
+    /// The config's `spellcheck`: whether the browser checks spelling in
+    /// pages' text fields, and in which languages. Sent with the handshake and
+    /// on reloads that change it.
+    Spellcheck {
+        enabled: bool,
+        languages: Vec<String>,
+    },
+
     /// Host names of sites the browser draws dark while the theme is dark.
     ///
     /// The config's `theme.force_dark`. Always the full list. Sent with the

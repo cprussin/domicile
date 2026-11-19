@@ -379,6 +379,7 @@ export const WEBVIEW_CONTEXT_MENU_ACTIONS = [
   "save-media-as",
   "picture-in-picture",
   "inspect",
+  "add-to-dictionary",
 ] as const;
 
 export type WebViewContextMenuAction =
@@ -1079,6 +1080,10 @@ declare global {
     readonly canPaste: boolean;
     readonly canDelete: boolean;
     readonly canSelectAll: boolean;
+    /** The misspelled word under the click, or `""` for none. */
+    readonly misspelledWord: string;
+    /** The dictionary's suggestions for {@link misspelledWord}, best first. */
+    readonly spellingSuggestions: readonly string[];
     /**
      * Do one of {@link WEBVIEW_CONTEXT_MENU_ACTIONS} for this menu. Throws a
      * `TypeError` for an unknown action, a `NotSupportedError` for one this
@@ -1086,6 +1091,13 @@ declare global {
      * `InvalidStateError` once a newer menu has replaced this one.
      */
     run(action: WebViewContextMenuAction): void;
+    /**
+     * Replace {@link misspelledWord} with `word`, usually one of
+     * {@link spellingSuggestions}. Throws a `NotSupportedError` when there is
+     * no misspelled word, and an `InvalidStateError` once a newer menu has
+     * replaced this one.
+     */
+    replaceMisspelling(word: string): void;
   }
 
   /**

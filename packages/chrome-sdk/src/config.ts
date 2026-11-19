@@ -34,6 +34,7 @@ export type Config = {
    * `docs/WRITING-A-SHELL.md#options`.
    */
   shell_options?: Record<string, unknown>;
+  spellcheck?: SpellcheckConfig;
   startup?: StartupConfig;
   /**
    * The terminal applications such as htop and vim run in
@@ -536,6 +537,17 @@ export type SiteAccess = SiteAccessMode | string[];
 
 /** [`SiteAccess`] other than a list of hosts. */
 export type SiteAccessMode = "on_click" | "all_sites";
+
+/** Spell checking in pages: in browser windows, web apps and Electron apps. */
+export type SpellcheckConfig = {
+  /** Underlines misspelled words in text fields and suggests corrections. */
+  enabled?: boolean;
+  /**
+   * The languages words are checked in, as language tags such as `en-US`.
+   * A word spelled right in any of them passes.
+   */
+  languages?: string[];
+};
 
 /**
  * The commands a desk starts with.

@@ -24,7 +24,9 @@ const plain = (overrides: Partial<PageContext> = {}): PageContext => ({
   hasPixels: false,
   link: undefined,
   media: MediaKind.None,
+  misspelling: undefined,
   pictureInPicture: { active: false, can: false },
+  replaceMisspelling: () => undefined,
   run: () => undefined,
   selection: "",
   source: undefined,
@@ -58,8 +60,11 @@ const event = (fields: Partial<DomicileContextMenuEvent>) =>
     linkText: "",
     linkUrl: "",
     mediaType: "none",
+    misspelledWord: "",
+    replaceMisspelling: () => undefined,
     run: () => undefined,
     selectionText: "",
+    spellingSuggestions: [],
     srcUrl: "",
     x: 0,
     y: 0,
@@ -104,6 +109,32 @@ describe("pageContextOf", () => {
       }),
     );
     expect(context.pictureInPicture).toEqual({ active: true, can: true });
+  });
+
+  it("reads a misspelled word and what it could be", () => {
+    const context = pageContextOf(
+      event({
+        misspelledWord: "recieve",
+        spellingSuggestions: ["receive", "relieve"],
+      }),
+    );
+    expect(context.misspelling).toEqual({
+      suggestions: ["receive", "relieve"],
+      word: "recieve",
+    });
+  });
+
+  it("reads no misspelled word as none", () => {
+    expect(pageContextOf(event({})).misspelling).toBeUndefined();
+  });
+
+  it("hands a replacement back to the event it came from", async () => {
+    const replaced = await new Promise<string>((resolve) => {
+      pageContextOf(
+        event({ misspelledWord: "recieve", replaceMisspelling: resolve }),
+      ).replaceMisspelling("receive");
+    });
+    expect(replaced).toBe("receive");
   });
 
   it("hands an action back to the event it came from", async () => {
@@ -292,6 +323,57 @@ describe("pageMenuFor", () => {
     ]);
   });
 
+  it("puts a misspelled word's fixes above the rest of a field's menu", () => {
+    const groups = pageMenuFor(
+      plain({
+        editable: true,
+        misspelling: { suggestions: ["receive", "relieve"], word: "recieve" },
+      }),
+      page,
+    );
+    expect(
+      groups[0]?.map(({ command, label, replacement }) => ({
+        command,
+        label,
+        replacement,
+      })),
+    ).toEqual([
+      {
+        command: PageMenuCommand.ReplaceMisspelling,
+        label: "receive",
+        replacement: "receive",
+      },
+      {
+        command: PageMenuCommand.ReplaceMisspelling,
+        label: "relieve",
+        replacement: "relieve",
+      },
+      {
+        command: PageMenuCommand.AddToDictionary,
+        label: "Add to dictionary",
+        replacement: undefined,
+      },
+    ]);
+    expect(groups[1]?.map(({ command }) => command)).toEqual([
+      PageMenuCommand.Undo,
+      PageMenuCommand.Redo,
+    ]);
+  });
+
+  it("says so when a misspelled word has no suggestions", () => {
+    expect(
+      commandsOf(
+        plain({
+          editable: true,
+          misspelling: { suggestions: [], word: "zorblax" },
+        }),
+      )[0],
+    ).toEqual([
+      `(${PageMenuCommand.NoSpellingSuggestions})`,
+      PageMenuCommand.AddToDictionary,
+    ]);
+  });
+
   it("copies and searches for a selection outside a field", () => {
     const [selected] = pageMenuFor(
       plain({ can: { ...plain().can, copy: true }, selection: "domicile" }),
@@ -324,9 +406,9 @@ describe("choosePageCommand", () => {
       },
       openWindow: () => undefined,
     };
-    choosePageCommand(PageMenuCommand.ZoomIn, plain(), window);
-    choosePageCommand(PageMenuCommand.ZoomOut, plain(), window);
-    choosePageCommand(PageMenuCommand.ZoomReset, plain(), window);
+    choosePageCommand({ command: PageMenuCommand.ZoomIn }, plain(), window);
+    choosePageCommand({ command: PageMenuCommand.ZoomOut }, plain(), window);
+    choosePageCommand({ command: PageMenuCommand.ZoomReset }, plain(), window);
     expect(browsed).toEqual([
       BrowserCommand.ZoomIn,
       BrowserCommand.ZoomOut,
@@ -337,11 +419,33 @@ describe("choosePageCommand", () => {
   it("asks the browser for picture-in-picture", async () => {
     const ran = await new Promise<string>((resolve) => {
       choosePageCommand(
-        PageMenuCommand.PictureInPicture,
+        { command: PageMenuCommand.PictureInPicture },
         plain({ run: resolve }),
         { browse: () => undefined, openWindow: () => undefined },
       );
     });
     expect(ran).toBe("picture-in-picture");
+  });
+
+  it("puts the chosen suggestion in place of the misspelled word", async () => {
+    const replaced = await new Promise<string>((resolve) => {
+      choosePageCommand(
+        { command: PageMenuCommand.ReplaceMisspelling, replacement: "receive" },
+        plain({ replaceMisspelling: resolve }),
+        { browse: () => undefined, openWindow: () => undefined },
+      );
+    });
+    expect(replaced).toBe("receive");
+  });
+
+  it("asks the browser to add the misspelled word to the dictionary", async () => {
+    const ran = await new Promise<string>((resolve) => {
+      choosePageCommand(
+        { command: PageMenuCommand.AddToDictionary },
+        plain({ run: resolve }),
+        { browse: () => undefined, openWindow: () => undefined },
+      );
+    });
+    expect(ran).toBe("add-to-dictionary");
   });
 });

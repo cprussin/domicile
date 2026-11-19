@@ -247,6 +247,7 @@ bool IsEdit(domicile::mojom::blink::WebViewContextMenuAction action) {
     case domicile::mojom::blink::WebViewContextMenuAction::kSaveMediaAs:
     case domicile::mojom::blink::WebViewContextMenuAction::kPictureInPicture:
     case domicile::mojom::blink::WebViewContextMenuAction::kInspect:
+    case domicile::mojom::blink::WebViewContextMenuAction::kAddToDictionary:
       return false;
   }
 }
@@ -669,6 +670,22 @@ void HTMLWebViewElement::RunContextMenuAction(
     Element::Focus();
   }
   guest_->RunContextMenuAction(menu.id(), action);
+}
+
+void HTMLWebViewElement::ReplaceMisspelling(
+    const DomicileContextMenuEvent& menu,
+    const String& word,
+    ExceptionState& exception_state) {
+  if (menu.id() != context_menu_id_) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "A newer context menu has replaced this one.");
+    return;
+  }
+  CHECK(guest_.is_bound());
+  // An edit, so the page takes the focus back first, as RunContextMenuAction.
+  Element::Focus();
+  guest_->ReplaceMisspelling(menu.id(), word);
 }
 
 // Does not change `site_permissions_`: the browser reports the stored result

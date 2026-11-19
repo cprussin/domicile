@@ -757,6 +757,26 @@
         }
       ]
     },
+    "SpellcheckConfig": {
+      "additionalProperties": false,
+      "description": "Spell checking in pages: in browser windows, web apps and Electron apps.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Underlines misspelled words in text fields and suggests corrections.",
+          "type": "boolean"
+        },
+        "languages": {
+          "default": ["en-US"],
+          "description": "The languages words are checked in, as language tags such as `en-US`.\nA word spelled right in any of them passes.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "StartupConfig": {
       "additionalProperties": false,
       "description": "The commands a desk starts with.\n\nRun once, when the compositor starts. A reload does not rerun them, which\nwould start duplicates, or stop them, which would kill programs in use.",
@@ -1137,6 +1157,13 @@
       "default": {},
       "description": "The values of the options the shell declares, by key. The compositor\nsends them to the shell without reading them. See\n`docs/WRITING-A-SHELL.md#options`.",
       "type": "object"
+    },
+    "spellcheck": {
+      "$ref": "#/$defs/SpellcheckConfig",
+      "default": {
+        "enabled": true,
+        "languages": ["en-US"]
+      }
     },
     "startup": {
       "$ref": "#/$defs/StartupConfig",

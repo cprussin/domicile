@@ -2080,3 +2080,40 @@ fn an_extension_s_private_setting_is_refused_as_private_profiles_switch_it() {
     let text = r#"{ "extensions": { "settings": { "ddkjiahejlhfcafbddmgiahcphecmpfh": { "private": true } } } }"#;
     assert!(Config::parse(text).is_err());
 }
+
+#[test]
+fn spelling_is_checked_in_american_english_unless_configured() {
+    let unset = Config::parse("{}").unwrap().spellcheck;
+    assert_eq!(
+        (unset.enabled, unset.languages),
+        (true, vec!["en-US".to_string()])
+    );
+    let configured =
+        Config::parse(r#"{ "spellcheck": { "enabled": false, "languages": ["en-GB", "de-DE"] } }"#)
+            .unwrap()
+            .spellcheck;
+    assert_eq!(
+        (configured.enabled, configured.languages),
+        (false, vec!["en-GB".to_string(), "de-DE".to_string()])
+    );
+}
+
+#[test]
+fn rejects_checking_spelling_in_no_language() {
+    let err = Config::parse(r#"{ "spellcheck": { "languages": [] } }"#).unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
+}
+
+#[test]
+fn rejects_a_spelling_language_that_is_not_a_language_tag() {
+    for language in ["", "en US", "../en-US", "en_US"] {
+        let err = Config::parse(&format!(
+            r#"{{ "spellcheck": {{ "languages": ["{language}"] }} }}"#
+        ))
+        .unwrap_err();
+        assert!(
+            matches!(err, ConfigError::Validation(_)),
+            "{language:?}: got {err:?}"
+        );
+    }
+}

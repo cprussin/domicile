@@ -32,6 +32,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 
 ### Also new
 
+- Spell checking in every text field: right-click a misspelled word for suggestions, or add it to your dictionary. [Spelling](BROWSER.md#spelling)
 - Pop a video out of its page to float it over everything. [#2077](https://github.com/cprussin/domicile/pull/2077) · [#2116](https://github.com/cprussin/domicile/pull/2116) · [#2177](https://github.com/cprussin/domicile/pull/2177)
 - HDR per monitor in Settings, and 10-bit color without banding. [Monitors](MONITORS.md) · [#1974](https://github.com/cprussin/domicile/issues/1974)
 - Press and hold Back or Forward to jump to any page before or after. [The address bar](BROWSER.md#the-address-bar) · [#2251](https://github.com/cprussin/domicile/pull/2251)

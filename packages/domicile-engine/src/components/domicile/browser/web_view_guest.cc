@@ -251,6 +251,12 @@ PrintCallback& PrintSlot() {
   return *print;
 }
 
+// Storage for SetAddToDictionary's callback.
+AddToDictionaryCallback& AddToDictionarySlot() {
+  static base::NoDestructor<AddToDictionaryCallback> add;
+  return *add;
+}
+
 // The guests' camera and microphone. See SetMediaAccess.
 MediaAccess* g_media_access = nullptr;
 
@@ -272,6 +278,13 @@ const PrintCallback& Printer() {
   // //chrome sets it in StartDesk, with the window host.
   CHECK(!PrintSlot().is_null());
   return PrintSlot();
+}
+
+// Adds a word to a dictionary. See SetAddToDictionary.
+const AddToDictionaryCallback& DictionaryAdder() {
+  // //chrome sets it in StartDesk, with the window host.
+  CHECK(!AddToDictionarySlot().is_null());
+  return AddToDictionarySlot();
 }
 
 // Serves WebViewGuestHost for one document.
@@ -1056,6 +1069,12 @@ void WebViewGuest::SetInspect(InspectCallback inspect) {
 void WebViewGuest::SetPrint(PrintCallback print) {
   CHECK(PrintSlot().is_null());
   PrintSlot() = std::move(print);
+}
+
+// static
+void WebViewGuest::SetAddToDictionary(AddToDictionaryCallback add) {
+  CHECK(AddToDictionarySlot().is_null());
+  AddToDictionarySlot() = std::move(add);
 }
 
 // static
@@ -1854,17 +1873,7 @@ void WebViewGuest::RunContextMenuAction(
     int32_t menu,
     mojom::WebViewContextMenuAction action) {
   CHECK(guest_contents_);
-
-  // The element only sends ids it received, so this is a bad message.
-  if (menu <= 0 || menu > context_menu_id_) {
-    receiver_.ReportBadMessage(
-        "domicile: a <webview> answered a context menu it was never sent.");
-    return;
-  }
-  // A race: a newer menu was sent before the shell acted.
-  if (menu != context_menu_id_) {
-    LOG(INFO) << "domicile: a <webview>'s context menu was replaced before "
-                 "the shell acted on it; dropping the action.";
+  if (!IsNewestContextMenu(menu)) {
     return;
   }
   const content::ContextMenuParams& params = *context_menu_params_;
@@ -1887,28 +1896,36 @@ void WebViewGuest::RunContextMenuAction(
             << static_cast<int>(action) << ".";
   switch (action) {
     case mojom::WebViewContextMenuAction::kUndo:
-      EditWhenFocused(&content::WebContents::Undo, kEditTries);
+      EditWhenFocused(base::BindRepeating(&content::WebContents::Undo),
+                      kEditTries);
       return;
     case mojom::WebViewContextMenuAction::kRedo:
-      EditWhenFocused(&content::WebContents::Redo, kEditTries);
+      EditWhenFocused(base::BindRepeating(&content::WebContents::Redo),
+                      kEditTries);
       return;
     case mojom::WebViewContextMenuAction::kCut:
-      EditWhenFocused(&content::WebContents::Cut, kEditTries);
+      EditWhenFocused(base::BindRepeating(&content::WebContents::Cut),
+                      kEditTries);
       return;
     case mojom::WebViewContextMenuAction::kCopy:
-      EditWhenFocused(&content::WebContents::Copy, kEditTries);
+      EditWhenFocused(base::BindRepeating(&content::WebContents::Copy),
+                      kEditTries);
       return;
     case mojom::WebViewContextMenuAction::kPaste:
-      EditWhenFocused(&content::WebContents::Paste, kEditTries);
+      EditWhenFocused(base::BindRepeating(&content::WebContents::Paste),
+                      kEditTries);
       return;
     case mojom::WebViewContextMenuAction::kPasteAndMatchStyle:
-      EditWhenFocused(&content::WebContents::PasteAndMatchStyle, kEditTries);
+      EditWhenFocused(base::BindRepeating(&content::WebContents::PasteAndMatchStyle),
+                      kEditTries);
       return;
     case mojom::WebViewContextMenuAction::kDelete:
-      EditWhenFocused(&content::WebContents::Delete, kEditTries);
+      EditWhenFocused(base::BindRepeating(&content::WebContents::Delete),
+                      kEditTries);
       return;
     case mojom::WebViewContextMenuAction::kSelectAll:
-      EditWhenFocused(&content::WebContents::SelectAll, kEditTries);
+      EditWhenFocused(base::BindRepeating(&content::WebContents::SelectAll),
+                      kEditTries);
       return;
     // Chrome also copies the unfiltered URL.
     case mojom::WebViewContextMenuAction::kCopyLinkAddress:
@@ -1951,7 +1968,50 @@ void WebViewGuest::RunContextMenuAction(
     case mojom::WebViewContextMenuAction::kInspect:
       Inspector().Run(*frame, gfx::Point(params.x, params.y));
       return;
+    case mojom::WebViewContextMenuAction::kAddToDictionary:
+      DictionaryAdder().Run(*guest_contents_->GetBrowserContext(),
+                            base::UTF16ToUTF8(params.misspelled_word));
+      return;
   }
+}
+
+void WebViewGuest::ReplaceMisspelling(int32_t menu, const std::string& word) {
+  CHECK(guest_contents_);
+  if (!IsNewestContextMenu(menu)) {
+    return;
+  }
+  if (!OffersSpellingFixes(*context_menu_params_)) {
+    receiver_.ReportBadMessage(
+        "domicile: a <webview> asked to replace a misspelling its context "
+        "menu is not over.");
+    return;
+  }
+  LOG(INFO) << "domicile: a <webview>'s context menu replaced a misspelling.";
+  // Chrome's menu does the same: the renderer replaces the word around the
+  // selection it made for the menu.
+  EditWhenFocused(
+      base::BindRepeating(
+          [](const std::u16string& replacement, content::WebContents* page) {
+            page->ReplaceMisspelling(replacement);
+          },
+          base::UTF8ToUTF16(word)),
+      kEditTries);
+}
+
+bool WebViewGuest::IsNewestContextMenu(int32_t menu) {
+  // The element only sends ids it received, so this is a bad message.
+  if (menu <= 0 || menu > context_menu_id_) {
+    receiver_.ReportBadMessage(
+        "domicile: a <webview> answered a context menu it was never sent.");
+    return false;
+  }
+  // A race: a newer menu was sent before the shell acted.
+  if (menu != context_menu_id_) {
+    LOG(INFO) << "domicile: a <webview>'s context menu was replaced before "
+                 "the shell acted on it; dropping the action.";
+    return false;
+  }
+  return true;
 }
 
 void WebViewGuest::EditWhenFocused(EditCommand command, int tries) {
@@ -1959,7 +2019,7 @@ void WebViewGuest::EditWhenFocused(EditCommand command, int tries) {
   // Null while focus is outside this guest, when an edit would go to the
   // shell.
   if (guest_contents_->GetFocusedFrame() != nullptr) {
-    (guest_contents_.get()->*command)();
+    command.Run(guest_contents_.get());
     return;
   }
   if (tries == 0) {

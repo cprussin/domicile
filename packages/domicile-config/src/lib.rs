@@ -1278,6 +1278,51 @@ impl ElectronConfig {
     }
 }
 
+/// Spell checking in pages: in browser windows, web apps and Electron apps.
+// `PartialEq` lets a reload detect a change; see the compositor's
+// `Restatement`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SpellcheckConfig {
+    /// Underlines misspelled words in text fields and suggests corrections.
+    pub enabled: bool,
+    /// The languages words are checked in, as language tags such as `en-US`.
+    /// A word spelled right in any of them passes.
+    pub languages: Vec<String>,
+}
+
+impl Default for SpellcheckConfig {
+    fn default() -> Self {
+        SpellcheckConfig {
+            enabled: true,
+            languages: vec!["en-US".to_string()],
+        }
+    }
+}
+
+impl SpellcheckConfig {
+    fn validate(&self) -> Result<(), ConfigError> {
+        let not_a_tag = self.languages.iter().find(|language| {
+            language.is_empty()
+                || !language
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-')
+        });
+        match (not_a_tag, self.languages.is_empty()) {
+            (Some(language), _) => Err(ConfigError::Validation(format!(
+                "spellcheck.languages holds {language:?}, which is not a language tag such as \
+                 \"en-US\""
+            ))),
+            (None, true) => Err(ConfigError::Validation(
+                "spellcheck.languages is empty; set spellcheck.enabled to false to stop \
+                 checking spelling"
+                    .into(),
+            )),
+            (None, false) => Ok(()),
+        }
+    }
+}
+
 /// The full compositor configuration.
 #[derive(Debug, Clone, Default, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
@@ -1292,6 +1337,7 @@ pub struct Config {
     pub lock: LockConfig,
     pub lockdown: LockdownConfig,
     pub output: OutputConfig,
+    pub spellcheck: SpellcheckConfig,
     pub startup: StartupConfig,
     /// The terminal applications such as htop and vim run in
     /// (`Terminal=true` in their desktop entries): its argv, which the
@@ -1360,6 +1406,7 @@ impl Config {
         self.idle.validate()?;
         self.input.validate()?;
         self.lock.validate()?;
+        self.spellcheck.validate()?;
         self.startup.validate()?;
         if self.terminal.as_ref().is_some_and(Vec::is_empty) {
             return Err(ConfigError::Validation(
