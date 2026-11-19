@@ -13,17 +13,18 @@
 // 8. A Google search for the query, always, as the fallback.
 //
 // The site and the search each have a private row beside them. `!p` anywhere
-// in the query offers only the web rows, all private.
+// in the query offers only the web rows, all private. `!g` offers only its
+// Google search, so Enter searches without a look at the matches.
 //
 // `typedAddress` decides site vs. search, so this box and a browser window's
 // address bar agree.
 
 import type {
-  Engine,
   TaggedSearch,
   TaggedSite,
 } from "@domicile-desktop/manganese-address/search";
 import {
+  Engine,
   googleUrl,
   TAGS,
   taggedSearch,
@@ -128,13 +129,17 @@ export const choicesFor = (
 ): Choice[] => {
   const words = query.split(/\s+/).filter((word) => word !== "");
   const typed = words.filter((word) => word !== PRIVATE_TAG).join(" ");
+  const isPrivate = words.includes(PRIVATE_TAG);
+  const tagged = taggedChoicesFor(isPrivate ? typed : query, isPrivate);
   return [
     ...tagsFor(query),
-    ...(words.includes(PRIVATE_TAG)
-      ? [...taggedChoicesFor(typed, true), ...webChoicesFor(typed, true)]
+    ...(taggedSearch(query)?.engine === Engine.Google
+      ? tagged
       : [
-          ...taggedChoicesFor(query, false),
-          ...plainChoicesFor(query, found, apps, bookmarks),
+          ...tagged,
+          ...(isPrivate
+            ? webChoicesFor(typed, true)
+            : plainChoicesFor(query, found, apps, bookmarks)),
         ]),
   ];
 };

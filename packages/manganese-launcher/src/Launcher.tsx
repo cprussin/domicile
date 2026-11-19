@@ -1100,6 +1100,7 @@ const logoOf = (engine: Engine): typeof FileIcon => {
     case Engine.GitHub: {
       return GithubLogoIcon;
     }
+    case Engine.Google:
     case Engine.GoogleImages:
     case Engine.GoogleMaps: {
       return GoogleLogoIcon;
@@ -1117,6 +1118,9 @@ const nameOf = (engine: Engine): string => {
   switch (engine) {
     case Engine.GitHub: {
       return "GitHub";
+    }
+    case Engine.Google: {
+      return "Google";
     }
     case Engine.GoogleImages: {
       return "Google Images";
@@ -1144,10 +1148,15 @@ const tagDoesOf = (engine: Engine | undefined): string =>
     : `Search ${nameOf(engine)}`;
 
 /** What adding a tag does, for its preview. */
-const tagUseOf = (engine: Engine | undefined): string =>
-  engine === undefined
-    ? "open sites and searches in a private browser"
-    : `search ${nameOf(engine)} instead of Google`;
+const tagUseOf = (engine: Engine | undefined): string => {
+  if (engine === undefined) {
+    return "open sites and searches in a private browser";
+  } else {
+    return engine === Engine.Google
+      ? "search Google and skip the other matches"
+      : `search ${nameOf(engine)} instead of Google`;
+  }
+};
 
 // The search box is the panel's header, set off by a line under it.
 const searchStyles = css({

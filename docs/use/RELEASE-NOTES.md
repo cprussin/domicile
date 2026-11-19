@@ -42,6 +42,7 @@ Work and personal, apart: each profile has its own sign-ins and extensions, and 
 - "Sign in with Google" works. [#2086](https://github.com/cprussin/domicile/pull/2086)
 - Games can lock the pointer. [#2057](https://github.com/cprussin/domicile/pull/2057) · [#2123](https://github.com/cprussin/domicile/pull/2123)
 - Input methods such as fcitx5 and IBus. [#2059](https://github.com/cprussin/domicile/pull/2059) · [#2062](https://github.com/cprussin/domicile/pull/2062)
+- Type `!g` in the launcher to search Google straight away, without other matches. [Launcher](LAUNCHER.md)
 - Terminal apps in the launcher. [#2069](https://github.com/cprussin/domicile/pull/2069)
 - Per-monitor mode, refresh rate and adaptive sync. [#2031](https://github.com/cprussin/domicile/pull/2031) · [#2048](https://github.com/cprussin/domicile/pull/2048)
 - Key repeat settings. [#2024](https://github.com/cprussin/domicile/pull/2024)
