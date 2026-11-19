@@ -222,6 +222,23 @@ void ElectronApp::Take(std::string_view line) {
     if (const std::optional<std::string> id = IdOf(clear->window)) {
       desk_->ClearHistory(*id);
     }
+  } else if (const auto* edit = std::get_if<ElectronEdit>(&*request)) {
+    if (const std::optional<std::string> id = IdOf(edit->window)) {
+      desk_->Edit(*id, edit->command);
+    }
+  } else if (const auto* replace = std::get_if<ElectronReplace>(&*request)) {
+    if (const std::optional<std::string> id = IdOf(replace->window)) {
+      desk_->Replace(*id, replace->text, replace->misspelling);
+    }
+  } else if (const auto* find = std::get_if<ElectronFindInPage>(&*request)) {
+    if (const std::optional<std::string> id = IdOf(find->window)) {
+      desk_->FindInPage(*id, *find);
+    }
+  } else if (const auto* stop =
+                 std::get_if<ElectronStopFindInPage>(&*request)) {
+    if (const std::optional<std::string> id = IdOf(stop->window)) {
+      desk_->StopFindInPage(*id, stop->action);
+    }
   } else if (const auto* title = std::get_if<ElectronSetTitle>(&*request)) {
     if (const std::optional<std::string> id =
             WindowIdOf(title->window, "a title")) {
@@ -405,6 +422,8 @@ ElectronPageCalls ElectronApp::CallsFor(ElectronWindow number) {
       .window_opening = base::BindRepeating(&ElectronApp::PageWindowOpening,
                                             weak_factory_.GetWeakPtr(), number),
       .state = base::BindRepeating(&ElectronApp::PageStateChanged,
+                                   weak_factory_.GetWeakPtr(), number),
+      .found = base::BindRepeating(&ElectronApp::PageFound,
                                    weak_factory_.GetWeakPtr(), number),
   };
 }
@@ -663,6 +682,12 @@ void ElectronApp::PageStateChanged(ElectronWindow number,
                                    ElectronPageState state) {
   if (windows_.contains(number)) {
     send_.Run(ElectronPageStateChanged(number, state));
+  }
+}
+
+void ElectronApp::PageFound(ElectronWindow number, ElectronFindResult result) {
+  if (windows_.contains(number)) {
+    send_.Run(ElectronFoundInPage(number, result));
   }
 }
 

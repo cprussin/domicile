@@ -472,9 +472,11 @@ base::expected<ElectronRequest, std::string> ParseHello(
 bool IsWindowRequest(std::string_view type) {
   return type == "open_window" || type == "load_url" ||
          type == "focus_window" || type == "go_to_index" ||
-         type == "clear_history" || type == "close_window" ||
-         type == "destroy_window" || type == "ipc_send" || type == "ipc_post" ||
-         type == "port_post" || type == "port_close" || type == "set_views" ||
+         type == "clear_history" || type == "edit" || type == "replace" ||
+         type == "find_in_page" || type == "stop_find_in_page" ||
+         type == "close_window" || type == "destroy_window" ||
+         type == "ipc_send" || type == "ipc_post" || type == "port_post" ||
+         type == "port_close" || type == "set_views" ||
          type == "set_menu_bar" || type == "show_message_box" ||
          type == "execute_javascript" || type == "set_title" ||
          type == "set_hidden";
@@ -575,6 +577,88 @@ base::expected<ElectronRequest, ElectronRefusal> ParseSetMenuBar(
     set.menu = std::move(*json);
   }
   return set;
+}
+
+// The Edit menu's commands, by their names on the wire.
+constexpr std::pair<std::string_view, ElectronEditCommand> kEditCommands[] = {
+    {"undo", ElectronEditCommand::kUndo},
+    {"redo", ElectronEditCommand::kRedo},
+    {"cut", ElectronEditCommand::kCut},
+    {"copy", ElectronEditCommand::kCopy},
+    {"paste", ElectronEditCommand::kPaste},
+    {"paste_and_match_style", ElectronEditCommand::kPasteAndMatchStyle},
+    {"delete", ElectronEditCommand::kDelete},
+    {"select_all", ElectronEditCommand::kSelectAll},
+    {"unselect", ElectronEditCommand::kUnselect},
+    {"center_selection", ElectronEditCommand::kCenterSelection},
+};
+
+// An edit request, or why it is not one.
+base::expected<ElectronRequest, ElectronRefusal> ParseEdit(
+    const base::DictValue& request,
+    ElectronWindow window) {
+  const std::string* command = request.FindString("command");
+  if (command != nullptr) {
+    for (const auto& [name, value] : kEditCommands) {
+      if (*command == name) {
+        return ElectronEdit{.window = window, .command = value};
+      }
+    }
+  }
+  return Refuse(
+      "\"command\" must be undo, redo, cut, copy, paste, "
+      "paste_and_match_style, delete, select_all, unselect or "
+      "center_selection",
+      window);
+}
+
+// A find_in_page request, or why it is not one.
+base::expected<ElectronRequest, ElectronRefusal> ParseFindInPage(
+    const base::DictValue& request,
+    ElectronWindow window) {
+  const std::optional<int> number = request.FindInt("request");
+  const std::string* text = request.FindString("text");
+  const std::optional<bool> forward = request.FindBool("forward");
+  const std::optional<bool> find_next = request.FindBool("find_next");
+  const std::optional<bool> match_case = request.FindBool("match_case");
+  if (!number.has_value() || *number < 1) {
+    return Refuse("\"request\" must be a whole number from 1", window);
+  } else if (text == nullptr || text->empty()) {
+    return Refuse("\"text\" must be a string that is not empty", window);
+  } else if (!forward.has_value() || !find_next.has_value() ||
+             !match_case.has_value()) {
+    return Refuse(
+        "\"forward\", \"find_next\" and \"match_case\" must each be true "
+        "or false",
+        window);
+  }
+  return ElectronFindInPage{.window = window,
+                            .request = *number,
+                            .text = *text,
+                            .forward = *forward,
+                            .find_next = *find_next,
+                            .match_case = *match_case};
+}
+
+// A stop_find_in_page request, or why it is not one.
+base::expected<ElectronRequest, ElectronRefusal> ParseStopFindInPage(
+    const base::DictValue& request,
+    ElectronWindow window) {
+  const std::string* action = request.FindString("action");
+  if (action != nullptr && *action == "clear_selection") {
+    return ElectronStopFindInPage{
+        .window = window, .action = ElectronStopFindAction::kClearSelection};
+  } else if (action != nullptr && *action == "keep_selection") {
+    return ElectronStopFindInPage{
+        .window = window, .action = ElectronStopFindAction::kKeepSelection};
+  } else if (action != nullptr && *action == "activate_selection") {
+    return ElectronStopFindInPage{
+        .window = window, .action = ElectronStopFindAction::kActivateSelection};
+  }
+  return Refuse(
+      "\"action\" must be clear_selection, keep_selection or "
+      "activate_selection",
+      window);
 }
 
 // A show_message_box request, or why it is not one.
@@ -1223,6 +1307,22 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ElectronGoToIndex{.window = *window, .index = *index};
   } else if (*type == "clear_history") {
     return ElectronClearHistory{.window = *window};
+  } else if (*type == "edit") {
+    return ParseEdit(*request, *window);
+  } else if (*type == "replace") {
+    const std::string* text = request->FindString("text");
+    const std::optional<bool> misspelling = request->FindBool("misspelling");
+    if (text == nullptr) {
+      return Refuse("\"text\" must be a string", *window);
+    } else if (!misspelling.has_value()) {
+      return Refuse("\"misspelling\" must be true or false", *window);
+    }
+    return ElectronReplace{
+        .window = *window, .text = *text, .misspelling = *misspelling};
+  } else if (*type == "find_in_page") {
+    return ParseFindInPage(*request, *window);
+  } else if (*type == "stop_find_in_page") {
+    return ParseStopFindInPage(*request, *window);
   } else if (*type == "close_window") {
     return ElectronCloseWindow{.window = *window};
   } else if (*type == "set_title") {
@@ -1512,6 +1612,20 @@ std::string ElectronPageStateChanged(ElectronWindow window,
   event.Set("focused", state.focused);
   event.Set("pid", state.pid);
   event.Set("crashed", state.crashed);
+  return Line(std::move(event));
+}
+
+std::string ElectronFoundInPage(ElectronWindow window,
+                                const ElectronFindResult& result) {
+  base::DictValue event = Event("found_in_page", window);
+  event.Set("request", result.request);
+  event.Set("matches", result.matches);
+  event.Set("active_match_ordinal", result.active_match_ordinal);
+  event.Set("selection", base::DictValue()
+                             .Set("x", result.x)
+                             .Set("y", result.y)
+                             .Set("width", result.width)
+                             .Set("height", result.height));
   return Line(std::move(event));
 }
 

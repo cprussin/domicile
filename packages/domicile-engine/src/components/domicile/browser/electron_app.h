@@ -74,6 +74,8 @@ struct ElectronPageCalls {
       window_opening;
   // What the page is now: its history, loading, focus and renderer.
   base::RepeatingCallback<void(ElectronPageState state)> state;
+  // A find_in_page search is done.
+  base::RepeatingCallback<void(ElectronFindResult result)> found;
 };
 
 // A window's menu bar, as the desk lists it: the menu's entries as JSON
@@ -268,6 +270,19 @@ class ElectronDesk {
   virtual void GoToIndex(const std::string& id, int index) = 0;
   // Forgets every entry of window `id`'s page's history but the one shown.
   virtual void ClearHistory(const std::string& id) = 0;
+  // Does `command` at the focus in window `id`'s page.
+  virtual void Edit(const std::string& id, ElectronEditCommand command) = 0;
+  // Puts `text` in place of the word at the selection in window `id`'s page:
+  // as a spelling correction, if `misspelling`.
+  virtual void Replace(const std::string& id,
+                       const std::string& text,
+                       bool misspelling) = 0;
+  // Searches window `id`'s page, which answers with its page calls' `found`.
+  virtual void FindInPage(const std::string& id,
+                          const ElectronFindInPage& find) = 0;
+  // Ends window `id`'s page's search, doing `action` with its match.
+  virtual void StopFindInPage(const std::string& id,
+                              ElectronStopFindAction action) = 0;
   // The title the desktop shows for window `id`, over its page's.
   virtual void SetTitle(const std::string& id, const std::string& title) = 0;
   // Whether the desktop shows window `id`. A hidden window stays open, its
@@ -468,6 +483,7 @@ class ElectronApp {
   void MenuClicked(ElectronWindow number, int command);
   void CloseAsked(ElectronWindow number);
   void PageStateChanged(ElectronWindow number, ElectronPageState state);
+  void PageFound(ElectronWindow number, ElectronFindResult result);
   void SetMenuBar(const ElectronSetMenuBar& bar);
   // The desk id of window `number` when it is a window, not a view, or
   // nothing after refusing `what` of a view.
