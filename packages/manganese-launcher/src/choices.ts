@@ -173,12 +173,16 @@ export const openWithOf = (choice: Launchable): Launch =>
 
 /**
  * The tags `query`'s last word starts, by tag, leaving out tags the line
- * already has. None once a space ends the word.
+ * already has. None once a space ends the word, or once the word is a whole
+ * tag after words to search: `kate bush !yt` then searches on Enter, as
+ * `!yt kate bush` does.
  */
 const tagsFor = (query: string): Choice[] => {
   const words = query.split(/\s+/);
   const typing = words.at(-1) ?? "";
-  return typing.startsWith("!")
+  const isDone =
+    isTag(typing) && words.some((word) => word !== "" && !isTag(word));
+  return typing.startsWith("!") && !isDone
     ? [...Object.keys(TAGS), PRIVATE_TAG]
         .filter(
           (tag) => tag.startsWith(typing) && !words.slice(0, -1).includes(tag),
@@ -193,6 +197,9 @@ const tagsFor = (query: string): Choice[] => {
         )
     : [];
 };
+
+/** Whether `word` is a tag, `!p` included. */
+const isTag = (word: string): boolean => word in TAGS || word === PRIVATE_TAG;
 
 /** The page and search `query`'s tag names, if any. */
 const taggedChoicesFor = (query: string, isPrivate: boolean): Choice[] => {

@@ -212,6 +212,32 @@ describe("choicesFor", () => {
       ]);
     });
 
+    it("offers no tags for a whole tag after words, so Enter searches", () => {
+      expect(choicesFor("kate bush !g", [], [], [])).toStrictEqual([
+        Choice.TaggedSearch(
+          {
+            engine: Engine.Google,
+            query: "kate bush",
+            url: "https://google.com/search?q=kate%20bush",
+          },
+          false,
+        ),
+      ]);
+      expect(choicesFor("kate bush !yt", [], [], [])[0]?.kind).toBe(
+        ChoiceKind.TaggedSearch,
+      );
+      expect(choicesFor("kate bush !p", [], [], [])[0]?.kind).toBe(
+        ChoiceKind.Search,
+      );
+    });
+
+    it("still offers tags for a whole tag with nothing to search", () => {
+      expect(choicesFor("!g", [], [], []).slice(0, 2)).toStrictEqual([
+        Choice.Tag("!g", Engine.Google, "!g "),
+        Choice.Tag("!gh", Engine.GitHub, "!gh "),
+      ]);
+    });
+
     it("offers no tags once the word is done or matches none", () => {
       const kinds = (query: string) =>
         choicesFor(query, [], [], []).map(({ kind }) => kind);
