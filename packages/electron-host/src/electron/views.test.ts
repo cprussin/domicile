@@ -81,6 +81,37 @@ describe("WebContentsView", () => {
     });
   });
 
+  it("focuses its window while its page has the keyboard", () => {
+    const { BrowserWindow, say, WebContentsView } = setUp();
+    const window = new BrowserWindow();
+    load(window, "app://notes/");
+    const view = new WebContentsView();
+    load(view.webContents, "app://notes/chat");
+    window.contentView.addChildView(view);
+    const heard: string[] = [];
+    window.on("focus", () => heard.push("focus"));
+    window.on("blur", () => heard.push("blur"));
+    const state = {
+      crashed: false,
+      entries: [{ title: "", url: "app://notes/chat" }],
+      focused: true,
+      index: 0,
+      loading: false,
+      pid: 7,
+      type: "page_state" as const,
+      window: view.id,
+    };
+
+    // Claude's View > Full Screen acts on the focused window, whose page is
+    // empty and whose views have the keyboard.
+    say(state);
+    expect(window.isFocused()).toBe(true);
+    expect(BrowserWindow.getFocusedWindow()).toBe(window);
+    say({ ...state, focused: false });
+    expect(BrowserWindow.getFocusedWindow()).toBeNull();
+    expect(heard).toEqual(["focus", "blur"]);
+  });
+
   it("starts at no size, as Electron's does", () => {
     const { WebContentsView } = setUp();
 

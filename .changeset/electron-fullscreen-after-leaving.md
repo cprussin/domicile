@@ -2,4 +2,4 @@
 "@domicile-desktop/electron-host": patch
 ---
 
-An Electron app's window goes fullscreen again when the app asks after the user left fullscreen with the desktop: the engine now hears that the app no longer wants it, so the next ask is a change the shell acts on.
+Claude Desktop's View > Full Screen works on the engine. An Electron window is the focused window while one of its views has the keyboard, or while the user picks from its menu bar, as on Electron. And a window goes fullscreen again when the app asks after the user left fullscreen with the desktop.

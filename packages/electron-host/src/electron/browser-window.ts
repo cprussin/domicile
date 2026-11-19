@@ -1297,6 +1297,11 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     protected override wasClosed() {
       this.holder?.contentView.removeChildView(this);
     }
+
+    /** Its window has the keyboard while the view's page does. */
+    override focusChanged(_focused: boolean) {
+      this.holder?.focusMoved();
+    }
   }
 
   /**
@@ -1371,6 +1376,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       this.#children.splice(index ?? this.#children.length, 0, view);
       view.holder = this.window;
       this.window.placeViews();
+      this.window.focusMoved();
     };
 
     readonly removeChildView = (view: WebContentsView) => {
@@ -1378,6 +1384,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         this.#children = this.#children.filter((child) => child !== view);
         view.holder = undefined;
         this.window.placeViews();
+        this.window.focusMoved();
       }
     };
 
@@ -1422,6 +1429,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     #lastPopup = 0;
     #menuBarVisible = true;
     #menuBarAutoHide: boolean;
+    /** Whether its page or one of its views' has the keyboard. */
+    #focused = false;
+    /** Whether an entry of its menu bar is running. */
+    #choosing = false;
     /** What the app asks the shell to make the window. */
     #wants: WindowState = NORMAL;
     /** What the shell last made it. */
@@ -1620,11 +1631,32 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly setParentWindow = (_parent: unknown) => undefined;
     readonly getNativeWindowHandle = () => Buffer.alloc(8);
     readonly getMediaSourceId = () => "";
-    readonly isFocused = () => this.webContents.isFocused();
+    /**
+     * Whether it is the app's window with the keyboard, as Electron's: its
+     * page or one of its views' has it, or the user is choosing from its menu
+     * bar, which the shell draws and which has the keyboard meanwhile.
+     */
+    readonly isFocused = () => this.#choosing || this.#focused;
 
-    override focusChanged(focused: boolean) {
-      this.emit(focused ? "focus" : "blur", eventObject());
+    override focusChanged(_focused: boolean) {
+      this.focusMoved();
     }
+
+    /**
+     * The keyboard moved in or out of its page or one of its views': says
+     * focus or blur when the window took or lost it. Focus moving from the
+     * page to a view says blur, then focus, as the engine reports each page
+     * on its own.
+     */
+    readonly focusMoved = () => {
+      const focused =
+        this.webContents.isFocused() ||
+        this.contentView.children.some((view) => view.webContents.isFocused());
+      if (focused !== this.#focused) {
+        this.#focused = focused;
+        this.emit(focused ? "focus" : "blur", eventObject());
+      }
+    };
     readonly reload = () => this.webContents.reload();
 
     readonly setBrowserView = (view: BrowserView | null) => {
@@ -1835,7 +1867,12 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
 
     protected override menuClicked(command: number) {
       if (this.#menu !== null) {
-        menus.click(this.#menu, command, this.id);
+        this.#choosing = true;
+        try {
+          menus.click(this.#menu, command, this.id);
+        } finally {
+          this.#choosing = false;
+        }
       }
     }
 

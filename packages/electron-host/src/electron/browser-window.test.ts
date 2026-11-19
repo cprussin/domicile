@@ -1288,6 +1288,27 @@ describe("a window's menu bar", () => {
 
     expect(clicks).toEqual([["New Note", window]]);
   });
+  it("is the focused window while an entry of its menu bar runs", () => {
+    const { BrowserWindow, menus, say } = setUp();
+    const focused: unknown[] = [];
+    const window = new BrowserWindow();
+    void window.loadURL("https://notes.test/");
+    // As Claude's View > Full Screen, which acts on the focused window.
+    window.setMenu(
+      menus.Menu.buildFromTemplate([
+        {
+          click: () => focused.push(BrowserWindow.getFocusedWindow()),
+          label: "Full Screen",
+        },
+      ]),
+    );
+
+    // The shell's menu has the keyboard, not the window's page.
+    say({ command: 1, type: "menu_clicked", window: 1 });
+
+    expect(focused).toEqual([window]);
+    expect(BrowserWindow.getFocusedWindow()).toBeNull();
+  });
 });
 
 describe("a window's popup menus", () => {
