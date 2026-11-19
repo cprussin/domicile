@@ -1471,7 +1471,7 @@
               exit 1
             }
             target=${domicilePackage}/lib/systemd/user/domicile-session.target
-            for line in 'BindsTo=graphical-session.target' 'Before=graphical-session.target'; do
+            for line in 'BindsTo=graphical-session.target' 'Before=graphical-session.target xdg-desktop-autostart.target'; do
               grep -qxF "$line" "$target" || {
                 echo "domicile-session.target is missing: $line" >&2
                 cat "$target" >&2
