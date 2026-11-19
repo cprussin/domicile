@@ -185,6 +185,116 @@ describe(createBrowserWindow, () => {
     ]);
   });
 
+  it("edits at the page's focus, as the Edit menu does", () => {
+    const { BrowserWindow, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://a.test/");
+    const contents = window.webContents;
+    sent.length = 0;
+
+    contents.undo();
+    contents.redo();
+    contents.cut();
+    contents.copy();
+    contents.paste();
+    contents.pasteAndMatchStyle();
+    contents.delete();
+    contents.selectAll();
+    contents.unselect();
+    contents.centerSelection();
+    contents.replace("cat");
+    contents.replaceMisspelling("dog");
+    expect(sent).toEqual([
+      ...(
+        [
+          "undo",
+          "redo",
+          "cut",
+          "copy",
+          "paste",
+          "paste_and_match_style",
+          "delete",
+          "select_all",
+          "unselect",
+          "center_selection",
+        ] as const
+      ).map((command) => ({ command, type: "edit" as const, window: 1 })),
+      { misspelling: false, text: "cat", type: "replace", window: 1 },
+      { misspelling: true, text: "dog", type: "replace", window: 1 },
+    ]);
+  });
+
+  it("finds in the page, and says each search's last answer", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://a.test/");
+    const heard: unknown[] = [];
+    window.webContents.on("found-in-page", (_event, result) =>
+      heard.push(result),
+    );
+    sent.length = 0;
+
+    const first = window.webContents.findInPage("cat");
+    const second = window.webContents.findInPage("cat", {
+      findNext: true,
+      forward: false,
+      matchCase: true,
+    });
+    window.webContents.stopFindInPage("keepSelection");
+    say({
+      active_match_ordinal: 2,
+      matches: 3,
+      request: second,
+      selection: { height: 4, width: 3, x: 1, y: 2 },
+      type: "found_in_page",
+      window: 1,
+    });
+
+    expect([first, second]).toEqual([1, 2]);
+    expect(sent).toEqual([
+      {
+        find_next: false,
+        forward: true,
+        match_case: false,
+        request: 1,
+        text: "cat",
+        type: "find_in_page",
+        window: 1,
+      },
+      {
+        find_next: true,
+        forward: false,
+        match_case: true,
+        request: 2,
+        text: "cat",
+        type: "find_in_page",
+        window: 1,
+      },
+      { action: "keep_selection", type: "stop_find_in_page", window: 1 },
+    ]);
+    expect(heard).toEqual([
+      {
+        activeMatchOrdinal: 2,
+        finalUpdate: true,
+        matches: 3,
+        requestId: 2,
+        selectionArea: { height: 4, width: 3, x: 1, y: 2 },
+      },
+    ]);
+  });
+
+  it("refuses a search for nothing and a stop it can't do, as Electron does", () => {
+    const { BrowserWindow } = setUp();
+    const window = new BrowserWindow();
+
+    expect(() => window.webContents.findInPage("")).toThrow(
+      "Must provide a non-empty search content",
+    );
+    expect(() => window.webContents.stopFindInPage("forget" as never)).toThrow(
+      "Invalid action for stopFindInPage",
+    );
+  });
+
   it("numbers windows from 1 and finds them by number", () => {
     const { BrowserWindow } = setUp();
     const first = new BrowserWindow();

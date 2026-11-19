@@ -119,6 +119,30 @@ class ChromeElectronDesk final : public ElectronDesk {
       page->ClearHistory();
     }
   }
+  void Edit(const std::string& id, ElectronEditCommand command) override {
+    if (ElectronPage* page = ElectronPageOf(id)) {
+      page->Edit(command);
+    }
+  }
+  void Replace(const std::string& id,
+               const std::string& text,
+               bool misspelling) override {
+    if (ElectronPage* page = ElectronPageOf(id)) {
+      page->Replace(text, misspelling);
+    }
+  }
+  void FindInPage(const std::string& id,
+                  const ElectronFindInPage& find) override {
+    if (ElectronPage* page = ElectronPageOf(id)) {
+      page->FindInPage(find);
+    }
+  }
+  void StopFindInPage(const std::string& id,
+                      ElectronStopFindAction action) override {
+    if (ElectronPage* page = ElectronPageOf(id)) {
+      page->StopFindInPage(action);
+    }
+  }
   void SetTitle(const std::string& id, const std::string& title) override {
     SetElectronTitle(id, title);
   }

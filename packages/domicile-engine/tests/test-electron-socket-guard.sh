@@ -56,36 +56,41 @@ says() { # $1 MEASURED, $2 what the sentence must contain
 }
 
 # MEASURED is "<ready> <opened> <loaded> <titled> <closed> <chrome-refused>
-# <walked>".
+# <walked> <found>".
 echo "the claim — an app's window over the Electron socket"
 expect "a window that opened, loaded, took its title and closed is the pass" \
-  "pass" "$(verdict "1 1 1 1 1 1 1")"
-expect "no hello is a failure" "fail" "$(verdict "0 0 0 0 0 0 1")"
+  "pass" "$(verdict "1 1 1 1 1 1 1 1")"
+expect "no hello is a failure" "fail" "$(verdict "0 0 0 0 0 0 1 1")"
 expect "and blames binding the socket" "yes" \
-  "$(says "0 0 0 0 0 0 1" "StartElectronSocket")"
+  "$(says "0 0 0 0 0 0 1 1" "StartElectronSocket")"
 expect "a window that did not open is a failure" "fail" \
-  "$(verdict "1 0 0 0 0 1 1")"
+  "$(verdict "1 0 0 0 0 1 1 1")"
 expect "and names where it opens" "yes" \
-  "$(says "1 0 0 0 0 1 1" "OpenElectron")"
+  "$(says "1 0 0 0 0 1 1 1" "OpenElectron")"
 expect "a page that never said it loaded is a failure" "fail" \
-  "$(verdict "1 1 0 1 1 1 1")"
+  "$(verdict "1 1 0 1 1 1 1 1")"
 expect "a title that never arrived is a failure" "fail" \
-  "$(verdict "1 1 1 0 1 1 1")"
-expect "and blames the listing" "yes" "$(says "1 1 1 0 1 1 1" "Listed")"
+  "$(verdict "1 1 1 0 1 1 1 1")"
+expect "and blames the listing" "yes" "$(says "1 1 1 0 1 1 1 1" "Listed")"
 expect "a window that did not close is a failure" "fail" \
-  "$(verdict "1 1 1 1 0 1 1")"
+  "$(verdict "1 1 1 1 0 1 1 1")"
 
 expect "a history that never arrived or never went back is a failure" "fail" \
-  "$(verdict "1 1 1 1 1 1 0")"
+  "$(verdict "1 1 1 1 1 1 0 1")"
 expect "and names where the state is sent" "yes" \
-  "$(says "1 1 1 1 1 1 0" "ReportState")"
+  "$(says "1 1 1 1 1 1 0 1" "ReportState")"
+
+expect "a find that never answered is a failure" "fail" \
+  "$(verdict "1 1 1 1 1 1 1 0")"
+expect "and names where the answer is sent" "yes" \
+  "$(says "1 1 1 1 1 1 1 0" "DidReceiveFindReply")"
 
 echo
 echo "the control — a chrome:// page"
 expect "a chrome:// page that opened is a failure" "fail" \
-  "$(verdict "1 1 1 1 1 0 1")"
+  "$(verdict "1 1 1 1 1 0 1 1")"
 expect "and says which schemes open" "yes" \
-  "$(says "1 1 1 1 1 0 1" "http and https")"
+  "$(says "1 1 1 1 1 0 1 1" "http and https")"
 expect "an empty measurement is a failure" "fail" "$(verdict "")"
 
 [ "$FAILED" -eq 0 ] && echo "all ok"

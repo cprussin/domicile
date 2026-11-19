@@ -18,6 +18,8 @@
 #   title_changed      its page's title reached the app
 #   walked             page_state listed its page's history, with its
 #                      renderer's pid, and go_to_index went back in it
+#   found              find_in_page found the page's one "window", and
+#                      found_in_page said so
 #   window_closed      destroy_window closed it, and the app heard
 #   chrome:// refused  the control: a page the app may not open stays shut
 set -u
@@ -33,6 +35,11 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS/lib-broker.sh"
 
 CHROMIUM="${1:-}"
+# The shell's window, and so the app window's page: find_in_page searches only
+# a page with something on screen, and a headless window has no size unless
+# it is given one.
+WIDTH="${WIDTH:-1024}"
+HEIGHT="${HEIGHT:-768}"
 if [ -z "$CHROMIUM" ]; then
   annotate "guard-electron-socket: no path to chromium/src was given"
   exit 1
@@ -107,6 +114,7 @@ rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \
+  --window-size="$WIDTH,$HEIGHT" \
   --app="domicile://shell/" \
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-app-module.js" \
@@ -159,7 +167,7 @@ try:
     connection.connect(path)
 except OSError as failure:
     print("no socket: %s" % failure, flush=True)
-    print("measured: 0 0 0 0 0 0 0", flush=True)
+    print("measured: 0 0 0 0 0 0 0 0", flush=True)
     sys.exit(0)
 reader = connection.makefile("r", encoding="utf-8")
 
@@ -191,12 +199,19 @@ if loaded is not None:
     if hear_until(state_of(1, 2, 1)) is not None:
         send({"type": "go_to_index", "window": 1, "index": 0})
         walked = hear_until(state_of(1, 2, 0))
+found = None
+if walked is not None:
+    send({"type": "find_in_page", "window": 1, "request": 1,
+          "text": "window", "forward": True, "find_next": False,
+          "match_case": False})
+    found = hear_until(lambda e: e.get("type") == "found_in_page" and
+                       e.get("window") == 1)
 send({"type": "destroy_window", "window": 1})
 closed = hear_until(lambda e: e == {"type": "window_closed", "window": 1})
 send({"type": "open_window", "window": 2, "url": "chrome://settings"})
 control = hear_until(lambda e: e.get("window") == 2)
 
-print("measured: %d %d %d %d %d %d %d" % (
+print("measured: %d %d %d %d %d %d %d %d" % (
     ready is not None and ready["type"] == "ready",
     opened is not None and opened["type"] == "window_opened",
     loaded is not None,
@@ -205,24 +220,27 @@ print("measured: %d %d %d %d %d %d %d" % (
     control is not None and control["type"] == "window_refused",
     walked is not None and
     walked["entries"][0]["url"] == page and
-    walked["entries"][1]["url"] == second), flush=True)
+    walked["entries"][1]["url"] == second,
+    found is not None and found["request"] == 1 and
+    found["matches"] == 1 and found["active_match_ordinal"] == 1),
+    flush=True)
 PY
 
 MEASURED="$(sed -n 's/^measured: //p' "$APP_LOG")"
 echo
 echo "measured: $MEASURED"
-echo "  (ready opened loaded titled closed chrome-refused walked)"
+echo "  (ready opened loaded titled closed chrome-refused walked found)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-electron-socket-guard.sh`
 # runs this block directly. MEASURED is "<ready> <opened> <loaded> <titled>
-# <closed> <chrome-refused> <walked>".
+# <closed> <chrome-refused> <walked> <found>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"1 1 1 1 1 1 1")
+"1 1 1 1 1 1 1 1")
   PASSED="an Electron app's window opened over the Electron socket, loaded, \
-took its title, listed its history and went back in it, and closed, and a \
-chrome:// page was refused"
+took its title, listed its history and went back in it, found a word in its \
+page, and closed, and a chrome:// page was refused"
   ;;
 "0 "*)
   FAILURE="the Electron socket did not take the app's hello: it was not \
@@ -245,7 +263,14 @@ not hear the desk's listing change"
   FAILURE="destroy_window did not close the window, or the app never heard: \
 CloseBrowserWindow, or the listing that drops it"
   ;;
-"1 1 1 1 1 1 0")
+"1 1 1 1 1 1 1 0")
+  FAILURE="find_in_page never answered with the page's one match: \
+ElectronPage::FindInPage, or DidReceiveFindReply and found_in_page, which \
+says only a search's final reply. Chromium finds nothing in a page with no \
+size, so check the engine log's \"an Electron page heard\" sizes -- the \
+app's log has what it heard"
+  ;;
+"1 1 1 1 1 1 0 "*)
   FAILURE="the page's history never reached the app, or go_to_index did not \
 go back in it: ElectronPage::ReportState (NavigationEntryCommitted, \
 DidStopLoading) and page_state, or ElectronPage::GoToIndex -- the app's log \

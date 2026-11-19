@@ -68,6 +68,25 @@ namespace domicile {
 //                                           index page_state listed)
 //   {"type":"clear_history","window":1}    (navigationHistory.clear: all
 //                                           but the page shown)
+//   {"type":"edit","window":1,"command":"undo"}
+//                                          (webContents.undo and the rest
+//                                           of the Edit menu: undo, redo,
+//                                           cut, copy, paste,
+//                                           paste_and_match_style, delete,
+//                                           select_all, unselect,
+//                                           center_selection)
+//   {"type":"replace","window":1,"text":"word","misspelling":false}
+//                                          (webContents.replace, or
+//                                           replaceMisspelling)
+//   {"type":"find_in_page","window":1,"request":1,"text":"a",
+//    "forward":true,"find_next":false,"match_case":false}
+//                                          (webContents.findInPage, which
+//                                           the app numbers from 1)
+//   {"type":"stop_find_in_page","window":1,"action":"clear_selection"}
+//                                          (webContents.stopFindInPage:
+//                                           clear_selection,
+//                                           keep_selection or
+//                                           activate_selection)
 //   {"type":"set_title","window":1,"title":"Claude"}
 //                                          (win.setTitle, and a page title
 //                                           the app let through)
@@ -133,6 +152,11 @@ namespace domicile {
 //                                           focus, its renderer's pid and
 //                                           whether that renderer is gone:
 //                                           each time one changes)
+//   {"type":"found_in_page","window":1,"request":1,"matches":3,
+//    "active_match_ordinal":1,
+//    "selection":{"x":0,"y":0,"width":10,"height":10}}
+//                                          (find_in_page's last answer, as
+//                                           Electron's found-in-page)
 //   {"type":"ipc_message","window":1,"channel":"c","args":[...]}
 //                                          (ipcRenderer.send)
 //   {"type":"ipc_invoke","window":1,"invoke":3,"channel":"c","args":[...]}
@@ -354,6 +378,72 @@ struct ElectronGoToIndex {
 // navigationHistory.clear: forgets every entry but the one shown.
 struct ElectronClearHistory {
   ElectronWindow window;
+};
+
+// What webContents.undo and the rest of the Edit menu do at the page's focus.
+enum class ElectronEditCommand {
+  kUndo,
+  kRedo,
+  kCut,
+  kCopy,
+  kPaste,
+  kPasteAndMatchStyle,
+  kDelete,
+  kSelectAll,
+  kUnselect,
+  kCenterSelection,
+};
+
+struct ElectronEdit {
+  ElectronWindow window;
+  ElectronEditCommand command = ElectronEditCommand::kUndo;
+};
+
+// webContents.replace, or replaceMisspelling: `text` in place of the word at
+// the selection.
+struct ElectronReplace {
+  ElectronWindow window;
+  std::string text;
+  bool misspelling = false;
+};
+
+// webContents.findInPage: search `request`, which the app numbers, for
+// `text`. `find_next` goes on with the search before it instead of starting
+// over.
+struct ElectronFindInPage {
+  ElectronWindow window;
+  int request = 0;
+  std::string text;
+  bool forward = true;
+  bool find_next = false;
+  bool match_case = false;
+};
+
+// What webContents.stopFindInPage does with the match it leaves.
+enum class ElectronStopFindAction {
+  kClearSelection,
+  kKeepSelection,
+  kActivateSelection,
+};
+
+struct ElectronStopFindInPage {
+  ElectronWindow window;
+  ElectronStopFindAction action = ElectronStopFindAction::kClearSelection;
+};
+
+// A find_in_page search's last answer: how many matches the page has, which
+// is selected (from 1; 0 for none) and where it is, in the page's CSS pixels.
+struct ElectronFindResult {
+  int request = 0;
+  int matches = 0;
+  int active_match_ordinal = 0;
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
+
+  friend bool operator==(const ElectronFindResult&,
+                         const ElectronFindResult&) = default;
 };
 
 // What an app's webContents knows of its page, sent whenever it changes.
@@ -762,6 +852,10 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronFocusWindow,
                                      ElectronGoToIndex,
                                      ElectronClearHistory,
+                                     ElectronEdit,
+                                     ElectronReplace,
+                                     ElectronFindInPage,
+                                     ElectronStopFindInPage,
                                      ElectronCloseWindow,
                                      ElectronDestroyWindow,
                                      ElectronSendToPage,
@@ -842,6 +936,9 @@ std::string ElectronCloseAsked(ElectronWindow window);
 // What `window`'s page is now.
 std::string ElectronPageStateChanged(ElectronWindow window,
                                      const ElectronPageState& state);
+// A find_in_page search in `window`'s page is done.
+std::string ElectronFoundInPage(ElectronWindow window,
+                                const ElectronFindResult& result);
 // The size, in CSS pixels, the shell gave window or view `window`'s page.
 std::string ElectronWindowResized(ElectronWindow window, int width, int height);
 // The user clicked entry `command` of `window`'s menu bar.
