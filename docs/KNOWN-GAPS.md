@@ -63,6 +63,13 @@ the detail, when there is one. Remove a gap when it's fixed.
 - **Resize cost is unmeasured.**
   [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#embed-deadlines).
 
+## Drag and drop
+
+- **Drags don't cross between pages and native windows,** in either
+  direction: the desk runs its own drags, and the compositor's
+  `wl_data_device` drags stay among native windows.
+  [A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md#drag-and-drop).
+
 ## Clipboard
 
 - **A nested desktop's browser uses the host's clipboard.**
