@@ -237,6 +237,14 @@ class FakeDesk final : public ElectronDesk {
     calls.push_back("flush cookies in " + partition.name);
     std::move(done).Run();
   }
+  std::unique_ptr<ElectronCookieWatch> WatchCookies(
+      const WebViewPartition& partition,
+      base::RepeatingCallback<void(const ElectronCookieChange& change)> changed)
+      override {
+    calls.push_back("watch cookies in " + partition.name);
+    cookie_changed = std::move(changed);
+    return std::make_unique<ElectronCookieWatch>();
+  }
   void ClearStorage(const WebViewPartition& partition,
                     const ElectronClearStorage& clear,
                     base::OnceClosure done) override {
@@ -252,6 +260,9 @@ class FakeDesk final : public ElectronDesk {
   bool has_shell = true;
   // What each window's page may call, by id.
   std::map<std::string, ElectronPageCalls> pages;
+  // What the last WatchCookies was told to call.
+  base::RepeatingCallback<void(const ElectronCookieChange& change)>
+      cookie_changed;
   // Each window's partition and session, by id.
   std::map<std::string, WebViewPartition> partitions;
   std::map<std::string, base::WeakPtr<ElectronSession>> sessions;
@@ -1532,6 +1543,30 @@ TEST_F(ElectronAppTest, ASessionCallGetsTheCookiesItsFilterMatches) {
                          "\"path\":\"\",\"sameSite\":\"unspecified\","
                          "\"secure\":false,\"session\":true,\"value\":\"1\"}],"
                          "\"type\":\"session_result\"}\n"});
+}
+
+TEST_F(ElectronAppTest, AWatchedSessionsCookieChangesReachTheApp) {
+  Hello();
+
+  app_->Take(R"({"type":"session_call","call":1,"session":"persist:work",)"
+             R"("method":"cookies_watch"})");
+  app_->Take(R"({"type":"session_call","call":2,"session":"persist:work",)"
+             R"("method":"cookies_watch"})");
+  desk_.cookie_changed.Run(
+      {.cookie = {.name = "lc", .value = "1", .domain = ".a.test"},
+       .cause = "inserted"});
+
+  // Watching twice is watching once.
+  EXPECT_EQ(desk_.calls, Lines{"watch cookies in electron-claude:work"});
+  EXPECT_EQ(sent_,
+            (Lines{"{\"call\":1,\"result\":null,\"type\":\"session_result\"}\n",
+                   "{\"call\":2,\"result\":null,\"type\":\"session_result\"}\n",
+                   "{\"cause\":\"inserted\",\"cookie\":{\"domain\":\".a.test\","
+                   "\"hostOnly\":false,\"httpOnly\":false,\"name\":\"lc\","
+                   "\"path\":\"\",\"sameSite\":\"unspecified\","
+                   "\"secure\":false,\"session\":true,\"value\":\"1\"},"
+                   "\"removed\":false,\"session\":\"persist:work\","
+                   "\"type\":\"cookie_changed\"}\n"}));
 }
 
 TEST_F(ElectronAppTest, ASessionCallSaysWhyACookieWasNotSet) {

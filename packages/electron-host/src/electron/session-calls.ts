@@ -15,6 +15,7 @@ export type SessionCallMessage = {
     | "cookies_set"
     | "cookies_remove"
     | "cookies_flush"
+    | "cookies_watch"
     | "clear_storage_data"
     | "clear_cache"
     | "set_user_agent";
@@ -33,6 +34,15 @@ export type SessionResult =
       readonly call: number;
       readonly error: string;
     };
+
+/** A change to a watched session's cookies, as the engine says it. */
+export type CookieChanged = {
+  readonly type: "cookie_changed";
+  readonly session: string;
+  readonly cookie: Cookie;
+  readonly cause: string;
+  readonly removed: boolean;
+};
 
 /** Electron's `CookiesGetFilter`. */
 export type CookiesGetFilter = {
@@ -89,7 +99,8 @@ export type ClearStorageDataOptions = {
 
 /** What one session has of these calls. */
 export type SessionCalls = {
-  readonly cookies: Cookies;
+  /** An EventEmitter as well, for `changed`. */
+  readonly cookies: Cookies & EventEmitter;
   readonly clearStorageData: (
     options?: ClearStorageDataOptions,
   ) => Promise<void>;
@@ -133,6 +144,32 @@ export const createSessionCalls = (
 
   const nothing = (promise: Promise<unknown>) => promise.then(() => undefined);
 
+  // Each session's `cookies`, which hear its changes.
+  const cookieEmitters = new Map<string, EventEmitter>();
+
+  /**
+   * An EventEmitter, as Electron's is. The engine watches the session's
+   * cookies from the first `changed` listener on, so `changed` fires as in
+   * Electron.
+   */
+  const cookiesEmitter = (session: string) => {
+    if (cookieEmitters.has(session)) {
+      throw new Error(`session ${JSON.stringify(session)} was made twice`);
+    }
+    const emitter = new EventEmitter();
+    cookieEmitters.set(session, emitter);
+    let watching = false;
+    emitter.on("newListener", (event: string) => {
+      if (event === "changed" && !watching) {
+        watching = true;
+        // A refusal is the engine's bug, and its rejection goes unhandled,
+        // loudly.
+        void call(session, "cookies_watch");
+      }
+    });
+    return emitter;
+  };
+
   const forSession = (session: string): SessionCalls => {
     let userAgent: string | undefined;
     return {
@@ -145,9 +182,7 @@ export const createSessionCalls = (
             defined({ origin: options.origin, storages: options.storages }),
           ),
         ),
-      // An EventEmitter, as Electron's is. The engine doesn't report cookie
-      // changes yet, so `changed` never fires.
-      cookies: Object.assign<EventEmitter, Cookies>(new EventEmitter(), {
+      cookies: Object.assign<EventEmitter, Cookies>(cookiesEmitter(session), {
         flushStore: () => nothing(call(session, "cookies_flush")),
         get: async (filter) =>
           (await call(session, "cookies_get", {
@@ -206,5 +241,16 @@ export const createSessionCalls = (
     }
   };
 
-  return { forSession, hear };
+  /** Says `change` to its session's `cookies`, as Electron's `changed`. */
+  const heardCookie = (change: CookieChanged) => {
+    const emitter = cookieEmitters.get(change.session);
+    if (emitter === undefined) {
+      throw new Error(
+        `the engine changed a cookie of session ${JSON.stringify(change.session)}, which this app never made`,
+      );
+    }
+    emitter.emit("changed", {}, change.cookie, change.cause, change.removed);
+  };
+
+  return { forSession, hear, heardCookie };
 };

@@ -36,6 +36,49 @@ describe(createSessionCalls, () => {
     expect(await got).toEqual([{ domain: "a.test", name: "n", value: "v" }]);
   });
 
+  it("watches a session's cookies once something listens, and says each change", () => {
+    const { calls, sent } = setUp();
+    const { cookies } = calls.forSession("persist:a");
+    const heard: unknown[][] = [];
+
+    expect(sent).toEqual([]);
+    cookies.on("changed", (_event, cookie, cause, removed) =>
+      heard.push([cookie, cause, removed]),
+    );
+    cookies.on("changed", () => undefined);
+    calls.heardCookie({
+      cause: "inserted",
+      cookie: { name: "lc", value: "1" },
+      removed: false,
+      session: "persist:a",
+      type: "cookie_changed",
+    });
+
+    expect(sent).toEqual([
+      {
+        call: 1,
+        method: "cookies_watch",
+        session: "persist:a",
+        type: "session_call",
+      },
+    ]);
+    expect(heard).toEqual([[{ name: "lc", value: "1" }, "inserted", false]]);
+  });
+
+  it("refuses a change to a session nobody made", () => {
+    const { calls } = setUp();
+
+    expect(() =>
+      calls.heardCookie({
+        cause: "inserted",
+        cookie: { name: "lc", value: "1" },
+        removed: false,
+        session: "persist:b",
+        type: "cookie_changed",
+      }),
+    ).toThrow("persist:b");
+  });
+
   it("sets and removes cookies, and rejects with the engine's reason", async () => {
     const { calls, sent } = setUp();
     const { cookies } = calls.forSession("");

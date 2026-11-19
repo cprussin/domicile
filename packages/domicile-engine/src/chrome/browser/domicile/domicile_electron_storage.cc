@@ -13,14 +13,17 @@
 
 #include "base/check_op.h"
 #include "base/functional/bind.h"
+#include "base/notreached.h"
 #include "base/time/time.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_access_result.h"
+#include "net/cookies/cookie_change_dispatcher.h"
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_options.h"
@@ -83,6 +86,58 @@ ElectronCookie CookieOf(const net::CanonicalCookie& cookie) {
               : std::nullopt,
       .same_site = SameSiteName(cookie.SameSite())};
 }
+
+// Electron's name for why a cookie changed, as session.cookies' `changed`
+// gives it.
+std::string CauseName(net::CookieChangeCause cause) {
+  switch (cause) {
+    case net::CookieChangeCause::INSERTED:
+      return "inserted";
+    case net::CookieChangeCause::INSERTED_NO_CHANGE_OVERWRITE:
+      return "inserted-no-change-overwrite";
+    case net::CookieChangeCause::INSERTED_NO_VALUE_CHANGE_OVERWRITE:
+      return "inserted-no-value-change-overwrite";
+    case net::CookieChangeCause::EXPLICIT:
+    // Electron has no name of its own for a deletion it knows nothing about.
+    case net::CookieChangeCause::UNKNOWN_DELETION:
+      return "explicit";
+    case net::CookieChangeCause::OVERWRITE:
+      return "overwrite";
+    case net::CookieChangeCause::EXPIRED:
+      return "expired";
+    case net::CookieChangeCause::EVICTED:
+      return "evicted";
+    case net::CookieChangeCause::EXPIRED_OVERWRITE:
+      return "expired-overwrite";
+  }
+  NOTREACHED();
+}
+
+// A watch on a partition's cookies: the network service's listener for
+// every change, which ends when this closes its pipe.
+class CookieWatch final : public ElectronCookieWatch,
+                          public network::mojom::CookieChangeListener {
+ public:
+  CookieWatch(
+      network::mojom::CookieManager* cookies,
+      base::RepeatingCallback<void(const ElectronCookieChange&)> changed)
+      : changed_(std::move(changed)) {
+    cookies->AddGlobalChangeListener(receiver_.BindNewPipeAndPassRemote());
+  }
+  ~CookieWatch() override = default;
+
+  // network::mojom::CookieChangeListener:
+  void OnCookieChange(const net::CookieChangeInfo& change) override {
+    changed_.Run(ElectronCookieChange{
+        .cookie = CookieOf(change.cookie),
+        .cause = CauseName(change.cause),
+        .removed = net::CookieChangeCauseIsDeletion(change.cause)});
+  }
+
+ private:
+  base::RepeatingCallback<void(const ElectronCookieChange&)> changed_;
+  mojo::Receiver<network::mojom::CookieChangeListener> receiver_{this};
+};
 
 // Electron's names for clearStorageData's storages, as content's.
 uint32_t RemoveMaskOf(const std::set<std::string>& storages) {
@@ -225,6 +280,17 @@ void FlushElectronCookies(const WebViewPartition& partition,
   }
   storage->GetCookieManagerForBrowserProcess()->FlushCookieStore(
       std::move(done));
+}
+
+std::unique_ptr<ElectronCookieWatch> WatchElectronCookies(
+    const WebViewPartition& partition,
+    base::RepeatingCallback<void(const ElectronCookieChange&)> changed) {
+  content::StoragePartition* storage = StorageOf(partition);
+  if (storage == nullptr) {
+    return std::make_unique<ElectronCookieWatch>();
+  }
+  return std::make_unique<CookieWatch>(
+      storage->GetCookieManagerForBrowserProcess(), std::move(changed));
 }
 
 void ClearElectronStorage(const WebViewPartition& partition,
