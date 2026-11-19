@@ -174,6 +174,12 @@ export type WindowState = {
    */
   launcherOpen: boolean;
   /**
+   * Where the next browser window opens: beside the tab a page's text, link
+   * or image was dropped on (`TabDropped`). `undefined` opens it beside the
+   * focus.
+   */
+  newTabAt: { target: NodeRef; edge: Direction } | undefined;
+  /**
    * The workspace the overview's keys are on, or `undefined` for the shown
    * one. Kept here because `focus` and `move` commands step it.
    */
@@ -239,6 +245,7 @@ export const NO_WINDOWS: WindowState = {
   homes: { "1": UNDESCRIBED_SCREEN },
   launcherOpen: false,
   mode: "default",
+  newTabAt: undefined,
   overviewAim: undefined,
   overviewCards: {},
   overviewOpen: false,
@@ -475,6 +482,7 @@ export enum WindowActionKind {
   ScreensDescribed,
   ShortcutsInhibitorSwitched,
   SplitToggled,
+  TabDropped,
   TabSubgrouped,
   TerminalOpened,
   VirtualMonitorAdded,
@@ -1007,6 +1015,17 @@ export const WindowAction = {
   /** `layout toggle split`. */
   SplitToggled: () => ({ kind: WindowActionKind.SplitToggled as const }),
 
+  /**
+   * A page's text, link or image dropped on a tab strip, beside `target`'s
+   * tab on its `edge`. Opens `url` in a browser window there.
+   */
+  TabDropped: (target: NodeRef, edge: Direction, url: string) => ({
+    edge,
+    kind: WindowActionKind.TabDropped as const,
+    target,
+    url,
+  }),
+
   /** `group`: turns the focused tab into a group of its own. */
   TabSubgrouped: () => ({ kind: WindowActionKind.TabSubgrouped as const }),
 
@@ -1422,7 +1441,10 @@ const reduceAction = (
       return { ...state, launcherOpen: false };
     }
     case WindowActionKind.BrowserWindowsListed: {
-      return listBrowsers(state, action.windows, action.backgroundApps);
+      return placedNewTab(
+        state,
+        listBrowsers(state, action.windows, action.backgroundApps),
+      );
     }
     case WindowActionKind.ChildFocused: {
       return onCurrent(state, childFocused);
@@ -1540,6 +1562,14 @@ const reduceAction = (
     }
     case WindowActionKind.ModeSwapped: {
       return onCurrent(state, modeToggled);
+    }
+    case WindowActionKind.TabDropped: {
+      // Closes the launcher, as opening a page from it does.
+      return {
+        ...state,
+        launcherOpen: false,
+        newTabAt: { edge: action.edge, target: action.target },
+      };
     }
     case WindowActionKind.NewTabPressed: {
       return {
@@ -1950,6 +1980,30 @@ const listBrowsers = (
         kept,
       ),
     );
+};
+
+// Moves the first browser window `listed` opened since `before` to where a
+// drop aimed it (`newTabAt`). Waits for the next list when none opened.
+const placedNewTab = (
+  before: WindowState,
+  listed: WindowState,
+): WindowState => {
+  const at = listed.newTabAt;
+  const opened = listed.windows.find(
+    ({ id, kind }) =>
+      kind === WindowKind.Browser &&
+      windowOf(before, id) === undefined &&
+      workspaceHolding(listed, id) !== undefined,
+  );
+  return at === undefined || opened === undefined
+    ? listed
+    : dropNode(
+        { ...listed, newTabAt: undefined },
+        { id: opened.id, up: 0 },
+        at.target,
+        at.edge,
+        Beside.InStrip,
+      );
 };
 
 // Takes each browser window its app has just hidden off its workspace, and

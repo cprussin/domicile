@@ -121,6 +121,9 @@ export const useWindows = (
           }
         }
       }
+      if (action.kind === WindowActionKind.TabDropped) {
+        domicile.browser.open(action.url);
+      }
       if (action.kind === WindowActionKind.BrowserOpened) {
         if (action.profile !== undefined) {
           domicile.browser.open(action.src, { profile: action.profile });

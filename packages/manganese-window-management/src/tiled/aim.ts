@@ -48,6 +48,12 @@ export type Dragged = {
   windows: readonly string[];
 };
 
+/**
+ * A drag carrying no window: a page's text, link or image, which opens a new
+ * tab where it is dropped. See `useTabDrop`.
+ */
+export const NO_WINDOW: Dragged = { node: { id: "", up: 0 }, windows: [] };
+
 /** A float's box, which hides every target behind it. */
 export type FloatCover = {
   depth: number;

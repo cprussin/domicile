@@ -1247,4 +1247,7 @@ const stageActionsOf = (
   onStretch: (id: string, edge: Direction, by: number, on: Geometry) => {
     act(WindowAction.WindowStretched(id, edge, by, on.workspace));
   },
+  onTabDrop: (target: NodeRef, edge: Direction, url: string) => {
+    act(WindowAction.TabDropped(target, edge, url));
+  },
 });

@@ -12,6 +12,8 @@ tiles beside your apps like any other.
 - Links clicked in your apps open here too, and so do PDFs, images and videos
   you open from the launcher.
 - `domicile open <address>` opens one from a terminal.
+- Drag text, a link or an image onto a group's tabs: a blue bar shows where
+  the new tab goes. Text is searched, or opened if it is an address.
 
 A new tab is a new window: it opens beside the one you were in, in the same
 group. Meta+W merges groups side by side into one group of tabs.
