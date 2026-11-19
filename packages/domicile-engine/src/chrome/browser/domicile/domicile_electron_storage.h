@@ -4,11 +4,13 @@
 #ifndef CHROME_BROWSER_DOMICILE_DOMICILE_ELECTRON_STORAGE_H_
 #define CHROME_BROWSER_DOMICILE_DOMICILE_ELECTRON_STORAGE_H_
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "base/functional/callback.h"
+#include "components/domicile/browser/electron_app.h"
 #include "components/domicile/browser/electron_protocol.h"
 #include "components/domicile/browser/web_view_partition.h"
 #include "url/gurl.h"
@@ -35,6 +37,12 @@ void RemoveElectronCookie(const WebViewPartition& partition,
                           base::OnceClosure done);
 void FlushElectronCookies(const WebViewPartition& partition,
                           base::OnceClosure done);
+// Calls `changed` with each change to the cookies, as session.cookies'
+// `changed` says it, until the watch is destroyed. Hears nothing without a
+// shell.
+std::unique_ptr<ElectronCookieWatch> WatchElectronCookies(
+    const WebViewPartition& partition,
+    base::RepeatingCallback<void(const ElectronCookieChange&)> changed);
 void ClearElectronStorage(const WebViewPartition& partition,
                           const ElectronClearStorage& clear,
                           base::OnceClosure done);

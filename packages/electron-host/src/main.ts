@@ -177,6 +177,7 @@ const main = async ([resources, ...args]: string[]) => {
     hooks.userAgentFallback = userAgentFallback;
     const sessionCalls = createSessionCalls(engine.send, userAgentFallback.get);
     engine.events.on("sessionResult", sessionCalls.hear);
+    engine.events.on("cookieChanged", sessionCalls.heardCookie);
     const permissions = createPermissions(
       engine.send,
       (window) => webContentsOf(window),

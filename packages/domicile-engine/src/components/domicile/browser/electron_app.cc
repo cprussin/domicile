@@ -583,6 +583,16 @@ void ElectronApp::RunSessionCall(ElectronSessionCall call) {
                         done_with_nothing(std::move(done)));
   } else if (std::holds_alternative<ElectronFlushCookies>(call.method)) {
     desk_->FlushCookies(*partition, done_with_nothing(std::move(done)));
+  } else if (std::holds_alternative<ElectronWatchCookies>(call.method)) {
+    if (!cookie_watches_.contains(call.session)) {
+      cookie_watches_.emplace(
+          call.session,
+          desk_->WatchCookies(
+              *partition,
+              base::BindRepeating(&ElectronApp::CookieChanged,
+                                  weak_factory_.GetWeakPtr(), call.session)));
+    }
+    std::move(done).Run(base::Value());
   } else if (auto* clear = std::get_if<ElectronClearStorage>(&call.method)) {
     desk_->ClearStorage(*partition, *clear, done_with_nothing(std::move(done)));
   } else if (std::holds_alternative<ElectronClearCache>(call.method)) {
@@ -600,6 +610,11 @@ void ElectronApp::RunSessionCall(ElectronSessionCall call) {
     }
     std::move(done).Run(base::Value());
   }
+}
+
+void ElectronApp::CookieChanged(const std::string& session,
+                                const ElectronCookieChange& change) {
+  send_.Run(ElectronCookieChanged(session, change));
 }
 
 void ElectronApp::SessionCallDone(
