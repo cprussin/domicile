@@ -203,6 +203,10 @@ pub fn serve(
         let config = Arc::clone(config);
         thread::spawn(move || {
             let opened = TcpStream::connect(&relay).and_then(|mut stream| {
+                // Each write goes out at once. Nagle's algorithm would hold
+                // one back until the last is acknowledged, which a peer
+                // delays ~40 ms, on every exchange.
+                stream.set_nodelay(true)?;
                 said(&mut stream, &DeskSays::Accept { token })?;
                 Ok(stream)
             });
@@ -226,6 +230,7 @@ fn bridged(mut tls: TcpStream, config: &Arc<ServerConfig>, local: SocketAddr) ->
         return Ok(());
     }
     let mut plain = TcpStream::connect(local)?;
+    plain.set_nodelay(true)?;
     // The handshake's last read may have brought the agent's first request.
     let mut early = Vec::new();
     match connection.reader().read_to_end(&mut early) {

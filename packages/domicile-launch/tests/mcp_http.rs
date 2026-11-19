@@ -412,3 +412,61 @@ fn wait_until(done: impl Fn() -> bool) {
     }
     panic!("it never happened");
 }
+
+#[test]
+fn an_answer_in_pieces_is_not_held_back_for_an_acknowledgment() {
+    let desk = desk();
+    // Once it answers, it serves; a connection queued before may not be
+    // served the same way.
+    assert_eq!(desk.ask("GET", "/authorize", &[], "").status, 400);
+    let stream = TcpStream::connect(("127.0.0.1", desk.port)).unwrap();
+    stream.set_nodelay(true).unwrap();
+    let mut reader = io::BufReader::new(stream.try_clone().unwrap());
+    let mut writer = stream;
+    // The page is larger than one of the pieces `tiny_http` writes.
+    let request = format!(
+        "GET /authorize HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\r\n",
+        desk.port
+    );
+    let quickest = quickest(|| {
+        writer.write_all(request.as_bytes()).unwrap();
+        let length = answered_length(&mut reader);
+        assert!(length > 1024, "the page is {length} bytes");
+    });
+    assert!(
+        quickest < Duration::from_millis(30),
+        "the quickest answer took {quickest:?}"
+    );
+}
+
+/// Reads one answer off `reader` and says how long its body is.
+fn answered_length(reader: &mut impl io::BufRead) -> usize {
+    let mut length = 0;
+    loop {
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        if line == "\r\n" {
+            break;
+        }
+        if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length: ") {
+            length = value.trim().parse().unwrap();
+        }
+    }
+    let mut body = vec![0; length];
+    reader.read_exact(&mut body).unwrap();
+    length
+}
+
+/// The quickest of five runs of `exchange` on a connection already in use. A
+/// piece held back for an acknowledgment holds every run for ~40 ms.
+fn quickest(mut exchange: impl FnMut()) -> Duration {
+    exchange();
+    (0..5)
+        .map(|_| {
+            let started = std::time::Instant::now();
+            exchange();
+            started.elapsed()
+        })
+        .min()
+        .unwrap()
+}

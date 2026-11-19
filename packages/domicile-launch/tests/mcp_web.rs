@@ -6,6 +6,7 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 
 use domicile_launch::mcp::web::{dial, serve, server_config, Certificates};
 use domicile_relay::Relay;
@@ -51,8 +52,9 @@ fn local() -> std::net::SocketAddr {
     address
 }
 
-#[test]
-fn an_agent_reaches_the_desk_through_the_relay_and_only_the_desk_decrypts() {
+/// An agent's TLS connection to a desk dialed in to a relay, whose
+/// plaintext goes to the HTTP server at `local`, and the desk's host.
+fn connected(local: std::net::SocketAddr) -> (StreamOwned<ClientConnection, TcpStream>, String) {
     let (public, desks) = relay();
     let dialed = dial(&desks, &[9; 32]).unwrap();
     let host = dialed.host.clone();
@@ -77,7 +79,6 @@ fn an_agent_reaches_the_desk_through_the_relay_and_only_the_desk_decrypts() {
     assert!(certificates.ready());
 
     let config = server_config(Arc::clone(&certificates));
-    let local = local();
     thread::spawn(move || serve(dialed, &desks, &config, local));
 
     let mut roots = RootCertStore::empty();
@@ -97,10 +98,64 @@ fn an_agent_reaches_the_desk_through_the_relay_and_only_the_desk_decrypts() {
     let tcp = TcpStream::connect(("127.0.0.1", public)).unwrap();
     tcp.set_read_timeout(Some(std::time::Duration::from_secs(10)))
         .unwrap();
-    let mut tls = StreamOwned::new(connection, tcp);
+    (StreamOwned::new(connection, tcp), host)
+}
+
+#[test]
+fn an_agent_reaches_the_desk_through_the_relay_and_only_the_desk_decrypts() {
+    let (mut tls, host) = connected(local());
     tls.write_all(format!("GET /mcp HTTP/1.1\r\nHost: {host}\r\n\r\n").as_bytes())
         .unwrap();
     let mut answer = String::new();
     let _ = tls.read_to_string(&mut answer);
     assert!(answer.ends_with("\r\n\r\nhello"), "{answer}");
+}
+
+#[test]
+fn an_exchange_in_pieces_is_not_held_back_for_an_acknowledgment() {
+    // A server that answers each four bytes asked in two pieces, sending
+    // each at once, as `domicile mcp --http` does.
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let local = listener.local_addr().unwrap();
+    thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream.set_nodelay(true).unwrap();
+        let mut asked = [0; 4];
+        while stream.read_exact(&mut asked).is_ok() {
+            stream.write_all(b"head").unwrap();
+            thread::sleep(Duration::from_millis(5));
+            stream.write_all(b"body").unwrap();
+        }
+    });
+    let (mut tls, _) = connected(local);
+    tls.sock.set_nodelay(true).unwrap();
+
+    // Each piece is a TLS record of its own, apart enough for the desk to
+    // pass each on alone.
+    let quickest = quickest(|| {
+        tls.write_all(b"as").unwrap();
+        thread::sleep(Duration::from_millis(5));
+        tls.write_all(b"ks").unwrap();
+        let mut answer = [0; 8];
+        tls.read_exact(&mut answer).unwrap();
+        assert_eq!(&answer, b"headbody");
+    });
+    assert!(
+        quickest < Duration::from_millis(30),
+        "the quickest exchange took {quickest:?}"
+    );
+}
+
+/// The quickest of five runs of `exchange` on a connection already in use. A
+/// piece held back for an acknowledgment holds every run for ~40 ms.
+fn quickest(mut exchange: impl FnMut()) -> Duration {
+    exchange();
+    (0..5)
+        .map(|_| {
+            let started = std::time::Instant::now();
+            exchange();
+            started.elapsed()
+        })
+        .min()
+        .unwrap()
 }

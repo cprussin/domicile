@@ -162,6 +162,11 @@ impl Relay {
 
     /// A client on the public port: find its desk and ask it to connect.
     fn client(self: Arc<Self>, mut client: TcpStream) {
+        // Each write goes out at once. Nagle's algorithm would hold one back
+        // until the last is acknowledged, which a peer delays ~40 ms.
+        if client.set_nodelay(true).is_err() {
+            return;
+        }
         let _ = client.set_read_timeout(Some(PATIENCE));
         let mut read = Vec::new();
         let host = loop {
@@ -215,6 +220,10 @@ impl Relay {
     /// A connection on the desk port: a desk dialing in, or opening a
     /// connection it was asked to.
     fn desk(self: Arc<Self>, stream: TcpStream) {
+        // As in `client`: no write waits on an acknowledgment.
+        if stream.set_nodelay(true).is_err() {
+            return;
+        }
         let _ = stream.set_read_timeout(Some(PATIENCE));
         let Ok(mut reader) = stream.try_clone().map(BufReader::new) else {
             return;

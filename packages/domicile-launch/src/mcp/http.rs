@@ -13,6 +13,7 @@
 use std::collections::HashMap;
 use std::io::{self, Read};
 use std::net::TcpListener;
+use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
@@ -79,6 +80,7 @@ pub fn serve_http(
     agent: impl Fn() -> Agent<'static> + Send + Sync + 'static,
 ) -> io::Result<()> {
     let port = web.listener.local_addr()?.port();
+    answered_at_once(&web.listener)?;
     let server = Server::from_listener(web.listener, None).map_err(io::Error::other)?;
     let random: Random = Arc::new(Mutex::new(web.random));
     let shared = Arc::new(Shared {
@@ -113,6 +115,29 @@ pub fn serve_http(
             }
             None => swept(&shared),
         }
+    }
+}
+
+/// Sets `TCP_NODELAY` on `listener`, which each connection it accepts takes
+/// from it. `tiny_http` writes an answer in pieces; Nagle's algorithm would
+/// hold each piece after the first until the last is acknowledged, which the
+/// client delays ~40 ms, on every answer.
+fn answered_at_once(listener: &TcpListener) -> io::Result<()> {
+    let on: libc::c_int = 1;
+    // SAFETY: the descriptor is the listener's, open for this call, and the
+    // option is the size it says.
+    let set = unsafe {
+        libc::setsockopt(
+            listener.as_raw_fd(),
+            libc::IPPROTO_TCP,
+            libc::TCP_NODELAY,
+            std::ptr::from_ref(&on).cast(),
+            std::mem::size_of_val(&on) as libc::socklen_t,
+        )
+    };
+    match set {
+        0 => Ok(()),
+        _ => Err(io::Error::last_os_error()),
     }
 }
 

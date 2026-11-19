@@ -198,3 +198,60 @@ fn a_desk_dialing_in_again_replaces_its_old_connection() {
     assert!(matches!(welcome, Some(RelaySays::Welcome { .. })));
     assert_eq!(old.hear(), None, "the old connection is hung up");
 }
+
+#[test]
+fn an_answer_in_pieces_is_not_held_back_for_an_acknowledgment() {
+    let (public, desks) = relay();
+    let (_, mut control) = dialed_in(desks, &key(1), &key(1));
+    let host = format!("{}.{ZONE}", label(key(1).verifying_key().as_bytes()));
+    let mut client = TcpStream::connect(("127.0.0.1", public)).unwrap();
+    client.set_nodelay(true).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let hello = client_hello(&host);
+    client.write_all(&hello).unwrap();
+    let Some(RelaySays::Open { token }) = control.hear() else {
+        panic!("not asked to open");
+    };
+    let mut opened = Line::to(desks);
+    opened.stream.set_nodelay(true).unwrap();
+    opened.say(&DeskSays::Accept { token });
+    let mut got = vec![0; hello.len()];
+    opened.reader.read_exact(&mut got).unwrap();
+
+    // Each asks and answers in two pieces, as TLS records go, apart enough
+    // for the relay to pass each on alone.
+    let quickest = quickest(|| {
+        client.write_all(b"as").unwrap();
+        thread::sleep(Duration::from_millis(5));
+        client.write_all(b"ks").unwrap();
+        let mut asked = [0; 4];
+        opened.reader.read_exact(&mut asked).unwrap();
+        assert_eq!(&asked, b"asks");
+        opened.stream.write_all(b"head").unwrap();
+        thread::sleep(Duration::from_millis(5));
+        opened.stream.write_all(b"body").unwrap();
+        let mut answer = [0; 8];
+        client.read_exact(&mut answer).unwrap();
+        assert_eq!(&answer, b"headbody");
+    });
+    assert!(
+        quickest < Duration::from_millis(30),
+        "the quickest answer took {quickest:?}"
+    );
+}
+
+/// The quickest of five runs of `exchange` on a connection already in use. A
+/// piece held back for an acknowledgment holds every run for ~40 ms.
+fn quickest(mut exchange: impl FnMut()) -> Duration {
+    exchange();
+    (0..5)
+        .map(|_| {
+            let started = std::time::Instant::now();
+            exchange();
+            started.elapsed()
+        })
+        .min()
+        .unwrap()
+}
