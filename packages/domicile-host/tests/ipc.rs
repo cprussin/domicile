@@ -373,6 +373,37 @@ fn the_sites_to_force_dark_ride_with_the_handshake() {
 }
 
 #[test]
+fn spell_checking_rides_with_the_handshake_once_configured() {
+    // The browser process reads it, so a reloaded page's new channel needs it
+    // again. A host without a config sends none, and the browser keeps its
+    // own default.
+    let hello = to_line(&ChromeMessage::Hello {
+        protocol_version: PROTOCOL_VERSION,
+        checked: false,
+    });
+    let unset = Session::new().ingest(&hello);
+    assert!(
+        !unset
+            .iter()
+            .any(|message| matches!(message, HostMessage::Spellcheck { .. })),
+        "{unset:?}"
+    );
+
+    let mut session = Session::new();
+    session
+        .host_mut()
+        .set_spellcheck(false, vec!["de-DE".into()]);
+    let out = session.ingest(&hello);
+    assert!(
+        out.contains(&HostMessage::Spellcheck {
+            enabled: false,
+            languages: vec!["de-DE".into()],
+        }),
+        "{out:?}"
+    );
+}
+
+#[test]
 fn the_keyboard_and_the_shell_s_options_ride_with_the_handshake() {
     // A reloaded page has no resolved keys or options, so the handshake
     // resends them. The keys follow the keymap they were resolved against.

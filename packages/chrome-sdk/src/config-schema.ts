@@ -439,6 +439,12 @@ export const outputConfigSchema = z.strictObject({
   profiles: z.array(profileSchema).prefault([]),
 });
 
+/** Spell checking in pages: in browser windows, web apps and Electron apps. */
+export const spellcheckConfigSchema = z.strictObject({
+  enabled: z.boolean().prefault(true),
+  languages: z.array(z.string()).prefault(["en-US"]),
+});
+
 /**
  * The commands a desk starts with.
  *
@@ -598,6 +604,10 @@ export const configSchema = z.strictObject({
     .nullish()
     .transform((value) => value ?? undefined),
   shell_options: z.record(z.string(), z.unknown()).prefault({}),
+  spellcheck: spellcheckConfigSchema.prefault({
+    enabled: true,
+    languages: ["en-US"],
+  }),
   startup: startupConfigSchema.prefault({ commands: [] }),
   terminal: z
     .array(z.string())

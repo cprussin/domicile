@@ -22,6 +22,7 @@
 //! | `theme.accent_color`, `contrast`, `reduced_motion`, `icon_theme`, `cursor_theme`, `cursor_size`, `font_name`, `monospace_font_name` | sent to the desk's clients (`Portals::restyle`); `icon_theme` also redraws tray and notification icons; `cursor_theme` and `cursor_size` also go to every chrome's browser, which draws the pointer (`Host::set_appearance`) |
 //! | `theme.cursor_hide_after_ms`, `cursor_hide_when_typing` | sent to every chrome's browser, which hides the pointer (`Host::set_appearance`) |
 //! | `theme.force_dark` | sent to every chrome, whose browser draws those sites dark from their next load (`Host::set_force_dark`) |
+//! | `spellcheck.*` | sent to every chrome, whose browser checks spelling in those languages (`Host::set_spellcheck`) |
 //! | `files.omit` | sent to the index, which rewalks the home (`omit_from_the_index`) |
 //! | `electron.apps` | the entries that run them on the engine written again (`write_the_electron_entries`) |
 //! | `extensions.*` | sent to every chrome, whose browser installs them (`hand_over_the_extensions`) |
@@ -53,7 +54,7 @@
 
 use domicile_config::{
     AgentsConfig, BrowserConfig, Config, ExtensionsConfig, IdleConfig, KeyRepeat, KeyboardConfig,
-    LockConfig, LockdownConfig, Omit, ThemeConfig, ThemeMode,
+    LockConfig, LockdownConfig, Omit, SpellcheckConfig, ThemeConfig, ThemeMode,
 };
 
 /// What a reloaded config asks the compositor to restate.
@@ -82,6 +83,9 @@ pub struct Restatement {
     pub appearance: Option<ThemeConfig>,
     /// The sites the browser draws dark, or `None` if unchanged.
     pub force_dark: Option<Vec<String>>,
+    /// Whether and in which languages the browser checks spelling, or `None`
+    /// if unchanged.
+    pub spellcheck: Option<SpellcheckConfig>,
     /// What the file index leaves out, or `None` if unchanged.
     pub omit: Option<Omit>,
     /// The Electron apps that run on the engine, or `None` if unchanged.
@@ -129,6 +133,7 @@ impl Restatement {
                 .then(|| now.theme.clone()),
             force_dark: (was.theme.force_dark != now.theme.force_dark)
                 .then(|| now.theme.force_dark.clone()),
+            spellcheck: (was.spellcheck != now.spellcheck).then(|| now.spellcheck.clone()),
             omit: (was.files.omit != now.files.omit).then(|| now.files.omit.clone()),
             electron_apps: (was.electron != now.electron).then(|| now.electron.apps.clone()),
             extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
@@ -293,6 +298,21 @@ mod tests {
 
         assert_eq!(restated.force_dark, Some(vec!["mail.google.com".into()]));
         assert_eq!(restated.appearance, None);
+    }
+
+    #[test]
+    fn spell_checking_that_moved_is_restated() {
+        let was = parsed("{}");
+        let now = parsed(r#"{ "spellcheck": { "languages": ["de-DE"] } }"#);
+
+        assert_eq!(
+            Restatement::between(&was, &now).spellcheck,
+            Some(SpellcheckConfig {
+                enabled: true,
+                languages: vec!["de-DE".into()],
+            })
+        );
+        assert_eq!(Restatement::between(&now, &now), Restatement::default());
     }
 
     #[test]

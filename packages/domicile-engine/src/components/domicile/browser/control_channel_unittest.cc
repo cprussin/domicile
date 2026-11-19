@@ -662,6 +662,21 @@ TEST_F(ControlChannelTest, TheSitesToForceDarkReachTheBrowser) {
             (std::vector<std::string>{"mail.google.com"}));
 }
 
+// How to check spelling is this process's too. One whose languages are not
+// strings is dropped.
+TEST_F(ControlChannelTest, SpellCheckingReachesTheBrowser) {
+  base::test::TestFuture<SpellcheckSettings> heard;
+  SetSpellcheckSink(heard.GetRepeatingCallback<const SpellcheckSettings&>());
+
+  Say("{\"type\":\"spellcheck\",\"enabled\":true,\"languages\":[1]}\n"
+      "{\"type\":\"spellcheck\",\"enabled\":false,"
+      "\"languages\":[\"de-DE\"]}\n");
+
+  EXPECT_EQ(heard.Take(),
+            (SpellcheckSettings{.enabled = false, .languages = {"de-DE"}}));
+  SetSpellcheckSink(SpellcheckSink());
+}
+
 // The desk's browser profiles are this process's too, and reach it with the
 // page whose channel heard them. Ones that name a profile they do not list are
 // dropped.

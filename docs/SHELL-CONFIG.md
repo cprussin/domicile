@@ -144,6 +144,7 @@ An edit applies to the running desktop, and windows stay open:
 | `theme.font_name`, `monospace_font_name` | Windows that read the settings portal follow |
 | `theme.force_dark` | Those sites are drawn dark from their next load |
 | `theme.icon_theme` | Shell and windows that read the settings portal follow; tray icons redrawn and later notifications drawn in it; manganese on the next menu or launcher opening, and title bars when a new app id appears |
+| `spellcheck` | Text fields check spelling in the new languages, or stop |
 | `files.omit` | Launcher file index rebuilt |
 | `electron.apps` | Starting a newly listed app runs it on the engine; apps already running stay as they are |
 | `extensions` | Extensions installed or removed ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)) |
@@ -529,7 +530,24 @@ For sites with no dark theme of their own, such as Gmail:
   rejected.
 - Default: `[]`.
 
-## Displays
+## Spelling
+
+```json
+{ "spellcheck": { "enabled": true, "languages": ["en-US", "de-DE"] } }
+```
+
+Text fields in pages, web apps and Electron apps underline misspelled words.
+
+- `enabled`: default `true`.
+- `languages`: language tags, default `["en-US"]`. A tag the engine has no
+  dictionary for is logged and left out. An empty list is rejected; set
+  `enabled` to `false` instead.
+- Dictionaries ship with the engine. None is downloaded, and words are never
+  sent to Google's spelling service.
+- A right click on a misspelled word gives a shell the word and its
+  suggestions on the context menu event. See
+  [SHELL-BROWSER-WINDOWS.md](SHELL-BROWSER-WINDOWS.md#the-keyboard).
+
 
 `output` has two ways to describe displays:
 

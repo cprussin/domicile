@@ -183,6 +183,11 @@ class CORE_EXPORT HTMLWebViewElement final
       const DomicileContextMenuEvent& menu,
       domicile::mojom::blink::WebViewContextMenuAction action,
       ExceptionState&);
+  // Replaces `menu`'s misspelled word with `word`. Throws as
+  // RunContextMenuAction.
+  void ReplaceMisspelling(const DomicileContextMenuEvent& menu,
+                          const String& word,
+                          ExceptionState&);
 
   // Releases a dispatched file chooser event once answered. See
   // `waiting_choosers_`.

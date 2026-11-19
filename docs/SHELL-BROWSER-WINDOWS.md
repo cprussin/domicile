@@ -422,10 +422,16 @@ Draw the context menu yourself:
   `mediaType`, `selectionText`, `isEditable`, the `can*` edit flags,
   `canPictureInPicture` / `inPictureInPicture` for a video, and `x` / `y`
   relative to the view.
+- Over a misspelled word in a field, `misspelledWord` names it and
+  `spellingSuggestions` lists the dictionary's fixes, best first. Both are
+  empty elsewhere. `event.replaceMisspelling(word)` puts `word` in its place;
+  `event.run("add-to-dictionary")` stops it being marked. Both throw over
+  anything but a misspelling. Languages come from the config's
+  [`spellcheck`](SHELL-CONFIG.md#spelling).
 - `event.run(action)` does what only the browser can: `copy-link-address`,
   `save-link-as`, `copy-image`, `copy-media-address`, `save-media-as`,
   `picture-in-picture` (enters, or leaves when in), the edit commands (`cut`,
-  `paste`, …) and `inspect`. A save asks `domicile-file-chooser` where. See `WEBVIEW_CONTEXT_MENU_ACTIONS`.
+  `paste`, …), `add-to-dictionary` and `inspect`. A save asks `domicile-file-chooser` where. See `WEBVIEW_CONTEXT_MENU_ACTIONS`.
 - Back, reload and "open in new window" (`browser.open`) need no menu
   action.
 - `view.inspect()` opens DevTools for the page in a new browser window. It

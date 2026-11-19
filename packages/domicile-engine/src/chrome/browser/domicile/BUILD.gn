@@ -5,12 +5,25 @@
 # desk, browser windows, extensions, history, site data, file dialogs,
 # permission prompts, device choosers, links for applications, sign-ins,
 # "Sign in with" dialogs, other prompts, refusing Chrome's own dialogs,
-# printing and pointer warps.
+# printing, spell checking and pointer warps.
 #
 # A separate target because //chrome/browser:browser accepts no new sources,
 # and it keeps the fork to one added dependency in a Chromium-owned file.
 # It lives in //chrome because it needs browser windows, profiles and aura
 # hosts. Code that does not is in //components/domicile, with the tests.
+# The Hunspell dictionaries Chrome checks spelling with, in `dictionaries/`
+# beside the engine, which patch 0246 makes Chrome's DIR_APP_DICTIONARIES. The
+# release tarball carries the folder. See domicile_spellcheck.h.
+action("domicile_dictionaries") {
+  script = "copy_dictionaries.py"
+  outputs = [ "$root_out_dir/dictionaries.stamp" ]
+  args = [
+    rebase_path("//third_party/hunspell_dictionaries", root_build_dir),
+    rebase_path("$root_out_dir/dictionaries", root_build_dir),
+    rebase_path(outputs[0], root_build_dir),
+  ]
+}
+
 source_set("domicile") {
   sources = [
     "domicile_agent_devtools.cc",
@@ -89,6 +102,8 @@ source_set("domicile") {
     "domicile_shell_windows.h",
     "domicile_sign_in.cc",
     "domicile_sign_in.h",
+    "domicile_spellcheck.cc",
+    "domicile_spellcheck.h",
     "domicile_site_data.cc",
     "domicile_site_data.h",
     "domicile_tab_helpers.cc",
@@ -99,6 +114,9 @@ source_set("domicile") {
 
   # Public so //chrome/browser, which depends only on this target, starts it.
   public_deps = [ "//components/domicile:rtkit" ]
+
+  # The dictionaries domicile_spellcheck.cc's profiles check spelling with.
+  data_deps = [ ":domicile_dictionaries" ]
 
   deps = [
     "//base",
@@ -148,6 +166,10 @@ source_set("domicile") {
     "//components/domicile:shell_swap",
     "//components/domicile:shell_window_wait",
     "//components/domicile:shell_windows",
+    # The config's spell checking, in every profile's prefs, and the context
+    # menu's "Add to dictionary".
+    "//chrome/browser/spellchecker",
+    "//components/domicile:spellcheck_settings",
     "//components/domicile:shortcut_registry",
     "//components/tabs:public",
     "//content/public/browser",

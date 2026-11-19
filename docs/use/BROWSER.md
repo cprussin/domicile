@@ -138,6 +138,28 @@ it.
 
 <!-- /tabs -->
 
+## Spelling
+
+Text fields in pages, web apps and Electron apps underline misspelled words.
+Right-click one for suggestions, or **Add to dictionary** to stop it being
+marked.
+
+Spelling is checked in American English unless you choose other languages in
+your config file:
+
+```json
+{ "spellcheck": { "languages": ["en-US", "de-DE"] } }
+```
+
+On NixOS:
+
+```nix
+programs.domicile.settings.spellcheck.languages = ["en-US" "de-DE"];
+```
+
+Set `enabled` to `false` to turn it off. Dictionaries come with the desktop,
+and your words are never sent anywhere to be checked.
+
 ## Differences from Chrome
 
 The browser is Chromium, with the desktop in place of Chrome's own window and

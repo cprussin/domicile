@@ -40,6 +40,13 @@ for artifact in "${ARTIFACTS[@]}"; do
 done
 ls -l "$ENGINE_OUT/chrome" "$ENGINE_OUT/libdomicile_engine.so"
 
+# The spelling dictionaries, which the release tarball needs too.
+ls "$ENGINE_OUT"/dictionaries/*.bdic >/dev/null 2>&1 || {
+  annotate "the build produced no dictionaries/*.bdic in $ENGINE_OUT;" \
+    "domicile_dictionaries did not run"
+  exit 1
+}
+
 missing=""
 for symbol in "${SYMBOLS[@]}"; do
   grep -qa "$symbol" "$ENGINE_OUT/libdomicile_engine.so" ||

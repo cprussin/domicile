@@ -223,6 +223,9 @@ pub struct Host {
     /// Host names of sites the browser draws dark, for
     /// [`HostMessage::ForceDark`].
     force_dark: Vec<String>,
+    /// The [`HostMessage::Spellcheck`] the config's `spellcheck` makes.
+    /// `None` until set; a host without a config sends none.
+    spellcheck: Option<HostMessage>,
     /// The [`HostMessage::BrowserProfiles`] the config's `browser` makes.
     /// `None` until set; a host without a config sends none.
     browser_profiles: Option<HostMessage>,
@@ -559,6 +562,17 @@ impl Host {
         HostMessage::ForceDark {
             sites: self.force_dark.clone(),
         }
+    }
+
+    /// Replace whether and in which languages the browser checks spelling,
+    /// for chromes that connect later.
+    pub fn set_spellcheck(&mut self, enabled: bool, languages: Vec<String>) {
+        self.spellcheck = Some(HostMessage::Spellcheck { enabled, languages });
+    }
+
+    /// The spell checking message, or `None` if none was set.
+    pub fn describe_spellcheck(&self) -> Option<HostMessage> {
+        self.spellcheck.clone()
     }
 
     /// Replace the keysym-to-keycode map and the shell's options, for

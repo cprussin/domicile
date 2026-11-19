@@ -34,6 +34,11 @@ mojom::WebViewContextMenuPtr AsWebViewContextMenu(
 bool Offers(const content::ContextMenuParams& params,
             mojom::WebViewContextMenuAction action);
 
+// Whether a menu over `params` is over a misspelled word, which
+// WebViewGuest::ReplaceMisspelling replaces. As Offers, the element checks
+// first.
+bool OffersSpellingFixes(const content::ContextMenuParams& params);
+
 // `params` as an Electron app's webContents hears it in `context-menu`, with
 // the click at `in_page`.
 ElectronContextMenu AsElectronContextMenu(

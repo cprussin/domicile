@@ -118,6 +118,10 @@ mojom::WebViewContextMenuPtr AsWebViewContextMenu(
   menu->can_delete = Can(params, blink::ContextMenuDataEditFlags::kCanDelete);
   menu->can_select_all =
       Can(params, blink::ContextMenuDataEditFlags::kCanSelectAll);
+  menu->misspelled_word = base::UTF16ToUTF8(params.misspelled_word);
+  for (const std::u16string& suggestion : params.dictionary_suggestions) {
+    menu->spelling_suggestions.push_back(base::UTF16ToUTF8(suggestion));
+  }
   return menu;
 }
 
@@ -209,7 +213,13 @@ bool Offers(const content::ContextMenuParams& params,
       return HasPixels(params) || HasSource(params);
     case mojom::WebViewContextMenuAction::kPictureInPicture:
       return CanPictureInPicture(params);
+    case mojom::WebViewContextMenuAction::kAddToDictionary:
+      return OffersSpellingFixes(params);
   }
+}
+
+bool OffersSpellingFixes(const content::ContextMenuParams& params) {
+  return !params.misspelled_word.empty();
 }
 
 }  // namespace domicile

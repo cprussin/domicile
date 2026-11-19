@@ -270,10 +270,15 @@ const asksForAMenu = (
       linkText: "",
       linkUrl: "",
       mediaType: "none",
+      misspelledWord: "",
+      replaceMisspelling: (word: string) => {
+        ran.push(`replace with ${word}`);
+      },
       run: (action: string) => {
         ran.push(action);
       },
       selectionText: "",
+      spellingSuggestions: [],
       srcUrl: "",
       x: 10,
       y: 20,
@@ -2815,6 +2820,19 @@ describe("BrowserWindow", () => {
       await userEvent.click(await menuItem("Paste$"));
 
       expect(ran).toStrictEqual(["paste"]);
+    });
+
+    it("puts the chosen spelling in place of a misspelled word", async () => {
+      const { container } = renderWindow();
+      const ran = asksForAMenu(view(container), {
+        isEditable: true,
+        misspelledWord: "recieve",
+        spellingSuggestions: ["receive", "relieve"],
+      });
+
+      await userEvent.click(await menuItem("relieve"));
+
+      expect(ran).toStrictEqual(["replace with relieve"]);
     });
   });
 

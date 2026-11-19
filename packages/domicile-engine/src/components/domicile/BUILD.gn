@@ -1207,6 +1207,21 @@ source_set("desktop_prefs") {
   ]
 }
 
+# How a profile checks spelling: the config's `spellcheck`, in Chrome's prefs.
+# Its own target for :desktop_prefs' reason: a test reaches it with no profile.
+source_set("spellcheck_settings") {
+  sources = [
+    "browser/spellcheck_settings.cc",
+    "browser/spellcheck_settings.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/prefs",
+    "//components/spellcheck/common",
+  ]
+}
+
 # The shell's control channel, in the browser process.
 #
 # Its own target so the slice can meet a compiler before the Blink half exists,
@@ -1432,6 +1447,7 @@ source_set("control_channel") {
     ":portal_request",
     ":shell_swap",
     ":shortcut_registry",
+    ":spellcheck_settings",
     ":system_call",
     ":theme",
     "//base",
@@ -1484,6 +1500,7 @@ source_set("unit_tests") {
     "browser/extension_settings_unittest.cc",
     "browser/extension_tray_entry_unittest.cc",
     "browser/force_dark_unittest.cc",
+    "browser/spellcheck_settings_unittest.cc",
     "browser/file_choice_unittest.cc",
     "browser/frame_sink_broker_unittest.cc",
     "browser/guest_dialogs_unittest.cc",
@@ -1584,6 +1601,7 @@ source_set("unit_tests") {
     ":extension_tray_entry",
     ":file_choice",
     ":force_dark",
+    ":spellcheck_settings",
     ":forwarded_keys",
     ":guest_dialogs",
     ":held_chords",

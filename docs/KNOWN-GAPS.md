@@ -20,8 +20,8 @@ the detail, when there is one. Remove a gap when it's fixed.
 - **A chrome repaint damages the whole output.**
 - **Windows under a fullscreen window keep drawing,** so manganese can animate
   the fullscreen window back to its box.
-- **Browser window context menus have only Chrome's core items.** No spelling
-  suggestions, page or extension items.
+- **Browser window context menus have only Chrome's core items.** No page or
+  extension items.
 - **An input method's candidate list does not show over pages or the
   shell:** they compose from it, but only native windows show its list.
   [TEXT-INPUT.md](/docs/architecture/TEXT-INPUT.md#plan).

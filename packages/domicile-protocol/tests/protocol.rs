@@ -192,6 +192,23 @@ fn spawn_wire_shape_is_pinned() {
 }
 
 #[test]
+fn spellcheck_says_whether_and_in_which_languages() {
+    let v = serde_json::to_value(HostMessage::Spellcheck {
+        enabled: true,
+        languages: vec!["en-US".into(), "de-DE".into()],
+    })
+    .unwrap();
+    assert_eq!(
+        v,
+        serde_json::json!({
+            "type": "spellcheck",
+            "enabled": true,
+            "languages": ["en-US", "de-DE"],
+        })
+    );
+}
+
+#[test]
 fn browser_profiles_wire_shape_is_pinned() {
     let v = serde_json::to_value(HostMessage::BrowserProfiles {
         profiles: vec![BrowserProfile {

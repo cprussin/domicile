@@ -37,6 +37,10 @@ export enum PageMenuCommand {
   PictureInPicture = "PictureInPicture",
   CopyImage = "CopyImage",
   CopyMediaAddress = "CopyMediaAddress",
+  ReplaceMisspelling = "ReplaceMisspelling",
+  /** Shown, grayed out, when a misspelled word has nothing to become. */
+  NoSpellingSuggestions = "NoSpellingSuggestions",
+  AddToDictionary = "AddToDictionary",
   Undo = "Undo",
   Redo = "Redo",
   Cut = "Cut",
@@ -66,8 +70,12 @@ export type PageContext = {
   hasPixels: boolean;
   link: string | undefined;
   media: MediaKind;
+  /** The misspelled word under the click, and what it could be instead. */
+  misspelling: { suggestions: readonly string[]; word: string } | undefined;
   /** Whether a video can go into picture-in-picture, and whether it is in it. */
   pictureInPicture: { active: boolean; can: boolean };
+  /** Put `word` in place of the misspelled word under the click. */
+  replaceMisspelling: (word: string) => void;
   /** Ask the browser to do one of the things only it can, for this click. */
   run: (action: WebViewContextMenuAction) => void;
   selection: string;
@@ -83,6 +91,8 @@ export type PageMenuItem = {
   command: PageMenuCommand;
   disabled: boolean;
   label: string;
+  /** For a spelling suggestion: the word it puts in place. */
+  replacement?: string | undefined;
   shortcut?: string | undefined;
 };
 
@@ -135,9 +145,19 @@ export const pageContextOf = (
   hasPixels: event.hasImageContents,
   link: addressOf(event.linkUrl),
   media: mediaSchema.parse(event.mediaType),
+  misspelling:
+    event.misspelledWord === ""
+      ? undefined
+      : {
+          suggestions: event.spellingSuggestions,
+          word: event.misspelledWord,
+        },
   pictureInPicture: {
     active: event.inPictureInPicture,
     can: event.canPictureInPicture,
+  },
+  replaceMisspelling: (word) => {
+    event.replaceMisspelling(word);
   },
   run: (action) => {
     event.run(action);
@@ -190,11 +210,18 @@ export type PageMenuWindow = {
  * handed back to the browser through the event the menu came from.
  */
 export const choosePageCommand = (
-  command: PageMenuCommand,
+  { command, replacement }: Pick<PageMenuItem, "command" | "replacement">,
   context: PageContext,
   window: PageMenuWindow,
 ): void => {
   switch (command) {
+    case PageMenuCommand.ReplaceMisspelling: {
+      context.replaceMisspelling(required(replacement, "replacement"));
+      break;
+    }
+    case PageMenuCommand.NoSpellingSuggestions: {
+      throw new Error("page menu: chose the grayed-out no-suggestions line");
+    }
     case PageMenuCommand.Back: {
       window.browse(BrowserCommand.Back);
       break;
@@ -237,6 +264,7 @@ export const choosePageCommand = (
     case PageMenuCommand.PictureInPicture:
     case PageMenuCommand.CopyImage:
     case PageMenuCommand.CopyMediaAddress:
+    case PageMenuCommand.AddToDictionary:
     case PageMenuCommand.Undo:
     case PageMenuCommand.Redo:
     case PageMenuCommand.Cut:
@@ -261,6 +289,7 @@ const browserActionFor = (
     | PageMenuCommand.PictureInPicture
     | PageMenuCommand.CopyImage
     | PageMenuCommand.CopyMediaAddress
+    | PageMenuCommand.AddToDictionary
     | PageMenuCommand.Undo
     | PageMenuCommand.Redo
     | PageMenuCommand.Cut
@@ -289,6 +318,9 @@ const browserActionFor = (
     }
     case PageMenuCommand.CopyMediaAddress: {
       return "copy-media-address";
+    }
+    case PageMenuCommand.AddToDictionary: {
+      return "add-to-dictionary";
     }
     case PageMenuCommand.Undo: {
       return "undo";
@@ -320,14 +352,12 @@ const browserActionFor = (
   }
 };
 
-/** An address the menu offered a command for, which it therefore has. */
-const required = (address: string | undefined, what: string): string => {
-  if (address === undefined) {
-    throw new Error(
-      `page menu: a command for a ${what} with none under the click`,
-    );
+/** What the menu offered a command for, which it therefore has. */
+const required = (value: string | undefined, what: string): string => {
+  if (value === undefined) {
+    throw new Error(`page menu: a command for a ${what} with none to use`);
   } else {
-    return address;
+    return value;
   }
 };
 
@@ -427,8 +457,14 @@ const nounOf = (media: MediaKind): string | undefined => {
   }
 };
 
-/** A field's, as Chrome's: history, then the clipboard and the selection. */
+/**
+ * A field's, as Chrome's: a misspelled word's fixes, history, then the
+ * clipboard and the selection.
+ */
 const editGroups = (context: PageContext): PageMenuItem[][] => [
+  ...(context.misspelling === undefined
+    ? []
+    : [spellingGroup(context.misspelling.suggestions)]),
   [
     item(PageMenuCommand.Undo, "Undo", !context.can.undo),
     item(PageMenuCommand.Redo, "Redo", !context.can.redo),
@@ -445,6 +481,23 @@ const editGroups = (context: PageContext): PageMenuItem[][] => [
     item(PageMenuCommand.Delete, "Delete", !context.can.delete),
     item(PageMenuCommand.SelectAll, "Select all", !context.can.selectAll),
   ],
+];
+
+/** What a misspelled word could be instead, or that it is right after all. */
+const spellingGroup = (suggestions: readonly string[]): PageMenuItem[] => [
+  ...(suggestions.length === 0
+    ? [
+        item(
+          PageMenuCommand.NoSpellingSuggestions,
+          "No spelling suggestions",
+          true,
+        ),
+      ]
+    : suggestions.map((word) => ({
+        ...item(PageMenuCommand.ReplaceMisspelling, word),
+        replacement: word,
+      }))),
+  item(PageMenuCommand.AddToDictionary, "Add to dictionary"),
 ];
 
 /** Text selected outside a field: copy it, or search for it. */
