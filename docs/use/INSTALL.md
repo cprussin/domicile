@@ -132,11 +132,11 @@ domicile @domicile-desktop/manganese
 ## The newest build
 
 To run the newest `stable` build before it is released, download its package
-from [`packages-latest`](https://github.com/cprussin/domicile/releases/tag/packages-latest)
+from [`packages-latest`](https://github.com/cprussin/domicile-builds/releases/tag/packages-latest)
 and check it:
 
 ```sh
-base=https://github.com/cprussin/domicile/releases/download/packages-latest
+base=https://github.com/cprussin/domicile-builds/releases/download/packages-latest
 pkg=domicile_amd64.deb   # your package from the table below
 curl -fL -O "$base/$pkg" -O "$base/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS
