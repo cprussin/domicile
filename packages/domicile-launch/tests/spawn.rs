@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::spawn::{
-    composite_on_the_cpu, compositor, engine, let_the_engine_take_input, send_frames_in_memory,
-    the_engine_takes_input, Runtime,
+    composite_on_the_cpu, compositor, engine, let_the_engine_open_links, let_the_engine_take_input,
+    send_frames_in_memory, the_engine_takes_input, Runtime,
 };
 
 /// A built shell, split as `shell_path` returns it: the directory the engine
@@ -581,6 +581,46 @@ fn a_machine_with_no_data_directories_keeps_the_defaults_behind_this_desktops() 
     assert_eq!(
         env_of(&spawned, "XDG_DATA_DIRS").unwrap(),
         "/run/d/share:/d/share:/usr/local/share:/usr/share"
+    );
+}
+
+#[test]
+fn a_link_a_page_opens_in_an_app_runs_this_desktops_xdg_open() {
+    // The engine hands `slack:` and other app links to `xdg-open`. It must be
+    // `domicile open`, which the shell's "Open Slack?" prompt names the app
+    // from, or the machine's `xdg-open` finds no app and nothing opens.
+    let inherited = |name: &str| (name == "PATH").then(|| "/usr/bin:/bin".to_string());
+    let mut spawned = engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "wayland",
+        &runtime(),
+        None,
+    );
+    let_the_engine_open_links(&mut spawned, Path::new("/d/share"), &runtime(), &inherited);
+    assert_eq!(
+        env_of(&spawned, "PATH").unwrap(),
+        "/run/d/bin:/usr/bin:/bin"
+    );
+}
+
+#[test]
+fn a_link_a_page_opens_in_an_app_finds_the_apps_the_compositor_finds() {
+    // `domicile open` reads the data directories for the entries that run
+    // the config's Electron apps on the engine, as an app the compositor
+    // started does.
+    let inherited = |name: &str| (name == "XDG_DATA_DIRS").then(|| "/run/sw/share".to_string());
+    let mut spawned = engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "wayland",
+        &runtime(),
+        None,
+    );
+    let_the_engine_open_links(&mut spawned, Path::new("/d/share"), &runtime(), &inherited);
+    assert_eq!(
+        env_of(&spawned, "XDG_DATA_DIRS").unwrap(),
+        "/run/d/share:/d/share:/run/sw/share"
     );
 }
 

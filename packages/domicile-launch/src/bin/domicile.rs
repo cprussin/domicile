@@ -38,8 +38,8 @@ use domicile_launch::components::{
     builder, components, electron_host, engine as engine_path, our_shell, version_file, Components,
 };
 use domicile_launch::compositor_socket::{
-    act_on_window, agents, configure_display, displays, emulate, forget_agent, inputs, lock,
-    monitors, power_displays, screen_record, screenshot, send_shell, shell_bindings,
+    act_on_window, agents, configure_display, displays, emulate, forget_agent, inputs, launch,
+    lock, monitors, power_displays, screen_record, screenshot, send_shell, shell_bindings,
     shell_commands, shoot_desk, status, stop_agent, theme, windows,
 };
 use domicile_launch::config_check::check;
@@ -85,8 +85,8 @@ use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::shell_source::{shell_source, ShellSource};
 use domicile_launch::software_compositing::{self, on_the_cpu};
 use domicile_launch::spawn::{
-    composite_on_the_cpu, compositor, engine, let_the_engine_take_input, send_frames_in_memory,
-    the_engine_takes_input, Runtime,
+    composite_on_the_cpu, compositor, engine, let_the_engine_open_links, let_the_engine_take_input,
+    send_frames_in_memory, the_engine_takes_input, Runtime,
 };
 use domicile_launch::splash::{lay_out, tell, the_page_ends, Progress, ENDED};
 use domicile_launch::subscription::follow;
@@ -276,8 +276,8 @@ fn versioned() -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
-/// Opens `target` with what opens its type, in this process's place, or in a
-/// browser window of the running desktop, in browser profile `profile` when
+/// Opens `target` with what opens its type, started by the running desktop's
+/// compositor, or in a browser window of the running desktop, in browser profile `profile` when
 /// given; see `domicile_launch::open`. Only a web address takes a profile.
 fn opened(target: &str, profile: Option<String>) -> Result<ExitCode, String> {
     match opening(target, &typed_in()?, &places()).map_err(|why| why.to_string())? {
@@ -286,15 +286,10 @@ fn opened(target: &str, profile: Option<String>) -> Result<ExitCode, String> {
             target: target.to_string(),
         }
         .to_string()),
-        Opening::Run(argv) => {
-            let (program, args) = argv
-                .split_first()
-                .expect("a handler's command has a program");
-            Err(format!(
-                "cannot run {program}: {}",
-                Command::new(program).args(args).exec()
-            ))
-        }
+        // The compositor starts it, as the launcher would: whoever asked,
+        // such as the engine's `xdg-open`, may lack the desktop's
+        // environment.
+        Opening::Run(command) => asked(&Request::Launch { command }),
     }
 }
 
@@ -872,6 +867,9 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         Request::ConfigureDisplay { .. } => Some(CONFIGURE_WITHIN + ANSWER_WITHIN),
         Request::ShootDesk { .. } => Some(CAPTURE_WITHIN + ANSWER_WITHIN),
         Request::DevTools { .. } => Some(DEVTOOLS_WITHIN + ANSWER_WITHIN),
+        // Longer than the supervisor waits for the compositor, so its own
+        // failure reaches this terminal rather than a timeout.
+        Request::Launch { .. } => Some(ANSWER_WITHIN + ANSWER_WITHIN),
         _ => Some(ANSWER_WITHIN),
     };
     let answer = ask(&socket, request, patience).map_err(|why| why.to_string())?;
@@ -1830,6 +1828,12 @@ fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), Down>
     if desktop.on_the_cpu {
         composite_on_the_cpu(&mut spawn);
     }
+    let_the_engine_open_links(
+        &mut spawn,
+        &data_of(desktop.browser)?,
+        desktop.places,
+        desktop.env,
+    );
     if let Some(schemes) = electron_schemes(desktop.env) {
         spawn.args.push(schemes.into());
     }
@@ -1958,6 +1962,9 @@ fn answer_a_command(
                     },
                     run_app: &|root, module| {
                         run_app(engine, root, module, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    },
+                    launch: &|command| {
+                        launch(chrome, command, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
                     },
                     // The interactive one waits for the user, however long that
                     // takes.

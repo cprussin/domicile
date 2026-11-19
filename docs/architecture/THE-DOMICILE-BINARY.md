@@ -388,7 +388,7 @@ running one. The first argument decides which.
 domicile which-shell ─▶ $DOMICILE_SOCK ─▶ supervisor
 domicile load-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine ─▶ page
 domicile open <url>  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
-domicile open <file> ─▶ its type's default, in the caller's place
+domicile open <file> ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor (starts its type's default)
 domicile open --app  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
 domicile screenshot  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor
 domicile send-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor ─▶ every page
@@ -421,6 +421,11 @@ Several desktops per session:
   to `domicile-xdg-open`, which runs `domicile open`. Web links open in this
   desktop regardless of `mimeapps.list`; anything else opens with its type's
   default, as the launcher's Enter does.
+- The engine gets the same `PATH` and `XDG_DATA_DIRS`, so a page's app link
+  (`slack:`, `zoommtg:`) opens the app its "Open …?" prompt named.
+- `domicile open` picks the handler itself, then has the compositor start it
+  as the launcher would: the desktop's environment, its own scope, and an
+  activation token. Whoever asked, such as the engine, may lack those.
 - The same directory holds the desktop's own `domicile`, so the launcher's
   "Open with" asks this desktop's `open --which`, whatever `domicile` is
   installed, and lists that app first.

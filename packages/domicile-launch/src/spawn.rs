@@ -198,6 +198,27 @@ pub fn send_frames_in_memory(compositor: &mut Spawn) {
     compositor.args.push("yes".into());
 }
 
+/// Makes an [`engine`] open links for apps, such as `slack:`, as the
+/// [`compositor`]'s apps do: its `xdg-open` is `domicile open`, which finds
+/// the entries that run the config's Electron apps on the engine. The shell
+/// names the app it asks about with `domicile open --which`, so the two agree,
+/// except on `Terminal=true` handlers: the engine has no `DOMICILE_TERMINAL`,
+/// which the compositor sets from the live config, so it skips them.
+pub fn let_the_engine_open_links(
+    engine: &mut Spawn,
+    data: &Path,
+    runtime: &Runtime,
+    inherited: &dyn Fn(&str) -> Option<String>,
+) {
+    engine
+        .env
+        .push(("PATH".to_string(), shims_first(runtime, inherited)));
+    engine.env.push((
+        "XDG_DATA_DIRS".to_string(),
+        data_dirs(data, runtime, inherited),
+    ));
+}
+
 /// Whether the engine on `platform` takes emulated input (EIS) through its
 /// own input path, so the shell and its lock screen hear it as a real hand's.
 /// A desk the engine drives does; a nested one's host session delivers it.
@@ -244,22 +265,6 @@ pub fn compositor(
     scope_clients: bool,
     inherited: &dyn Fn(&str) -> Option<String>,
 ) -> Spawn {
-    let mut path = OsString::from(&runtime.shims);
-    if let Some(theirs) = inherited("PATH") {
-        path.push(":");
-        path.push(theirs);
-    }
-    // Unset means `/usr/local/share:/usr/share` per the XDG spec, so keep
-    // those after ours.
-    let mut data_dirs = OsString::from(&runtime.electron_entries);
-    data_dirs.push(":");
-    data_dirs.push(data);
-    data_dirs.push(":");
-    data_dirs.push(
-        inherited("XDG_DATA_DIRS")
-            .filter(|theirs| !theirs.is_empty())
-            .unwrap_or_else(|| "/usr/local/share:/usr/share".to_string()),
-    );
     let mut libraries = OsString::from(engine);
     if let Some(theirs) = inherited("LD_LIBRARY_PATH") {
         libraries.push(":");
@@ -296,8 +301,11 @@ pub fn compositor(
                 runtime.electron.clone().into(),
             ),
             ("BROWSER".to_string(), browser.into()),
-            ("PATH".to_string(), path),
-            ("XDG_DATA_DIRS".to_string(), data_dirs),
+            ("PATH".to_string(), shims_first(runtime, inherited)),
+            (
+                "XDG_DATA_DIRS".to_string(),
+                data_dirs(data, runtime, inherited),
+            ),
             ("LD_LIBRARY_PATH".to_string(), libraries),
             (
                 "RUST_LOG".to_string(),
@@ -310,6 +318,37 @@ pub fn compositor(
         ],
         program: compositor.to_path_buf(),
     }
+}
+
+/// `PATH` with [`Runtime::shims`] first, so `xdg-open` is `domicile open`.
+fn shims_first(runtime: &Runtime, inherited: &dyn Fn(&str) -> Option<String>) -> OsString {
+    let mut path = OsString::from(&runtime.shims);
+    if let Some(theirs) = inherited("PATH") {
+        path.push(":");
+        path.push(theirs);
+    }
+    path
+}
+
+/// `XDG_DATA_DIRS` with [`Runtime::electron_entries`] first, then `data`,
+/// as [`compositor`] says.
+fn data_dirs(
+    data: &Path,
+    runtime: &Runtime,
+    inherited: &dyn Fn(&str) -> Option<String>,
+) -> OsString {
+    // Unset means `/usr/local/share:/usr/share` per the XDG spec, so keep
+    // those after ours.
+    let mut dirs = OsString::from(&runtime.electron_entries);
+    dirs.push(":");
+    dirs.push(data);
+    dirs.push(":");
+    dirs.push(
+        inherited("XDG_DATA_DIRS")
+            .filter(|theirs| !theirs.is_empty())
+            .unwrap_or_else(|| "/usr/local/share:/usr/share".to_string()),
+    );
+    dirs
 }
 
 const ENABLE_FEATURES: &str = "--enable-features=";

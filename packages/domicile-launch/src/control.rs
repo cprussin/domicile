@@ -79,6 +79,11 @@ pub enum Request {
     /// resolves both ([`crate::app_entry`]). See
     /// `docs/architecture/APP-MODULES.md`.
     RunApp { root: PathBuf, module: PathBuf },
+    /// Start `command` as the compositor starts an app from the launcher,
+    /// with the desktop's environment, in its own scope. `domicile open`
+    /// asks this for the handler it picks, so a link the engine opens starts
+    /// its app as one the user started.
+    Launch { command: Vec<String> },
     /// Write a PNG of the whole desk to this absolute path, or, with no
     /// `file`, take the shell's interactive screenshot.
     ///
@@ -491,6 +496,11 @@ pub type OpenApp<'a> = &'a dyn Fn(&str, Option<&str>, AppReuse, Option<&str>) ->
 /// [`crate::command_socket::run_app`] in a desktop; a closure in tests.
 pub type RunApp<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
 
+/// Tells the compositor to start a program as an app.
+///
+/// [`crate::compositor_socket::launch`] in a desktop; a closure in tests.
+pub type Launch<'a> = &'a dyn Fn(&[String]) -> Result<(), String>;
+
 /// Tells the compositor to take a screenshot, into the file if one is given.
 ///
 /// [`crate::compositor_socket::screenshot`] in a desktop; a closure in tests.
@@ -729,6 +739,7 @@ pub struct Desktop<'a> {
     pub open: OpenUrl<'a>,
     pub open_app: OpenApp<'a>,
     pub run_app: RunApp<'a>,
+    pub launch: Launch<'a>,
     pub capture: Screenshot<'a>,
     pub record: ScreenRecord<'a>,
     pub send: SendShell<'a>,
@@ -866,6 +877,10 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             },
         ),
         Ok(Request::RunApp { root, module }) => to_line(&match (desktop.run_app)(&root, &module) {
+            Ok(()) => Response::Opened,
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::Launch { command }) => to_line(&match (desktop.launch)(&command) {
             Ok(()) => Response::Opened,
             Err(why) => Response::Refused { why },
         }),

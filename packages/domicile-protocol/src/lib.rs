@@ -272,7 +272,8 @@ pub enum ChromeMessage {
     /// no direct reply; [`HostMessage::AppClosed`] follows if it closes.
     CloseApp { app_id: String },
 
-    /// Spawn a client process (argv) for a keybinding or launcher.
+    /// Spawn a client process (argv) for a keybinding, the launcher or
+    /// `domicile open`.
     ///
     /// The child inherits the compositor's environment, so it connects to
     /// Domicile's Wayland display.

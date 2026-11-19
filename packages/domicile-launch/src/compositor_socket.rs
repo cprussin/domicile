@@ -1,6 +1,6 @@
-//! Asks the compositor for a screenshot, to send the shell a command, for its
-//! theme, to turn the monitors off or on, or for a virtual monitor, over its
-//! chrome socket.
+//! Asks the compositor for a screenshot, to start an app, to send the shell a
+//! command, for its theme, to turn the monitors off or on, or for a virtual
+//! monitor, over its chrome socket.
 //!
 //! Each request is the message a page sends for it (`SystemRequest::Screenshot`,
 //! `SystemRequest::SendShell`, `ChromeMessage::SetTheme`), so the compositor
@@ -117,6 +117,37 @@ pub fn send_shell(
     match answer.reply {
         SystemReply::Sent { output } => Ok(output),
         reply => Err(not_done(socket, reply, answer.said)),
+    }
+}
+
+/// Tells the compositor at `socket` to start `command` as an app, as the
+/// launcher does. The compositor answers a start with nothing and drops it
+/// while locked, so a locked status after it is refused. The status is read
+/// as the start is queued, so a lock that lands between the two can make it
+/// wrong. A start it takes and can't do, it logs.
+pub fn launch(
+    socket: &Path,
+    command: &[String],
+    patience: Option<Duration>,
+) -> Result<(), CompositorError> {
+    let messages = [
+        ChromeMessage::Spawn {
+            command: command.to_vec(),
+        },
+        ChromeMessage::WhichStatus,
+    ];
+    let said = exchanged(socket, &messages, patience)?;
+    match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::Status(DesktopStatus { locked: false, .. })) => Ok(()),
+        Ok(HostMessage::Status(DesktopStatus { locked: true, .. })) => {
+            Err(CompositorError::Refused {
+                why: "the desktop is locked, so it started nothing".to_string(),
+            })
+        }
+        _ => Err(CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said,
+        }),
     }
 }
 

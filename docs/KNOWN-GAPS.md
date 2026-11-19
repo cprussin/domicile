@@ -57,6 +57,9 @@ the detail, when there is one. Remove a gap when it's fixed.
 - **No payments.** Chrome draws the payment sheet itself, so it is turned off
   until the shell has its own.
   [ENGINE-BROWSER-BEHAVIOR.md](/docs/architecture/ENGINE-BROWSER-BEHAVIOR.md#chromes-dialogs-sheets-and-floating-windows).
+- **A page's app link can't open a `Terminal=true` app,** such as a
+  terminal mail client for `mailto:`: the engine has no `DOMICILE_TERMINAL`,
+  so its `domicile open` skips them (`let_the_engine_open_links`).
 - **Resize cost is unmeasured.**
   [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#embed-deadlines).
 

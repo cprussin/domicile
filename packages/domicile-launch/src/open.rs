@@ -38,7 +38,7 @@ pub struct Places {
 pub enum Opening {
     /// Open this web address in a browser window of the desktop.
     Browse(String),
-    /// Run this argv in the caller's place.
+    /// Run this argv: `domicile open` has the desktop's compositor start it.
     Run(Vec<String>),
 }
 

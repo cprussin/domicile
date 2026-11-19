@@ -109,8 +109,9 @@ while True:
 ENGINE
 chmod +x "$WORK/engine/chrome"
 
-# Stub compositor: binds the chrome socket, publishes the session, sends every
-# shell command, and saves every screenshot it is asked for. With no file, it is
+# Stub compositor: binds the chrome socket, publishes the session, records every
+# program it is told to start, sends every shell command, and saves every
+# screenshot it is asked for. With no file, it is
 # the user picking: it waits for \$WORK/picked, which names the file saved or
 # says "cancel".
 cat >"$WORK/domicile-compositor" <<COMPOSITOR
@@ -129,17 +130,27 @@ listening.bind(arguments["--chrome-socket"])
 listening.listen(4)
 open(session, "w").close()
 
+def first_question(connection):
+    """The first line that asks something. A start is answered with nothing,
+    so it is recorded and the next line read."""
+    for line in connection.makefile("rb"):
+        with open("$WORK/compositor-heard", "a") as heard:
+            heard.write(line.decode())
+        asked = json.loads(line)
+        if asked["type"] != "spawn":
+            return asked
+        with open("$WORK/compositor-spawned", "a") as spawned:
+            spawned.write(json.dumps(asked["command"]) + "\n")
+
 while True:
     connection, _ = listening.accept()
-    line = b""
-    while not line.endswith(b"\n"):
-        got = connection.recv(4096)
-        if not got:
-            break
-        line += got
-    with open("$WORK/compositor-heard", "a") as heard:
-        heard.write(line.decode())
-    asked = json.loads(line)
+    asked = first_question(connection)
+    if asked["type"] == "which_status":
+        connection.sendall((json.dumps(
+            {"type": "status", "theme": "dark", "locked": False, "keymap": None,
+             "screens_off": False, "held_awake_by": [], "capturing": []}) + "\n").encode())
+        connection.close()
+        continue
     if asked["request"]["call"] == "send_shell":
         connection.sendall((json.dumps(
             {"type": "system_reply", "id": asked["id"], "reply": {"kind": "sent"}}) + "\n").encode())
@@ -449,13 +460,10 @@ else
 fi
 
 echo "== and a file opens with its type's default application =="
-# A desk of its own: one type, one application, which records what it ran on.
+# A desk of its own: one type, one application.
 mkdir -p "$WORK/desk/mime" "$WORK/desk/applications" "$WORK/desk-config"
 printf '50:application/pdf:*.pdf\n' >"$WORK/desk/mime/globs2"
-cat >"$WORK/viewer" <<VIEWER
-#!/bin/sh
-printf '%s\n' "\$@" >"$WORK/viewer-heard"
-VIEWER
+printf '#!/bin/sh\n' >"$WORK/viewer"
 chmod +x "$WORK/viewer"
 printf '[Desktop Entry]\nType=Application\nName=Viewer\nExec=%s %%f\nMimeType=application/pdf;\n' \
   "$WORK/viewer" >"$WORK/desk/applications/viewer.desktop"
@@ -464,10 +472,13 @@ touch "$WORK/notes.pdf"
     XDG_DATA_HOME="$WORK/desk" XDG_DATA_DIRS="$WORK/none" \
     XDG_CONFIG_HOME="$WORK/desk-config" XDG_CONFIG_DIRS="$WORK/none" \
     xdg-open notes.pdf >"$WORK/file.log" 2>&1 )
-if [ "$(cat "$WORK/viewer-heard" 2>/dev/null)" = "$WORK/notes.pdf" ]; then
-  echo "PASS: notes.pdf opened in $WORK/viewer"
+# The compositor starts it, as the launcher does.
+SPAWNED="$(tail -n 1 "$WORK/compositor-spawned" 2>/dev/null)"
+WANT="[\"$WORK/viewer\", \"$WORK/notes.pdf\"]"
+if [ "$SPAWNED" = "$WANT" ]; then
+  echo "PASS: the compositor was told to start $SPAWNED"
 else
-  echo "FAIL: notes.pdf did not open in its type's default:"
+  echo "FAIL: the compositor was told to start '$SPAWNED', not $WANT:"
   sed 's/^/    /' "$WORK/file.log"
   FAILED=1
 fi
