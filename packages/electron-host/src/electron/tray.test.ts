@@ -44,6 +44,9 @@ describe("layoutOf", () => {
   const { Menu, model } = createMenu({
     appName: () => "Notes",
     focusedWindow: () => null,
+    popup: () => {
+      throw new Error("a tray's menu pops up nowhere in these tests");
+    },
     roles: {},
     setApplicationMenu: () => undefined,
   });
@@ -97,6 +100,9 @@ describe("Tray", () => {
     const { click, Menu, MenuItem, model } = createMenu({
       appName: () => "Slack",
       focusedWindow: () => null,
+      popup: () => {
+        throw new Error("a tray's menu pops up nowhere in these tests");
+      },
       roles: {},
       setApplicationMenu: () => undefined,
     });

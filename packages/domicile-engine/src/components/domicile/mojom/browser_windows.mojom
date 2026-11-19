@@ -125,6 +125,11 @@ struct BrowserWindow {
   // electron_protocol.h); empty for none. One at a time: the next is listed
   // once this one is answered with BrowserWindows.AnswerMessageBox.
   string message_box;
+  // The popup menu an Electron app shows over this window (Menu.popup), for
+  // the shell to draw over its page, as JSON: {"menu": its entries, as
+  // `menu`'s, "x", "y"}, where it goes in CSS pixels from the page's top
+  // left; empty for none. Answer it with BrowserWindows.AnswerPopupMenu.
+  string popup_menu;
 };
 
 // What OpenApp does when an app window with its `app_id` is already open.
@@ -191,6 +196,12 @@ interface BrowserWindows {
   // the entry. A window that closed meanwhile, or has no menu, is a click
   // that raced it and does nothing. A `command` below 1 is a bad message.
   ClickMenu(string id, int32 command);
+
+  // The user chose entry `command` of the popup menu window `id` shows, or
+  // put it away with nothing chosen for 0; its app hears which and runs the
+  // entry. A window that closed meanwhile, or shows none, is an answer that
+  // raced it and does nothing. A negative `command` is a bad message.
+  AnswerPopupMenu(string id, int32 command);
 
   // The user answered the message box window `id` shows with button
   // `response`, leaving its checkbox checked or not; its app hears the

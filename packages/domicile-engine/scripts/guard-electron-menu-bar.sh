@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # An Electron app's menu bar: the menu an app sets for its window is listed
 # to the shell with the window, as the shell draws it under the window's tab,
-# and a click on an entry there reaches the app. See "Menus" in
+# and a click on an entry there reaches the app. Its popup menus
+# (`Menu.popup`) are listed and answered the same way. See "Menus" in
 # docs/architecture/ELECTRON-APPS.md.
 #
 #   nix develop .#full --command \
@@ -9,15 +10,22 @@
 #
 # Set up as guard-electron-views.sh is, with an HTTP server of its own on
 # 127.0.0.1, and a shell of its own (guard-electron-menu-bar-module.js) that
-# says each window's menu as it reads it and clicks "&Quit" once. A python
-# client plays `electron-host`: it opens a window, sets a File menu holding
-# Quit, waits for the click, then takes the menu away and hides the bar. It
-# asserts:
+# says each window's menu and popup menu as it reads them, clicks "&Quit"
+# once and chooses "&Settings" from a popup. A python client plays
+# `electron-host`: it opens a window, sets a File menu holding Quit, waits for
+# the click, then takes the menu away and hides the bar. Then it pops up a
+# menu at a point, waits for the choice, pops up another with no point, and
+# puts it away. It asserts:
 #
 #   ready    the socket took the hello
 #   listed   the shell read the window's menu, with its flags
 #   clicked  the app heard the click on Quit, by its id
 #   cleared  the shell read the window with no menu and the bar's new flags
+#   popped   the shell read both popups, the first at the app's point and the
+#            second at the page's top left, as nothing was pressed there
+#   chose    the app heard the popup's choice of Settings, by its id
+#   closed   the app heard the second popup closed with nothing chosen when
+#            it put it away, and the shell read the window with no popup
 #
 # No control run: the menu is listed only once the app sets it, and the
 # cleared listing is the set one's control.
@@ -183,7 +191,7 @@ try:
     connection.connect(path)
 except OSError as failure:
     print("no socket: %s" % failure, flush=True)
-    print("measured: 0 0", flush=True)
+    print("measured: 0 0 0 0", flush=True)
     sys.exit(0)
 connection.settimeout(None)
 
@@ -206,8 +214,25 @@ send({"type": "set_menu_bar", "window": 1, "visible": False,
 # The shell's listing of it is read from the engine's log.
 time.sleep(2)
 
-print("measured: %d %d" % (
-    ready is not None and ready["type"] == "ready", clicked is not None),
+# A popup at a point, which the shell answers with Settings.
+send({"type": "popup_menu", "window": 1, "popup": 1, "x": 12, "y": 30,
+      "menu": [entry(5, "&Settings"), entry(7, "", type="separator"),
+               entry(8, "&About")]})
+chose = hear_until(lambda e: e.get("type") == "popup_menu_closed" and
+                   e.get("popup") == 1)
+# One with no point, which the shell leaves up until the app puts it away.
+send({"type": "popup_menu", "window": 1, "popup": 2,
+      "menu": [entry(6, "&Stay")]})
+time.sleep(1)
+send({"type": "close_popup_menu", "window": 1, "popup": 2})
+closed = hear_until(lambda e: e.get("type") == "popup_menu_closed" and
+                    e.get("popup") == 2)
+time.sleep(1)
+
+print("measured: %d %d %d %d" % (
+    ready is not None and ready["type"] == "ready", clicked is not None,
+    chose is not None and chose.get("command") == 5,
+    closed is not None and closed.get("command") == 0),
     flush=True)
 server.shutdown()
 PY
@@ -219,20 +244,29 @@ grep -qF "GUARD menu id=1 visible=true auto=false &File>&New Window,,&Quit" \
 CLEARED=0
 grep -qF "GUARD menu id=1 none visible=false auto=true" "$ENGINE_LOG" &&
   CLEARED=1
-read -r READY CLICKED <<<"${APP_MEASURED:-0 0}"
-MEASURED="$READY $LISTED $CLICKED $CLEARED"
+POPPED=0
+grep -qF "GUARD popup id=1 at=12,30 &Settings,,&About" "$ENGINE_LOG" &&
+  grep -qF "GUARD popup id=1 at=0,0 &Stay" "$ENGINE_LOG" && POPPED=1
+read -r READY CLICKED CHOSE PUT_AWAY <<<"${APP_MEASURED:-0 0 0 0}"
+CLOSED=0
+[ "$PUT_AWAY" = 1 ] &&
+  [ "$(grep -o 'GUARD popup id=1 [^"]*' "$ENGINE_LOG" | tail -1)" = \
+    "GUARD popup id=1 none" ] && CLOSED=1
+MEASURED="$READY $LISTED $CLICKED $CLEARED $POPPED $CHOSE $CLOSED"
 echo
 echo "measured: $MEASURED"
-echo "  (ready listed clicked cleared)"
+echo "  (ready listed clicked cleared popped chose closed)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-electron-menu-bar-guard.sh`
-# runs this block directly. MEASURED is "<ready> <listed> <clicked> <cleared>".
+# runs this block directly. MEASURED is "<ready> <listed> <clicked> <cleared>
+# <popped> <chose> <closed>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"1 1 1 1")
+"1 1 1 1 1 1 1")
   PASSED="the app's menu was listed with its window, a click on it reached \\
-the app, and taking it away was listed too"
+the app, and taking it away was listed too; its popup menus were listed where \\
+they go, and the choice and the close reached the app"
   ;;
 "0 "*)
   FAILURE="the Electron socket did not take the app's hello -- \\
@@ -246,9 +280,25 @@ must list the menu with its window, and DomicileBrowserWindow.menu give it"
   FAILURE="THE APP NEVER HEARD THE CLICK ON ITS MENU: clickBrowserWindowMenu \\
 must reach the window's ElectronPage, and the app hear menu_clicked"
   ;;
-"1 1 1 0")
+"1 1 1 0 "*)
   FAILURE="the shell kept the app's menu after the app took it away: \\
 SetMenuBar must relist the window with no menu and the bar's new flags"
+  ;;
+"1 1 1 1 0 "*)
+  FAILURE="the shell never read the app's popup menus where they go: \\
+DeskWindows::ShowPopupMenu must list them with the window \\
+(PopupMenuListing, at the app's x and y or the last press), and \\
+DomicileBrowserWindow.popupMenu give them"
+  ;;
+"1 1 1 1 1 0 "*)
+  FAILURE="THE APP NEVER HEARD WHAT WAS CHOSEN FROM ITS POPUP MENU: \\
+answerBrowserWindowPopupMenu must reach DeskWindows::AnswerPopupMenu, and \\
+the app hear popup_menu_closed with the entry's id"
+  ;;
+"1 1 1 1 1 1 0")
+  FAILURE="putting a popup menu away never reached the app, or the shell \\
+kept it: ClosePopupMenu must answer it with 0, relist the window with no \\
+popup, and the app hear popup_menu_closed"
   ;;
 *)
   FAILURE="there is no measurement here this guard can place ($MEASURED)"

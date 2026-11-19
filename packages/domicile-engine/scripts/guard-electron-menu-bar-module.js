@@ -1,11 +1,15 @@
 // The shell for guard-electron-menu-bar.sh. It reads each browser window's
-// menu bar from the list, says what it read, and clicks the entry the guard's
-// app named "Quit" once, as a user clicking it in the bar would.
+// menu bar and popup menu from the list, says what it read, clicks the entry
+// the guard's app named "Quit" once, as a user clicking it in the bar would,
+// and chooses "Settings" from a popup menu that holds it.
 //
 //   GUARD shell-loaded                          this module ran
 //   GUARD menu id=… visible=… auto=… <labels>   a window's menu, by its labels
 //   GUARD menu id=… none visible=… auto=…       a window with no menu
 //   GUARD clicked id=… command=…                the shell clicked an entry
+//   GUARD popup id=… at=x,y <labels>            a window's popup menu
+//   GUARD popup id=… none                       a window with no popup menu
+//   GUARD chose id=… command=…                  the shell chose from a popup
 
 export const HostShell = (_root, desktop) => {
   const say = (what) => {
@@ -13,6 +17,7 @@ export const HostShell = (_root, desktop) => {
   };
 
   const said = new Map();
+  const saidPopup = new Map();
   let clicked = false;
 
   /** Each entry's label, its submenu's after a ">", in order. */
@@ -55,6 +60,22 @@ export const HostShell = (_root, desktop) => {
         clicked = true;
         desktop.clickBrowserWindowMenu(window.id, quit.id);
         say(`clicked id=${window.id} command=${quit.id}`);
+      }
+      const popup =
+        window.popupMenu === null ? null : JSON.parse(window.popupMenu);
+      const popupLine =
+        popup === null
+          ? `popup id=${window.id} none`
+          : `popup id=${window.id} at=${popup.x},${popup.y} ${labels(popup.menu)}`;
+      if (saidPopup.get(window.id) !== popupLine) {
+        saidPopup.set(window.id, popupLine);
+        say(popupLine);
+        const settings =
+          popup === null ? undefined : find(popup.menu, "&Settings");
+        if (settings !== undefined) {
+          desktop.answerBrowserWindowPopupMenu(window.id, settings.id);
+          say(`chose id=${window.id} command=${settings.id}`);
+        }
       }
     }
   });

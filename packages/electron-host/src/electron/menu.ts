@@ -192,14 +192,40 @@ export type Menu<Window> = EventEmitter & {
   append(item: MenuItem<Window>): void;
   insert(position: number, item: MenuItem<Window>): void;
   getMenuItemById(id: string): MenuItem<Window> | null;
-  popup(options?: object): void;
+  popup(options?: PopupOptions<Window>): void;
   closePopup(window?: Window): void;
+};
+
+/** `Menu.popup`'s options, as far as Domicile carries them out. */
+export type PopupOptions<Window> = {
+  /** The window it goes over; the focused one if left out. */
+  readonly window?: Window;
+  /** Where, in CSS pixels from the window's page; else the last press. */
+  readonly x?: number;
+  readonly y?: number;
+  /** Called once it closes, after any entry chosen ran. */
+  readonly callback?: () => void;
+  // macOS's alone, or where an entry goes over the point: neither moves it.
+  readonly positioningItem?: number;
+  readonly sourceType?: string;
+  readonly frame?: unknown;
 };
 
 /** What the menus reach outside themselves. */
 export type MenuDependencies<Window> = {
   readonly appName: () => string;
   readonly focusedWindow: () => Window | null;
+  /**
+   * Has the shell draw `entries` over `window`, at `at` or where the user
+   * last pressed. `closed` hears the entry chosen, or 0 for none; the
+   * function returned puts it away.
+   */
+  readonly popup: (
+    window: Window,
+    entries: readonly MenuEntry[],
+    at: { x: number; y: number } | undefined,
+    closed: (command: number) => void,
+  ) => () => void;
   /** What each role does, for those the host carries out. */
   readonly roles: Partial<Record<Role, (window: Window | null) => void>>;
   /** Shows the app's menu bar, or none. */
@@ -405,15 +431,52 @@ export const createMenu = <Window>(dependencies: MenuDependencies<Window>) => {
       return null;
     }
 
-    /** A context menu needs the shell to draw it; that comes with app menus. */
-    popup(_options?: object) {
-      throw new Error(
-        "Menu.popup needs a shell context menu, which Domicile doesn't give Electron apps yet",
+    /** What puts each window's popup of this menu away. */
+    readonly #popups = new Map<Window, () => void>();
+
+    /** The shell draws the menu over the window, as its menu bar's menus. */
+    popup(options: PopupOptions<Window> = {}) {
+      const window = options.window ?? dependencies.focusedWindow();
+      if (window === null) {
+        throw new Error(
+          "Menu.popup has no window to go over: no window is focused, and options.window names none",
+        );
+      }
+      const { x, y } = options;
+      if ((x === undefined) !== (y === undefined)) {
+        throw new TypeError(
+          "Menu.popup takes both x and y, or neither, as Domicile places it",
+        );
+      }
+      this.#popups.get(window)?.();
+      this.emit("menu-will-show", { preventDefault: () => undefined });
+      const close = dependencies.popup(
+        window,
+        model(this),
+        x === undefined || y === undefined ? undefined : { x, y },
+        (command) => {
+          if (this.#popups.get(window) === close) {
+            this.#popups.delete(window);
+          }
+          this.emit("menu-will-close", { preventDefault: () => undefined });
+          if (command > 0) {
+            click(this, command, NO_KEYS, window);
+          }
+          options.callback?.();
+        },
       );
+      this.#popups.set(window, close);
     }
 
-    closePopup(_window?: Window) {
-      // Nothing is popped up.
+    closePopup(window?: Window) {
+      const over = window ?? dependencies.focusedWindow();
+      if (over === null) {
+        for (const close of this.#popups.values()) {
+          close();
+        }
+      } else {
+        this.#popups.get(over)?.();
+      }
     }
   }
 

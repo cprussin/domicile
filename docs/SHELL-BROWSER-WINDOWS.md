@@ -584,6 +584,19 @@ for (const window of domicile.browser.windows ?? []) {
 
 Manganese draws it with the component library's `MenuBar`.
 
+An app can also pop a menu up (`Menu.popup`), as Claude's menu button does:
+
+- **`popupMenu`** is the menu as JSON, `{menu, x, y}`, or `undefined` for
+  none: `menu` holds entries as `menu` does, and `x` and `y` are where it
+  goes, in CSS pixels from the window's page's top left.
+- **Answer it** with `domicile.browser.answerPopupMenu(id, entry.id)` for
+  the entry chosen, or `0` when it is put away with none. The app runs the
+  entry, and the next list has no `popupMenu`.
+
+`appPopupMenu(window.popupMenu)` in `@domicile-desktop/sdk/app-menu` reads it
+as `{entries, at}`. Manganese draws it with the component library's
+`ContextMenu`.
+
 See "Desktop pieces" in [ELECTRON-APPS.md](architecture/ELECTRON-APPS.md).
 
 ## Message boxes

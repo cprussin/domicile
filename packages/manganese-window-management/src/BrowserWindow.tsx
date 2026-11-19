@@ -40,6 +40,7 @@ import { flex } from "../styled-system/patterns";
 import { AddressBar } from "./browser/AddressBar";
 import { AppAddress } from "./browser/AppAddress";
 import { AppMenuBar } from "./browser/AppMenuBar";
+import { AppPopupMenu } from "./browser/AppPopupMenu";
 import { leftOrigin } from "./browser/app-origin";
 import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
 import { FindBar } from "./browser/FindBar";
@@ -54,6 +55,7 @@ import { pageHistoryFor } from "./browser/page-history";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useAppMenuBar } from "./browser/useAppMenuBar";
 import { useAppMessageBox } from "./browser/useAppMessageBox";
+import { useAppPopupMenu } from "./browser/useAppPopupMenu";
 import {
   useBrowserProfile,
   usePinnedSite,
@@ -370,6 +372,8 @@ export const BrowserWindow = ({
   // The message box an Electron app asks over this window, and the button
   // in it to focus. The engine draws no dialog.
   const appBox = useAppMessageBox(domicile, window);
+  // A popup menu the app opened (`Menu.popup`), such as its menu button's.
+  const appPopup = useAppPopupMenu(domicile, window);
   const [appBoxButton, setAppBoxButton] = useState<HTMLElement | null>(null);
   // The link for an application the page opened, the application that opens
   // it, and the button to focus. The engine draws no dialog.
@@ -1023,6 +1027,14 @@ export const BrowserWindow = ({
               onClose={dismissMenu}
             />
           )}
+          {appPopup !== undefined && view !== null && (
+            <AppPopupMenu
+              at={pagePoint(view, appPopup.popup.at)}
+              entries={appPopup.popup.entries}
+              key={appPopup.key}
+              onAnswer={appPopup.answer}
+            />
+          )}
           {deviceRequest !== undefined && (
             <div className={deviceAskStyles}>
               <DeviceAsk request={deviceRequest} />
@@ -1187,3 +1199,9 @@ const noTopEdgeStyles = css({ borderBlockStartWidth: 0 });
  */
 const addressOf = (shown: string, sent: string): string =>
   shown === "" ? sent : shown;
+
+/** A point in `view`'s page, in the viewport's CSS pixels. */
+const pagePoint = (view: HTMLElement, at: { x: number; y: number }) => {
+  const box = view.getBoundingClientRect();
+  return { x: box.left + at.x, y: box.top + at.y };
+};

@@ -29,6 +29,7 @@ describe("browser", () => {
         messageBox: undefined,
         parent: undefined,
         partition: "",
+        popupMenu: undefined,
         popupWindow: undefined,
         profile: "default",
         title: "",
@@ -83,6 +84,7 @@ describe("browser", () => {
     browser.close("1");
     browser.clickMenu("2", 7);
     browser.answerMessageBox("2", 1, true);
+    browser.answerPopupMenu("2", 3);
 
     expect(fake.calls).toStrictEqual([
       ["openBrowserWindow", "https://a.example/", "", ""],
@@ -92,6 +94,7 @@ describe("browser", () => {
       ["closeBrowserWindow", "1"],
       ["clickBrowserWindowMenu", "2", 7],
       ["answerBrowserWindowMessageBox", "2", 1, true],
+      ["answerBrowserWindowPopupMenu", "2", 3],
     ]);
   });
 

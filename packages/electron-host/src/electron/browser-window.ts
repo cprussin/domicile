@@ -1015,6 +1015,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           this.menuClicked(event.command);
           break;
         }
+        case "popup_menu_closed": {
+          this.popupMenuClosed(event.popup, event.command);
+          break;
+        }
         case "close_asked": {
           this.closeAsked();
           break;
@@ -1091,6 +1095,13 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     /** The user chose entry `command` of the page's menu bar. */
     protected menuClicked(_command: number) {
       // Only a window has a menu bar.
+    }
+
+    /** Popup menu `popup` closed, with entry `command` chosen or 0. */
+    protected popupMenuClosed(popup: number, _command: number) {
+      throw new Error(
+        `the engine closed popup menu ${popup} of ${this.id}, which only a window has`,
+      );
     }
 
     /** The page is gone. */
@@ -1357,6 +1368,9 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     /** The views the engine last placed, as it was told them. */
     #placed = "[]";
     #menu: Menu | null = menus.applicationMenu();
+    /** Each popup menu up over the window, and what hears it close. */
+    readonly #popups = new Map<number, (command: number) => void>();
+    #lastPopup = 0;
     #menuBarVisible = true;
     #menuBarAutoHide: boolean;
 
@@ -1693,6 +1707,53 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       }
     }
 
+    /**
+     * Has the shell draw `menu` over the window (`Menu.popup`), at `at` in
+     * CSS pixels from its page's top left, or where the user last pressed.
+     * `closed` hears the entry chosen, or 0; the function returned puts it
+     * away.
+     */
+    readonly popupMenu = (
+      menu: readonly MenuEntry[],
+      at: { x: number; y: number } | undefined,
+      closed: (command: number) => void,
+    ): (() => void) => {
+      this.assertAlive();
+      if (!this.opened) {
+        // Nothing is drawn yet to draw it over: it closes as it opens.
+        queueMicrotask(() => {
+          closed(0);
+        });
+        return () => undefined;
+      }
+      this.#lastPopup += 1;
+      const popup = this.#lastPopup;
+      this.#popups.set(popup, closed);
+      toEngine({
+        menu,
+        popup,
+        type: "popup_menu",
+        window: this.id,
+        ...(at === undefined ? {} : { x: at.x, y: at.y }),
+      });
+      return () => {
+        if (this.#popups.has(popup) && !this.destroyed) {
+          toEngine({ popup, type: "close_popup_menu", window: this.id });
+        }
+      };
+    };
+
+    protected override popupMenuClosed(popup: number, command: number) {
+      const closed = this.#popups.get(popup);
+      if (closed === undefined) {
+        throw new Error(
+          `the engine closed popup menu ${popup} of window ${this.id}, which was not up`,
+        );
+      }
+      this.#popups.delete(popup);
+      closed(command);
+    }
+
     protected override wasLoaded() {
       if (!this.#shown) {
         this.#shown = true;
@@ -1732,6 +1793,12 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     protected override wasClosed() {
       windows.delete(this.id);
       this.#menu?.off("changed", this.#showMenuBar);
+      // A popup up over the window closes with it, nothing chosen.
+      const popups = [...this.#popups.values()];
+      this.#popups.clear();
+      for (const closed of popups) {
+        closed(0);
+      }
       // The engine lets go of the window's views; they live on unheld.
       for (const view of this.contentView.children) {
         view.holder = undefined;

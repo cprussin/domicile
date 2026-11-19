@@ -65,6 +65,7 @@ const listed = (
   messageBox: undefined,
   parent: undefined,
   partition: "",
+  popupMenu: undefined,
   popupWindow: popup.popupWindow === 0 ? undefined : popup.popupWindow,
   profile: "default",
   title: "",

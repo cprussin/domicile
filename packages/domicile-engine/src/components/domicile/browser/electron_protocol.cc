@@ -478,6 +478,7 @@ bool IsWindowRequest(std::string_view type) {
          type == "ipc_send" || type == "ipc_post" || type == "port_post" ||
          type == "port_close" || type == "set_views" ||
          type == "set_menu_bar" || type == "show_message_box" ||
+         type == "popup_menu" || type == "close_popup_menu" ||
          type == "execute_javascript" || type == "set_title" ||
          type == "set_hidden";
 }
@@ -659,6 +660,37 @@ base::expected<ElectronRequest, ElectronRefusal> ParseStopFindInPage(
       "\"action\" must be clear_selection, keep_selection or "
       "activate_selection",
       window);
+}
+
+// A popup_menu request, or why it is not one.
+base::expected<ElectronRequest, ElectronRefusal> ParsePopupMenu(
+    const base::DictValue& request,
+    ElectronWindow window) {
+  const std::optional<int> popup = request.FindInt("popup");
+  const base::ListValue* menu = request.FindList("menu");
+  const base::Value* x = request.Find("x");
+  const base::Value* y = request.Find("y");
+  if (!popup.has_value() || *popup < 1) {
+    return Refuse("\"popup\" must be a whole number from 1", window);
+  } else if (menu == nullptr || menu->empty()) {
+    return Refuse("\"menu\" must be a list of entries, not empty", window);
+  } else if ((x == nullptr) != (y == nullptr) ||
+             (x != nullptr && !(x->is_int() && y->is_int()))) {
+    return Refuse(
+        "\"x\" and \"y\" must both be whole numbers, or both be left out",
+        window);
+  }
+  base::expected<std::string, std::string> json = ElectronMenuJson(*menu);
+  if (!json.has_value()) {
+    return Refuse(std::move(json.error()), window);
+  }
+  ElectronPopupMenu popped{
+      .window = window, .popup = *popup, .menu = std::move(*json)};
+  if (x != nullptr) {
+    popped.x = x->GetInt();
+    popped.y = y->GetInt();
+  }
+  return popped;
 }
 
 // A show_message_box request, or why it is not one.
@@ -1297,6 +1329,14 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ParseSetMenuBar(*request, *window);
   } else if (*type == "show_message_box") {
     return ParseShowMessageBox(*request, *window);
+  } else if (*type == "popup_menu") {
+    return ParsePopupMenu(*request, *window);
+  } else if (*type == "close_popup_menu") {
+    const std::optional<int> popup = request->FindInt("popup");
+    if (!popup.has_value() || *popup < 1) {
+      return Refuse("\"popup\" must be a whole number from 1", *window);
+    }
+    return ElectronClosePopupMenu{.window = *window, .popup = *popup};
   } else if (*type == "focus_window") {
     return ElectronFocusWindow{.window = *window};
   } else if (*type == "go_to_index") {
@@ -1640,6 +1680,15 @@ std::string ElectronWindowResized(ElectronWindow window,
 
 std::string ElectronMenuClicked(ElectronWindow window, int command) {
   base::DictValue event = Event("menu_clicked", window);
+  event.Set("command", command);
+  return Line(std::move(event));
+}
+
+std::string ElectronPopupMenuClosed(ElectronWindow window,
+                                    int popup,
+                                    int command) {
+  base::DictValue event = Event("popup_menu_closed", window);
+  event.Set("popup", popup);
   event.Set("command", command);
   return Line(std::move(event));
 }

@@ -180,6 +180,23 @@ export type EngineRequest =
       readonly auto_hide: boolean;
     }
   | {
+      /** `Menu.popup`: the shell draws `menu` over the window. */
+      readonly type: "popup_menu";
+      readonly window: number;
+      /** Names this popup in its `popup_menu_closed`. */
+      readonly popup: number;
+      readonly menu: readonly MenuEntry[];
+      /** Where, in CSS pixels from the page's top left; else the last press. */
+      readonly x?: number;
+      readonly y?: number;
+    }
+  | {
+      /** `Menu.closePopup`: puts popup `popup` away, if it is still up. */
+      readonly type: "close_popup_menu";
+      readonly window: number;
+      readonly popup: number;
+    }
+  | {
       readonly type: "ipc_send";
       readonly window: number;
       readonly channel: string;
@@ -337,6 +354,13 @@ const engineEvent = z.discriminatedUnion("type", [
   z.object({
     command: z.number(),
     type: z.literal("menu_clicked"),
+    window: z.number(),
+  }),
+  // A popup menu closed: `command` is the entry chosen, or 0 for none.
+  z.object({
+    command: z.number(),
+    popup: z.number(),
+    type: z.literal("popup_menu_closed"),
     window: z.number(),
   }),
   z.object({

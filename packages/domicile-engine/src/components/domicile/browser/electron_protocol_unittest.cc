@@ -3,6 +3,7 @@
 
 #include "components/domicile/browser/electron_protocol.h"
 
+#include <optional>
 #include <string>
 #include <utility>
 #include <variant>
@@ -619,6 +620,63 @@ TEST(ElectronProtocolTest, ASetMenuBarKeepsTheMenusEntries) {
             "");
 }
 
+TEST(ElectronProtocolTest, APopupMenuKeepsItsEntriesAndWhereItGoes) {
+  constexpr char kEntry[] =
+      R"({"id":3,"type":"normal","label":"Settings","enabled":true,)"
+      R"("visible":true,"checked":false})";
+  const auto at = ParseElectronRequest(
+      std::string(R"({"type":"popup_menu","window":2,"popup":5,"menu":[)") +
+      kEntry + R"(],"x":10,"y":-4})");
+  const auto pointer = ParseElectronRequest(
+      std::string(R"({"type":"popup_menu","window":2,"popup":6,"menu":[)") +
+      kEntry + "]}");
+  const auto close = ParseElectronRequest(
+      R"({"type":"close_popup_menu","window":2,"popup":5})");
+
+  ASSERT_TRUE(at.has_value()) << at.error().why;
+  const auto& popped = std::get<ElectronPopupMenu>(*at);
+  EXPECT_EQ(popped.window, 2);
+  EXPECT_EQ(popped.popup, 5);
+  EXPECT_EQ(popped.menu,
+            R"([{"checked":false,"enabled":true,"id":3,"label":"Settings",)"
+            R"("type":"normal","visible":true}])");
+  EXPECT_EQ(popped.x, 10);
+  EXPECT_EQ(popped.y, -4);
+  ASSERT_TRUE(pointer.has_value()) << pointer.error().why;
+  EXPECT_EQ(std::get<ElectronPopupMenu>(*pointer).x, std::nullopt);
+  EXPECT_EQ(std::get<ElectronPopupMenu>(*pointer).y, std::nullopt);
+  ASSERT_TRUE(close.has_value());
+  EXPECT_EQ(std::get<ElectronClosePopupMenu>(*close).popup, 5);
+}
+
+TEST(ElectronProtocolTest, ABadPopupMenuIsRefusedAsTheWindows) {
+  constexpr char kEntry[] =
+      R"({"id":3,"type":"normal","label":"Settings","enabled":true,)"
+      R"("visible":true,"checked":false})";
+  const std::string menu = std::string(R"("menu":[)") + kEntry + "]";
+  EXPECT_EQ(
+      ParseElectronRequest(R"({"type":"popup_menu","window":2,)" + menu + "}")
+          .error(),
+      (ElectronRefusal{.why = "\"popup\" must be a whole number from 1",
+                       .window = 2}));
+  EXPECT_EQ(
+      WhyRefused(R"({"type":"popup_menu","window":2,"popup":1,"menu":[]})"),
+      "\"menu\" must be a list of entries, not empty");
+  for (const std::string& where :
+       {std::string(R"(,"x":1)"), std::string(R"(,"x":1,"y":"2")"),
+        std::string(R"(,"y":1.5,"x":1)")}) {
+    EXPECT_EQ(WhyRefused(R"({"type":"popup_menu","window":2,"popup":1,)" +
+                         menu + where + "}"),
+              "\"x\" and \"y\" must both be whole numbers, or both be left "
+              "out");
+  }
+  EXPECT_EQ(WhyRefused(R"({"type":"popup_menu","window":2,"popup":1,)"
+                       R"("menu":[1]})"),
+            "each menu entry must be an object");
+  EXPECT_EQ(WhyRefused(R"({"type":"close_popup_menu","window":2})"),
+            "\"popup\" must be a whole number from 1");
+}
+
 TEST(ElectronProtocolTest, ABadSetMenuBarIsRefusedAsTheWindows) {
   const std::string flags = R"("visible":true,"auto_hide":false)";
   const std::string entry =
@@ -752,6 +810,9 @@ TEST(ElectronProtocolTest, EventsAreOneLineEach) {
             "\"type\":\"found_in_page\",\"window\":2}\n");
   EXPECT_EQ(ElectronMenuClicked(7, 12),
             "{\"command\":12,\"type\":\"menu_clicked\",\"window\":7}\n");
+  EXPECT_EQ(ElectronPopupMenuClosed(3, 5, 0),
+            "{\"command\":0,\"popup\":5,\"type\":\"popup_menu_closed\","
+            "\"window\":3}\n");
   EXPECT_EQ(ElectronMessageBoxAnswered(3, 9, 1, true),
             "{\"box\":9,\"checkbox_checked\":true,\"response\":1,"
             "\"type\":\"message_box_answered\",\"window\":3}\n");

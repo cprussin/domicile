@@ -1210,3 +1210,84 @@ describe("a window's menu bar", () => {
     expect(clicks).toEqual([["New Note", window]]);
   });
 });
+
+describe("a window's popup menus", () => {
+  /** The popup requests sent, without the rest. */
+  const popupRequests = (sent: readonly EngineRequest[]) =>
+    sent.filter(
+      (request) =>
+        request.type === "popup_menu" || request.type === "close_popup_menu",
+    );
+
+  it("asks the engine to draw the menu, and runs the entry chosen", () => {
+    const { BrowserWindow, menus, say, sent } = setUp();
+    const heard: unknown[] = [];
+    const window = new BrowserWindow();
+    void window.loadURL("https://claude.test/");
+    const menu = menus.Menu.buildFromTemplate([
+      {
+        click: (item, over) => heard.push([item.label, over]),
+        label: "New Chat",
+      },
+    ]);
+
+    menu.popup({ callback: () => heard.push("closed"), window, x: 4, y: 8 });
+    const [asked] = popupRequests(sent);
+    say({
+      command: menu.items[0]?.commandId ?? 0,
+      popup: 1,
+      type: "popup_menu_closed",
+      window: 1,
+    });
+
+    expect(asked).toMatchObject({
+      popup: 1,
+      type: "popup_menu",
+      window: 1,
+      x: 4,
+      y: 8,
+    });
+    expect(heard).toEqual([["New Chat", window], "closed"]);
+  });
+
+  it("asks the engine to put it away on closePopup", () => {
+    const { BrowserWindow, menus, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://claude.test/");
+    const menu = menus.Menu.buildFromTemplate([{ label: "New Chat" }]);
+
+    menu.popup({ window });
+    menu.closePopup(window);
+
+    expect(popupRequests(sent).map(({ type }) => type)).toEqual([
+      "popup_menu",
+      "close_popup_menu",
+    ]);
+  });
+
+  it("closes a popup with nothing chosen when its window closes", () => {
+    const { BrowserWindow, menus, say } = setUp();
+    const heard: string[] = [];
+    const window = new BrowserWindow();
+    // It never loads: the window closes first.
+    window.loadURL("https://claude.test/").catch(() => undefined);
+    const menu = menus.Menu.buildFromTemplate([
+      { click: () => heard.push("clicked"), label: "New Chat" },
+    ]);
+
+    menu.popup({ callback: () => heard.push("closed"), window });
+    say({ type: "window_closed", window: 1 });
+
+    expect(heard).toEqual(["closed"]);
+  });
+
+  it("throws for a popup the engine closes that was never up", () => {
+    const { BrowserWindow, say } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://claude.test/");
+
+    expect(() => {
+      say({ command: 0, popup: 3, type: "popup_menu_closed", window: 1 });
+    }).toThrow("popup menu 3 of window 1, which was not up");
+  });
+});

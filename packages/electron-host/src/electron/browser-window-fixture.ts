@@ -59,6 +59,13 @@ export const setUp = ({ refuse }: { refuse?: (why: string) => never } = {}) => {
   const menus = createMenu<{ readonly id: number }>({
     appName: () => "Notes",
     focusedWindow: () => null,
+    popup: (window, entries, at, closed): (() => void) => {
+      const over = windows.BrowserWindow.fromId(window.id);
+      if (over === null) {
+        throw new Error(`no window ${window.id} to pop a menu up over`);
+      }
+      return over.popupMenu(entries, at, closed);
+    },
     roles: {},
     setApplicationMenu: (menu) => {
       for (const window of windows.BrowserWindow.getAllWindows()) {

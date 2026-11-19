@@ -375,7 +375,7 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 | Electron | Domicile |
 |---|---|
 | `Menu.setApplicationMenu`, `win.setMenu` | a menu bar under the window's tab, drawn by the shell. The host (`src/electron/browser-window.ts`) sends each window's menu model with `set_menu_bar` once the window opens and again whenever the menu changes, and runs the entry a `menu_clicked` names for that window. As on Electron for Linux, `setApplicationMenu` sets every window's menu and each new window starts with it; `autoHideMenuBar`, `setAutoHideMenuBar`, `setMenuBarVisibility` and `removeMenu` go along with it. Electron's default menu isn't made: an app with no menu has no bar |
-| `Menu.popup` | a shell context menu |
+| `Menu.popup`, `Menu.closePopup` | a menu the shell draws over the window, with the menu bar's entries and look. The host sends the menu's model with `popup_menu`, at the app's `x` and `y` or, without them, where the user last pressed in the page (a menu button's click). The entry chosen runs as a menu bar click does, then `menu-will-close` and the `callback`. One popup at a time per window: a new one replaces the last, which closes with nothing chosen, as does one whose window closes. `positioningItem`, `sourceType` and `frame` are other platforms' and are not used |
 | `Menu`, `MenuItem` | built in the host (`src/electron/menu.ts`): roles get Electron's Linux labels and accelerators, and role menus (`editMenu`, `viewMenu`, …) expand as Electron's do; macOS-only roles are hidden. The tray and the menu bar draw a menu's model and click its entries by number; a click toggles a checkbox or picks a radio first. The Edit menu's roles act on the clicked window's page. A role the host doesn't carry out yet throws when clicked, naming it. `before`/`after` place items; group positions keep template order |
 | `Tray` | a StatusNotifierItem on D-Bus, as Electron does on Linux ([SYSTEM-TRAY.md](SYSTEM-TRAY.md)), built in the host (`src/electron/tray.ts`). Each tray has its own bus connection, so `destroy` takes the icon down. The icon goes as `IconPixmap`, the tooltip as `ToolTip`'s title, and the context menu as a `com.canonical.dbusmenu` at `/MenuBar` that the shell draws and clicks; a change anywhere in the menu sends `LayoutUpdated`. `Activate` is `click`, `SecondaryActivate` `middle-click` and `ContextMenu` `right-click`. The click's activation token isn't needed: the engine raises the app's windows itself. Balloons, pressed images, `setTitle` and `getBounds` are other platforms' and do nothing |
 | `Notification` | `org.freedesktop.Notifications`, as Electron does on Linux ([NOTIFICATIONS.md](NOTIFICATIONS.md)): a click is the `default` action, buttons are actions numbered from 0, `hasReply` is `inline-reply`, and `desktop-entry` names the app. An icon is a file path; a `nativeImage` icon throws until the host has `nativeImage` |
@@ -398,6 +398,15 @@ with the menu component the tray uses. A click goes back through
 entry's id. The bar behaves as on Electron for Linux: it follows the app's
 `autoHideMenuBar` and `setMenuBarVisibility`, and Alt toggles it. Only a
 window has a menu bar; a view's is refused.
+
+Popup menus (`Menu.popup`) go the same way: `popup_menu {window, popup, menu,
+x?, y?}` lists `{menu, x, y}` with the window (`DomicileBrowserWindow.popupMenu`),
+the point from the page's top left, and the engine fills in the last press in
+the page when the app gave none. The shell draws it there and answers through
+`answerBrowserWindowPopupMenu` with the entry chosen, or 0 when it was put away
+with none; the app hears `popup_menu_closed {window, popup, command}`.
+`close_popup_menu {window, popup}` puts it away, answering 0. One is listed at
+a time: a newer popup answers the older with 0.
 
 Message boxes travel the same way: `show_message_box {window, box, box_type,
 title, message, detail, buttons, default_id, cancel_id, checkbox_label,
@@ -589,6 +598,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: app menus (`set_menu_bar`), listed with the window, and clicks back to the app (`menu_clicked`)
 - [x] Manganese: app menus as a menu bar under the window's tab; accelerators run their entries; Alt toggles an auto-hidden bar, and Alt with a mnemonic opens a menu
 - [x] `electron-host`: `setApplicationMenu`, `setMenu` and the menu bar's settings reach the engine; clicks come back
+- [x] engine, Manganese and `electron-host`: popup menus (`Menu.popup`, `popup_menu`), drawn at the app's point or the last press, the choice back to the app (`popup_menu_closed`), which Claude's menu button opens (`guard-electron-menu-bar.sh`)
 - [x] engine: message boxes (`show_message_box`), listed with the window one at a time, and answers back to the app (`message_box_answered`)
 - [x] Manganese: message boxes over the window's page, the app's buttons in its order; Enter presses its default and Escape its cancel
 - [x] `electron-host`: `dialog.showMessageBox`

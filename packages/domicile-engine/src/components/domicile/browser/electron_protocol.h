@@ -97,6 +97,14 @@ namespace domicile {
 //   {"type":"set_hidden","window":1,"hidden":true}
 //                                          (win.hide, and win.show with
 //                                           false)
+//   {"type":"popup_menu","window":1,"popup":1,"menu":[...],"x":10,"y":20}
+//                                          (Menu.popup: a menu the shell
+//                                           draws over the window's page,
+//                                           at x and y in its CSS pixels,
+//                                           or where the user last pressed
+//                                           in it without them)
+//   {"type":"close_popup_menu","window":1,"popup":1}
+//                                          (Menu.closePopup)
 //   {"type":"close_window","window":1}     (the page may refuse)
 //   {"type":"destroy_window","window":1}   (closes without asking)
 //   {"type":"ipc_send","window":1,"channel":"c","args":[...]}
@@ -343,6 +351,25 @@ struct ElectronSetMenuBar {
   // after Alt is tapped, as Electron's autoHideMenuBar.
   bool visible = true;
   bool auto_hide = false;
+};
+
+// Menu.popup: a menu the shell draws over `window`'s page, which the app knows
+// as `popup` until it closes. At `x` and `y`, in CSS pixels from the page's
+// top left, or where the user last pressed in the page without them.
+struct ElectronPopupMenu {
+  ElectronWindow window;
+  int popup = 0;
+  // The menu's entries as JSON, checked and with only the keys the shell
+  // reads. See ElectronMenuJson.
+  std::string menu;
+  std::optional<int> x;
+  std::optional<int> y;
+};
+
+// Menu.closePopup: puts away popup `popup` over `window`, if it still shows.
+struct ElectronClosePopupMenu {
+  ElectronWindow window;
+  int popup = 0;
 };
 
 // dialog.showMessageBox: a question the shell asks over `window`, which the
@@ -876,6 +903,8 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronSetViews,
                                      ElectronSetMenuBar,
                                      ElectronShowMessageBox,
+                                     ElectronPopupMenu,
+                                     ElectronClosePopupMenu,
                                      ElectronExecuteJavaScript,
                                      ElectronSetTitle,
                                      ElectronSetHidden,
@@ -943,6 +972,11 @@ std::string ElectronFoundInPage(ElectronWindow window,
 std::string ElectronWindowResized(ElectronWindow window, int width, int height);
 // The user clicked entry `command` of `window`'s menu bar.
 std::string ElectronMenuClicked(ElectronWindow window, int command);
+// Popup menu `popup` over `window` closed: the user chose entry `command`,
+// or 0 when it was put away with nothing chosen.
+std::string ElectronPopupMenuClosed(ElectronWindow window,
+                                    int popup,
+                                    int command);
 // Message box `box` over `window` was answered with button `response`, and
 // its checkbox left checked or not.
 std::string ElectronMessageBoxAnswered(ElectronWindow window,

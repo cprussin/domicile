@@ -98,6 +98,16 @@ struct ElectronDeskMessageBox {
   int cancel_id = 0;
 };
 
+// A popup menu over a window, as the desk lists it: the menu's entries as
+// JSON (see ElectronMenuJson), and where the app asked for it, in CSS pixels
+// from the page's top left. Without `x` and `y` it goes where the user last
+// pressed in the page.
+struct ElectronDeskPopupMenu {
+  std::string menu;
+  std::optional<int> x;
+  std::optional<int> y;
+};
+
 // Where a window holds one of its views, as the desk lists it: the view's
 // desk id and the app's bounds, in CSS pixels from the window page's top left.
 struct ElectronDeskView {
@@ -264,6 +274,15 @@ class ElectronDesk {
       ElectronDeskMessageBox box,
       base::OnceCallback<void(int response, bool checkbox_checked)>
           answered) = 0;
+  // Shows `menu` over window `id`, in place of any it shows, which closes
+  // with nothing chosen, and runs `closed` with the entry the user chose, or
+  // 0 once it is put away: by the user, by ClosePopupMenu or by the window
+  // closing.
+  virtual void ShowPopupMenu(const std::string& id,
+                             ElectronDeskPopupMenu menu,
+                             base::OnceCallback<void(int command)> closed) = 0;
+  // Puts away the popup menu window `id` shows, if it shows one.
+  virtual void ClosePopupMenu(const std::string& id) = 0;
   virtual void Load(const std::string& id, const GURL& url) = 0;
   virtual void Focus(const std::string& id) = 0;
   // Shows entry `index` of window `id`'s page's history, if it has one.
@@ -489,6 +508,9 @@ class ElectronApp {
   // nothing after refusing `what` of a view.
   std::optional<std::string> WindowIdOf(ElectronWindow number,
                                         std::string_view what);
+  void PopupMenu(const ElectronPopupMenu& popup);
+  void ClosePopupMenu(const ElectronClosePopupMenu& close);
+  void PopupMenuClosed(ElectronWindow number, int popup, int command);
   void ShowMessageBox(const ElectronShowMessageBox& box);
   void MessageBoxAnswered(ElectronWindow number,
                           int box,
@@ -510,6 +532,8 @@ class ElectronApp {
   std::optional<ElectronHello> hello_;
   // The app's open windows, by the numbers it gave them.
   std::map<ElectronWindow, Window> windows_;
+  // The popup menu each window shows, by the app's number for it.
+  std::map<ElectronWindow, int> popups_;
   // The pages' invokes waiting on the app's handlers, by number.
   std::map<int, ElectronAnswer> invokes_;
   int next_invoke_ = 1;

@@ -319,6 +319,11 @@ void ElectronApp::Take(std::string_view line) {
     SetMenuBar(*bar);
   } else if (auto* box = std::get_if<ElectronShowMessageBox>(&*request)) {
     ShowMessageBox(*box);
+  } else if (auto* popup = std::get_if<ElectronPopupMenu>(&*request)) {
+    PopupMenu(*popup);
+  } else if (auto* close_popup =
+                 std::get_if<ElectronClosePopupMenu>(&*request)) {
+    ClosePopupMenu(*close_popup);
   } else {
     const auto& destroy = std::get<ElectronDestroyWindow>(*request);
     if (const std::optional<std::string> id = IdOf(destroy.window)) {
@@ -718,6 +723,45 @@ void ElectronApp::SetMenuBar(const ElectronSetMenuBar& bar) {
   desk_->SetMenuBar(*id, ElectronDeskMenuBar{.menu = bar.menu,
                                              .visible = bar.visible,
                                              .auto_hide = bar.auto_hide});
+}
+
+void ElectronApp::PopupMenu(const ElectronPopupMenu& popup) {
+  const std::optional<std::string> id =
+      WindowIdOf(popup.window, "a popup menu");
+  if (!id.has_value()) {
+    // The app waits on every popup: this one closed before it opened.
+    send_.Run(ElectronPopupMenuClosed(popup.window, popup.popup, 0));
+    return;
+  }
+  // Before the desk closes the one it replaces, which then isn't current.
+  popups_.insert_or_assign(popup.window, popup.popup);
+  desk_->ShowPopupMenu(
+      *id,
+      ElectronDeskPopupMenu{.menu = popup.menu, .x = popup.x, .y = popup.y},
+      base::BindOnce(&ElectronApp::PopupMenuClosed, weak_factory_.GetWeakPtr(),
+                     popup.window, popup.popup));
+}
+
+void ElectronApp::ClosePopupMenu(const ElectronClosePopupMenu& close) {
+  const auto shown = popups_.find(close.window);
+  // One that closed already, which the app hears of.
+  if (shown == popups_.end() || shown->second != close.popup) {
+    return;
+  }
+  if (const std::optional<std::string> id = IdOf(close.window)) {
+    desk_->ClosePopupMenu(*id);
+  }
+}
+
+// Sent even when the window has closed since: the app waits on every popup.
+void ElectronApp::PopupMenuClosed(ElectronWindow number,
+                                  int popup,
+                                  int command) {
+  if (const auto shown = popups_.find(number);
+      shown != popups_.end() && shown->second == popup) {
+    popups_.erase(shown);
+  }
+  send_.Run(ElectronPopupMenuClosed(number, popup, command));
 }
 
 void ElectronApp::ShowMessageBox(const ElectronShowMessageBox& box) {

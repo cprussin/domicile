@@ -353,6 +353,7 @@ export class FakeDomicileHost {
           messageBox: null,
           parent,
           partition,
+          popupMenu: null,
           popupWindow,
           profile: profile ?? (isApp ? null : fallback),
           title: "",
@@ -430,6 +431,18 @@ export class FakeDomicileHost {
               menuBarVisible: visible,
             }
           : window,
+      ),
+    });
+  }
+
+  /**
+   * Browser window `id` shows its Electron app's popup menu `menu`, as the
+   * engine lists it (JSON), or null for none.
+   */
+  setPopupMenu(id: string, menu: string | null): void {
+    this.set({
+      browserWindows: (this.#state.browserWindows ?? []).map((window) =>
+        window.id === id ? { ...window, popupMenu: menu } : window,
       ),
     });
   }

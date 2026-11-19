@@ -2647,6 +2647,24 @@ void DomicileHost::clickBrowserWindowMenu(ScriptState*,
   }
 }
 
+void DomicileHost::answerBrowserWindowPopupMenu(
+    ScriptState*,
+    const String& id,
+    int32_t command,
+    ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a browser window's id");
+    return;
+  } else if (command < 0) {
+    exception_state.ThrowTypeError(
+        "command must be an entry's id, or 0 for none chosen");
+    return;
+  }
+  if (Ready(exception_state)) {
+    windows_->AnswerPopupMenu(id, command);
+  }
+}
+
 void DomicileHost::answerBrowserWindowMessageBox(
     ScriptState*,
     const String& id,
@@ -2919,7 +2937,8 @@ void DomicileHost::ListBrowserWindows() {
         window->y, window->hidden,
         window->menu.empty() ? String() : window->menu,
         window->menu_bar_visible, window->menu_bar_auto_hide,
-        window->message_box.empty() ? String() : window->message_box));
+        window->message_box.empty() ? String() : window->message_box,
+        window->popup_menu.empty() ? String() : window->popup_menu));
   }
   browser_windows_ = MakeGarbageCollected<FrozenArray<DomicileBrowserWindow>>(
       std::move(listed));

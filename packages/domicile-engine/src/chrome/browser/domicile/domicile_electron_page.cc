@@ -39,8 +39,12 @@
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "sandbox/policy/switches.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
+#include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
+#include "ui/gfx/geometry/point_conversions.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -398,6 +402,18 @@ void ElectronPage::DidReceiveFindReply(int request_id,
     const ElectronFindResult done = result;
     finds_.erase(find);
     calls_.found.Run(done);
+  }
+}
+
+void ElectronPage::DidGetUserInteraction(const blink::WebInputEvent& event) {
+  if (event.GetType() == blink::WebInputEvent::Type::kMouseDown) {
+    last_press_ = gfx::ToFlooredPoint(
+        static_cast<const blink::WebMouseEvent&>(event).PositionInWidget());
+  } else if (event.GetType() == blink::WebInputEvent::Type::kTouchStart) {
+    const auto& touch = static_cast<const blink::WebTouchEvent&>(event);
+    if (touch.touches_length > 0) {
+      last_press_ = gfx::ToFlooredPoint(touch.touches[0].PositionInWidget());
+    }
   }
 }
 

@@ -107,4 +107,11 @@
   // DomicileHost.answerBrowserWindowMessageBox; the window then lists its
   // next box, if its app asked more.
   readonly attribute DOMString? messageBox;
+
+  // The popup menu an Electron app shows over this window (Menu.popup), as
+  // JSON, null for none: `menu`, its entries as `menu`'s are, and `x` and
+  // `y`, where it goes in CSS pixels from the page's top left. Draw it over
+  // the page there, and answer it with
+  // DomicileHost.answerBrowserWindowPopupMenu.
+  readonly attribute DOMString? popupMenu;
 };

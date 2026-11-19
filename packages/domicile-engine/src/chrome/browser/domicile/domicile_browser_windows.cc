@@ -17,6 +17,8 @@
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/functional/function_ref.h"
+#include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
@@ -64,6 +66,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -502,6 +505,54 @@ class DeskWindows final : public base::SupportsUserData::Data,
     }
   }
 
+  // Shows `menu` over window `id`, in place of any it shows, which closes
+  // with nothing chosen. The app made sure `id` is one of its windows; one
+  // that closed meanwhile closes the menu at once.
+  void ShowPopupMenu(const std::string& id,
+                     ElectronDeskPopupMenu menu,
+                     base::OnceCallback<void(int)> closed) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    if (window == windows_.end()) {
+      LOG(WARNING) << "domicile: asked to pop up a menu over browser window "
+                   << id << ", which is not open; it closes at once.";
+      std::move(closed).Run(0);
+      return;
+    }
+    CHECK(!window->view) << "browser window " << id
+                         << " was asked to pop up a menu and is a view";
+    std::optional<ShownPopup> replaced = std::move(window->popup_menu);
+    window->popup_menu = ShownPopup{.listed = PopupMenuListing(*window, menu),
+                                    .closed = std::move(closed)};
+    Changed();
+    if (replaced.has_value()) {
+      std::move(replaced->closed).Run(0);
+    }
+  }
+
+  // Puts away the popup menu window `id` shows, as if nothing was chosen.
+  void ClosePopupMenu(const std::string& id) {
+    // An unknown window, or one showing none, is a close that raced it.
+    AnswerPopupMenu(id, 0);
+  }
+
+  // The user chose entry `command` of the popup menu window `id` shows, or
+  // put it away for 0. A window that closed meanwhile, or shows none, is an
+  // answer that raced it.
+  void AnswerPopupMenu(const std::string& id, int command) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    if (window == windows_.end() || !window->popup_menu.has_value()) {
+      LOG(WARNING) << "domicile: an answer to a popup menu over browser "
+                      "window "
+                   << id << ", which shows none.";
+      return;
+    }
+    base::OnceCallback<void(int)> closed =
+        std::move(window->popup_menu->closed);
+    window->popup_menu.reset();
+    Changed();
+    std::move(closed).Run(command);
+  }
+
   // The user answered the message box window `id` shows with button
   // `response`. A window that closed meanwhile, or shows none, is an answer
   // that raced it. Returns false for a button the box doesn't have.
@@ -600,6 +651,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
     // Its message boxes answer with their cancel buttons, as the app waits on
     // each.
     std::deque<AskedMessageBox> boxes = std::move(found->message_boxes);
+    std::optional<ShownPopup> popup = std::move(found->popup_menu);
     closing_.push_back({id, std::move(found->guest)});
     base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
@@ -618,6 +670,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
     Changed();
     for (AskedMessageBox& box : boxes) {
       std::move(box.answered).Run(box.box.cancel_id, false);
+    }
+    if (popup.has_value()) {
+      std::move(popup->closed).Run(0);
     }
   }
 
@@ -858,6 +913,13 @@ class DeskWindows final : public base::SupportsUserData::Data,
     base::OnceCallback<void(int, bool)> answered;
   };
 
+  // A popup menu a window shows: as the shell lists it, and where the
+  // entry chosen goes.
+  struct ShownPopup {
+    std::string listed;
+    base::OnceCallback<void(int)> closed;
+  };
+
   struct Window {
     std::string id;
     std::unique_ptr<WebViewGuest> guest;
@@ -894,7 +956,34 @@ class DeskWindows final : public base::SupportsUserData::Data,
     ElectronDeskMenuBar menu_bar;
     // The message boxes its Electron app asks over it, first shown first.
     std::deque<AskedMessageBox> message_boxes;
+    // The popup menu its Electron app shows over it, if any.
+    std::optional<ShownPopup> popup_menu;
   };
+
+  // `menu` as the shell lists it over `window`: {"menu": its entries, "x",
+  // "y"}, where the app asked, or where the user last pressed in the page.
+  static std::string PopupMenuListing(const Window& window,
+                                      const ElectronDeskPopupMenu& menu) {
+    std::optional<base::Value> entries =
+        base::JSONReader::Read(menu.menu, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
+    CHECK(entries.has_value() && entries->is_list())
+        << "an Electron popup menu's entries are not a JSON list: "
+        << menu.menu;
+    gfx::Point at;
+    if (menu.x.has_value() && menu.y.has_value()) {
+      at = gfx::Point(*menu.x, *menu.y);
+    } else if (const ElectronPage* page =
+                   ElectronPage::FromWebContents(&window.guest->contents())) {
+      at = page->last_press().value_or(gfx::Point());
+    }
+    std::string listed;
+    CHECK(base::JSONWriter::Write(base::DictValue()
+                                      .Set("menu", std::move(*entries))
+                                      .Set("x", at.x())
+                                      .Set("y", at.y()),
+                                  &listed));
+    return listed;
+  }
 
   // One window as the shell's list has it.
   static mojom::BrowserWindowPtr Listed(const Window& window) {
@@ -923,7 +1012,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
         window.menu_bar.auto_hide,
         window.message_boxes.empty()
             ? std::string()
-            : window.message_boxes.front().box.message_box);
+            : window.message_boxes.front().box.message_box,
+        window.popup_menu.has_value() ? window.popup_menu->listed
+                                      : std::string());
   }
 
   // Makes a window and gives it its first page with `load`. Returns it, or
@@ -1379,6 +1470,15 @@ class BrowserWindowsService final
     windows_->ClickMenu(id, command);
   }
 
+  void AnswerPopupMenu(const std::string& id, int32_t command) override {
+    if (command < 0) {
+      ReportBadMessageAndDeleteThis(
+          "domicile: a popup menu was answered with a negative entry.");
+      return;
+    }
+    windows_->AnswerPopupMenu(id, command);
+  }
+
   void AnswerMessageBox(const std::string& id,
                         int32_t response,
                         bool checkbox_checked) override {
@@ -1670,6 +1770,22 @@ void SetElectronViews(const std::string& id,
 void SetElectronMenuBar(const std::string& id, ElectronDeskMenuBar bar) {
   if (DeskWindows* windows = ShellDeskWindows()) {
     windows->SetMenuBar(id, std::move(bar));
+  }
+}
+
+void ShowElectronPopupMenu(const std::string& id,
+                           ElectronDeskPopupMenu menu,
+                           base::OnceCallback<void(int)> closed) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->ShowPopupMenu(id, std::move(menu), std::move(closed));
+  } else {
+    std::move(closed).Run(0);
+  }
+}
+
+void CloseElectronPopupMenu(const std::string& id) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->ClosePopupMenu(id);
   }
 }
 

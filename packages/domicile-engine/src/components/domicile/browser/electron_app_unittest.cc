@@ -156,6 +156,16 @@ class FakeDesk final : public ElectronDesk {
     message_boxes.push_back(
         {.id = id, .box = std::move(box), .answered = std::move(answered)});
   }
+  void ShowPopupMenu(const std::string& id,
+                     ElectronDeskPopupMenu menu,
+                     base::OnceCallback<void(int)> closed) override {
+    calls.push_back("popup over " + id);
+    popups.push_back(
+        {.id = id, .menu = std::move(menu), .closed = std::move(closed)});
+  }
+  void ClosePopupMenu(const std::string& id) override {
+    calls.push_back("close popup over " + id);
+  }
   void SendToPage(const std::string& id,
                   const std::string& channel,
                   const std::string& args_json) override {
@@ -250,6 +260,12 @@ class FakeDesk final : public ElectronDesk {
     base::OnceCallback<void(int, bool)> answered;
   };
   std::vector<AskedBox> message_boxes;
+  struct ShownPopup {
+    std::string id;
+    ElectronDeskPopupMenu menu;
+    base::OnceCallback<void(int)> closed;
+  };
+  std::vector<ShownPopup> popups;
   // What GetCookies finds and why SetCookie fails, when it does.
   std::vector<ElectronCookie> cookies;
   std::optional<std::string> cookie_refusal;
@@ -741,6 +757,47 @@ TEST_F(ElectronAppTest, AMessageBoxGoesOverItsWindowAndItsAnswerBack) {
   EXPECT_EQ(sent_, Lines{"{\"box\":5,\"checkbox_checked\":true,"
                          "\"response\":1,\"type\":\"message_box_answered\","
                          "\"window\":1}\n"});
+}
+
+TEST_F(ElectronAppTest, APopupMenuGoesOverItsWindowAndItsChoiceBack) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+             R"("view":true})");
+  sent_.clear();
+  desk_.calls.clear();
+  const std::string menu =
+      R"("menu":[{"id":3,"type":"normal","label":"Settings",)"
+      R"("enabled":true,"visible":true,"checked":false}])";
+
+  app_->Take(R"({"type":"popup_menu","window":1,"popup":4,)" + menu +
+             R"(,"x":5,"y":6})");
+  app_->Take(R"({"type":"popup_menu","window":2,"popup":5,)" + menu + "}");
+  // An old popup's number closes nothing; the shown one's closes it.
+  app_->Take(R"({"type":"close_popup_menu","window":1,"popup":3})");
+  app_->Take(R"({"type":"close_popup_menu","window":1,"popup":4})");
+
+  ASSERT_EQ(desk_.popups.size(), 1u);
+  EXPECT_EQ(desk_.popups[0].id, "10");
+  EXPECT_EQ(desk_.popups[0].menu.menu,
+            R"([{"checked":false,"enabled":true,"id":3,"label":"Settings",)"
+            R"("type":"normal","visible":true}])");
+  EXPECT_EQ(desk_.popups[0].menu.x, 5);
+  EXPECT_EQ(desk_.popups[0].menu.y, 6);
+  EXPECT_EQ(desk_.calls, (Lines{"popup over 10", "close popup over 10"}));
+  EXPECT_EQ(sent_,
+            (Lines{"{\"type\":\"window_refused\",\"why\":\"window 2 is a "
+                   "view, and only a window has a popup menu\","
+                   "\"window\":2}\n",
+                   "{\"command\":0,\"popup\":5,\"type\":\"popup_menu_closed\","
+                   "\"window\":2}\n"}));
+
+  // Heard even after the window closed, as the app waits on every popup.
+  app_->Listed({});
+  sent_.clear();
+  std::move(desk_.popups[0].closed).Run(3);
+  EXPECT_EQ(sent_, Lines{"{\"command\":3,\"popup\":4,"
+                         "\"type\":\"popup_menu_closed\",\"window\":1}\n"});
 }
 
 TEST_F(ElectronAppTest, OnlyAWindowHoldsViewsAndOnlyViews) {
