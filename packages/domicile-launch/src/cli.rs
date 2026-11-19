@@ -76,7 +76,8 @@ Ask the running desktop:
                                         Send a DevTools Protocol method, with
                                         its params as a JSON object, to a
                                         browser window's page, or one of its
-                                        views, and print its result
+                                        views, or the shell's page, and print
+                                        its result
   domicile screen-record                Record the screen until the toolbar stops it
   domicile send-shell <word>...         Run a shell command, as a keybinding does,
                                         and print what it answers
@@ -286,8 +287,8 @@ pub enum CliError {
     #[error("{said} is not a JSON object of a DevTools method's params.")]
     NotParams { said: String },
     #[error(
-        "devtools takes a browser window's id, as list-windows prints it, \
-         maybe --view and one of its views, and a DevTools Protocol method \
+        "devtools takes a browser window's id, as list-windows prints it, or \
+         shell, maybe --view and one of its views, and a DevTools Protocol method \
          such as Accessibility.getFullAXTree."
     )]
     NotDevTools,

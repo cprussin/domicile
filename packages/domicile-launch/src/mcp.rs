@@ -202,11 +202,12 @@ fn initialized(params: &Value) -> Value {
 /// How an agent should use the tools, sent in `initialize`. Reading a window
 /// as text takes fewer steps and tokens than looking at the desk.
 const INSTRUCTIONS: &str = "Read and act on windows as text first: list_windows, then \
-    browser_snapshot or app_snapshot, then the browser_ and app_ tools by ref. Each act \
-    answers what it changed in the window, so there is no need to look again. Use \
-    screenshot only for what a tree can't show: images, layout, the shell's own bars and \
-    panels, or an app that doesn't support accessibility. Zoom into an area rather than \
-    taking the whole desk again.";
+    browser_snapshot or app_snapshot, then the browser_ and app_ tools by ref. The \
+    browser_ tools reach the shell's own bars, panels and dialogs as window \"shell\". \
+    Each act answers what it changed in the window, so there is no need to look again. \
+    Use screenshot only for what a tree can't show: images, layout, or an app that \
+    doesn't support accessibility. Zoom into an area rather than taking the whole desk \
+    again.";
 
 /// What the client calls itself in `initialize`: its title, else its name.
 fn named(params: &Value) -> String {

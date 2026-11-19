@@ -177,7 +177,8 @@ ref of another process is refused.
 
 Send one [DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/)
 method to a browser window's page, with its params as a JSON object, and print
-its result as JSON. `<window>` is an id `list-windows` prints. `--view` sends
+its result as JSON. `<window>` is an id `list-windows` prints, or `shell` for
+the shell's own page: its bars, panels and dialogs. `--view` sends
 it to one of the window's views instead, by the id `list-windows --json`
 lists. `domicile mcp` drives browser windows with it.
 
@@ -192,7 +193,8 @@ Only the methods an agent needs to read and drive a page go through:
 `Input.dispatchKeyEvent`, `dispatchMouseEvent` and `insertText`; and `Page.captureScreenshot`,
 `getLayoutMetrics`, `getNavigationHistory`, `navigate` (to http and https
 only), `navigateToHistoryEntry` and `reload`. Nothing reads cookies or
-storage or runs script. Private windows and native windows are refused. A page
+storage or runs script. Private windows and native windows are refused, and
+so is navigating or reloading the shell's page. A page
 that does not answer in 10 seconds is refused too.
 
 ## `domicile screen-record`
@@ -564,7 +566,7 @@ Each tool runs a verb and answers what it printed, or its error:
 | `app_click`, `app_focus`, `app_set_text` | `accessibility-act <window> <ref> click\|focus\|set-text <text>` |
 | `ask_to_use_desktop` | nothing: asks the user again, after they stopped the agent or turned it away |
 
-The browser and app tools work on a window the desk hides and need no screenshot, so prefer them for browser windows and for native apps that support accessibility. `initialize`'s instructions tell the agent so. Each browser and app act answers what it changed in the window since the agent last read it, or all of it, read a quarter second after. An Electron app such as Claude or Slack draws its page in views: `browser_click` acts in the view its ref names, and `browser_type`, `browser_key` and `browser_screenshot` take a `view`. Tools the lock refuses are refused while the desktop is locked.
+The browser and app tools work on a window the desk hides and need no screenshot, so prefer them for browser windows and for native apps that support accessibility. The browser tools reach the shell's own bars, panels and dialogs as window `shell`, with the entire desktop. `initialize`'s instructions tell the agent so. Each browser and app act answers what it changed in the window since the agent last read it, or all of it, read a quarter second after. An Electron app such as Claude or Slack draws its page in views: `browser_click` acts in the view its ref names, and `browser_type`, `browser_key` and `browser_screenshot` take a `view`. Tools the lock refuses are refused while the desktop is locked.
 
 ### Over HTTP
 
