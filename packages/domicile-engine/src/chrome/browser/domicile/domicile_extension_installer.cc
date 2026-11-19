@@ -201,9 +201,11 @@ void Reconcile(base::WeakPtr<Profile> profile, const ExtensionList& wanted) {
     }
   }
 
-  // Installed as external, which is how Chromium treats extensions from
-  // machine configuration. Marked acknowledged so it is never disabled
-  // pending a prompt (`FeatureSwitch::prompt_for_external_extensions`).
+  // Installed as a Web Store install (kInternal), not an external one: at
+  // every start Chrome uninstalls, data and all, each external extension no
+  // external provider lists (ExternalProviderManager::CheckExternalUninstall),
+  // and the config is no provider. Marked acknowledged so it is never
+  // disabled pending a prompt.
   for (const std::string& id : changes.install_from_web_store) {
     // AddFromExternalUpdateUrl refuses ids the user uninstalled; the config
     // overrides that.
@@ -213,7 +215,7 @@ void Reconcile(base::WeakPtr<Profile> profile, const ExtensionList& wanted) {
             ->AddFromExternalUpdateUrl(
                 id, /*install_parameter=*/std::string(),
                 extension_urls::GetWebstoreUpdateUrl(),
-                extensions::mojom::ManifestLocation::kExternalPrefDownload,
+                extensions::mojom::ManifestLocation::kInternal,
                 extensions::Extension::NO_FLAGS,
                 /*mark_acknowledged=*/true)) {
       Remember(pref_service, id);

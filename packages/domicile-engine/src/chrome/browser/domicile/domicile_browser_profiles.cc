@@ -621,14 +621,15 @@ void BrowserProfileRegistry::MirrorUserExtensions() {
                            weak_factory_.GetWeakPtr(), load));
         continue;
       }
-      // As the config's are: AddFromExternalUpdateUrl refuses an id the user
-      // uninstalled here before, which installing it elsewhere overrides.
+      // As the config's are (Reconcile says why kInternal):
+      // AddFromExternalUpdateUrl refuses an id the user uninstalled here
+      // before, which installing it elsewhere overrides.
       extensions::ExtensionPrefs::Get(profile)
           ->ClearExternalExtensionUninstalled(extension.id);
       if (pending->AddFromExternalUpdateUrl(
               extension.id, /*install_parameter=*/std::string(),
               extension_urls::GetWebstoreUpdateUrl(),
-              extensions::mojom::ManifestLocation::kExternalPrefDownload,
+              extensions::mojom::ManifestLocation::kInternal,
               extensions::Extension::NO_FLAGS,
               /*mark_acknowledged=*/true)) {
         from_web_store = true;
