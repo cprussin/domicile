@@ -9,6 +9,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type {
+  EditCommand,
   Engine,
   EngineRequest,
   OpenKeys,
@@ -38,6 +39,36 @@ export type WebPreferences = {
   /** Added to the page's renderer's command line: its process.argv. */
   readonly additionalArguments?: readonly string[] | undefined;
 };
+
+/** The requests about a page's contents, which its window's number completes. */
+type PageRequest =
+  Extract<
+    EngineRequest,
+    { type: "edit" | "replace" | "find_in_page" | "stop_find_in_page" }
+  > extends infer Request
+    ? Request extends unknown
+      ? Omit<Request, "window">
+      : never
+    : never;
+
+/** webContents.findInPage's options, as Electron's. */
+export type FindOptions = {
+  readonly forward?: boolean | undefined;
+  readonly findNext?: boolean | undefined;
+  readonly matchCase?: boolean | undefined;
+};
+
+/** What webContents.stopFindInPage does with the match, by its wire names. */
+const STOP_FIND_ACTIONS = {
+  activateSelection: "activate_selection",
+  clearSelection: "clear_selection",
+  keepSelection: "keep_selection",
+} as const;
+
+export type StopFindAction = keyof typeof STOP_FIND_ACTIONS;
+
+/** A search's last answer, as the engine says it. */
+type FoundInPage = Extract<WindowEvent, { type: "found_in_page" }>;
 
 /** What every page with Node.js gets alike: the app's, not the window's. */
 export type PageNodeBase = Pick<PageNode, "env">;
@@ -466,6 +497,79 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         });
       }
     };
+    /** Sends `request` for the page, if its window is still open. */
+    readonly #toPage = (request: PageRequest) => {
+      if (this.owner.isOpen()) {
+        toEngine({ ...request, window: this.owner.id });
+      }
+    };
+    readonly #edit = (command: EditCommand) => () =>
+      this.#toPage({ command, type: "edit" });
+    // The Edit menu, at the page's focus.
+    readonly undo = this.#edit("undo");
+    readonly redo = this.#edit("redo");
+    readonly cut = this.#edit("cut");
+    readonly copy = this.#edit("copy");
+    readonly paste = this.#edit("paste");
+    readonly pasteAndMatchStyle = this.#edit("paste_and_match_style");
+    readonly delete = this.#edit("delete");
+    readonly selectAll = this.#edit("select_all");
+    readonly unselect = this.#edit("unselect");
+    readonly centerSelection = this.#edit("center_selection");
+    readonly replace = (text: string) =>
+      this.#toPage({ misspelling: false, text, type: "replace" });
+    readonly replaceMisspelling = (text: string) =>
+      this.#toPage({ misspelling: true, text, type: "replace" });
+
+    /** The number the last findInPage was given. */
+    #lastFind = 0;
+    /**
+     * Searches the page, answering with `found-in-page` once the search is
+     * done, as Electron does. Gives the search's number.
+     */
+    readonly findInPage = (
+      text: string,
+      { findNext = false, forward = true, matchCase = false }: FindOptions = {},
+    ) => {
+      if (text === "") {
+        throw new Error("Must provide a non-empty search content");
+      }
+      this.#lastFind += 1;
+      this.#toPage({
+        find_next: findNext,
+        forward,
+        match_case: matchCase,
+        request: this.#lastFind,
+        text,
+        type: "find_in_page",
+      });
+      return this.#lastFind;
+    };
+    readonly stopFindInPage = (action: StopFindAction) => {
+      if (!Object.hasOwn(STOP_FIND_ACTIONS, action)) {
+        throw new Error("Invalid action for stopFindInPage");
+      }
+      this.#toPage({
+        action: STOP_FIND_ACTIONS[action],
+        type: "stop_find_in_page",
+      });
+    };
+    /** Takes a search's last answer from the engine. */
+    readonly found = ({
+      active_match_ordinal,
+      matches,
+      request,
+      selection,
+    }: FoundInPage) => {
+      this.emit("found-in-page", eventObject(), {
+        activeMatchOrdinal: active_match_ordinal,
+        finalUpdate: true,
+        matches,
+        requestId: request,
+        selectionArea: { ...selection },
+      });
+    };
+
     // Electron's older names for the same, which apps such as Element call.
     readonly canGoBack = this.navigationHistory.canGoBack;
     readonly canGoForward = this.navigationHistory.canGoForward;
@@ -918,6 +1022,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         case "page_state": {
           const { type: _type, window: _window, ...state } = event;
           this.webContents.takeState(state);
+          break;
+        }
+        case "found_in_page": {
+          this.webContents.found(event);
           break;
         }
         case "javascript_result": {

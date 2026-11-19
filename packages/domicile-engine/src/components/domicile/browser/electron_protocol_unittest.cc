@@ -4,6 +4,7 @@
 #include "components/domicile/browser/electron_protocol.h"
 
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -300,6 +301,101 @@ TEST(ElectronProtocolTest, AWindowsHistoryMovesToAnIndexOrIsCleared) {
         R"({"type":"go_to_index","window":2,"index":"1"})"}) {
     EXPECT_EQ(WhyRefused(line), "\"index\" must be a whole number from 0");
   }
+}
+
+TEST(ElectronProtocolTest, AnEditIsOneOfTheEditMenusCommands) {
+  for (const auto& [name, command] :
+       std::vector<std::pair<std::string, ElectronEditCommand>>{
+           {"undo", ElectronEditCommand::kUndo},
+           {"redo", ElectronEditCommand::kRedo},
+           {"cut", ElectronEditCommand::kCut},
+           {"copy", ElectronEditCommand::kCopy},
+           {"paste", ElectronEditCommand::kPaste},
+           {"paste_and_match_style", ElectronEditCommand::kPasteAndMatchStyle},
+           {"delete", ElectronEditCommand::kDelete},
+           {"select_all", ElectronEditCommand::kSelectAll},
+           {"unselect", ElectronEditCommand::kUnselect},
+           {"center_selection", ElectronEditCommand::kCenterSelection}}) {
+    const auto edit = ParseElectronRequest(
+        R"({"type":"edit","window":3,"command":")" + name + R"("})");
+    ASSERT_TRUE(edit.has_value()) << name;
+    EXPECT_EQ(std::get<ElectronEdit>(*edit).window, 3);
+    EXPECT_EQ(std::get<ElectronEdit>(*edit).command, command) << name;
+  }
+  for (const char* line : {R"({"type":"edit","window":3})",
+                           R"({"type":"edit","window":3,"command":"Undo"})",
+                           R"({"type":"edit","window":3,"command":"fly"})"}) {
+    EXPECT_EQ(WhyRefused(line),
+              "\"command\" must be undo, redo, cut, copy, paste, "
+              "paste_and_match_style, delete, select_all, unselect or "
+              "center_selection");
+  }
+}
+
+TEST(ElectronProtocolTest, AReplaceNamesItsTextAndWhetherItIsASpelling) {
+  const auto replace = ParseElectronRequest(
+      R"({"type":"replace","window":3,"text":"word","misspelling":true})");
+
+  ASSERT_TRUE(replace.has_value());
+  EXPECT_EQ(std::get<ElectronReplace>(*replace).text, "word");
+  EXPECT_TRUE(std::get<ElectronReplace>(*replace).misspelling);
+  EXPECT_EQ(WhyRefused(R"({"type":"replace","window":3,"misspelling":false})"),
+            "\"text\" must be a string");
+  EXPECT_EQ(WhyRefused(R"({"type":"replace","window":3,"text":"w"})"),
+            "\"misspelling\" must be true or false");
+}
+
+TEST(ElectronProtocolTest, AFindIsNumberedAndSaysHowItSearches) {
+  const auto find = ParseElectronRequest(
+      R"({"type":"find_in_page","window":3,"request":4,"text":"cat",)"
+      R"("forward":false,"find_next":true,"match_case":true})");
+
+  ASSERT_TRUE(find.has_value());
+  const auto& found = std::get<ElectronFindInPage>(*find);
+  EXPECT_EQ(found.window, 3);
+  EXPECT_EQ(found.request, 4);
+  EXPECT_EQ(found.text, "cat");
+  EXPECT_FALSE(found.forward);
+  EXPECT_TRUE(found.find_next);
+  EXPECT_TRUE(found.match_case);
+  constexpr char kHow[] =
+      R"("forward":true,"find_next":false,"match_case":false})";
+  for (const std::string& line :
+       {std::string(R"({"type":"find_in_page","window":3,"text":"a",)") + kHow,
+        std::string(
+            R"({"type":"find_in_page","window":3,"request":0,"text":"a",)") +
+            kHow}) {
+    EXPECT_EQ(WhyRefused(line), "\"request\" must be a whole number from 1");
+  }
+  EXPECT_EQ(
+      WhyRefused(
+          std::string(
+              R"({"type":"find_in_page","window":3,"request":1,"text":"",)") +
+          kHow),
+      "\"text\" must be a string that is not empty");
+  EXPECT_EQ(
+      WhyRefused(R"({"type":"find_in_page","window":3,"request":1,"text":"a",)"
+                 R"("forward":true,"match_case":false})"),
+      "\"forward\", \"find_next\" and \"match_case\" must each be true or "
+      "false");
+}
+
+TEST(ElectronProtocolTest, AStopFindSaysWhatBecomesOfTheMatch) {
+  for (const auto& [name, action] :
+       std::vector<std::pair<std::string, ElectronStopFindAction>>{
+           {"clear_selection", ElectronStopFindAction::kClearSelection},
+           {"keep_selection", ElectronStopFindAction::kKeepSelection},
+           {"activate_selection",
+            ElectronStopFindAction::kActivateSelection}}) {
+    const auto stop = ParseElectronRequest(
+        R"({"type":"stop_find_in_page","window":3,"action":")" + name +
+        R"("})");
+    ASSERT_TRUE(stop.has_value()) << name;
+    EXPECT_EQ(std::get<ElectronStopFindInPage>(*stop).action, action);
+  }
+  EXPECT_EQ(WhyRefused(R"({"type":"stop_find_in_page","window":3})"),
+            "\"action\" must be clear_selection, keep_selection or "
+            "activate_selection");
 }
 
 TEST(ElectronProtocolTest, AnUnknownRequestIsNamed) {
@@ -644,6 +740,16 @@ TEST(ElectronProtocolTest, EventsAreOneLineEach) {
       "\"https://a.test/\"},{\"title\":\"\",\"url\":\"https://b.test/\"}],"
       "\"focused\":true,\"index\":1,\"loading\":true,\"pid\":77,"
       "\"type\":\"page_state\",\"window\":2}\n");
+  EXPECT_EQ(ElectronFoundInPage(2, ElectronFindResult{.request = 4,
+                                                      .matches = 3,
+                                                      .active_match_ordinal = 1,
+                                                      .x = 5,
+                                                      .y = 6,
+                                                      .width = 7,
+                                                      .height = 8}),
+            "{\"active_match_ordinal\":1,\"matches\":3,\"request\":4,"
+            "\"selection\":{\"height\":8,\"width\":7,\"x\":5,\"y\":6},"
+            "\"type\":\"found_in_page\",\"window\":2}\n");
   EXPECT_EQ(ElectronMenuClicked(7, 12),
             "{\"command\":12,\"type\":\"menu_clicked\",\"window\":7}\n");
   EXPECT_EQ(ElectronMessageBoxAnswered(3, 9, 1, true),

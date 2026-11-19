@@ -80,6 +80,19 @@ export type EngineHello = {
   readonly resources_path: string;
 };
 
+/** What the engine's `edit` does, by its names on the wire. */
+export type EditCommand =
+  | "undo"
+  | "redo"
+  | "cut"
+  | "copy"
+  | "paste"
+  | "paste_and_match_style"
+  | "delete"
+  | "select_all"
+  | "unselect"
+  | "center_selection";
+
 export type EngineRequest =
   | ({ readonly type: "hello"; readonly version: number } & EngineHello)
   | ({ readonly type: "open_window"; readonly url: string } & OpenKeys)
@@ -109,6 +122,37 @@ export type EngineRequest =
       readonly index: number;
     }
   | { readonly type: "clear_history"; readonly window: number }
+  /** webContents.undo and the rest of the Edit menu, at the page's focus. */
+  | {
+      readonly type: "edit";
+      readonly window: number;
+      readonly command: EditCommand;
+    }
+  /** webContents.replace, or replaceMisspelling. */
+  | {
+      readonly type: "replace";
+      readonly window: number;
+      readonly text: string;
+      readonly misspelling: boolean;
+    }
+  /** webContents.findInPage, which the app numbers from 1. */
+  | {
+      readonly type: "find_in_page";
+      readonly window: number;
+      readonly request: number;
+      readonly text: string;
+      readonly forward: boolean;
+      readonly find_next: boolean;
+      readonly match_case: boolean;
+    }
+  | {
+      readonly type: "stop_find_in_page";
+      readonly window: number;
+      readonly action:
+        | "clear_selection"
+        | "keep_selection"
+        | "activate_selection";
+    }
   | {
       readonly type: "set_title";
       readonly window: number;
@@ -220,6 +264,20 @@ const engineEvent = z.discriminatedUnion("type", [
     loading: z.boolean(),
     pid: z.number(),
     type: z.literal("page_state"),
+    window: z.number(),
+  }),
+  // A find_in_page search's last answer.
+  z.object({
+    active_match_ordinal: z.number(),
+    matches: z.number(),
+    request: z.number(),
+    selection: z.object({
+      height: z.number(),
+      width: z.number(),
+      x: z.number(),
+      y: z.number(),
+    }),
+    type: z.literal("found_in_page"),
     window: z.number(),
   }),
   z.object({

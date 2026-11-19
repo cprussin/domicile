@@ -35,10 +35,12 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
+#include "content/public/common/stop_find_action.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "sandbox/policy/switches.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/switches.h"
+#include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -292,6 +294,110 @@ void ElectronPage::ClearHistory() {
   content::NavigationController& controller = web_contents()->GetController();
   if (controller.CanPruneAllButLastCommitted()) {
     controller.PruneAllButLastCommitted();
+  }
+}
+
+void ElectronPage::Edit(ElectronEditCommand command) {
+  content::WebContents& contents = *web_contents();
+  switch (command) {
+    case ElectronEditCommand::kUndo:
+      contents.Undo();
+      return;
+    case ElectronEditCommand::kRedo:
+      contents.Redo();
+      return;
+    case ElectronEditCommand::kCut:
+      contents.Cut();
+      return;
+    case ElectronEditCommand::kCopy:
+      contents.Copy();
+      return;
+    case ElectronEditCommand::kPaste:
+      contents.Paste();
+      return;
+    case ElectronEditCommand::kPasteAndMatchStyle:
+      contents.PasteAndMatchStyle();
+      return;
+    case ElectronEditCommand::kDelete:
+      contents.Delete();
+      return;
+    case ElectronEditCommand::kSelectAll:
+      contents.SelectAll();
+      return;
+    case ElectronEditCommand::kUnselect:
+      contents.CollapseSelection();
+      return;
+    case ElectronEditCommand::kCenterSelection:
+      contents.CenterSelection();
+      return;
+  }
+}
+
+void ElectronPage::Replace(const std::string& text, bool misspelling) {
+  if (misspelling) {
+    web_contents()->ReplaceMisspelling(base::UTF8ToUTF16(text));
+  } else {
+    web_contents()->Replace(base::UTF8ToUTF16(text));
+  }
+}
+
+void ElectronPage::FindInPage(const ElectronFindInPage& find) {
+  auto options = blink::mojom::FindOptions::New();
+  options->forward = find.forward;
+  options->new_session = !find.find_next;
+  options->match_case = find.match_case;
+  // The reply can come before Find returns, so the request is known first.
+  web_contents()->Find(base::UTF8ToUTF16(find.text), std::move(options),
+                       /*skip_delay=*/true, [&](int request_id) {
+                         finds_.insert_or_assign(
+                             request_id,
+                             ElectronFindResult{.request = find.request});
+                       });
+}
+
+void ElectronPage::StopFindInPage(ElectronStopFindAction action) {
+  switch (action) {
+    case ElectronStopFindAction::kClearSelection:
+      web_contents()->StopFinding(content::STOP_FIND_ACTION_CLEAR_SELECTION);
+      return;
+    case ElectronStopFindAction::kKeepSelection:
+      web_contents()->StopFinding(content::STOP_FIND_ACTION_KEEP_SELECTION);
+      return;
+    case ElectronStopFindAction::kActivateSelection:
+      web_contents()->StopFinding(content::STOP_FIND_ACTION_ACTIVATE_SELECTION);
+      return;
+  }
+}
+
+void ElectronPage::DidReceiveFindReply(int request_id,
+                                       int number_of_matches,
+                                       const gfx::Rect& selection_rect,
+                                       int active_match_ordinal,
+                                       bool final_update) {
+  const auto find = finds_.find(request_id);
+  // Another client's search, as DevTools may run.
+  if (find == finds_.end()) {
+    return;
+  }
+  ElectronFindResult& result = find->second;
+  // -1 means no change, and an empty rectangle no new selection.
+  if (number_of_matches != -1) {
+    result.matches = number_of_matches;
+  }
+  if (active_match_ordinal != -1) {
+    result.active_match_ordinal = active_match_ordinal;
+  }
+  if (!selection_rect.IsEmpty()) {
+    result.x = selection_rect.x();
+    result.y = selection_rect.y();
+    result.width = selection_rect.width();
+    result.height = selection_rect.height();
+  }
+  // Electron says only the last answer, as found-in-page.
+  if (final_update) {
+    const ElectronFindResult done = result;
+    finds_.erase(find);
+    calls_.found.Run(done);
   }
 }
 

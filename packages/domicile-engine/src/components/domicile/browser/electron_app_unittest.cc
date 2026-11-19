@@ -107,6 +107,27 @@ class FakeDesk final : public ElectronDesk {
   void ClearHistory(const std::string& id) override {
     calls.push_back("clear history " + id);
   }
+  void Edit(const std::string& id, ElectronEditCommand command) override {
+    calls.push_back("edit " + id + " " +
+                    base::NumberToString(static_cast<int>(command)));
+  }
+  void Replace(const std::string& id,
+               const std::string& text,
+               bool misspelling) override {
+    calls.push_back(
+        std::string(misspelling ? "replace misspelling " : "replace ") + id +
+        " " + text);
+  }
+  void FindInPage(const std::string& id,
+                  const ElectronFindInPage& find) override {
+    calls.push_back("find " + id + " " + base::NumberToString(find.request) +
+                    " " + find.text);
+  }
+  void StopFindInPage(const std::string& id,
+                      ElectronStopFindAction action) override {
+    calls.push_back("stop find " + id + " " +
+                    base::NumberToString(static_cast<int>(action)));
+  }
   void SetTitle(const std::string& id, const std::string& title) override {
     calls.push_back("title " + id + " " + title);
   }
@@ -623,6 +644,42 @@ TEST_F(ElectronAppTest, APagesStateReachesTheAppAndItsHistoryMoves) {
   app_->Listed({});
   sent_.clear();
   page.state.Run(ElectronPageState{});
+  EXPECT_TRUE(sent_.empty());
+}
+
+TEST_F(ElectronAppTest, APageEditsAndFindsAsTheAppAsks) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  sent_.clear();
+  desk_.calls.clear();
+
+  app_->Take(R"({"type":"edit","window":3,"command":"select_all"})");
+  app_->Take(R"({"type":"replace","window":3,"text":"cat",)"
+             R"("misspelling":true})");
+  app_->Take(R"({"type":"find_in_page","window":3,"request":2,"text":"dog",)"
+             R"("forward":true,"find_next":false,"match_case":false})");
+  app_->Take(
+      R"({"type":"stop_find_in_page","window":3,"action":"keep_selection"})");
+  EXPECT_EQ(
+      desk_.calls,
+      (Lines{"edit 10 " + base::NumberToString(static_cast<int>(
+                              ElectronEditCommand::kSelectAll)),
+             "replace misspelling 10 cat", "find 10 2 dog",
+             "stop find 10 " + base::NumberToString(static_cast<int>(
+                                   ElectronStopFindAction::kKeepSelection))}));
+
+  page.found.Run(ElectronFindResult{
+      .request = 2, .matches = 1, .active_match_ordinal = 1, .width = 4});
+  EXPECT_EQ(sent_,
+            Lines{"{\"active_match_ordinal\":1,\"matches\":1,\"request\":2,"
+                  "\"selection\":{\"height\":0,\"width\":4,\"x\":0,\"y\":0},"
+                  "\"type\":\"found_in_page\",\"window\":3}\n"});
+
+  // An answer that raced the window closing says nothing.
+  app_->Listed({});
+  sent_.clear();
+  page.found.Run(ElectronFindResult{.request = 3});
   EXPECT_TRUE(sent_.empty());
 }
 
