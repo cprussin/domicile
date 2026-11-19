@@ -62,6 +62,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 - Ctrl+C and Escape work when you select an area on screen for a screenshot or a share. [Screenshots](SCREENSHOTS.md)
 - The wallpaper takes less memory on screens smaller than 4K: it downloads each photo only as large as your screens show it.
 - Screenshot, share and other dialogs fade out when you answer them, instead of vanishing.
+- Sharing your screen or a window in Google Meet asks once, not twice.
 - A site's notifications show the site's icon instead of the browser's.
 - A Gmail notification opens its mail beside your inbox, once Gmail has synced it. [Inboxes](NOTIFICATIONS.md#inboxes) · [#2284](https://github.com/cprussin/domicile/pull/2284)
 - PDFs stay sharp and no longer go blank. [#2038](https://github.com/cprussin/domicile/pull/2038) · [#2080](https://github.com/cprussin/domicile/pull/2080) · [#2100](https://github.com/cprussin/domicile/pull/2100)

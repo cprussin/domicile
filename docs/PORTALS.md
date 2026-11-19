@@ -400,6 +400,12 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   through its restore token. A `Start` canceled because the picker was up
   answers half a second after the pick's `Start`: Electron frees both of its
   capturers when either fails, and a pick answered after that crashed Slack.
+- **A restore cut short carries over.** Meet restarts a page's capture as
+  it starts: webrtc closes the session restoring the pick before its `Start`
+  answers, and opens another with the same token. The frontend deletes a
+  token when it is used and saves it again only from an answer, so this
+  backend gets none for the second. A connection's next ask without a token, within 2 seconds
+  of closing a session while its `Start` restored, restores the same pick.
 - **A region is dragged on the desk shot or selected on screen.** As in the
   screenshot picker, the user drags over the picker's desk preview, and the
   area is turned into the desktop's logical pixels, grown to whole ones.
