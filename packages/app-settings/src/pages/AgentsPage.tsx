@@ -90,7 +90,7 @@ export const AgentsPage = ({
                         }
                       }}
                       size="sm"
-                      variant="danger"
+                      variant="dangerGhost"
                     >
                       Stop
                     </Button>

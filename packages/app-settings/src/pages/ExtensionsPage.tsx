@@ -397,7 +397,7 @@ const ExtensionRow = ({
                   beforeIcon={<TrashIcon size={14} />}
                   onClick={onUninstall}
                   size="sm"
-                  variant="danger"
+                  variant="dangerGhost"
                 >
                   Uninstall
                 </Button>

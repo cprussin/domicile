@@ -448,6 +448,11 @@ export const domicilePreset = definePreset({
               base: "color-mix(in oklab, {colors.foreground} 65%, {colors.background})",
             },
           },
+          // Text on a `danger` fill. Theme-independent, so it reads the same
+          // on the red in either theme.
+          onDanger: {
+            value: "white",
+          },
           // Text and panels drawn over the wallpaper. Theme-independent
           // because the wallpaper doesn't change with the theme.
           onPhoto: {
