@@ -1170,6 +1170,7 @@ impl Host {
             | ChromeMessage::WhichShellCommands
             | ChromeMessage::WhichShellBindings
             | ChromeMessage::WhichInputs
+            | ChromeMessage::WhichIdleTime
             | ChromeMessage::Watch { .. }
             | ChromeMessage::ActOnWindow { .. }
             | ChromeMessage::ConfigureDisplay { .. }

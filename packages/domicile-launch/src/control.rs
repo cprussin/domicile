@@ -179,6 +179,9 @@ pub enum Request {
     ShellBindings,
     /// Report the keyboards, pointers and touch devices the engine reads.
     Inputs,
+    /// Report how long nobody has used the desktop, in whole seconds. Asked
+    /// by Electron apps' `powerMonitor.getSystemIdleTime`.
+    IdleTime,
     /// Report the agents let in now and those remembered. Asked by
     /// `domicile-app-host` for Settings › Agents.
     Agents,
@@ -432,6 +435,9 @@ pub enum Response {
 
     /// Answers `inputs`.
     Inputs { inputs: Vec<ListedInput> },
+
+    /// Answers `idle_time`.
+    IdleTime { seconds: u64 },
 
     /// Answers `agents`.
     Agents { agents: KnownAgents },
@@ -711,6 +717,11 @@ pub type ListShellBindings<'a> = &'a dyn Fn() -> Result<Vec<ShellBinding>, Strin
 /// [`crate::compositor_socket::inputs`] in a desktop; a closure in tests.
 pub type ListInputs<'a> = &'a dyn Fn() -> Result<Vec<ListedInput>, String>;
 
+/// Asks the compositor how many whole seconds nobody has used the desktop.
+///
+/// [`crate::compositor_socket::idle_time`] in a desktop; a closure in tests.
+pub type AskIdleTime<'a> = &'a dyn Fn() -> Result<u64, String>;
+
 /// Asks the compositor for the agents it knows.
 ///
 /// [`crate::compositor_socket::agents`] in a desktop; a closure in tests.
@@ -777,6 +788,7 @@ pub struct Desktop<'a> {
     pub shell_commands: ListShellCommands<'a>,
     pub shell_bindings: ListShellBindings<'a>,
     pub inputs: ListInputs<'a>,
+    pub idle_time: AskIdleTime<'a>,
     pub agents: ListAgents<'a>,
     pub stop_agent: StoppingAgents<'a>,
     pub forget_agent: ForgettingAgents<'a>,
@@ -1044,6 +1056,10 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::Inputs) => to_line(&match (desktop.inputs)() {
             Ok(inputs) => Response::Inputs { inputs },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::IdleTime) => to_line(&match (desktop.idle_time)() {
+            Ok(seconds) => Response::IdleTime { seconds },
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::Agents) => to_line(&match (desktop.agents)() {

@@ -602,6 +602,16 @@ fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
             inputs: vec![keyboard]
         }
     );
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"idle_time\"}",
+            &Desktop {
+                idle_time: &|| Ok(42),
+                ..nothing_dialed()
+            },
+        ),
+        Response::IdleTime { seconds: 42 }
+    );
     let status = DesktopStatus {
         theme: Theme::Light,
         locked: false,
@@ -1318,6 +1328,7 @@ fn nothing_dialed() -> Desktop<'static> {
         shell_commands: &|| panic!("only shell_commands lists the shell's commands"),
         shell_bindings: &|| panic!("only shell_bindings lists the shell's bindings"),
         inputs: &|| panic!("only inputs lists the input devices"),
+        idle_time: &|| panic!("only idle_time asks how long nobody has been here"),
         agents: &|| panic!("only agents lists the agents"),
         stop_agent: &|_| panic!("only stop_agent stops an agent"),
         forget_agent: &|_| panic!("only forget_agent forgets an agent"),

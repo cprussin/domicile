@@ -431,6 +431,11 @@ pub enum ChromeMessage {
     /// by `domicile list-inputs`.
     WhichInputs,
 
+    /// Report how long nobody has used the desktop. Answered with
+    /// [`HostMessage::IdleTime`] on this connection only. Sent by
+    /// `domicile idle-time`.
+    WhichIdleTime,
+
     /// Hear about `topics` on this connection until it closes: each topic's
     /// answer at once ([`HostMessage::WindowList`], [`HostMessage::DisplayList`],
     /// [`HostMessage::InputList`], [`HostMessage::Status`]), then again
@@ -906,6 +911,13 @@ pub enum HostMessage {
     /// Answers [`ChromeMessage::WhichInputs`] on the asking connection only,
     /// in the order the engine found the devices.
     InputList { inputs: Vec<ListedInput> },
+
+    /// Answers [`ChromeMessage::WhichIdleTime`] on the asking connection only:
+    /// whole seconds since the last input from a keyboard, pointer, touch or
+    /// tablet, or since the compositor started when there has been none. Idle
+    /// inhibitors don't reset it, as they don't reset Electron's
+    /// `powerMonitor.getSystemIdleTime`.
+    IdleTime { seconds: u64 },
 
     /// Answers [`ChromeMessage::ActOnWindow`] on the asking connection only:
     /// why it was not done, or nothing when it was.

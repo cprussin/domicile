@@ -95,6 +95,13 @@ fn a_listing_prints_a_table_or_with_json_what_the_desktop_said() {
             json: false
         })
     );
+    assert_eq!(
+        run(&["idle-time", "--json"]),
+        Ok(Invocation::List {
+            listing: Listing::IdleTime,
+            json: true
+        })
+    );
     // The shell's commands are what `send-shell` takes, so its help is them.
     assert_eq!(
         run(&["send-shell", "--help"]),

@@ -6,6 +6,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Instant;
 
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::system::{
@@ -48,6 +49,7 @@ pub enum ConnectionRequest {
     WhichShellCommands,
     WhichShellBindings,
     WhichInputs,
+    WhichIdleTime,
 }
 
 /// Write a message's responses to the connection that asked, in order.
@@ -492,6 +494,9 @@ fn read_chrome_messages(
             }
             Ok(ChromeMessage::WhichStatus) => {
                 answer_on_the_connection(hub, ConnectionRequest::WhichStatus)
+            }
+            Ok(ChromeMessage::WhichIdleTime) => {
+                answer_on_the_connection(hub, ConnectionRequest::WhichIdleTime)
             }
             Ok(ChromeMessage::WhichShellCommands) => {
                 answer_on_the_connection(hub, ConnectionRequest::WhichShellCommands)
@@ -1072,6 +1077,8 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
         }],
         // For `domicile list-inputs`.
         ConnectionRequest::WhichInputs => vec![hub.host.lock().unwrap().list_inputs()],
+        // For `domicile idle-time`, which Electron apps' powerMonitor asks.
+        ConnectionRequest::WhichIdleTime => vec![hub.idle_time(Instant::now())],
         // A page has no filesystem, so the compositor searches for it. Safe
         // because `search_files` names no path; this side decides what is read.
         //

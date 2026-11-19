@@ -6,6 +6,7 @@ import { statSync } from "node:fs";
 import { access, mkdir, readFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import { readAppPackage } from "./app-package";
 import { watchAppearance } from "./appearance";
 import { connectDesktop, runCommand, runCommandSync } from "./desktop";
@@ -323,7 +324,7 @@ const main = async ([resources, ...args]: string[]) => {
       nativeTheme,
       net,
       netLog: createNetLog(),
-      powerMonitor: createPowerMonitor(desktopState.statuses),
+      powerMonitor: createPowerMonitor(desktopState.statuses, idleSeconds),
       powerSaveBlocker: createPowerSaveBlocker(() => {
         const inhibitor = Bun.spawn(
           ["domicile", "inhibit-idle", "--", "sleep", "infinity"],
@@ -427,6 +428,22 @@ const listDisplays = (): ListedDisplay[] => {
     );
   }
   return JSON.parse(ran.stdout.toString()) as ListedDisplay[];
+};
+
+/** What `domicile idle-time --json` prints. */
+const idleTimeSchema = z.object({ seconds: z.number().int().nonnegative() });
+
+/** How many whole seconds nobody has used the desktop, from `domicile idle-time --json`. */
+const idleSeconds = (): number => {
+  const ran = runCommandSync(["domicile", "idle-time", "--json"], {
+    output: true,
+  });
+  if (ran.code !== 0) {
+    throw new Error(
+      `domicile idle-time failed, so the app can't tell whether anybody is here: ${ran.stderr.trim()}`,
+    );
+  }
+  return idleTimeSchema.parse(JSON.parse(ran.stdout.toString())).seconds;
 };
 
 /**

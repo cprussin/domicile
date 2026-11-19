@@ -6,6 +6,7 @@ use std::io::Write;
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::AtomicU32;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Instant;
 
 use domicile_host::bells::Bells;
 use domicile_host::idle_holds::IdleHolds;
@@ -114,6 +115,10 @@ pub struct ChromeHub {
     /// The connections `domicile subscribe` holds. The writer thread tells
     /// them; see [`serve_outbound`].
     pub watchers: Watchers,
+    /// The last input, or when the hub was made if there has been none. The
+    /// Wayland thread sets it with [`ChromeHub::stirred`]; see
+    /// [`ChromeHub::idle_time`].
+    stirred_at: Mutex<Instant>,
 }
 
 impl ChromeHub {
@@ -155,6 +160,7 @@ impl ChromeHub {
             virtual_monitors: VirtualMonitors::default(),
             keymaps: Keymaps::default(),
             watchers: Watchers::default(),
+            stirred_at: Mutex::new(Instant::now()),
         });
         (hub, outbound_rx)
     }
@@ -227,6 +233,21 @@ impl ChromeHub {
             self.keymaps.listed().map(|listed| listed.active),
             self.idle_holds.holders(),
         )
+    }
+
+    /// Records input at `now`, for [`ChromeHub::idle_time`].
+    pub fn stirred(&self, now: Instant) {
+        *self.stirred_at.lock().unwrap() = now;
+    }
+
+    /// How long nobody has used the desktop as of `now`, answering
+    /// `which_idle_time`.
+    pub fn idle_time(&self, now: Instant) -> HostMessage {
+        HostMessage::IdleTime {
+            seconds: now
+                .duration_since(*self.stirred_at.lock().unwrap())
+                .as_secs(),
+        }
     }
 
     /// The answer to a [`WatchTopic`], as its `which_*` gets it.
@@ -630,5 +651,19 @@ mod tests {
                 HostMessage::FocusChanged { app_id: None },
             ]
         );
+    }
+
+    #[test]
+    fn the_idle_time_counts_whole_seconds_since_the_last_input() {
+        let (hub, _outbound, _) = hub_with_an_app();
+        let input = std::time::Instant::now();
+
+        hub.stirred(input);
+
+        assert_eq!(
+            hub.idle_time(input + Duration::from_millis(90_700)),
+            HostMessage::IdleTime { seconds: 90 }
+        );
+        assert_eq!(hub.idle_time(input), HostMessage::IdleTime { seconds: 0 });
     }
 }

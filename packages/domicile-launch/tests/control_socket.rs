@@ -178,6 +178,7 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                         panic!("a question about this desktop reaches no compositor")
                     },
                     inputs: &|| panic!("a question about this desktop reaches no compositor"),
+                    idle_time: &|| panic!("a question about this desktop reaches no compositor"),
                     agents: &|| panic!("a question about this desktop reaches no compositor"),
                     stop_agent: &|_| panic!("a question about this desktop reaches no compositor"),
                     forget_agent: &|_| {

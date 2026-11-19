@@ -92,6 +92,7 @@ impl DomicileCompositor {
                 "input restarts the idle clock"
             );
         }
+        self.hub.stirred(now);
         match idle.stirred(now) {
             Some(Blanking::ComeBack) => {
                 debug!("somebody is at this desktop again; its screens come back on");

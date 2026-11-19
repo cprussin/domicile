@@ -663,6 +663,14 @@ const shellBindingListSchema = z.looseObject({
   type: z.literal("shell_binding_list"),
 });
 
+// Whole seconds since the last input, or since the compositor started.
+// Answers `which_idle_time` on the asking connection only, for
+// `domicile idle-time`.
+const idleTimeSchema = z.looseObject({
+  seconds: z.number(),
+  type: z.literal("idle_time"),
+});
+
 // The input devices the engine reads. Answers `which_inputs` on the asking
 // connection only, for `domicile list-inputs`.
 const inputListSchema = z.looseObject({
@@ -984,6 +992,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   shellCommandListSchema,
   shellBindingListSchema,
   inputListSchema,
+  idleTimeSchema,
   windowActedSchema,
   displayConfiguredSchema,
   deskShotSchema,
@@ -1048,6 +1057,7 @@ export type DisplayListMessage = z.infer<typeof displayListSchema>;
 export type WindowListMessage = z.infer<typeof windowListSchema>;
 export type StatusMessage = z.infer<typeof statusSchema>;
 export type ShellCommandListMessage = z.infer<typeof shellCommandListSchema>;
+export type IdleTimeMessage = z.infer<typeof idleTimeSchema>;
 export type ShellBindingListMessage = z.infer<typeof shellBindingListSchema>;
 export type InputListMessage = z.infer<typeof inputListSchema>;
 export type WindowActedMessage = z.infer<typeof windowActedSchema>;

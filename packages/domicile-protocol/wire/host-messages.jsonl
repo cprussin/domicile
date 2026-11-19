@@ -32,6 +32,7 @@
 {"type":"shell_command_list","commands":[{"usage":"focus left|right|up|down","description":"Move focus to the neighboring window."}]}
 {"type":"shell_binding_list","bindings":[{"mode":"default","chord":"Meta+Left","action":"send-shell focus left"}]}
 {"type":"input_list","inputs":[{"id":9,"name":"Logitech MX Master 3","kind":"mouse","connection":"bluetooth","sys_path":"/sys/devices/input9","vendor":1133,"product":16514}]}
+{"type":"idle_time","seconds":42}
 {"type":"window_acted","refused":"the desktop is locked"}
 {"type":"display_configured","refused":"no monitor HDMI-A-9 is plugged in; domicile list-displays lists them"}
 {"type":"desk_shot","shot":{"place":{"position":[-1920,0],"size":[3840,1080]},"width":1568,"height":441}}

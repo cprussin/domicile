@@ -38,8 +38,8 @@ use domicile_launch::components::{
     builder, components, electron_host, engine as engine_path, our_shell, version_file, Components,
 };
 use domicile_launch::compositor_socket::{
-    act_on_window, agents, configure_display, displays, emulate, forget_agent, inputs, launch,
-    lock, monitors, power_displays, screen_record, screenshot, send_shell, shell_bindings,
+    act_on_window, agents, configure_display, displays, emulate, forget_agent, idle_time, inputs,
+    launch, lock, monitors, power_displays, screen_record, screenshot, send_shell, shell_bindings,
     shell_commands, shoot_desk, status, stop_agent, theme, windows,
 };
 use domicile_launch::config_check::check;
@@ -957,6 +957,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         | Response::ShellCommands { .. }
         | Response::ShellBindings { .. }
         | Response::Inputs { .. }
+        | Response::IdleTime { .. }
         | Response::Agents { .. } => Err(format!(
             "the desktop answered {answer:?}, which no command asks for"
         )),
@@ -1285,6 +1286,10 @@ fn listed(listing: Listing, json: bool) -> Result<ExitCode, String> {
         (Response::ShellBindings { bindings }, true) => as_json(&bindings),
         (Response::Inputs { inputs }, false) => inputs_table(&inputs),
         (Response::Inputs { inputs }, true) => as_json(&inputs),
+        (Response::IdleTime { seconds }, false) => format!("{seconds}\n"),
+        (Response::IdleTime { seconds }, true) => {
+            as_json(&serde_json::json!({ "seconds": seconds }))
+        }
         (Response::Agents { agents }, false) => agents_table(&agents),
         (Response::Agents { agents }, true) => as_json(&agents),
         (Response::Refused { why }, _) => {
@@ -2183,6 +2188,9 @@ fn answer_a_command(
                         shell_bindings(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
                     },
                     inputs: &|| inputs(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string()),
+                    idle_time: &|| {
+                        idle_time(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
+                    },
                     agents: &|| agents(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string()),
                     stop_agent: &|session| {
                         stop_agent(chrome, session, Some(ANSWER_WITHIN))

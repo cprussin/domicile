@@ -77,7 +77,6 @@
     "BaseWindow.setParentWindow": "does nothing, as isModal",
     "BaseWindow.unmaximize": "does nothing: the engine has no request for it",
     "net.isOnline": "always true, even offline",
-    "powerMonitor.getSystemIdleTime": "always 0, so apps such as Slack never see the user away",
     "ServiceWorkers.getAllRunning": "always none, though the engine runs the app's service workers",
     "ServiceWorkers.getFromVersionID": "always null, as getAllRunning",
     "ServiceWorkers.getInfoFromVersionID": "always null, as getAllRunning",

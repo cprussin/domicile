@@ -24,6 +24,7 @@ describe("powerMonitor", () => {
       (heard) => {
         hear = heard;
       },
+      () => 0,
       () => false,
     );
     const seen: string[] = [];
@@ -38,6 +39,36 @@ describe("powerMonitor", () => {
 
     expect(seen).toEqual(["lock", "unlock"]);
     expect(monitor.getSystemIdleState(60)).toBe("active");
+  });
+
+  it("reads how long nobody has used the desktop", () => {
+    let idle = 30;
+    const monitor = createPowerMonitor(
+      () => undefined,
+      () => idle,
+      () => false,
+    );
+
+    expect(monitor.getSystemIdleTime()).toBe(30);
+    expect(monitor.getSystemIdleState(60)).toBe("active");
+    idle = 60;
+    expect(monitor.getSystemIdleState(60)).toBe("idle");
+  });
+
+  it("reads a locked desktop as locked however long it sat", () => {
+    let hear: (status: DesktopStatus) => void = () => undefined;
+    const monitor = createPowerMonitor(
+      (heard) => {
+        hear = heard;
+      },
+      () => 600,
+      () => false,
+    );
+
+    monitor.getSystemIdleState(60);
+    hear({ locked: true });
+
+    expect(monitor.getSystemIdleState(60)).toBe("locked");
   });
 
   it("reads the battery from sysfs", () => {

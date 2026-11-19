@@ -442,7 +442,8 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ConnectionRequest::WhichStatus
             | ConnectionRequest::WhichShellCommands
             | ConnectionRequest::WhichShellBindings
-            | ConnectionRequest::WhichInputs,
+            | ConnectionRequest::WhichInputs
+            | ConnectionRequest::WhichIdleTime,
         )
         | Asked::System(
             Reach::ReadsTheKernel
@@ -1149,6 +1150,7 @@ mod tests {
             ConnectionRequest::WhichShellCommands,
             ConnectionRequest::WhichShellBindings,
             ConnectionRequest::WhichInputs,
+            ConnectionRequest::WhichIdleTime,
         ] {
             assert_eq!(refused(Asked::OnTheConnection(&request)), None);
         }

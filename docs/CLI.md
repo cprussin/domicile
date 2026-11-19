@@ -447,6 +447,19 @@ capturing   -
 
 `--json` prints `{"shell": …, "status": {…}}` instead, for scripts.
 
+## `domicile idle-time [--json]`
+
+Print how many whole seconds nobody has used the desktop: since the last key,
+pointer, touch or tablet input, or since the desktop started when there has
+been none. Idle inhibitors don't reset it. Electron apps read it for
+`powerMonitor.getSystemIdleTime`, so Slack and the like can mark you away.
+
+```
+42
+```
+
+`--json` prints `{"seconds": 42}` instead.
+
 ## `domicile disable-while-typing [on|off|toggle]`
 
 Set whether a touchpad ignores the pointer while you type, or print it. On by
@@ -634,7 +647,7 @@ shell.
 `accessibility-act`, `agent`, `list-agents`, `stop-agent` and `forget-agent`
 are refused while the desktop is locked, as is adding a `monitor`. `theme`, `sleep-displays`,
 `wake-displays`, `lock`, `inhibit-idle`, `list-displays`, `list-windows`,
-`list-inputs`, `status`, `subscribe`, `configure-display`,
+`list-inputs`, `status`, `idle-time`, `subscribe`, `configure-display`,
 `list-shell-commands` and `list-bindings` work, and a `monitor` added before keeps resizing.
 
 ## Environment

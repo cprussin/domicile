@@ -490,7 +490,9 @@ What the host has is real where the engine can do it and a stated answer
 where the shell owns it: window state reads as shown and normal, because
 the shell lays windows out, and `globalShortcut` refuses with a warning,
 because shortcuts are the shell's. `screen` and `powerMonitor` follow the
-desk through `domicile subscribe` from their first use. The
+desk through `domicile subscribe` from their first use, and
+`powerMonitor.getSystemIdleTime` asks `domicile idle-time`, so Slack can mark
+you away. The
 `electron-apps-start-on-a-tty` VM test starts Element and Slack as packaged
 and fails on a crash or on Element leaving the engine.
 

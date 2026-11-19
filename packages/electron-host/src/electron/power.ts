@@ -1,9 +1,9 @@
 // The stand-ins for Electron's `powerMonitor` and `powerSaveBlocker`.
 //
 // `powerMonitor` says when the desktop locks and unlocks, from
-// `domicile subscribe status`, and reads the battery from sysfs. Idle time
-// isn't something Wayland tells a client, so the desktop always reads as in
-// use. `powerSaveBlocker` keeps the screens on with `domicile inhibit-idle`.
+// `domicile subscribe status`, reads how long nobody has used it from
+// `domicile idle-time`, and reads the battery from sysfs. `powerSaveBlocker`
+// keeps the screens on with `domicile inhibit-idle`.
 
 import { EventEmitter } from "node:events";
 import { readdirSync, readFileSync } from "node:fs";
@@ -40,9 +40,14 @@ export const onBattery = (root = POWER_SUPPLY) => {
   );
 };
 
-/** Electron's `powerMonitor`. `statuses` hands each desktop status to its argument. */
+/**
+ * Electron's `powerMonitor`. `statuses` hands each desktop status to its
+ * argument; `idleSeconds` says how many whole seconds nobody has used the
+ * desktop.
+ */
 export const createPowerMonitor = (
   statuses: (heard: (status: DesktopStatus) => void) => void,
+  idleSeconds: () => number,
   battery = onBattery,
 ) => {
   const monitor = new EventEmitter();
@@ -67,11 +72,16 @@ export const createPowerMonitor = (
   };
   return Object.assign(monitor, {
     getCurrentThermalState: () => "unknown" as const,
-    getSystemIdleState: (_threshold: number) => {
+    getSystemIdleState: (threshold: number) => {
       follow();
-      return locked === true ? ("locked" as const) : ("active" as const);
+      if (locked === true) {
+        return "locked" as const;
+      }
+      return idleSeconds() >= threshold
+        ? ("idle" as const)
+        : ("active" as const);
     },
-    getSystemIdleTime: () => 0,
+    getSystemIdleTime: () => idleSeconds(),
     isOnBatteryPower: () => battery(),
     get onBatteryPower() {
       return battery();

@@ -111,6 +111,8 @@ Ask the running desktop:
   domicile status [--json]              Print the shell, theme, keymap, lock,
                                         and what keeps the screens on or
                                         captures the desktop
+  domicile idle-time [--json]           Print how many seconds nobody has used
+                                        the desktop
   domicile disable-while-typing [on|off|toggle]
                                         Set the touchpad setting, or print it
   domicile monitor <name> <W>x<H>[@Hz] [scale]
@@ -495,7 +497,7 @@ pub enum Invocation {
     Version,
 }
 
-/// What a `list-*` verb or `status` prints.
+/// What a `list-*` verb, `status` or `idle-time` prints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Listing {
     Displays,
@@ -504,6 +506,7 @@ pub enum Listing {
     ShellCommands,
     Bindings,
     Inputs,
+    IdleTime,
     Agents,
 }
 
@@ -517,6 +520,7 @@ impl Listing {
             Self::ShellCommands => Request::ShellCommands,
             Self::Bindings => Request::ShellBindings,
             Self::Inputs => Request::Inputs,
+            Self::IdleTime => Request::IdleTime,
             Self::Agents => Request::Agents,
         }
     }
@@ -1233,6 +1237,7 @@ fn verb(word: &str) -> Option<Verb> {
         "list-shell-commands" => Some(Verb::Listing(Listing::ShellCommands)),
         "list-bindings" => Some(Verb::Listing(Listing::Bindings)),
         "list-inputs" => Some(Verb::Listing(Listing::Inputs)),
+        "idle-time" => Some(Verb::Listing(Listing::IdleTime)),
         "list-agents" => Some(Verb::Listing(Listing::Agents)),
         "stop-agent" => Some(Verb::StoppingAgent),
         "forget-agent" => Some(Verb::Forgetting),

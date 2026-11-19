@@ -413,6 +413,19 @@ pub fn inputs(
     }
 }
 
+/// Asks the compositor at `socket` how many whole seconds nobody has used the
+/// desktop.
+pub fn idle_time(socket: &Path, patience: Option<Duration>) -> Result<u64, CompositorError> {
+    let said = exchanged(socket, &[ChromeMessage::WhichIdleTime], patience)?;
+    match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::IdleTime { seconds }) => Ok(seconds),
+        _ => Err(CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said,
+        }),
+    }
+}
+
 /// Asks the compositor at `socket` which keys and gestures the shell binds.
 pub fn shell_bindings(
     socket: &Path,
