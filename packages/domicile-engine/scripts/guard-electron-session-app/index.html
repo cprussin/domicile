@@ -2,15 +2,18 @@
 <title>served</title>
 <!-- Served by the guard's own server at http://127.0.0.1/. Says how it
      loaded (its user agent, its cookies and what localStorage kept from a
-     load before), then keeps a cookie and a localStorage item of its own.
-     The title says everything at once, as the desk may report only its
-     last. -->
+     load before). Its first load, with no query, then keeps a cookie and a
+     localStorage item of its own; later loads only read, so reading again
+     after clearStorageData can't put back what it cleared. The title says
+     everything at once, as the desk may report only its last. -->
 <script>
   const kept = localStorage.getItem("x") ?? "none";
   const cookies = document.cookie;
-  localStorage.setItem("x", "1");
-  // biome-ignore lint/suspicious/noDocumentCookie: the guard checks that a page's own cookie reaches the session.
-  document.cookie = "page=2; path=/; max-age=3600";
+  if (location.search === "") {
+    localStorage.setItem("x", "1");
+    // biome-ignore lint/suspicious/noDocumentCookie: the guard checks that a page's own cookie reaches the session.
+    document.cookie = "page=2; path=/; max-age=3600";
+  }
   document.title = [
     "done",
     navigator.userAgent,
