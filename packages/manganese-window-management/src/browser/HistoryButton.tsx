@@ -4,7 +4,7 @@ import { ContextMenu } from "@domicile-desktop/component-library/ContextMenu";
 import { newTabClick } from "@domicile-desktop/component-library/new-tab-click";
 import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ClockCounterClockwise";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
-import type { MouseEvent, ReactNode } from "react";
+import type { MouseEvent, ReactElement } from "react";
 import { useState } from "react";
 import { css } from "../../styled-system/css";
 import type { PageHistoryChoice, PageHistoryEntry } from "./page-history";
@@ -15,7 +15,7 @@ const MENU_LENGTH = 12;
 
 type Props = {
   /** The arrow. */
-  children: ReactNode;
+  children: ReactElement;
   disabled: boolean;
   /** The history, or nothing from an engine without history entries. */
   history: PageHistoryChoice | undefined;

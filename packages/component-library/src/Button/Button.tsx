@@ -1,5 +1,5 @@
 import { Button as BaseButton } from "@base-ui/react/button";
-import type { ComponentProps, ReactNode, Ref } from "react";
+import type { ComponentProps, ReactElement, ReactNode, Ref } from "react";
 import { useLayoutEffect, useState } from "react";
 import { css, cva, cx } from "../../styled-system/css";
 import type { ControlVariant } from "../../styled-system/recipes";
@@ -34,12 +34,14 @@ type CommonProps = Partial<ControlVariant> & {
         afterIcon?: ReactNode | undefined;
         beforeIcon?: ReactNode | undefined;
         children: string;
-        label?: undefined;
+        /** A longer name than the text, such as "Forget Codex" in a row. */
+        label?: string | undefined;
       }
     | {
         afterIcon?: undefined;
         beforeIcon?: undefined;
-        children: ReactNode;
+        /** The icon; `label` names it. */
+        children: ReactElement;
         label: string;
       }
   );
@@ -106,7 +108,7 @@ export const Button = ({
     }
   }, [loading, renderedLoading]);
 
-  const iconOnly = label !== undefined;
+  const iconOnly = typeof children !== "string";
   const isDisabled = loading === true || disabled === true;
   const sharedProps = {
     "aria-busy": loading === true ? true : undefined,
