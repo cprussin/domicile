@@ -187,6 +187,12 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
     request, matches, active_match_ordinal, selection}`, which the host
     emits as `found-in-page`. `stopFindInPage` sends `stop_find_in_page
     {window, action}`.
+  - **Context menus:** a right click in a window's or view's page goes to
+    its app, not the shell, as Electron draws no menu of its own. The
+    engine sends `context_menu {window, x, y, link_url, …, edit_flags,
+    media_flags}` (`WebViewGuest::TakeContextMenusWith`), which the host
+    emits as webContents `context-menu` with Electron's params; the app
+    draws its menu with `Menu.popup`, or none.
   - **Hide and show:** `hide()`, `show()`, `showInactive()` and `show:
     false` send `set_hidden {window, hidden}` (`hidden` with `open_window`).
     A hidden window stays open, its page running; the engine lists it with
@@ -640,6 +646,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: a sandboxed preload's `process.versions.electron` and `process.resourcesPath`, from `hello`, and the rest of Electron's renderer `process`, `webFrame.insertText` and `setVisualZoomLevelLimits`, each there or saying it doesn't work yet (`guard-electron-preload.sh`, `preload-coverage.test.ts`)
 - [x] engine: a page's history, loading, focus, renderer pid and crash reach the app (`page_state`), and it walks the history (`go_to_index`, `clear_history`), for `navigationHistory`, `getFocusedWindow` and the rest (`guard-electron-socket.sh`)
 - [x] engine: the Edit menu's commands and `replace` at the page's focus (`edit`, `replace`), and find in page (`find_in_page`, `found_in_page`, `stop_find_in_page`), with the Edit menu's roles (`guard-electron-socket.sh`)
+- [x] engine: a page's context menus reach its app as `context-menu` (`context_menu`), and the shell draws none for it
 - [ ] engine: a message box before any window has a page, which Element shows when there's no keyring and hands itself back on
 - [ ] phase 2, engine: Electron's Node built into the engine, and the engine run as Node
 - [x] phase 2, engine: Node in the pages of windows that ask for it (`guard-electron-node.sh`)

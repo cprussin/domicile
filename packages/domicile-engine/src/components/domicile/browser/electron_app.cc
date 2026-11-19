@@ -436,6 +436,8 @@ ElectronPageCalls ElectronApp::CallsFor(ElectronWindow number) {
                                    weak_factory_.GetWeakPtr(), number),
       .found = base::BindRepeating(&ElectronApp::PageFound,
                                    weak_factory_.GetWeakPtr(), number),
+      .context_menu = base::BindRepeating(&ElectronApp::PageContextMenu,
+                                          weak_factory_.GetWeakPtr(), number),
       .window_state = base::BindRepeating(&ElectronApp::WindowStateChanged,
                                           weak_factory_.GetWeakPtr(), number),
   };
@@ -723,6 +725,13 @@ void ElectronApp::PageStateChanged(ElectronWindow number,
 void ElectronApp::PageFound(ElectronWindow number, ElectronFindResult result) {
   if (windows_.contains(number)) {
     send_.Run(ElectronFoundInPage(number, result));
+  }
+}
+
+void ElectronApp::PageContextMenu(ElectronWindow number,
+                                  ElectronContextMenu menu) {
+  if (windows_.contains(number)) {
+    send_.Run(ElectronContextMenuAsked(number, menu));
   }
 }
 

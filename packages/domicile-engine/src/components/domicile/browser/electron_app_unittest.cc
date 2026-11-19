@@ -748,6 +748,23 @@ TEST_F(ElectronAppTest, APageEditsAndFindsAsTheAppAsks) {
   EXPECT_TRUE(sent_.empty());
 }
 
+TEST_F(ElectronAppTest, APagesContextMenuGoesToTheApp) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  sent_.clear();
+
+  const ElectronContextMenu menu{.x = 4, .y = 5, .selection_text = "cat"};
+  page.context_menu.Run(menu);
+  EXPECT_EQ(sent_, Lines{ElectronContextMenuAsked(3, menu)});
+
+  // A menu that raced the window closing says nothing.
+  app_->Listed({});
+  sent_.clear();
+  page.context_menu.Run(menu);
+  EXPECT_TRUE(sent_.empty());
+}
+
 TEST_F(ElectronAppTest, AWindowHasItsOwnTitleAndMayHide) {
   Hello();
   app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"

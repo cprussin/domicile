@@ -1831,6 +1831,13 @@ bool WebViewGuest::HandleContextMenu(
       gfx::ToRoundedPoint(page->TransformRootPointToViewCoordSpace(
           gfx::PointF(params.x, params.y)));
 
+  if (!context_menu_taking_.is_null()) {
+    LOG(INFO) << "domicile: a <webview>'s page asked for a context menu; "
+                 "its embedder takes it.";
+    context_menu_taking_.Run(params, in_page);
+    return true;
+  }
+
   context_menu_id_ += 1;
   context_menu_frame_ = render_frame_host.GetGlobalId();
   context_menu_params_ = params;
@@ -3265,6 +3272,10 @@ void WebViewGuest::Focused() {
 
 void WebViewGuest::DecideWindowsWith(WindowOpening opening) {
   window_opening_ = std::move(opening);
+}
+
+void WebViewGuest::TakeContextMenusWith(ContextMenuTaking taking) {
+  context_menu_taking_ = std::move(taking);
 }
 
 void WebViewGuest::KeepFullFrameRate() {

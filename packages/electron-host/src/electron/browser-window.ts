@@ -7,7 +7,6 @@ import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-
 import type {
   EditCommand,
   Engine,
@@ -19,6 +18,8 @@ import type {
   WindowEvent,
 } from "../engine";
 import type { ElectronApp } from "./app";
+import type { ContextMenuAsked } from "./context-menu";
+import { contextMenuParams } from "./context-menu";
 import type { createIpcMain } from "./ipc-main";
 import { IpcMain } from "./ipc-main";
 import type { MenuEntry } from "./menu";
@@ -587,6 +588,15 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       });
     };
 
+    /** Takes a context menu the user asked for over the page. */
+    readonly contextMenu = (menu: ContextMenuAsked) => {
+      this.emit(
+        "context-menu",
+        eventObject(),
+        contextMenuParams(menu, this.mainFrame),
+      );
+    };
+
     // Electron's older names for the same, which apps such as Element call.
     readonly canGoBack = this.navigationHistory.canGoBack;
     readonly canGoForward = this.navigationHistory.canGoForward;
@@ -1052,6 +1062,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         }
         case "found_in_page": {
           this.webContents.found(event);
+          break;
+        }
+        case "context_menu": {
+          this.webContents.contextMenu(event);
           break;
         }
         case "javascript_result": {
