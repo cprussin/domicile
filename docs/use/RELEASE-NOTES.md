@@ -59,6 +59,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 
 ### Fixes
 
+- You can drag text, images and links within and between pages.
 - A nested tab group's last window drags out past the group when the group is the first or last tab.
 - The lock screen's passphrase field always looks focused while you type into it.
 - A launcher tag typed after the words, as in `kate bush !yt`, searches on Enter instead of filling in the tag again.
