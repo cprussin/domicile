@@ -107,6 +107,7 @@ Headless.
 | `guard-notification-server-late.sh` | the browser connects to a notification server that takes its name after the browser looked, on a private bus (patch 0134) |
 | `guard-notification-window.sh` | a page's notification names its browser window in `x-domicile-browser-window`, and the shell's names none, on a private bus with a stand-in server (patch 0172) |
 | `guard-notification-site-icon.sh` | a site's notification carries the site's favicon as its application icon, in place of the browser's logo, on a private bus with a stand-in server (patch 0239); `NEGATIVE=1` notifies from a site with no favicon and must keep the logo |
+| `guard-agent-devtools-shell.sh` | an agent's `devtools` for window `shell` answers the shell page's accessibility tree; one for a window that isn't open is refused |
 | `guard-shell-script-src.sh` | an injected inline `<script>` and `onerror` do not run in the shell; a `<script src>` from the shell root does |
 | `guard-domicile-fetch.sh` | the shell `fetch()`es a file beside it and one from `domicile://home/` (patch 0126); a site in its `<webview>` reads neither with `fetch()`, a no-cors `fetch()` or `XMLHttpRequest` |
 | `guard-shell-hmr.sh` | a shell served by `domicile-builder --serve` and loaded with `load_shell` `dev_server` takes Vite's updates: an edit it accepts applies in place with its state kept, and an edit to its entry reloads it (the control) |

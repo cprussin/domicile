@@ -433,7 +433,8 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 - `devtools` is `domicile devtools`
   ([CLI.md](/docs/CLI.md#domicile-devtools-window-method-params)), which
   `domicile mcp` drives browser windows with. `window` is the engine's id for
-  a browser window. It attaches a DevTools client of its own for the one
+  a browser window, or `shell` for the shell's page, which refuses
+  `Page.navigate`, `navigateToHistoryEntry` and `reload`. It attaches a DevTools client of its own for the one
   method and detaches once answered, so DevTools the user has open keeps
   working. Only `kDevToolsMethods` in `command_protocol.h` go through, and
   `Page.navigate` only to http and https; a private window is refused, and so

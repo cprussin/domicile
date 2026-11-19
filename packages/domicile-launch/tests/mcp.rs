@@ -1197,3 +1197,34 @@ fn an_act_whose_window_cannot_be_read_again_says_so_and_that_it_acted() {
         .iter()
         .all(|reply| reply["result"]["isError"] == false));
 }
+
+#[test]
+fn the_browser_tools_read_the_shells_own_page_as_window_shell() {
+    let mut ran = Vec::new();
+    let replies = served(
+        &[call("browser_snapshot", json!({"window": "shell"}))],
+        |args: &[String]| {
+            ran.push(args.to_vec());
+            printed(&format!("{}\n", one_button("Wi-Fi")))
+        },
+    );
+    // The shell holds no views, and list-windows doesn't list it.
+    assert_eq!(
+        ran,
+        [["devtools", "shell", "Accessibility.getFullAXTree", "{}"]]
+    );
+    assert_eq!(
+        replies[0]["result"]["content"][0]["text"],
+        "- RootWebArea \"Inbox\" [ref=1]\n  - button \"Wi-Fi\" [ref=12]\n"
+    );
+}
+
+#[test]
+fn an_agent_given_only_some_windows_cannot_reach_the_shell() {
+    let replies = served_letting(
+        &[call("browser_snapshot", json!({"window": "shell"}))],
+        never_run,
+        |_| Ok(reaching(two_windows()).0),
+    );
+    assert_eq!(replies[0]["result"]["isError"], true);
+}

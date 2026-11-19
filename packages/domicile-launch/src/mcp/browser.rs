@@ -24,14 +24,17 @@ pub(super) enum Browser {
     Screenshot,
 }
 
+/// The window the browser tools name to reach the shell's own page: its
+/// bars, panels and dialogs.
+const SHELL: &str = "shell";
+
 /// The longest name or value a snapshot shows of one element, in characters.
 const LONGEST: usize = 200;
 
 /// A browser tool's description, its arguments' JSON schemas and which are
 /// required.
 pub(super) fn described(tool: Browser) -> (&'static str, Value, Vec<&'static str>) {
-    let window =
-        json!({"type": "string", "description": "A browser window's id, from list_windows."});
+    let window = json!({"type": "string", "description": "A browser window's id, from list_windows, or \"shell\" for the shell's own bars, panels and dialogs."});
     let element =
         json!({"type": "string", "description": "An element's ref, from browser_snapshot."});
     let view = json!({"type": "string", "description": "One of the window's views, from browser_snapshot or list_windows. Left out, the window's own page."});
@@ -203,6 +206,10 @@ fn outline_of<D: FnMut(&[String]) -> io::Result<Ran>>(
 ) -> io::Result<Result<String, String>> {
     let tree = sent!(page, "Accessibility.getFullAXTree", json!({}));
     let mut lines = outline(&tree, 0, "");
+    // The shell's page holds no views, and is no window list-windows lists.
+    if page.window == SHELL {
+        return Ok(Ok(lines));
+    }
     let views = match page.views()? {
         Ok(views) => views,
         Err(why) => return Ok(Err(why)),

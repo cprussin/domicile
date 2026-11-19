@@ -3,6 +3,7 @@
 
 #include "chrome/browser/domicile/domicile_agent_devtools.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -30,6 +31,15 @@
 
 namespace domicile {
 namespace {
+
+// The window an agent names to reach the shell's own page: its bars, panels
+// and dialogs.
+constexpr char kShellWindow[] = "shell";
+
+// What an agent may not send the shell's page: it reads and clicks the shell,
+// and never takes the desk away from it.
+constexpr std::string_view kShellKeeps[] = {
+    "Page.navigate", "Page.navigateToHistoryEntry", "Page.reload"};
 
 // The id of the one method a client sends.
 constexpr int kMethodId = 1;
@@ -148,10 +158,17 @@ void SendDevToolsToBrowserWindow(const std::string& window,
                                  base::DictValue params,
                                  DevToolsAnswered answered) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  content::WebContents* page = BrowserWindowContents(window);
+  content::WebContents* page = window == kShellWindow
+                                   ? DeskShellContents()
+                                   : BrowserWindowContents(window);
   if (page == nullptr) {
     std::move(answered).Run(base::unexpected(
         base::StrCat({"no browser window ", window, " is open"})));
+    return;
+  }
+  if (window == kShellWindow && std::ranges::contains(kShellKeeps, method)) {
+    std::move(answered).Run(base::unexpected(
+        base::StrCat({method, " is refused on the shell's page"})));
     return;
   }
   if (page->GetBrowserContext()->IsOffTheRecord()) {

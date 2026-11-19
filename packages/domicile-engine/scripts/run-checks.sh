@@ -45,6 +45,7 @@ FIRST=(
 # log. At most `CHECKS_AT_ONCE` at a time.
 TOGETHER=(
   guard-webview-framing
+  guard-agent-devtools-shell
   guard-shell-local-network
   guard-webview-notifications
   guard-notification-server-late
@@ -164,6 +165,7 @@ LAST=(
 # Guards with no control run.
 ONCE=(
   node-runs-on-the-engine
+  guard-agent-devtools-shell
   guard-app-only-in-shell
   guard-asks-promise
   guard-browser-brand
