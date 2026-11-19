@@ -35,6 +35,11 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS/lib-broker.sh"
 
 CHROMIUM="${1:-}"
+# The shell's window, and so the app window's page: find_in_page searches only
+# a page with something on screen, and a headless window has no size unless
+# it is given one.
+WIDTH="${WIDTH:-1024}"
+HEIGHT="${HEIGHT:-768}"
 if [ -z "$CHROMIUM" ]; then
   annotate "guard-electron-socket: no path to chromium/src was given"
   exit 1
@@ -109,6 +114,7 @@ rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \
+  --window-size="$WIDTH,$HEIGHT" \
   --app="domicile://shell/" \
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-app-module.js" \
@@ -260,7 +266,9 @@ CloseBrowserWindow, or the listing that drops it"
 "1 1 1 1 1 1 1 0")
   FAILURE="find_in_page never answered with the page's one match: \
 ElectronPage::FindInPage, or DidReceiveFindReply and found_in_page, which \
-says only a search's final reply -- the app's log has what it heard"
+says only a search's final reply. Chromium finds nothing in a page with no \
+size, so check the engine log's \"an Electron page heard\" sizes -- the \
+app's log has what it heard"
   ;;
 "1 1 1 1 1 1 0 "*)
   FAILURE="the page's history never reached the app, or go_to_index did not \

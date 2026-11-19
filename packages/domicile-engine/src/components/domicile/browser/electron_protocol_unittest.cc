@@ -360,7 +360,7 @@ TEST(ElectronProtocolTest, AFindIsNumberedAndSaysHowItSearches) {
   EXPECT_TRUE(found.match_case);
   constexpr char kHow[] =
       R"("forward":true,"find_next":false,"match_case":false})";
-  for (const std::string line :
+  for (const std::string& line :
        {std::string(R"({"type":"find_in_page","window":3,"text":"a",)") + kHow,
         std::string(
             R"({"type":"find_in_page","window":3,"request":0,"text":"a",)") +
