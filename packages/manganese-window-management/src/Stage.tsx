@@ -54,6 +54,7 @@ import type { NodeRef } from "./tree/path";
 import { focusedWindowIn } from "./tree/tiling";
 import { useCaptured } from "./useCaptured";
 import { keyOf, useFocusGlows } from "./useFocusGlows";
+import { useTabDrop } from "./useTabDrop";
 import type { DrawnWindow, WindowMotions } from "./useWindowMotion";
 import { useWindowMotion } from "./useWindowMotion";
 import { WindowFrame } from "./WindowFrame";
@@ -128,6 +129,8 @@ type Props = {
   onNewTab: (id: string) => void;
   /** Browser window `id`'s page entered or left fullscreen. */
   onPageFullscreen: (id: string, fullscreen: boolean) => void;
+  /** A page's text, link or image dropped on a tab strip. See `useTabDrop`. */
+  onTabDrop: (target: NodeRef, edge: Direction, url: string) => void;
   /** A float resized to `box`, in the page's pixels, on the screen `on`. */
   onResize: (id: string, box: Rect, on: Geometry) => void;
   /** The user clicked a window or its chrome. */
@@ -195,6 +198,7 @@ export const Stage = memo(
     onNewTab,
     onPageFullscreen,
     onResize,
+    onTabDrop,
     onSelect,
     onStretch,
     overview,
@@ -258,6 +262,7 @@ export const Stage = memo(
       active === undefined ? "resting" : barMotion(active.motion);
     // Drawn over every window, not by the dragged one: see `DropIndicator`.
     const [aim, setAim] = useState<Aim | undefined>(undefined);
+    const tabDrop = useTabDrop({ onAim: setAim, onTabDrop, targets });
     // A border drag or a tiled resize grab resizes in place, so unlike a move
     // it does not fade the window. See `stageStyles`.
     const [stretching, setStretching] = useState(false);
@@ -304,7 +309,7 @@ export const Stage = memo(
     const { onPlayedOut } = motions;
     const tabsShown = motions.tabs.map(({ tab }) => tab);
     return (
-      <main>
+      <main {...tabDrop}>
         <SettleHandoffs>
           {/*
           Before every window, so each float covers its own shadow by document

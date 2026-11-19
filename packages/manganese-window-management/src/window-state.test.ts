@@ -2004,6 +2004,46 @@ describe("the buttons on a tab group's strip", () => {
   });
 });
 
+describe("a page's text, link or image dropped on a tab strip", () => {
+  it("opens its tab where the drop aimed, and only that one", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.TabDropped(
+        { id: APP("kitty"), up: 0 },
+        Direction.Left,
+        "https://a.example/",
+      ),
+      WindowAction.BrowserWindowsListed([listed("1", "https://a.example/")]),
+      WindowAction.BrowserWindowsListed([
+        listed("1", "https://a.example/"),
+        listed("2", "https://b.example/"),
+      ]),
+    );
+
+    // The second opens beside the focus, as any new window does.
+    expect(windowsOf(workspaceHere(state).tiling)).toEqual([
+      BROWSER("1"),
+      BROWSER("2"),
+      APP("kitty"),
+      APP("editor"),
+    ]);
+  });
+
+  it("closes the launcher, as opening a page from it does", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.LauncherToggled(),
+      WindowAction.TabDropped(
+        { id: APP("kitty"), up: 0 },
+        Direction.Right,
+        "https://a.example/",
+      ),
+    );
+
+    expect(state.launcherOpen).toBe(false);
+  });
+});
+
 describe("a tab of a selected group", () => {
   /** Kitty and the editor tabbed, the whole group selected. */
   const selected = () =>
