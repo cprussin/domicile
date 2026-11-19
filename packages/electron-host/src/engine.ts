@@ -180,6 +180,18 @@ export type EngineRequest =
       readonly auto_hide: boolean;
     }
   | {
+      /**
+       * `maximize`, `minimize`, `setFullScreen` and their undoing: what the
+       * app asks the shell to make the window. The shell decides, and says
+       * what it did with `window_state`.
+       */
+      readonly type: "set_window_state";
+      readonly window: number;
+      readonly maximized: boolean;
+      readonly minimized: boolean;
+      readonly fullscreen: boolean;
+    }
+  | {
       /** `Menu.popup`: the shell draws `menu` over the window. */
       readonly type: "popup_menu";
       readonly window: number;
@@ -354,6 +366,14 @@ const engineEvent = z.discriminatedUnion("type", [
   z.object({
     command: z.number(),
     type: z.literal("menu_clicked"),
+    window: z.number(),
+  }),
+  // What the shell made the window, each time that changes.
+  z.object({
+    fullscreen: z.boolean(),
+    maximized: z.boolean(),
+    minimized: z.boolean(),
+    type: z.literal("window_state"),
     window: z.number(),
   }),
   // A popup menu closed: `command` is the entry chosen, or 0 for none.

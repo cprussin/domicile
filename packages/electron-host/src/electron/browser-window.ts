@@ -85,6 +85,10 @@ const hostNodeBase = (): PageNodeBase => ({
 
 export type BrowserWindowOptions = {
   readonly show?: boolean | undefined;
+  /** It asks to be fullscreen once it opens. */
+  readonly fullscreen?: boolean | undefined;
+  /** Whether `setFullScreen` can make it fullscreen; true unless false. */
+  readonly fullscreenable?: boolean | undefined;
   /** The menu bar hides until the user presses Alt. */
   readonly autoHideMenuBar?: boolean | undefined;
   readonly title?: string | undefined;
@@ -92,6 +96,19 @@ export type BrowserWindowOptions = {
   readonly width?: number | undefined;
   readonly height?: number | undefined;
   readonly webPreferences?: WebPreferences | undefined;
+};
+
+/** A window's state, as the app asks it and the shell makes it. */
+type WindowState = {
+  readonly maximized: boolean;
+  readonly minimized: boolean;
+  readonly fullscreen: boolean;
+};
+
+const NORMAL: WindowState = {
+  fullscreen: false,
+  maximized: false,
+  minimized: false,
 };
 
 /** What setWindowOpenHandler's handler is told of a page's new window. */
@@ -1019,6 +1036,11 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           this.popupMenuClosed(event.popup, event.command);
           break;
         }
+        case "window_state": {
+          const { type: _type, window: _window, ...state } = event;
+          this.stateChanged(state);
+          break;
+        }
         case "close_asked": {
           this.closeAsked();
           break;
@@ -1095,6 +1117,13 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     /** The user chose entry `command` of the page's menu bar. */
     protected menuClicked(_command: number) {
       // Only a window has a menu bar.
+    }
+
+    /** The shell made the page's window `state`. */
+    protected stateChanged(_state: WindowState) {
+      throw new Error(
+        `the engine said the state of ${this.id}, which only a window has`,
+      );
     }
 
     /** Popup menu `popup` closed, with entry `command` chosen or 0. */
@@ -1373,6 +1402,13 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     #lastPopup = 0;
     #menuBarVisible = true;
     #menuBarAutoHide: boolean;
+    /** What the app asks the shell to make the window. */
+    #wants: WindowState = NORMAL;
+    /** What the shell last made it. */
+    #state: WindowState = NORMAL;
+    /** The ask the engine last heard, so it hears each only once: none yet. */
+    #asked = JSON.stringify(NORMAL);
+    #fullScreenable: boolean;
 
     constructor(options: BrowserWindowOptions = {}) {
       super(
@@ -1386,6 +1422,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         width: options.width ?? DEFAULT_SIZE.width,
       };
       this.#menuBarAutoHide = options.autoHideMenuBar ?? false;
+      this.#fullScreenable = options.fullscreenable ?? true;
+      if (options.fullscreen === true && this.#fullScreenable) {
+        this.#wants = { ...NORMAL, fullscreen: true };
+      }
       this.#menu?.on("changed", this.#showMenuBar);
       windows.set(this.id, this);
       this.created();
@@ -1463,14 +1503,44 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly getSize = () => [this.#size.width, this.#size.height];
     readonly getContentSize = () => this.getSize();
 
-    // The shell lays windows out and decides their state: a window asks
-    // nothing of it, and reads as the shell keeps every window, shown and
-    // normal, where the shell put it.
-    readonly isMinimized = () => false;
-    readonly isMaximized = () => false;
-    readonly isFullScreen = () => false;
+    // The shell decides each window's state: a window asks for one, and reads
+    // as what the shell last made it.
+    readonly isMinimized = () => this.#state.minimized;
+    readonly isMaximized = () => this.#state.maximized;
+    readonly isFullScreen = () => this.#state.fullscreen;
+    readonly isNormal = () =>
+      !(
+        this.#state.maximized ||
+        this.#state.minimized ||
+        this.#state.fullscreen
+      );
+    readonly minimize = () => {
+      this.#ask({ ...this.#wants, minimized: true });
+    };
+    /** Electron's restores a minimized window as it maximizes it. */
+    readonly maximize = () => {
+      this.#ask({ ...this.#wants, maximized: true, minimized: false });
+    };
+    readonly unmaximize = () => {
+      this.#ask({ ...this.#wants, maximized: false });
+    };
+    /** Out of minimized, back to the state it had. */
+    readonly restore = () => {
+      this.#ask({ ...this.#wants, minimized: false });
+    };
+    /** Does nothing for a window that isn't fullscreenable, as Electron. */
+    readonly setFullScreen = (flag: boolean) => {
+      if (this.#fullScreenable || !flag) {
+        this.#ask({ ...this.#wants, fullscreen: flag });
+      }
+    };
+    readonly isFullScreenable = () => this.#fullScreenable;
+    readonly setFullScreenable = (fullscreenable: boolean) => {
+      this.#fullScreenable = fullscreenable;
+    };
+    // The shell lays windows out: they read as the shell keeps them, where it
+    // put them.
     readonly isSimpleFullScreen = () => false;
-    readonly isNormal = () => true;
     readonly isKiosk = () => false;
     readonly isModal = () => false;
     readonly isAlwaysOnTop = () => false;
@@ -1480,16 +1550,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly isMovable = () => true;
     readonly isMinimizable = () => true;
     readonly isMaximizable = () => true;
-    readonly isFullScreenable = () => true;
     readonly isClosable = () => true;
     readonly isVisibleOnAllWorkspaces = () => false;
-    readonly minimize = () => undefined;
-    readonly maximize = () => undefined;
-    readonly unmaximize = () => undefined;
-    readonly restore = () => undefined;
     readonly blur = () => undefined;
     readonly center = () => undefined;
-    readonly setFullScreen = (_flag: boolean) => undefined;
     readonly setSimpleFullScreen = (_flag: boolean) => undefined;
     readonly setKiosk = (_flag: boolean) => undefined;
     readonly setAlwaysOnTop = (_flag: boolean, _level?: string) => undefined;
@@ -1499,7 +1563,6 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly setMovable = (_movable: boolean) => undefined;
     readonly setMinimizable = (_minimizable: boolean) => undefined;
     readonly setMaximizable = (_maximizable: boolean) => undefined;
-    readonly setFullScreenable = (_fullscreenable: boolean) => undefined;
     readonly setClosable = (_closable: boolean) => undefined;
     readonly setSkipTaskbar = (_skip: boolean) => undefined;
     readonly setVisibleOnAllWorkspaces = (_visible: boolean) => undefined;
@@ -1693,8 +1756,45 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       }
     };
 
+    /** Asks the shell to make the window `wants`, once it is open. */
+    readonly #ask = (wants: WindowState) => {
+      this.assertAlive();
+      this.#wants = wants;
+      this.#tellWants();
+    };
+
+    readonly #tellWants = () => {
+      const asked = JSON.stringify(this.#wants);
+      if (this.opened && !this.destroyed && asked !== this.#asked) {
+        this.#asked = asked;
+        toEngine({ type: "set_window_state", window: this.id, ...this.#wants });
+      }
+    };
+
+    protected override stateChanged(state: WindowState) {
+      const was = this.#state;
+      this.#state = state;
+      // What the user did, such as leaving fullscreen, is what the app's next
+      // ask starts from.
+      this.#wants = state;
+      this.#asked = JSON.stringify(state);
+      if (was.maximized !== state.maximized) {
+        this.emit(state.maximized ? "maximize" : "unmaximize");
+      }
+      if (!was.minimized && state.minimized) {
+        this.emit("minimize");
+      }
+      if (was.fullscreen !== state.fullscreen) {
+        this.emit(state.fullscreen ? "enter-full-screen" : "leave-full-screen");
+      }
+      if (was.minimized && !state.minimized) {
+        this.emit("restore");
+      }
+    }
+
     protected override wasOpened() {
       this.placeViews();
+      this.#tellWants();
       // A window opens with no menu bar, so there's only one to tell of.
       if (this.#menu !== null) {
         this.#showMenuBar();

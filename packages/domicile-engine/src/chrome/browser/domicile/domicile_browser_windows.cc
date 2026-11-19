@@ -415,6 +415,37 @@ class DeskWindows final : public base::SupportsUserData::Data,
     }
   }
 
+  // The state the Electron app asks for window `id`. The app made sure `id`
+  // is one of its windows; one that closed meanwhile is skipped.
+  void SetWindowState(const std::string& id, ElectronWindowState state) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    if (window == windows_.end()) {
+      LOG(WARNING) << "domicile: asked to set the state of browser window "
+                   << id << ", which is not open.";
+      return;
+    }
+    CHECK(!window->view) << "browser window " << id
+                         << " was given a window state and is a view";
+    if (window->wanted_state != state) {
+      window->wanted_state = state;
+      Changed();
+    }
+  }
+
+  // The shell made window `id` `state`. Only an Electron app hears it; a
+  // window that closed meanwhile is a report that raced it.
+  void ReportWindowState(const std::string& id, ElectronWindowState state) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    // A view has no state of its own: its window's is the view's.
+    if (window == windows_.end() || window->view) {
+      return;
+    }
+    if (ElectronPage* page =
+            ElectronPage::FromWebContents(&window->guest->contents())) {
+      page->WindowStateChanged(state);
+    }
+  }
+
   // Window `id` holds `views`, bottom first, and no others. The app made
   // sure `id` is a window and each of `views` a view, both its own; a window
   // or view that closed meanwhile is skipped.
@@ -958,6 +989,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
     std::deque<AskedMessageBox> message_boxes;
     // The popup menu its Electron app shows over it, if any.
     std::optional<ShownPopup> popup_menu;
+    // The state its Electron app asks for it.
+    ElectronWindowState wanted_state;
   };
 
   // `menu` as the shell lists it over `window`: {"menu": its entries, "x",
@@ -1014,7 +1047,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
             ? std::string()
             : window.message_boxes.front().box.message_box,
         window.popup_menu.has_value() ? window.popup_menu->listed
-                                      : std::string());
+                                      : std::string(),
+        window.wanted_state.maximized, window.wanted_state.minimized,
+        window.wanted_state.fullscreen);
   }
 
   // Makes a window and gives it its first page with `load`. Returns it, or
@@ -1470,6 +1505,15 @@ class BrowserWindowsService final
     windows_->ClickMenu(id, command);
   }
 
+  void SetWindowState(const std::string& id,
+                      bool maximized,
+                      bool minimized,
+                      bool fullscreen) override {
+    windows_->ReportWindowState(id, {.maximized = maximized,
+                                     .minimized = minimized,
+                                     .fullscreen = fullscreen});
+  }
+
   void AnswerPopupMenu(const std::string& id, int32_t command) override {
     if (command < 0) {
       ReportBadMessageAndDeleteThis(
@@ -1757,6 +1801,12 @@ void SetElectronTitle(const std::string& id, const std::string& title) {
 void SetElectronHidden(const std::string& id, bool hidden) {
   if (DeskWindows* windows = ShellDeskWindows()) {
     windows->SetHidden(id, hidden);
+  }
+}
+
+void SetElectronWindowState(const std::string& id, ElectronWindowState state) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->SetWindowState(id, state);
   }
 }
 

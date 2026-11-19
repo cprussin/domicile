@@ -480,7 +480,7 @@ bool IsWindowRequest(std::string_view type) {
          type == "set_menu_bar" || type == "show_message_box" ||
          type == "popup_menu" || type == "close_popup_menu" ||
          type == "execute_javascript" || type == "set_title" ||
-         type == "set_hidden";
+         type == "set_hidden" || type == "set_window_state";
 }
 
 // Entry `entry` of a menu, with only the keys the shell reads, or why it is
@@ -1377,6 +1377,21 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
       return Refuse("\"hidden\" must be true or false", *window);
     }
     return ElectronSetHidden{.window = *window, .hidden = *hidden};
+  } else if (*type == "set_window_state") {
+    const std::optional<bool> maximized = request->FindBool("maximized");
+    const std::optional<bool> minimized = request->FindBool("minimized");
+    const std::optional<bool> fullscreen = request->FindBool("fullscreen");
+    if (!maximized.has_value() || !minimized.has_value() ||
+        !fullscreen.has_value()) {
+      return Refuse(
+          "\"maximized\", \"minimized\" and \"fullscreen\" must each be "
+          "true or false",
+          *window);
+    }
+    return ElectronSetWindowState{.window = *window,
+                                  .state = {.maximized = *maximized,
+                                            .minimized = *minimized,
+                                            .fullscreen = *fullscreen}};
   } else if (*type == "ipc_send") {
     return ParseSendToPage(*request, *window);
   } else if (*type == "execute_javascript") {
@@ -1681,6 +1696,15 @@ std::string ElectronWindowResized(ElectronWindow window,
 std::string ElectronMenuClicked(ElectronWindow window, int command) {
   base::DictValue event = Event("menu_clicked", window);
   event.Set("command", command);
+  return Line(std::move(event));
+}
+
+std::string ElectronWindowStateChanged(ElectronWindow window,
+                                       const ElectronWindowState& state) {
+  base::DictValue event = Event("window_state", window);
+  event.Set("maximized", state.maximized);
+  event.Set("minimized", state.minimized);
+  event.Set("fullscreen", state.fullscreen);
   return Line(std::move(event));
 }
 

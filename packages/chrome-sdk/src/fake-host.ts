@@ -359,6 +359,9 @@ export class FakeDomicileHost {
           title: "",
           toplevelId: null,
           url,
+          wantsFullscreen: false,
+          wantsMaximized: false,
+          wantsMinimized: false,
           width,
           x,
           y,
@@ -431,6 +434,30 @@ export class FakeDomicileHost {
               menuBarVisible: visible,
             }
           : window,
+      ),
+    });
+  }
+
+  /**
+   * Browser window `id` shows its Electron app's popup menu `menu`, as the
+   * engine lists it (JSON), or null for none.
+   */
+  /**
+   * Browser window `id`'s Electron app asks to be maximized, minimized or
+   * fullscreen, as the engine lists it.
+   */
+  setWantedState(
+    id: string,
+    wants: Partial<
+      Pick<
+        DomicileBrowserWindow,
+        "wantsFullscreen" | "wantsMaximized" | "wantsMinimized"
+      >
+    >,
+  ): void {
+    this.set({
+      browserWindows: (this.#state.browserWindows ?? []).map((window) =>
+        window.id === id ? { ...window, ...wants } : window,
       ),
     });
   }

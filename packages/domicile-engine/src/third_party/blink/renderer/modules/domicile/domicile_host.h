@@ -339,6 +339,12 @@ class MODULES_EXPORT DomicileHost final
                                     const String& id,
                                     int32_t command,
                                     ExceptionState&);
+  void setBrowserWindowState(ScriptState*,
+                             const String& id,
+                             bool maximized,
+                             bool minimized,
+                             bool fullscreen,
+                             ExceptionState&);
   void answerBrowserWindowMessageBox(ScriptState*,
                                      const String& id,
                                      int32_t response,

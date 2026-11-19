@@ -421,6 +421,14 @@ export type DomicileBrowserWindow = {
    * DomicileHost.answerBrowserWindowPopupMenu.
    */
   readonly popupMenu: string | null;
+  /**
+   * What an Electron app asks this window to be (win.maximize, minimize,
+   * setFullScreen). The shell decides, and says what it made the window with
+   * DomicileHost.setBrowserWindowState. Each is false for any other window.
+   */
+  readonly wantsMaximized: boolean;
+  readonly wantsMinimized: boolean;
+  readonly wantsFullscreen: boolean;
 };
 
 /**
@@ -1214,6 +1222,19 @@ export type DomicileHost = {
    * closed meanwhile, or shows no popup menu, does nothing.
    */
   answerBrowserWindowPopupMenu(id: string, command: number): void;
+  /**
+   * The shell made browser window `id` maximized, minimized and fullscreen as
+   * these say, whether or not its app asked (DomicileBrowserWindow.
+   * wantsMaximized and the rest). An Electron app's window tells its app of
+   * each change; any other window, or one that closed meanwhile, does
+   * nothing.
+   */
+  setBrowserWindowState(
+    id: string,
+    maximized: boolean,
+    minimized: boolean,
+    fullscreen: boolean,
+  ): void;
   /**
    * The user answered the message box window `id` shows
    * (DomicileBrowserWindow.messageBox) with button `response`, an index into

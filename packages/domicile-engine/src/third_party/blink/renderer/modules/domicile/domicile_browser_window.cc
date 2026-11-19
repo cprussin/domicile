@@ -27,7 +27,10 @@ DomicileBrowserWindow::DomicileBrowserWindow(
     bool menu_bar_visible,
     bool menu_bar_auto_hide,
     const String& message_box,
-    const String& popup_menu)
+    const String& popup_menu,
+    bool wants_maximized,
+    bool wants_minimized,
+    bool wants_fullscreen)
     : id_(id),
       url_(url),
       title_(title),
@@ -49,7 +52,10 @@ DomicileBrowserWindow::DomicileBrowserWindow(
       menu_bar_visible_(menu_bar_visible),
       menu_bar_auto_hide_(menu_bar_auto_hide),
       message_box_(message_box),
-      popup_menu_(popup_menu) {}
+      popup_menu_(popup_menu),
+      wants_maximized_(wants_maximized),
+      wants_minimized_(wants_minimized),
+      wants_fullscreen_(wants_fullscreen) {}
 
 DomicileBrowserWindow::~DomicileBrowserWindow() = default;
 

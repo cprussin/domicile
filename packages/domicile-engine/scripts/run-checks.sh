@@ -142,6 +142,7 @@ TOGETHER=(
   guard-electron-node
   guard-electron-protocol
   guard-electron-menu-bar
+  guard-electron-window-state
   guard-electron-message-box
   guard-electron-schemes
   guard-electron-session
@@ -171,6 +172,7 @@ ONCE=(
   guard-domicile-fetch
   guard-shell-hmr
   guard-electron-menu-bar
+  guard-electron-window-state
   guard-electron-message-box
   guard-electron-node
   guard-electron-preload

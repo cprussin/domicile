@@ -2665,6 +2665,21 @@ void DomicileHost::answerBrowserWindowPopupMenu(
   }
 }
 
+void DomicileHost::setBrowserWindowState(ScriptState*,
+                                         const String& id,
+                                         bool maximized,
+                                         bool minimized,
+                                         bool fullscreen,
+                                         ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a browser window's id");
+    return;
+  }
+  if (Ready(exception_state)) {
+    windows_->SetWindowState(id, maximized, minimized, fullscreen);
+  }
+}
+
 void DomicileHost::answerBrowserWindowMessageBox(
     ScriptState*,
     const String& id,
@@ -2938,7 +2953,9 @@ void DomicileHost::ListBrowserWindows() {
         window->menu.empty() ? String() : window->menu,
         window->menu_bar_visible, window->menu_bar_auto_hide,
         window->message_box.empty() ? String() : window->message_box,
-        window->popup_menu.empty() ? String() : window->popup_menu));
+        window->popup_menu.empty() ? String() : window->popup_menu,
+        window->wants_maximized, window->wants_minimized,
+        window->wants_fullscreen));
   }
   browser_windows_ = MakeGarbageCollected<FrozenArray<DomicileBrowserWindow>>(
       std::move(listed));

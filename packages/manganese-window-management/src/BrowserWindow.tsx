@@ -56,6 +56,7 @@ import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useAppMenuBar } from "./browser/useAppMenuBar";
 import { useAppMessageBox } from "./browser/useAppMessageBox";
 import { useAppPopupMenu } from "./browser/useAppPopupMenu";
+import { useAppWindowState } from "./browser/useAppWindowState";
 import {
   useBrowserProfile,
   usePinnedSite,
@@ -333,6 +334,9 @@ export const BrowserWindow = ({
   const zoom = useZoom(view);
   // A fullscreen page, such as a video, fills the window without its bar.
   const pageFullscreen = usePageFullscreen(view, fullscreen, onPageFullscreen);
+  // An Electron app's win.setFullScreen does as a fullscreen page does, and
+  // the app hears what the window is.
+  useAppWindowState(domicile, window, fullscreen, onPageFullscreen);
   // True while `focusOwn` is calling `focus()`. Focus events fire
   // synchronously inside that call, so this marks them as not user reaches.
   const focusing = useRef(false);

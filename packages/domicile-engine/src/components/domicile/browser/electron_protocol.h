@@ -97,6 +97,12 @@ namespace domicile {
 //   {"type":"set_hidden","window":1,"hidden":true}
 //                                          (win.hide, and win.show with
 //                                           false)
+//   {"type":"set_window_state","window":1,"maximized":true,
+//    "minimized":false,"fullscreen":false}
+//                                          (win.maximize, minimize,
+//                                           setFullScreen and their undoing:
+//                                           what the app asks the shell to
+//                                           make the window)
 //   {"type":"popup_menu","window":1,"popup":1,"menu":[...],"x":10,"y":20}
 //                                          (Menu.popup: a menu the shell
 //                                           draws over the window's page,
@@ -151,6 +157,10 @@ namespace domicile {
 //   {"type":"close_asked","window":1}      (the user asked to close the
 //                                           window: the app decides, as a
 //                                           BrowserWindow's `close` event)
+//   {"type":"window_state","window":1,"maximized":false,
+//    "minimized":false,"fullscreen":true}
+//                                          (what the shell made the window,
+//                                           each time that changes)
 //   {"type":"page_state","window":1,
 //    "entries":[{"url":"https://a/","title":"A"}],
 //    "index":0,"loading":false,"focused":true,"pid":1234,"crashed":false}
@@ -513,6 +523,26 @@ struct ElectronSetTitle {
 struct ElectronSetHidden {
   ElectronWindow window;
   bool hidden = false;
+};
+
+// A window's state: maximized, minimized, fullscreen, or none of them for a
+// normal window. Several can hold at once, as a maximized window made
+// fullscreen is still maximized underneath.
+struct ElectronWindowState {
+  bool maximized = false;
+  bool minimized = false;
+  bool fullscreen = false;
+
+  friend bool operator==(const ElectronWindowState&,
+                         const ElectronWindowState&) = default;
+};
+
+// win.maximize, unmaximize, minimize, restore and setFullScreen: the state
+// the app asks the shell to give `window`. The shell decides, and says what
+// it did with window_state.
+struct ElectronSetWindowState {
+  ElectronWindow window;
+  ElectronWindowState state;
 };
 
 // app.userAgentFallback: the user agent of the pages of each session that
@@ -908,6 +938,7 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronExecuteJavaScript,
                                      ElectronSetTitle,
                                      ElectronSetHidden,
+                                     ElectronSetWindowState,
                                      ElectronSetUserAgentFallback>;
 
 // Why a line is not a request, and which window or protocol request it was
@@ -972,6 +1003,9 @@ std::string ElectronFoundInPage(ElectronWindow window,
 std::string ElectronWindowResized(ElectronWindow window, int width, int height);
 // The user clicked entry `command` of `window`'s menu bar.
 std::string ElectronMenuClicked(ElectronWindow window, int command);
+// The shell made `window` `state`.
+std::string ElectronWindowStateChanged(ElectronWindow window,
+                                       const ElectronWindowState& state);
 // Popup menu `popup` over `window` closed: the user chose entry `command`,
 // or 0 when it was put away with nothing chosen.
 std::string ElectronPopupMenuClosed(ElectronWindow window,

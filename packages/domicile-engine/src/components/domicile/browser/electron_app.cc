@@ -249,6 +249,12 @@ void ElectronApp::Take(std::string_view line) {
             WindowIdOf(hidden->window, "hiding")) {
       desk_->SetHidden(*id, hidden->hidden);
     }
+  } else if (const auto* asked =
+                 std::get_if<ElectronSetWindowState>(&*request)) {
+    if (const std::optional<std::string> id =
+            WindowIdOf(asked->window, "a window state")) {
+      desk_->SetWindowState(*id, asked->state);
+    }
   } else if (const auto* fallback =
                  std::get_if<ElectronSetUserAgentFallback>(&*request)) {
     SetUserAgentFallback(*fallback);
@@ -430,6 +436,8 @@ ElectronPageCalls ElectronApp::CallsFor(ElectronWindow number) {
                                    weak_factory_.GetWeakPtr(), number),
       .found = base::BindRepeating(&ElectronApp::PageFound,
                                    weak_factory_.GetWeakPtr(), number),
+      .window_state = base::BindRepeating(&ElectronApp::WindowStateChanged,
+                                          weak_factory_.GetWeakPtr(), number),
   };
 }
 
@@ -668,6 +676,13 @@ void ElectronApp::PageGone(ElectronWindow number) {
 void ElectronApp::PageResized(ElectronWindow number, int width, int height) {
   if (windows_.contains(number)) {
     send_.Run(ElectronWindowResized(number, width, height));
+  }
+}
+
+void ElectronApp::WindowStateChanged(ElectronWindow number,
+                                     ElectronWindowState state) {
+  if (windows_.contains(number)) {
+    send_.Run(ElectronWindowStateChanged(number, state));
   }
 }
 

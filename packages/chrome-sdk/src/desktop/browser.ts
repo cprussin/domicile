@@ -194,6 +194,12 @@ export type Browser = {
    */
   answerPopupMenu: (id: string, command: number) => void;
   /**
+   * The shell made window `id` `state`, whether or not its app asked (its
+   * `wantsMaximized` and the rest). Its Electron app hears each change; any
+   * other window ignores it.
+   */
+  setWindowState: (id: string, state: WindowStateReport) => void;
+  /**
    * The user answered the message box window `id` shows (its `messageBox`)
    * with button `response`, an index into its `buttons`, leaving its checkbox
    * `checkboxChecked`; its Electron app hears the answer.
@@ -233,7 +239,15 @@ export type BrowserHost = Pick<
   | "removeEventListener"
   | "reopenBrowserWindow"
   | "setBrowserProfileExtensionEnabled"
+  | "setBrowserWindowState"
 >;
+
+/** What the shell made a window, as `setWindowState` reports it. */
+export type WindowStateReport = {
+  readonly maximized: boolean;
+  readonly minimized: boolean;
+  readonly fullscreen: boolean;
+};
 
 export const browser = (host: BrowserHost): Browser => {
   const windowsOf = memoizeLast(
@@ -302,6 +316,9 @@ export const browser = (host: BrowserHost): Browser => {
     },
     setExtensionEnabled: (profile, id, enabled) =>
       host.setBrowserProfileExtensionEnabled(profile, id, enabled),
+    setWindowState: (id, { fullscreen, maximized, minimized }) => {
+      host.setBrowserWindowState(id, maximized, minimized, fullscreen);
+    },
     siteFor: async (url) => {
       const site = await host.browserSiteFor(url);
       return site === "" ? undefined : site;
