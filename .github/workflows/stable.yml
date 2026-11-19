@@ -41,6 +41,8 @@ jobs:
     with:
       ref: ${{ needs.promote.outputs.promoted }}
       publish: true
+    # DOMICILE_BUILDS_TOKEN, to publish into cprussin/domicile-builds.
+    secrets: inherit
 
   nix-cache:
     needs: promote

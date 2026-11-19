@@ -466,18 +466,14 @@ Then [finish the install](#after-installing).
 
 ### A `stable` commit
 
-Each commit `stable` moves to is released as packages on GitHub:
-
-- **`packages-latest`** holds the newest packages under fixed names, so the
-  commands below always fetch them.
-- **`packages-<commit>`** holds each commit's packages, with the version in
-  their names:
-  [releases](https://github.com/cprussin/domicile/releases?q=packages-&expanded=true).
+Each commit `stable` moves to replaces the packages in
+[`packages-latest`](https://github.com/cprussin/domicile-builds/releases/tag/packages-latest),
+under fixed names, so the commands below always fetch the newest.
 
 Download your distribution's package and `SHA256SUMS`, and check the package:
 
 ```sh
-base=https://github.com/cprussin/domicile/releases/download/packages-latest
+base=https://github.com/cprussin/domicile-builds/releases/download/packages-latest
 pkg=domicile_amd64.deb   # your package from the table below
 curl -fL -O "$base/$pkg" -O "$base/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS
