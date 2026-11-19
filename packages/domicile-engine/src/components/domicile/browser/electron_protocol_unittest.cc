@@ -833,6 +833,16 @@ TEST(ElectronProtocolTest, EventsAreOneLineEach) {
           3, {.maximized = false, .minimized = true, .fullscreen = false}),
       "{\"fullscreen\":false,\"maximized\":false,\"minimized\":true,"
       "\"type\":\"window_state\",\"window\":3}\n");
+  EXPECT_EQ(ElectronCookieChanged("persist:x", {.cookie = {.name = "lc",
+                                                           .value = "1",
+                                                           .domain = ".a.test",
+                                                           .path = "/"},
+                                                .cause = "inserted"}),
+            "{\"cause\":\"inserted\",\"cookie\":{\"domain\":\".a.test\","
+            "\"hostOnly\":false,\"httpOnly\":false,\"name\":\"lc\","
+            "\"path\":\"/\",\"sameSite\":\"unspecified\",\"secure\":false,"
+            "\"session\":true,\"value\":\"1\"},\"removed\":false,"
+            "\"session\":\"persist:x\",\"type\":\"cookie_changed\"}\n");
   EXPECT_EQ(ElectronPopupMenuClosed(3, 5, 0),
             "{\"command\":0,\"popup\":5,\"type\":\"popup_menu_closed\","
             "\"window\":3}\n");
@@ -1361,7 +1371,8 @@ TEST(ElectronProtocolTest, ASessionCallClearsStorageAndSetsTheUserAgent) {
   for (const auto& [method, expected] :
        {std::pair<std::string, ElectronSessionMethod>{"clear_cache",
                                                       ElectronClearCache{}},
-        {"cookies_flush", ElectronFlushCookies{}}}) {
+        {"cookies_flush", ElectronFlushCookies{}},
+        {"cookies_watch", ElectronWatchCookies{}}}) {
     const auto call = ParseElectronRequest(base::StrCat(
         {R"({"type":"session_call","call":9,"session":"","method":")", method,
          R"("})"}));

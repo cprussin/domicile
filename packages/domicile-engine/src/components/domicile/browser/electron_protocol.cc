@@ -1099,6 +1099,8 @@ base::expected<ElectronSessionMethod, std::string> SessionMethodIn(
     return RemoveCookieIn(request);
   } else if (method == "cookies_flush") {
     return ElectronFlushCookies{};
+  } else if (method == "cookies_watch") {
+    return ElectronWatchCookies{};
   } else if (method == "clear_storage_data") {
     return ClearStorageIn(request);
   } else if (method == "clear_cache") {
@@ -1591,6 +1593,17 @@ base::DictValue ElectronCookieValue(const ElectronCookie& cookie) {
   }
   value.Set("sameSite", cookie.same_site);
   return value;
+}
+
+std::string ElectronCookieChanged(std::string_view session,
+                                  const ElectronCookieChange& change) {
+  base::DictValue event;
+  event.Set("type", "cookie_changed");
+  event.Set("session", session);
+  event.Set("cookie", ElectronCookieValue(change.cookie));
+  event.Set("cause", change.cause);
+  event.Set("removed", change.removed);
+  return Line(std::move(event));
 }
 
 std::string ElectronReady(const std::vector<ElectronScheme>& schemes,

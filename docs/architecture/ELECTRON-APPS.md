@@ -365,7 +365,10 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   included, as Electron does. A session's user agent reaches its open
   windows from their next navigation and its new windows before their first
   ([`domicile_electron_storage.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_electron_storage.h)).
-  Not yet: `cookies.on('changed')`.
+  The first `cookies.on('changed')` listener sends `cookies_watch`; from
+  then on each change to the session's cookies comes back as
+  `cookie_changed`, with Electron's `cause` and `removed`. Slack waits on it
+  to finish signing in.
 - **User agent**: `ready` names the engine's user agent and Chrome's full
   version. The host makes Electron's from them (`Name/1.2.3 Chrome/<full>
   Electron/<version>` in Chrome's place) and sends it as

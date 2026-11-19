@@ -16,6 +16,7 @@ import type {
 import type { IncomingRequest, ProtocolRequest } from "./electron/protocol";
 import type { RegisteredScheme } from "./electron/schemes";
 import type {
+  CookieChanged,
   SessionCallMessage,
   SessionResult,
 } from "./electron/session-calls";
@@ -435,6 +436,24 @@ const engineEvent = z.discriminatedUnion("type", [
     type: z.literal("session_result"),
   }),
   z.object({
+    cause: z.string(),
+    cookie: z.object({
+      domain: z.string(),
+      expirationDate: z.number().exactOptional(),
+      hostOnly: z.boolean(),
+      httpOnly: z.boolean(),
+      name: z.string(),
+      path: z.string(),
+      sameSite: z.string(),
+      secure: z.boolean(),
+      session: z.boolean(),
+      value: z.string(),
+    }),
+    removed: z.boolean(),
+    session: z.string(),
+    type: z.literal("cookie_changed"),
+  }),
+  z.object({
     ask: z.number(),
     media_types: z.array(z.string()).optional(),
     permission: z.string(),
@@ -484,6 +503,8 @@ export type Engine = {
     webRequest: [request: IncomingWebRequest];
     /** The engine's answer to a session call. */
     sessionResult: [result: SessionResult];
+    /** A change to the cookies of a session the app watches. */
+    cookieChanged: [change: CookieChanged];
     /** A page's permission request, for its session's handler. */
     permissionRequest: [request: IncomingPermissionRequest];
   }>;
@@ -545,6 +566,8 @@ export const connectEngine = (
             ? { call, result, type: "session_result" }
             : { call, error, type: "session_result" },
         );
+      } else if (parsed.data.type === "cookie_changed") {
+        events.emit("cookieChanged", parsed.data);
       } else if (parsed.data.type === "permission_request") {
         events.emit("permissionRequest", parsed.data);
       } else if ("window" in parsed.data) {

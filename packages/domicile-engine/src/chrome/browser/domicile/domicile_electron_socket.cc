@@ -230,6 +230,12 @@ class ChromeElectronDesk final : public ElectronDesk {
                     base::OnceClosure done) override {
     FlushElectronCookies(partition, std::move(done));
   }
+  std::unique_ptr<ElectronCookieWatch> WatchCookies(
+      const WebViewPartition& partition,
+      base::RepeatingCallback<void(const ElectronCookieChange&)> changed)
+      override {
+    return WatchElectronCookies(partition, std::move(changed));
+  }
   void ClearStorage(const WebViewPartition& partition,
                     const ElectronClearStorage& clear,
                     base::OnceClosure done) override {

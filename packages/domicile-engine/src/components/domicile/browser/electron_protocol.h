@@ -161,6 +161,12 @@ namespace domicile {
 //    "minimized":false,"fullscreen":true}
 //                                          (what the shell made the window,
 //                                           each time that changes)
+//   {"type":"cookie_changed","session":"","cookie":{...},
+//    "cause":"inserted","removed":false}
+//                                          (session.cookies' `changed`, for
+//                                           a session whose cookies the app
+//                                           watches: session_call
+//                                           cookies_watch)
 //   {"type":"page_state","window":1,
 //    "entries":[{"url":"https://a/","title":"A"}],
 //    "index":0,"loading":false,"focused":true,"pid":1234,"crashed":false}
@@ -861,6 +867,12 @@ struct ElectronFlushCookies {
   friend bool operator==(const ElectronFlushCookies&,
                          const ElectronFlushCookies&) = default;
 };
+// Report each change to the session's cookies from now on, as cookie_changed
+// events, for session.cookies' `changed`. Watching twice is watching once.
+struct ElectronWatchCookies {
+  friend bool operator==(const ElectronWatchCookies&,
+                         const ElectronWatchCookies&) = default;
+};
 // session.clearStorageData: `storages` (Electron's names; none is all) of
 // `origin` (none is every origin).
 struct ElectronClearStorage {
@@ -885,6 +897,7 @@ using ElectronSessionMethod = std::variant<ElectronGetCookies,
                                            ElectronSetCookie,
                                            ElectronRemoveCookie,
                                            ElectronFlushCookies,
+                                           ElectronWatchCookies,
                                            ElectronClearStorage,
                                            ElectronClearCache,
                                            ElectronSetUserAgent>;
@@ -983,6 +996,19 @@ std::string ElectronSessionResult(
     const base::expected<base::Value, std::string>& result);
 // `cookie` as cookies.get gives it.
 base::DictValue ElectronCookieValue(const ElectronCookie& cookie);
+// A change to a cookie of session `session`, as session.cookies' `changed`
+// says it: `cause` is Electron's ("inserted", "explicit", "overwrite", ...),
+// and `removed` whether the change took the cookie away.
+struct ElectronCookieChange {
+  ElectronCookie cookie;
+  std::string cause;
+  bool removed = false;
+
+  friend bool operator==(const ElectronCookieChange&,
+                         const ElectronCookieChange&) = default;
+};
+std::string ElectronCookieChanged(std::string_view session,
+                                  const ElectronCookieChange& change);
 
 std::string ElectronRefused(std::string_view why);
 std::string ElectronWindowOpened(ElectronWindow window);
