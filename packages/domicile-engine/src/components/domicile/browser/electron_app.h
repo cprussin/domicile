@@ -76,6 +76,9 @@ struct ElectronPageCalls {
   base::RepeatingCallback<void(ElectronPageState state)> state;
   // A find_in_page search is done.
   base::RepeatingCallback<void(ElectronFindResult result)> found;
+  // The user asked for a context menu over the page, which the app draws if
+  // it wants one, as the engine draws none.
+  base::RepeatingCallback<void(ElectronContextMenu menu)> context_menu;
   // The shell made the window `state`; called only when that changes.
   base::RepeatingCallback<void(ElectronWindowState state)> window_state;
 };
@@ -526,6 +529,7 @@ class ElectronApp {
   void PageStateChanged(ElectronWindow number, ElectronPageState state);
   void WindowStateChanged(ElectronWindow number, ElectronWindowState state);
   void PageFound(ElectronWindow number, ElectronFindResult result);
+  void PageContextMenu(ElectronWindow number, ElectronContextMenu menu);
   void SetMenuBar(const ElectronSetMenuBar& bar);
   // The desk id of window `number` when it is a window, not a view, or
   // nothing after refusing `what` of a view.

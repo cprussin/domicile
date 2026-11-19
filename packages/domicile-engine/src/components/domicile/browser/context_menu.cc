@@ -3,6 +3,10 @@
 
 #include "components/domicile/browser/context_menu.h"
 
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "base/strings/utf_string_conversions.h"
 #include "content/public/browser/context_menu_params.h"
 #include "third_party/blink/public/common/context_menu_data/context_menu_data.h"
@@ -66,6 +70,26 @@ bool HasSource(const content::ContextMenuParams& params) {
          params.src_url.is_valid();
 }
 
+// Electron's names for them. No default arm, as AsWebViewMediaType.
+std::string ElectronMediaType(ContextMenuDataMediaType type) {
+  switch (type) {
+    case ContextMenuDataMediaType::kNone:
+      return "none";
+    case ContextMenuDataMediaType::kImage:
+      return "image";
+    case ContextMenuDataMediaType::kVideo:
+      return "video";
+    case ContextMenuDataMediaType::kAudio:
+      return "audio";
+    case ContextMenuDataMediaType::kCanvas:
+      return "canvas";
+    case ContextMenuDataMediaType::kFile:
+      return "file";
+    case ContextMenuDataMediaType::kPlugin:
+      return "plugin";
+  }
+}
+
 }  // namespace
 
 mojom::WebViewContextMenuPtr AsWebViewContextMenu(
@@ -95,6 +119,69 @@ mojom::WebViewContextMenuPtr AsWebViewContextMenu(
   menu->can_select_all =
       Can(params, blink::ContextMenuDataEditFlags::kCanSelectAll);
   return menu;
+}
+
+ElectronContextMenu AsElectronContextMenu(
+    const content::ContextMenuParams& params,
+    const gfx::Point& in_page) {
+  using blink::ContextMenuData;
+  using blink::ContextMenuDataEditFlags;
+  std::vector<std::string> suggestions;
+  for (const std::u16string& suggestion : params.dictionary_suggestions) {
+    suggestions.push_back(base::UTF16ToUTF8(suggestion));
+  }
+  return ElectronContextMenu{
+      .x = in_page.x(),
+      .y = in_page.y(),
+      .link_url = params.link_url.possibly_invalid_spec(),
+      .link_text = base::UTF16ToUTF8(params.link_text),
+      .page_url = params.page_url.possibly_invalid_spec(),
+      .frame_url = params.frame_url.possibly_invalid_spec(),
+      .src_url = params.src_url.possibly_invalid_spec(),
+      .media_type = ElectronMediaType(params.media_type),
+      .has_image_contents = params.has_image_contents,
+      .is_editable = params.is_editable,
+      .selection_text = base::UTF16ToUTF8(params.selection_text),
+      .title_text = base::UTF16ToUTF8(params.title_text),
+      .alt_text = base::UTF16ToUTF8(params.alt_text),
+      .suggested_filename = base::UTF16ToUTF8(params.suggested_filename),
+      .misspelled_word = base::UTF16ToUTF8(params.misspelled_word),
+      .dictionary_suggestions = std::move(suggestions),
+      .spellcheck_enabled = params.spellcheck_enabled,
+      .frame_charset = params.frame_charset,
+      .edit_flags =
+          {
+              .can_undo = Can(params, ContextMenuDataEditFlags::kCanUndo),
+              .can_redo = Can(params, ContextMenuDataEditFlags::kCanRedo),
+              .can_cut = Can(params, ContextMenuDataEditFlags::kCanCut),
+              .can_copy = Can(params, ContextMenuDataEditFlags::kCanCopy),
+              .can_paste = Can(params, ContextMenuDataEditFlags::kCanPaste),
+              .can_delete = Can(params, ContextMenuDataEditFlags::kCanDelete),
+              .can_select_all =
+                  Can(params, ContextMenuDataEditFlags::kCanSelectAll),
+              .can_edit_richly =
+                  Can(params, ContextMenuDataEditFlags::kCanEditRichly),
+          },
+      .media_flags =
+          {
+              .in_error = Has(params, ContextMenuData::kMediaInError),
+              .is_paused = Has(params, ContextMenuData::kMediaPaused),
+              .is_muted = Has(params, ContextMenuData::kMediaMuted),
+              .has_audio = Has(params, ContextMenuData::kMediaHasAudio),
+              .is_looping = Has(params, ContextMenuData::kMediaLoop),
+              .is_controls_visible =
+                  Has(params, ContextMenuData::kMediaControls),
+              .can_toggle_controls =
+                  Has(params, ContextMenuData::kMediaCanToggleControls),
+              .can_print = Has(params, ContextMenuData::kMediaCanPrint),
+              .can_save = Has(params, ContextMenuData::kMediaCanSave),
+              .can_show_picture_in_picture = CanPictureInPicture(params),
+              .is_showing_picture_in_picture =
+                  Has(params, ContextMenuData::kMediaPictureInPicture),
+              .can_rotate = Has(params, ContextMenuData::kMediaCanRotate),
+              .can_loop = Has(params, ContextMenuData::kMediaCanLoop),
+          },
+  };
 }
 
 bool Offers(const content::ContextMenuParams& params,

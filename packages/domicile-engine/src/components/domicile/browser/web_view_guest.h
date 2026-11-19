@@ -637,6 +637,14 @@ class WebViewGuest : public mojom::WebViewGuest,
                                    std::unique_ptr<content::WebContents> held)>;
   void DecideWindowsWith(WindowOpening opening);
 
+  // Runs with each context menu the page asks for, and where the click was in
+  // the page's CSS pixels, instead of asking the shell to draw one. An
+  // Electron window's, whose app draws its own or none, as on Electron.
+  using ContextMenuTaking =
+      base::RepeatingCallback<void(const content::ContextMenuParams& params,
+                                   const gfx::Point& in_page)>;
+  void TakeContextMenusWith(ContextMenuTaking taking);
+
   // The page's zoom factor, for chrome.tabs. ZoomTo expects a factor already
   // within blink's range (see DeskZoomFactor in
   // //components/domicile:desk_tabs) and reports the change like SetZoom.
@@ -1360,6 +1368,8 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // See DecideWindowsWith; null when windows open as a browser's do.
   WindowOpening window_opening_;
+  // See TakeContextMenusWith.
+  ContextMenuTaking context_menu_taking_;
 
   // See AddZoomChangedCallback.
   base::RepeatingCallbackList<void(double, double)> zoom_callbacks_;

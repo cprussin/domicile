@@ -3,6 +3,9 @@
 
 #include "components/domicile/browser/context_menu.h"
 
+#include <string>
+#include <vector>
+
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "content/public/browser/context_menu_params.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -41,6 +44,45 @@ TEST(ContextMenuTest, TheMenuSaysWhatWasUnderTheClick) {
   EXPECT_EQ(menu->src_url, GURL("https://example.test/picture.png"));
   EXPECT_EQ(menu->media_type, mojom::WebViewMediaType::kImage);
   EXPECT_TRUE(menu->has_image_contents);
+}
+
+TEST(ContextMenuTest, AnElectronAppHearsWhatWasUnderTheClick) {
+  content::ContextMenuParams params = OverAnImageInALink();
+  params.page_url = GURL("https://example.test/");
+  params.media_flags = blink::ContextMenuData::kMediaCanSave;
+  const ElectronContextMenu menu =
+      AsElectronContextMenu(params, gfx::Point(12, 34));
+
+  EXPECT_EQ(menu.x, 12);
+  EXPECT_EQ(menu.y, 34);
+  EXPECT_EQ(menu.link_url, "https://example.test/opened");
+  EXPECT_EQ(menu.link_text, "a picture");
+  EXPECT_EQ(menu.page_url, "https://example.test/");
+  EXPECT_EQ(menu.src_url, "https://example.test/picture.png");
+  EXPECT_EQ(menu.media_type, "image");
+  EXPECT_TRUE(menu.has_image_contents);
+  EXPECT_EQ(menu.media_flags,
+            ElectronContextMenu::MediaFlags{.can_save = true});
+}
+
+TEST(ContextMenuTest, AnElectronAppHearsTheMisspellingAndEditFlags) {
+  content::ContextMenuParams params;
+  params.is_editable = true;
+  params.spellcheck_enabled = true;
+  params.misspelled_word = u"teh";
+  params.dictionary_suggestions = {u"the", u"ten"};
+  params.edit_flags = blink::ContextMenuDataEditFlags::kCanPaste |
+                      blink::ContextMenuDataEditFlags::kCanSelectAll;
+  const ElectronContextMenu menu = AsElectronContextMenu(params, gfx::Point());
+
+  EXPECT_TRUE(menu.is_editable);
+  EXPECT_TRUE(menu.spellcheck_enabled);
+  EXPECT_EQ(menu.misspelled_word, "teh");
+  EXPECT_EQ(menu.dictionary_suggestions,
+            (std::vector<std::string>{"the", "ten"}));
+  EXPECT_EQ(menu.edit_flags, (ElectronContextMenu::EditFlags{
+                                 .can_paste = true, .can_select_all = true}));
+  EXPECT_EQ(menu.media_type, "none");
 }
 
 TEST(ContextMenuTest, TheLinkIsTheOneTheGuestMayAskFor) {

@@ -46,6 +46,7 @@
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "components/domicile/browser/browser_window_capture_target.h"
 #include "components/domicile/browser/browser_window_listing.h"
+#include "components/domicile/browser/context_menu.h"
 #include "components/domicile/browser/notification_window.h"
 #include "components/domicile/browser/web_view_guest.h"
 #include "components/domicile/browser/web_view_partition.h"
@@ -146,6 +147,19 @@ WebViewGuest::WindowOpening AskTheApp(
             held ? std::make_unique<HeldPage>(std::move(held)) : nullptr);
       },
       std::move(opening));
+}
+
+// Hands each context menu an Electron window's page asks for to its app, as
+// Electron's webContents `context-menu`.
+WebViewGuest::ContextMenuTaking TellTheApp(
+    base::RepeatingCallback<void(ElectronContextMenu)> context_menu) {
+  return base::BindRepeating(
+      [](const base::RepeatingCallback<void(ElectronContextMenu)>&
+             context_menu,
+         const content::ContextMenuParams& params, const gfx::Point& in_page) {
+        context_menu.Run(AsElectronContextMenu(params, in_page));
+      },
+      std::move(context_menu));
 }
 
 // Has `contents` load as `user_agent`: its next browser navigation, as
@@ -325,6 +339,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
           guest.KeepFullFrameRate();
           // Its new windows are the app's to decide on.
           guest.DecideWindowsWith(AskTheApp(calls.window_opening));
+          // Its context menus are the app's to draw.
+          guest.TakeContextMenusWith(TellTheApp(calls.context_menu));
           // Before the first navigation, which runs the preload and loads
           // through the session too.
           if (session && !session->user_agent().empty()) {
@@ -358,6 +374,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
         WebViewGuest::AdoptOpenedWindow(std::move(contents));
     guest->KeepFullFrameRate();
     guest->DecideWindowsWith(AskTheApp(calls.window_opening));
+    guest->TakeContextMenusWith(TellTheApp(calls.context_menu));
     // Content started its first navigation before the app answered, so the
     // preload runs from the page's next document, and the session's user agent
     // from its next request.
