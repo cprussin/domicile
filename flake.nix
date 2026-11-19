@@ -2674,6 +2674,33 @@
 
 
             machine.wait_for_unit("multi-user.target")
+            # PROBE (draft branch, not to merge): start the desktop 8 times and
+            # dump the resize-freeze lines, whole, for each start.
+            # The runner keeps only the tail of the output: keep the console out.
+            serial_stdout_off()
+            results = []
+            for attempt in range(8):
+                machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+                machine.succeed(CLIENT)
+                sized = machine.execute("for i in $(seq 60); do grep -qE 'configure\\([1-9]' /tmp/client.log && exit 0; sleep 1; done; exit 1")[0] == 0
+                results.append(sized)
+                print(f"PROBE attempt {attempt} sized={sized}")
+                commands = [
+                    "grep -E 'domicile: (widget|compositor) ' /tmp/domicile.log || true",
+                    "grep -E 'shell window|told the chrome|presenting the desk' /tmp/domicile.log | head -20 | cut -c1-300 || true",
+                ]
+                if not sized:
+                    commands += [
+                        "ls -la /run/user/1000/ | grep wayland; tail -8 /tmp/client.log | cut -c1-160",
+                        "grep -E 'toplevel|configure' /tmp/domicile.log | grep -v system_request | tail -12 | cut -c1-240 || true",
+                        "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -6 | cut -c1-300 || true",
+                    ]
+                for command in commands:
+                    print(f"PROBE {attempt} $ {command}")
+                    print(machine.execute(f"{command} 2>&1")[1])
+                machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3; rm -f /tmp/client.log /tmp/domicile.log")
+                machine.execute("systemctl start getty@tty1.service")
+            raise AssertionError(f"PROBE done, sized={results}")
             try:
                 a_window_is_up()
                 a_finger_reaches_the_window_as_touch()
