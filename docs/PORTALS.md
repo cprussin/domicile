@@ -272,6 +272,8 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     becomes a clipboard history row. An application that asked still gets
     its file; the shell's own screenshot is not saved
     (`SystemReply::Copied`).
+  - **The shell's own screenshot asked again while its picker is up**, such
+    as a second Print, gets that picker's answer. It shows no second picker.
   - The picker lists "Everything" (the whole desk), then screens, then
     windows, beside the frozen desk. The desk outlines the pick with its
     size; arrow keys move through the list. "Select on screen" selects an

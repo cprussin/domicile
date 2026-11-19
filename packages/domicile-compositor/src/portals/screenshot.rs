@@ -11,7 +11,8 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::mpsc::{channel, Sender};
+use std::sync::{Arc, Mutex};
 
 use domicile_host::data_url::data_url;
 use domicile_host::screenshot::{
@@ -344,6 +345,65 @@ pub async fn for_the_shell(
                 }
             }
         }
+    }
+}
+
+/// What the shell's own screenshot dialog answers.
+type ShellAnswer = Result<Kept, SystemError>;
+
+/// The shell's own screenshot dialog, while one is up.
+///
+/// A shell screenshot asked for meanwhile, such as a second Print, answers as
+/// that dialog does. Queued instead, it would show a second dialog, of a desk
+/// shot with the first over it, once the first closed.
+#[derive(Clone, Default)]
+pub struct ShellDialog(Arc<Mutex<Option<Vec<Sender<ShellAnswer>>>>>);
+
+impl ShellDialog {
+    /// `ask`'s answer, or the answer of the dialog already up instead of
+    /// running `ask`. Blocks until then.
+    pub fn take(&self, ask: impl FnOnce() -> ShellAnswer) -> ShellAnswer {
+        let joined = {
+            let mut up = self.0.lock().unwrap();
+            match up.as_mut() {
+                Some(waiting) => {
+                    let (answer, answered) = channel();
+                    waiting.push(answer);
+                    Some(answered)
+                }
+                None => {
+                    *up = Some(Vec::new());
+                    None
+                }
+            }
+        };
+        if let Some(answered) = joined {
+            return answered
+                .recv()
+                .expect("the dialog up answers every call waiting on it, or panicked");
+        }
+        // Closed even when `ask` panics, so the next Print shows a dialog and
+        // the calls waiting on this one panic too rather than hang.
+        let closed = Closed(&self.0);
+        let answer = ask();
+        let waiting = closed.0.lock().unwrap().take();
+        for waiter in waiting.into_iter().flatten() {
+            // A waiter is a blocked call; it cannot have gone.
+            waiter
+                .send(answer.clone())
+                .expect("a call waiting on the dialog is still waiting");
+        }
+        answer
+    }
+}
+
+/// Closes a [`ShellDialog`] when dropped, dropping any call still waiting on
+/// it.
+struct Closed<'a>(&'a Mutex<Option<Vec<Sender<ShellAnswer>>>>);
+
+impl Drop for Closed<'_> {
+    fn drop(&mut self) {
+        self.0.lock().unwrap().take();
     }
 }
 
@@ -1332,6 +1392,62 @@ mod tests {
             album,
             copied,
         }
+    }
+
+    /// A second Print while the shell's dialog is up shows no second dialog,
+    /// then or once the first closes.
+    #[test]
+    fn a_shell_screenshot_asked_while_its_dialog_is_up_answers_as_that_dialog() {
+        let dialog = ShellDialog::default();
+        let (answer, answered) = channel::<ShellAnswer>();
+        let (up, shown) = channel();
+        let first = {
+            let dialog = dialog.clone();
+            thread::spawn(move || {
+                dialog.take(|| {
+                    up.send(()).expect("the test listens");
+                    answered.recv().expect("the test answers")
+                })
+            })
+        };
+        shown
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the first dialog is up");
+        let second = {
+            let dialog = dialog.clone();
+            thread::spawn(move || dialog.take(|| panic!("a second dialog was shown")))
+        };
+        let waited = std::time::Instant::now();
+        while dialog.0.lock().unwrap().as_ref().map_or(0, Vec::len) == 0 {
+            assert!(
+                waited.elapsed() < Duration::from_secs(10),
+                "the second call waits on the first dialog"
+            );
+            thread::sleep(Duration::from_millis(1));
+        }
+
+        answer.send(Ok(Kept::Copied)).expect("the dialog waits");
+
+        assert_eq!(first.join().expect("returned"), Ok(Kept::Copied));
+        assert_eq!(second.join().expect("returned"), Ok(Kept::Copied));
+        // Closed, so the next Print shows its own.
+        assert_eq!(
+            dialog.take(|| Err(other("shown".into()))),
+            Err(other("shown".into()))
+        );
+    }
+
+    /// A dialog whose call panicked is closed: the next Print shows its own.
+    #[test]
+    fn a_shell_screenshot_after_one_that_panicked_shows_its_own_dialog() {
+        let dialog = ShellDialog::default();
+        let panicked = {
+            let dialog = dialog.clone();
+            thread::spawn(move || dialog.take(|| panic!("the desk could not be shot")))
+        };
+        assert!(panicked.join().is_err());
+
+        assert_eq!(dialog.take(|| Ok(Kept::Copied)), Ok(Kept::Copied));
     }
 
     #[test]

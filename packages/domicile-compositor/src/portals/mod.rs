@@ -132,6 +132,8 @@ pub const CURRENT_DESKTOP: &str = "domicile";
 pub struct Portals {
     backends: Backends,
     shots: Shots,
+    /// The shell's own screenshot dialog, while one is up.
+    shell_dialog: screenshot::ShellDialog,
     /// `None` in unit tests that cast nothing.
     recordings: Option<Recordings>,
     agents: Arc<agent::Door>,
@@ -196,6 +198,7 @@ impl Portals {
             ),
             backends,
             shots: Shots::none(),
+            shell_dialog: screenshot::ShellDialog::default(),
             recordings: None,
         }
     }
@@ -304,14 +307,21 @@ impl Portals {
     }
 
     /// Takes a screenshot the shell asked for itself, and returns where it
-    /// went. Blocks until then, the dialog included. See
-    /// [`screenshot::for_the_shell`].
+    /// went. Blocks until then, the dialog included. One asked for while the
+    /// shell's dialog is up answers as that dialog does; see
+    /// [`screenshot::ShellDialog`] and [`screenshot::for_the_shell`].
     pub fn screenshot(&self, file: Option<PathBuf>) -> Result<Kept, SystemError> {
-        zbus::block_on(screenshot::for_the_shell(
-            &self.backends.queue,
-            &self.shots,
-            file,
-        ))
+        let take = || {
+            zbus::block_on(screenshot::for_the_shell(
+                &self.backends.queue,
+                &self.shots,
+                file.clone(),
+            ))
+        };
+        match &file {
+            Some(_) => take(),
+            None => self.shell_dialog.take(take),
+        }
     }
 
     /// Writes a PNG of the desk for an agent. Blocks until then. See
@@ -561,6 +571,7 @@ pub fn serve(
         ),
         backends: backends.clone(),
         shots: shots.clone(),
+        shell_dialog: screenshot::ShellDialog::default(),
         recordings: Some(Recordings {
             casting: casting.casting.clone(),
             shoot: shots.shoot.clone(),

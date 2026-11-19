@@ -519,6 +519,7 @@ mod tests {
                 ),
                 backends,
                 shots: crate::portals::Shots::none(),
+                shell_dialog: crate::portals::screenshot::ShellDialog::default(),
                 recordings: None,
             },
             dialogs,

@@ -23,6 +23,7 @@ const KEYS: ShellKeybindings = {
     "Meta+t": KeyAction.SendShell(["get-tree"]),
     "Meta+v": KeyAction.SendShell(["clipboard"]),
     "Meta+x": KeyAction.SendShell(["teleport"]),
+    Print: KeyAction.SendShell(["screenshot"]),
     "swipe:4:down": KeyAction.SendShell(["layer", "down"]),
     "swipe:4:up": KeyAction.SendShell(["layer", "up"]),
     XF86AudioRaiseVolume: KeyAction.SendShell(["volume", "up"]),
@@ -89,14 +90,19 @@ describe("useKeybindings", () => {
     expect(acted).toStrictEqual([WindowAction.FocusStepped(Direction.Right)]);
   });
 
-  it("answers only the launcher's own key while it is up", () => {
-    // The launcher is modal, so keys must not act on windows behind it.
+  it("answers only the launcher's own key and Print while it is up", () => {
+    // The launcher is modal, so keys must not act on windows behind it. A
+    // screenshot acts on none, and is how the launcher is shot.
     const { acted, presses } = bound(true);
 
     presses("Meta+l");
+    presses("Print");
     presses("Meta+space");
 
-    expect(acted).toStrictEqual([WindowAction.LauncherToggled()]);
+    expect(acted).toStrictEqual([
+      WindowAction.ScreenshotTaken(),
+      WindowAction.LauncherToggled(),
+    ]);
   });
 
   it("answers only the overview's own keys while it is up, and the hardware keys", () => {

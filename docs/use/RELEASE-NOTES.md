@@ -62,6 +62,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 - The desktop takes about 35 MB less memory at rest: the browser keeps one process ready for a new page instead of two.
 - The desktop takes about 35 MB less memory at rest: the browser starts its audio service only when something plays sound or asks for a microphone or camera.
 - Ctrl+C and Escape work when you select an area on screen for a screenshot or a share. [Screenshots](SCREENSHOTS.md)
+- Print takes a screenshot while the launcher is open, and pressing it again in the screenshot picker no longer opens a second picker once you close the first. [Screenshots](SCREENSHOTS.md)
 - The wallpaper takes less memory on screens smaller than 4K: it downloads each photo only as large as your screens show it.
 - Screenshot, share and other dialogs fade out when you answer them, instead of vanishing.
 - Sharing your screen or a window in Google Meet asks once, not twice.

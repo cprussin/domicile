@@ -119,11 +119,13 @@ export const useKeybindings = ({
 /**
  * Whether an action runs while the launcher is open.
  *
- * Only the launcher toggle does. The launcher is modal, so other keys must not
- * act on windows behind it.
+ * The launcher is modal, so keys must not act on windows behind it. Its own
+ * toggle runs, and so does a screenshot, which acts on no window and is how
+ * the launcher is shot.
  */
 const heardOverLauncher = (action: WindowAction): boolean =>
-  action.kind === WindowActionKind.LauncherToggled;
+  action.kind === WindowActionKind.LauncherToggled ||
+  action.kind === WindowActionKind.ScreenshotTaken;
 
 /**
  * The actions a key runs while the overview is open: its own, which steer it

@@ -104,7 +104,9 @@ export type System = {
    * if the shell were the application: the desk freezes, `<PortalDialogs />`
    * draws the screenshot dialog, and the area picked is saved under
    * `$XDG_PICTURES_DIR/Screenshots/`, or copied to the clipboard instead when
-   * the user presses Ctrl+C. Resolves with where it went.
+   * the user presses Ctrl+C. Resolves with where it went. A call while the
+   * shell's screenshot dialog is up resolves as that dialog does, and shows
+   * no second one.
    */
   screenshot: () => Promise<Result<ScreenshotKept, SystemError>>;
   /**
