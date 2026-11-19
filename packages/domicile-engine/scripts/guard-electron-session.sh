@@ -202,8 +202,18 @@ send({"type": "open_window", "window": 1, "url": origin + "/index.html"})
 first = page_says("")
 got = call(3, "cookies_get", filter={"url": origin + "/"})
 cleared = call(4, "clear_storage_data")
-send({"type": "load_url", "window": 1, "url": origin + "/index.html?again"})
-second = page_says("?again")
+# The renderer keeps its own copy of the page's localStorage, which hears of
+# the clear on a pipe of its own, so a load right after clear_storage_data
+# answers may still read the old item. Later loads only read: storage the
+# clear missed reads back every time, a stale copy only until it hears.
+second = ["", "", "", ""]
+for attempt in range(1, 6):
+    again = "?again%d" % attempt
+    send({"type": "load_url", "window": 1, "url": origin + "/index.html" + again})
+    second = page_says(again)
+    if second[1] == "" and second[2] == "none":
+        break
+    time.sleep(0.2)
 
 names = sorted(cookie.get("name") for cookie in
                ((got or {}).get("result") or []))
