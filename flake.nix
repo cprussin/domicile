@@ -2691,6 +2691,9 @@
                     "grep -E 'suspended' /tmp/client.log | tail -4 | cut -c1-160 || true",
                     "grep -iE 'gesture|workspace' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
                     "grep -E '^\\[' /tmp/domicile.log | grep -iE 'touch|finger|evdev' | tail -12 | cut -c1-200 || true",
+                    # Whole, last: a page whose resize is never acked, and
+                    # what holds it. The cut lines above lose the reason.
+                    "grep -E 'domicile: (widget|compositor) ' /tmp/domicile.log | tail -8 || true",
                 ]:
                     print(f"$ {command}")
                     print(machine.execute(f"{command} 2>&1")[1])
