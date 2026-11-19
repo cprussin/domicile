@@ -203,6 +203,10 @@ the page in devtools does not unlock the desktop.
 ### Drawing the lock screen
 
 - Your page still receives keys, so it can take a passphrase in a field.
+- To keep focus in the field, take it back after a `focusin` elsewhere has
+  finished (`setTimeout`), not inside the handler. Focused from inside it, the
+  field takes keys but does not match `:focus` when a `<webview>` was taking
+  focus.
 - `unlock` sends it to the compositor. On success, `locked` becomes `false` on
   every shell. Clear the lock screen then, not on your own submit.
 - A passphrase that did not unlock fires `lockchange` with `locked` still
