@@ -2506,7 +2506,7 @@
                 if [ "$(tty)" = /dev/tty1 ]; then
                   mkdir -p ~/.config/domicile
                   cp ${config} ~/.config/domicile/domicile.json
-                  export DOMICILE_ENGINE_ARGS="--log-level=0 --vmodule=*evdev*=1,*domicile*=1,*/domicile/*=1"
+                  export DOMICILE_ENGINE_ARGS="--remote-debugging-port=9222 --log-level=0 --vmodule=*evdev*=1,*domicile*=1,*/domicile/*=1"
                   export RUST_LOG=domicile_compositor=trace
                   exec ${self.packages.${system}.manganese}/bin/manganese >/tmp/domicile.log 2>&1
                 fi
@@ -2594,10 +2594,12 @@
               '';
             };
             fonts.enableDefaultPackages = true;
+            environment.systemPackages = [ pkgs.curl ];
           };
           testScript = ''
             import datetime as dt
 
+            NAME = "touchscreen-on-a-tty"
             WAIT = dt.timedelta(seconds=300)
             CLIENT = (
                 "su alice -c 'XDG_RUNTIME_DIR=/run/user/1000 "
@@ -2674,6 +2676,1489 @@
 
 
             machine.wait_for_unit("multi-user.target")
+            # PROBE (draft branch, not to merge): one cold boot; pass if the
+            # window is sized, else dump what the desk did, every line tagged.
+            machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+            machine.succeed(CLIENT)
+            sized = machine.execute("for i in $(seq 120); do grep -qE 'configure\\([1-9]' /tmp/client.log && exit 0; sleep 1; done; exit 1")[0] == 0
+            if sized:
+                print(f"PROBE {NAME} sized")
+            else:
+                for command in [
+                    "grep -E 'domicile: (widget|compositor) ' /tmp/domicile.log | cut -c1-400",
+                    "grep -E 'domicile_compositor' /tmp/domicile.log | grep -vE 'system_request|system_response|activity|spawn' | head -30 | cut -c1-220",
+                    "grep -E '^\\[' /tmp/domicile.log | grep -E 'domicile' | grep -vE 'evdev|libinput|dbus' | head -25 | cut -c1-220",
+                    "grep -c 'chrome -> host' /tmp/domicile.log",
+                    "tail -6 /tmp/client.log | cut -c1-160",
+                ]:
+                    print(f"PROBE {NAME} $ {command[:60]}")
+                    for line in machine.execute(f"{command} 2>&1")[1].splitlines():
+                        print(f"PROBE {NAME}: {line}")
+                raise AssertionError(f"PROBE {NAME} unsized")
+            try:
+                a_window_is_up()
+                a_finger_reaches_the_window_as_touch()
+                a_finger_along_the_edge_is_the_windows()
+                a_finger_in_from_the_edge_is_the_shells()
+            except Exception:
+                machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
+                # The runner keeps only the tail of this output, so the
+                # compositor and engine lines come last.
+                for command in [
+                    "grep -E 'wl_(pointer|touch)@' /tmp/client.log | tail -10 | cut -c1-160 || true",
+                    "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -4 | cut -c1-200 || true",
+                    "grep -E 'chrome -> host' /tmp/domicile.log | grep -v activity | tail -6 | cut -c1-200 || true",
+                    "grep -iE 'pointers|touchscreens bound' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E 'suspended' /tmp/client.log | tail -4 | cut -c1-160 || true",
+                    "grep -iE 'gesture|workspace' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E '^\\[' /tmp/domicile.log | grep -iE 'touch|finger|evdev' | tail -12 | cut -c1-200 || true",
+                    # Whole, last: a page whose resize is never acked, and
+                    # what holds it. The cut lines above lose the reason.
+                    "grep -E 'domicile: (widget|compositor) ' /tmp/domicile.log | tail -8 || true",
+                ]:
+                    print(f"$ {command}")
+                    print(machine.execute(f"{command} 2>&1")[1])
+                raise
+          '';
+        };
+
+        touchscreen-probe-1 = pkgs.testers.runNixOSTest {
+          name = "touchscreen-probe-1";
+          nodes.machine = {
+            imports = [ self.nixosModules.domicile ];
+            programs.domicile.enable = true;
+            virtualisation = {
+              memorySize = 4096;
+              cores = 2;
+              # No EDID, so the head is named by its connector, `Virtual-1`,
+              # as the config binds it.
+              qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800,edid=off" ];
+            };
+            users.users.alice = {
+              isNormalUser = true;
+              uid = 1000;
+              extraGroups = [ "domicile" "video" "input" ];
+            };
+            services.getty.autologinUser = "alice";
+            environment.loginShellInit =
+              let
+                config = pkgs.writeText "domicile.json" (builtins.toJSON {
+                  input.pointers = [ { device = "test touchscreen"; display = "Virtual-1"; } ];
+                });
+              in
+              ''
+                if [ "$(tty)" = /dev/tty1 ]; then
+                  mkdir -p ~/.config/domicile
+                  cp ${config} ~/.config/domicile/domicile.json
+                  export DOMICILE_ENGINE_ARGS="--remote-debugging-port=9222 --log-level=0 --vmodule=*evdev*=1,*domicile*=1,*/domicile/*=1"
+                  export RUST_LOG=domicile_compositor=trace
+                  exec ${self.packages.${system}.manganese}/bin/manganese >/tmp/domicile.log 2>&1
+                fi
+              '';
+            # A multitouch screen the engine takes for a touchscreen. The test
+            # writes `tap X Y` or `drag X Y DX DY`, in the display's pixels, a
+            # command per line to `/run/input`.
+            hardware.uinput.enable = true;
+            systemd.services.test-input = {
+              wantedBy = [ "multi-user.target" ];
+              before = [ "getty@tty1.service" ];
+              serviceConfig.ExecStart = pkgs.writers.writePython3 "test-input"
+                { libraries = [ pkgs.python3Packages.evdev ]; } ''
+                import os
+                import time
+
+                from evdev import AbsInfo, UInput, ecodes as e
+
+                # The display, 1280 by 800, in 4096 units a side.
+                WIDTH, HEIGHT, RANGE = 1280, 800, 4095
+                screen = UInput(
+                    {
+                        e.EV_KEY: [e.BTN_TOUCH],
+                        e.EV_ABS: [
+                            (e.ABS_X, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_Y, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_MT_SLOT, AbsInfo(0, 0, 9, 0, 0, 0)),
+                            (e.ABS_MT_TRACKING_ID, AbsInfo(0, 0, 65535, 0, 0, 0)),
+                            (e.ABS_MT_POSITION_X, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_MT_POSITION_Y, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                        ],
+                    },
+                    name="test touchscreen",
+                    input_props=[e.INPUT_PROP_DIRECT],
+                )
+                tracking = 0
+
+
+                def at(x, y):
+                    """The display's pixel `x`, `y` in the screen's units."""
+                    return round(x * RANGE / WIDTH), round(y * RANGE / HEIGHT)
+
+
+                def report(x, y):
+                    x, y = at(x, y)
+                    screen.write(e.EV_ABS, e.ABS_MT_POSITION_X, x)
+                    screen.write(e.EV_ABS, e.ABS_MT_POSITION_Y, y)
+                    screen.write(e.EV_ABS, e.ABS_X, x)
+                    screen.write(e.EV_ABS, e.ABS_Y, y)
+                    screen.syn()
+                    time.sleep(0.012)
+
+
+                def drag(x, y, dx, dy, steps):
+                    """One finger down at `x`, `y`, through `dx`, `dy`, then up."""
+                    global tracking
+                    tracking += 1
+                    screen.write(e.EV_ABS, e.ABS_MT_SLOT, 0)
+                    screen.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, tracking)
+                    screen.write(e.EV_KEY, e.BTN_TOUCH, 1)
+                    report(x, y)
+                    for step in range(1, steps + 1):
+                        report(x + dx * step / steps, y + dy * step / steps)
+                    screen.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, -1)
+                    screen.write(e.EV_KEY, e.BTN_TOUCH, 0)
+                    screen.syn()
+                    time.sleep(0.2)
+
+
+                os.mkfifo("/run/input")
+                # A writer of its own, never written to, so the reader never
+                # sees end of file between the test's writers: alone, it closed
+                # and reopened after each, and a writer that opened in that gap
+                # got EPIPE. The reader stays read-only text, which hands each
+                # line over as it arrives.
+                os.open("/run/input", os.O_RDWR | os.O_NONBLOCK)
+                while True:
+                    with open("/run/input") as commands:
+                        for command in commands:
+                            match command.split():
+                                case ["tap", x, y]:
+                                    drag(int(x), int(y), 0, 0, 0)
+                                case ["drag", x, y, dx, dy]:
+                                    drag(int(x), int(y), int(dx), int(dy), 20)
+              '';
+            };
+            fonts.enableDefaultPackages = true;
+            environment.systemPackages = [ pkgs.curl ];
+          };
+          testScript = ''
+            import datetime as dt
+
+            NAME = "touchscreen-probe-1"
+            WAIT = dt.timedelta(seconds=300)
+            CLIENT = (
+                "su alice -c 'XDG_RUNTIME_DIR=/run/user/1000 "
+                "WAYLAND_DISPLAY=$(basename $(ls /run/user/1000/wayland-[0-9] | head -1)) "
+                "${testClient}/bin/domicile-test-client --trace --title touch' "
+                ">/tmp/client.log 2>&1 &"
+            )
+
+
+            def say(command):
+                machine.succeed(f"echo '{command}' >/run/input")
+
+
+            def traced(pattern):
+                """Whether the client's trace has a line matching `pattern`."""
+                return machine.execute(f"grep -qE '{pattern}' /tmp/client.log")[0] == 0
+
+
+            def downs():
+                return int(machine.succeed(
+                    "grep -cE 'wl_touch@[0-9]+\\.down\\(' /tmp/client.log || true").strip())
+
+
+            def a_window_is_up():
+                machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+                machine.succeed(CLIENT)
+                # Sized, so the shell has placed it: Manganese tiles the
+                # first window over the monitor, 20 pixels in from its sides.
+                machine.wait_until_succeeds(
+                    "grep -qE 'configure\\([1-9]' /tmp/client.log", timeout=WAIT)
+
+
+            def a_finger_reaches_the_window_as_touch():
+                # Tried until one lands: the engine binds the screen to its
+                # display once the compositor has sent the displays.
+                def landed(_):
+                    say("drag 600 400 60 40")
+                    return traced(r"wl_touch@[0-9]+\.up\(")
+
+                retry(landed, timeout=dt.timedelta(seconds=60))
+                assert traced(r"wl_touch@[0-9]+\.down\("), "no touch down"
+                assert traced(r"wl_touch@[0-9]+\.touch_motion\("), "the finger never moved"
+                assert traced(r"wl_touch@[0-9]+\.touch_frame\(\)"), "no touch frame"
+                assert not traced(r"wl_pointer@[0-9]+\.button\("), "the finger was a click too"
+
+
+            def a_finger_along_the_edge_is_the_windows():
+                # Lands in the left edge's band, over the window past the
+                # gap, and goes down along the edge: withheld, then replayed.
+                before = downs()
+                say("drag 30 300 0 200")
+                retry(lambda _: downs() > before, timeout=dt.timedelta(seconds=10))
+
+
+            def resumed():
+                return int(machine.succeed(
+                    "grep -cE '\\.suspended\\(false\\)' /tmp/client.log || true").strip())
+
+
+            def a_finger_in_from_the_edge_is_the_shells():
+                # An empty workspace 2 hides the window. In from the left edge
+                # is the workspace before, which shows it again, and the
+                # window never has the finger: `workspace prev_on_output`
+                # needs a workspace to step to, as sway's does.
+                machine.send_key("meta_l-2")
+                retry(lambda _: traced(r"\.suspended\(true\)"), timeout=dt.timedelta(seconds=30))
+                before, shown = downs(), resumed()
+                say("drag 4 400 300 0")
+                try:
+                    retry(lambda _: resumed() > shown, timeout=dt.timedelta(seconds=10))
+                except Exception:
+                    raise AssertionError("the swipe did not change the workspace")
+                assert downs() == before, "the window had the shell's finger"
+
+
+            machine.wait_for_unit("multi-user.target")
+            # PROBE (draft branch, not to merge): one cold boot; pass if the
+            # window is sized, else dump what the desk did, every line tagged.
+            machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+            machine.succeed(CLIENT)
+            sized = machine.execute("for i in $(seq 120); do grep -qE 'configure\\([1-9]' /tmp/client.log && exit 0; sleep 1; done; exit 1")[0] == 0
+            if sized:
+                print(f"PROBE {NAME} sized")
+            else:
+                for command in [
+                    "grep -E 'domicile: (widget|compositor) ' /tmp/domicile.log | cut -c1-400",
+                    "grep -E 'domicile_compositor' /tmp/domicile.log | grep -vE 'system_request|system_response|activity|spawn' | head -30 | cut -c1-220",
+                    "grep -E '^\\[' /tmp/domicile.log | grep -E 'domicile' | grep -vE 'evdev|libinput|dbus' | head -25 | cut -c1-220",
+                    "grep -c 'chrome -> host' /tmp/domicile.log",
+                    "tail -6 /tmp/client.log | cut -c1-160",
+                ]:
+                    print(f"PROBE {NAME} $ {command[:60]}")
+                    for line in machine.execute(f"{command} 2>&1")[1].splitlines():
+                        print(f"PROBE {NAME}: {line}")
+                raise AssertionError(f"PROBE {NAME} unsized")
+            try:
+                a_window_is_up()
+                a_finger_reaches_the_window_as_touch()
+                a_finger_along_the_edge_is_the_windows()
+                a_finger_in_from_the_edge_is_the_shells()
+            except Exception:
+                machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
+                # The runner keeps only the tail of this output, so the
+                # compositor and engine lines come last.
+                for command in [
+                    "grep -E 'wl_(pointer|touch)@' /tmp/client.log | tail -10 | cut -c1-160 || true",
+                    "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -4 | cut -c1-200 || true",
+                    "grep -E 'chrome -> host' /tmp/domicile.log | grep -v activity | tail -6 | cut -c1-200 || true",
+                    "grep -iE 'pointers|touchscreens bound' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E 'suspended' /tmp/client.log | tail -4 | cut -c1-160 || true",
+                    "grep -iE 'gesture|workspace' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E '^\\[' /tmp/domicile.log | grep -iE 'touch|finger|evdev' | tail -12 | cut -c1-200 || true",
+                    # Whole, last: a page whose resize is never acked, and
+                    # what holds it. The cut lines above lose the reason.
+                    "grep -E 'domicile: (widget|compositor) ' /tmp/domicile.log | tail -8 || true",
+                ]:
+                    print(f"$ {command}")
+                    print(machine.execute(f"{command} 2>&1")[1])
+                raise
+          '';
+        };
+
+        touchscreen-probe-2 = pkgs.testers.runNixOSTest {
+          name = "touchscreen-probe-2";
+          nodes.machine = {
+            imports = [ self.nixosModules.domicile ];
+            programs.domicile.enable = true;
+            virtualisation = {
+              memorySize = 4096;
+              cores = 2;
+              # No EDID, so the head is named by its connector, `Virtual-1`,
+              # as the config binds it.
+              qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800,edid=off" ];
+            };
+            users.users.alice = {
+              isNormalUser = true;
+              uid = 1000;
+              extraGroups = [ "domicile" "video" "input" ];
+            };
+            services.getty.autologinUser = "alice";
+            environment.loginShellInit =
+              let
+                config = pkgs.writeText "domicile.json" (builtins.toJSON {
+                  input.pointers = [ { device = "test touchscreen"; display = "Virtual-1"; } ];
+                });
+              in
+              ''
+                if [ "$(tty)" = /dev/tty1 ]; then
+                  mkdir -p ~/.config/domicile
+                  cp ${config} ~/.config/domicile/domicile.json
+                  export DOMICILE_ENGINE_ARGS="--remote-debugging-port=9222 --log-level=0 --vmodule=*evdev*=1,*domicile*=1,*/domicile/*=1"
+                  export RUST_LOG=domicile_compositor=trace
+                  exec ${self.packages.${system}.manganese}/bin/manganese >/tmp/domicile.log 2>&1
+                fi
+              '';
+            # A multitouch screen the engine takes for a touchscreen. The test
+            # writes `tap X Y` or `drag X Y DX DY`, in the display's pixels, a
+            # command per line to `/run/input`.
+            hardware.uinput.enable = true;
+            systemd.services.test-input = {
+              wantedBy = [ "multi-user.target" ];
+              before = [ "getty@tty1.service" ];
+              serviceConfig.ExecStart = pkgs.writers.writePython3 "test-input"
+                { libraries = [ pkgs.python3Packages.evdev ]; } ''
+                import os
+                import time
+
+                from evdev import AbsInfo, UInput, ecodes as e
+
+                # The display, 1280 by 800, in 4096 units a side.
+                WIDTH, HEIGHT, RANGE = 1280, 800, 4095
+                screen = UInput(
+                    {
+                        e.EV_KEY: [e.BTN_TOUCH],
+                        e.EV_ABS: [
+                            (e.ABS_X, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_Y, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_MT_SLOT, AbsInfo(0, 0, 9, 0, 0, 0)),
+                            (e.ABS_MT_TRACKING_ID, AbsInfo(0, 0, 65535, 0, 0, 0)),
+                            (e.ABS_MT_POSITION_X, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_MT_POSITION_Y, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                        ],
+                    },
+                    name="test touchscreen",
+                    input_props=[e.INPUT_PROP_DIRECT],
+                )
+                tracking = 0
+
+
+                def at(x, y):
+                    """The display's pixel `x`, `y` in the screen's units."""
+                    return round(x * RANGE / WIDTH), round(y * RANGE / HEIGHT)
+
+
+                def report(x, y):
+                    x, y = at(x, y)
+                    screen.write(e.EV_ABS, e.ABS_MT_POSITION_X, x)
+                    screen.write(e.EV_ABS, e.ABS_MT_POSITION_Y, y)
+                    screen.write(e.EV_ABS, e.ABS_X, x)
+                    screen.write(e.EV_ABS, e.ABS_Y, y)
+                    screen.syn()
+                    time.sleep(0.012)
+
+
+                def drag(x, y, dx, dy, steps):
+                    """One finger down at `x`, `y`, through `dx`, `dy`, then up."""
+                    global tracking
+                    tracking += 1
+                    screen.write(e.EV_ABS, e.ABS_MT_SLOT, 0)
+                    screen.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, tracking)
+                    screen.write(e.EV_KEY, e.BTN_TOUCH, 1)
+                    report(x, y)
+                    for step in range(1, steps + 1):
+                        report(x + dx * step / steps, y + dy * step / steps)
+                    screen.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, -1)
+                    screen.write(e.EV_KEY, e.BTN_TOUCH, 0)
+                    screen.syn()
+                    time.sleep(0.2)
+
+
+                os.mkfifo("/run/input")
+                # A writer of its own, never written to, so the reader never
+                # sees end of file between the test's writers: alone, it closed
+                # and reopened after each, and a writer that opened in that gap
+                # got EPIPE. The reader stays read-only text, which hands each
+                # line over as it arrives.
+                os.open("/run/input", os.O_RDWR | os.O_NONBLOCK)
+                while True:
+                    with open("/run/input") as commands:
+                        for command in commands:
+                            match command.split():
+                                case ["tap", x, y]:
+                                    drag(int(x), int(y), 0, 0, 0)
+                                case ["drag", x, y, dx, dy]:
+                                    drag(int(x), int(y), int(dx), int(dy), 20)
+              '';
+            };
+            fonts.enableDefaultPackages = true;
+            environment.systemPackages = [ pkgs.curl ];
+          };
+          testScript = ''
+            import datetime as dt
+
+            NAME = "touchscreen-probe-2"
+            WAIT = dt.timedelta(seconds=300)
+            CLIENT = (
+                "su alice -c 'XDG_RUNTIME_DIR=/run/user/1000 "
+                "WAYLAND_DISPLAY=$(basename $(ls /run/user/1000/wayland-[0-9] | head -1)) "
+                "${testClient}/bin/domicile-test-client --trace --title touch' "
+                ">/tmp/client.log 2>&1 &"
+            )
+
+
+            def say(command):
+                machine.succeed(f"echo '{command}' >/run/input")
+
+
+            def traced(pattern):
+                """Whether the client's trace has a line matching `pattern`."""
+                return machine.execute(f"grep -qE '{pattern}' /tmp/client.log")[0] == 0
+
+
+            def downs():
+                return int(machine.succeed(
+                    "grep -cE 'wl_touch@[0-9]+\\.down\\(' /tmp/client.log || true").strip())
+
+
+            def a_window_is_up():
+                machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+                machine.succeed(CLIENT)
+                # Sized, so the shell has placed it: Manganese tiles the
+                # first window over the monitor, 20 pixels in from its sides.
+                machine.wait_until_succeeds(
+                    "grep -qE 'configure\\([1-9]' /tmp/client.log", timeout=WAIT)
+
+
+            def a_finger_reaches_the_window_as_touch():
+                # Tried until one lands: the engine binds the screen to its
+                # display once the compositor has sent the displays.
+                def landed(_):
+                    say("drag 600 400 60 40")
+                    return traced(r"wl_touch@[0-9]+\.up\(")
+
+                retry(landed, timeout=dt.timedelta(seconds=60))
+                assert traced(r"wl_touch@[0-9]+\.down\("), "no touch down"
+                assert traced(r"wl_touch@[0-9]+\.touch_motion\("), "the finger never moved"
+                assert traced(r"wl_touch@[0-9]+\.touch_frame\(\)"), "no touch frame"
+                assert not traced(r"wl_pointer@[0-9]+\.button\("), "the finger was a click too"
+
+
+            def a_finger_along_the_edge_is_the_windows():
+                # Lands in the left edge's band, over the window past the
+                # gap, and goes down along the edge: withheld, then replayed.
+                before = downs()
+                say("drag 30 300 0 200")
+                retry(lambda _: downs() > before, timeout=dt.timedelta(seconds=10))
+
+
+            def resumed():
+                return int(machine.succeed(
+                    "grep -cE '\\.suspended\\(false\\)' /tmp/client.log || true").strip())
+
+
+            def a_finger_in_from_the_edge_is_the_shells():
+                # An empty workspace 2 hides the window. In from the left edge
+                # is the workspace before, which shows it again, and the
+                # window never has the finger: `workspace prev_on_output`
+                # needs a workspace to step to, as sway's does.
+                machine.send_key("meta_l-2")
+                retry(lambda _: traced(r"\.suspended\(true\)"), timeout=dt.timedelta(seconds=30))
+                before, shown = downs(), resumed()
+                say("drag 4 400 300 0")
+                try:
+                    retry(lambda _: resumed() > shown, timeout=dt.timedelta(seconds=10))
+                except Exception:
+                    raise AssertionError("the swipe did not change the workspace")
+                assert downs() == before, "the window had the shell's finger"
+
+
+            machine.wait_for_unit("multi-user.target")
+            # PROBE (draft branch, not to merge): one cold boot; pass if the
+            # window is sized, else dump what the desk did, every line tagged.
+            machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+            machine.succeed(CLIENT)
+            sized = machine.execute("for i in $(seq 120); do grep -qE 'configure\\([1-9]' /tmp/client.log && exit 0; sleep 1; done; exit 1")[0] == 0
+            if sized:
+                print(f"PROBE {NAME} sized")
+            else:
+                for command in [
+                    "grep -E 'domicile: (widget|compositor) ' /tmp/domicile.log | cut -c1-400",
+                    "grep -E 'domicile_compositor' /tmp/domicile.log | grep -vE 'system_request|system_response|activity|spawn' | head -30 | cut -c1-220",
+                    "grep -E '^\\[' /tmp/domicile.log | grep -E 'domicile' | grep -vE 'evdev|libinput|dbus' | head -25 | cut -c1-220",
+                    "grep -c 'chrome -> host' /tmp/domicile.log",
+                    "tail -6 /tmp/client.log | cut -c1-160",
+                ]:
+                    print(f"PROBE {NAME} $ {command[:60]}")
+                    for line in machine.execute(f"{command} 2>&1")[1].splitlines():
+                        print(f"PROBE {NAME}: {line}")
+                raise AssertionError(f"PROBE {NAME} unsized")
+            try:
+                a_window_is_up()
+                a_finger_reaches_the_window_as_touch()
+                a_finger_along_the_edge_is_the_windows()
+                a_finger_in_from_the_edge_is_the_shells()
+            except Exception:
+                machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
+                # The runner keeps only the tail of this output, so the
+                # compositor and engine lines come last.
+                for command in [
+                    "grep -E 'wl_(pointer|touch)@' /tmp/client.log | tail -10 | cut -c1-160 || true",
+                    "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -4 | cut -c1-200 || true",
+                    "grep -E 'chrome -> host' /tmp/domicile.log | grep -v activity | tail -6 | cut -c1-200 || true",
+                    "grep -iE 'pointers|touchscreens bound' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E 'suspended' /tmp/client.log | tail -4 | cut -c1-160 || true",
+                    "grep -iE 'gesture|workspace' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E '^\\[' /tmp/domicile.log | grep -iE 'touch|finger|evdev' | tail -12 | cut -c1-200 || true",
+                    # Whole, last: a page whose resize is never acked, and
+                    # what holds it. The cut lines above lose the reason.
+                    "grep -E 'domicile: (widget|compositor) ' /tmp/domicile.log | tail -8 || true",
+                ]:
+                    print(f"$ {command}")
+                    print(machine.execute(f"{command} 2>&1")[1])
+                raise
+          '';
+        };
+
+        touchscreen-probe-3 = pkgs.testers.runNixOSTest {
+          name = "touchscreen-probe-3";
+          nodes.machine = {
+            imports = [ self.nixosModules.domicile ];
+            programs.domicile.enable = true;
+            virtualisation = {
+              memorySize = 4096;
+              cores = 2;
+              # No EDID, so the head is named by its connector, `Virtual-1`,
+              # as the config binds it.
+              qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800,edid=off" ];
+            };
+            users.users.alice = {
+              isNormalUser = true;
+              uid = 1000;
+              extraGroups = [ "domicile" "video" "input" ];
+            };
+            services.getty.autologinUser = "alice";
+            environment.loginShellInit =
+              let
+                config = pkgs.writeText "domicile.json" (builtins.toJSON {
+                  input.pointers = [ { device = "test touchscreen"; display = "Virtual-1"; } ];
+                });
+              in
+              ''
+                if [ "$(tty)" = /dev/tty1 ]; then
+                  mkdir -p ~/.config/domicile
+                  cp ${config} ~/.config/domicile/domicile.json
+                  export DOMICILE_ENGINE_ARGS="--remote-debugging-port=9222 --log-level=0 --vmodule=*evdev*=1,*domicile*=1,*/domicile/*=1"
+                  export RUST_LOG=domicile_compositor=trace
+                  exec ${self.packages.${system}.manganese}/bin/manganese >/tmp/domicile.log 2>&1
+                fi
+              '';
+            # A multitouch screen the engine takes for a touchscreen. The test
+            # writes `tap X Y` or `drag X Y DX DY`, in the display's pixels, a
+            # command per line to `/run/input`.
+            hardware.uinput.enable = true;
+            systemd.services.test-input = {
+              wantedBy = [ "multi-user.target" ];
+              before = [ "getty@tty1.service" ];
+              serviceConfig.ExecStart = pkgs.writers.writePython3 "test-input"
+                { libraries = [ pkgs.python3Packages.evdev ]; } ''
+                import os
+                import time
+
+                from evdev import AbsInfo, UInput, ecodes as e
+
+                # The display, 1280 by 800, in 4096 units a side.
+                WIDTH, HEIGHT, RANGE = 1280, 800, 4095
+                screen = UInput(
+                    {
+                        e.EV_KEY: [e.BTN_TOUCH],
+                        e.EV_ABS: [
+                            (e.ABS_X, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_Y, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_MT_SLOT, AbsInfo(0, 0, 9, 0, 0, 0)),
+                            (e.ABS_MT_TRACKING_ID, AbsInfo(0, 0, 65535, 0, 0, 0)),
+                            (e.ABS_MT_POSITION_X, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_MT_POSITION_Y, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                        ],
+                    },
+                    name="test touchscreen",
+                    input_props=[e.INPUT_PROP_DIRECT],
+                )
+                tracking = 0
+
+
+                def at(x, y):
+                    """The display's pixel `x`, `y` in the screen's units."""
+                    return round(x * RANGE / WIDTH), round(y * RANGE / HEIGHT)
+
+
+                def report(x, y):
+                    x, y = at(x, y)
+                    screen.write(e.EV_ABS, e.ABS_MT_POSITION_X, x)
+                    screen.write(e.EV_ABS, e.ABS_MT_POSITION_Y, y)
+                    screen.write(e.EV_ABS, e.ABS_X, x)
+                    screen.write(e.EV_ABS, e.ABS_Y, y)
+                    screen.syn()
+                    time.sleep(0.012)
+
+
+                def drag(x, y, dx, dy, steps):
+                    """One finger down at `x`, `y`, through `dx`, `dy`, then up."""
+                    global tracking
+                    tracking += 1
+                    screen.write(e.EV_ABS, e.ABS_MT_SLOT, 0)
+                    screen.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, tracking)
+                    screen.write(e.EV_KEY, e.BTN_TOUCH, 1)
+                    report(x, y)
+                    for step in range(1, steps + 1):
+                        report(x + dx * step / steps, y + dy * step / steps)
+                    screen.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, -1)
+                    screen.write(e.EV_KEY, e.BTN_TOUCH, 0)
+                    screen.syn()
+                    time.sleep(0.2)
+
+
+                os.mkfifo("/run/input")
+                # A writer of its own, never written to, so the reader never
+                # sees end of file between the test's writers: alone, it closed
+                # and reopened after each, and a writer that opened in that gap
+                # got EPIPE. The reader stays read-only text, which hands each
+                # line over as it arrives.
+                os.open("/run/input", os.O_RDWR | os.O_NONBLOCK)
+                while True:
+                    with open("/run/input") as commands:
+                        for command in commands:
+                            match command.split():
+                                case ["tap", x, y]:
+                                    drag(int(x), int(y), 0, 0, 0)
+                                case ["drag", x, y, dx, dy]:
+                                    drag(int(x), int(y), int(dx), int(dy), 20)
+              '';
+            };
+            fonts.enableDefaultPackages = true;
+            environment.systemPackages = [ pkgs.curl ];
+          };
+          testScript = ''
+            import datetime as dt
+
+            NAME = "touchscreen-probe-3"
+            WAIT = dt.timedelta(seconds=300)
+            CLIENT = (
+                "su alice -c 'XDG_RUNTIME_DIR=/run/user/1000 "
+                "WAYLAND_DISPLAY=$(basename $(ls /run/user/1000/wayland-[0-9] | head -1)) "
+                "${testClient}/bin/domicile-test-client --trace --title touch' "
+                ">/tmp/client.log 2>&1 &"
+            )
+
+
+            def say(command):
+                machine.succeed(f"echo '{command}' >/run/input")
+
+
+            def traced(pattern):
+                """Whether the client's trace has a line matching `pattern`."""
+                return machine.execute(f"grep -qE '{pattern}' /tmp/client.log")[0] == 0
+
+
+            def downs():
+                return int(machine.succeed(
+                    "grep -cE 'wl_touch@[0-9]+\\.down\\(' /tmp/client.log || true").strip())
+
+
+            def a_window_is_up():
+                machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+                machine.succeed(CLIENT)
+                # Sized, so the shell has placed it: Manganese tiles the
+                # first window over the monitor, 20 pixels in from its sides.
+                machine.wait_until_succeeds(
+                    "grep -qE 'configure\\([1-9]' /tmp/client.log", timeout=WAIT)
+
+
+            def a_finger_reaches_the_window_as_touch():
+                # Tried until one lands: the engine binds the screen to its
+                # display once the compositor has sent the displays.
+                def landed(_):
+                    say("drag 600 400 60 40")
+                    return traced(r"wl_touch@[0-9]+\.up\(")
+
+                retry(landed, timeout=dt.timedelta(seconds=60))
+                assert traced(r"wl_touch@[0-9]+\.down\("), "no touch down"
+                assert traced(r"wl_touch@[0-9]+\.touch_motion\("), "the finger never moved"
+                assert traced(r"wl_touch@[0-9]+\.touch_frame\(\)"), "no touch frame"
+                assert not traced(r"wl_pointer@[0-9]+\.button\("), "the finger was a click too"
+
+
+            def a_finger_along_the_edge_is_the_windows():
+                # Lands in the left edge's band, over the window past the
+                # gap, and goes down along the edge: withheld, then replayed.
+                before = downs()
+                say("drag 30 300 0 200")
+                retry(lambda _: downs() > before, timeout=dt.timedelta(seconds=10))
+
+
+            def resumed():
+                return int(machine.succeed(
+                    "grep -cE '\\.suspended\\(false\\)' /tmp/client.log || true").strip())
+
+
+            def a_finger_in_from_the_edge_is_the_shells():
+                # An empty workspace 2 hides the window. In from the left edge
+                # is the workspace before, which shows it again, and the
+                # window never has the finger: `workspace prev_on_output`
+                # needs a workspace to step to, as sway's does.
+                machine.send_key("meta_l-2")
+                retry(lambda _: traced(r"\.suspended\(true\)"), timeout=dt.timedelta(seconds=30))
+                before, shown = downs(), resumed()
+                say("drag 4 400 300 0")
+                try:
+                    retry(lambda _: resumed() > shown, timeout=dt.timedelta(seconds=10))
+                except Exception:
+                    raise AssertionError("the swipe did not change the workspace")
+                assert downs() == before, "the window had the shell's finger"
+
+
+            machine.wait_for_unit("multi-user.target")
+            # PROBE (draft branch, not to merge): one cold boot; pass if the
+            # window is sized, else dump what the desk did, every line tagged.
+            machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+            machine.succeed(CLIENT)
+            sized = machine.execute("for i in $(seq 120); do grep -qE 'configure\\([1-9]' /tmp/client.log && exit 0; sleep 1; done; exit 1")[0] == 0
+            if sized:
+                print(f"PROBE {NAME} sized")
+            else:
+                for command in [
+                    "grep -E 'domicile: (widget|compositor) ' /tmp/domicile.log | cut -c1-400",
+                    "grep -E 'domicile_compositor' /tmp/domicile.log | grep -vE 'system_request|system_response|activity|spawn' | head -30 | cut -c1-220",
+                    "grep -E '^\\[' /tmp/domicile.log | grep -E 'domicile' | grep -vE 'evdev|libinput|dbus' | head -25 | cut -c1-220",
+                    "grep -c 'chrome -> host' /tmp/domicile.log",
+                    "tail -6 /tmp/client.log | cut -c1-160",
+                ]:
+                    print(f"PROBE {NAME} $ {command[:60]}")
+                    for line in machine.execute(f"{command} 2>&1")[1].splitlines():
+                        print(f"PROBE {NAME}: {line}")
+                raise AssertionError(f"PROBE {NAME} unsized")
+            try:
+                a_window_is_up()
+                a_finger_reaches_the_window_as_touch()
+                a_finger_along_the_edge_is_the_windows()
+                a_finger_in_from_the_edge_is_the_shells()
+            except Exception:
+                machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
+                # The runner keeps only the tail of this output, so the
+                # compositor and engine lines come last.
+                for command in [
+                    "grep -E 'wl_(pointer|touch)@' /tmp/client.log | tail -10 | cut -c1-160 || true",
+                    "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -4 | cut -c1-200 || true",
+                    "grep -E 'chrome -> host' /tmp/domicile.log | grep -v activity | tail -6 | cut -c1-200 || true",
+                    "grep -iE 'pointers|touchscreens bound' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E 'suspended' /tmp/client.log | tail -4 | cut -c1-160 || true",
+                    "grep -iE 'gesture|workspace' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E '^\\[' /tmp/domicile.log | grep -iE 'touch|finger|evdev' | tail -12 | cut -c1-200 || true",
+                    # Whole, last: a page whose resize is never acked, and
+                    # what holds it. The cut lines above lose the reason.
+                    "grep -E 'domicile: (widget|compositor) ' /tmp/domicile.log | tail -8 || true",
+                ]:
+                    print(f"$ {command}")
+                    print(machine.execute(f"{command} 2>&1")[1])
+                raise
+          '';
+        };
+
+        touchscreen-probe-4 = pkgs.testers.runNixOSTest {
+          name = "touchscreen-probe-4";
+          nodes.machine = {
+            imports = [ self.nixosModules.domicile ];
+            programs.domicile.enable = true;
+            virtualisation = {
+              memorySize = 4096;
+              cores = 2;
+              # No EDID, so the head is named by its connector, `Virtual-1`,
+              # as the config binds it.
+              qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800,edid=off" ];
+            };
+            users.users.alice = {
+              isNormalUser = true;
+              uid = 1000;
+              extraGroups = [ "domicile" "video" "input" ];
+            };
+            services.getty.autologinUser = "alice";
+            environment.loginShellInit =
+              let
+                config = pkgs.writeText "domicile.json" (builtins.toJSON {
+                  input.pointers = [ { device = "test touchscreen"; display = "Virtual-1"; } ];
+                });
+              in
+              ''
+                if [ "$(tty)" = /dev/tty1 ]; then
+                  mkdir -p ~/.config/domicile
+                  cp ${config} ~/.config/domicile/domicile.json
+                  export DOMICILE_ENGINE_ARGS="--remote-debugging-port=9222 --log-level=0 --vmodule=*evdev*=1,*domicile*=1,*/domicile/*=1"
+                  export RUST_LOG=domicile_compositor=trace
+                  exec ${self.packages.${system}.manganese}/bin/manganese >/tmp/domicile.log 2>&1
+                fi
+              '';
+            # A multitouch screen the engine takes for a touchscreen. The test
+            # writes `tap X Y` or `drag X Y DX DY`, in the display's pixels, a
+            # command per line to `/run/input`.
+            hardware.uinput.enable = true;
+            systemd.services.test-input = {
+              wantedBy = [ "multi-user.target" ];
+              before = [ "getty@tty1.service" ];
+              serviceConfig.ExecStart = pkgs.writers.writePython3 "test-input"
+                { libraries = [ pkgs.python3Packages.evdev ]; } ''
+                import os
+                import time
+
+                from evdev import AbsInfo, UInput, ecodes as e
+
+                # The display, 1280 by 800, in 4096 units a side.
+                WIDTH, HEIGHT, RANGE = 1280, 800, 4095
+                screen = UInput(
+                    {
+                        e.EV_KEY: [e.BTN_TOUCH],
+                        e.EV_ABS: [
+                            (e.ABS_X, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_Y, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_MT_SLOT, AbsInfo(0, 0, 9, 0, 0, 0)),
+                            (e.ABS_MT_TRACKING_ID, AbsInfo(0, 0, 65535, 0, 0, 0)),
+                            (e.ABS_MT_POSITION_X, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_MT_POSITION_Y, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                        ],
+                    },
+                    name="test touchscreen",
+                    input_props=[e.INPUT_PROP_DIRECT],
+                )
+                tracking = 0
+
+
+                def at(x, y):
+                    """The display's pixel `x`, `y` in the screen's units."""
+                    return round(x * RANGE / WIDTH), round(y * RANGE / HEIGHT)
+
+
+                def report(x, y):
+                    x, y = at(x, y)
+                    screen.write(e.EV_ABS, e.ABS_MT_POSITION_X, x)
+                    screen.write(e.EV_ABS, e.ABS_MT_POSITION_Y, y)
+                    screen.write(e.EV_ABS, e.ABS_X, x)
+                    screen.write(e.EV_ABS, e.ABS_Y, y)
+                    screen.syn()
+                    time.sleep(0.012)
+
+
+                def drag(x, y, dx, dy, steps):
+                    """One finger down at `x`, `y`, through `dx`, `dy`, then up."""
+                    global tracking
+                    tracking += 1
+                    screen.write(e.EV_ABS, e.ABS_MT_SLOT, 0)
+                    screen.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, tracking)
+                    screen.write(e.EV_KEY, e.BTN_TOUCH, 1)
+                    report(x, y)
+                    for step in range(1, steps + 1):
+                        report(x + dx * step / steps, y + dy * step / steps)
+                    screen.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, -1)
+                    screen.write(e.EV_KEY, e.BTN_TOUCH, 0)
+                    screen.syn()
+                    time.sleep(0.2)
+
+
+                os.mkfifo("/run/input")
+                # A writer of its own, never written to, so the reader never
+                # sees end of file between the test's writers: alone, it closed
+                # and reopened after each, and a writer that opened in that gap
+                # got EPIPE. The reader stays read-only text, which hands each
+                # line over as it arrives.
+                os.open("/run/input", os.O_RDWR | os.O_NONBLOCK)
+                while True:
+                    with open("/run/input") as commands:
+                        for command in commands:
+                            match command.split():
+                                case ["tap", x, y]:
+                                    drag(int(x), int(y), 0, 0, 0)
+                                case ["drag", x, y, dx, dy]:
+                                    drag(int(x), int(y), int(dx), int(dy), 20)
+              '';
+            };
+            fonts.enableDefaultPackages = true;
+            environment.systemPackages = [ pkgs.curl ];
+          };
+          testScript = ''
+            import datetime as dt
+
+            NAME = "touchscreen-probe-4"
+            WAIT = dt.timedelta(seconds=300)
+            CLIENT = (
+                "su alice -c 'XDG_RUNTIME_DIR=/run/user/1000 "
+                "WAYLAND_DISPLAY=$(basename $(ls /run/user/1000/wayland-[0-9] | head -1)) "
+                "${testClient}/bin/domicile-test-client --trace --title touch' "
+                ">/tmp/client.log 2>&1 &"
+            )
+
+
+            def say(command):
+                machine.succeed(f"echo '{command}' >/run/input")
+
+
+            def traced(pattern):
+                """Whether the client's trace has a line matching `pattern`."""
+                return machine.execute(f"grep -qE '{pattern}' /tmp/client.log")[0] == 0
+
+
+            def downs():
+                return int(machine.succeed(
+                    "grep -cE 'wl_touch@[0-9]+\\.down\\(' /tmp/client.log || true").strip())
+
+
+            def a_window_is_up():
+                machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+                machine.succeed(CLIENT)
+                # Sized, so the shell has placed it: Manganese tiles the
+                # first window over the monitor, 20 pixels in from its sides.
+                machine.wait_until_succeeds(
+                    "grep -qE 'configure\\([1-9]' /tmp/client.log", timeout=WAIT)
+
+
+            def a_finger_reaches_the_window_as_touch():
+                # Tried until one lands: the engine binds the screen to its
+                # display once the compositor has sent the displays.
+                def landed(_):
+                    say("drag 600 400 60 40")
+                    return traced(r"wl_touch@[0-9]+\.up\(")
+
+                retry(landed, timeout=dt.timedelta(seconds=60))
+                assert traced(r"wl_touch@[0-9]+\.down\("), "no touch down"
+                assert traced(r"wl_touch@[0-9]+\.touch_motion\("), "the finger never moved"
+                assert traced(r"wl_touch@[0-9]+\.touch_frame\(\)"), "no touch frame"
+                assert not traced(r"wl_pointer@[0-9]+\.button\("), "the finger was a click too"
+
+
+            def a_finger_along_the_edge_is_the_windows():
+                # Lands in the left edge's band, over the window past the
+                # gap, and goes down along the edge: withheld, then replayed.
+                before = downs()
+                say("drag 30 300 0 200")
+                retry(lambda _: downs() > before, timeout=dt.timedelta(seconds=10))
+
+
+            def resumed():
+                return int(machine.succeed(
+                    "grep -cE '\\.suspended\\(false\\)' /tmp/client.log || true").strip())
+
+
+            def a_finger_in_from_the_edge_is_the_shells():
+                # An empty workspace 2 hides the window. In from the left edge
+                # is the workspace before, which shows it again, and the
+                # window never has the finger: `workspace prev_on_output`
+                # needs a workspace to step to, as sway's does.
+                machine.send_key("meta_l-2")
+                retry(lambda _: traced(r"\.suspended\(true\)"), timeout=dt.timedelta(seconds=30))
+                before, shown = downs(), resumed()
+                say("drag 4 400 300 0")
+                try:
+                    retry(lambda _: resumed() > shown, timeout=dt.timedelta(seconds=10))
+                except Exception:
+                    raise AssertionError("the swipe did not change the workspace")
+                assert downs() == before, "the window had the shell's finger"
+
+
+            machine.wait_for_unit("multi-user.target")
+            # PROBE (draft branch, not to merge): one cold boot; pass if the
+            # window is sized, else dump what the desk did, every line tagged.
+            machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+            machine.succeed(CLIENT)
+            sized = machine.execute("for i in $(seq 120); do grep -qE 'configure\\([1-9]' /tmp/client.log && exit 0; sleep 1; done; exit 1")[0] == 0
+            if sized:
+                print(f"PROBE {NAME} sized")
+            else:
+                for command in [
+                    "grep -E 'domicile: (widget|compositor) ' /tmp/domicile.log | cut -c1-400",
+                    "grep -E 'domicile_compositor' /tmp/domicile.log | grep -vE 'system_request|system_response|activity|spawn' | head -30 | cut -c1-220",
+                    "grep -E '^\\[' /tmp/domicile.log | grep -E 'domicile' | grep -vE 'evdev|libinput|dbus' | head -25 | cut -c1-220",
+                    "grep -c 'chrome -> host' /tmp/domicile.log",
+                    "tail -6 /tmp/client.log | cut -c1-160",
+                ]:
+                    print(f"PROBE {NAME} $ {command[:60]}")
+                    for line in machine.execute(f"{command} 2>&1")[1].splitlines():
+                        print(f"PROBE {NAME}: {line}")
+                raise AssertionError(f"PROBE {NAME} unsized")
+            try:
+                a_window_is_up()
+                a_finger_reaches_the_window_as_touch()
+                a_finger_along_the_edge_is_the_windows()
+                a_finger_in_from_the_edge_is_the_shells()
+            except Exception:
+                machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
+                # The runner keeps only the tail of this output, so the
+                # compositor and engine lines come last.
+                for command in [
+                    "grep -E 'wl_(pointer|touch)@' /tmp/client.log | tail -10 | cut -c1-160 || true",
+                    "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -4 | cut -c1-200 || true",
+                    "grep -E 'chrome -> host' /tmp/domicile.log | grep -v activity | tail -6 | cut -c1-200 || true",
+                    "grep -iE 'pointers|touchscreens bound' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E 'suspended' /tmp/client.log | tail -4 | cut -c1-160 || true",
+                    "grep -iE 'gesture|workspace' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E '^\\[' /tmp/domicile.log | grep -iE 'touch|finger|evdev' | tail -12 | cut -c1-200 || true",
+                    # Whole, last: a page whose resize is never acked, and
+                    # what holds it. The cut lines above lose the reason.
+                    "grep -E 'domicile: (widget|compositor) ' /tmp/domicile.log | tail -8 || true",
+                ]:
+                    print(f"$ {command}")
+                    print(machine.execute(f"{command} 2>&1")[1])
+                raise
+          '';
+        };
+
+        touchscreen-probe-5 = pkgs.testers.runNixOSTest {
+          name = "touchscreen-probe-5";
+          nodes.machine = {
+            imports = [ self.nixosModules.domicile ];
+            programs.domicile.enable = true;
+            virtualisation = {
+              memorySize = 4096;
+              cores = 2;
+              # No EDID, so the head is named by its connector, `Virtual-1`,
+              # as the config binds it.
+              qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800,edid=off" ];
+            };
+            users.users.alice = {
+              isNormalUser = true;
+              uid = 1000;
+              extraGroups = [ "domicile" "video" "input" ];
+            };
+            services.getty.autologinUser = "alice";
+            environment.loginShellInit =
+              let
+                config = pkgs.writeText "domicile.json" (builtins.toJSON {
+                  input.pointers = [ { device = "test touchscreen"; display = "Virtual-1"; } ];
+                });
+              in
+              ''
+                if [ "$(tty)" = /dev/tty1 ]; then
+                  mkdir -p ~/.config/domicile
+                  cp ${config} ~/.config/domicile/domicile.json
+                  export DOMICILE_ENGINE_ARGS="--remote-debugging-port=9222 --log-level=0 --vmodule=*evdev*=1,*domicile*=1,*/domicile/*=1"
+                  export RUST_LOG=domicile_compositor=trace
+                  exec ${self.packages.${system}.manganese}/bin/manganese >/tmp/domicile.log 2>&1
+                fi
+              '';
+            # A multitouch screen the engine takes for a touchscreen. The test
+            # writes `tap X Y` or `drag X Y DX DY`, in the display's pixels, a
+            # command per line to `/run/input`.
+            hardware.uinput.enable = true;
+            systemd.services.test-input = {
+              wantedBy = [ "multi-user.target" ];
+              before = [ "getty@tty1.service" ];
+              serviceConfig.ExecStart = pkgs.writers.writePython3 "test-input"
+                { libraries = [ pkgs.python3Packages.evdev ]; } ''
+                import os
+                import time
+
+                from evdev import AbsInfo, UInput, ecodes as e
+
+                # The display, 1280 by 800, in 4096 units a side.
+                WIDTH, HEIGHT, RANGE = 1280, 800, 4095
+                screen = UInput(
+                    {
+                        e.EV_KEY: [e.BTN_TOUCH],
+                        e.EV_ABS: [
+                            (e.ABS_X, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_Y, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_MT_SLOT, AbsInfo(0, 0, 9, 0, 0, 0)),
+                            (e.ABS_MT_TRACKING_ID, AbsInfo(0, 0, 65535, 0, 0, 0)),
+                            (e.ABS_MT_POSITION_X, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_MT_POSITION_Y, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                        ],
+                    },
+                    name="test touchscreen",
+                    input_props=[e.INPUT_PROP_DIRECT],
+                )
+                tracking = 0
+
+
+                def at(x, y):
+                    """The display's pixel `x`, `y` in the screen's units."""
+                    return round(x * RANGE / WIDTH), round(y * RANGE / HEIGHT)
+
+
+                def report(x, y):
+                    x, y = at(x, y)
+                    screen.write(e.EV_ABS, e.ABS_MT_POSITION_X, x)
+                    screen.write(e.EV_ABS, e.ABS_MT_POSITION_Y, y)
+                    screen.write(e.EV_ABS, e.ABS_X, x)
+                    screen.write(e.EV_ABS, e.ABS_Y, y)
+                    screen.syn()
+                    time.sleep(0.012)
+
+
+                def drag(x, y, dx, dy, steps):
+                    """One finger down at `x`, `y`, through `dx`, `dy`, then up."""
+                    global tracking
+                    tracking += 1
+                    screen.write(e.EV_ABS, e.ABS_MT_SLOT, 0)
+                    screen.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, tracking)
+                    screen.write(e.EV_KEY, e.BTN_TOUCH, 1)
+                    report(x, y)
+                    for step in range(1, steps + 1):
+                        report(x + dx * step / steps, y + dy * step / steps)
+                    screen.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, -1)
+                    screen.write(e.EV_KEY, e.BTN_TOUCH, 0)
+                    screen.syn()
+                    time.sleep(0.2)
+
+
+                os.mkfifo("/run/input")
+                # A writer of its own, never written to, so the reader never
+                # sees end of file between the test's writers: alone, it closed
+                # and reopened after each, and a writer that opened in that gap
+                # got EPIPE. The reader stays read-only text, which hands each
+                # line over as it arrives.
+                os.open("/run/input", os.O_RDWR | os.O_NONBLOCK)
+                while True:
+                    with open("/run/input") as commands:
+                        for command in commands:
+                            match command.split():
+                                case ["tap", x, y]:
+                                    drag(int(x), int(y), 0, 0, 0)
+                                case ["drag", x, y, dx, dy]:
+                                    drag(int(x), int(y), int(dx), int(dy), 20)
+              '';
+            };
+            fonts.enableDefaultPackages = true;
+            environment.systemPackages = [ pkgs.curl ];
+          };
+          testScript = ''
+            import datetime as dt
+
+            NAME = "touchscreen-probe-5"
+            WAIT = dt.timedelta(seconds=300)
+            CLIENT = (
+                "su alice -c 'XDG_RUNTIME_DIR=/run/user/1000 "
+                "WAYLAND_DISPLAY=$(basename $(ls /run/user/1000/wayland-[0-9] | head -1)) "
+                "${testClient}/bin/domicile-test-client --trace --title touch' "
+                ">/tmp/client.log 2>&1 &"
+            )
+
+
+            def say(command):
+                machine.succeed(f"echo '{command}' >/run/input")
+
+
+            def traced(pattern):
+                """Whether the client's trace has a line matching `pattern`."""
+                return machine.execute(f"grep -qE '{pattern}' /tmp/client.log")[0] == 0
+
+
+            def downs():
+                return int(machine.succeed(
+                    "grep -cE 'wl_touch@[0-9]+\\.down\\(' /tmp/client.log || true").strip())
+
+
+            def a_window_is_up():
+                machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+                machine.succeed(CLIENT)
+                # Sized, so the shell has placed it: Manganese tiles the
+                # first window over the monitor, 20 pixels in from its sides.
+                machine.wait_until_succeeds(
+                    "grep -qE 'configure\\([1-9]' /tmp/client.log", timeout=WAIT)
+
+
+            def a_finger_reaches_the_window_as_touch():
+                # Tried until one lands: the engine binds the screen to its
+                # display once the compositor has sent the displays.
+                def landed(_):
+                    say("drag 600 400 60 40")
+                    return traced(r"wl_touch@[0-9]+\.up\(")
+
+                retry(landed, timeout=dt.timedelta(seconds=60))
+                assert traced(r"wl_touch@[0-9]+\.down\("), "no touch down"
+                assert traced(r"wl_touch@[0-9]+\.touch_motion\("), "the finger never moved"
+                assert traced(r"wl_touch@[0-9]+\.touch_frame\(\)"), "no touch frame"
+                assert not traced(r"wl_pointer@[0-9]+\.button\("), "the finger was a click too"
+
+
+            def a_finger_along_the_edge_is_the_windows():
+                # Lands in the left edge's band, over the window past the
+                # gap, and goes down along the edge: withheld, then replayed.
+                before = downs()
+                say("drag 30 300 0 200")
+                retry(lambda _: downs() > before, timeout=dt.timedelta(seconds=10))
+
+
+            def resumed():
+                return int(machine.succeed(
+                    "grep -cE '\\.suspended\\(false\\)' /tmp/client.log || true").strip())
+
+
+            def a_finger_in_from_the_edge_is_the_shells():
+                # An empty workspace 2 hides the window. In from the left edge
+                # is the workspace before, which shows it again, and the
+                # window never has the finger: `workspace prev_on_output`
+                # needs a workspace to step to, as sway's does.
+                machine.send_key("meta_l-2")
+                retry(lambda _: traced(r"\.suspended\(true\)"), timeout=dt.timedelta(seconds=30))
+                before, shown = downs(), resumed()
+                say("drag 4 400 300 0")
+                try:
+                    retry(lambda _: resumed() > shown, timeout=dt.timedelta(seconds=10))
+                except Exception:
+                    raise AssertionError("the swipe did not change the workspace")
+                assert downs() == before, "the window had the shell's finger"
+
+
+            machine.wait_for_unit("multi-user.target")
+            # PROBE (draft branch, not to merge): one cold boot; pass if the
+            # window is sized, else dump what the desk did, every line tagged.
+            machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+            machine.succeed(CLIENT)
+            sized = machine.execute("for i in $(seq 120); do grep -qE 'configure\\([1-9]' /tmp/client.log && exit 0; sleep 1; done; exit 1")[0] == 0
+            if sized:
+                print(f"PROBE {NAME} sized")
+            else:
+                for command in [
+                    "grep -E 'domicile: (widget|compositor) ' /tmp/domicile.log | cut -c1-400",
+                    "grep -E 'domicile_compositor' /tmp/domicile.log | grep -vE 'system_request|system_response|activity|spawn' | head -30 | cut -c1-220",
+                    "grep -E '^\\[' /tmp/domicile.log | grep -E 'domicile' | grep -vE 'evdev|libinput|dbus' | head -25 | cut -c1-220",
+                    "grep -c 'chrome -> host' /tmp/domicile.log",
+                    "tail -6 /tmp/client.log | cut -c1-160",
+                ]:
+                    print(f"PROBE {NAME} $ {command[:60]}")
+                    for line in machine.execute(f"{command} 2>&1")[1].splitlines():
+                        print(f"PROBE {NAME}: {line}")
+                raise AssertionError(f"PROBE {NAME} unsized")
+            try:
+                a_window_is_up()
+                a_finger_reaches_the_window_as_touch()
+                a_finger_along_the_edge_is_the_windows()
+                a_finger_in_from_the_edge_is_the_shells()
+            except Exception:
+                machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
+                # The runner keeps only the tail of this output, so the
+                # compositor and engine lines come last.
+                for command in [
+                    "grep -E 'wl_(pointer|touch)@' /tmp/client.log | tail -10 | cut -c1-160 || true",
+                    "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -4 | cut -c1-200 || true",
+                    "grep -E 'chrome -> host' /tmp/domicile.log | grep -v activity | tail -6 | cut -c1-200 || true",
+                    "grep -iE 'pointers|touchscreens bound' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E 'suspended' /tmp/client.log | tail -4 | cut -c1-160 || true",
+                    "grep -iE 'gesture|workspace' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E '^\\[' /tmp/domicile.log | grep -iE 'touch|finger|evdev' | tail -12 | cut -c1-200 || true",
+                    # Whole, last: a page whose resize is never acked, and
+                    # what holds it. The cut lines above lose the reason.
+                    "grep -E 'domicile: (widget|compositor) ' /tmp/domicile.log | tail -8 || true",
+                ]:
+                    print(f"$ {command}")
+                    print(machine.execute(f"{command} 2>&1")[1])
+                raise
+          '';
+        };
+
+        touchscreen-probe-6 = pkgs.testers.runNixOSTest {
+          name = "touchscreen-probe-6";
+          nodes.machine = {
+            imports = [ self.nixosModules.domicile ];
+            programs.domicile.enable = true;
+            virtualisation = {
+              memorySize = 4096;
+              cores = 2;
+              # No EDID, so the head is named by its connector, `Virtual-1`,
+              # as the config binds it.
+              qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800,edid=off" ];
+            };
+            users.users.alice = {
+              isNormalUser = true;
+              uid = 1000;
+              extraGroups = [ "domicile" "video" "input" ];
+            };
+            services.getty.autologinUser = "alice";
+            environment.loginShellInit =
+              let
+                config = pkgs.writeText "domicile.json" (builtins.toJSON {
+                  input.pointers = [ { device = "test touchscreen"; display = "Virtual-1"; } ];
+                });
+              in
+              ''
+                if [ "$(tty)" = /dev/tty1 ]; then
+                  mkdir -p ~/.config/domicile
+                  cp ${config} ~/.config/domicile/domicile.json
+                  export DOMICILE_ENGINE_ARGS="--remote-debugging-port=9222 --log-level=0 --vmodule=*evdev*=1,*domicile*=1,*/domicile/*=1"
+                  export RUST_LOG=domicile_compositor=trace
+                  exec ${self.packages.${system}.manganese}/bin/manganese >/tmp/domicile.log 2>&1
+                fi
+              '';
+            # A multitouch screen the engine takes for a touchscreen. The test
+            # writes `tap X Y` or `drag X Y DX DY`, in the display's pixels, a
+            # command per line to `/run/input`.
+            hardware.uinput.enable = true;
+            systemd.services.test-input = {
+              wantedBy = [ "multi-user.target" ];
+              before = [ "getty@tty1.service" ];
+              serviceConfig.ExecStart = pkgs.writers.writePython3 "test-input"
+                { libraries = [ pkgs.python3Packages.evdev ]; } ''
+                import os
+                import time
+
+                from evdev import AbsInfo, UInput, ecodes as e
+
+                # The display, 1280 by 800, in 4096 units a side.
+                WIDTH, HEIGHT, RANGE = 1280, 800, 4095
+                screen = UInput(
+                    {
+                        e.EV_KEY: [e.BTN_TOUCH],
+                        e.EV_ABS: [
+                            (e.ABS_X, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_Y, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_MT_SLOT, AbsInfo(0, 0, 9, 0, 0, 0)),
+                            (e.ABS_MT_TRACKING_ID, AbsInfo(0, 0, 65535, 0, 0, 0)),
+                            (e.ABS_MT_POSITION_X, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                            (e.ABS_MT_POSITION_Y, AbsInfo(0, 0, RANGE, 0, 0, 0)),
+                        ],
+                    },
+                    name="test touchscreen",
+                    input_props=[e.INPUT_PROP_DIRECT],
+                )
+                tracking = 0
+
+
+                def at(x, y):
+                    """The display's pixel `x`, `y` in the screen's units."""
+                    return round(x * RANGE / WIDTH), round(y * RANGE / HEIGHT)
+
+
+                def report(x, y):
+                    x, y = at(x, y)
+                    screen.write(e.EV_ABS, e.ABS_MT_POSITION_X, x)
+                    screen.write(e.EV_ABS, e.ABS_MT_POSITION_Y, y)
+                    screen.write(e.EV_ABS, e.ABS_X, x)
+                    screen.write(e.EV_ABS, e.ABS_Y, y)
+                    screen.syn()
+                    time.sleep(0.012)
+
+
+                def drag(x, y, dx, dy, steps):
+                    """One finger down at `x`, `y`, through `dx`, `dy`, then up."""
+                    global tracking
+                    tracking += 1
+                    screen.write(e.EV_ABS, e.ABS_MT_SLOT, 0)
+                    screen.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, tracking)
+                    screen.write(e.EV_KEY, e.BTN_TOUCH, 1)
+                    report(x, y)
+                    for step in range(1, steps + 1):
+                        report(x + dx * step / steps, y + dy * step / steps)
+                    screen.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, -1)
+                    screen.write(e.EV_KEY, e.BTN_TOUCH, 0)
+                    screen.syn()
+                    time.sleep(0.2)
+
+
+                os.mkfifo("/run/input")
+                # A writer of its own, never written to, so the reader never
+                # sees end of file between the test's writers: alone, it closed
+                # and reopened after each, and a writer that opened in that gap
+                # got EPIPE. The reader stays read-only text, which hands each
+                # line over as it arrives.
+                os.open("/run/input", os.O_RDWR | os.O_NONBLOCK)
+                while True:
+                    with open("/run/input") as commands:
+                        for command in commands:
+                            match command.split():
+                                case ["tap", x, y]:
+                                    drag(int(x), int(y), 0, 0, 0)
+                                case ["drag", x, y, dx, dy]:
+                                    drag(int(x), int(y), int(dx), int(dy), 20)
+              '';
+            };
+            fonts.enableDefaultPackages = true;
+            environment.systemPackages = [ pkgs.curl ];
+          };
+          testScript = ''
+            import datetime as dt
+
+            NAME = "touchscreen-probe-6"
+            WAIT = dt.timedelta(seconds=300)
+            CLIENT = (
+                "su alice -c 'XDG_RUNTIME_DIR=/run/user/1000 "
+                "WAYLAND_DISPLAY=$(basename $(ls /run/user/1000/wayland-[0-9] | head -1)) "
+                "${testClient}/bin/domicile-test-client --trace --title touch' "
+                ">/tmp/client.log 2>&1 &"
+            )
+
+
+            def say(command):
+                machine.succeed(f"echo '{command}' >/run/input")
+
+
+            def traced(pattern):
+                """Whether the client's trace has a line matching `pattern`."""
+                return machine.execute(f"grep -qE '{pattern}' /tmp/client.log")[0] == 0
+
+
+            def downs():
+                return int(machine.succeed(
+                    "grep -cE 'wl_touch@[0-9]+\\.down\\(' /tmp/client.log || true").strip())
+
+
+            def a_window_is_up():
+                machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+                machine.succeed(CLIENT)
+                # Sized, so the shell has placed it: Manganese tiles the
+                # first window over the monitor, 20 pixels in from its sides.
+                machine.wait_until_succeeds(
+                    "grep -qE 'configure\\([1-9]' /tmp/client.log", timeout=WAIT)
+
+
+            def a_finger_reaches_the_window_as_touch():
+                # Tried until one lands: the engine binds the screen to its
+                # display once the compositor has sent the displays.
+                def landed(_):
+                    say("drag 600 400 60 40")
+                    return traced(r"wl_touch@[0-9]+\.up\(")
+
+                retry(landed, timeout=dt.timedelta(seconds=60))
+                assert traced(r"wl_touch@[0-9]+\.down\("), "no touch down"
+                assert traced(r"wl_touch@[0-9]+\.touch_motion\("), "the finger never moved"
+                assert traced(r"wl_touch@[0-9]+\.touch_frame\(\)"), "no touch frame"
+                assert not traced(r"wl_pointer@[0-9]+\.button\("), "the finger was a click too"
+
+
+            def a_finger_along_the_edge_is_the_windows():
+                # Lands in the left edge's band, over the window past the
+                # gap, and goes down along the edge: withheld, then replayed.
+                before = downs()
+                say("drag 30 300 0 200")
+                retry(lambda _: downs() > before, timeout=dt.timedelta(seconds=10))
+
+
+            def resumed():
+                return int(machine.succeed(
+                    "grep -cE '\\.suspended\\(false\\)' /tmp/client.log || true").strip())
+
+
+            def a_finger_in_from_the_edge_is_the_shells():
+                # An empty workspace 2 hides the window. In from the left edge
+                # is the workspace before, which shows it again, and the
+                # window never has the finger: `workspace prev_on_output`
+                # needs a workspace to step to, as sway's does.
+                machine.send_key("meta_l-2")
+                retry(lambda _: traced(r"\.suspended\(true\)"), timeout=dt.timedelta(seconds=30))
+                before, shown = downs(), resumed()
+                say("drag 4 400 300 0")
+                try:
+                    retry(lambda _: resumed() > shown, timeout=dt.timedelta(seconds=10))
+                except Exception:
+                    raise AssertionError("the swipe did not change the workspace")
+                assert downs() == before, "the window had the shell's finger"
+
+
+            machine.wait_for_unit("multi-user.target")
+            # PROBE (draft branch, not to merge): one cold boot; pass if the
+            # window is sized, else dump what the desk did, every line tagged.
+            machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+            machine.succeed(CLIENT)
+            sized = machine.execute("for i in $(seq 120); do grep -qE 'configure\\([1-9]' /tmp/client.log && exit 0; sleep 1; done; exit 1")[0] == 0
+            if sized:
+                print(f"PROBE {NAME} sized")
+            else:
+                for command in [
+                    "grep -E 'domicile: (widget|compositor) ' /tmp/domicile.log | cut -c1-400",
+                    "grep -E 'domicile_compositor' /tmp/domicile.log | grep -vE 'system_request|system_response|activity|spawn' | head -30 | cut -c1-220",
+                    "grep -E '^\\[' /tmp/domicile.log | grep -E 'domicile' | grep -vE 'evdev|libinput|dbus' | head -25 | cut -c1-220",
+                    "grep -c 'chrome -> host' /tmp/domicile.log",
+                    "tail -6 /tmp/client.log | cut -c1-160",
+                ]:
+                    print(f"PROBE {NAME} $ {command[:60]}")
+                    for line in machine.execute(f"{command} 2>&1")[1].splitlines():
+                        print(f"PROBE {NAME}: {line}")
+                raise AssertionError(f"PROBE {NAME} unsized")
             try:
                 a_window_is_up()
                 a_finger_reaches_the_window_as_touch()

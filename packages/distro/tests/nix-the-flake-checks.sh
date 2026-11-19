@@ -12,4 +12,8 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 require_nix
 cd "$ROOT"
 
-nix flake check --print-build-logs
+# PROBE (draft branch): the runner keeps the tail, so repeat the probe lines last.
+rc=0
+nix flake check --keep-going --print-build-logs 2>&1 | tee /tmp/flake-check.log || rc=$?
+grep -oE 'PROBE .*' /tmp/flake-check.log | grep -v 'print(' | tail -95 || true
+exit "$rc"
