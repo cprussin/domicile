@@ -1477,6 +1477,36 @@ describe("a window's state", () => {
     expect(window.isFullScreenable()).toBe(false);
   });
 
+  it("asks again for fullscreen after the user left it", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://claude.test/");
+    window.setFullScreen(true);
+    shellMade(say, { fullscreen: true });
+    // The user left fullscreen with the shell, not the app. The shell acts
+    // only on a change to what the app wants, so the engine must hear that
+    // the app no longer wants it, or the app's next ask changes nothing.
+    shellMade(say, {});
+
+    window.setFullScreen(true);
+
+    expect(asked(sent).map(({ fullscreen }) => fullscreen)).toEqual([
+      true,
+      false,
+      true,
+    ]);
+  });
+
+  it("asks nothing back of the state a window opens in", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const window = new BrowserWindow({ fullscreen: true });
+    void window.loadURL("https://claude.test/");
+    // The shell's first word, before it acts on the ask.
+    shellMade(say, {});
+
+    expect(asked(sent).map(({ fullscreen }) => fullscreen)).toEqual([true]);
+  });
+
   it("starts the app's next ask from what the shell made the window", () => {
     const { BrowserWindow, say, sent } = setUp();
     const window = new BrowserWindow();

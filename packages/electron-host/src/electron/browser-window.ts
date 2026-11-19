@@ -112,6 +112,12 @@ const NORMAL: WindowState = {
   minimized: false,
 };
 
+/** Whether `a` and `b` are the same state. */
+const sameState = (a: WindowState, b: WindowState) =>
+  a.fullscreen === b.fullscreen &&
+  a.maximized === b.maximized &&
+  a.minimized === b.minimized;
+
 /** What setWindowOpenHandler's handler is told of a page's new window. */
 export type WindowOpenDetails = {
   readonly url: string;
@@ -1420,8 +1426,8 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     #wants: WindowState = NORMAL;
     /** What the shell last made it. */
     #state: WindowState = NORMAL;
-    /** The ask the engine last heard, so it hears each only once: none yet. */
-    #asked = JSON.stringify(NORMAL);
+    /** What the engine holds the app asked, so it hears each only once. */
+    #asked: WindowState = NORMAL;
     #fullScreenable: boolean;
 
     constructor(options: BrowserWindowOptions = {}) {
@@ -1778,10 +1784,16 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     };
 
     readonly #tellWants = () => {
-      const asked = JSON.stringify(this.#wants);
-      if (this.opened && !this.destroyed && asked !== this.#asked) {
-        this.#asked = asked;
-        toEngine({ type: "set_window_state", window: this.id, ...this.#wants });
+      const wants = this.#wants;
+      if (this.opened && !this.destroyed && !sameState(wants, this.#asked)) {
+        this.#asked = wants;
+        toEngine({
+          fullscreen: wants.fullscreen,
+          maximized: wants.maximized,
+          minimized: wants.minimized,
+          type: "set_window_state",
+          window: this.id,
+        });
       }
     };
 
@@ -1789,9 +1801,15 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       const was = this.#state;
       this.#state = state;
       // What the user did, such as leaving fullscreen, is what the app's next
-      // ask starts from.
+      // ask starts from. The engine keeps what was last asked, and the shell
+      // acts only when that changes: a change the user made away from it is
+      // asked back, or the app asking for the same again would do nothing.
+      // The shell's word on a window that hasn't changed, such as the first
+      // before it acts on an ask, leaves the ask be.
       this.#wants = state;
-      this.#asked = JSON.stringify(state);
+      if (!sameState(was, state)) {
+        this.#tellWants();
+      }
       if (was.maximized !== state.maximized) {
         this.emit(state.maximized ? "maximize" : "unmaximize");
       }
