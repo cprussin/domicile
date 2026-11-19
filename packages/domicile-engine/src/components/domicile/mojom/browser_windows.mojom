@@ -130,6 +130,12 @@ struct BrowserWindow {
   // `menu`'s, "x", "y"}, where it goes in CSS pixels from the page's top
   // left; empty for none. Answer it with BrowserWindows.AnswerPopupMenu.
   string popup_menu;
+  // What an Electron app asks this window to be (win.maximize, minimize,
+  // setFullScreen): the shell decides, and says what it made the window with
+  // BrowserWindows.SetWindowState. Each is false for any other window.
+  bool wants_maximized;
+  bool wants_minimized;
+  bool wants_fullscreen;
 };
 
 // What OpenApp does when an app window with its `app_id` is already open.
@@ -202,6 +208,11 @@ interface BrowserWindows {
   // entry. A window that closed meanwhile, or shows none, is an answer that
   // raced it and does nothing. A negative `command` is a bad message.
   AnswerPopupMenu(string id, int32 command);
+
+  // The shell made window `id` maximized, minimized and fullscreen as these
+  // say; its Electron app hears each change. Any other window, or one that
+  // closed meanwhile, does nothing.
+  SetWindowState(string id, bool maximized, bool minimized, bool fullscreen);
 
   // The user answered the message box window `id` shows with button
   // `response`, leaving its checkbox checked or not; its app hears the

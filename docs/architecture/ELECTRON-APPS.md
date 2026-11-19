@@ -194,6 +194,23 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
     out of capture tools' lists. `show()` also focuses it. Manganese takes a
     hidden window off its workspace and puts it on the one on screen when it
     is shown.
+  - **Window state:** `maximize()`, `unmaximize()`, `minimize()`,
+    `restore()`, `setFullScreen()` and `fullscreen: true` send
+    `set_window_state {window, maximized, minimized, fullscreen}`, what the
+    app asks, once the window is open. The engine lists it as the window's
+    `wantsMaximized`, `wantsMinimized` and `wantsFullscreen`; the shell
+    decides, and reports what it made the window with
+    `setBrowserWindowState`, which reaches the app as `window_state` only when
+    it changes. `isMaximized`, `isMinimized`, `isFullScreen` and `isNormal`
+    read the shell's last report, and the host emits `maximize`,
+    `unmaximize`, `minimize`, `restore`, `enter-full-screen` and
+    `leave-full-screen` as it changes. The app's next ask starts from that
+    report, so a window the user took out of fullscreen stays out when the
+    app maximizes it. `setFullScreen` does nothing for a window made with
+    `fullscreenable: false`. Manganese fills the screen with a window whose
+    app asks for fullscreen, as for a fullscreen page, and reports it; its
+    windows tile, so none is maximized or minimized
+    (`browser/useAppWindowState.ts`).
   - **Icon:** an Electron window is listed with its app's desktop id
     (`appId`), and Manganese draws the app's icon from its desktop entry for
     it, in its title bar and in the screenshot and screen cast pickers, over
@@ -611,6 +628,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] every Electron API an app can call: what the host lacks hands the app back with a reason, never a `TypeError` (`electron-apps-start-on-a-tty` in `flake.nix`)
 - [x] engine: a window's own title (`set_title`), hidden windows (`set_hidden`), and the user's close asking the app (`close_asked`); `ipcRenderer` is an EventEmitter (`emit` reaches the preload's own listeners, which Element's preload relies on)
 - [x] `electron-host`: `setTitle`, `hide`, `show`, `showInactive`, `show: false`, and the `close` event for the user's close
+- [x] engine, Manganese and `electron-host`: window state (`set_window_state`, `window_state`): `maximize`, `minimize`, `restore`, `setFullScreen` and the `is*` calls and events, from what the shell makes the window (`guard-electron-window-state.sh`)
 - [x] Manganese: hidden Electron windows off every workspace; app windows drawn with their app's icon
 - [x] engine: `webContents.executeJavaScript` and `mainFrame` (a `WebFrameMain` for the page's one frame), which Claude calls at start: the code runs in the page's main world after any load under way, a promise it gives is awaited, and what it gives comes back as JSON carries it (`execute_javascript` and `javascript_result` in `electron_protocol.h`). A throw rejects with a generic reason; the page's console has the exception
 - [x] engine: the rest of a sandboxed preload's `electron` module (`webFrame`, `webUtils`, `crashReporter`, `nativeImage`), `process.isMainFrame`, and `additionalArguments` in its `process.argv`, without which Claude's preloads expose nothing and claude.ai shows its web layout (`guard-electron-preload.sh`)

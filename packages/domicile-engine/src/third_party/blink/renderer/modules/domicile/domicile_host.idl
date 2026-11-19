@@ -549,6 +549,14 @@
   [CallWith=ScriptState, RaisesException] undefined answerBrowserWindowPopupMenu(
       DOMString id, long command);
 
+  // The shell made browser window `id` maximized, minimized and fullscreen as
+  // these say, whether or not its app asked (DomicileBrowserWindow.
+  // wantsMaximized and the rest). An Electron app's window tells its app of
+  // each change; any other window, or one that closed meanwhile, does
+  // nothing.
+  [CallWith=ScriptState, RaisesException] undefined setBrowserWindowState(
+      DOMString id, boolean maximized, boolean minimized, boolean fullscreen);
+
   // The user answered the message box window `id` shows
   // (DomicileBrowserWindow.messageBox) with button `response`, an index into
   // its `buttons`, leaving its checkbox `checkboxChecked`. Throws a TypeError

@@ -16,6 +16,7 @@
 #include "base/json/json_writer.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/types/expected.h"
@@ -133,6 +134,12 @@ class FakeDesk final : public ElectronDesk {
   }
   void SetHidden(const std::string& id, bool hidden) override {
     calls.push_back(std::string(hidden ? "hide " : "show ") + id);
+  }
+  void SetWindowState(const std::string& id,
+                      ElectronWindowState state) override {
+    calls.push_back(base::StrCat(
+        {"state of ", id, state.maximized ? " max" : "",
+         state.minimized ? " min" : "", state.fullscreen ? " full" : ""}));
   }
   void AskToClose(const std::string& id) override {
     calls.push_back("ask to close " + id);
@@ -613,6 +620,37 @@ TEST_F(ElectronAppTest, AClickOnTheMenuBarReachesTheApp) {
   app_->Listed({});
   sent_.clear();
   page.menu_clicked.Run(8);
+  EXPECT_TRUE(sent_.empty());
+}
+
+TEST_F(ElectronAppTest, AWindowStateGoesToTheDeskAndTheShellsBackToTheApp) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"open_window","window":4,"url":"https://a.test/",)"
+             R"("view":true})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  sent_.clear();
+  desk_.calls.clear();
+
+  app_->Take(R"({"type":"set_window_state","window":3,"maximized":true,)"
+             R"("minimized":false,"fullscreen":true})");
+  app_->Take(R"({"type":"set_window_state","window":4,"maximized":true,)"
+             R"("minimized":false,"fullscreen":false})");
+  page.window_state.Run({.fullscreen = true});
+
+  EXPECT_EQ(desk_.calls, Lines{"state of 10 max full"});
+  EXPECT_EQ(sent_,
+            (Lines{"{\"type\":\"window_refused\",\"why\":\"window 4 is a "
+                   "view, and only a window has a window state\","
+                   "\"window\":4}\n",
+                   "{\"fullscreen\":true,\"maximized\":false,"
+                   "\"minimized\":false,\"type\":\"window_state\","
+                   "\"window\":3}\n"}));
+
+  // A change that raced the window closing says nothing.
+  app_->Listed({});
+  sent_.clear();
+  page.window_state.Run({});
   EXPECT_TRUE(sent_.empty());
 }
 

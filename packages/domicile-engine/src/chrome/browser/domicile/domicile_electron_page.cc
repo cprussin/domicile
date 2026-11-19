@@ -283,6 +283,13 @@ void ElectronPage::MenuClicked(int command) {
   calls_.menu_clicked.Run(command);
 }
 
+void ElectronPage::WindowStateChanged(ElectronWindowState state) {
+  if (state != window_state_) {
+    window_state_ = state;
+    calls_.window_state.Run(state);
+  }
+}
+
 void ElectronPage::CloseAsked() {
   calls_.close_asked.Run();
 }

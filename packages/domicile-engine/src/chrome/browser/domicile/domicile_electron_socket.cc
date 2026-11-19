@@ -157,6 +157,10 @@ class ChromeElectronDesk final : public ElectronDesk {
   void SetHidden(const std::string& id, bool hidden) override {
     SetElectronHidden(id, hidden);
   }
+  void SetWindowState(const std::string& id,
+                      ElectronWindowState state) override {
+    SetElectronWindowState(id, state);
+  }
   void AskToClose(const std::string& id) override {
     AskToCloseBrowserWindow(id);
   }

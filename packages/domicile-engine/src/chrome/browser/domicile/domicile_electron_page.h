@@ -125,6 +125,8 @@ class ElectronPage final : public content::WebContentsObserver,
       base::OnceCallback<void(base::expected<base::Value, std::string>)> done);
   // The user clicked entry `command` of the window's menu bar.
   void MenuClicked(int command);
+  // The shell made the window `state`. The app hears only a change.
+  void WindowStateChanged(ElectronWindowState state);
   // The user asked to close the window: the app decides.
   void CloseAsked();
   // navigationHistory.goToIndex: shows entry `index`, as the app last heard
@@ -248,6 +250,8 @@ class ElectronPage final : public content::WebContentsObserver,
   std::optional<ElectronPageState> state_;
   // Whether the page has the keyboard focus, as Chromium last said.
   bool focused_ = false;
+  // What the shell last made the window; normal until it says otherwise.
+  ElectronWindowState window_state_;
   // The app's searches still running, by Chromium's request ids, with what
   // their replies have said so far.
   base::flat_map<int, ElectronFindResult> finds_;

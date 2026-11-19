@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { EngineRequest } from "../engine";
+import type { EngineRequest, WindowEvent } from "../engine";
 import { createBrowserWindow } from "./browser-window";
 import { setUp } from "./browser-window-fixture";
 import type { MenuEntry } from "./menu";
@@ -1289,5 +1289,129 @@ describe("a window's popup menus", () => {
     expect(() => {
       say({ command: 0, popup: 3, type: "popup_menu_closed", window: 1 });
     }).toThrow("popup menu 3 of window 1, which was not up");
+  });
+});
+
+describe("a window's state", () => {
+  /** The set_window_state requests sent, without the rest. */
+  const asked = (sent: readonly EngineRequest[]) =>
+    sent.filter((request) => request.type === "set_window_state");
+
+  /** The engine's word that the shell made window 1 `state`. */
+  const shellMade = (
+    say: (event: WindowEvent) => void,
+    state: { maximized?: boolean; minimized?: boolean; fullscreen?: boolean },
+  ) => {
+    say({
+      fullscreen: state.fullscreen ?? false,
+      maximized: state.maximized ?? false,
+      minimized: state.minimized ?? false,
+      type: "window_state",
+      window: 1,
+    });
+  };
+
+  it("asks the shell, and reads as the shell says", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://claude.test/");
+
+    window.maximize();
+    window.setFullScreen(true);
+
+    expect(asked(sent)).toEqual([
+      {
+        fullscreen: false,
+        maximized: true,
+        minimized: false,
+        type: "set_window_state",
+        window: 1,
+      },
+      {
+        fullscreen: true,
+        maximized: true,
+        minimized: false,
+        type: "set_window_state",
+        window: 1,
+      },
+    ]);
+    expect([window.isMaximized(), window.isFullScreen()]).toEqual([
+      false,
+      false,
+    ]);
+    shellMade(say, { fullscreen: true });
+    expect([
+      window.isMaximized(),
+      window.isFullScreen(),
+      window.isNormal(),
+    ]).toEqual([false, true, false]);
+  });
+
+  it("tells the app of each change the shell makes", () => {
+    const { BrowserWindow, say } = setUp();
+    const heard: string[] = [];
+    const window = new BrowserWindow();
+    void window.loadURL("https://claude.test/");
+    for (const event of [
+      "maximize",
+      "unmaximize",
+      "minimize",
+      "restore",
+      "enter-full-screen",
+      "leave-full-screen",
+    ]) {
+      window.on(event, () => heard.push(event));
+    }
+
+    shellMade(say, { fullscreen: true, maximized: true });
+    shellMade(say, { fullscreen: true, maximized: true });
+    shellMade(say, { minimized: true });
+    shellMade(say, {});
+
+    expect(heard).toEqual([
+      "maximize",
+      "enter-full-screen",
+      "unmaximize",
+      "minimize",
+      "leave-full-screen",
+      "restore",
+    ]);
+  });
+
+  it("asks once open for a window that starts fullscreen", () => {
+    const { BrowserWindow, sent } = setUp();
+    const window = new BrowserWindow({ fullscreen: true });
+
+    expect(asked(sent)).toEqual([]);
+    void window.loadURL("https://claude.test/");
+    expect(asked(sent)).toMatchObject([{ fullscreen: true, window: 1 }]);
+  });
+
+  it("asks nothing of a window that can't be fullscreen", () => {
+    const { BrowserWindow, sent } = setUp();
+    const window = new BrowserWindow({ fullscreenable: false });
+    void window.loadURL("https://claude.test/");
+
+    window.setFullScreen(true);
+
+    expect(asked(sent)).toEqual([]);
+    expect(window.isFullScreenable()).toBe(false);
+  });
+
+  it("starts the app's next ask from what the shell made the window", () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://claude.test/");
+    window.setFullScreen(true);
+    shellMade(say, { fullscreen: true });
+    // The user took the window out of fullscreen.
+    shellMade(say, {});
+
+    window.maximize();
+
+    expect(asked(sent).at(-1)).toMatchObject({
+      fullscreen: false,
+      maximized: true,
+    });
   });
 });

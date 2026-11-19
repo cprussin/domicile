@@ -642,6 +642,23 @@ fullscreen at once:
 Manganese fills the screen with the window while its page is fullscreen
 (`usePageFullscreen`).
 
+An Electron app can ask for its window's state too (`win.maximize`,
+`minimize`, `setFullScreen`). The shell decides:
+
+- **`wantsMaximized`**, **`wantsMinimized`** and **`wantsFullscreen`** are
+  what the app asks; each is false for any other window, and `change` fires
+  when one changes.
+- **Report what you made the window** with
+  `domicile.browser.setWindowState(id, {maximized, minimized, fullscreen})`,
+  whether or not the app asked, such as when the user takes it out of
+  fullscreen. The app hears each change, and reads `isMaximized()` and the
+  rest from it. Reporting the same state again is fine: the app hears only
+  changes. Any other window ignores it.
+
+Manganese fills the screen with a window whose app wants fullscreen, as for a
+fullscreen page, and reports whether the window fills its screen. Its windows
+tile, so it reports none maximized or minimized (`useAppWindowState`).
+
 ## Picture-in-picture video
 
 A page's `requestPictureInPicture()`, its video controls' button, or the

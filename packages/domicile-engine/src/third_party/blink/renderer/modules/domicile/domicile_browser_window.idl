@@ -114,4 +114,11 @@
   // the page there, and answer it with
   // DomicileHost.answerBrowserWindowPopupMenu.
   readonly attribute DOMString? popupMenu;
+
+  // What an Electron app asks this window to be (win.maximize, minimize,
+  // setFullScreen). The shell decides, and says what it made the window with
+  // DomicileHost.setBrowserWindowState. Each is false for any other window.
+  readonly attribute boolean wantsMaximized;
+  readonly attribute boolean wantsMinimized;
+  readonly attribute boolean wantsFullscreen;
 };

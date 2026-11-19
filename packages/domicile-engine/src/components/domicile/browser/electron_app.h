@@ -76,6 +76,8 @@ struct ElectronPageCalls {
   base::RepeatingCallback<void(ElectronPageState state)> state;
   // A find_in_page search is done.
   base::RepeatingCallback<void(ElectronFindResult result)> found;
+  // The shell made the window `state`; called only when that changes.
+  base::RepeatingCallback<void(ElectronWindowState state)> window_state;
 };
 
 // A window's menu bar, as the desk lists it: the menu's entries as JSON
@@ -307,6 +309,10 @@ class ElectronDesk {
   // Whether the desktop shows window `id`. A hidden window stays open, its
   // page running.
   virtual void SetHidden(const std::string& id, bool hidden) = 0;
+  // The state the app asks for window `id`, listed for the shell, which
+  // decides and says what it did through the page's window_state call.
+  virtual void SetWindowState(const std::string& id,
+                              ElectronWindowState state) = 0;
   // Closes window `id` once its page agrees.
   virtual void AskToClose(const std::string& id) = 0;
   // Closes window `id` without asking.
@@ -502,6 +508,7 @@ class ElectronApp {
   void MenuClicked(ElectronWindow number, int command);
   void CloseAsked(ElectronWindow number);
   void PageStateChanged(ElectronWindow number, ElectronPageState state);
+  void WindowStateChanged(ElectronWindow number, ElectronWindowState state);
   void PageFound(ElectronWindow number, ElectronFindResult result);
   void SetMenuBar(const ElectronSetMenuBar& bar);
   // The desk id of window `number` when it is a window, not a view, or

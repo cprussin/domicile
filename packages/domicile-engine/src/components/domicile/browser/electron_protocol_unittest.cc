@@ -551,6 +551,24 @@ TEST(ElectronProtocolTest, SetTitleAndSetHiddenNameTheirWindow) {
             "\"hidden\" must be true or false");
 }
 
+TEST(ElectronProtocolTest, SetWindowStateKeepsEachStateTheAppAsks) {
+  const auto asked = ParseElectronRequest(
+      R"({"type":"set_window_state","window":4,"maximized":true,)"
+      R"("minimized":false,"fullscreen":true})");
+
+  ASSERT_TRUE(asked.has_value()) << asked.error().why;
+  const auto& set = std::get<ElectronSetWindowState>(*asked);
+  EXPECT_EQ(set.window, 4);
+  EXPECT_EQ(set.state,
+            (ElectronWindowState{
+                .maximized = true, .minimized = false, .fullscreen = true}));
+  EXPECT_EQ(
+      WhyRefused(R"({"type":"set_window_state","window":4,"maximized":true,)"
+                 R"("minimized":false})"),
+      "\"maximized\", \"minimized\" and \"fullscreen\" must each be true or "
+      "false");
+}
+
 TEST(ElectronProtocolTest, SetViewsPlacesEachViewBottomFirst) {
   const auto request = ParseElectronRequest(
       R"({"type":"set_views","window":1,"views":[)"
@@ -810,6 +828,11 @@ TEST(ElectronProtocolTest, EventsAreOneLineEach) {
             "\"type\":\"found_in_page\",\"window\":2}\n");
   EXPECT_EQ(ElectronMenuClicked(7, 12),
             "{\"command\":12,\"type\":\"menu_clicked\",\"window\":7}\n");
+  EXPECT_EQ(
+      ElectronWindowStateChanged(
+          3, {.maximized = false, .minimized = true, .fullscreen = false}),
+      "{\"fullscreen\":false,\"maximized\":false,\"minimized\":true,"
+      "\"type\":\"window_state\",\"window\":3}\n");
   EXPECT_EQ(ElectronPopupMenuClosed(3, 5, 0),
             "{\"command\":0,\"popup\":5,\"type\":\"popup_menu_closed\","
             "\"window\":3}\n");

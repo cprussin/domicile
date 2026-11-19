@@ -35,6 +35,9 @@ describe("browser", () => {
         title: "",
         toplevelId: undefined,
         url: "https://example.com/",
+        wantsFullscreen: false,
+        wantsMaximized: false,
+        wantsMinimized: false,
         width: 0,
         x: 0,
         y: 0,
@@ -85,6 +88,11 @@ describe("browser", () => {
     browser.clickMenu("2", 7);
     browser.answerMessageBox("2", 1, true);
     browser.answerPopupMenu("2", 3);
+    browser.setWindowState("2", {
+      fullscreen: true,
+      maximized: false,
+      minimized: false,
+    });
 
     expect(fake.calls).toStrictEqual([
       ["openBrowserWindow", "https://a.example/", "", ""],
@@ -95,6 +103,7 @@ describe("browser", () => {
       ["clickBrowserWindowMenu", "2", 7],
       ["answerBrowserWindowMessageBox", "2", 1, true],
       ["answerBrowserWindowPopupMenu", "2", 3],
+      ["setBrowserWindowState", "2", false, false, true],
     ]);
   });
 
