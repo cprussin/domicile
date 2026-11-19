@@ -28,6 +28,10 @@ The user guide's [Agents](use/AGENTS.md) page is the short version of this.
 5. **Settings › Agents** lists each agent connected now or remembered, with
    what it reaches and when it was last used. **Stop** ends its sessions;
    **Forget** makes it ask again.
+6. While any agent is in, apps are told to build accessibility trees (AT-SPI's
+   `IsEnabled`), so Qt, Firefox and similar apps can be read as text. It goes
+   back off when the last agent leaves, unless it was on before. An app
+   started before may need a restart.
 
 Agents are refused while the desktop is locked.
 

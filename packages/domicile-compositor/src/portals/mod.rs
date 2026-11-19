@@ -43,6 +43,7 @@ use crate::eis::{Captured, Eis};
 use crate::notifications::NotificationServer;
 
 mod access;
+mod accessibility;
 mod account;
 pub mod agent;
 mod app_chooser;
@@ -188,6 +189,10 @@ impl Portals {
                 None,
                 recording::system_clock(),
                 agent::PATIENCE,
+                agent::Accessibility {
+                    enabled: Box::new(|| true),
+                    enable: Box::new(|_| {}),
+                },
             ),
             backends,
             shots: Shots::none(),
@@ -552,6 +557,7 @@ pub fn serve(
             ),
             recording::system_clock(),
             agent::PATIENCE,
+            accessibility::on_the_session_bus(),
         ),
         backends: backends.clone(),
         shots: shots.clone(),

@@ -56,6 +56,14 @@ pub fn path(state_home: Option<PathBuf>, home: Option<PathBuf>) -> Option<PathBu
         .map(|state| state.join("domicile/agents.json"))
 }
 
+/// Whether apps build accessibility trees: AT-SPI's `IsEnabled`, which Qt,
+/// Firefox and others wait on before they expose anything. The door turns it
+/// on while an agent is in, so the agent can read those apps as text.
+pub struct Accessibility {
+    pub enabled: Box<dyn Fn() -> bool + Send + Sync>,
+    pub enable: Box<dyn Fn(bool) + Send + Sync>,
+}
+
 /// Every agent the desk lets in: those in now, and those remembered.
 pub struct Door {
     queue: Arc<Queue>,
@@ -67,16 +75,22 @@ pub struct Door {
     /// Agents the user stopped since they last answered its dialog: each
     /// asks next time, remembered or not, so a stop holds until they say.
     stopped: Mutex<HashSet<String>>,
+    accessibility: Accessibility,
+    /// Whether the door turned accessibility on, to turn it off once the
+    /// last agent goes. Left alone if the user had it on.
+    turned_on: Mutex<bool>,
 }
 
 impl Door {
     /// Agents asked about through `queue`, given `patience` to answer, and
-    /// remembered at `path`. `clock` times their actions.
+    /// remembered at `path`. `clock` times their actions. `accessibility` is
+    /// on while any is in.
     pub fn new(
         queue: Arc<Queue>,
         path: Option<PathBuf>,
         clock: Clock,
         patience: Duration,
+        accessibility: Accessibility,
     ) -> Arc<Door> {
         Arc::new(Door {
             queue,
@@ -85,6 +99,8 @@ impl Door {
             remembered: Mutex::new(Remembered::load(path)),
             connected: Mutex::new(Vec::new()),
             stopped: Mutex::new(HashSet::new()),
+            accessibility,
+            turned_on: Mutex::new(false),
         })
     }
 
@@ -148,10 +164,13 @@ impl Door {
             move |answer| control.take(answer),
         );
         listed.set(id).expect("a session is listed once");
-        self.connected
-            .lock()
-            .unwrap()
-            .push((id, Arc::clone(&session)));
+        let mut connected = self.connected.lock().unwrap();
+        connected.push((id, Arc::clone(&session)));
+        if connected.len() == 1 && !(self.accessibility.enabled)() {
+            (self.accessibility.enable)(true);
+            *self.turned_on.lock().unwrap() = true;
+        }
+        drop(connected);
         Ok(LetIn {
             reach,
             lease: Box::new(Lease {
@@ -400,11 +419,14 @@ impl AgentLease for Lease {
 
 impl Drop for Lease {
     fn drop(&mut self) {
-        self.door
-            .connected
-            .lock()
-            .unwrap()
-            .retain(|(id, _)| *id != self.id);
+        let mut connected = self.door.connected.lock().unwrap();
+        connected.retain(|(id, _)| *id != self.id);
+        let mut turned_on = self.door.turned_on.lock().unwrap();
+        if connected.is_empty() && *turned_on {
+            (self.door.accessibility.enable)(false);
+            *turned_on = false;
+        }
+        drop((connected, turned_on));
         self.door.queue.end(self.id);
     }
 }
@@ -538,9 +560,27 @@ mod tests {
         door: Arc<Door>,
         queue: Arc<Queue>,
         published: Published,
+        /// Whether apps build accessibility trees, as the door left it.
+        accessible: Arc<AtomicBool>,
+    }
+
+    /// Accessibility that starts `on`, kept in `accessible`.
+    fn accessibility(on: bool, accessible: &Arc<AtomicBool>) -> Accessibility {
+        accessible.store(on, Ordering::SeqCst);
+        let (reads, writes) = (Arc::clone(accessible), Arc::clone(accessible));
+        Accessibility {
+            enabled: Box::new(move || reads.load(Ordering::SeqCst)),
+            enable: Box::new(move |on| writes.store(on, Ordering::SeqCst)),
+        }
     }
 
     fn desk(path: Option<PathBuf>, patience: Duration) -> Desk {
+        desk_accessible(path, patience, false)
+    }
+
+    /// [`desk`], whose apps build accessibility trees already if `on`.
+    fn desk_accessible(path: Option<PathBuf>, patience: Duration, on: bool) -> Desk {
+        let accessible = Arc::new(AtomicBool::new(false));
         let queue = Arc::new(Queue::default());
         let (publish, published) = channel();
         queue.listen(
@@ -551,9 +591,16 @@ mod tests {
             |_| None,
         );
         Desk {
-            door: Door::new(queue.clone(), path, Arc::new(|| 7), patience),
+            door: Door::new(
+                queue.clone(),
+                path,
+                Arc::new(|| 7),
+                patience,
+                accessibility(on, &accessible),
+            ),
             queue,
             published,
+            accessible,
         }
     }
 
@@ -677,6 +724,29 @@ mod tests {
         drop(let_in.lease);
         assert!(sessions(&desk).is_empty());
         assert!(desk.door.known().connected.is_empty());
+    }
+
+    #[test]
+    fn apps_build_accessibility_trees_while_an_agent_is_in() {
+        let desk = desk(None, PATIENCE);
+        let (first, _) = let_in_answering(&desk, vec![], |_| allow(AgentReach::Desk));
+        assert!(desk.accessible.load(Ordering::SeqCst));
+        let (second, _) = let_in_answering(&desk, vec![], |_| allow(AgentReach::Desk));
+        drop(first.expect("let in").lease);
+        assert!(
+            desk.accessible.load(Ordering::SeqCst),
+            "one agent is in still"
+        );
+        drop(second.expect("let in").lease);
+        assert!(!desk.accessible.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn accessibility_the_user_turned_on_stays_on_after_the_agents() {
+        let desk = desk_accessible(None, PATIENCE, true);
+        let (let_in, _) = let_in_answering(&desk, vec![], |_| allow(AgentReach::Desk));
+        drop(let_in.expect("let in").lease);
+        assert!(desk.accessible.load(Ordering::SeqCst));
     }
 
     #[test]

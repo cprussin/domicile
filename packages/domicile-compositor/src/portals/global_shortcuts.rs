@@ -512,6 +512,10 @@ mod tests {
                     None,
                     Arc::new(|| 0),
                     crate::portals::agent::PATIENCE,
+                    crate::portals::agent::Accessibility {
+                        enabled: Box::new(|| true),
+                        enable: Box::new(|_| {}),
+                    },
                 ),
                 backends,
                 shots: crate::portals::Shots::none(),
