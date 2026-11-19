@@ -9,7 +9,7 @@ import { StopIcon } from "@phosphor-icons/react/dist/ssr/Stop";
 import { useEffect, useState } from "react";
 
 import { css } from "../styled-system/css";
-import { flex, hstack } from "../styled-system/patterns";
+import { center, flex, hstack } from "../styled-system/patterns";
 
 /** An agent the user let in. */
 export type Agent = Extract<Capturing, { kind: CapturingKind.Agent }>;
@@ -31,9 +31,10 @@ export type AgentsDesktop = {
 };
 
 /**
- * Top bar agents item: a violet pill per agent in control, such as Claude
- * Code, named as it names itself. Its panel says what it can reach and what
- * it did last, with buttons that change what it reaches and stop it.
+ * Top bar agents item: one violet pill for every agent session in control,
+ * such as Claude Code, named as the agent names itself. Its panel says what
+ * each session can reach and did last, with buttons that change what it
+ * reaches and stop it.
  */
 export const Agents = ({ domicile }: { domicile: AgentsDesktop }) => {
   const [agents, setAgents] = useState<readonly Agent[]>([]);
@@ -49,60 +50,71 @@ export const Agents = ({ domicile }: { domicile: AgentsDesktop }) => {
     return portals.on("change", heard);
   }, [domicile]);
 
+  const [first, ...rest] = agents;
   // Nothing at all when none is in, so the bar closes the item.
-  return agents.length > 0 ? (
-    <span className={pillsStyles}>
-      {agents.map((agent) => (
-        <Pill
-          agent={agent}
-          change={() => {
-            domicile.portals.changeAgent(agent.id);
-          }}
-          key={agent.id}
-          stop={() => {
-            domicile.portals.stopCapturing(agent.id);
-          }}
-        />
-      ))}
-    </span>
-  ) : undefined;
+  return first === undefined ? undefined : (
+    <Pill
+      agents={[first, ...rest]}
+      change={(agent) => {
+        domicile.portals.changeAgent(agent.id);
+      }}
+      stop={(agent) => {
+        domicile.portals.stopCapturing(agent.id);
+      }}
+    />
+  );
 };
 
-/** One agent's pill, and its panel. */
-const Pill = ({
-  agent,
-  change,
-  stop,
-}: {
-  agent: Agent;
-  change: () => void;
-  stop: () => void;
-}) => (
-  <Popover
-    align="center"
-    side="bottom"
-    tone="overPhoto"
-    tooltip={`${agent.agent} can see and use ${reach(agent)}`}
-    trigger={
-      <button className={triggerStyles} type="button">
-        <RobotIcon aria-hidden size={15} weight="bold" />
-        {agent.agent}
-      </button>
-    }
-  >
-    <Panel agent={agent} change={change} stop={stop} />
-  </Popover>
-);
+/** The agent sessions in control, never none. */
+type Sessions = readonly [Agent, ...Agent[]];
 
-const Panel = ({
-  agent,
-  change,
-  stop,
-}: {
-  agent: Agent;
-  change: () => void;
-  stop: () => void;
-}) => {
+type Controls = {
+  change: (agent: Agent) => void;
+  stop: (agent: Agent) => void;
+};
+
+/** The one pill, and its panel. */
+const Pill = ({ agents, change, stop }: Controls & { agents: Sessions }) => {
+  const [first] = agents;
+  const names = new Set(agents.map((agent) => agent.agent));
+  const label = names.size === 1 ? first.agent : "Agents";
+  const several = agents.length > 1 ? sessionsName(agents, names) : undefined;
+  return (
+    <Popover
+      align="center"
+      side="bottom"
+      tone="overPhoto"
+      tooltip={
+        several === undefined
+          ? `${first.agent} can see and use ${reach(first)}`
+          : `${several} are in control`
+      }
+      trigger={
+        <button aria-label={several} className={triggerStyles} type="button">
+          <RobotIcon aria-hidden size={15} weight="bold" />
+          {label}
+          {several !== undefined && (
+            <span className={countStyles}>{agents.length}</span>
+          )}
+        </button>
+      }
+    >
+      {several === undefined ? (
+        <Panel agent={first} change={change} stop={stop} />
+      ) : (
+        <SessionsPanel
+          agents={agents}
+          change={change}
+          stop={stop}
+          title={`${several} are in control`}
+        />
+      )}
+    </Popover>
+  );
+};
+
+/** One session's panel. */
+const Panel = ({ agent, change, stop }: Controls & { agent: Agent }) => {
   const now = useNow();
   return (
     <div className={panelStyles}>
@@ -112,45 +124,114 @@ const Panel = ({
           {`It can see and use ${reach(agent)}.`}
         </span>
       </span>
-      {agent.actions.length > 0 && (
-        <ul aria-label={`What ${agent.agent} did`} className={actionsStyles}>
-          {agent.actions.map((action) => (
-            <li
-              className={actionStyles}
-              key={`${String(action.atMs)}:${action.said}`}
-            >
-              <span className={saidStyles}>{action.said}</span>
-              <time
-                className={whenStyles}
-                dateTime={new Date(action.atMs).toISOString()}
-              >
-                {ago(action.atMs, now)}
-              </time>
-            </li>
-          ))}
-        </ul>
-      )}
+      <Actions agent={agent} now={now} />
+      <Buttons agent={agent} change={change} stop={stop} />
+    </div>
+  );
+};
+
+/** Several sessions' panel: each with its own buttons, then Stop all. */
+const SessionsPanel = ({
+  agents,
+  change,
+  stop,
+  title,
+}: Controls & { agents: Sessions; title: string }) => {
+  const now = useNow();
+  return (
+    <div className={panelStyles}>
+      <strong>{title}</strong>
+      {agents.map((agent) => (
+        <section
+          aria-label={agent.agent}
+          className={sessionStyles}
+          key={agent.id}
+        >
+          <span className={headStyles}>
+            <strong>{agent.agent}</strong>
+            <span className={detailStyles}>
+              {`Can see and use ${reach(agent)}.`}
+            </span>
+          </span>
+          <Actions agent={agent} now={now} />
+          <Buttons agent={agent} change={change} quiet stop={stop} />
+        </section>
+      ))}
       <span className={buttonsStyles}>
         <Button
-          beforeIcon={<SlidersHorizontalIcon aria-hidden />}
-          onClick={change}
-          size="sm"
-          variant="outline"
-        >
-          Change
-        </Button>
-        <Button
           beforeIcon={<StopIcon aria-hidden weight="fill" />}
-          onClick={stop}
+          onClick={() => {
+            for (const agent of agents) {
+              stop(agent);
+            }
+          }}
           size="sm"
           variant="danger"
         >
-          Stop
+          Stop all
         </Button>
       </span>
     </div>
   );
 };
+
+/** What `agent` did last, if anything. */
+const Actions = ({ agent, now }: { agent: Agent; now: number }) =>
+  agent.actions.length > 0 && (
+    <ul aria-label={`What ${agent.agent} did`} className={actionsStyles}>
+      {agent.actions.map((action) => (
+        <li
+          className={actionStyles}
+          key={`${String(action.atMs)}:${action.said}`}
+        >
+          <span className={saidStyles}>{action.said}</span>
+          <time
+            className={whenStyles}
+            dateTime={new Date(action.atMs).toISOString()}
+          >
+            {ago(action.atMs, now)}
+          </time>
+        </li>
+      ))}
+    </ul>
+  );
+
+/** Change and Stop; `quiet` draws Stop without a fill, for one among several. */
+const Buttons = ({
+  agent,
+  change,
+  quiet = false,
+  stop,
+}: Controls & { agent: Agent; quiet?: boolean }) => (
+  <span className={buttonsStyles}>
+    <Button
+      beforeIcon={<SlidersHorizontalIcon aria-hidden />}
+      onClick={() => {
+        change(agent);
+      }}
+      size="sm"
+      variant="outline"
+    >
+      Change
+    </Button>
+    <Button
+      beforeIcon={<StopIcon aria-hidden weight="fill" />}
+      onClick={() => {
+        stop(agent);
+      }}
+      size="sm"
+      variant={quiet ? "dangerGhost" : "danger"}
+    >
+      Stop
+    </Button>
+  </span>
+);
+
+/** Several sessions, named once: "2 Claude Code sessions" or "3 agents". */
+const sessionsName = (agents: Sessions, names: ReadonlySet<string>): string =>
+  names.size === 1
+    ? `${String(agents.length)} ${agents[0].agent} sessions`
+    : `${String(agents.length)} agents`;
 
 const isAgent = (session: Capturing): session is Agent =>
   session.kind === CapturingKind.Agent;
@@ -191,9 +272,6 @@ const useNow = (): number => {
   return now;
 };
 
-// Apart by the bar's own gap between items, so each pill reads as its own.
-const pillsStyles = hstack({ gap: 4 });
-
 // Violet, so it reads apart from the red sharing pill.
 const triggerStyles = hstack({
   _hover: {
@@ -215,6 +293,17 @@ const triggerStyles = hstack({
   whiteSpace: "nowrap",
 });
 
+// How many sessions, on the pill.
+const countStyles = center({
+  backgroundColor: "color-mix(in oklab, currentcolor 24%, transparent)",
+  blockSize: 4,
+  borderRadius: "full",
+  fontSize: "xs",
+  inline: true,
+  minInlineSize: 4,
+  paddingInline: 1,
+});
+
 const panelStyles = flex({
   direction: "column",
   gap: 3,
@@ -224,12 +313,17 @@ const panelStyles = flex({
 
 const headStyles = flex({ direction: "column", gap: 0.5 });
 
-// Side by side, sharing the panel's width.
-const buttonsStyles = css({
-  "& > *": { flex: 1 },
-  display: "flex",
-  gap: 2,
+// A rule above each session, so they read apart.
+const sessionStyles = flex({
+  borderBlockStart:
+    "1px solid color-mix(in oklab, currentcolor 15%, transparent)",
+  direction: "column",
+  gap: 3,
+  paddingBlockStart: 3,
 });
+
+// At the panel's end, sized to their labels.
+const buttonsStyles = hstack({ gap: 2, justifyContent: "flex-end" });
 
 const detailStyles = css({ fontSize: "xs", opacity: 0.75 });
 

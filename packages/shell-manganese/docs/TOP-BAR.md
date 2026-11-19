@@ -435,10 +435,12 @@ export const Shell = runManganese({
 
 ## Agents
 
-- Shown while an agent, such as Claude Code, is in control: a violet pill per
-  agent, named as it names itself. Hovering it says what it can reach.
-- Click says what it can see and use and what it did last, with **Change**
-  and **Stop** buttons.
+- Shown while an agent, such as Claude Code, is in control: one violet pill
+  for every session, named as the agent names itself, or "Agents" when the
+  sessions are different agents. With several sessions it shows a count.
+- Hovering one session's pill says what it can reach.
+- Click says what each session can see and use and what it did last, with
+  **Change** and **Stop** buttons, and **Stop all** when there are several.
 - See [AGENTS.md](../../../docs/AGENTS.md).
 
 ## Keep awake

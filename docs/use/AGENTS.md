@@ -38,9 +38,10 @@ Cancel to keep it out.
 
 ## While it works
 
-A violet pill with the agent's name sits in the bar. Click it to see what it
-can reach and what it did last, **Change** to give it more or less, or
-**Stop** to end it.
+A violet pill with the agent's name sits in the bar. With several sessions it
+shows how many, and reads "Agents" when they're different agents. Click it to
+see what each can reach and what it did last, **Change** to give it more or
+less, or **Stop** to end it. **Stop all** ends every session.
 
 **Settings › Agents** lists every agent connected or remembered. **Stop** ends
 it, **Forget** makes it ask again, and **Sign out** makes an agent on the web

@@ -19,9 +19,11 @@ The user guide's [Agents](use/AGENTS.md) page is the short version of this.
    - **Remember for Claude Code**, shown with the entire desktop, lets it in
      from then on without asking.
    - Cancel, or a minute without an answer, refuses it.
-3. While it's in, a violet pill with its name sits in the bar. Click it to see
-   what it can reach and what it did last, **Change** to give it more or less,
-   and **Stop** to end it. Canceling a change keeps what it has.
+3. While it's in, a violet pill with its name sits in the bar. Every session
+   shares the one pill, which counts them when there are several and reads
+   "Agents" when they're different agents. Click it to see what each can reach
+   and did last, **Change** to give it more or less, and **Stop** to end it.
+   **Stop all** ends every session. Canceling a change keeps what it has.
 4. An agent you cancel or stop is refused from then on, until you ask it to
    try again: its `ask_to_use_desktop` tool, or its next session, asks again.
    After a stop it asks even when it is remembered.
