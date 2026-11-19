@@ -16,6 +16,7 @@ import type {
 import type { IncomingRequest, ProtocolRequest } from "./electron/protocol";
 import type { RegisteredScheme } from "./electron/schemes";
 import type {
+  CookieChanged,
   SessionCallMessage,
   SessionResult,
 } from "./electron/session-calls";
@@ -309,6 +310,62 @@ const engineEvent = z.discriminatedUnion("type", [
     type: z.literal("found_in_page"),
     window: z.number(),
   }),
+  // A context menu the user asked for over a page: Electron's context-menu.
+  z.object({
+    alt_text: z.string(),
+    dictionary_suggestions: z.array(z.string()),
+    edit_flags: z.object({
+      can_copy: z.boolean(),
+      can_cut: z.boolean(),
+      can_delete: z.boolean(),
+      can_edit_richly: z.boolean(),
+      can_paste: z.boolean(),
+      can_redo: z.boolean(),
+      can_select_all: z.boolean(),
+      can_undo: z.boolean(),
+    }),
+    frame_charset: z.string(),
+    frame_url: z.string(),
+    has_image_contents: z.boolean(),
+    is_editable: z.boolean(),
+    link_text: z.string(),
+    link_url: z.string(),
+    media_flags: z.object({
+      can_loop: z.boolean(),
+      can_print: z.boolean(),
+      can_rotate: z.boolean(),
+      can_save: z.boolean(),
+      can_show_picture_in_picture: z.boolean(),
+      can_toggle_controls: z.boolean(),
+      has_audio: z.boolean(),
+      in_error: z.boolean(),
+      is_controls_visible: z.boolean(),
+      is_looping: z.boolean(),
+      is_muted: z.boolean(),
+      is_paused: z.boolean(),
+      is_showing_picture_in_picture: z.boolean(),
+    }),
+    media_type: z.enum([
+      "none",
+      "image",
+      "audio",
+      "video",
+      "canvas",
+      "file",
+      "plugin",
+    ]),
+    misspelled_word: z.string(),
+    page_url: z.string(),
+    selection_text: z.string(),
+    spellcheck_enabled: z.boolean(),
+    src_url: z.string(),
+    suggested_filename: z.string(),
+    title_text: z.string(),
+    type: z.literal("context_menu"),
+    window: z.number(),
+    x: z.number(),
+    y: z.number(),
+  }),
   z.object({
     args: z.array(z.unknown()),
     channel: z.string(),
@@ -435,6 +492,24 @@ const engineEvent = z.discriminatedUnion("type", [
     type: z.literal("session_result"),
   }),
   z.object({
+    cause: z.string(),
+    cookie: z.object({
+      domain: z.string(),
+      expirationDate: z.number().exactOptional(),
+      hostOnly: z.boolean(),
+      httpOnly: z.boolean(),
+      name: z.string(),
+      path: z.string(),
+      sameSite: z.string(),
+      secure: z.boolean(),
+      session: z.boolean(),
+      value: z.string(),
+    }),
+    removed: z.boolean(),
+    session: z.string(),
+    type: z.literal("cookie_changed"),
+  }),
+  z.object({
     ask: z.number(),
     media_types: z.array(z.string()).optional(),
     permission: z.string(),
@@ -484,6 +559,8 @@ export type Engine = {
     webRequest: [request: IncomingWebRequest];
     /** The engine's answer to a session call. */
     sessionResult: [result: SessionResult];
+    /** A change to the cookies of a session the app watches. */
+    cookieChanged: [change: CookieChanged];
     /** A page's permission request, for its session's handler. */
     permissionRequest: [request: IncomingPermissionRequest];
   }>;
@@ -545,6 +622,8 @@ export const connectEngine = (
             ? { call, result, type: "session_result" }
             : { call, error, type: "session_result" },
         );
+      } else if (parsed.data.type === "cookie_changed") {
+        events.emit("cookieChanged", parsed.data);
       } else if (parsed.data.type === "permission_request") {
         events.emit("permissionRequest", parsed.data);
       } else if ("window" in parsed.data) {

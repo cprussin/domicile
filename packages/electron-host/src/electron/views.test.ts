@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { EngineRequest } from "../engine";
-import { setUp } from "./browser-window-fixture";
+import { contextMenuAt, setUp } from "./browser-window-fixture";
 
 /** Loads `url` in `page`, whose load a test may cut short by closing it. */
 const load = (
@@ -275,6 +275,21 @@ describe("WebContentsView", () => {
     say({ args: [], channel: "ping", type: "ipc_message", window: view.id });
 
     expect(heard).toEqual([view.webContents]);
+  });
+
+  it("hears a context menu over its own page, as its webContents", () => {
+    const { say, WebContentsView } = setUp();
+    const view = new WebContentsView();
+    const heard: unknown[] = [];
+    view.webContents.on(
+      "context-menu",
+      (_event: unknown, params: { selectionText: string }) =>
+        heard.push(params.selectionText),
+    );
+
+    say({ ...contextMenuAt(view.id), selection_text: "cat" });
+
+    expect(heard).toEqual(["cat"]);
   });
 
   it("finds its page's webContents by the engine's number", () => {

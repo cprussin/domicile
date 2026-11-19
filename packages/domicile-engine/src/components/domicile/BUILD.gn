@@ -610,7 +610,10 @@ source_set("context_menu") {
     "browser/context_menu.h",
   ]
 
-  public_deps = [ "//components/domicile/mojom" ]
+  public_deps = [
+    ":electron_protocol",
+    "//components/domicile/mojom",
+  ]
 
   deps = [
     "//base",

@@ -76,6 +76,9 @@ struct ElectronPageCalls {
   base::RepeatingCallback<void(ElectronPageState state)> state;
   // A find_in_page search is done.
   base::RepeatingCallback<void(ElectronFindResult result)> found;
+  // The user asked for a context menu over the page, which the app draws if
+  // it wants one, as the engine draws none.
+  base::RepeatingCallback<void(ElectronContextMenu menu)> context_menu;
   // The shell made the window `state`; called only when that changes.
   base::RepeatingCallback<void(ElectronWindowState state)> window_state;
 };
@@ -220,6 +223,13 @@ class ElectronSession {
   bool handles_permissions_ = false;
   std::string user_agent_;
   base::WeakPtrFactory<ElectronSession> weak_factory_{this};
+};
+
+// A watch on a session's cookies, which ElectronDesk::WatchCookies starts.
+// Destroying it ends the watch.
+class ElectronCookieWatch {
+ public:
+  virtual ~ElectronCookieWatch() = default;
 };
 
 // What an Electron app's windows are on the desk: app windows, named by the
@@ -369,6 +379,12 @@ class ElectronDesk {
   // Writes the cookies to disk.
   virtual void FlushCookies(const WebViewPartition& partition,
                             base::OnceClosure done) = 0;
+  // Calls `changed` with each change to the cookies until the watch is
+  // destroyed.
+  virtual std::unique_ptr<ElectronCookieWatch> WatchCookies(
+      const WebViewPartition& partition,
+      base::RepeatingCallback<void(const ElectronCookieChange& change)>
+          changed) = 0;
   virtual void ClearStorage(const WebViewPartition& partition,
                             const ElectronClearStorage& clear,
                             base::OnceClosure done) = 0;
@@ -462,6 +478,9 @@ class ElectronApp {
   void RunSessionCall(ElectronSessionCall call);
   void SessionCallDone(int call,
                        base::expected<base::Value, std::string> result);
+  // A change to the cookies of session `session`, which the app watches.
+  void CookieChanged(const std::string& session,
+                     const ElectronCookieChange& change);
   void StartFetch(const std::string& session,
                   ElectronFetch fetch,
                   std::unique_ptr<ElectronResponder> responder);
@@ -510,6 +529,7 @@ class ElectronApp {
   void PageStateChanged(ElectronWindow number, ElectronPageState state);
   void WindowStateChanged(ElectronWindow number, ElectronWindowState state);
   void PageFound(ElectronWindow number, ElectronFindResult result);
+  void PageContextMenu(ElectronWindow number, ElectronContextMenu menu);
   void SetMenuBar(const ElectronSetMenuBar& bar);
   // The desk id of window `number` when it is a window, not a view, or
   // nothing after refusing `what` of a view.
@@ -546,6 +566,8 @@ class ElectronApp {
   int next_invoke_ = 1;
   // The app's sessions, by Electron partition, "" its own.
   std::map<std::string, std::unique_ptr<ElectronSession>> sessions_;
+  // The sessions whose cookies the app watches (cookies_watch), by partition.
+  std::map<std::string, std::unique_ptr<ElectronCookieWatch>> cookie_watches_;
   // The pages' protocol requests waiting on the app, by number.
   std::map<int, Pending> fetches_;
   int next_fetch_ = 1;

@@ -1099,6 +1099,8 @@ base::expected<ElectronSessionMethod, std::string> SessionMethodIn(
     return RemoveCookieIn(request);
   } else if (method == "cookies_flush") {
     return ElectronFlushCookies{};
+  } else if (method == "cookies_watch") {
+    return ElectronWatchCookies{};
   } else if (method == "clear_storage_data") {
     return ClearStorageIn(request);
   } else if (method == "clear_cache") {
@@ -1593,6 +1595,17 @@ base::DictValue ElectronCookieValue(const ElectronCookie& cookie) {
   return value;
 }
 
+std::string ElectronCookieChanged(std::string_view session,
+                                  const ElectronCookieChange& change) {
+  base::DictValue event;
+  event.Set("type", "cookie_changed");
+  event.Set("session", session);
+  event.Set("cookie", ElectronCookieValue(change.cookie));
+  event.Set("cause", change.cause);
+  event.Set("removed", change.removed);
+  return Line(std::move(event));
+}
+
 std::string ElectronReady(const std::vector<ElectronScheme>& schemes,
                           const ElectronEngineInfo& engine) {
   base::ListValue registered;
@@ -1681,6 +1694,63 @@ std::string ElectronFoundInPage(ElectronWindow window,
                              .Set("y", result.y)
                              .Set("width", result.width)
                              .Set("height", result.height));
+  return Line(std::move(event));
+}
+
+std::string ElectronContextMenuAsked(ElectronWindow window,
+                                     const ElectronContextMenu& menu) {
+  base::DictValue event = Event("context_menu", window);
+  event.Set("x", menu.x);
+  event.Set("y", menu.y);
+  event.Set("link_url", menu.link_url);
+  event.Set("link_text", menu.link_text);
+  event.Set("page_url", menu.page_url);
+  event.Set("frame_url", menu.frame_url);
+  event.Set("src_url", menu.src_url);
+  event.Set("media_type", menu.media_type);
+  event.Set("has_image_contents", menu.has_image_contents);
+  event.Set("is_editable", menu.is_editable);
+  event.Set("selection_text", menu.selection_text);
+  event.Set("title_text", menu.title_text);
+  event.Set("alt_text", menu.alt_text);
+  event.Set("suggested_filename", menu.suggested_filename);
+  event.Set("misspelled_word", menu.misspelled_word);
+  base::ListValue suggestions;
+  for (const std::string& suggestion : menu.dictionary_suggestions) {
+    suggestions.Append(suggestion);
+  }
+  event.Set("dictionary_suggestions", std::move(suggestions));
+  event.Set("spellcheck_enabled", menu.spellcheck_enabled);
+  event.Set("frame_charset", menu.frame_charset);
+  const ElectronContextMenu::EditFlags& edit = menu.edit_flags;
+  event.Set("edit_flags", base::DictValue()
+                              .Set("can_undo", edit.can_undo)
+                              .Set("can_redo", edit.can_redo)
+                              .Set("can_cut", edit.can_cut)
+                              .Set("can_copy", edit.can_copy)
+                              .Set("can_paste", edit.can_paste)
+                              .Set("can_delete", edit.can_delete)
+                              .Set("can_select_all", edit.can_select_all)
+                              .Set("can_edit_richly", edit.can_edit_richly));
+  const ElectronContextMenu::MediaFlags& media = menu.media_flags;
+  event.Set(
+      "media_flags",
+      base::DictValue()
+          .Set("in_error", media.in_error)
+          .Set("is_paused", media.is_paused)
+          .Set("is_muted", media.is_muted)
+          .Set("has_audio", media.has_audio)
+          .Set("is_looping", media.is_looping)
+          .Set("is_controls_visible", media.is_controls_visible)
+          .Set("can_toggle_controls", media.can_toggle_controls)
+          .Set("can_print", media.can_print)
+          .Set("can_save", media.can_save)
+          .Set("can_show_picture_in_picture",
+               media.can_show_picture_in_picture)
+          .Set("is_showing_picture_in_picture",
+               media.is_showing_picture_in_picture)
+          .Set("can_rotate", media.can_rotate)
+          .Set("can_loop", media.can_loop));
   return Line(std::move(event));
 }
 

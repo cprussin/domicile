@@ -826,6 +826,34 @@ TEST(ElectronProtocolTest, EventsAreOneLineEach) {
             "{\"active_match_ordinal\":1,\"matches\":3,\"request\":4,"
             "\"selection\":{\"height\":8,\"width\":7,\"x\":5,\"y\":6},"
             "\"type\":\"found_in_page\",\"window\":2}\n");
+  EXPECT_EQ(
+      ElectronContextMenuAsked(
+          2, ElectronContextMenu{
+                 .x = 10,
+                 .y = 20,
+                 .page_url = "https://a.test/",
+                 .is_editable = true,
+                 .misspelled_word = "teh",
+                 .dictionary_suggestions = {"the", "ten"},
+                 .spellcheck_enabled = true,
+                 .edit_flags = {.can_paste = true, .can_select_all = true},
+                 .media_flags = {.can_save = true}}),
+      "{\"alt_text\":\"\",\"dictionary_suggestions\":[\"the\",\"ten\"],"
+      "\"edit_flags\":{\"can_copy\":false,\"can_cut\":false,"
+      "\"can_delete\":false,\"can_edit_richly\":false,\"can_paste\":true,"
+      "\"can_redo\":false,\"can_select_all\":true,\"can_undo\":false},"
+      "\"frame_charset\":\"\",\"frame_url\":\"\",\"has_image_contents\":false,"
+      "\"is_editable\":true,\"link_text\":\"\",\"link_url\":\"\","
+      "\"media_flags\":{\"can_loop\":false,\"can_print\":false,"
+      "\"can_rotate\":false,\"can_save\":true,"
+      "\"can_show_picture_in_picture\":false,\"can_toggle_controls\":false,"
+      "\"has_audio\":false,\"in_error\":false,\"is_controls_visible\":false,"
+      "\"is_looping\":false,\"is_muted\":false,\"is_paused\":false,"
+      "\"is_showing_picture_in_picture\":false},\"media_type\":\"none\","
+      "\"misspelled_word\":\"teh\",\"page_url\":\"https://a.test/\","
+      "\"selection_text\":\"\",\"spellcheck_enabled\":true,\"src_url\":\"\","
+      "\"suggested_filename\":\"\",\"title_text\":\"\",\"type\":\"context_menu\","
+      "\"window\":2,\"x\":10,\"y\":20}\n");
   EXPECT_EQ(ElectronMenuClicked(7, 12),
             "{\"command\":12,\"type\":\"menu_clicked\",\"window\":7}\n");
   EXPECT_EQ(
@@ -833,6 +861,16 @@ TEST(ElectronProtocolTest, EventsAreOneLineEach) {
           3, {.maximized = false, .minimized = true, .fullscreen = false}),
       "{\"fullscreen\":false,\"maximized\":false,\"minimized\":true,"
       "\"type\":\"window_state\",\"window\":3}\n");
+  EXPECT_EQ(ElectronCookieChanged("persist:x", {.cookie = {.name = "lc",
+                                                           .value = "1",
+                                                           .domain = ".a.test",
+                                                           .path = "/"},
+                                                .cause = "inserted"}),
+            "{\"cause\":\"inserted\",\"cookie\":{\"domain\":\".a.test\","
+            "\"hostOnly\":false,\"httpOnly\":false,\"name\":\"lc\","
+            "\"path\":\"/\",\"sameSite\":\"unspecified\",\"secure\":false,"
+            "\"session\":true,\"value\":\"1\"},\"removed\":false,"
+            "\"session\":\"persist:x\",\"type\":\"cookie_changed\"}\n");
   EXPECT_EQ(ElectronPopupMenuClosed(3, 5, 0),
             "{\"command\":0,\"popup\":5,\"type\":\"popup_menu_closed\","
             "\"window\":3}\n");
@@ -1361,7 +1399,8 @@ TEST(ElectronProtocolTest, ASessionCallClearsStorageAndSetsTheUserAgent) {
   for (const auto& [method, expected] :
        {std::pair<std::string, ElectronSessionMethod>{"clear_cache",
                                                       ElectronClearCache{}},
-        {"cookies_flush", ElectronFlushCookies{}}}) {
+        {"cookies_flush", ElectronFlushCookies{}},
+        {"cookies_watch", ElectronWatchCookies{}}}) {
     const auto call = ParseElectronRequest(base::StrCat(
         {R"({"type":"session_call","call":9,"session":"","method":")", method,
          R"("})"}));

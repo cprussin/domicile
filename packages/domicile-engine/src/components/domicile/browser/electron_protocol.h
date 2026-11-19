@@ -161,6 +161,12 @@ namespace domicile {
 //    "minimized":false,"fullscreen":true}
 //                                          (what the shell made the window,
 //                                           each time that changes)
+//   {"type":"cookie_changed","session":"","cookie":{...},
+//    "cause":"inserted","removed":false}
+//                                          (session.cookies' `changed`, for
+//                                           a session whose cookies the app
+//                                           watches: session_call
+//                                           cookies_watch)
 //   {"type":"page_state","window":1,
 //    "entries":[{"url":"https://a/","title":"A"}],
 //    "index":0,"loading":false,"focused":true,"pid":1234,"crashed":false}
@@ -175,6 +181,19 @@ namespace domicile {
 //    "selection":{"x":0,"y":0,"width":10,"height":10}}
 //                                          (find_in_page's last answer, as
 //                                           Electron's found-in-page)
+//   {"type":"context_menu","window":1,"x":10,"y":20,"link_url":"",
+//    "link_text":"","page_url":"https://a/","frame_url":"","src_url":"",
+//    "media_type":"none","has_image_contents":false,"is_editable":true,
+//    "selection_text":"","title_text":"","alt_text":"",
+//    "suggested_filename":"","misspelled_word":"teh",
+//    "dictionary_suggestions":["the"],"spellcheck_enabled":true,
+//    "frame_charset":"UTF-8","edit_flags":{"can_undo":false,...},
+//    "media_flags":{"in_error":false,...}}
+//                                          (the user asked for a context
+//                                           menu over the page, at x, y in
+//                                           its CSS pixels: Electron's
+//                                           context-menu. The engine draws
+//                                           none, as Electron draws none)
 //   {"type":"ipc_message","window":1,"channel":"c","args":[...]}
 //                                          (ipcRenderer.send)
 //   {"type":"ipc_invoke","window":1,"invoke":3,"channel":"c","args":[...]}
@@ -481,6 +500,65 @@ struct ElectronFindResult {
 
   friend bool operator==(const ElectronFindResult&,
                          const ElectronFindResult&) = default;
+};
+
+// The context menu the user asked for over a page, as Electron's
+// webContents `context-menu` params: where, in the page's CSS pixels, and
+// what was under the click.
+struct ElectronContextMenu {
+  int x = 0;
+  int y = 0;
+  std::string link_url;
+  std::string link_text;
+  std::string page_url;
+  std::string frame_url;
+  std::string src_url;
+  // none, image, audio, video, canvas, file or plugin.
+  std::string media_type = "none";
+  bool has_image_contents = false;
+  bool is_editable = false;
+  std::string selection_text;
+  std::string title_text;
+  std::string alt_text;
+  std::string suggested_filename;
+  std::string misspelled_word;
+  std::vector<std::string> dictionary_suggestions;
+  bool spellcheck_enabled = false;
+  std::string frame_charset;
+  // Electron's editFlags.
+  struct EditFlags {
+    bool can_undo = false;
+    bool can_redo = false;
+    bool can_cut = false;
+    bool can_copy = false;
+    bool can_paste = false;
+    bool can_delete = false;
+    bool can_select_all = false;
+    bool can_edit_richly = false;
+
+    friend bool operator==(const EditFlags&, const EditFlags&) = default;
+  } edit_flags;
+  // Electron's mediaFlags.
+  struct MediaFlags {
+    bool in_error = false;
+    bool is_paused = false;
+    bool is_muted = false;
+    bool has_audio = false;
+    bool is_looping = false;
+    bool is_controls_visible = false;
+    bool can_toggle_controls = false;
+    bool can_print = false;
+    bool can_save = false;
+    bool can_show_picture_in_picture = false;
+    bool is_showing_picture_in_picture = false;
+    bool can_rotate = false;
+    bool can_loop = false;
+
+    friend bool operator==(const MediaFlags&, const MediaFlags&) = default;
+  } media_flags;
+
+  friend bool operator==(const ElectronContextMenu&,
+                         const ElectronContextMenu&) = default;
 };
 
 // What an app's webContents knows of its page, sent whenever it changes.
@@ -861,6 +939,12 @@ struct ElectronFlushCookies {
   friend bool operator==(const ElectronFlushCookies&,
                          const ElectronFlushCookies&) = default;
 };
+// Report each change to the session's cookies from now on, as cookie_changed
+// events, for session.cookies' `changed`. Watching twice is watching once.
+struct ElectronWatchCookies {
+  friend bool operator==(const ElectronWatchCookies&,
+                         const ElectronWatchCookies&) = default;
+};
 // session.clearStorageData: `storages` (Electron's names; none is all) of
 // `origin` (none is every origin).
 struct ElectronClearStorage {
@@ -885,6 +969,7 @@ using ElectronSessionMethod = std::variant<ElectronGetCookies,
                                            ElectronSetCookie,
                                            ElectronRemoveCookie,
                                            ElectronFlushCookies,
+                                           ElectronWatchCookies,
                                            ElectronClearStorage,
                                            ElectronClearCache,
                                            ElectronSetUserAgent>;
@@ -983,6 +1068,19 @@ std::string ElectronSessionResult(
     const base::expected<base::Value, std::string>& result);
 // `cookie` as cookies.get gives it.
 base::DictValue ElectronCookieValue(const ElectronCookie& cookie);
+// A change to a cookie of session `session`, as session.cookies' `changed`
+// says it: `cause` is Electron's ("inserted", "explicit", "overwrite", ...),
+// and `removed` whether the change took the cookie away.
+struct ElectronCookieChange {
+  ElectronCookie cookie;
+  std::string cause;
+  bool removed = false;
+
+  friend bool operator==(const ElectronCookieChange&,
+                         const ElectronCookieChange&) = default;
+};
+std::string ElectronCookieChanged(std::string_view session,
+                                  const ElectronCookieChange& change);
 
 std::string ElectronRefused(std::string_view why);
 std::string ElectronWindowOpened(ElectronWindow window);
@@ -999,6 +1097,9 @@ std::string ElectronPageStateChanged(ElectronWindow window,
 // A find_in_page search in `window`'s page is done.
 std::string ElectronFoundInPage(ElectronWindow window,
                                 const ElectronFindResult& result);
+// The user asked for a context menu over `window`'s page.
+std::string ElectronContextMenuAsked(ElectronWindow window,
+                                     const ElectronContextMenu& menu);
 // The size, in CSS pixels, the shell gave window or view `window`'s page.
 std::string ElectronWindowResized(ElectronWindow window, int width, int height);
 // The user clicked entry `command` of `window`'s menu bar.
