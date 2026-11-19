@@ -19,16 +19,18 @@ fail() {
   FAILED=$((FAILED + 1))
 }
 deleted() { # what, tag
-  grep -qxF "gh release delete $2 --repo $REPO --cleanup-tag --yes" "$WORK/log" &&
-    ok "$1" || fail "$1" "$2 was not deleted: $(cat "$WORK/log")"
+  grep -qxF "DELETE repos/$REPO/releases/id-$2" "$WORK/log" &&
+    grep -qxF "DELETE repos/$REPO/git/refs/tags/$2" "$WORK/log" &&
+    ok "$1" || fail "$1" "$2 and its tag were not deleted: $(cat "$WORK/log")"
 }
 kept() { # what, tag
-  grep -q "release delete $2 " "$WORK/log" &&
+  grep -q "/id-$2\$\|/tags/$2\$" "$WORK/log" &&
     fail "$1" "$2 was deleted" || ok "$1"
 }
 
 # A `gh` answering from files.
-#   $GH/releases           `<tag>\t<created>` lines of the pruned repository
+#   $GH/releases           `id-<tag>\t<tag>\t<created>\t<draft>` lines of the
+#                          pruned repository
 #   $GH/release-tags       the `release-*` refs
 #   $GH/pulls              open pull requests' head commits
 #   $GH/pin-<ref>          both engine-*.nix files at <ref>, `/` as `_`
@@ -38,7 +40,7 @@ cat >"$WORK/bin/gh" <<'FAKE'
 #!/usr/bin/env bash
 url="${!#}"
 case "$*" in
-  ("release delete "*) echo "gh $*" >>"$GH_LOG" ;;
+  ("api -X DELETE "*) echo "DELETE $4" >>"$GH_LOG" ;;
   (*"/git/matching-refs/tags/release-"*) cat "$GH/release-tags" ;;
   (*"/pulls?state=open"*) cat "$GH/pulls" ;;
   (*"/contents/"*)
@@ -78,9 +80,11 @@ pin abc123 engine-s-pr
   for tag in engine-s-main engine-official-s-stable engine-official-s-release \
     engine-s-pr engine-s-old packages-latest engine-nightly engine-official-nightly \
     engine-v1.0.0 domicile@1.0.0; do
-    printf '%s\t2026-11-01T00:00:00Z\n' "$tag"
+    printf 'id-%s\t%s\t2026-11-01T00:00:00Z\tfalse\n' "$tag" "$tag"
   done
-  printf '%s\t2026-11-15T00:00:00Z\n' engine-s-recent
+  printf 'id-%s\t%s\t2026-11-15T00:00:00Z\tfalse\n' engine-s-recent engine-s-recent
+  # Two drafts under one tag name, which has no tag.
+  printf 'id-%s\t%s\t2026-10-01T00:00:00Z\ttrue\n' draft-a engine-s-draft draft-b engine-s-draft
 } >"$GH/releases"
 if out="$(prune "$REPO" 7)"; then ok "the prune succeeds"; else fail "the prune succeeds" "$out"; fi
 deleted "an old unpinned engine is deleted" engine-s-old
@@ -109,6 +113,14 @@ for tag in engine-s-main engine-official-s-stable engine-official-s-release engi
 done
 kept "a pushed engine tag is kept" engine-v1.0.0
 kept "a release that is not a build is never touched" domicile@1.0.0
+
+echo "drafts are deleted one by one, and have no tag to delete"
+for id in draft-a draft-b; do
+  grep -qxF "DELETE repos/$REPO/releases/id-$id" "$WORK/log" &&
+    ok "draft $id is deleted" || fail "draft $id is deleted" "$(cat "$WORK/log")"
+done
+grep -q "tags/engine-s-draft" "$WORK/log" &&
+  fail "no tag is deleted for a draft" "$(cat "$WORK/log")" || ok "no tag is deleted for a draft"
 
 echo "a pin that cannot be read stops the prune before it deletes anything"
 rm "$GH/pin-stable"

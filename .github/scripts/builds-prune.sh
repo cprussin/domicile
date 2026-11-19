@@ -57,9 +57,9 @@ printf '  %s\n' $pinned
 
 # Listed in full before anything is deleted, since deleting shifts the pages.
 gh api --paginate "repos/$REPO/releases?per_page=100" \
-  --jq '.[] | [.tag_name, .created_at] | @tsv' >"$work/releases"
+  --jq '.[] | [.id, .tag_name, .created_at, .draft] | @tsv' >"$work/releases"
 cutoff=$((NOW - KEEP_DAYS * 86400))
-while IFS=$'\t' read -r tag created; do
+while IFS=$'\t' read -r id tag created draft; do
   case "$tag" in
     (engine-v*) continue ;;
     (packages-latest | engine-nightly | engine-official-nightly)
@@ -74,5 +74,7 @@ while IFS=$'\t' read -r tag created; do
   fi
   [ "$(date -u -d "$created" +%s)" -lt "$cutoff" ] || continue
   echo "deleting $tag, published $created"
-  gh release delete "$tag" --repo "$REPO" --cleanup-tag --yes
+  # By id: drafts can share a tag name, and have no tag to delete.
+  gh api -X DELETE "repos/$REPO/releases/$id"
+  [ "$draft" = true ] || gh api -X DELETE "repos/$REPO/git/refs/tags/$tag"
 done <"$work/releases"
