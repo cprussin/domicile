@@ -12,63 +12,65 @@ _Unreleased_
 
 ![Element on the engine, its menu bar drawn by the shell](media/release-electron.png)
 
-Listed Electron apps run on the desktop's engine. Their windows, views, menu bars and message boxes reach your shell to lay out and draw. A page that asks for Node.js (`nodeIntegration`, or a preload that isn't sandboxed) gets it, in a renderer of its own. The app's `setWindowOpenHandler` decides on its pages' new windows, so a link it hands to `shell.openExternal` opens in the user's browser.
+Electron apps run on the desktop's engine, and your shell draws their windows, menu bars and message boxes. List the apps in `electron.apps`.
 
-[Design](architecture/ELECTRON-APPS.md) · [`electron.apps`](SHELL-CONFIG.md) · [#2091](https://github.com/cprussin/domicile/pull/2091) · [#2151](https://github.com/cprussin/domicile/pull/2151) · [#2161](https://github.com/cprussin/domicile/pull/2161) · [#2172](https://github.com/cprussin/domicile/pull/2172) · [#2201](https://github.com/cprussin/domicile/pull/2201) · [#2256](https://github.com/cprussin/domicile/pull/2256)
+[Menu bars](SHELL-BROWSER-WINDOWS.md#menu-bars) · [Message boxes](SHELL-BROWSER-WINDOWS.md#message-boxes) · [`electron.apps`](SHELL-CONFIG.md#other-sections) · [Design](architecture/ELECTRON-APPS.md) · [#2091](https://github.com/cprussin/domicile/pull/2091) · [#2151](https://github.com/cprussin/domicile/pull/2151) · [#2161](https://github.com/cprussin/domicile/pull/2161) · [#2172](https://github.com/cprussin/domicile/pull/2172) · [#2201](https://github.com/cprussin/domicile/pull/2201) · [#2256](https://github.com/cprussin/domicile/pull/2256)
+
+### Let agents drive the desktop
+
+Claude Code and other agents can see and use the desktop, with the user's permission: `claude mcp add domicile -- domicile mcp`. Agents on the web, like claude.ai, connect with `agents.web`. Your shell draws the permission prompt with `<PortalDialogs />`.
+
+[Agents](AGENTS.md) · [`domicile mcp`](CLI.md#domicile-mcp) · [`agents.web`](SHELL-CONFIG.md#agents) · [Dialogs and portals](PORTALS.md#agents)
 
 ### Browser profiles
 
 ![A page in the Work profile, and its profile menu](media/release-profiles.png)
 
-Profiles with their own sign-ins, site data and extensions; each site opens in its own. `browser.profiles`, `profileFor()`, `reopen()`, `pin()`, `<webview profile>`.
+Profiles with their own sign-ins, site data and extensions, each opening the sites it's given: `browser.profiles` and `<webview profile>`.
 
-[Design](architecture/BROWSER-PROFILES.md) · [#2212](https://github.com/cprussin/domicile/pull/2212) · [#2213](https://github.com/cprussin/domicile/pull/2213) · [#2216](https://github.com/cprussin/domicile/pull/2216) · [#2230](https://github.com/cprussin/domicile/pull/2230)
-
-### Let agents drive the desktop
-
-`domicile mcp` serves the Model Context Protocol, so Claude Code and other agents can list windows, open things, run shell commands, see the desk and click and type on it, and read and drive browser windows and accessible native apps by their accessibility trees, even while they are hidden: `claude mcp add domicile -- domicile mcp`. `domicile pointer`, `scroll`, `key`, `type`, `screenshot --fit`, `devtools`, `accessibility` and `accessibility-act` do the same from scripts. Private windows are never driven. The first tool call asks the user to let the agent in, with the entire desktop or only the windows they check, and a running agent is listed as a capturing session they can change or stop, after which its `ask_to_use_desktop` tool asks again: `PortalKind.Agent`, `PortalAnswer.Agent` and `CapturingKind.Agent` in the SDK, drawn by `<PortalDialogs />`. An agent let reach the whole desktop can be remembered, and Settings › Agents lists them to stop or forget: `domicile list-agents`, `stop-agent` and `forget-agent`. `domicile mcp --http` serves agents that connect to a URL, signed in with OAuth and a code the desktop shows, and `domicile mcp --relay` serves agents on the web, such as claude.ai, through a relay that can't read what they say; `agents.web`, Connect from the web in Settings, runs it. An Electron app's views are listed with its window (`views` in `list-windows --json`) and read and driven like its page (`devtools --view`), and `screenshot --fit --area` zooms into part of the desk.
-
-[`domicile mcp`](CLI.md#domicile-mcp) · [Agents](AGENTS.md)
+[Browser profiles](SHELL-BROWSER-WINDOWS.md#browser-profiles) · [Design](architecture/BROWSER-PROFILES.md) · [#2212](https://github.com/cprussin/domicile/pull/2212) · [#2213](https://github.com/cprussin/domicile/pull/2213) · [#2216](https://github.com/cprussin/domicile/pull/2216) · [#2230](https://github.com/cprussin/domicile/pull/2230)
 
 ### Script the desktop
 
-`domicile status`, `subscribe`, `list-windows`, `list-displays`, `list-inputs`, `list-bindings`, `configure-display`, `sleep-displays`, `lock`, `focus-window` and more, like `swaymsg`.
+`domicile` commands query and control the desktop from scripts, like `swaymsg`.
 
 [The domicile command](CLI.md) · [#2121](https://github.com/cprussin/domicile/pull/2121) · [#2122](https://github.com/cprussin/domicile/pull/2122) · [#2134](https://github.com/cprussin/domicile/pull/2134) · [#2136](https://github.com/cprussin/domicile/pull/2136)
 
 ### Also new
 
-- HDR and 10-bit color: `wp_color_management_v1`, 10-bit and half-float buffers, HDR10 per display, and `Display.hdr`, `peakLuminance`, `sdrWhite`. [Design](architecture/COLOR.md) · [#1974](https://github.com/cprussin/domicile/issues/1974)
-- `<app picture-in-picture>` floats a page's video as a shell window, growing from its `source`. [#2077](https://github.com/cprussin/domicile/pull/2077) · [#2177](https://github.com/cprussin/domicile/pull/2177)
-- `system-network`: saved Wi-Fi networks in `Wifi.saved`, with `setWifiAutoJoin()` and `forgetWifi()`, from NetworkManager or iwd. [#2334](https://github.com/cprussin/domicile/pull/2334)
-- `browser.clickMatch()` and `<webview>.clickMatch()` click a selector's first match in a page. [#2284](https://github.com/cprussin/domicile/pull/2284)
-- `<webview>.history()` for a Back and Forward history menu. [#2251](https://github.com/cprussin/domicile/pull/2251)
-- Pointer lock, confinement and relative motion. [#2054](https://github.com/cprussin/domicile/pull/2054) · [#2057](https://github.com/cprussin/domicile/pull/2057) · [#2123](https://github.com/cprussin/domicile/pull/2123)
-- Input methods in pages, the shell and native windows. [#2059](https://github.com/cprussin/domicile/pull/2059) · [#2062](https://github.com/cprussin/domicile/pull/2062)
-- Shells and app modules are cross-origin isolated, with Web Workers. [#2182](https://github.com/cprussin/domicile/pull/2182) · [#2183](https://github.com/cprussin/domicile/pull/2183)
+- HDR and 10-bit color. [`hdr`](SHELL-CONFIG.md#hdr) · [Design](architecture/COLOR.md) · [#1974](https://github.com/cprussin/domicile/issues/1974)
+- `<app picture-in-picture>` floats a page's video as a shell window. [Picture-in-picture](SHELL-BROWSER-WINDOWS.md#picture-in-picture-video) · [#2077](https://github.com/cprussin/domicile/pull/2077) · [#2177](https://github.com/cprussin/domicile/pull/2177)
+- `system-network`: saved Wi-Fi networks in `Wifi.saved`, with `setWifiAutoJoin()` and `forgetWifi()`, from NetworkManager or iwd. [Libraries](SHELL-SYSTEM-ACCESS.md#libraries) · [#2334](https://github.com/cprussin/domicile/pull/2334)
+- `clickMatch()` clicks a selector's first match in a page. [Browser windows](SHELL-BROWSER-WINDOWS.md) · [#2284](https://github.com/cprussin/domicile/pull/2284)
+- `<webview>.history()` for a Back and Forward history menu. [Browser windows](SHELL-BROWSER-WINDOWS.md) · [#2251](https://github.com/cprussin/domicile/pull/2251)
+- Pointer lock, confinement and relative motion. [Windows](WRITING-A-SHELL.md#windows) · [#2054](https://github.com/cprussin/domicile/pull/2054) · [#2057](https://github.com/cprussin/domicile/pull/2057) · [#2123](https://github.com/cprussin/domicile/pull/2123)
+- Input methods in pages, the shell and native windows. [Design](architecture/TEXT-INPUT.md) · [#2059](https://github.com/cprussin/domicile/pull/2059) · [#2062](https://github.com/cprussin/domicile/pull/2062)
+- Shells and app modules are cross-origin isolated, with Web Workers. [Scripts](SHELL-PACKAGING.md#scripts) · [#2182](https://github.com/cprussin/domicile/pull/2182) · [#2183](https://github.com/cprussin/domicile/pull/2183)
 - CSS `zoom` on `<app>`. [#2072](https://github.com/cprussin/domicile/pull/2072)
-- Modifier-tap bindings and `--inhibited` chords. [#2065](https://github.com/cprussin/domicile/pull/2065) · [#2030](https://github.com/cprussin/domicile/pull/2030)
-- The shell draws "Sign in with" account choosers. [#2086](https://github.com/cprussin/domicile/pull/2086)
-- `windows.bells()`, `toplevelId`, `cursorImage`, minimize and client-side move and resize. [#2025](https://github.com/cprussin/domicile/pull/2025) · [#2026](https://github.com/cprussin/domicile/pull/2026) · [#2049](https://github.com/cprussin/domicile/pull/2049) · [#2052](https://github.com/cprussin/domicile/pull/2052) · [#2074](https://github.com/cprussin/domicile/pull/2074)
-- `session.idleAfter` and `session.idleBeforeBlanking`. [#2073](https://github.com/cprussin/domicile/pull/2073)
-- Config: `terminal`, `input.keyboard.repeat`, display `mode`, `refresh`, `adaptive_sync`. [#2024](https://github.com/cprussin/domicile/pull/2024) · [#2031](https://github.com/cprussin/domicile/pull/2031) · [#2048](https://github.com/cprussin/domicile/pull/2048) · [#2069](https://github.com/cprussin/domicile/pull/2069)
-- `@domicile-desktop/sdk/config-schema`. [#2090](https://github.com/cprussin/domicile/pull/2090)
-- A Nix binary cache for `stable`. [#2217](https://github.com/cprussin/domicile/pull/2217)
+- Modifier-tap bindings and `--inhibited` chords. [Keybindings](WRITING-A-SHELL.md#keybindings) · [#2065](https://github.com/cprussin/domicile/pull/2065) · [#2030](https://github.com/cprussin/domicile/pull/2030)
+- The shell draws "Sign in with" account choosers. ["Sign in with"](SHELL-BROWSER-WINDOWS.md#sign-in-with) · [#2086](https://github.com/cprussin/domicile/pull/2086)
+- `windows.bells()`, `toplevelId`, `cursorImage`, minimize and client-side move and resize. [Windows](WRITING-A-SHELL.md#windows) · [#2025](https://github.com/cprussin/domicile/pull/2025) · [#2026](https://github.com/cprussin/domicile/pull/2026) · [#2049](https://github.com/cprussin/domicile/pull/2049) · [#2052](https://github.com/cprussin/domicile/pull/2052) · [#2074](https://github.com/cprussin/domicile/pull/2074)
+- `session.idleAfter` and `session.idleBeforeBlanking`. [Idle](SHELL-IDLE-AND-LOCK.md#idle) · [#2073](https://github.com/cprussin/domicile/pull/2073)
+- Config: `terminal`, `input.keyboard.repeat`, display `mode`, `refresh`, `adaptive_sync`. [The config](SHELL-CONFIG.md) · [#2024](https://github.com/cprussin/domicile/pull/2024) · [#2031](https://github.com/cprussin/domicile/pull/2031) · [#2048](https://github.com/cprussin/domicile/pull/2048) · [#2069](https://github.com/cprussin/domicile/pull/2069)
+- `@domicile-desktop/sdk/config-schema`. [Types and schema](SHELL-CONFIG.md#types-and-schema) · [#2090](https://github.com/cprussin/domicile/pull/2090)
+- A Nix binary cache for `stable`. [Install](INSTALL.md) · [#2217](https://github.com/cprussin/domicile/pull/2217)
 - Chromium 160. [#2023](https://github.com/cprussin/domicile/pull/2023)
 
 ### Breaking changes
 
-- `extensions.settings.<id>.private` and the SDK's `inPrivate` are gone: a private profile's extensions say what runs there. [#2237](https://github.com/cprussin/domicile/pull/2237)
-- `session.idleWarnings` and `idle.warn_before_seconds` are gone: use `session.idleAfter`. [#2073](https://github.com/cprussin/domicile/pull/2073)
+- `extensions.settings.<id>.private` and the SDK's `inPrivate` are gone: a private profile's extensions say what runs there. [Private browsing](SHELL-BROWSER-WINDOWS.md#private-browsing) · [#2237](https://github.com/cprussin/domicile/pull/2237)
+- `session.idleWarnings` and `idle.warn_before_seconds` are gone: use `session.idleAfter`. [Idle after a time](SHELL-IDLE-AND-LOCK.md#idle-after-a-time) · [#2073](https://github.com/cprussin/domicile/pull/2073)
 
 ### Fixes
 
 - Loud failures: software rendering, a stuck fullscreen page and a checked engine each notify and log. [#2071](https://github.com/cprussin/domicile/pull/2071) · [#2088](https://github.com/cprussin/domicile/pull/2088) · [#2051](https://github.com/cprussin/domicile/pull/2051)
-- `PortalDialogs` animates a dialog out once answered. `AppChooser` takes `open` and `onOpenChangeComplete` to do the same.
+- `PortalDialogs` animates a dialog out once answered. `AppChooser` takes `open` and `onOpenChangeComplete` to do the same. [Dialogs and portals](PORTALS.md)
 - Captures the engine can't take fail at once. [#2184](https://github.com/cprussin/domicile/pull/2184)
 - A renderer that answers the wrong request crashes instead of hanging. [#2215](https://github.com/cprussin/domicile/pull/2215) · [#2248](https://github.com/cprussin/domicile/pull/2248)
 - No re-raster while a window animates; hidden windows don't tick the display. [#2227](https://github.com/cprussin/domicile/pull/2227) · [#2143](https://github.com/cprussin/domicile/pull/2143)
 - A stuck page flip no longer freezes the desktop. [#2043](https://github.com/cprussin/domicile/pull/2043)
+
+Special thanks to: [ploug](https://github.com/ploug) & [mecattaf](https://github.com/mecattaf)
 
 ## 1.2.0
 

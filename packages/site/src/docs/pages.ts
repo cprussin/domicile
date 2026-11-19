@@ -48,6 +48,7 @@ const SECTIONS: readonly DocSection[] = [
       page("windows", "WINDOWS", "Windows and workspaces"),
       page("browser", "BROWSER", "Browsing and web apps"),
       page("electron-apps", "ELECTRON-APPS", "Electron apps"),
+      page("agents", "AGENTS", "Agents"),
       page("launcher", "LAUNCHER", "The launcher"),
       page("top-bar", "TOP-BAR", "The top bar"),
       page("notifications", "NOTIFICATIONS", "Notifications"),

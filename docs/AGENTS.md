@@ -6,6 +6,8 @@ sees it in the bar the whole time it's in, and can stop it.
 
 ## For users
 
+The user guide's [Agents](use/AGENTS.md) page is the short version of this.
+
 1. Add the server to the agent: `claude mcp add domicile -- domicile mcp`.
 2. The first time the agent uses a tool, Domicile asks: **Let Claude Code use
    your desktop?**

@@ -11,41 +11,46 @@ _Unreleased_
 
 ![Element on the desktop's browser, with its menu bar under its tab](../media/release-electron.png)
 
-Slack, Element and Claude run on the desktop's browser instead of their own Chromium, with menus and dialogs in the desktop's style. Apps whose windows use Node.js can run there too. They reach servers on your network and VPN, such as a Matrix homeserver behind WireGuard. Links in them open in your browser, signed in, and Slack's sign-in page gets your password manager. ChatGPT only starts on OpenAI's own Chromium, so it stays there.
+Slack, Element, Claude and other Electron apps run on the desktop's browser, with menus and dialogs in the desktop's style.
 
 [How to turn it on](ELECTRON-APPS.md) · [#2091](https://github.com/cprussin/domicile/pull/2091) · [#2162](https://github.com/cprussin/domicile/pull/2162) · [#2173](https://github.com/cprussin/domicile/pull/2173) · [#2243](https://github.com/cprussin/domicile/pull/2243) · [#2256](https://github.com/cprussin/domicile/pull/2256) · [#2283](https://github.com/cprussin/domicile/pull/2283) · [#2302](https://github.com/cprussin/domicile/pull/2302) · [#2316](https://github.com/cprussin/domicile/pull/2316)
+
+### Let agents use your desktop
+
+Claude Code, claude.ai and other agents can use your desktop, all of it or only the windows you pick. You see each one in the bar while it works, and can stop it at any time.
+
+[How to set it up](AGENTS.md)
 
 ### Browser profiles
 
 ![The profile menu, open from the address bar](../media/release-profiles.png)
 ![Settings' Profiles page](../media/release-profiles-settings.png)
 
-Work and personal, apart: each profile has its own sign-ins and extensions, and opens the sites you give it.
+Keep work and personal apart: each profile has its own sign-ins and extensions, and opens the sites you give it.
 
 [Profiles](BROWSER.md#profiles) · [#2212](https://github.com/cprussin/domicile/pull/2212) · [#2231](https://github.com/cprussin/domicile/pull/2231) · [#2234](https://github.com/cprussin/domicile/pull/2234) · [#2236](https://github.com/cprussin/domicile/pull/2236) · [#2259](https://github.com/cprussin/domicile/pull/2259)
 
 ### Also new
 
-- Let Claude Code and other agents use your desktop, all of it or only the windows you pick. A violet pill in the bar shows the agent while it's in, with what it did last, a Change button and a Stop button. Remember one you trust, and forget it again in Settings. Turn on Connect from the web in Settings › Agents to use your desktop from claude.ai: copy your desktop's address into it as a connector, and enter the code your desktop shows. [Agents](../AGENTS.md)
 - Pop a video out of its page to float it over everything. [#2077](https://github.com/cprussin/domicile/pull/2077) · [#2116](https://github.com/cprussin/domicile/pull/2116) · [#2177](https://github.com/cprussin/domicile/pull/2177)
 - HDR per monitor in Settings, and 10-bit color without banding. [Monitors](MONITORS.md) · [#1974](https://github.com/cprussin/domicile/issues/1974)
-- Press and hold Back or Forward to jump to any page before or after. [#2251](https://github.com/cprussin/domicile/pull/2251)
-- Ctrl+click Back, Forward, a page in their menus or a profile to open it in a new window, as a middle click does.
+- Press and hold Back or Forward to jump to any page before or after. [The address bar](BROWSER.md#the-address-bar) · [#2251](https://github.com/cprussin/domicile/pull/2251)
+- Ctrl+click Back, Forward, a page in their menus or a profile to open it in a new window, as a middle click does. [The address bar](BROWSER.md#the-address-bar)
 - Put your browser profiles in any order and give them any color, in Settings. [Profiles](BROWSER.md#profiles) · [#2263](https://github.com/cprussin/domicile/pull/2263)
-- See your saved Wi-Fi networks in quick settings, in range or not: turn joining automatically on or off, or forget one. [#2334](https://github.com/cprussin/domicile/pull/2334)
-- Quick settings lights Wi-Fi, Wired and Bluetooth while connected. [#2266](https://github.com/cprussin/domicile/pull/2266)
+- See your saved Wi-Fi networks in quick settings, in range or not: turn joining automatically on or off, or forget one. [The top bar](TOP-BAR.md) · [#2334](https://github.com/cprussin/domicile/pull/2334)
+- Quick settings lights Wi-Fi, Wired and Bluetooth while connected. [The top bar](TOP-BAR.md) · [#2266](https://github.com/cprussin/domicile/pull/2266)
 - The tray's menu pins icons and switches extensions. [#2137](https://github.com/cprussin/domicile/pull/2137)
-- Tap Super, or swipe up with four fingers, for the overview. [#2065](https://github.com/cprussin/domicile/pull/2065) · [#2148](https://github.com/cprussin/domicile/pull/2148)
+- Tap Super, or swipe up with four fingers, for the overview. [Overview](WINDOWS.md#overview) · [#2065](https://github.com/cprussin/domicile/pull/2065) · [#2148](https://github.com/cprussin/domicile/pull/2148)
 - Keep one wallpaper instead of a new one every minute: Settings › Shell. [Wallpaper](APPEARANCE.md#wallpaper)
-- The night light fades in and out. [#2181](https://github.com/cprussin/domicile/pull/2181)
-- Meta+W merges side-by-side windows into tabs. [#2093](https://github.com/cprussin/domicile/pull/2093)
-- Extensions can run in private windows. [#2060](https://github.com/cprussin/domicile/pull/2060)
+- The night light fades in and out. [Night light](MONITORS.md#night-light) · [#2181](https://github.com/cprussin/domicile/pull/2181)
+- Meta+W merges side-by-side windows into tabs. [Layout](KEYS.md#layout) · [#2093](https://github.com/cprussin/domicile/pull/2093)
+- Extensions can run in private windows. [Extensions](BROWSER.md#extensions) · [#2060](https://github.com/cprussin/domicile/pull/2060)
 - "Sign in with Google" works. [#2086](https://github.com/cprussin/domicile/pull/2086)
 - Games can lock the pointer. [#2057](https://github.com/cprussin/domicile/pull/2057) · [#2123](https://github.com/cprussin/domicile/pull/2123)
 - Input methods such as fcitx5 and IBus. [#2059](https://github.com/cprussin/domicile/pull/2059) · [#2062](https://github.com/cprussin/domicile/pull/2062)
 - Type `!g` in the launcher to search Google straight away, without other matches. [Launcher](LAUNCHER.md)
 - Terminal apps in the launcher. [#2069](https://github.com/cprussin/domicile/pull/2069)
-- Per-monitor mode, refresh rate and adaptive sync. [#2031](https://github.com/cprussin/domicile/pull/2031) · [#2048](https://github.com/cprussin/domicile/pull/2048)
+- Per-monitor mode, refresh rate and adaptive sync. [Monitors](MONITORS.md) · [#2031](https://github.com/cprussin/domicile/pull/2031) · [#2048](https://github.com/cprussin/domicile/pull/2048)
 - Key repeat settings. [#2024](https://github.com/cprussin/domicile/pull/2024)
 - Firefox animates with the desktop. [#2087](https://github.com/cprussin/domicile/pull/2087) · [#2089](https://github.com/cprussin/domicile/pull/2089)
 - Chromium 160. [#2023](https://github.com/cprussin/domicile/pull/2023)
@@ -54,17 +59,19 @@ Work and personal, apart: each profile has its own sign-ins and extensions, and 
 
 - The desktop takes about 35 MB less memory at rest: the browser keeps one process ready for a new page instead of two.
 - The desktop takes about 35 MB less memory at rest: the browser starts its audio service only when something plays sound or asks for a microphone or camera.
-- Ctrl+C and Escape work when you select an area on screen for a screenshot or a share.
+- Ctrl+C and Escape work when you select an area on screen for a screenshot or a share. [Screenshots](SCREENSHOTS.md)
 - The wallpaper takes less memory on screens smaller than 4K: it downloads each photo only as large as your screens show it.
 - Screenshot, share and other dialogs fade out when you answer them, instead of vanishing.
 - A site's notifications show the site's icon instead of the browser's.
-- A Gmail notification opens its mail beside your inbox, once Gmail has synced it. [#2284](https://github.com/cprussin/domicile/pull/2284)
+- A Gmail notification opens its mail beside your inbox, once Gmail has synced it. [Inboxes](NOTIFICATIONS.md#inboxes) · [#2284](https://github.com/cprussin/domicile/pull/2284)
 - PDFs stay sharp and no longer go blank. [#2038](https://github.com/cprussin/domicile/pull/2038) · [#2080](https://github.com/cprussin/domicile/pull/2080) · [#2100](https://github.com/cprussin/domicile/pull/2100)
 - Smoother windows on heavy pages, adaptive sync monitors and the overview. [#2227](https://github.com/cprussin/domicile/pull/2227) · [#2094](https://github.com/cprussin/domicile/pull/2094) · [#2041](https://github.com/cprussin/domicile/pull/2041)
 - Less battery use while idle. [#2143](https://github.com/cprussin/domicile/pull/2143) · [#2138](https://github.com/cprussin/domicile/pull/2138)
 - DisplayLink docks no longer freeze the desktop. [#2043](https://github.com/cprussin/domicile/pull/2043) · [#2045](https://github.com/cprussin/domicile/pull/2045)
-- The lock screen always gets your typing. [#2039](https://github.com/cprussin/domicile/pull/2039) · [#2140](https://github.com/cprussin/domicile/pull/2140)
-- A notification says so when the desktop can't use your graphics card. [#2071](https://github.com/cprussin/domicile/pull/2071)
+- The lock screen always gets your typing. [Locking and sleep](LOCK-AND-IDLE.md) · [#2039](https://github.com/cprussin/domicile/pull/2039) · [#2140](https://github.com/cprussin/domicile/pull/2140)
+- A notification says so when the desktop can't use your graphics card. [Graphics problems](TROUBLESHOOTING.md#graphics-problems) · [#2071](https://github.com/cprussin/domicile/pull/2071)
+
+Special thanks to: [ploug](https://github.com/ploug) & [mecattaf](https://github.com/mecattaf)
 
 ## 1.2.0
 
