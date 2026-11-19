@@ -190,8 +190,18 @@ fn initialized(params: &Value) -> Value {
         "protocolVersion": version,
         "capabilities": {"tools": {}},
         "serverInfo": {"name": "domicile", "version": env!("CARGO_PKG_VERSION")},
+        "instructions": INSTRUCTIONS,
     })
 }
+
+/// How an agent should use the tools, sent in `initialize`. Reading a window
+/// as text takes fewer steps and tokens than looking at the desk.
+const INSTRUCTIONS: &str = "Read and act on windows as text first: list_windows, then \
+    browser_snapshot or app_snapshot, then the browser_ and app_ tools by ref. To see what \
+    an act changed, snapshot again rather than taking a screenshot. Use screenshot only \
+    for what a tree can't show: images, layout, the shell's own bars and panels, or an \
+    app that doesn't support accessibility. Zoom into an area rather than taking the \
+    whole desk again.";
 
 /// What the client calls itself in `initialize`: its title, else its name.
 fn named(params: &Value) -> String {
@@ -378,12 +388,12 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec![],
         ),
         Tool::Screenshot => (
-            "Take a PNG of every monitor, or of an area of the last screenshot, at most 1280 pixels across. The pointer tools take points in its pixels. To read small text, take an area rather than changing windows or the layout.",
+            "Take a PNG of every monitor, or of an area of the last screenshot, at most 1280 pixels across. The pointer tools take points in its pixels. Slower and larger than browser_snapshot and app_snapshot: use it only for what they can't show. To read small text, take an area rather than changing windows or the layout.",
             json!({"area": {"type": "array", "items": coordinate, "minItems": 4, "maxItems": 4, "description": "[x, y, width, height] of the last screenshot, to zoom into."}}),
             vec![],
         ),
         Tool::Click => (
-            "Click at a point of the last screenshot.",
+            "Click at a point of the last screenshot. In a window with a tree, browser_click or app_click by ref instead.",
             json!({
                 "x": coordinate,
                 "y": coordinate,
@@ -413,7 +423,7 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec!["chord"],
         ),
         Tool::TypeText => (
-            "Type text on the keyboard, where the focus is.",
+            "Type text on the keyboard, where the focus is. In a window with a tree, browser_type or app_set_text instead.",
             json!({"text": {"type": "string"}}),
             vec!["text"],
         ),

@@ -80,6 +80,17 @@ fn initialize_names_the_server_and_offers_tools() {
     assert_eq!(replies[0]["result"]["protocolVersion"], "2025-06-18");
     assert_eq!(replies[0]["result"]["serverInfo"]["name"], "domicile");
     assert!(replies[0]["result"]["capabilities"]["tools"].is_object());
+    // Agents read windows as text first, which is quicker and smaller than
+    // looking at the desk.
+    let instructions = replies[0]["result"]["instructions"].as_str().unwrap();
+    for tool in [
+        "list_windows",
+        "browser_snapshot",
+        "app_snapshot",
+        "screenshot",
+    ] {
+        assert!(instructions.contains(tool), "{instructions}");
+    }
 }
 
 #[test]
