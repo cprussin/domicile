@@ -9,6 +9,7 @@
 #include <string_view>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
 #include "base/types/expected.h"
 #include "base/values.h"
@@ -19,6 +20,7 @@
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace base {
@@ -131,6 +133,14 @@ class ElectronPage final : public content::WebContentsObserver,
   void GoToIndex(int index);
   // navigationHistory.clear: forgets every entry but the one shown.
   void ClearHistory();
+  // webContents.undo and the rest of the Edit menu, at the page's focus.
+  void Edit(ElectronEditCommand command);
+  // webContents.replace and replaceMisspelling.
+  void Replace(const std::string& text, bool misspelling);
+  // webContents.findInPage. Its last answer reaches the app as `found`.
+  void FindInPage(const ElectronFindInPage& find);
+  // webContents.stopFindInPage.
+  void StopFindInPage(ElectronStopFindAction action);
   // Where the user last pressed in the page, with the pointer or a touch, in
   // its widget's pixels from the top left; nothing before the first press.
   // Menu.popup puts a menu there when the app says nowhere.
@@ -167,6 +177,11 @@ class ElectronPage final : public content::WebContentsObserver,
       content::RenderWidgetHost* render_widget_host) override;
   void OnWebContentsLostFocus(
       content::RenderWidgetHost* render_widget_host) override;
+  void DidReceiveFindReply(int request_id,
+                           int number_of_matches,
+                           const gfx::Rect& selection_rect,
+                           int active_match_ordinal,
+                           bool final_update) override;
   void PrimaryMainFrameRenderProcessGone(
       base::TerminationStatus status) override;
 
@@ -233,6 +248,9 @@ class ElectronPage final : public content::WebContentsObserver,
   std::optional<ElectronPageState> state_;
   // Whether the page has the keyboard focus, as Chromium last said.
   bool focused_ = false;
+  // The app's searches still running, by Chromium's request ids, with what
+  // their replies have said so far.
+  base::flat_map<int, ElectronFindResult> finds_;
   // See last_press().
   std::optional<gfx::Point> last_press_;
 

@@ -520,9 +520,7 @@ jobs:
       - name: Publish the release
         if: ${{ needs.build.outputs.build == 'true' }}
         env:
-          # Builds are published in cprussin/domicile-builds, so watchers
-          # of this repository are not notified of each.
-          DOMICILE_BUILDS_TOKEN: ${{ secrets.DOMICILE_BUILDS_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARBALL: ${{ steps.package.outputs.tarball }}
         run: .github/scripts/engine-release-publish.sh "$STAGE" "$TARBALL"
 

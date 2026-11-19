@@ -12,9 +12,8 @@ name: Engine release
 #   is never canceled. See packages/ci/tests/test-engine-release-coalesces.sh.
 # - Yields the compile slot to pull requests: engine-yielding-build.sh pauses
 #   the build while anyone waits and resumes it incrementally after.
-# - Publishes as `engine-official-` in cprussin/domicile-builds, beside
-#   engine.yml's releases, then opens a pull request to pin
-#   `engine-official.nix` (engine-official-repin.sh).
+# - Publishes as `engine-official-`, beside engine.yml's releases, then opens
+#   a pull request to pin `engine-official.nix` (engine-official-repin.sh).
 # - A separate workflow from engine.yml because it needs a different build:
 #   `is_component_build = false` produces something that fits in a tarball;
 #   engine.yml's component build links to hundreds of .so files.
@@ -36,10 +35,10 @@ concurrency:
   group: engine-release-${{ github.ref }}
   cancel-in-progress: false
 
-# The release is DOMICILE_BUILDS_TOKEN's and the pull request that pins it
+# To create the release and upload to it. The pull request that pins it is
 # DOMICILE_WRITEBACK_TOKEN's, not this token's.
 permissions:
-  contents: read
+  contents: write
   # The build posts its progress as a commit status.
   statuses: write
   # The compile slot and the tree pool ask whether a holder's run is over.
@@ -232,9 +231,7 @@ jobs:
 
       - name: Publish
         env:
-          # Builds are published in cprussin/domicile-builds, so watchers
-          # of this repository are not notified of each.
-          DOMICILE_BUILDS_TOKEN: ${{ secrets.DOMICILE_BUILDS_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARBALL: ${{ steps.package.outputs.tarball }}
         run: |
           set -euo pipefail
