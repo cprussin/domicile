@@ -6,6 +6,7 @@ import { Children } from "react";
 import { css, cva } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
+import type { Point } from "../ContextMenu/ContextMenu";
 import type { RowMotion } from "../LeavingRows/LeavingRow";
 import { LeavingRow } from "../LeavingRows/LeavingRow";
 import { newTabClick } from "../new-tab-click";
@@ -67,6 +68,11 @@ type Props = Common &
          * elsewhere, as a link opens in a new tab.
          */
         onPressInNew?: (() => void) | undefined;
+        /**
+         * A right click on the row, where it landed, such as to open the
+         * row's thing's own menu there. The page's menu doesn't show.
+         */
+        onSecondaryPress?: ((at: Point) => void) | undefined;
       }
     | {
         actions?: undefined;
@@ -74,6 +80,7 @@ type Props = Common &
         name?: undefined;
         onPress?: undefined;
         onPressInNew?: undefined;
+        onSecondaryPress?: undefined;
       }
   );
 
@@ -99,6 +106,7 @@ export const ListRow = ({
   name,
   onPress,
   onPressInNew,
+  onSecondaryPress,
   surface = "plain",
 }: Props) => {
   const below = Children.toArray(children).length > 0;
@@ -160,6 +168,14 @@ export const ListRow = ({
             aria-busy={busy === true ? true : undefined}
             aria-label={name}
             className={rowStyles({ pressable: true })}
+            onContextMenu={
+              onSecondaryPress === undefined
+                ? undefined
+                : (event) => {
+                    event.preventDefault();
+                    onSecondaryPress({ x: event.clientX, y: event.clientY });
+                  }
+            }
             type="button"
             {...(onPressInNew === undefined
               ? { onClick: onPress }
@@ -287,8 +303,13 @@ const rowStyles = cva({
 });
 
 // A pressed row's button, and its actions beside it. The button lights alone
-// under the pointer.
-const pressedStyles = flex({ align: "center", minInlineSize: 0 });
+// under the pointer, and shrinks so a long label is cut short instead of
+// pushing the actions out.
+const pressedStyles = flex({
+  "& > button": { flex: 1, minInlineSize: 0 },
+  align: "center",
+  minInlineSize: 0,
+});
 
 // Inset as the row's own end is, so its buttons line up with other rows'.
 const actionsStyles = flex({

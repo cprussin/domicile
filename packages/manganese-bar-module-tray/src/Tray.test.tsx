@@ -3,6 +3,7 @@ import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { Extension } from "@domicile-desktop/sdk/extension";
 import type { TrayItem } from "@domicile-desktop/sdk/tray";
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 
 import { Tray } from "./Tray";
 
@@ -59,6 +60,7 @@ type Move = [readonly string[], string, string];
 
 type TrayProps = {
   domicile?: Domicile;
+  end?: ReactNode;
   onUnpin?: (key: string) => void;
   opened?: { id: string; popup: string; profile: string } | undefined;
   unpinned?: ReadonlySet<string>;
@@ -70,6 +72,7 @@ type TrayProps = {
 
 const renderTray = ({
   domicile = recordingDomicile([]),
+  end = <button type="button">All tray icons</button>,
   extensions = [counter],
   items = [sync],
   onMove = () => undefined,
@@ -81,7 +84,7 @@ const renderTray = ({
   render(
     <Tray
       domicile={domicile}
-      end={<button type="button">All tray icons</button>}
+      end={end}
       extensions={extensions}
       items={items}
       onActivate={() => undefined}
@@ -237,6 +240,29 @@ describe("Tray", () => {
       fireEvent.click(button("Counter"));
 
       expect(clicked).toStrictEqual([counter.id]);
+    });
+
+    it("leaves the menu's button working after a drag", () => {
+      const pressed: string[] = [];
+      renderTray({
+        end: (
+          <button onClick={() => pressed.push("menu")} type="button">
+            All tray icons
+          </button>
+        ),
+      });
+
+      drag("Counter", "Syncthing");
+      fireEvent.pointerUp(window, { pointerId: 1 });
+      fireEvent.click(button("Counter"));
+      fireEvent.pointerDown(button("All tray icons"), {
+        button: 0,
+        pointerId: 1,
+      });
+      fireEvent.pointerUp(window, { pointerId: 1 });
+      fireEvent.click(button("All tray icons"));
+
+      expect(pressed).toStrictEqual(["menu"]);
     });
   });
 });

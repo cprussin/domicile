@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { None, Ok } from "@cprussin/option-result";
+import type { watchMenu } from "@domicile-desktop/sdk/dbusmenu";
+import { MenuEntry } from "@domicile-desktop/sdk/dbusmenu";
 import type { BrowserProfile } from "@domicile-desktop/sdk/desktop/browser";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type {
@@ -6,7 +9,7 @@ import type {
   InstalledExtension,
 } from "@domicile-desktop/sdk/extension";
 import type { TrayItem } from "@domicile-desktop/sdk/tray";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { TrayIconsMenu } from "./TrayIconsMenu";
@@ -21,6 +24,44 @@ const sync: TrayItem = {
   menu: undefined,
   title: "Syncthing",
 };
+
+/** An application whose menu holds one entry, Open. */
+const network: TrayItem = {
+  bus: ":1.42",
+  icon: ICON,
+  id: "network",
+  itemIsMenu: false,
+  menu: "/MenuBar",
+  title: "Network",
+};
+
+/** A `watchMenu` that reports {@link network}'s menu, and records its clicks. */
+const watchingNetwork =
+  (calls: unknown[][]): typeof watchMenu =>
+  (_system, _address, onMenu) => {
+    onMenu(
+      Ok([
+        MenuEntry.Item({
+          enabled: true,
+          icon: undefined,
+          id: 1,
+          image: undefined,
+          label: "Open",
+          mnemonic: undefined,
+          submenu: undefined,
+          toggle: undefined,
+        }),
+      ]),
+    );
+    return {
+      aboutToShow: () => Promise.resolve(Ok("shown")),
+      click: (id) => {
+        calls.push(["menu.click", id]);
+        return Promise.resolve(Ok("clicked"));
+      },
+      stop: () => undefined,
+    };
+  };
 
 const DARK = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const OFF = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -127,8 +168,9 @@ const renderMenu = ({
     <TrayIconsMenu
       domicile={recordingDomicile(calls, refuse)}
       extensions={extensions}
+      icons={() => Promise.resolve(Ok(() => Promise.resolve(Ok(None()))))}
       installed={installed}
-      items={[sync]}
+      items={[sync, network]}
       onActivate={(id) => calls.push(["onActivate", id])}
       onOpen={(popup) => calls.push(["onOpen", popup])}
       onPin={(key) => calls.push(["onPin", key])}
@@ -136,6 +178,7 @@ const renderMenu = ({
       onUnpin={(key) => calls.push(["onUnpin", key])}
       profile={profile}
       unpinned={unpinned}
+      watch={watchingNetwork(calls)}
     />,
   );
 
@@ -190,6 +233,32 @@ describe(TrayIconsMenu, () => {
       ["extensions.activate", DARK],
       ["onOpen", { id: DARK, popup: darkAction.popup, profile: "default" }],
     ]);
+  });
+
+  it("sends an app's right click anywhere on its row, as its icon would", async () => {
+    const calls: unknown[][] = [];
+    renderMenu({ calls });
+    await openMenu();
+
+    await userEvent.pointer({
+      keys: "[MouseRight]",
+      target: screen.getByRole("button", { name: "Syncthing" }),
+    });
+
+    expect(calls).toStrictEqual([["tray.activate", "syncthing", "context"]]);
+  });
+
+  it("opens an app's own menu from its row, and clicks the entry chosen", async () => {
+    const calls: unknown[][] = [];
+    renderMenu({ calls });
+    await openMenu();
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Network" }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "Open" }),
+    );
+
+    expect(calls).toStrictEqual([["menu.click", 1]]);
   });
 
   it("switches an extension off", async () => {

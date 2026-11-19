@@ -113,6 +113,11 @@ export const Tray = ({
           event.stopPropagation();
         }
       }}
+      // Any press starts afresh, the menu's button's too, so a drag
+      // suppresses only its own release's click.
+      onPointerDownCapture={() => {
+        moved.current = false;
+      }}
     >
       {entries.map((entry) => (
         <div
@@ -120,7 +125,6 @@ export const Tray = ({
           key={entry.key}
           onPointerDown={(event) => {
             if (event.button === PRIMARY_BUTTON) {
-              moved.current = false;
               setDragged(entry.key);
             }
           }}

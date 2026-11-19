@@ -9,6 +9,7 @@ import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
 import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { Switch } from "@domicile-desktop/component-library/Switch";
+import type { watchMenu } from "@domicile-desktop/sdk/dbusmenu";
 import type { BrowserProfile } from "@domicile-desktop/sdk/desktop/browser";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type {
@@ -28,6 +29,7 @@ import { useState } from "react";
 
 import { css } from "../styled-system/css";
 import { center } from "../styled-system/patterns";
+import type { MenuIcons } from "./menu-icons";
 import { extensionKey, statusNotifierKey } from "./tray-entry";
 import { useItemMenu } from "./useItemMenu";
 
@@ -60,6 +62,10 @@ type Props = {
   profile: BrowserProfile | undefined;
   /** The keys of the icons kept out of the tray. */
   unpinned: ReadonlySet<string>;
+  /** Injectable so tests can answer for the applications' menus. */
+  watch?: typeof watchMenu | undefined;
+  /** Injectable so tests can answer for the menus' icons. */
+  icons?: MenuIcons | undefined;
 };
 
 /**
@@ -75,6 +81,7 @@ type Props = {
 export const TrayIconsMenu = ({
   domicile,
   extensions,
+  icons,
   installed,
   items,
   onActivate,
@@ -84,6 +91,7 @@ export const TrayIconsMenu = ({
   onUnpin,
   profile,
   unpinned,
+  watch,
 }: Props) => {
   const [open, setOpen] = useState(false);
   const [failure, setFailure] = useState<Failure | undefined>(undefined);
@@ -160,12 +168,14 @@ export const TrayIconsMenu = ({
               {items.map((item) => (
                 <AppRow
                   domicile={domicile}
+                  icons={icons}
                   item={item}
                   key={item.id}
                   onClose={() => {
                     setOpen(false);
                   }}
                   pin={pinOf(statusNotifierKey(item.id), item.title)}
+                  watch={watch}
                 />
               ))}
             </List>
@@ -251,7 +261,7 @@ export const TrayIconsMenu = ({
 /** A request the engine refused: what it was, and the engine's words. */
 type Failure = { detail: string; what: string };
 
-type AppRowProps = {
+type AppRowProps = Pick<Props, "icons" | "watch"> & {
   domicile: Domicile;
   item: TrayItem;
   /** Closes the tray's menu. */
@@ -261,14 +271,27 @@ type AppRowProps = {
 };
 
 /**
- * An application's row. A click is its icon's primary click; the secondary
- * button opens its own menu where it was clicked.
+ * An application's row. A click is its icon's primary click; a right click
+ * anywhere on it opens its own menu there.
  */
-const AppRow = ({ domicile, item, onClose, pin }: AppRowProps) => {
-  const menu = useItemMenu(domicile, item);
+const AppRow = ({
+  domicile,
+  icons,
+  item,
+  onClose,
+  pin,
+  watch,
+}: AppRowProps) => {
+  const menu = useItemMenu(domicile, item, watch, icons);
   return (
     <ListRow
-      actions={pin}
+      // The menu beside the row's button, so its clicks don't bubble into it.
+      actions={
+        <>
+          {pin}
+          {menu.opened}
+        </>
+      }
       icon={
         item.icon === undefined ? (
           <span className={letterStyles}>{item.title.slice(0, 1)}</span>
@@ -276,24 +299,12 @@ const AppRow = ({ domicile, item, onClose, pin }: AppRowProps) => {
           <img alt="" className={iconStyles} src={item.icon} />
         )
       }
-      label={
-        // biome-ignore lint/a11y/noStaticElementInteractions: the secondary click on the row's own button, which holds this
-        // biome-ignore lint/a11y/noNoninteractiveElementInteractions: as above
-        <span
-          onContextMenu={(event) => {
-            event.preventDefault();
-            menu.show({ x: event.clientX, y: event.clientY });
-          }}
-        >
-          {item.title}
-          {menu.opened}
-        </span>
-      }
-      name={item.title}
+      label={item.title}
       onPress={() => {
         onClose();
         domicile.tray.activate(item.id, "primary");
       }}
+      onSecondaryPress={menu.show}
     />
   );
 };

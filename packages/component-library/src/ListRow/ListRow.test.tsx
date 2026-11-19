@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { Button } from "../Button/Button";
@@ -157,6 +157,26 @@ describe(ListRow, () => {
       expect(pressed).toStrictEqual(["pin", "row"]);
     });
 
+    it("cuts a long label short rather than pushing its actions out", () => {
+      render(
+        <List>
+          <ListRow
+            actions={<Button>Pin</Button>}
+            label="An extension whose name runs past the panel's edge"
+            onPress={() => undefined}
+          />
+        </List>,
+      );
+
+      const row = globalThis.getComputedStyle(
+        screen.getByRole("button", {
+          name: "An extension whose name runs past the panel's edge",
+        }),
+      );
+      expect(row.flexGrow).toBe("1");
+      expect(row.minInlineSize).toBe("0rem");
+    });
+
     it("takes a middle click or a Ctrl+click apart from a click", async () => {
       const pressed: string[] = [];
       render(
@@ -182,6 +202,25 @@ describe(ListRow, () => {
       await user.click(row);
 
       expect(pressed).toStrictEqual(["new", "new", "press"]);
+    });
+
+    it("takes a right click where it lands, in place of the page's menu", async () => {
+      const pressed = Promise.withResolvers<{ x: number; y: number }>();
+      render(
+        <List label="Apps">
+          <ListRow
+            label="Syncthing"
+            onPress={() => undefined}
+            onSecondaryPress={pressed.resolve}
+          />
+        </List>,
+      );
+      const row = screen.getByRole("button", { name: "Syncthing" });
+
+      const shown = fireEvent.contextMenu(row, { clientX: 12, clientY: 34 });
+
+      expect(await pressed.promise).toStrictEqual({ x: 12, y: 34 });
+      expect(shown).toBe(false);
     });
 
     it("says it is busy while its request is out", () => {
