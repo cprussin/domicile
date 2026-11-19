@@ -319,7 +319,8 @@ process.resourcesPath without the hello's (ElectronHello, ElectronPage, \
 Preload's app), process.argv without the window's \
 \"arguments\" (ElectronOpenWindow, ElectronPage, Preload's arguments), or \
 process not saying loaded, document-start and document-end (the bootstrap's \
-emitter, ElectronPreload::DidDispatchDOMContentLoadedEvent) -- \
+emitter, ElectronPreload::RunAtDocumentEnd from RunScriptsAtDocumentEnd in \
+patch 0218) -- \
 the app's log has what the preload saw"
   ;;
 *)

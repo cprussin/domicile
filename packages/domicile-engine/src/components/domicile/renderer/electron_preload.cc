@@ -494,14 +494,19 @@ bool ElectronPreload::RunAtDocumentStart(content::RenderFrame* frame) {
   return self->Run(std::move(preload));
 }
 
-void ElectronPreload::DidDispatchDOMContentLoadedEvent() {
-  if (bootstrap_.IsEmpty()) {
+// static
+bool ElectronPreload::RunAtDocumentEnd(content::RenderFrame* frame) {
+  ElectronPreload* self = Get(frame);
+  if (!self || self->bootstrap_.IsEmpty()) {
     // No preload ran in this document, so nothing listens.
-    return;
+    return true;
   }
-  v8::Isolate* isolate = IsolateOf(*render_frame()->GetWebFrame());
+  v8::Isolate* isolate = IsolateOf(*frame->GetWebFrame());
   v8::HandleScope handle_scope(isolate);
-  Call("documentEnd", {});
+  // A listener is the app's script, and may end the frame, this with it.
+  base::WeakPtr<ElectronPreload> alive = self->weak_factory_.GetWeakPtr();
+  self->Call("documentEnd", {});
+  return !!alive;
 }
 
 void ElectronPreload::WillReleaseScriptContext(v8::Local<v8::Context> context,
