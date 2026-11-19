@@ -1607,6 +1607,53 @@ fn devtools_refuses_a_window_it_does_not_drive_saying_why() {
     }
 }
 
+#[test]
+fn devtools_sends_window_shell_to_the_shells_own_page() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"devtools\",\"window\":\"shell\",\"method\":\"Accessibility.getFullAXTree\",\"params\":{}}",
+            &Desktop {
+                windows: &three_windows,
+                status: &|| status(false),
+                devtools: &|window, method, _| {
+                    assert_eq!((window, method), ("shell", "Accessibility.getFullAXTree"));
+                    Ok(serde_json::json!({"nodes": []}))
+                },
+                ..nothing_dialed()
+            },
+        ),
+        Response::DevTools {
+            result: serde_json::json!({"nodes": []})
+        }
+    );
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"devtools\",\"window\":\"shell\",\"view\":\"9\",\"method\":\"Page.reload\",\"params\":{}}",
+            &Desktop {
+                windows: &three_windows,
+                status: &|| status(false),
+                ..nothing_dialed()
+            },
+        ),
+        Response::Refused {
+            why: "the shell holds no views; list-windows lists browser windows' views".to_string()
+        }
+    );
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"devtools\",\"window\":\"shell\",\"method\":\"Page.reload\",\"params\":{}}",
+            &Desktop {
+                windows: &three_windows,
+                status: &|| status(true),
+                ..nothing_dialed()
+            },
+        ),
+        Response::Refused {
+            why: "the desktop is locked".to_string()
+        }
+    );
+}
+
 fn status(locked: bool) -> Result<DesktopStatus, String> {
     Ok(DesktopStatus {
         theme: Theme::Light,

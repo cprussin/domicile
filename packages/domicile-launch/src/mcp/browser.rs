@@ -26,7 +26,7 @@ pub(super) enum Browser {
 
 /// The window the browser tools name to reach the shell's own page: its
 /// bars, panels and dialogs.
-const SHELL: &str = "shell";
+const SHELL: &str = crate::control::SHELL_WINDOW;
 
 /// The longest name or value a snapshot shows of one element, in characters.
 const LONGEST: usize = 200;

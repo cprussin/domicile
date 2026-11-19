@@ -1158,11 +1158,13 @@ fn powered(power: DisplayPower, display: Option<String>, set: PowerDisplays) -> 
     })
 }
 
-/// Carries out `to` with `set`. A toggle asks first, since the engine keeps the
-/// setting.
+/// The window `devtools` names for the shell's own page.
+pub const SHELL_WINDOW: &str = "shell";
+
 /// Sends `method` to the browser window `domicile list-windows` lists as
-/// `window`, or to its view `view`, while the desktop is unlocked. The window
-/// must be neither native nor private.
+/// `window`, or to its view `view`, or to the shell's own page as window
+/// [`SHELL_WINDOW`], while the desktop is unlocked. A listed window must be
+/// neither native nor private.
 fn driven(
     desktop: &Desktop,
     window: &str,
@@ -1172,6 +1174,16 @@ fn driven(
 ) -> Result<serde_json::Value, String> {
     if (desktop.status)()?.locked {
         return Err("the desktop is locked".to_string());
+    }
+    // Not a window list-windows lists: the engine answers it with the shell's
+    // own page.
+    if window == SHELL_WINDOW {
+        return match view {
+            None => (desktop.devtools)(SHELL_WINDOW, method, params),
+            Some(_) => Err(
+                "the shell holds no views; list-windows lists browser windows' views".to_string(),
+            ),
+        };
     }
     let windows = (desktop.windows)()?;
     let listed = windows
@@ -1202,6 +1214,8 @@ fn driven(
     }
 }
 
+/// Carries out `to` with `set`. A toggle asks first, since the engine keeps the
+/// setting.
 fn switched(to: Option<Switch>, set: DisableWhileTyping) -> Result<bool, String> {
     match to {
         None => set(None),
