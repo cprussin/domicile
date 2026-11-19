@@ -29,10 +29,16 @@
         getComputedStyle(document.querySelector("p")).color;
       const styled = color() === "rgb(1, 2, 3)";
       window.guard.unstyle();
-      window.guard.send("shaped", {
-        ...window.guard.shaped,
-        styled,
-        unstyled: color() !== "rgb(1, 2, 3)",
+      const unstyled = color() !== "rgb(1, 2, 3)";
+      // The preload hears document-end once DOMContentLoaded has gone to
+      // every listener, this one included.
+      setTimeout(() => {
+        window.guard.send("shaped", {
+          ...window.guard.shaped,
+          heard: window.guard.heard(),
+          styled,
+          unstyled,
+        });
       });
     });
   } else {

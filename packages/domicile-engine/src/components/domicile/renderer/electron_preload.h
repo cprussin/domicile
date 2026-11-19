@@ -58,6 +58,8 @@ class ElectronPreload final
   // content::RenderFrameObserver:
   void ReadyToCommitNavigation(
       blink::WebDocumentLoader* document_loader) override;
+  // The preload's process says document-end, as Electron's does.
+  void DidDispatchDOMContentLoadedEvent() override;
   void WillReleaseScriptContext(v8::Local<v8::Context> context,
                                 int32_t world_id) override;
   void OnDestruct() override;

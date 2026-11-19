@@ -256,6 +256,11 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
   say they don't work yet. Its `process` has `isMainFrame`, `contextId`, and
   `versions.electron` and `resourcesPath` from the app's `hello`; Electron's
   own calls on it, such as `getCPUUsage`, say they don't work yet. Its
+  `process` is an EventEmitter, as Electron's is: it says `loaded` and
+  `document-start` once the preload has run, and `document-end` once the
+  document's `DOMContentLoaded` has been dispatched. Slack's preload sets up
+  its window on `document-start`, and without `process.on` it throws before
+  exposing anything, so Slack never signs in. It doesn't say `exit`. Its
   `process.argv` ends with the window's
   `additionalArguments`, which the host sends as `open_window`'s
   `arguments`; Claude's preloads read their features there. The preload has
@@ -644,6 +649,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: `webContents.executeJavaScript` and `mainFrame` (a `WebFrameMain` for the page's one frame), which Claude calls at start: the code runs in the page's main world after any load under way, a promise it gives is awaited, and what it gives comes back as JSON carries it (`execute_javascript` and `javascript_result` in `electron_protocol.h`). A throw rejects with a generic reason; the page's console has the exception
 - [x] engine: the rest of a sandboxed preload's `electron` module (`webFrame`, `webUtils`, `crashReporter`, `nativeImage`), `process.isMainFrame`, and `additionalArguments` in its `process.argv`, without which Claude's preloads expose nothing and claude.ai shows its web layout (`guard-electron-preload.sh`)
 - [x] engine: a sandboxed preload's `process.versions.electron` and `process.resourcesPath`, from `hello`, and the rest of Electron's renderer `process`, `webFrame.insertText` and `setVisualZoomLevelLimits`, each there or saying it doesn't work yet (`guard-electron-preload.sh`, `preload-coverage.test.ts`)
+- [x] engine: a sandboxed preload's `process` is an EventEmitter that says `loaded`, `document-start` and `document-end`, without which Slack's preload throws and Slack never signs in (`guard-electron-preload.sh`, `preload-coverage.test.ts`)
 - [x] engine: a page's history, loading, focus, renderer pid and crash reach the app (`page_state`), and it walks the history (`go_to_index`, `clear_history`), for `navigationHistory`, `getFocusedWindow` and the rest (`guard-electron-socket.sh`)
 - [x] engine: the Edit menu's commands and `replace` at the page's focus (`edit`, `replace`), and find in page (`find_in_page`, `found_in_page`, `stop_find_in_page`), with the Edit menu's roles (`guard-electron-socket.sh`)
 - [x] engine: a page's context menus reach its app as `context-menu` (`context_menu`), and the shell draws none for it

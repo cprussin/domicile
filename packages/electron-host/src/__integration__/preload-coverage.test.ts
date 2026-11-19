@@ -64,8 +64,15 @@ const PreloadGot = z.object({
   process: Members.and(z.object({ versions: Members })),
 });
 
-/** What a preload gets from the bootstrap: its electron and its process. */
-const preloadGets = async () => {
+/**
+ * Runs the bootstrap as the engine does, with `preload` as the app's
+ * preload and stand-ins for the natives.
+ *
+ * @returns What the bootstrap hands back: the calls the engine makes.
+ */
+const runBootstrap = async (
+  preload: (require: (name: string) => unknown, process: unknown) => void,
+) => {
   const bootstrap: unknown = (0, eval)(await bootstrapSource());
   if (typeof bootstrap !== "function") {
     throw new Error("kBootstrap is not a function");
@@ -75,14 +82,8 @@ const preloadGets = async () => {
     {},
     { get: (_target, name) => () => `native ${String(name)}` },
   );
-  const got: unknown[] = [];
-  bootstrap(
-    natives,
-    (require: (name: string) => unknown, process: unknown) => {
-      got.push({ electron: require("electron"), process });
-    },
-    true,
-    {
+  return Calls.parse(
+    bootstrap(natives, preload, true, {
       arch: "x64",
       argv: ["/engine/chrome", "--a-switch"],
       chromeVersion: "160.0.0.0",
@@ -90,13 +91,43 @@ const preloadGets = async () => {
       frameToken: "token",
       resourcesPath: "/opt/app/resources",
       routingId: 1,
-    },
+    }),
   );
+};
+
+/** The calls the bootstrap hands the engine, as the engine reads them. */
+const Calls = z.object({ documentEnd: z.function() });
+
+/** What a preload gets from the bootstrap: its electron and its process. */
+const preloadGets = async () => {
+  const got: unknown[] = [];
+  await runBootstrap((require, process) => {
+    got.push({ electron: require("electron"), process });
+  });
   if (got.length !== 1) {
     throw new Error(`the bootstrap ran the preload ${got.length} times`);
   }
   return PreloadGot.parse(got[0]);
 };
+
+/** A Node EventEmitter's methods, which `process` and `ipcRenderer` have. */
+const EVENT_EMITTER = [
+  "addListener",
+  "emit",
+  "eventNames",
+  "getMaxListeners",
+  "listenerCount",
+  "listeners",
+  "off",
+  "on",
+  "once",
+  "prependListener",
+  "prependOnceListener",
+  "rawListeners",
+  "removeAllListeners",
+  "removeListener",
+  "setMaxListeners",
+];
 
 const UNSUPPORTED = /does not work on Domicile yet/;
 
@@ -133,10 +164,12 @@ describe("Electron preload coverage", () => {
       ...ELECTRON_PRELOAD_PROCESS.methods,
       ...ELECTRON_PRELOAD_PROCESS.properties,
       ...FROM_NODE,
+      ...EVENT_EMITTER,
     ]
       .filter((name) => !(name in NOT_IN_A_RENDERER))
       .forEach(walk("process", process));
     ["chrome", "electron"].forEach(walk("process.versions", process.versions));
+    EVENT_EMITTER.forEach(walk("ipcRenderer", electron.ipcRenderer));
     gaps.sort();
 
     // biome-ignore lint/style/noProcessEnv: how a developer updates the list
@@ -146,5 +179,26 @@ describe("Electron preload coverage", () => {
     expect(gaps).toEqual(JSON.parse(await readFile(COVERAGE, "utf8")));
     const decided = await decidedStubs(true);
     expect(stubs.sort()).toEqual([...decided.lies, ...decided.honest].sort());
+  });
+});
+
+describe("a sandboxed preload's process", () => {
+  it("emits loaded, document-start and document-end, as Electron's does", async () => {
+    const heard: string[] = [];
+    const Listen = z.custom<(name: string, listener: () => void) => unknown>(
+      (value) => typeof value === "function",
+    );
+    const Emitter = z.object({ on: Listen, once: Listen });
+    const calls = await runBootstrap((_require, process) => {
+      // Slack's preload sets up its window here, and throws without `on`.
+      const emitter = Emitter.parse(process);
+      emitter.once("loaded", () => heard.push("loaded"));
+      emitter.on("document-start", () => heard.push("document-start"));
+      emitter.on("document-end", () => heard.push("document-end"));
+    });
+    // The preload runs at document start, before the page's scripts.
+    expect(heard).toEqual(["loaded", "document-start"]);
+    calls.documentEnd();
+    expect(heard).toEqual(["loaded", "document-start", "document-end"]);
   });
 });
