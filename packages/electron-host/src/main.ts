@@ -22,6 +22,8 @@ import { createGlobalShortcut } from "./electron/global-shortcut";
 import { createIpcMain } from "./electron/ipc-main";
 import type { MenuEntry } from "./electron/menu";
 import { createMenu } from "./electron/menu";
+import type { RoleWindow } from "./electron/menu-roles";
+import { windowRoles } from "./electron/menu-roles";
 import { boxWindow, createMessageBoxes } from "./electron/message-boxes";
 import {
   MessageChannelMain,
@@ -65,26 +67,13 @@ import { quirksOf } from "./quirks";
  * A window as the app's menus hand it to a click and pop up over: one of its
  * BrowserWindows.
  */
-type MenuWindow = {
-  readonly close: () => void;
-  readonly webContents: Record<EditRole, () => void>;
+type MenuWindow = RoleWindow & {
   readonly popupMenu: (
     entries: readonly MenuEntry[],
     at: { x: number; y: number } | undefined,
     closed: (command: number) => void,
   ) => () => void;
 };
-
-/** The Edit menu's roles, which act at the window's page's focus. */
-type EditRole =
-  | "undo"
-  | "redo"
-  | "cut"
-  | "copy"
-  | "paste"
-  | "pasteAndMatchStyle"
-  | "delete"
-  | "selectAll";
 
 /**
  * How long an app started with the desktop waits for the engine to listen.
@@ -217,19 +206,9 @@ const main = async ([resources, ...args]: string[]) => {
       focusedWindow: (): MenuWindow | null => BrowserWindow.getFocusedWindow(),
       popup: (window, entries, at, closed) =>
         window.popupMenu(entries, at, closed),
-      roles: {
-        close: (window) => window?.close(),
-        copy: (window) => window?.webContents.copy(),
-        cut: (window) => window?.webContents.cut(),
-        delete: (window) => window?.webContents.delete(),
-        paste: (window) => window?.webContents.paste(),
-        pasteAndMatchStyle: (window) =>
-          window?.webContents.pasteAndMatchStyle(),
-        quit: () => app.quit(),
-        redo: (window) => window?.webContents.redo(),
-        selectAll: (window) => window?.webContents.selectAll(),
-        undo: (window) => window?.webContents.undo(),
-      },
+      roles: windowRoles(() => {
+        app.quit();
+      }),
       // Electron gives every window the app's menu, as each new one starts with.
       setApplicationMenu: (menu) => {
         for (const window of BrowserWindow.getAllWindows()) {
