@@ -2,6 +2,7 @@ import type { Option, Result } from "@cprussin/option-result";
 import { Button } from "@domicile-desktop/component-library/Button";
 import type { Detail } from "@domicile-desktop/component-library/DetailList";
 import { DetailList } from "@domicile-desktop/component-library/DetailList";
+import { DrilldownPage } from "@domicile-desktop/component-library/Drilldown";
 import { EmptyState } from "@domicile-desktop/component-library/EmptyState";
 import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import { Input } from "@domicile-desktop/component-library/Input";
@@ -22,15 +23,17 @@ import type {
   WifiNetwork,
 } from "@domicile-desktop/system-network/wifi";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import { LockSimpleIcon } from "@phosphor-icons/react/dist/ssr/LockSimple";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { WifiHighIcon } from "@phosphor-icons/react/dist/ssr/WifiHigh";
 import { WifiSlashIcon } from "@phosphor-icons/react/dist/ssr/WifiSlash";
-import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { hstack } from "../styled-system/patterns";
 import type { Addresses } from "./addressing";
 import { addressRowsOf, COPYABLE } from "./addressing";
+import { Failure } from "./Failure";
+import { SavedNetworks } from "./SavedNetworks";
 import { signalOf } from "./signal";
 import { speedOf } from "./speed";
 import { WifiSignalIcon } from "./WifiSignalIcon";
@@ -49,7 +52,9 @@ type Props = {
 /**
  * The Wi-Fi section: a switch for the radio on its heading, the connection
  * with its details folded away, then the other networks in range, each
- * joined with a click. Nothing without a Wi-Fi device.
+ * joined with a click. At its foot, a page of the saved networks, radio on or
+ * off. Nothing without a Wi-Fi device. Goes in a `Drilldown`, which shows the
+ * page.
  *
  * Scans when shown. A refusal shows plainly where it was asked, with the
  * service's words in its tooltip; the service's state shows the rest.
@@ -96,6 +101,7 @@ type ControlsProps = {
 const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
   const requests = useRequests();
   const [asking, setAsking] = useState<string | undefined>(undefined);
+  const [savedOpen, setSavedOpen] = useState(false);
   const { backend, device, interface: name } = wifi;
   const scanning = wifi.scanning || requests.pending("scan");
   const join = (network: WifiNetwork, passphrase: string | undefined) => {
@@ -224,6 +230,27 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
           icon={WifiSlashIcon}
           title="Wi-Fi is off"
         />
+      )}
+      {wifi.saved.length > 0 && (
+        <List>
+          <ListRow
+            end={<CaretRightIcon aria-hidden size={14} weight="bold" />}
+            label="Saved networks"
+            onPress={() => {
+              setSavedOpen(true);
+            }}
+          />
+        </List>
+      )}
+      {savedOpen && (
+        <DrilldownPage
+          onBack={() => {
+            setSavedOpen(false);
+          }}
+          title="Saved networks"
+        >
+          <SavedNetworks actions={actions} host={host} wifi={wifi} />
+        </DrilldownPage>
       )}
     </PanelSection>
   );
@@ -385,20 +412,6 @@ const Passphrase = ({
     </form>
   );
 };
-
-/** What failed, in plain words, with the service's in its tooltip. */
-const Failure = ({
-  children,
-  error,
-}: {
-  children: ReactNode;
-  error: SystemError | undefined;
-}) =>
-  error !== undefined && (
-    <PanelNote detail={error.message} tone="warning">
-      {children}
-    </PanelNote>
-  );
 
 /** A new secured network, whose passphrase the service does not know. */
 const needsPassphrase = (network: WifiNetwork): boolean =>

@@ -230,6 +230,10 @@ button, and their controls in one panel, each labeled in words.
     - The other networks, strongest first, marked saved and secured. A click
       joins a saved or open network. A new secured one asks for its
       passphrase.
+    - **Saved networks** opens a page of every saved network, in range or
+      not, radio on or off: the connected one, then those in range, then the
+      rest by when they were last used. Each shows its security, a **Join
+      automatically** switch and **Forget**.
     - A refusal shows under what was asked.
     - Wi-Fi is read only while the panel is open.
   - Details can be selected. Addresses, gateways, DNS servers, interface

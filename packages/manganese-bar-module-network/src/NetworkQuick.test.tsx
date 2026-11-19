@@ -43,6 +43,7 @@ const WIFI: Wifi = {
   hardwareAddress: "A4:C3:F0:85:AC:2D",
   interface: "wlan0",
   networks: [],
+  saved: [],
   scanning: false,
 };
 
