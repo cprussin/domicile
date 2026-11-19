@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { EngineRequest, WindowEvent } from "../engine";
 import { createBrowserWindow } from "./browser-window";
-import { setUp } from "./browser-window-fixture";
+import { contextMenuAt, setUp } from "./browser-window-fixture";
 import type { MenuEntry } from "./menu";
 import type { MessagePortMain } from "./message-port-main";
 import { MessageChannelMain } from "./message-port-main";
@@ -222,6 +222,85 @@ describe(createBrowserWindow, () => {
       { misspelling: false, text: "cat", type: "replace", window: 1 },
       { misspelling: true, text: "dog", type: "replace", window: 1 },
     ]);
+  });
+
+  it("hears a context menu asked for over its page, in Electron's names", () => {
+    const { BrowserWindow, say } = setUp();
+    const window = new BrowserWindow();
+    const heard: unknown[] = [];
+    window.webContents.on("context-menu", (_event, params) =>
+      heard.push(params),
+    );
+
+    say(contextMenuAt(window.id));
+
+    expect(heard).toEqual([
+      {
+        altText: "",
+        dictionarySuggestions: ["the"],
+        editFlags: {
+          canCopy: true,
+          canCut: false,
+          canDelete: false,
+          canEditRichly: false,
+          canPaste: true,
+          canRedo: false,
+          canSelectAll: true,
+          canUndo: false,
+        },
+        formControlType: "none",
+        frame: window.webContents.mainFrame,
+        frameCharset: "UTF-8",
+        frameURL: "",
+        hasImageContents: false,
+        inputFieldType: "none",
+        isEditable: true,
+        linkText: "",
+        linkURL: "",
+        mediaFlags: {
+          canLoop: false,
+          canPrint: false,
+          canRotate: false,
+          canSave: false,
+          canShowPictureInPicture: false,
+          canToggleControls: false,
+          hasAudio: false,
+          inError: false,
+          isControlsVisible: false,
+          isLooping: false,
+          isMuted: false,
+          isPaused: false,
+          isShowingPictureInPicture: false,
+        },
+        mediaType: "none",
+        menuSourceType: "mouse",
+        misspelledWord: "teh",
+        pageURL: "https://a.test/",
+        referrerPolicy: { policy: "default", url: "" },
+        selectionRect: { height: 0, width: 0, x: 0, y: 0 },
+        selectionStartOffset: 0,
+        selectionText: "teh",
+        spellcheckEnabled: true,
+        srcURL: "",
+        suggestedFilename: "",
+        titleText: "",
+        x: 10,
+        y: 20,
+      },
+    ]);
+  });
+
+  it("hands a context menu over a subframe no frame, as it can't name one", () => {
+    const { BrowserWindow, say } = setUp();
+    const window = new BrowserWindow();
+    const frames: unknown[] = [];
+    window.webContents.on("context-menu", (_event, params) =>
+      frames.push(params.frame),
+    );
+
+    say({ ...contextMenuAt(window.id), frame_url: "https://b.test/" });
+
+    expect(frames).toEqual([null]);
   });
 
   it("finds in the page, and says each search's last answer", () => {

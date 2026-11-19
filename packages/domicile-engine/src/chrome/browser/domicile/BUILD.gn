@@ -115,6 +115,8 @@ source_set("domicile") {
     # Lists each browser window for capture tools.
     "//components/domicile:browser_window_listing",
     "//components/domicile:command_protocol",
+    # An Electron window's context menus, as its app hears them.
+    "//components/domicile:context_menu",
     # Marks the renderer an Electron page with Node.js starts.
     "//components/domicile:electron_node_switches",
     "//components/domicile:common",
