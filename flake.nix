@@ -2674,6 +2674,31 @@
 
 
             machine.wait_for_unit("multi-user.target")
+            # PROBE (draft branch, not to merge): start the desktop 8 times and
+            # dump the resize-freeze lines, whole, for each start.
+            results = []
+            for attempt in range(8):
+                machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=WAIT)
+                machine.succeed(CLIENT)
+                sized = machine.execute("for i in $(seq 60); do grep -qE 'configure\\([1-9]' /tmp/client.log && exit 0; sleep 1; done; exit 1")[0] == 0
+                results.append(sized)
+                print(f"PROBE attempt {attempt} sized={sized}")
+                commands = [
+                    "grep -E 'domicile: (widget|compositor) ' /tmp/domicile.log || true",
+                    "grep -E 'shell window|told the chrome|presenting the desk' /tmp/domicile.log | head -20 | cut -c1-300 || true",
+                ]
+                if not sized:
+                    commands += [
+                        "tail -30 /tmp/client.log | cut -c1-200",
+                        "grep -E 'toplevel|configure|chrome -> host|host -> chrome' /tmp/domicile.log | tail -40 | cut -c1-300 || true",
+                        "grep -E 'FATAL|Check failed|ERROR:' /tmp/domicile.log | grep -v dbus | tail -20 | cut -c1-400 || true",
+                    ]
+                for command in commands:
+                    print(f"PROBE {attempt} $ {command}")
+                    print(machine.execute(f"{command} 2>&1")[1])
+                machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3; rm -f /tmp/client.log /tmp/domicile.log")
+                machine.execute("systemctl start getty@tty1.service")
+            raise AssertionError(f"PROBE done, sized={results}")
             try:
                 a_window_is_up()
                 a_finger_reaches_the_window_as_touch()
