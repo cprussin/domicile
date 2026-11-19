@@ -417,7 +417,7 @@ export type DomicileBrowserWindow = {
    * The popup menu an Electron app shows over this window (Menu.popup), as
    * JSON, null for none: `menu`, its entries as `menu`'s are, and `x` and
    * `y`, where it goes in CSS pixels from the page's top left. Draw it over
-   * the page there (`appPopupMenu` reads it), and answer it with
+   * the page there, and answer it with
    * DomicileHost.answerBrowserWindowPopupMenu.
    */
   readonly popupMenu: string | null;
@@ -1210,9 +1210,8 @@ export type DomicileHost = {
   /**
    * The user chose entry `command` (its `id`) of the popup menu window `id`
    * shows (DomicileBrowserWindow.popupMenu), or put it away with nothing
-   * chosen for 0; its Electron app runs the entry. Throws a TypeError for a
-   * negative `command`. A window that closed meanwhile, or shows no popup
-   * menu, does nothing.
+   * chosen for 0. Throws a TypeError for a negative `command`. A window that
+   * closed meanwhile, or shows no popup menu, does nothing.
    */
   answerBrowserWindowPopupMenu(id: string, command: number): void;
   /**
