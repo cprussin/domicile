@@ -1221,8 +1221,9 @@ fn under_home(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, ConfigError
 pub struct AgentsConfig {
     /// Whether agents on the web, such as claude.ai, can reach the desktop
     /// through Domicile's relay: while it is set, the compositor runs
-    /// `domicile mcp --relay`. Each agent still signs in with a code the
-    /// desktop shows, and asks before it uses anything. Off by default. See
+    /// `domicile mcp --relay`. Each agent still signs in only once the user
+    /// allows it on the desktop, and asks before it uses anything. Off by
+    /// default. See
     /// `docs/AGENTS.md#agents-on-the-web`.
     pub web: bool,
 }

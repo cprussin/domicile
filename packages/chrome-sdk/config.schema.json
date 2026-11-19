@@ -16,7 +16,7 @@
       "properties": {
         "web": {
           "default": false,
-          "description": "Whether agents on the web, such as claude.ai, can reach the desktop\nthrough Domicile's relay: while it is set, the compositor runs\n`domicile mcp --relay`. Each agent still signs in with a code the\ndesktop shows, and asks before it uses anything. Off by default. See\n`docs/AGENTS.md#agents-on-the-web`.",
+          "description": "Whether agents on the web, such as claude.ai, can reach the desktop\nthrough Domicile's relay: while it is set, the compositor runs\n`domicile mcp --relay`. Each agent still signs in only once the user\nallows it on the desktop, and asks before it uses anything. Off by\ndefault. See\n`docs/AGENTS.md#agents-on-the-web`.",
           "type": "boolean"
         }
       },

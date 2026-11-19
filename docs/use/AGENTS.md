@@ -20,7 +20,8 @@ Other agents that run on your computer take the same command, `domicile mcp`.
    In the config file, that's `{ "agents": { "web": true } }`.
 2. Copy your desktop's address from there, and add it to claude.ai as a
    custom connector.
-3. Connect, and enter the code your desktop shows in a notification.
+3. Connect. Your desktop asks whether to let Claude sign in: click **Allow**
+   if it shows the same number as your browser.
 
 ## Letting an agent in
 
@@ -43,7 +44,7 @@ can reach and what it did last, **Change** to give it more or less, or
 
 **Settings › Agents** lists every agent connected or remembered. **Stop** ends
 it, **Forget** makes it ask again, and **Sign out** makes an agent on the web
-need a new code.
+ask to sign in again.
 
 ## Good to know
 

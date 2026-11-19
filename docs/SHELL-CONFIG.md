@@ -366,8 +366,8 @@ display the pointer is on.
 `agents.web` lets agents on the web, such as claude.ai, reach the desktop
 through Domicile's relay. While it is `true`, the compositor runs `domicile
 mcp --relay`, and runs it again if it exits; setting it back to `false`
-stops it. Each agent still signs in with a code the desktop shows, and asks
-before it uses anything. Defaults to `false`. Settings › Agents › Connect
+stops it. Each agent still signs in only once you allow it on the desktop,
+and asks before it uses anything. Defaults to `false`. Settings › Agents › Connect
 from the web sets it ([AGENTS.md](AGENTS.md#agents-on-the-web)).
 
 ## Idle

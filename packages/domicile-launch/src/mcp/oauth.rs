@@ -2,9 +2,10 @@
 //! itself, so a client such as claude.ai can sign in to the desk.
 //!
 //! A client registers itself (RFC 7591) and sends the user to `/authorize`,
-//! where they enter the pairing code the desk then shows them. The code
-//! proves they can see the desk; what the agent may then reach, the user still decides on the
-//! desk at its first tool call. Codes are bound to a PKCE S256 challenge.
+//! which waits while the desk asks the user whether it may sign in. Their
+//! answer on the desk is what lets it in; what the agent may then reach, the
+//! user still decides on the desk at its first tool call. Codes are bound to
+//! a PKCE S256 challenge.
 //! Clients and refresh tokens are kept, refresh tokens only as hashes, so a
 //! client stays signed in when the server restarts. See `docs/AGENTS.md`.
 
@@ -12,6 +13,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
@@ -32,10 +34,14 @@ const CODE_LIFETIME_MS: u64 = 2 * 60 * 1000;
 const ACCESS_LIFETIME_MS: u64 = 60 * 60 * 1000;
 /// How long a refresh token lasts unused.
 const REFRESH_IDLE_MS: u64 = 30 * 24 * 60 * 60 * 1000;
-/// Wrong pairing codes before the code changes.
-const MISSES: u32 = 5;
-/// The letters a pairing code is made of: no 0, 1, I, L or O to misread.
-const PAIRING_LETTERS: &[u8] = b"23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+/// How long the desk asks whether a client may sign in before the ask
+/// counts as declined.
+pub const ASK_MS: u64 = 2 * 60 * 1000;
+/// How much longer than [`ASK_MS`] an ask is kept, so an answer the user
+/// gives as the dialog closes still counts.
+const ASK_SLACK_MS: u64 = 30 * 1000;
+/// The longest name a client may give itself.
+const MOST_NAME_CHARS: usize = 40;
 
 /// What the server keeps between runs.
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -57,6 +63,46 @@ struct Refresh {
     hash: String,
     client: String,
     used_ms: u64,
+}
+
+/// A sign-in the desk is asking the user about, named by `id`, a secret only
+/// the browser that started it holds. It answers only the request it was
+/// made for.
+struct Asked {
+    id: String,
+    client: String,
+    redirect_uri: String,
+    challenge: String,
+    state: Option<String>,
+    /// The number the page and the dialog both show, so the user allows
+    /// the request their own browser made.
+    matching: String,
+    asked_ms: u64,
+    answer: Answer,
+}
+
+/// What the user said when the desk asked whether a client may sign in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Said {
+    Allowed,
+    Declined,
+    /// The desk couldn't ask, for this reason.
+    Failed(String),
+}
+
+/// Where the desk puts the user's answer to a sign-in, once they give it.
+#[derive(Debug, Clone, Default)]
+pub struct Answer(Arc<Mutex<Option<Said>>>);
+
+impl Answer {
+    /// Answers the sign-in with what the user said.
+    pub fn give(&self, said: Said) {
+        *self.0.lock().unwrap() = Some(said);
+    }
+
+    fn given(&self) -> Option<Said> {
+        self.0.lock().unwrap().clone()
+    }
 }
 
 /// An authorization code waiting to be exchanged.
@@ -110,7 +156,7 @@ pub fn signed_in(path: &Path) -> Vec<SignedIn> {
 
 /// Signs `client` out, as kept at `path`: its refresh tokens are dropped, and
 /// a running server drops its access tokens when it sees the file change. It
-/// signs in again with a new code.
+/// signs in again only once the user allows it on the desk.
 pub fn sign_out(path: &Path, client: &str) -> io::Result<()> {
     let mut saved = load(path);
     saved.refresh.retain(|refresh| refresh.client != client);
@@ -122,16 +168,27 @@ pub fn sign_out(path: &Path, client: &str) -> io::Result<()> {
 pub(super) enum Authorized {
     /// Send the browser here: the client, with a code or an error.
     Redirect(String),
-    /// Ask for the pairing code, for the client named; `wrong` after a wrong
-    /// one.
-    Ask { client: String, wrong: bool },
+    /// The desk is asking the user about the client named, showing
+    /// `matching`: come back with `ask` to see what they said.
+    Wait {
+        client: String,
+        ask: String,
+        matching: String,
+    },
+    /// The user declined the client named, didn't answer in time, or the
+    /// request names no ask the desk knows.
+    Declined { client: String },
+    /// The desk couldn't ask the user, for this reason.
+    Failed(String),
     /// The request can't go back to the client, which is unknown or named a
     /// redirect it didn't register.
     Refused(String),
 }
 
-/// Shows the user the pairing code for the client named.
-pub(super) type Shows = dyn Fn(&str, &str) + Send;
+/// Asks the user on the desk whether the client named may sign in, going
+/// back to the site named, showing the matching number its page shows, and
+/// gives `Answer` what they say. Returns at once.
+pub type Asks = dyn Fn(&str, &str, &str, Answer) + Send;
 
 /// The authorization server.
 pub(super) struct Auth {
@@ -140,45 +197,40 @@ pub(super) struct Auth {
     saved: Saved,
     codes: Vec<Code>,
     access: Vec<Access>,
-    pairing: String,
-    misses: u32,
+    asked: Vec<Asked>,
     /// When the kept file was last read or written, to see another process
     /// change it.
     seen: Option<(SystemTime, u64)>,
     clock: Box<dyn Fn() -> u64 + Send>,
     random: Box<dyn FnMut() -> [u8; 32] + Send>,
-    told: Box<Shows>,
+    ask: Box<Asks>,
 }
 
 impl Auth {
     /// The server at `issuer`, its base URL, keeping what it must at `path`.
     /// `clock` is the time in milliseconds and `random` makes secrets.
-    /// `told` hears the client and the pairing code each time `/authorize`
-    /// asks for it, for the desk to show the user.
+    /// `ask` asks the user on the desk whether a client may sign in.
     pub(super) fn new(
         issuer: String,
         path: Option<PathBuf>,
         clock: impl Fn() -> u64 + Send + 'static,
         random: impl FnMut() -> [u8; 32] + Send + 'static,
-        told: impl Fn(&str, &str) + Send + 'static,
+        ask: impl Fn(&str, &str, &str, Answer) + Send + 'static,
     ) -> Auth {
         let saved = path.as_deref().map(load).unwrap_or_default();
         let seen = path.as_deref().and_then(modified);
-        let mut auth = Auth {
+        Auth {
             issuer,
             path,
             saved,
             codes: Vec::new(),
             access: Vec::new(),
-            pairing: String::new(),
-            misses: 0,
+            asked: Vec::new(),
             seen,
             clock: Box::new(clock),
             random: Box::new(random),
-            told: Box::new(told),
-        };
-        auth.new_pairing();
-        auth
+            ask: Box::new(ask),
+        }
     }
 
     /// The MCP endpoint, which tokens are for.
@@ -233,6 +285,15 @@ impl Auth {
             .filter(|name| !name.is_empty())
             .unwrap_or("An agent")
             .to_string();
+        // The desk's dialog names it in its title.
+        if name.chars().count() > MOST_NAME_CHARS || name.chars().any(char::is_control) {
+            return Err(refusal(
+                "invalid_client_metadata",
+                &format!(
+                    "client_name is over {MOST_NAME_CHARS} characters or holds a control character"
+                ),
+            ));
+        }
         let client = Client {
             id: self.secret(),
             name,
@@ -251,15 +312,18 @@ impl Auth {
         Ok(answer)
     }
 
-    /// Answers `/authorize` with `query`, and with the pairing code the user
-    /// `entered`, if they have.
-    pub(super) fn authorize(&mut self, query: &Params, entered: Option<&str>) -> Authorized {
+    /// Answers `/authorize` with `query`. Without an `ask` field, it has the
+    /// desk ask the user; with one, it answers with what they said.
+    pub(super) fn authorize(&mut self, query: &Params) -> Authorized {
         let field = |name: &str| query.get(name).map(String::as_str).unwrap_or("");
         let Some(client) = self.client(field("client_id")).cloned() else {
             return Authorized::Refused("This app isn't registered with your desktop.".into());
         };
         let redirect_uri = field("redirect_uri");
-        if !client.redirect_uris.iter().any(|uri| uri == redirect_uri) {
+        // Kept clients are checked too, not only new registrations.
+        if !redirectable(redirect_uri)
+            || !client.redirect_uris.iter().any(|uri| uri == redirect_uri)
+        {
             return Authorized::Refused(format!(
                 "{} asked to go back to an address it didn't register.",
                 client.name
@@ -284,39 +348,88 @@ impl Auth {
         {
             return back("invalid_target");
         }
-        let wrong = match entered {
-            Some(entered) if same_code(entered, &self.pairing) => false,
-            Some(_) => {
-                self.misses += 1;
-                if self.misses >= MISSES {
-                    self.new_pairing();
-                }
-                true
+        let now = (self.clock)();
+        self.asked
+            .retain(|asked| now.saturating_sub(asked.asked_ms) < ASK_MS + ASK_SLACK_MS);
+        let Some(id) = query.get("ask") else {
+            if self
+                .asked
+                .iter()
+                .any(|asked| asked.answer.given().is_none())
+            {
+                return Authorized::Failed(
+                    "Your desktop is already asking about another sign-in. Answer it there, then try again."
+                        .into(),
+                );
             }
-            None => false,
-        };
-        if entered.is_none() || wrong {
-            (self.told)(&client.name, &self.pairing);
-            return Authorized::Ask {
+            let id = self.secret();
+            let matching = self.matching();
+            let answer = Answer::default();
+            self.asked.push(Asked {
+                id: id.clone(),
+                client: client.id.clone(),
+                redirect_uri: redirect_uri.to_string(),
+                challenge: field("code_challenge").to_string(),
+                state: query.get("state").cloned(),
+                matching: matching.clone(),
+                asked_ms: now,
+                answer: answer.clone(),
+            });
+            (self.ask)(&client.name, authority(redirect_uri), &matching, answer);
+            return Authorized::Wait {
                 client: client.name,
-                wrong,
+                ask: id,
+                matching,
             };
+        };
+        let Some(at) = self.asked.iter().position(|asked| {
+            asked.id == *id
+                && asked.client == client.id
+                && asked.redirect_uri == redirect_uri
+                && asked.challenge == field("code_challenge")
+                && asked.state.as_ref() == query.get("state")
+        }) else {
+            return Authorized::Declined {
+                client: client.name,
+            };
+        };
+        let Some(said) = self.asked[at].answer.given() else {
+            return Authorized::Wait {
+                client: client.name,
+                ask: id.clone(),
+                matching: self.asked[at].matching.clone(),
+            };
+        };
+        // An answer is read once.
+        self.asked.remove(at);
+        match said {
+            Said::Declined => Authorized::Declined {
+                client: client.name,
+            },
+            Said::Failed(why) => Authorized::Failed(why),
+            Said::Allowed => {
+                let code = self.code(&client.id, redirect_uri, field("code_challenge"));
+                let mut fields = vec![("code", code.as_str())];
+                if let Some(state) = query.get("state") {
+                    fields.push(("state", state));
+                }
+                Authorized::Redirect(with_query(redirect_uri, &fields))
+            }
         }
-        // A code lets one client in once.
-        self.new_pairing();
+    }
+
+    /// A new authorization code for `client`, going back to `redirect_uri`,
+    /// bound to `challenge`.
+    fn code(&mut self, client: &str, redirect_uri: &str, challenge: &str) -> String {
         let code = self.secret();
         self.codes.push(Code {
             code: code.clone(),
-            client: client.id,
+            client: client.to_string(),
             redirect_uri: redirect_uri.to_string(),
-            challenge: field("code_challenge").to_string(),
+            challenge: challenge.to_string(),
             issued_ms: (self.clock)(),
         });
-        let mut fields = vec![("code", code.as_str())];
-        if let Some(state) = query.get("state") {
-            fields.push(("state", state));
-        }
-        Authorized::Redirect(with_query(redirect_uri, &fields))
+        code
     }
 
     /// Answers `/token` with `form`: tokens, or RFC 6749's error.
@@ -411,14 +524,13 @@ impl Auth {
         self.saved.clients.iter().find(|client| client.id == id)
     }
 
-    fn new_pairing(&mut self) {
+    /// Four digits for the user to match between page and dialog.
+    fn matching(&mut self) -> String {
         let bytes = (self.random)();
-        let letters: String = bytes[..8]
-            .iter()
-            .map(|byte| char::from(PAIRING_LETTERS[usize::from(*byte) % PAIRING_LETTERS.len()]))
-            .collect();
-        self.pairing = format!("{}-{}", &letters[..4], &letters[4..]);
-        self.misses = 0;
+        format!(
+            "{:04}",
+            u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) % 10_000
+        )
     }
 
     fn secret(&mut self) -> String {
@@ -495,14 +607,16 @@ fn refusal(error: &str, description: &str) -> Value {
 }
 
 /// Whether a client may be sent back to `uri`: over https, or to this
-/// computer.
+/// computer, and with no user in its address, which would make the site the
+/// dialog names misleading.
 fn redirectable(uri: &str) -> bool {
     let loopback = ["http://localhost", "http://127.0.0.1", "http://[::1]"];
-    uri.starts_with("https://")
-        || loopback.iter().any(|base| {
-            uri.strip_prefix(base)
-                .is_some_and(|rest| rest.is_empty() || rest.starts_with([':', '/']))
-        })
+    !authority(uri).contains('@')
+        && (uri.starts_with("https://")
+            || loopback.iter().any(|base| {
+                uri.strip_prefix(base)
+                    .is_some_and(|rest| rest.is_empty() || rest.starts_with([':', '/']))
+            }))
 }
 
 /// `uri` with `fields` added to its query.
@@ -529,22 +643,14 @@ fn escaped(value: &str) -> String {
         .collect()
 }
 
-/// Whether `entered` is `code`, ignoring case, spaces and dashes, in time
-/// that doesn't depend on where they differ.
-fn same_code(entered: &str, code: &str) -> bool {
-    let normal = |text: &str| -> Vec<u8> {
-        text.bytes()
-            .filter(u8::is_ascii_alphanumeric)
-            .map(|byte| byte.to_ascii_uppercase())
-            .collect()
-    };
-    let (entered, code) = (normal(entered), normal(code));
-    entered.len() == code.len()
-        && entered
-            .iter()
-            .zip(&code)
-            .fold(0u8, |differs, (a, b)| differs | (a ^ b))
-            == 0
+/// Where `uri` goes, for the user to check: `claude.ai` for
+/// `https://claude.ai/api/mcp/auth_callback`.
+fn authority(uri: &str) -> &str {
+    let after_scheme = uri.split_once("://").map_or(uri, |(_, rest)| rest);
+    after_scheme
+        .split(['/', '?', '#'])
+        .next()
+        .expect("a split has a first piece")
 }
 
 /// PKCE's S256 challenge for `verifier`.
@@ -576,17 +682,21 @@ mod tests {
     const ISSUER: &str = "https://desk.example";
     const VERIFIER: &str = "a-verifier-long-enough-to-be-a-real-one-0123456789";
 
-    /// A server whose clock `now` sets, whose secrets count up, and the
-    /// pairing codes it told.
+    /// What the desk asked the user: the client, the site, the matching
+    /// number and where the answer goes.
+    type AskedUser = (String, String, String, Answer);
+
+    /// A server whose clock `now` sets, whose secrets count up, and what
+    /// it asked the user.
     struct Desk {
         auth: Auth,
         now: Arc<AtomicU64>,
-        told: Arc<Mutex<Vec<String>>>,
+        asked: Arc<Mutex<Vec<AskedUser>>>,
     }
 
     fn desk(path: Option<PathBuf>) -> Desk {
         let now = Arc::new(AtomicU64::new(1_000));
-        let told = Arc::new(Mutex::new(Vec::new()));
+        let asked = Arc::new(Mutex::new(Vec::new()));
         let counter = Arc::new(AtomicU8::new(0));
         let auth = Auth::new(
             ISSUER.to_string(),
@@ -597,18 +707,32 @@ mod tests {
             },
             move || [counter.fetch_add(1, Ordering::SeqCst); 32],
             {
-                let told = Arc::clone(&told);
-                move |_: &str, code: &str| told.lock().unwrap().push(code.to_string())
+                let asked = Arc::clone(&asked);
+                move |client: &str, site: &str, matching: &str, answer: Answer| {
+                    asked.lock().unwrap().push((
+                        client.to_string(),
+                        site.to_string(),
+                        matching.to_string(),
+                        answer,
+                    ));
+                }
             },
         );
-        Desk { auth, now, told }
+        Desk { auth, now, asked }
     }
 
     impl Desk {
-        /// The code the desk shows when `client` asks.
-        fn pairing(&mut self, client: &str) -> String {
-            self.auth.authorize(&asking(client), None);
-            self.told.lock().unwrap().last().unwrap().clone()
+        /// Starts `query`'s sign-in: the id to come back with.
+        fn started(&mut self, query: &Params) -> String {
+            let Authorized::Wait { ask, .. } = self.auth.authorize(query) else {
+                panic!("the desk didn't ask");
+            };
+            ask
+        }
+
+        /// The user's last answer goes to `said`.
+        fn says(&self, said: Said) {
+            self.asked.lock().unwrap().last().unwrap().3.give(said);
         }
 
         fn registered(&mut self) -> String {
@@ -624,9 +748,9 @@ mod tests {
         }
 
         fn code(&mut self, client: &str) -> String {
-            let pairing = self.pairing(client);
-            let Authorized::Redirect(to) = self.auth.authorize(&asking(client), Some(&pairing))
-            else {
+            let ask = self.started(&asking(client));
+            self.says(Said::Allowed);
+            let Authorized::Redirect(to) = self.auth.authorize(&coming_back(client, &ask)) else {
                 panic!("not let in");
             };
             query_of(&to)["code"].clone()
@@ -660,6 +784,13 @@ mod tests {
             ("state", "a state&more"),
             ("resource", "https://desk.example/mcp"),
         ])
+    }
+
+    /// [`asking`], come back to see what the user said about `ask`.
+    fn coming_back(client: &str, ask: &str) -> Params {
+        let mut query = asking(client);
+        query.insert("ask".into(), ask.into());
+        query
     }
 
     fn query_of(uri: &str) -> HashMap<String, String> {
@@ -706,6 +837,20 @@ mod tests {
             .auth
             .register(&json!({"redirect_uris": ["http://localhost.evil.example/back"]}))
             .is_err());
+        assert!(desk
+            .auth
+            .register(&json!({"redirect_uris": ["https://claude.ai@evil.example/back"]}))
+            .is_err());
+        for name in ["Claude\nAllow everything", &"Claude".repeat(10)] {
+            assert_eq!(
+                desk.auth
+                    .register(
+                        &json!({"client_name": name, "redirect_uris": ["https://claude.ai/back"]})
+                    )
+                    .unwrap_err()["error"],
+                "invalid_client_metadata"
+            );
+        }
         let registered = desk
             .auth
             .register(&json!({"redirect_uris": ["http://127.0.0.1:4567/callback"]}))
@@ -718,14 +863,14 @@ mod tests {
     fn authorize_refuses_an_unknown_client_or_redirect_without_going_back() {
         let mut desk = desk(None);
         assert!(matches!(
-            desk.auth.authorize(&asking("nobody"), None),
+            desk.auth.authorize(&asking("nobody")),
             Authorized::Refused(_)
         ));
         let client = desk.registered();
         let mut elsewhere = asking(&client);
         elsewhere.insert("redirect_uri".into(), "https://evil.example/".into());
         assert!(matches!(
-            desk.auth.authorize(&elsewhere, None),
+            desk.auth.authorize(&elsewhere),
             Authorized::Refused(_)
         ));
     }
@@ -736,7 +881,7 @@ mod tests {
         let client = desk.registered();
         let mut plain = asking(&client);
         plain.insert("code_challenge_method".into(), "plain".into());
-        let Authorized::Redirect(to) = desk.auth.authorize(&plain, None) else {
+        let Authorized::Redirect(to) = desk.auth.authorize(&plain) else {
             panic!("not sent back");
         };
         assert_eq!(query_of(&to)["error"], "invalid_request");
@@ -744,46 +889,110 @@ mod tests {
     }
 
     #[test]
-    fn the_pairing_code_lets_one_client_in_once() {
+    fn allowing_on_the_desk_lets_one_client_in_once() {
         let mut desk = desk(None);
         let client = desk.registered();
+        let Authorized::Wait { ask, matching, .. } = desk.auth.authorize(&asking(&client)) else {
+            panic!("the desk didn't ask");
+        };
+        {
+            let asked = desk.asked.lock().unwrap();
+            assert_eq!(asked.len(), 1);
+            assert_eq!(
+                (
+                    asked[0].0.as_str(),
+                    asked[0].1.as_str(),
+                    asked[0].2.as_str()
+                ),
+                ("Claude", "claude.ai", matching.as_str())
+            );
+        }
+        assert_eq!(matching.len(), 4);
         assert_eq!(
-            desk.auth.authorize(&asking(&client), None),
-            Authorized::Ask {
+            desk.auth.authorize(&coming_back(&client, &ask)),
+            Authorized::Wait {
                 client: "Claude".into(),
-                wrong: false
-            }
+                ask: ask.clone(),
+                matching,
+            },
+            "it waits until the user answers"
         );
-        assert_eq!(
-            desk.auth.authorize(&asking(&client), Some("WRNG-CODE")),
-            Authorized::Ask {
-                client: "Claude".into(),
-                wrong: true
-            }
-        );
-        let pairing = desk.pairing(&client);
-        let typed = pairing.to_lowercase().replace('-', " ");
-        let Authorized::Redirect(to) = desk.auth.authorize(&asking(&client), Some(&typed)) else {
+        desk.says(Said::Allowed);
+        let Authorized::Redirect(to) = desk.auth.authorize(&coming_back(&client, &ask)) else {
             panic!("not let in");
         };
         assert!(to.starts_with("https://claude.ai/api/mcp/auth_callback?code="));
         assert_eq!(query_of(&to)["state"], "a state&more");
-        assert_ne!(desk.pairing(&client), pairing, "a used code changes");
+        assert_eq!(
+            desk.auth.authorize(&coming_back(&client, &ask)),
+            Authorized::Declined {
+                client: "Claude".into()
+            },
+            "an answer lets in once"
+        );
+    }
+
+    #[test]
+    fn declining_failing_or_not_answering_lets_nothing_in() {
+        let mut desk = desk(None);
+        let client = desk.registered();
+        let declined = desk.started(&asking(&client));
+        desk.says(Said::Declined);
+        assert_eq!(
+            desk.auth.authorize(&coming_back(&client, &declined)),
+            Authorized::Declined {
+                client: "Claude".into()
+            }
+        );
+        let failed = desk.started(&asking(&client));
+        desk.says(Said::Failed("no shell".into()));
+        assert_eq!(
+            desk.auth.authorize(&coming_back(&client, &failed)),
+            Authorized::Failed("no shell".into())
+        );
+        let unanswered = desk.started(&asking(&client));
+        desk.now.fetch_add(ASK_MS + ASK_SLACK_MS, Ordering::SeqCst);
+        desk.says(Said::Allowed);
         assert!(matches!(
-            desk.auth.authorize(&asking(&client), Some(&pairing)),
-            Authorized::Ask { wrong: true, .. }
+            desk.auth.authorize(&coming_back(&client, &unanswered)),
+            Authorized::Declined { .. }
         ));
     }
 
     #[test]
-    fn too_many_wrong_codes_change_it() {
+    fn an_answer_lets_in_only_the_request_it_was_asked_for() {
         let mut desk = desk(None);
         let client = desk.registered();
-        let pairing = desk.pairing(&client);
-        for _ in 0..MISSES {
-            desk.auth.authorize(&asking(&client), Some("WRNG-CODE"));
+        let ask = desk.started(&asking(&client));
+        desk.says(Said::Allowed);
+        let mut other_state = coming_back(&client, &ask);
+        other_state.insert("state".into(), "another".into());
+        let mut other_challenge = coming_back(&client, &ask);
+        other_challenge.insert("code_challenge".into(), challenge("another verifier"));
+        for other in [other_state, other_challenge] {
+            assert!(matches!(
+                desk.auth.authorize(&other),
+                Authorized::Declined { .. }
+            ));
         }
-        assert_ne!(desk.pairing(&client), pairing);
+        assert!(matches!(
+            desk.auth.authorize(&coming_back(&client, "made-up")),
+            Authorized::Declined { .. }
+        ));
+    }
+
+    #[test]
+    fn the_desk_asks_about_one_sign_in_at_a_time() {
+        let mut desk = desk(None);
+        let client = desk.registered();
+        desk.started(&asking(&client));
+        assert!(matches!(
+            desk.auth.authorize(&asking(&client)),
+            Authorized::Failed(_)
+        ));
+        assert_eq!(desk.asked.lock().unwrap().len(), 1);
+        desk.says(Said::Declined);
+        desk.started(&asking(&client));
     }
 
     #[test]
@@ -897,7 +1106,7 @@ mod tests {
         let client = desk.registered();
         let mut elsewhere = asking(&client);
         elsewhere.insert("resource".into(), "https://other.example/mcp".into());
-        let Authorized::Redirect(to) = desk.auth.authorize(&elsewhere, None) else {
+        let Authorized::Redirect(to) = desk.auth.authorize(&elsewhere) else {
             panic!("not sent back");
         };
         assert_eq!(query_of(&to)["error"], "invalid_target");

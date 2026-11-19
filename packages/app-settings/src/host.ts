@@ -345,7 +345,7 @@ export type SettingsHost = {
   forgetAgent: (agent: string) => Promise<void>;
   /** Agents on the web: the relay address, and who is signed in. */
   webAgents: () => Promise<WebAgents>;
-  /** Signs agent `client` on the web out, so it needs a new code. */
+  /** Signs agent `client` on the web out, so the user must allow it again. */
   signOutWebAgent: (client: string) => Promise<void>;
   /** Has the desk try for its certificate again now, not when it would. */
   retryWebAgents: () => Promise<void>;

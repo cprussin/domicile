@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use domicile_launch::mcp::{serve_http, Agent, Grant, Ran, Web, IDLE_MS};
+use domicile_launch::mcp::{serve_http, Agent, Answer, Grant, Ran, Said, Web, IDLE_MS};
 use domicile_protocol::AgentReach;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -16,11 +16,15 @@ use sha2::{Digest, Sha256};
 const VERIFIER: &str = "a-verifier-long-enough-to-be-a-real-one-0123456789";
 const BACK: &str = "http://127.0.0.1:9/callback";
 
-/// A server on a port of its own, its clock, and the codes it showed.
+/// What the desk asked the user: the client, the site, the matching number
+/// and where the answer goes.
+type AskedUser = (String, String, String, Answer);
+
+/// A server on a port of its own, its clock, and what it asked the user.
 struct Desk {
     port: u16,
     now: Arc<AtomicU64>,
-    shown: Arc<Mutex<Vec<(String, String)>>>,
+    asked: Arc<Mutex<Vec<AskedUser>>>,
     /// How many agents have been let go.
     gone: Arc<AtomicU8>,
 }
@@ -51,20 +55,22 @@ fn desk() -> Desk {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let now = Arc::new(AtomicU64::new(1_000));
-    let shown = Arc::new(Mutex::new(Vec::new()));
+    let asked = Arc::new(Mutex::new(Vec::new()));
     let gone = Arc::new(AtomicU8::new(0));
     let counter = AtomicU8::new(0);
     let web = Web {
         listener,
         base: format!("http://127.0.0.1:{port}"),
         state: None,
-        show: Box::new({
-            let shown = Arc::clone(&shown);
-            move |client: &str, code: &str| {
-                shown
-                    .lock()
-                    .unwrap()
-                    .push((client.to_string(), code.to_string()));
+        ask: Box::new({
+            let asked = Arc::clone(&asked);
+            move |client: &str, site: &str, matching: &str, answer: Answer| {
+                asked.lock().unwrap().push((
+                    client.to_string(),
+                    site.to_string(),
+                    matching.to_string(),
+                    answer,
+                ));
             }
         }),
         clock: Arc::new({
@@ -104,7 +110,7 @@ fn desk() -> Desk {
     Desk {
         port,
         now,
-        shown,
+        asked,
         gone,
     }
 }
@@ -144,9 +150,9 @@ impl Desk {
         }
     }
 
-    /// Registers, enters the code the desk shows, and exchanges it: an
-    /// access token.
-    fn signed_in(&self) -> String {
+    /// Registers and opens the authorization page: the client's id, the
+    /// request's query, and the page.
+    fn authorizing(&self) -> (String, String, Got) {
         let client = self.ask(
             "POST",
             "/register",
@@ -161,20 +167,47 @@ impl Desk {
             escaped(BACK)
         );
         let page = self.ask("GET", &format!("/authorize?{query}"), &[], "");
+        (client_id, query, page)
+    }
+
+    /// Where the waiting page `page` loads next.
+    fn again(page: &Got) -> String {
+        let (_, after) = page.body.split_once(";url=").unwrap();
+        let (to, _) = after.split_once('"').unwrap();
+        to.replace("&amp;", "&")
+    }
+
+    /// Registers, is allowed on the desk, and exchanges the code: an access
+    /// token.
+    fn signed_in(&self) -> String {
+        let (client_id, query, page) = self.authorizing();
         assert_eq!(page.status, 200);
         assert!(
             page.body.contains("Connect Claude to your desktop"),
             "{}",
             page.body
         );
-        let (client_name, code) = self.shown.lock().unwrap().last().unwrap().clone();
-        assert_eq!(client_name, "Claude");
-        let sent = self.ask(
-            "POST",
-            "/authorize",
-            &[("Content-Type", "application/x-www-form-urlencoded")],
-            &format!("{query}&pairing_code={code}"),
+        let again = Desk::again(&page);
+        assert!(
+            again.starts_with(&format!("/authorize?{query}&ask=")),
+            "{again}"
         );
+        let waiting = self.ask("GET", &again, &[], "");
+        assert_eq!(Desk::again(&waiting), again, "it waits on the same ask");
+        let (client_name, site, matching, answer) =
+            self.asked.lock().unwrap().last().unwrap().clone();
+        assert_eq!(
+            (client_name.as_str(), site.as_str()),
+            ("Claude", "127.0.0.1:9")
+        );
+        assert!(
+            page.body
+                .contains(&format!("<p class=\"matching\">{matching}</p>")),
+            "the page shows the dialog's number: {}",
+            page.body
+        );
+        answer.give(Said::Allowed);
+        let sent = self.ask("GET", &again, &[], "");
         assert_eq!(sent.status, 302, "{}", sent.body);
         let location = &sent.headers["location"];
         assert!(location.starts_with(BACK), "{location}");
@@ -352,6 +385,22 @@ fn a_request_for_another_host_or_origin_is_refused() {
         "",
     );
     assert_eq!(local.status, 200);
+}
+
+#[test]
+fn a_client_the_user_declines_is_told_so() {
+    let desk = desk();
+    let (_, _, page) = desk.authorizing();
+    let again = Desk::again(&page);
+    desk.asked.lock().unwrap()[0].3.give(Said::Declined);
+    let declined = desk.ask("GET", &again, &[], "");
+    assert_eq!(declined.status, 200);
+    assert!(
+        declined.body.contains("Claude wasn't connected"),
+        "{}",
+        declined.body
+    );
+    assert!(!declined.body.contains("refresh"));
 }
 
 fn wait_until(done: impl Fn() -> bool) {

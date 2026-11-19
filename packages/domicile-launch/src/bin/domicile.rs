@@ -1077,16 +1077,15 @@ fn agents_served_at(listener: std::net::TcpListener, base: String) -> Result<Exi
         base,
         state: state_directory(&|name| std::env::var(name).ok())
             .map(|directory| directory.join(mcp::SIGNED_IN_FILE)),
-        show: Box::new(|client: &str, code: &str| {
-            let summary = format!("Connecting {client} to your desktop");
-            let body =
-                format!("Enter {code} to let it sign in. If you didn't start this, ignore it.");
-            let shown = notification::session_bus()
-                .and_then(|bus| notification::notify(&bus, "", &summary, &body));
-            if let Err(why) = shown {
-                eprintln!("domicile: could not show the code ({why}); it is {code}");
-            }
-        }),
+        ask: Box::new(
+            |client: &str, site: &str, matching: &str, answer: mcp::Answer| {
+                let (client, site, matching) =
+                    (client.to_string(), site.to_string(), matching.to_string());
+                std::thread::spawn(move || {
+                    answer.give(sign_in_asked(&client, &site, &matching));
+                });
+            },
+        ),
         clock: Arc::new(milliseconds_now),
         random: Box::new(|| {
             let mut bytes = [0; 32];
@@ -1114,6 +1113,100 @@ fn agents_served_at(listener: std::net::TcpListener, base: String) -> Result<Exi
     })
     .map_err(|why| format!("mcp: {why}"))?;
     Ok(ExitCode::SUCCESS)
+}
+
+/// Asks the user, in the shell's dialog, whether `client` may sign in, going
+/// back to `site`, if their browser shows `matching`. The dialog is Domicile's own, so it names no application;
+/// it goes away after [`mcp::ASK_MS`], when the sign-in no longer waits.
+fn sign_in_asked(client: &str, site: &str, matching: &str) -> mcp::Said {
+    /// Each ask's `Request` object, which closes the dialog.
+    static ASKED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let handle = format!(
+        "/org/freedesktop/portal/desktop/request/domicile_mcp_{}/sign_in_{}",
+        std::process::id(),
+        ASKED.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    );
+    let asked = sign_in_dialog(client, site, matching, &handle);
+    match asked {
+        Ok(0) => mcp::Said::Allowed,
+        Ok(1) => mcp::Said::Declined,
+        Ok(response) => {
+            eprintln!(
+                "domicile: could not ask whether {client} may sign in: the portal answered {response}"
+            );
+            mcp::Said::Failed(format!(
+                "Your desktop couldn't ask: its dialog ended without an answer ({response})."
+            ))
+        }
+        Err(why) => {
+            eprintln!("domicile: could not ask whether {client} may sign in: {why}");
+            mcp::Said::Failed(format!("Your desktop couldn't ask: {why}"))
+        }
+    }
+}
+
+/// Puts the sign-in to the shell through Domicile's `Access` portal: the
+/// portal's response.
+fn sign_in_dialog(
+    client: &str,
+    site: &str,
+    matching: &str,
+    handle: &str,
+) -> Result<u32, zbus::Error> {
+    use zbus::zvariant::{ObjectPath, Value};
+    let bus = zbus::blocking::connection::Builder::session()?
+        .method_timeout(std::time::Duration::from_millis(mcp::ASK_MS))
+        .build()?;
+    let options = std::collections::HashMap::from([
+        ("grant_label", Value::from("Allow")),
+        ("deny_label", Value::from("Cancel")),
+    ]);
+    let called = bus.call_method(
+        Some("org.freedesktop.impl.portal.desktop.domicile"),
+        "/org/freedesktop/portal/desktop",
+        Some("org.freedesktop.impl.portal.Access"),
+        "AccessDialog",
+        &(
+            ObjectPath::try_from(handle)?,
+            domicile_protocol::SHELL_APP_ID,
+            "",
+            format!("Let {client} sign in to your desktop?"),
+            "",
+            format!(
+                "Only allow this if your browser shows {matching}. \
+                 It goes back to {site}, and still asks before it uses anything."
+            ),
+            options,
+        ),
+    );
+    match called {
+        Ok(reply) => {
+            let (response, _): (
+                u32,
+                std::collections::HashMap<String, zbus::zvariant::OwnedValue>,
+            ) = reply.body().deserialize()?;
+            Ok(response)
+        }
+        Err(why) => {
+            // Unanswered in time, or the call failed: the sign-in no longer
+            // waits, so the dialog goes too.
+            let closed = bus.call_method(
+                Some("org.freedesktop.impl.portal.desktop.domicile"),
+                handle,
+                Some("org.freedesktop.impl.portal.Request"),
+                "Close",
+                &(),
+            );
+            if let Err(closing) = closed {
+                eprintln!("domicile: could not close the sign-in dialog: {closing}");
+            }
+            match why {
+                // Unanswered in time counts as declined, as `Cancel` does.
+                zbus::Error::InputOutput(io) if io.kind() == std::io::ErrorKind::TimedOut => Ok(1),
+                why => Err(why),
+            }
+        }
+    }
 }
 
 /// Runs `domicile agent name`, which asks the user to let it in, and holds

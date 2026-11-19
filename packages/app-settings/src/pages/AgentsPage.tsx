@@ -129,7 +129,7 @@ const FromTheWeb = ({
       <SwitchRow
         checked={on}
         disabled={editor === undefined || editor.readOnly !== undefined}
-        hint="For agents that run on a website, such as claude.ai. They reach your desktop through Domicile's relay, which passes the connection along without being able to read it. Each one still needs a code your desktop shows, and asks before it uses anything."
+        hint="For agents that run on a website, such as claude.ai. They reach your desktop through Domicile's relay, which passes the connection along without being able to read it. Each one still signs in only once you allow it on your desktop, and asks before it uses anything."
         label="Connect from the web"
         onChange={(checked) => {
           editor?.set(["agents", "web"], checked ? true : undefined);

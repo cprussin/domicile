@@ -36,8 +36,8 @@ Agents are refused while the desktop is locked.
 An agent that connects to a URL, rather than running `domicile mcp` itself,
 uses `domicile mcp --http 127.0.0.1:7465`
 ([CLI.md](CLI.md#over-http)). The first time it connects, it opens a page
-asking for a code, and the desktop shows the code in a notification: entering
-it signs the agent in. It still asks, as above, before it uses anything.
+that waits while the desktop asks whether to let it sign in. Page and dialog
+show the same number: **Allow** signs it in. It still asks, as above, before it uses anything.
 
 ### Agents on the web
 
@@ -50,7 +50,7 @@ Turning on **Connect from the web** in Settings › Agents (`agents.web`,
 the agent as a custom connector, and whether it is ready. When it can't get
 ready it says why, with **Try again**. Signing in and
 asking work as above. Each agent signed in is listed there too: **Sign out**
-drops its tokens, so it needs a new code.
+drops its tokens, so it asks to sign in again.
 
 ## Design
 
@@ -113,14 +113,20 @@ agent ── MCP (stdio) ── domicile mcp ── domicile agent <name> ──
   socket. All three are refused while the desk is locked, and to apps.
 - **Private windows are never offered.** The dialog lists every window but
   private browser windows, and the engine refuses DevTools on them anyway.
-- **Signing in proves the user sees the desk; the dialog still decides.**
+- **Signing in is allowed on the desk; the dialog still decides.**
   `domicile mcp --http` is its own OAuth 2.1 authorization server
   (`mcp::oauth`): dynamic registration, PKCE S256 only, and an authorization
-  page that asks for a code the desk shows in a notification, so someone who
-  merely has the URL can't sign in. A token only reaches `/mcp`; each session
-  is an `Agent`, as on stdio, on a thread of its own, and asks at its first
-  tool call. Codes are one use and change after five misses; access tokens
-  last an hour and refresh tokens rotate. The `Host` and `Origin` checks keep
+  page that waits while the desk asks "Let <client> sign in to your
+  desktop?" through its own `Access` portal, naming the site it goes back
+  to (redirects with a user in the address are refused) and a four-digit
+  number the page shows too, so the user allows their own browser's request
+  and someone who merely has the URL can't sign in. The page reloads itself (no script) holding a secret ask id, bound to that
+  request's client, redirect, challenge and state; an answer lets in once.
+  One ask at a time, two minutes to answer; someone with the URL can keep
+  that one ask busy, but not get past it. A token only reaches `/mcp`;
+  each session is an `Agent`, as on stdio, on a thread of its own, and asks
+  at its first tool call. Access tokens last an hour and refresh tokens
+  rotate. The `Host` and `Origin` checks keep
   a web page on another site from reaching a server on `localhost`.
 
 ## The relay
@@ -150,8 +156,8 @@ claude.ai ── TLS for <label>.<zone> ──▶ relay :443 ──── splice
   desk holds the certificate for its address.
 - **Its operator could still get a certificate for an address,** since they
   run the zone's DNS. Certificate Transparency logs would show it, and
-  signing in still needs the code the desk shows, so they could not sign an
-  agent in unseen.
+  signing in still needs the user to allow it on the desk, so they could not
+  sign an agent in unseen.
 - **Each address needs its own certificate.** Let's Encrypt allows 50 a week
   per registered domain, so a zone shared by many desks needs to be on the
   Public Suffix List.

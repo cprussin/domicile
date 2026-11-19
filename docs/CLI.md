@@ -539,9 +539,9 @@ with `claude mcp add --transport http domicile http://127.0.0.1:7465/mcp`.
 `<url>` is the address agents reach it at, if not `http://<address>`.
 
 - **Signing in** is OAuth 2.1, served by `domicile mcp` itself: the agent
-  registers, opens a page asking for a code, and the desktop shows the code in
-  a notification. Entering it lets that agent sign in; a code works once, and
-  five wrong ones change it. Signed-in agents are kept in
+  registers and opens a page that waits while the desktop asks whether to let
+  it sign in, showing the number the page shows; **Allow** lets it in, within
+  two minutes. Signed-in agents are kept in
   `$XDG_STATE_HOME/domicile/signed-in-agents.json`, refresh tokens only as
   hashes, so they stay signed in when it restarts.
 - **Each session asks on the desk** at its first tool call, as on stdio. A

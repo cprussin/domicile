@@ -593,8 +593,8 @@ in {
           agents.web = lib.mkOption {
             description = ''
               Whether agents on the web, such as claude.ai, can reach the
-              desktop through Domicile's relay. Each still signs in with a code
-              the desktop shows, and asks before it uses anything. Settings ›
+              desktop through Domicile's relay. Each still signs in only once
+              you allow it on the desktop, and asks before it uses anything. Settings ›
               Agents › Connect from the web sets it.
             '';
             type = lib.types.bool;

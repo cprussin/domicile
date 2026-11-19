@@ -22,7 +22,7 @@ use std::time::Duration;
 use serde_json::{json, Value};
 use tiny_http::{Header, Method, Request, Response, Server};
 
-use super::oauth::{base64url, Auth, Authorized, Params, Shows};
+use super::oauth::{base64url, Asks, Auth, Authorized, Params};
 use super::Agent;
 
 /// How long a session may go unused before it ends.
@@ -39,8 +39,8 @@ pub struct Web {
     pub base: String,
     /// Where signed-in clients are kept; `None` forgets them on exit.
     pub state: Option<PathBuf>,
-    /// Shows the user the pairing code for the client named.
-    pub show: Box<Shows>,
+    /// Asks the user on the desk whether a client may sign in.
+    pub ask: Box<Asks>,
     /// The time, in milliseconds.
     pub clock: Arc<dyn Fn() -> u64 + Send + Sync>,
     /// Makes secrets.
@@ -93,7 +93,7 @@ pub fn serve_http(
                 let random = Arc::clone(&random);
                 move || (random.lock().unwrap())()
             },
-            web.show,
+            web.ask,
         )),
         sessions: Mutex::new(HashMap::new()),
         random,
@@ -131,8 +131,8 @@ fn answered(mut request: Request, shared: &Shared, agent: &Maker) -> io::Result<
         return request.respond(text(403, "This address can't reach your desktop."));
     }
     let url = request.url().to_string();
-    let (path, query) = url.split_once('?').unwrap_or((&url, ""));
-    let query = form(query);
+    let (path, raw_query) = url.split_once('?').unwrap_or((&url, ""));
+    let query = form(raw_query);
     let method = request.method().clone();
     let response = match (method, path) {
         (
@@ -153,19 +153,7 @@ fn answered(mut request: Request, shared: &Shared, agent: &Maker) -> io::Result<
             ),
         },
         (Method::Get, "/authorize") => {
-            authorize_page(shared.auth.lock().unwrap().authorize(&query, None), &query)
-        }
-        (Method::Post, "/authorize") => {
-            let fields = form(&String::from_utf8_lossy(&body(&mut request)?));
-            let entered = fields.get("pairing_code").map(String::as_str).unwrap_or("");
-            authorize_page(
-                shared
-                    .auth
-                    .lock()
-                    .unwrap()
-                    .authorize(&fields, Some(entered)),
-                &fields,
-            )
+            authorize_page(shared.auth.lock().unwrap().authorize(&query), raw_query)
         }
         (Method::Post, "/token") => {
             let fields = form(&String::from_utf8_lossy(&body(&mut request)?));
@@ -303,59 +291,75 @@ fn started(agent: &Maker, id: String, shared: &Shared, now: u64) -> Sender<Asked
     asks
 }
 
-/// The `/authorize` page, or the redirect it answers with.
-fn authorize_page(authorized: Authorized, fields: &Params) -> Response<io::Cursor<Vec<u8>>> {
+/// How often the waiting page looks again for the user's answer.
+const LOOK_AGAIN_S: u8 = 2;
+
+/// The `/authorize` page for the request `query`, still encoded, or the
+/// redirect it answers with.
+fn authorize_page(authorized: Authorized, query: &str) -> Response<io::Cursor<Vec<u8>>> {
     match authorized {
         Authorized::Redirect(to) => text(302, "").with_header(header("Location", &to)),
-        Authorized::Refused(why) => page(400, "Can't connect", &format!("<p>{}</p>", html(&why))),
-        Authorized::Ask { client, wrong } => {
-            let hidden: String = fields
-                .iter()
-                .filter(|(name, _)| name.as_str() != "pairing_code")
-                .map(|(name, value)| {
-                    format!(
-                        "<input type=\"hidden\" name=\"{}\" value=\"{}\">",
-                        html(name),
-                        html(value)
-                    )
-                })
-                .collect();
-            let wrong = if wrong {
-                "<p class=\"wrong\">That code didn't match. Check the newest one on your desktop.</p>"
+        Authorized::Refused(why) | Authorized::Failed(why) => {
+            page(400, "Can't connect", "", &format!("<p>{}</p>", html(&why)))
+        }
+        Authorized::Wait {
+            client,
+            ask,
+            matching,
+        } => {
+            // Without script, which the page's policy forbids, the page
+            // loads itself again, holding the ask, until the user answers.
+            let again = if form(query).contains_key("ask") {
+                format!("/authorize?{query}")
             } else {
-                ""
+                format!("/authorize?{query}&ask={ask}")
             };
             page(
                 200,
                 &format!("Connect {} to your desktop", html(&client)),
                 &format!(
-                    "<p>Your desktop is showing a code. Enter it here to let {client} sign in.</p>\
-                     {wrong}\
-                     <form method=\"post\" action=\"/authorize\">{hidden}\
-                     <input name=\"pairing_code\" autocomplete=\"one-time-code\" autofocus \
-                     placeholder=\"ABCD-EFGH\" aria-label=\"Code\" required>\
-                     <button type=\"submit\">Connect</button></form>\
+                    "<meta http-equiv=\"refresh\" content=\"{LOOK_AGAIN_S};url={}\">",
+                    html(&again)
+                ),
+                &format!(
+                    "<p>Your desktop is asking whether to let {client} sign in. Allow it there \
+                     if it shows this number:</p>\
+                     <p class=\"matching\">{matching}</p>\
+                     <p class=\"wait\"><span class=\"spin\"></span>Waiting for your desktop…</p>\
                      <p class=\"hint\">{client} still asks on your desktop before it uses anything.</p>",
                     client = html(&client),
+                    matching = html(&matching),
                 ),
             )
         }
+        Authorized::Declined { client } => page(
+            200,
+            &format!("{} wasn't connected", html(&client)),
+            "",
+            &format!(
+                "<p>Your desktop didn't allow it. Start again from {} if you meant to connect.</p>",
+                html(&client)
+            ),
+        ),
     }
 }
 
-fn page(status: u16, title: &str, body: &str) -> Response<io::Cursor<Vec<u8>>> {
+/// A page titled `title` showing `body`, with `head` in its head.
+fn page(status: u16, title: &str, head: &str, body: &str) -> Response<io::Cursor<Vec<u8>>> {
     let document = format!(
         "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\">\
-         <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
+         <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">{head}\
          <title>{title}</title><style>\
          :root{{color-scheme:light dark;--bg:#f6f6f4;--card:#fff;--fg:#1c1c1a;--muted:#6b6b66;--line:#d9d9d4;--accent:#3b5bdb}}\
          @media (prefers-color-scheme:dark){{:root{{--bg:#151514;--card:#1f1f1d;--fg:#ececea;--muted:#a0a09a;--line:#3a3a36;--accent:#7c93f2}}}}\
          body{{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}}\
          main{{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px;margin:16px;max-width:380px}}\
          h1{{font-size:18px;margin:0 0 12px}}p{{margin:0 0 16px}}.hint{{color:var(--muted);font-size:13px;margin:16px 0 0}}\
-         .wrong{{color:#c92a2a}}form{{display:flex;gap:8px}}\
-         input{{flex:1;min-width:0;font:inherit;letter-spacing:.1em;text-transform:uppercase;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit}}\
-         button{{font:inherit;padding:8px 14px;border:0;border-radius:8px;background:var(--accent);color:#fff}}\
+         .matching{{font-size:28px;font-weight:600;letter-spacing:.15em;font-variant-numeric:tabular-nums}}\
+         .wait{{display:flex;align-items:center;gap:10px;color:var(--muted);margin:0}}\
+         .spin{{width:14px;height:14px;flex:none;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:spin 1s linear infinite}}\
+         @keyframes spin{{to{{transform:rotate(360deg)}}}}\
+         @media (prefers-reduced-motion:reduce){{.spin{{animation:none}}}}\
          </style><main><h1>{title}</h1>{body}</main></html>"
     );
     Response::from_string(document)
@@ -363,7 +367,7 @@ fn page(status: u16, title: &str, body: &str) -> Response<io::Cursor<Vec<u8>>> {
         .with_header(header("Content-Type", "text/html; charset=utf-8"))
         .with_header(header(
             "Content-Security-Policy",
-            "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",
+            "default-src 'none'; style-src 'unsafe-inline'; form-action 'none'",
         ))
         .with_header(header("X-Frame-Options", "DENY"))
 }
