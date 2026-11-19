@@ -58,6 +58,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 
 ### Fixes
 
+- A nested tab group's last window drags out past the group when the group is the first or last tab.
 - The lock screen's passphrase field always looks focused while you type into it.
 - A launcher tag typed after the words, as in `kate bush !yt`, searches on Enter instead of filling in the tag again.
 - The desktop takes about 35 MB less memory at rest: the browser keeps one process ready for a new page instead of two.
