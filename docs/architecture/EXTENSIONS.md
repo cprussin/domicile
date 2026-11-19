@@ -51,9 +51,11 @@ Once `ExtensionSystem::ready()`, reconciling:
 
 - Adds a missing Web Store id via
   `PendingExtensionManager::AddFromExternalUpdateUrl` with
-  `extension_urls::GetWebstoreUpdateUrl()`, as `kExternalPrefDownload`. It
-  installs and updates from the Store. It is marked acknowledged (Chromium
-  disables unacknowledged external extensions on Windows and macOS).
+  `extension_urls::GetWebstoreUpdateUrl()`, as `kInternal`, as a Store
+  install is. It installs and updates from the Store. Not an external
+  location: at every start Chrome uninstalls, data and all, each external
+  extension no external provider lists (`CheckExternalUninstall`), and the
+  config is no provider.
 - Loads a missing directory via `UnpackedInstaller::Load`. Failures are logged.
   Paths are compared after `base::MakeAbsoluteFilePath`.
 - Uninstalls an extension it added that the list no longer names, with
