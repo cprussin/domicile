@@ -22,6 +22,7 @@ source_set("unit_tests") {
   sources = [
     "display_regions_unittest.cc",
     "lcd_text_activation_unittest.cc",
+    "monitor_twin_activation_unittest.cc",
   ]
 
   deps = [
