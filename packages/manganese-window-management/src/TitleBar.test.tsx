@@ -581,6 +581,31 @@ describe("TitleBar", () => {
       expect(holder?.className).toContain(css({ display: "flex" }));
     });
 
+    // The buttons carry their own fill, over the title running under them.
+    // Taller than the tab's inside, it painted over the open tab's top edge,
+    // and at a fractional scale the strip's color showed round the buttons.
+    it("keeps its buttons' fill clear of the open tab's edge", () => {
+      const { container } = tab({ strip: { ...MIDDLE_TAB, open: true } });
+      const buttonsFill = (layer: "hover" | "leaf" | "raised" | "rail") => {
+        const element = face(container).querySelector<HTMLElement>(
+          `:scope > span > [data-fill="${layer}"]`,
+        );
+        if (element === null) {
+          throw new Error(`test: the buttons have no ${layer} layer`);
+        } else {
+          return element;
+        }
+      };
+
+      expect(buttonsFill("rail").parentElement?.className).toContain(
+        css({ alignSelf: "stretch" }),
+      );
+      expect(buttonsFill("hover").className).toContain(css({ inset: "1px" }));
+      expect(buttonsFill("leaf").className).toContain(css({ inset: "1px" }));
+      expect(buttonsFill("raised").className).toContain(css({ inset: "2px" }));
+      expect(buttonsFill("rail").className).toContain(css({ inset: "3px" }));
+    });
+
     it("edges the open tab stronger in a strip inside another group's well", () => {
       const strong = css({
         borderColor:

@@ -325,7 +325,7 @@ export const TitleBar = ({
             }}
             {...{ [UPRIGHT]: "" }}
           >
-            <Fill {...fill} edge="none" />
+            <Fill {...fill} edge="none" inner />
             {/*
             A hidden tab only offers to close, as in a browser. A narrow bar
             drops these too. A tab shows its buttons only under the pointer or
@@ -558,6 +558,8 @@ type FillProps = {
   edge: "nested" | "none" | "strong";
   /** A hidden tab, which lifts toward the open tab's color under the pointer. */
   hoverable: boolean;
+  /** The buttons' own fill, inside the face's. See `fillStyles`. */
+  inner?: boolean;
   /** The keyboard's own bar inside a selected group, washed in the accent. */
   leaf: boolean;
   /** Raised to the address bar's surface: an open tab, or a bar not resting. */
@@ -575,19 +577,19 @@ type FillProps = {
  * The rest of the bar is clear, so its buttons carry their own, over the
  * title running under them as the bar settles.
  */
-const Fill = ({ edge, hoverable, leaf, lit }: FillProps) => (
+const Fill = ({ edge, hoverable, inner = false, leaf, lit }: FillProps) => (
   <>
-    <span className={fillStyles({ layer: "rail" })} data-fill="rail" />
+    <span className={fillStyles({ inner, layer: "rail" })} data-fill="rail" />
     <span
-      className={fillStyles({ edge, layer: "raised", shown: lit })}
+      className={fillStyles({ edge, inner, layer: "raised", shown: lit })}
       data-fill="raised"
     />
     <span
-      className={fillStyles({ layer: "leaf", shown: leaf })}
+      className={fillStyles({ inner, layer: "leaf", shown: leaf })}
       data-fill="leaf"
     />
     <span
-      className={fillStyles({ hoverable, layer: "hover", shown: false })}
+      className={fillStyles({ hoverable, inner, layer: "hover", shown: false })}
       data-fill="hover"
     />
   </>
@@ -596,13 +598,28 @@ const Fill = ({ edge, hoverable, leaf, lit }: FillProps) => (
 const fillStyles = cva({
   base: {
     borderRadius: "inherit",
-    inset: 0,
     pointerEvents: "none",
     position: "absolute",
     transition: "opacity {durations.fast} {easings.out}",
     zIndex: -1,
   },
-  defaultVariants: { edge: "none", hoverable: false, shown: true },
+  /**
+   * The buttons' fill only hides the title running under them. It keeps
+   * clear of the open tab's edge, and each layer a pixel inside the one over
+   * it: at a fractional scale a layer's edge pixels blend, and a layer's
+   * edge under another's showed through as a seam round the buttons.
+   */
+  compoundVariants: [
+    { css: { inset: "1px" }, inner: true, layer: ["hover", "leaf"] },
+    { css: { inset: "2px" }, inner: true, layer: "raised" },
+    { css: { inset: "3px" }, inner: true, layer: "rail" },
+  ],
+  defaultVariants: {
+    edge: "none",
+    hoverable: false,
+    inner: false,
+    shown: true,
+  },
   variants: {
     edge: {
       nested: {
@@ -626,6 +643,8 @@ const fillStyles = cva({
       false: {},
       true: { "[data-face]:hover &": { opacity: 1 } },
     },
+    // The buttons' own fill, inset by `compoundVariants`.
+    inner: { false: { inset: 0 }, true: {} },
     layer: {
       hover: {
         backgroundColor:
@@ -741,6 +760,8 @@ const topCornerStyles = css({
  * buttons.
  */
 const controlStyles = hstack({
+  // The tab's inside, not the buttons' height, which is a pixel taller.
+  alignSelf: "stretch",
   gap: 0,
   // Over the title, with its own `Fill` beneath its buttons.
   isolation: "isolate",
