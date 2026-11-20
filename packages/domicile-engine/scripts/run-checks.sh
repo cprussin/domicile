@@ -117,6 +117,7 @@ TOGETHER=(
   guard-animation-main-frames
   guard-one-spare-renderer
   guard-webview-scale-animation
+  guard-webview-reshown-tiles
   guard-webview-crash
   guard-desktop-geometry
   guard-windows-state
