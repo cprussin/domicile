@@ -1431,7 +1431,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     #menuBarAutoHide: boolean;
     /** Whether its page or one of its views' has the keyboard. */
     #focused = false;
-    /** Whether an entry of its menu bar is running. */
+    /** Whether an entry of its menu bar or a popup menu is running. */
     #choosing = false;
     /** What the app asks the shell to make the window. */
     #wants: WindowState = NORMAL;
@@ -1634,7 +1634,8 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     /**
      * Whether it is the app's window with the keyboard, as Electron's: its
      * page or one of its views' has it, or the user is choosing from its menu
-     * bar, which the shell draws and which has the keyboard meanwhile.
+     * bar or a menu it popped up, which the shell draws and which has the
+     * keyboard meanwhile.
      */
     readonly isFocused = () => this.#choosing || this.#focused;
 
@@ -1920,7 +1921,14 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         );
       }
       this.#popups.delete(popup);
-      closed(command);
+      // The shell's popup had the keyboard, but the window is the focused
+      // one while the entry chosen runs, as on Electron.
+      this.#choosing = true;
+      try {
+        closed(command);
+      } finally {
+        this.#choosing = false;
+      }
     }
 
     protected override wasLoaded() {

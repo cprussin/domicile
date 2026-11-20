@@ -1350,6 +1350,33 @@ describe("a window's popup menus", () => {
     expect(heard).toEqual([["New Chat", window], "closed"]);
   });
 
+  it("is the focused window while the entry chosen from it runs", () => {
+    const { BrowserWindow, menus, say } = setUp();
+    const focused: unknown[] = [];
+    const window = new BrowserWindow();
+    void window.loadURL("https://claude.test/");
+    // Claude hides its menu bar and pops the app's menu up from its own
+    // title bar; its Full Screen acts on the focused window.
+    const menu = menus.Menu.buildFromTemplate([
+      {
+        click: () => focused.push(BrowserWindow.getFocusedWindow()),
+        label: "Full Screen",
+      },
+    ]);
+
+    // The shell's popup has the keyboard, not the window's page.
+    menu.popup({ window });
+    say({
+      command: menu.items[0]?.commandId ?? 0,
+      popup: 1,
+      type: "popup_menu_closed",
+      window: 1,
+    });
+
+    expect(focused).toEqual([window]);
+    expect(BrowserWindow.getFocusedWindow()).toBeNull();
+  });
+
   it("asks the engine to put it away on closePopup", () => {
     const { BrowserWindow, menus, sent } = setUp();
     const window = new BrowserWindow();
