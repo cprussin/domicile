@@ -87,36 +87,82 @@ int NextRoutingId() {
 constexpr char kBootstrap[] = R"JS(
 (function (native, preload, contextIsolated, facts) {
   'use strict';
-  const listeners = new Map();
   const answers = new Map();
   let nextInvoke = 1;
   // An error in a listener or the preload reaches the console, as an uncaught
   // one, and stops nothing else.
   const report = (error) => queueMicrotask(() => { throw error; });
-  const listen = (channel, listener, once, first = false) => {
-    if (typeof listener !== 'function') {
-      throw new TypeError('an ipcRenderer listener must be a function');
-    }
-    const key = String(channel);
-    const list = listeners.get(key) ?? [];
-    if (first) list.unshift({ listener, once });
-    else list.push({ listener, once });
-    listeners.set(key, list);
-  };
-  // Runs `channel`'s listeners with `args` as given, as Node's
-  // EventEmitter.emit does. Says whether any listened.
-  const run = (channel, args) => {
-    const list = listeners.get(channel);
-    if (!list) return false;
-    for (const entry of [...list]) {
-      if (entry.once) ipcRenderer.removeListener(channel, entry.listener);
-      try {
-        entry.listener(...args);
-      } catch (error) {
-        report(error);
+  // Gives `self` Node's EventEmitter, as Electron's ipcRenderer and a
+  // sandboxed preload's process have: listeners by event name, run with the
+  // arguments as given.
+  const emitter = (self) => {
+    const listeners = new Map();
+    // Node's default. Only kept for getMaxListeners: nothing warns here.
+    let maxListeners = 10;
+    const listen = (name, listener, once, first) => {
+      if (typeof listener !== 'function') {
+        throw new TypeError('an event listener must be a function');
       }
-    }
-    return true;
+      const key = String(name);
+      const list = listeners.get(key) ?? [];
+      if (first) list.unshift({ listener, once });
+      else list.push({ listener, once });
+      listeners.set(key, list);
+      return self;
+    };
+    const drop = (key, test) => {
+      const list = listeners.get(key);
+      if (list) {
+        const at = list.findIndex(test);
+        if (at >= 0) list.splice(at, 1);
+        if (list.length === 0) listeners.delete(key);
+      }
+    };
+    const methods = {
+      on: (name, listener) => listen(name, listener, false, false),
+      once: (name, listener) => listen(name, listener, true, false),
+      prependListener: (name, listener) => listen(name, listener, false, true),
+      prependOnceListener: (name, listener) =>
+          listen(name, listener, true, true),
+      // Runs `name`'s listeners with `args`, as Node's emit does, and says
+      // whether any listened.
+      emit(name, ...args) {
+        const key = String(name);
+        const list = listeners.get(key);
+        if (!list) return false;
+        for (const entry of [...list]) {
+          if (entry.once) drop(key, (each) => each === entry);
+          try {
+            entry.listener(...args);
+          } catch (error) {
+            report(error);
+          }
+        }
+        return true;
+      },
+      listeners: (name) =>
+          (listeners.get(String(name)) ?? []).map((entry) => entry.listener),
+      rawListeners: (name) => methods.listeners(name),
+      eventNames: () => [...listeners.keys()],
+      setMaxListeners(count) {
+        maxListeners = count;
+        return self;
+      },
+      getMaxListeners: () => maxListeners,
+      removeListener(name, listener) {
+        drop(String(name), (entry) => entry.listener === listener);
+        return self;
+      },
+      removeAllListeners(name) {
+        if (name === undefined) listeners.clear();
+        else listeners.delete(String(name));
+        return self;
+      },
+      listenerCount: (name) => listeners.get(String(name))?.length ?? 0,
+    };
+    methods.addListener = methods.on;
+    methods.off = methods.removeListener;
+    return Object.assign(self, methods);
   };
   const unsupported = (what) => () => {
     throw new Error(`${what} does not work on Domicile yet`);
@@ -137,7 +183,7 @@ constexpr char kBootstrap[] = R"JS(
       }
     });
   };
-  const ipcRenderer = {
+  const ipcRenderer = emitter({
     send(channel, ...args) {
       native.send(String(channel), JSON.stringify(args));
     },
@@ -149,61 +195,6 @@ constexpr char kBootstrap[] = R"JS(
         answers.set(id, { channel: key, resolve, reject });
         native.invoke(id, key, json);
       });
-    },
-    on(channel, listener) {
-      listen(channel, listener, false);
-      return ipcRenderer;
-    },
-    once(channel, listener) {
-      listen(channel, listener, true);
-      return ipcRenderer;
-    },
-    prependListener(channel, listener) {
-      listen(channel, listener, false, true);
-      return ipcRenderer;
-    },
-    prependOnceListener(channel, listener) {
-      listen(channel, listener, true, true);
-      return ipcRenderer;
-    },
-    // ipcRenderer is an EventEmitter: a preload may emit on it to reach its
-    // own listeners, which nothing sends to the main process.
-    emit(channel, ...args) {
-      return run(String(channel), args);
-    },
-    listeners(channel) {
-      return (listeners.get(String(channel)) ?? []).map(
-          (entry) => entry.listener);
-    },
-    rawListeners(channel) {
-      return ipcRenderer.listeners(channel);
-    },
-    eventNames() {
-      return [...listeners.keys()];
-    },
-    setMaxListeners() {
-      return ipcRenderer;
-    },
-    getMaxListeners() {
-      return 0;
-    },
-    removeListener(channel, listener) {
-      const key = String(channel);
-      const list = listeners.get(key);
-      if (list) {
-        const at = list.findIndex((entry) => entry.listener === listener);
-        if (at >= 0) list.splice(at, 1);
-        if (list.length === 0) listeners.delete(key);
-      }
-      return ipcRenderer;
-    },
-    removeAllListeners(channel) {
-      if (channel === undefined) listeners.clear();
-      else listeners.delete(String(channel));
-      return ipcRenderer;
-    },
-    listenerCount(channel) {
-      return listeners.get(String(channel))?.length ?? 0;
     },
     sendSync(channel, ...args) {
       return JSON.parse(native.sendSync(String(channel), JSON.stringify(args)));
@@ -224,9 +215,7 @@ constexpr char kBootstrap[] = R"JS(
       native.post(String(channel), JSON.stringify(message) ?? 'null', names);
     },
     sendToHost: unsupported('ipcRenderer.sendToHost'),
-  };
-  ipcRenderer.addListener = ipcRenderer.on;
-  ipcRenderer.off = ipcRenderer.removeListener;
+  });
   const contextBridge = {
     exposeInMainWorld(key, api) {
       if (!contextIsolated) {
@@ -350,7 +339,9 @@ constexpr char kBootstrap[] = R"JS(
       `Cannot find module '${name}': a preload on Domicile can require ` +
       'only electron');
   };
-  const process = {
+  // An EventEmitter, as Electron's is, which tells the preload of the
+  // document's progress: Slack's sets up its window on document-start.
+  const process = emitter({
     platform: 'linux',
     type: 'renderer',
     sandboxed: true,
@@ -379,7 +370,7 @@ constexpr char kBootstrap[] = R"JS(
     getSystemVersion: unsupported('process.getSystemVersion'),
     setFdLimit: unsupported('process.setFdLimit'),
     takeHeapSnapshot: unsupported('process.takeHeapSnapshot'),
-  };
+  });
   const module = { exports: {} };
   if (preload !== null) {
     try {
@@ -389,11 +380,19 @@ constexpr char kBootstrap[] = R"JS(
       report(error);
     }
   }
+  // Electron says loaded once its preloads ran, and document-start as the
+  // document starts, which is when this runs.
+  process.emit('loaded');
+  process.emit('document-start');
   const emit = (channel, event, args) => {
-    run(channel, [event, ...args]);
+    ipcRenderer.emit(channel, event, ...args);
   };
   return {
     electron,
+    // The document's DOMContentLoaded has been dispatched.
+    documentEnd() {
+      process.emit('document-end');
+    },
     deliver(channel, json) {
       emit(channel, { sender: ipcRenderer, senderId: 0, ports: [] },
            JSON.parse(json));
@@ -493,6 +492,21 @@ bool ElectronPreload::RunAtDocumentStart(content::RenderFrame* frame) {
   ToRun preload = std::move(*self->to_run_);
   self->to_run_.reset();
   return self->Run(std::move(preload));
+}
+
+// static
+bool ElectronPreload::RunAtDocumentEnd(content::RenderFrame* frame) {
+  ElectronPreload* self = Get(frame);
+  if (!self || self->bootstrap_.IsEmpty()) {
+    // No preload ran in this document, so nothing listens.
+    return true;
+  }
+  v8::Isolate* isolate = IsolateOf(*frame->GetWebFrame());
+  v8::HandleScope handle_scope(isolate);
+  // A listener is the app's script, and may end the frame, this with it.
+  base::WeakPtr<ElectronPreload> alive = self->weak_factory_.GetWeakPtr();
+  self->Call("documentEnd", {});
+  return !!alive;
 }
 
 void ElectronPreload::WillReleaseScriptContext(v8::Local<v8::Context> context,
@@ -703,8 +717,8 @@ bool ElectronPreload::Run(ToRun to_run) {
   }
   v8::Local<v8::Object> calls = made.As<v8::Object>();
   // The bootstrap is ours, so a call missing from it is the engine's bug.
-  for (const char* name :
-       {"deliver", "deliverPost", "toPort", "closePort", "settle"}) {
+  for (const char* name : {"deliver", "deliverPost", "toPort", "closePort",
+                           "settle", "documentEnd"}) {
     v8::Local<v8::Value> call;
     CHECK(
         calls->Get(world, gin::StringToSymbol(isolate, name)).ToLocal(&call) &&

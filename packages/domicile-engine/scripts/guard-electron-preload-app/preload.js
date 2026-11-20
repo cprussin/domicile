@@ -22,6 +22,12 @@ ipcRenderer.emit("local", 7);
 // top, by frameToken, and read the window's additionalArguments from
 // process.argv. Apps read their Electron and resources from process too.
 crashReporter.addExtraParameter("guard", "kept");
+// process is an EventEmitter that tells of the document's progress, as
+// Slack's preload relies on to set up its window.
+const heard = [];
+process.once("loaded", () => heard.push("loaded"));
+process.on("document-start", () => heard.push("document-start"));
+process.on("document-end", () => heard.push("document-end"));
 const styled = webFrame.insertCSS("p { color: rgb(1, 2, 3); }");
 const shaped = {
   argv: process.argv.includes("--guard-argument=1"),
@@ -43,6 +49,7 @@ contextBridge.exposeInMainWorld("guard", {
   ask: (n) => ipcRenderer.invoke("double", n),
   askNow: (n) => ipcRenderer.sendSync("triple", n),
   emitted,
+  heard: () => [...heard],
   onPing: (callback) =>
     ipcRenderer.on("ping", (_event, value) => callback(value)),
   send: (channel, value) => ipcRenderer.send(channel, value),
