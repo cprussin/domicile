@@ -20,8 +20,8 @@ use domicile_launch::site_permissions::{Permission, Setting, SitePermission, Sit
 use domicile_protocol::{
     AdaptiveSync, DeskRect, DeskShot, DesktopStatus, DisplayChange, DisplayHdr, DisplayInfo,
     DisplayTransform, EmulatedInput, InputConnection, InputKind, ListedDisplay, ListedInput,
-    ListedView, ListedWindow, MonitorInfo, ShellBinding, ShellCommandHelp, Theme, WindowAct,
-    WindowKind,
+    ListedView, ListedWindow, LogLevel, LogLevels, MonitorInfo, ShellBinding, ShellCommandHelp,
+    Subsystem, Theme, WindowAct, WindowKind,
 };
 
 #[test]
@@ -556,6 +556,43 @@ fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
             why: "no monitor DP-1 is plugged in".to_string()
         }
     );
+    let set = std::cell::RefCell::new(LogLevels::default());
+    let current = || set.borrow().clone();
+    let apply = |levels: &LogLevels| {
+        *set.borrow_mut() = levels.clone();
+        Ok(())
+    };
+    let desktop = Desktop {
+        log_levels: &current,
+        set_log_levels: &apply,
+        ..nothing_dialed()
+    };
+    let input_at_trace = LogLevels {
+        all: None,
+        subsystems: [(Subsystem::Input, LogLevel::Trace)].into(),
+    };
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"set_log_level\",\"level\":\"trace\",\"subsystems\":[\"input\"]}",
+            &desktop,
+        ),
+        Response::LogLevels {
+            levels: input_at_trace.clone()
+        }
+    );
+    assert_eq!(
+        reply_to("{\"type\":\"log_levels\"}", &desktop),
+        Response::LogLevels {
+            levels: input_at_trace
+        }
+    );
+    assert_eq!(
+        reply_to("{\"type\":\"reset_log_levels\"}", &desktop),
+        Response::LogLevels {
+            levels: LogLevels::default()
+        }
+    );
+    assert_eq!(*set.borrow(), LogLevels::default());
     assert_eq!(
         reply_to(
             "{\"type\":\"lock\"}",
@@ -1321,6 +1358,8 @@ fn nothing_dialed() -> Desktop<'static> {
         emulate: &|_| panic!("only emulate sends input"),
         devtools: &|_, _, _| panic!("only devtools sends DevTools methods"),
         configure_display: &|_, _| panic!("only configure_display configures a display"),
+        log_levels: &|| panic!("only the log level requests read the log levels"),
+        set_log_levels: &|_| panic!("only the log level requests set log levels"),
         monitors: &|| panic!("only monitors lists the monitors"),
         displays: &|| panic!("only displays lists the displays"),
         windows: &|| panic!("only windows lists the windows"),

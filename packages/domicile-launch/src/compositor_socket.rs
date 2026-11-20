@@ -1,6 +1,6 @@
 //! Asks the compositor for a screenshot, to start an app, to send the shell a
-//! command, for its theme, to turn the monitors off or on, or for a virtual
-//! monitor, over its chrome socket.
+//! command, for its theme, to turn the monitors off or on, for a virtual
+//! monitor, or to change its log levels, over its chrome socket.
 //!
 //! Each request is the message a page sends for it (`SystemRequest::Screenshot`,
 //! `SystemRequest::SendShell`, `ChromeMessage::SetTheme`), so the compositor
@@ -16,9 +16,9 @@ use std::time::Duration;
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
     AgentReach, ChromeMessage, DeskRect, DeskShot, DesktopStatus, DisplayChange, EmulatedInput,
-    HostMessage, KnownAgents, ListedDisplay, ListedInput, ListedWindow, MonitorInfo, ShellBinding,
-    ShellCommandHelp, SystemError, SystemErrorKind, SystemEvent, SystemReply, SystemRequest, Theme,
-    WatchTopic, WindowAct,
+    HostMessage, KnownAgents, ListedDisplay, ListedInput, ListedWindow, LogLevels, MonitorInfo,
+    ShellBinding, ShellCommandHelp, SystemError, SystemErrorKind, SystemEvent, SystemReply,
+    SystemRequest, Theme, WatchTopic, WindowAct,
 };
 
 use crate::cli::MonitorMode;
@@ -285,6 +285,29 @@ pub fn configure_display(
     )?;
     match serde_json::from_str::<HostMessage>(&said) {
         Ok(HostMessage::DisplayConfigured { refused }) => Ok(refused.map_or(Ok(()), Err)),
+        _ => Err(CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said,
+        }),
+    }
+}
+
+/// Tells the compositor at `socket` to log at `levels`. The outer error is
+/// the compositor's; the inner, why it refused.
+pub fn set_log_levels(
+    socket: &Path,
+    levels: &LogLevels,
+    patience: Option<Duration>,
+) -> Result<Result<(), String>, CompositorError> {
+    let said = exchanged(
+        socket,
+        &[ChromeMessage::SetLogLevels {
+            levels: levels.clone(),
+        }],
+        patience,
+    )?;
+    match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::LogLevelsSet { refused }) => Ok(refused.map_or(Ok(()), Err)),
         _ => Err(CompositorError::Unreadable {
             path: socket.display().to_string(),
             said,

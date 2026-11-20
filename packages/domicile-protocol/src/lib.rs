@@ -483,6 +483,12 @@ pub enum ChromeMessage {
         change: DisplayChange,
     },
 
+    /// Log at `levels` until the desktop restarts. They replace the levels
+    /// set before; [`LogLevels::default`] goes back to the starting levels.
+    /// Answered with [`HostMessage::LogLevelsSet`] on this connection only.
+    /// Sent by `domicile set-log-level`.
+    SetLogLevels { levels: LogLevels },
+
     /// This page has captured its old frame for `theme`; the windows may now
     /// switch.
     ///
@@ -935,6 +941,13 @@ pub enum HostMessage {
     /// Answers [`ChromeMessage::ConfigureDisplay`] on the asking connection
     /// only: why it was not done, or nothing when the desktop took it.
     DisplayConfigured {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        refused: Option<String>,
+    },
+
+    /// Answers [`ChromeMessage::SetLogLevels`] on the asking connection only:
+    /// why they were not set, or nothing.
+    LogLevelsSet {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         refused: Option<String>,
     },
@@ -3388,6 +3401,118 @@ pub enum CursorShape {
     AllScroll,
     ZoomIn,
     ZoomOut,
+}
+
+/// How much a part of the desktop logs, from least to most.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LogLevel {
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+impl LogLevel {
+    /// The name `domicile set-log-level` takes.
+    pub fn name(self) -> &'static str {
+        match self {
+            LogLevel::Error => "error",
+            LogLevel::Warn => "warn",
+            LogLevel::Info => "info",
+            LogLevel::Debug => "debug",
+            LogLevel::Trace => "trace",
+        }
+    }
+}
+
+/// An area of the desktop whose logs can be turned up on their own. Each part
+/// (compositor, engine, shell) maps it to the code it logs from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Subsystem {
+    Input,
+    Displays,
+    Windows,
+    Rendering,
+    Cast,
+    Portals,
+    Idle,
+    Clipboard,
+    Notifications,
+    Electron,
+    Agents,
+    Shell,
+    Session,
+}
+
+impl Subsystem {
+    /// Every subsystem, in the order help lists them.
+    pub const ALL: [Subsystem; 13] = [
+        Subsystem::Input,
+        Subsystem::Displays,
+        Subsystem::Windows,
+        Subsystem::Rendering,
+        Subsystem::Cast,
+        Subsystem::Portals,
+        Subsystem::Idle,
+        Subsystem::Clipboard,
+        Subsystem::Notifications,
+        Subsystem::Electron,
+        Subsystem::Agents,
+        Subsystem::Shell,
+        Subsystem::Session,
+    ];
+
+    /// The name `domicile set-log-level` takes.
+    pub fn name(self) -> &'static str {
+        match self {
+            Subsystem::Input => "input",
+            Subsystem::Displays => "displays",
+            Subsystem::Windows => "windows",
+            Subsystem::Rendering => "rendering",
+            Subsystem::Cast => "cast",
+            Subsystem::Portals => "portals",
+            Subsystem::Idle => "idle",
+            Subsystem::Clipboard => "clipboard",
+            Subsystem::Notifications => "notifications",
+            Subsystem::Electron => "electron",
+            Subsystem::Agents => "agents",
+            Subsystem::Shell => "shell",
+            Subsystem::Session => "session",
+        }
+    }
+
+    /// What it covers, for help and the Settings app.
+    pub fn description(self) -> &'static str {
+        match self {
+            Subsystem::Input => "Keyboards, pointers, touch, gestures and input methods",
+            Subsystem::Displays => "Monitors, modes, scale, color and night light",
+            Subsystem::Windows => "App windows, popups, focus and launching apps",
+            Subsystem::Rendering => "Frames, buffers, page flips and latency",
+            Subsystem::Cast => "Screen sharing, screenshots and casting",
+            Subsystem::Portals => "Desktop portals and their dialogs",
+            Subsystem::Idle => "Idle, the screen lock and sleep",
+            Subsystem::Clipboard => "Copy and paste",
+            Subsystem::Notifications => "Notifications and the system tray",
+            Subsystem::Electron => "Electron apps on the engine",
+            Subsystem::Agents => "Agents that use the desktop",
+            Subsystem::Shell => "The shell and its connection to the desktop",
+            Subsystem::Session => "Starting, stopping and the login session",
+        }
+    }
+}
+
+/// The log levels set at runtime, over the starting ones.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogLevels {
+    /// The level for everything Domicile logs, or the starting level.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub all: Option<LogLevel>,
+    /// Levels for single subsystems, over `all`.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub subsystems: std::collections::BTreeMap<Subsystem, LogLevel>,
 }
 
 /// The desktop's color theme.

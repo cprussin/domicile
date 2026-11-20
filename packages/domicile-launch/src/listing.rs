@@ -4,8 +4,8 @@
 use std::path::Path;
 
 use domicile_protocol::{
-    AgentReach, DesktopStatus, KnownAgents, ListedDisplay, ListedInput, ListedWindow, ShellBinding,
-    ShellCommandHelp,
+    AgentReach, DesktopStatus, KnownAgents, ListedDisplay, ListedInput, ListedWindow, LogLevels,
+    ShellBinding, ShellCommandHelp,
 };
 use serde::Serialize;
 
@@ -178,6 +178,37 @@ pub fn shell_commands_table(paint: Paint, commands: &[ShellCommandHelp]) -> Stri
                 paint.usage(&command.usage),
                 " ".repeat(width - command.usage.chars().count()),
                 command.description
+            )
+        })
+        .collect()
+}
+
+/// The level everything logs at, then each subsystem set apart from it.
+pub fn log_levels_table(paint: Paint, levels: &LogLevels) -> String {
+    let all = match levels.all {
+        Some(level) => vec![(level.name().to_string(), Style::Bold)],
+        None => vec![("as it started".to_string(), Style::Dim)],
+    };
+    let lines: Vec<(&str, Vec<Span>)> = std::iter::once(("everything", all))
+        .chain(levels.subsystems.iter().map(|(subsystem, level)| {
+            (
+                subsystem.name(),
+                vec![(level.name().to_string(), Style::Bold)],
+            )
+        }))
+        .collect();
+    let width = lines
+        .iter()
+        .map(|(name, _)| name.chars().count())
+        .max()
+        .expect("everything is a line");
+    lines
+        .iter()
+        .map(|(name, level)| {
+            format!(
+                "{}  {}\n",
+                paint.style(Style::Dim, &format!("{name:<width$}")),
+                painted(paint, level)
             )
         })
         .collect()

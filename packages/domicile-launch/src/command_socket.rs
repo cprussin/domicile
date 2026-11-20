@@ -17,8 +17,9 @@ use crate::command::{
     configure_extension_line, delete_history_line, devtools_line, disable_while_typing_line,
     extensions_line, history_line, load_shell_line, load_unpacked_line, media_devices_line,
     open_app_line, open_url_line, pin_browser_site_line, reply, run_app_line,
-    set_extension_enabled_line, set_media_device_line, set_site_permission_line, site_data_line,
-    site_permissions_line, uninstall_extension_line, visits_line, Reply, NO_SHELL_WINDOW,
+    set_extension_enabled_line, set_log_levels_line, set_media_device_line,
+    set_site_permission_line, site_data_line, site_permissions_line, uninstall_extension_line,
+    visits_line, Reply, NO_SHELL_WINDOW,
 };
 use crate::control::AppReuse;
 use crate::extensions::{ExtensionSettings, InstalledExtension};
@@ -337,6 +338,22 @@ pub fn clear_site_data(socket: &Path, host: &str, patience: Duration) -> Result<
         socket,
         &clear_site_data_line(host),
         Reply::Cleared,
+        patience,
+    )
+}
+
+/// Tells the engine at `socket` to log at Chromium's minimum severity
+/// `min_level` and VLOG at `vmodule` in every process.
+pub fn set_log_levels(
+    socket: &Path,
+    min_level: i32,
+    vmodule: &str,
+    patience: Duration,
+) -> Result<(), CommandError> {
+    carry_out(
+        socket,
+        &set_log_levels_line(min_level, vmodule),
+        Reply::Set,
         patience,
     )
 }

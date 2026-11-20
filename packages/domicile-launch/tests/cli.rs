@@ -9,8 +9,8 @@ use domicile_launch::commands::COMMANDS;
 use domicile_launch::control::{AppReuse, Request, Switch, ThemeChange};
 use domicile_launch::power::Power;
 use domicile_protocol::{
-    DeskRect, DisplayChange, DisplayTransform, EmulatedInput, PointerButton, Scale, WatchTopic,
-    WindowAct,
+    DeskRect, DisplayChange, DisplayTransform, EmulatedInput, LogLevel, PointerButton, Scale,
+    Subsystem, WatchTopic, WindowAct,
 };
 
 fn run(args: &[&str]) -> Result<Invocation, CliError> {
@@ -606,6 +606,58 @@ fn theme_takes_light_dark_toggle_or_nothing() {
 }
 
 #[test]
+fn set_log_level_takes_a_level_and_subsystems_or_reset_or_nothing() {
+    let ask = |request| Ok(Invocation::Ask { request });
+    assert_eq!(run(&["set-log-level"]), ask(Request::LogLevels));
+    assert_eq!(
+        run(&["set-log-level", "debug"]),
+        ask(Request::SetLogLevel {
+            level: LogLevel::Debug,
+            subsystems: Vec::new()
+        })
+    );
+    assert_eq!(
+        run(&["set-log-level", "trace", "input", "displays"]),
+        ask(Request::SetLogLevel {
+            level: LogLevel::Trace,
+            subsystems: vec![Subsystem::Input, Subsystem::Displays]
+        })
+    );
+    assert_eq!(
+        run(&["set-log-level", "--reset"]),
+        ask(Request::ResetLogLevels)
+    );
+}
+
+#[test]
+fn set_log_level_names_what_it_takes() {
+    assert_eq!(
+        run(&["set-log-level", "loud"]),
+        Err(CliError::NotALogLevel {
+            said: "loud".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["set-log-level", "debug", "inptu"]),
+        Err(CliError::NotASubsystem {
+            said: "inptu".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["set-log-level", "--reset", "input"]),
+        Err(CliError::Extra {
+            verb: "set-log-level --reset".to_string(),
+            extra: "input".to_string()
+        })
+    );
+    let said = CliError::NotASubsystem {
+        said: "inptu".to_string(),
+    }
+    .to_string();
+    assert!(said.contains("input, displays, windows"), "{said}");
+}
+
+#[test]
 fn theme_refuses_anything_else() {
     assert_eq!(
         run(&["theme", "blue"]),
@@ -803,6 +855,7 @@ fn every_command_in_the_help_parses_as_a_verb() {
         "devtools",
         "accessibility",
         "accessibility-act",
+        "set-log-level",
         "help",
     ];
     for verb in verbs {

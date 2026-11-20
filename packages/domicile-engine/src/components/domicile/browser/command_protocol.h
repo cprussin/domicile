@@ -153,6 +153,11 @@ namespace domicile {
 //   -> {"type":"disable_while_typing","enabled":false}
 //   -> {"type":"refused","why":"..."}
 //
+//   {"type":"set_log_levels","version":1,"min_level":0,
+//    "vmodule":"*/domicile/*=2"}
+//   -> {"type":"set"}
+//   -> {"type":"refused","why":"..."}
+//
 //   {"type":"devtools","version":1,"window":"<browser window id>",
 //    "method":"Accessibility.getFullAXTree","params":{"depth":4}}
 //   -> {"type":"devtools","result":{"nodes":[...]}}
@@ -164,6 +169,9 @@ namespace domicile {
 // enough to read the page's accessibility tree, click, type, scroll and
 // navigate, and nothing that reads cookies or storage or runs script. A
 // private window is never driven. `params` defaults to {}.
+// `set_log_levels` is `domicile set-log-level`: `min_level` is Chromium's
+// minimum severity (0 INFO to 3 FATAL) and `vmodule` its `--vmodule`, in every
+// engine process until the engine exits.
 // `disable_while_typing` is `domicile disable-while-typing`: whether the
 // touchpads rest while a keyboard types, set when the request says.
 // The site permissions, extensions and media devices are the Settings app's,
@@ -584,6 +592,11 @@ using SendDevTools = base::FunctionRef<void(const std::string& window,
                                             base::DictValue params,
                                             DevToolsAnswered answered)>;
 
+// Carries out `set_log_levels`: logs at `min_level` and VLOGs at `vmodule` in
+// every engine process, and in those started later.
+using SetLogLevels =
+    base::FunctionRef<void(int min_level, const std::string& vmodule)>;
+
 // What each command does, injected so this file can be tested with strings.
 struct CommandActions {
   LoadShell load_shell;
@@ -610,6 +623,7 @@ struct CommandActions {
   ClearSiteData clear_site_data;
   DisableWhileTyping disable_while_typing;
   SendDevTools send_devtools;
+  SetLogLevels set_log_levels;
 };
 
 // Receives the reply line, including its trailing newline.

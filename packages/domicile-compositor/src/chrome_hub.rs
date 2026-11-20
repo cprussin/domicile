@@ -24,6 +24,7 @@ use crate::client_requests::ClientRequest;
 use crate::file_indexing::Offered;
 use crate::frame_report::{report, FrameTimings, FrameWindow, REPORT_EVERY};
 use crate::lock::Seen;
+use crate::log_levels::LogFilter;
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::portals::Portals;
 use crate::theme_turnover::chrome_key;
@@ -69,6 +70,8 @@ pub struct ChromeHub {
     pub offered: Mutex<Option<Arc<Offered>>>,
     /// The lock state, for [`answer_on_the_connection`]. Set once at startup.
     pub lock: OnceLock<Seen>,
+    /// The log filter `domicile set-log-level` reloads. Set once at startup.
+    pub log_filter: OnceLock<LogFilter>,
     /// The desktop portal: tells clients the theme, and takes the shell's
     /// answers to their dialogs.
     ///
@@ -147,6 +150,7 @@ impl ChromeHub {
             child_nice,
             offered: Mutex::new(None),
             lock: OnceLock::new(),
+            log_filter: OnceLock::new(),
             portals,
             tray: OnceLock::new(),
             notifications: OnceLock::new(),

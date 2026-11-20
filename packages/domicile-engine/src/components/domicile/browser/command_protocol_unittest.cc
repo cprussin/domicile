@@ -87,6 +87,8 @@ struct Told {
   std::string devtools_window;
   std::string devtools_method;
   std::optional<base::DictValue> devtools_params;
+  std::optional<int> min_log_level;
+  std::string vmodule;
 };
 
 // The id the recording `load_unpacked` gives what it loads, and the one the
@@ -420,6 +422,10 @@ std::string Answer(std::string_view line,
     result.Set("sent", method);
     std::move(answered).Run(base::ok(std::move(result)));
   };
+  auto set_log_levels = [told](int min_level, const std::string& vmodule) {
+    told->min_log_level = min_level;
+    told->vmodule = vmodule;
+  };
   told->reply.clear();
   AnswerCommand(line,
                 {.load_shell = load_shell,
@@ -445,7 +451,8 @@ std::string Answer(std::string_view line,
                  .list_site_data = list_site_data,
                  .clear_site_data = clear_site_data,
                  .disable_while_typing = disable_while_typing,
-                 .send_devtools = send_devtools},
+                 .send_devtools = send_devtools,
+                 .set_log_levels = set_log_levels},
                 base::BindOnce([](std::string* out,
                                   std::string line) { *out = std::move(line); },
                                &told->reply));
@@ -1296,6 +1303,33 @@ TEST(CommandProtocolTest, RefusesDisableWhileTypingItCannotSet) {
   EXPECT_EQ(WhyOf(Answer(R"({"type":"disable_while_typing","version":1})",
                          &told, /*has_window=*/false)),
             "no touchpad");
+}
+
+// `domicile set-log-level`. The supervisor turns subsystems into `vmodule`
+// patterns; see domicile-launch's engine_log_levels.rs.
+TEST(CommandProtocolTest, SetsTheLogLevels) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(
+                R"({"type":"set_log_levels","version":1,"min_level":0,)"
+                R"("vmodule":"*/domicile/*=2"})",
+                &told)),
+            "set");
+  EXPECT_EQ(told.min_log_level, 0);
+  EXPECT_EQ(told.vmodule, "*/domicile/*=2");
+}
+
+TEST(CommandProtocolTest, RefusesALogLevelChromiumHasNot) {
+  // 0 is INFO and 3 is FATAL. Below 0 is a VLOG level, which `vmodule` sets
+  // per file instead of turning on all of Chromium's.
+  Told told;
+  for (const char* line :
+       {R"({"type":"set_log_levels","version":1,"min_level":-1,"vmodule":""})",
+        R"({"type":"set_log_levels","version":1,"min_level":4,"vmodule":""})",
+        R"({"type":"set_log_levels","version":1,"vmodule":""})",
+        R"({"type":"set_log_levels","version":1,"min_level":2})"}) {
+    EXPECT_EQ(TypeOf(Answer(line, &told)), "refused") << line;
+  }
+  EXPECT_EQ(told.min_log_level, std::nullopt);
 }
 
 // The History app, which these replace `chrome.history` and

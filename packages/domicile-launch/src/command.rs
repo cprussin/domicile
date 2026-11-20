@@ -63,6 +63,9 @@
 //! {"type":"clear_site_data","version":1,"host":"mail.example"}
 //! {"type":"cleared"}   |   {"type":"refused","why":"…"}
 //!
+//! {"type":"set_log_levels","version":1,"min_level":0,"vmodule":"*/domicile/*=1"}
+//! {"type":"set"}   |   {"type":"refused","why":"…"}
+//!
 //! {"type":"disable_while_typing","version":1,"enabled":false}
 //! {"type":"disable_while_typing","enabled":false}   |   {"type":"refused","why":"…"}
 //! ```
@@ -359,6 +362,16 @@ pub fn disable_while_typing_line(enabled: Option<bool>) -> String {
     })
 }
 
+/// The request to log at Chromium's minimum severity `min_level` and VLOG at
+/// `vmodule` in every engine process.
+pub fn set_log_levels_line(min_level: i32, vmodule: &str) -> String {
+    line(&Command::SetLogLevels {
+        version: VERSION,
+        min_level,
+        vmodule,
+    })
+}
+
 /// The request to send DevTools Protocol `method` with `params` to browser
 /// window `window`, by its id in the engine.
 pub fn devtools_line(window: &str, method: &str, params: &serde_json::Value) -> String {
@@ -494,6 +507,11 @@ enum Command<'a> {
     ClearSiteData {
         version: u32,
         host: &'a str,
+    },
+    SetLogLevels {
+        version: u32,
+        min_level: i32,
+        vmodule: &'a str,
     },
     DisableWhileTyping {
         version: u32,

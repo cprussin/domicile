@@ -118,6 +118,7 @@ mod latency_run;
 mod launches;
 mod lock;
 mod locking;
+mod log_levels;
 mod logind;
 mod memory_frames;
 mod modifiers;
@@ -178,6 +179,7 @@ use crate::frame_publishing::Upload;
 use crate::gbm::Gbm;
 use crate::held_frames::HeldFrames;
 use crate::latency::Latency;
+use crate::log_levels::LogFilter;
 use crate::presentations::Presentations;
 use crate::shm_upload::render_modifiers;
 use crate::uploads::Uploads;
@@ -824,40 +826,47 @@ fn main() -> ExitCode {
     }
 }
 
-/// Starts tracing, at `RUST_LOG`'s levels or `INFO`.
+/// Starts tracing, at `RUST_LOG`'s levels or `INFO`, and returns the filter
+/// `domicile set-log-level` reloads.
 ///
 /// When stdout is the journal, each event is an entry under
 /// `domicile-compositor` with its level as the priority, so `journalctl -p err`
 /// finds the compositor's errors. Otherwise events are formatted to stdout,
 /// colored only on a terminal: in a file, escape codes break searches like
 /// `grep pid=1234`.
-fn start_logging() -> Result<(), Box<dyn std::error::Error>> {
+fn start_logging() -> Result<LogFilter, Box<dyn std::error::Error>> {
     use std::io::IsTerminal;
     use std::os::fd::AsFd;
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
 
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    let starting = std::env::var("RUST_LOG")
+        .ok()
+        .filter(|directives| tracing_subscriber::EnvFilter::try_new(directives).is_ok())
+        .unwrap_or_else(|| "info".to_string());
+    let (filter, handle) =
+        tracing_subscriber::reload::Layer::new(tracing_subscriber::EnvFilter::try_new(&starting)?);
     let stdout = std::io::stdout();
-    match domicile_launch::journal::is_the_journal(stdout.as_fd()) {
-        true => tracing_subscriber::registry()
-            .with(filter)
-            .with(
-                tracing_journald::layer()?
-                    .with_syslog_identifier(domicile_launch::component_log::COMPOSITOR.to_string()),
-            )
-            .init(),
-        false => tracing_subscriber::fmt()
-            .with_ansi(stdout.is_terminal())
-            .with_env_filter(filter)
-            .init(),
-    }
-    Ok(())
+    let journal = domicile_launch::journal::is_the_journal(stdout.as_fd());
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(
+            journal
+                .then(tracing_journald::layer)
+                .transpose()?
+                .map(|layer| {
+                    layer.with_syslog_identifier(
+                        domicile_launch::component_log::COMPOSITOR.to_string(),
+                    )
+                }),
+        )
+        .with((!journal).then(|| tracing_subscriber::fmt::layer().with_ansi(stdout.is_terminal())))
+        .init();
+    Ok(LogFilter::new(starting, handle))
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    start_logging()?;
+    let log_filter = start_logging()?;
 
     // Read before any thread is raised, so the processes the desktop starts
     // run at the priority it was started at.
@@ -1148,6 +1157,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // desktop without a session bus still reports one. See `tray`.
     hub.host.lock().unwrap().set_tray(Vec::new());
     let publishing = Arc::clone(&hub);
+    if hub.log_filter.set(log_filter).is_err() {
+        unreachable!("the log filter is set once, here");
+    }
     let _ = hub.tray.set(tray::serve(
         data_dirs(
             std::env::var_os("XDG_DATA_HOME"),

@@ -15,14 +15,15 @@ use std::path::{Path, PathBuf};
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
     AgentReach, DeskRect, DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage,
-    KnownAgents, ListedDisplay, ListedInput, ListedWindow, MonitorInfo, Scale, ShellBinding,
-    ShellCommandHelp, Theme, WatchTopic, WindowAct, WindowKind,
+    KnownAgents, ListedDisplay, ListedInput, ListedWindow, LogLevel, LogLevels, MonitorInfo, Scale,
+    ShellBinding, ShellCommandHelp, Subsystem, Theme, WatchTopic, WindowAct, WindowKind,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::browser_profiles::BrowserProfileList;
 use crate::extensions::{ExtensionSettings, InstalledExtension};
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
+use crate::log_levels::changed;
 use crate::media_devices::{MediaDevices, MediaKind};
 use crate::shell_path::{Shell, ShellFiles};
 use crate::site_data::SiteData;
@@ -247,6 +248,19 @@ pub enum Request {
         display: String,
         change: DisplayChange,
     },
+    /// Log at `level`, for `subsystems` or, with none, for everything, until
+    /// the desktop restarts. Answered with [`Response::LogLevels`]. See
+    /// `domicile set-log-level`.
+    SetLogLevel {
+        level: LogLevel,
+        #[serde(default)]
+        subsystems: Vec<Subsystem>,
+    },
+    /// Go back to the levels the desktop started at. Answered with
+    /// [`Response::LogLevels`].
+    ResetLogLevels,
+    /// The levels set since the desktop started.
+    LogLevels,
     /// Hear about `topics` for as long as the connection is open: each
     /// topic's answer at once, then again whenever it changes, each as a
     /// [`Response::Heard`]. See `domicile subscribe`.
@@ -410,6 +424,8 @@ pub enum Response {
 
     /// The desktop's theme, after the request.
     Theme { theme: Theme },
+    /// The levels set since the desktop started.
+    LogLevels { levels: LogLevels },
 
     /// Answers `monitors`.
     Monitors { monitors: Vec<MonitorInfo> },
@@ -680,6 +696,12 @@ pub type SendDevTools<'a> =
 /// tests.
 pub type ConfiguringDisplays<'a> = &'a dyn Fn(&str, &DisplayChange) -> Result<(), String>;
 
+/// The log levels set since the desktop started.
+pub type ReadingLogLevels<'a> = &'a dyn Fn() -> LogLevels;
+
+/// Sets the desktop's log levels, replacing those set before.
+pub type SettingLogLevels<'a> = &'a dyn Fn(&LogLevels) -> Result<(), String>;
+
 /// Asks the compositor for the lit monitors.
 ///
 /// [`crate::compositor_socket::monitors`] in a desktop; a closure in tests.
@@ -781,6 +803,8 @@ pub struct Desktop<'a> {
     pub emulate: Emulating<'a>,
     pub devtools: SendDevTools<'a>,
     pub configure_display: ConfiguringDisplays<'a>,
+    pub log_levels: ReadingLogLevels<'a>,
+    pub set_log_levels: SettingLogLevels<'a>,
     pub monitors: ListMonitors<'a>,
     pub displays: ListDisplays<'a>,
     pub windows: ListWindows<'a>,
@@ -1109,6 +1133,14 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
                 Err(why) => Response::Refused { why },
             })
         }
+        Ok(Request::SetLogLevel { level, subsystems }) => leveled(
+            changed(&(desktop.log_levels)(), level, &subsystems),
+            desktop.set_log_levels,
+        ),
+        Ok(Request::ResetLogLevels) => leveled(LogLevels::default(), desktop.set_log_levels),
+        Ok(Request::LogLevels) => to_line(&Response::LogLevels {
+            levels: (desktop.log_levels)(),
+        }),
         Ok(Request::SleepDisplays { display }) => {
             powered(DisplayPower::Asleep, display, desktop.power_displays)
         }
@@ -1146,6 +1178,15 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
                 line.trim()
             ),
         }),
+    }
+}
+
+/// Sets the desktop's log levels to `levels` with `set`, answering them, or
+/// why the desktop refused, as a response line.
+fn leveled(levels: LogLevels, set: SettingLogLevels) -> String {
+    match set(&levels) {
+        Ok(()) => to_line(&Response::LogLevels { levels }),
+        Err(why) => to_line(&Response::Refused { why }),
     }
 }
 

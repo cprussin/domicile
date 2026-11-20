@@ -65,6 +65,7 @@ Grouped `--help`, `domicile help <command>` for usage and examples, and man page
 - `domicile exec` and `KeyAction.Exec` start a program for any shell, and say why when it doesn't start; agents get an `exec` tool. `domicile drag` holds the button while it moves, and `domicile type` presses Return for a line break. [The domicile command](CLI.md) · [Keybindings](architecture/KEYBINDINGS.md)
 - `domicile trace <file>` records the engine's frame production to a Perfetto trace. [The domicile command](CLI.md)
 - In the journal, logs carry their priority and a name per part: `domicile-compositor`, `domicile-engine`, `domicile-shell`. `journalctl --user -p err` finds errors. [Logs](LOGGING.md)
+- `domicile set-log-level trace input` turns the logs up while the desktop runs, for everything or for one subsystem, in the compositor and every engine process. `--reset` turns them back. [Levels](LOGGING.md#levels) · [`domicile set-log-level`](CLI.md#domicile-set-log-level-level-subsystem)
 - Chromium 160. [#2023](https://github.com/cprussin/domicile/pull/2023)
 
 ### Breaking changes

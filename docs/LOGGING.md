@@ -49,6 +49,41 @@ a library writing to stderr itself, such as Mesa.
 
 ## Levels
 
+Turn the logs up while the desktop runs, for everything or for the subsystems
+you are looking into, with `domicile set-log-level`:
+
+```sh
+domicile set-log-level trace input      # every input event
+domicile set-log-level debug            # everything at debug
+domicile set-log-level                  # print the levels set
+domicile set-log-level --reset          # back to the starting levels
+```
+
+The levels are `error`, `warn`, `info`, `debug` and `trace`. The compositor and
+every engine process change at once, and a part that restarts keeps them. They
+last until the desktop restarts.
+
+| Subsystem | Covers |
+|---|---|
+| `input` | Keyboards, pointers, touch, gestures and input methods |
+| `displays` | Monitors, modes, scale, color and night light |
+| `windows` | App windows, popups, focus and launching apps |
+| `rendering` | Frames, buffers, page flips and latency |
+| `cast` | Screen sharing, screenshots and casting |
+| `portals` | Desktop portals and their dialogs |
+| `idle` | Idle, the screen lock and sleep |
+| `clipboard` | Copy and paste |
+| `notifications` | Notifications and the system tray |
+| `electron` | Electron apps on the engine |
+| `agents` | Agents that use the desktop |
+| `shell` | The shell and its connection to the desktop |
+| `session` | Starting, stopping and the login session |
+
+Setting everything leaves Smithay and Chromium's own code at their starting
+levels; they log too much to read at `debug`.
+
+To start at other levels:
+
 - **Compositor:** `RUST_LOG`, such as `RUST_LOG=debug`.
 - **Engine:** `DOMICILE_ENGINE_ARGS`, such as `DOMICILE_ENGINE_ARGS='--log-level=0'`
   or `--v=1`. See [Running a desktop](RUNNING-A-DESKTOP.md).

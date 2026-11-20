@@ -196,6 +196,10 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                     configure_display: &|_, _| {
                         panic!("a question about this desktop reaches no compositor")
                     },
+                    log_levels: &|| panic!("a question about this desktop reads no log levels"),
+                    set_log_levels: &|_| {
+                        panic!("a question about this desktop reaches no compositor")
+                    },
                     permissions: &|| panic!("a question about this desktop reaches no engine"),
                     set_permission: &|_| panic!("a question about this desktop reaches no engine"),
                     load_unpacked: &|_| panic!("a question about this desktop reaches no engine"),

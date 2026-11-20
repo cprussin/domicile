@@ -777,7 +777,33 @@ pub const COMMANDS: &[Command] = &[
             entries: &[("--seconds <n>", "Record for `<n>` seconds instead of 20")],
         }],
         examples: &["domicile trace switch.pftrace"],
-        see_also: &[],
+        see_also: &["set-log-level"],
+    },
+    Command {
+        name: "set-log-level",
+        group: Group::Capture,
+        takes: "[<level> [<subsystems>]]",
+        summary: "Turn logs up or down until restart",
+        forms: &[
+            "set-log-level [<level> [<subsystem>...]]",
+            "set-log-level --reset",
+        ],
+        about: &[
+            "Sets the level the desktop logs at: `error`, `warn`, `info`, `debug` \
+             or `trace`. With subsystems it sets theirs alone; without, it sets \
+             everything's. The compositor and every engine process change at \
+             once, and the levels last until the desktop restarts. With nothing \
+             it prints the levels; `--reset` goes back to those it started at.",
+            "The subsystems are input, displays, windows, rendering, cast, \
+             portals, idle, clipboard, notifications, electron, agents, shell \
+             and session.",
+        ],
+        sections: &[],
+        examples: &[
+            "domicile set-log-level trace input",
+            "domicile set-log-level --reset",
+        ],
+        see_also: &["trace"],
     },
     // Agents and automation
     Command {
