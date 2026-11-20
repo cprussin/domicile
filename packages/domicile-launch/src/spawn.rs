@@ -320,10 +320,10 @@ pub fn compositor(
             ("LD_LIBRARY_PATH".to_string(), libraries),
             (
                 "RUST_LOG".to_string(),
-                // Warnings plus the compositor's few `INFO` lines (latency
-                // spikes report under `domicile`). An inherited value wins.
+                // Errors alone; `domicile set-log-level` turns it up while
+                // the desktop runs. An inherited value wins.
                 inherited("RUST_LOG")
-                    .unwrap_or_else(|| "warn,domicile_compositor=info,domicile=info".to_string())
+                    .unwrap_or_else(|| "error".to_string())
                     .into(),
             ),
         ],

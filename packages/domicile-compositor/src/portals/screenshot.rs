@@ -23,7 +23,6 @@ use domicile_protocol::{
     AccessDialog, DeskRect, DeskShot, FrozenDesk, PortalAnswer, PortalKind, PreviewedWindow,
     ShotRect, SystemError, SystemErrorKind, SHELL_APP_ID,
 };
-use tracing::warn;
 use zbus::object_server::ObjectServer;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
@@ -128,14 +127,14 @@ impl Screenshot {
                     .map_err(|unpicked| match unpicked {
                         Unpicked::Not(answer) => answer.response().max(1),
                         Unpicked::Failed(why) => {
-                            warn!(%why, "a window could not be shot for a screenshot");
+                            tracing::error!(%why, "a window could not be shot for a screenshot");
                             2
                         }
                     })?;
                 if picked.copy {
                     // The application asked for a file, so it still gets one.
                     if let Err(why) = (self.shots.copy)(encode(&picked.shot)) {
-                        warn!(%why, "a screenshot could not be copied; it is still saved");
+                        tracing::error!(%why, "a screenshot could not be copied; it is still saved");
                     }
                 }
                 picked.shot
@@ -143,7 +142,7 @@ impl Screenshot {
                 desk.shot
             };
             let path = (self.shots.save)(&shot).map_err(|why| -> u32 {
-                warn!(%why, "a screenshot could not be saved");
+                tracing::error!(%why, "a screenshot could not be saved");
                 2
             })?;
             Ok(file_uri(&path.display().to_string()))
@@ -194,7 +193,7 @@ impl Screenshot {
     /// A frame of the desk, or response `2`.
     async fn desk(&self) -> Result<Desk, u32> {
         (self.shots.shoot)().await.map_err(|why| {
-            warn!(%why, "the desk could not be shot for a screenshot");
+            tracing::error!(%why, "the desk could not be shot for a screenshot");
             2
         })
     }
@@ -283,7 +282,7 @@ async fn kept(connection: &zbus::Connection, app_id: &str) -> Option<bool> {
             None
         }
         Err(why) => {
-            warn!(%why, "the permission store could not be read; asking about screenshots again");
+            tracing::error!(%why, "the permission store could not be read; asking about screenshots again");
             None
         }
     }
@@ -303,7 +302,7 @@ async fn keep(connection: &zbus::Connection, app_id: &str, allowed: bool) {
         )
         .await;
     if let Err(why) = kept {
-        warn!(%why, "the permission store did not keep a screenshot answer; it will be asked again");
+        tracing::error!(%why, "the permission store did not keep a screenshot answer; it will be asked again");
     }
 }
 

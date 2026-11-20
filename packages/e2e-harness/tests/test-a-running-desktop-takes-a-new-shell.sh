@@ -192,7 +192,7 @@ while ! grep -q "domicile is up" "$LOG" 2>/dev/null; do
   sleep 0.1
   WAITED=$((WAITED + 1))
 done
-SOCK="$(sed -n 's/^DOMICILE_SOCK=//p' "$LOG")"
+SOCK="$(sed -n 's/^domicile is up..*DOMICILE_SOCK=//p' "$LOG")"
 
 FAILED=0
 

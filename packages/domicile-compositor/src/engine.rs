@@ -1506,7 +1506,7 @@ impl Engine {
                 if sampled.transform != BufferTransform::Normal
                     && !self.said_it_cannot_turn.replace(true)
                 {
-                    tracing::warn!(%why, "windows drawn turned are shown turned");
+                    tracing::error!(%why, "windows drawn turned are shown turned");
                 }
                 return self.submit_unturned(surface, buffer, sampled.crop, damage, at_box);
             }
@@ -1570,7 +1570,7 @@ impl Engine {
             // damaged.
             Err(why) => {
                 if !self.said_it_cannot_wait.replace(true) {
-                    tracing::warn!(%why, "resized windows stretch until they redraw");
+                    tracing::error!(%why, "resized windows stretch until they redraw");
                 }
                 return self.submit_at_the_newest_box(surface, buffer, crop, (0, 0, 0, 0));
             }
@@ -1629,7 +1629,7 @@ impl Engine {
             // shadow included.
             Err(why) => {
                 if !self.said_it_cannot_crop.replace(true) {
-                    tracing::warn!(%why, "windows are drawn uncropped, shadows and all");
+                    tracing::error!(%why, "windows are drawn uncropped, shadows and all");
                 }
                 return self.submit_uncropped(surface, buffer, damage);
             }

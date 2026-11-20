@@ -67,6 +67,7 @@ use domicile_launch::help::{command_help, error, overview, version_lines, with_u
 use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::idle_inhibit::{exit_code, inhibit_idle};
 use domicile_launch::install_app::{data_home, install_app, Fetched};
+use domicile_launch::launcher_log;
 use domicile_launch::listing::{
     agents_table, bindings_table, displays_table, inputs_table, log_levels_table,
     shell_commands_table, status_table, windows_table,
@@ -97,6 +98,7 @@ use domicile_launch::spawn::{
     send_frames_in_memory, the_engine_takes_input, Runtime,
 };
 use domicile_launch::splash::{lay_out, tell, the_page_ends, Progress, ENDED};
+use domicile_launch::startup::{up_line, Chosen};
 use domicile_launch::subscription::follow;
 use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
 use domicile_launch::trace::{self, producer_socket};
@@ -1716,8 +1718,8 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
             paint.style(Style::Dim, &format!("{label:<8}"))
         );
     };
+    let module = page.root.join(&page.module);
     if interactive {
-        let module = page.root.join(&page.module);
         choice("shell", &module.display().to_string());
         // A wrong config is a common cause of a wrong monitor layout.
         choice("config", &config.to_string());
@@ -1742,7 +1744,9 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         places.command.clone(),
         places.chrome_socket.clone(),
     )?;
-    println!("{VARIABLE}={}", places.control.display());
+    if interactive {
+        println!("{VARIABLE}={}", places.control.display());
+    }
     if let Some(building) = building {
         replacing_the_splash(
             building,
@@ -1795,9 +1799,20 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         software_compositing::vmwgfx_has_3d,
     )
     .map_err(|why| why.to_string())?;
-    if on_the_cpu {
-        println!("the engine composites on the CPU");
+    if interactive && on_the_cpu {
+        choice("engine", "composites on the CPU");
     }
+    // Off a terminal, the one line the desktop says when it is up.
+    let version = std::fs::read_to_string(version_file(&binary)).ok();
+    let up = up_line(&Chosen {
+        version: version.as_deref().and_then(|said| said.lines().next()),
+        shell: &module,
+        config: &config.to_string(),
+        profile: &places.profile,
+        platform: &platform.to_string(),
+        on_the_cpu,
+        socket: &places.control,
+    });
 
     // Install before starting components. Each runs in its own process
     // group, so Ctrl-C reaches only this process, whose default action would
@@ -1825,6 +1840,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         serving: &serving,
         levels: &levels,
         sink: &sink,
+        up: &up,
     };
     // The last desktop's compositor output, repeated if the run gives up.
     // Only the last, since each attempt usually fails the same way.
@@ -1834,7 +1850,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         &mut || one_desktop(&desktop, &mut said),
         &interrupted,
         &mut wait_or_notice_a_stop,
-        &mut |next| eprintln!("domicile: {next}"),
+        &mut |next| launcher_log::error(&next.to_string()),
     );
     Ok(match ending {
         Ending::Over => ExitCode::SUCCESS,
@@ -1844,16 +1860,16 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         // read. If the compositor never ran, point to the output above.
         Ending::GaveUp { .. } => {
             match &said {
-                Some(said) => eprintln!("\ndomicile: the last compositor said:\n\n{said}"),
-                None => eprintln!("domicile: every one of them said why above."),
+                Some(said) => launcher_log::error(&format!("the last compositor said:\n\n{said}")),
+                None => launcher_log::error("every one of them said why above."),
             }
             ExitCode::FAILURE
         }
         // The engine's own code, so a session manager can tell it apart.
         Ending::RendererUnavailable => {
-            eprintln!(
-                "domicile: renderer unavailable: the engine cannot draw on this \
-                 graphics card, even on the CPU, so the desktop is not started again."
+            launcher_log::error(
+                "renderer unavailable: the engine cannot draw on this \
+                 graphics card, even on the CPU, so the desktop is not started again.",
             );
             ExitCode::from(RENDERER_UNAVAILABLE)
         }
@@ -1901,6 +1917,9 @@ struct Desktop<'a> {
     levels: &'a Mutex<LogLevels>,
     /// Where the components' stderr goes.
     sink: &'a Arc<Sink>,
+    /// What a desktop says when it is up, off a terminal; see
+    /// `domicile_launch::startup`.
+    up: &'a str,
 }
 
 /// Runs one desktop until it ends or one of its parts keeps failing.
@@ -1915,7 +1934,7 @@ fn one_desktop(desktop: &Desktop, said: &mut Option<String>) -> Attempt {
         Ok(()) => Attempt::Ended,
         Err(Down::RendererUnavailable) => Attempt::RendererUnavailable,
         Err(Down::Failed(why)) => {
-            eprintln!("domicile: {why}");
+            launcher_log::error(&why);
             Attempt::Failed {
                 lived: started.elapsed(),
             }
@@ -1951,9 +1970,7 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), Down> {
                 paint.style(Style::Dim, "Ctrl-C to stop.")
             );
         }
-        false => println!(
-            "domicile is up. Apps connect to the WAYLAND_DISPLAY the compositor names above."
-        ),
+        false => println!("{}", desktop.up),
     }
 
     // Restart each part that dies; see `domicile_launch::restart`. `over`
@@ -1966,7 +1983,7 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), Down> {
         &mut || one_part(desktop, &mut running, heard, &mut replacing, &mut over),
         &interrupted,
         &mut wait_or_notice_a_stop,
-        &mut |next| eprintln!("domicile: {next}"),
+        &mut |next| launcher_log::error(&next.to_string()),
     );
     match ending {
         Ending::Over => over
@@ -2014,7 +2031,7 @@ fn one_part(
             Ok(()) => {}
             Err(Down::RendererUnavailable) => return PartAttempt::RendererUnavailable,
             Err(Down::Failed(why)) => {
-                eprintln!("domicile: {why}");
+                launcher_log::error(&why);
                 *replacing = Some(part);
                 return PartAttempt::Failed {
                     part,
@@ -2025,7 +2042,7 @@ fn one_part(
     }
     let exit = running.until_one_exits();
     if renderer_unavailable(&exit, started.elapsed(), desktop.policy) {
-        eprintln!("domicile: {exit}");
+        launcher_log::error(&exit.to_string());
         return PartAttempt::RendererUnavailable;
     }
     match restarts(&exit, desktop.platform) {
@@ -2036,7 +2053,7 @@ fn one_part(
         Some(part) => {
             // Print here: no caller reports a part's exit while the desktop is
             // still up.
-            eprintln!("domicile: {exit}");
+            launcher_log::error(&exit.to_string());
             running.let_go_of(exit.what);
             *replacing = Some(part);
             PartAttempt::Failed {
@@ -2046,9 +2063,9 @@ fn one_part(
         }
         None => {
             *over = Some(match exit.how == CLEANLY {
-                // Said here, since ending the run cleanly prints nothing else.
+                // The up line's counterpart: a clean end says why on stdout.
                 true => {
-                    eprintln!("domicile: {exit}");
+                    println!("domicile is down: {exit}");
                     Ok(())
                 }
                 false => Err(exit.to_string()),
@@ -2191,17 +2208,17 @@ fn electron_schemes(env: &dyn Fn(&str) -> Option<String>) -> Option<String> {
         Ok(record) => record,
         Err(why) if why.kind() == std::io::ErrorKind::NotFound => "{}".to_string(),
         Err(why) => {
-            eprintln!("domicile: cannot read {}: {why}", path.display());
+            launcher_log::error(&format!("cannot read {}: {why}", path.display()));
             "{}".to_string()
         }
     };
     with_known(&record)
         .and_then(|record| schemes_switch(&record))
         .unwrap_or_else(|why| {
-            eprintln!(
-                "domicile: registering only known Electron apps' schemes, since {} is wrong: {why}",
+            launcher_log::error(&format!(
+                "registering only known Electron apps' schemes, since {} is wrong: {why}",
                 path.display()
-            );
+            ));
             schemes_switch(electron_schemes::KNOWN).expect("the known schemes register")
         })
 }
@@ -2250,7 +2267,7 @@ fn answering(
                         answer_a_command(stream, &serving, &levels, &files, &engine, &chrome)
                     });
                 }
-                Err(why) => eprintln!("domicile: a command did not arrive: {why}"),
+                Err(why) => launcher_log::error(&format!("a command did not arrive: {why}")),
             }
         }
     });
@@ -2420,6 +2437,7 @@ fn answer_a_command(
                             ANSWER_WITHIN,
                         )
                         .map_err(|why| why.to_string())?;
+                        launcher_log::set(asked);
                         *set = asked.clone();
                         Ok(())
                     },
@@ -2461,7 +2479,7 @@ fn answer_a_command(
             agent: &admitting,
         },
     ) {
-        eprintln!("domicile: a command went unanswered: {why}");
+        launcher_log::error(&format!("a command went unanswered: {why}"));
     }
 }
 
@@ -2492,12 +2510,12 @@ fn watching_the_config(
             })
         });
         match reloaded {
-            Ok(()) => eprintln!("domicile: {} reloaded", module_config.display()),
+            Ok(()) => launcher_log::info(&format!("{} reloaded", module_config.display())),
             Err(why) => {
-                eprintln!(
-                    "domicile: {} did not reload, and the desk is as it was: {why}",
+                launcher_log::error(&format!(
+                    "{} did not reload, and the desk is as it was: {why}",
                     module_config.display()
-                );
+                ));
                 say_on_the_desk(&module_config, &why);
             }
         }
@@ -2514,7 +2532,7 @@ fn say_on_the_desk(config: &Path, why: &str) {
     let said = notification::session_bus()
         .and_then(|bus| notification::notify(&bus, "", &format!("{name} did not reload"), why));
     if let Err(unsaid) = said {
-        eprintln!("domicile: cannot say so on the desk: {unsaid}");
+        launcher_log::error(&format!("cannot say so on the desk: {unsaid}"));
     }
 }
 
@@ -2582,7 +2600,7 @@ fn first_build(
     std::thread::spawn(move || {
         let page = built(&builder_of, &asked, &mut |step| {
             if let Err(why) = tell(&told, &Progress::from(step)) {
-                eprintln!("domicile: the splash missed a step: {why}");
+                launcher_log::warn(&format!("the splash missed a step: {why}"));
             }
         })
         .and_then(as_shell);
@@ -2597,7 +2615,7 @@ fn first_build(
                 .map_err(|missing| missing.to_string())?;
             let page = lay_out(&bundle, splash)
                 .map_err(|why| format!("cannot lay out the splash: {why}"))?;
-            println!("the shell is still building, so the desk starts on the splash");
+            launcher_log::info("the shell is still building, so the desk starts on the splash");
             Ok((page, Some(building)))
         }
     }
@@ -2621,27 +2639,29 @@ fn replacing_the_splash(
             .and_then(|page| {
                 let ended = splash.join(ENDED);
                 if let Err(why) = tell(&splash, &Progress::Built { ended: &ended }) {
-                    eprintln!("domicile: the splash missed its ending: {why}");
+                    launcher_log::warn(&format!("the splash missed its ending: {why}"));
                 }
                 // The engine has `PATIENCE` to start, and the splash cannot
                 // end before it draws.
                 if !the_page_ends(&ended, PATIENCE) {
-                    eprintln!("domicile: the splash did not end, so the shell loads over it");
+                    launcher_log::warn("the splash did not end, so the shell loads over it");
                 }
                 load_the_shell(&engine, &page, &serving, &while_the_engine_starts())
                     .map(|()| page.root.join(&page.module))
             });
         match loaded {
-            Ok(module) => println!("the splash gave way to {}", module.display()),
+            Ok(module) => {
+                launcher_log::info(&format!("the splash gave way to {}", module.display()))
+            }
             Err(why) => {
-                eprintln!("domicile: the desk stays on the splash: {why}");
+                launcher_log::error(&format!("the desk stays on the splash: {why}"));
                 let failed = Progress::Failed {
                     supervisor: std::process::id(),
                     // `built` ends a failure with the build log, often empty.
                     why: why.trim_end(),
                 };
                 if let Err(unsaid) = tell(&splash, &failed) {
-                    eprintln!("domicile: the splash cannot say so: {unsaid}");
+                    launcher_log::error(&format!("the splash cannot say so: {unsaid}"));
                 }
             }
         }
@@ -2674,7 +2694,7 @@ fn wait_for(
     )
     .map_err(|stalled| match stalled {
         Stalled::Exited { exit, .. } if renderer_unavailable(&exit, started.elapsed(), policy) => {
-            eprintln!("domicile: {exit}");
+            launcher_log::error(&exit.to_string());
             Down::RendererUnavailable
         }
         stalled => Down::Failed(stalled.to_string()),
@@ -2751,10 +2771,10 @@ impl SaidSession {
         match named {
             Ok(manager) => Some(manager),
             Err(why) => {
-                eprintln!(
-                    "domicile: the user manager was not told this desktop's name before the \
+                launcher_log::error(&format!(
+                    "the user manager was not told this desktop's name before the \
                      desktop started: {why}"
-                );
+                ));
                 None
             }
         }
@@ -2771,17 +2791,17 @@ impl SaidSession {
         match answered {
             Ok(true) => true,
             Ok(false) => {
-                eprintln!(
-                    "domicile: no systemd user manager is on the session bus, so apps share the \
-                     desktop's cgroup"
+                launcher_log::warn(
+                    "no systemd user manager is on the session bus, so apps share the \
+                     desktop's cgroup",
                 );
                 false
             }
             Err(why) => {
-                eprintln!(
-                    "domicile: the session bus did not say whether a user manager runs, so apps \
+                launcher_log::warn(&format!(
+                    "the session bus did not say whether a user manager runs, so apps \
                      share the desktop's cgroup: {why}"
-                );
+                ));
                 false
             }
         }
@@ -2798,10 +2818,10 @@ impl SaidSession {
                         .expect("nothing panics holding it")
                         .get_or_insert_with(|| (places.control.clone(), earlier));
                 }
-                Err(why) => eprintln!(
-                    "domicile: the user manager was not told this desktop is the session, so \
+                Err(why) => launcher_log::error(&format!(
+                    "the user manager was not told this desktop is the session, so \
                      the portal will not start in it: {why}"
-                ),
+                )),
             }
         }
     }
@@ -2827,7 +2847,9 @@ impl Drop for SaidSession {
         // stopping one could stop another run's.
         if let (Some(manager), Some((control, earlier))) = (manager, took_over) {
             if let Err(why) = graphical_session::end(manager, control, earlier) {
-                eprintln!("domicile: the user manager still holds this desktop's session: {why}");
+                launcher_log::warn(&format!(
+                    "the user manager still holds this desktop's session: {why}"
+                ));
             }
         }
     }

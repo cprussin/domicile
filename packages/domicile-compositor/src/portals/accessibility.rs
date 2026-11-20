@@ -2,8 +2,6 @@
 //! accessibility trees. Qt, Firefox and others expose nothing until it is
 //! on. See [`super::agent::Accessibility`].
 
-use tracing::warn;
-
 use super::agent::Accessibility;
 
 const BUS: &str = "org.a11y.Bus";
@@ -19,7 +17,9 @@ pub fn on_the_session_bus() -> Accessibility {
             status()
                 .and_then(|status| status.get_property::<bool>(ENABLED))
                 .unwrap_or_else(|why| {
-                    warn!("apps' accessibility can't be read, so it is left alone: {why}");
+                    tracing::error!(
+                        "apps' accessibility can't be read, so it is left alone: {why}"
+                    );
                     true
                 })
         }),
@@ -27,7 +27,7 @@ pub fn on_the_session_bus() -> Accessibility {
             if let Err(why) = status()
                 .and_then(|status| status.set_property(ENABLED, on).map_err(zbus::Error::from))
             {
-                warn!(on, "apps' accessibility could not be set: {why}");
+                tracing::error!(on, "apps' accessibility could not be set: {why}");
             }
         }),
     }

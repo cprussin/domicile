@@ -23,7 +23,7 @@ use domicile_host::recording::{file_name, recordings_dir, Timer};
 use domicile_protocol::{
     Captured, CapturingKind, PortalAnswer, SystemError, SystemErrorKind, SHELL_APP_ID,
 };
-use tracing::{debug, warn};
+use tracing::debug;
 
 use super::queue::{ask_unbidden, Queue};
 use super::screencast::{captured, chosen, dialog, preview, Selected};
@@ -162,14 +162,14 @@ pub fn for_the_shell(queue: &Queue, recordings: &Recordings) -> Result<PathBuf, 
         timer = match heard {
             Heard::Control(PortalAnswer::Pause) => {
                 if let Err(why) = recorder.pause() {
-                    warn!(%why, "the recording did not pause");
+                    tracing::error!(%why, "the recording did not pause");
                     continue;
                 }
                 timer.paused((recordings.clock)())
             }
             Heard::Control(PortalAnswer::Resume) => {
                 if let Err(why) = recorder.resume() {
-                    warn!(%why, "the recording did not resume");
+                    tracing::error!(%why, "the recording did not resume");
                     continue;
                 }
                 timer.resumed((recordings.clock)())

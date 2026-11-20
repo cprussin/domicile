@@ -772,7 +772,7 @@ fn advertise_dmabuf(
         match DmabufFeedbackBuilder::new(device, formats.clone()).build() {
             Ok(feedback) => Some(feedback),
             Err(err) => {
-                tracing::warn!(%err, "cannot build dmabuf feedback; falling back to v3");
+                tracing::error!(%err, "cannot build dmabuf feedback; falling back to v3");
                 None
             }
         }
@@ -795,7 +795,7 @@ fn advertise_dmabuf(
 /// `None` is logged once here, since it blanks every shm window.
 fn shm_allocator(importer: &DmabufImporter) -> Option<Gbm> {
     let Some(node) = importer.node() else {
-        warn!(
+        error!(
             "EGL renders on no DRM node — a software rasterizer — so there is no GPU to copy \
              shared-memory clients' frames onto; their windows will be blank"
         );
@@ -804,7 +804,7 @@ fn shm_allocator(importer: &DmabufImporter) -> Option<Gbm> {
     match Gbm::open(gbm::LIBRARY, node) {
         Ok(gbm) => Some(gbm),
         Err(err) => {
-            warn!(%err, "shared-memory clients' windows will be blank");
+            error!(%err, "shared-memory clients' windows will be blank");
             None
         }
     }
@@ -1013,7 +1013,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     {
         Some(Ok(source)) => source,
         Some(Err(err)) => {
-            tracing::warn!(%err, "the last compositor's display would not bind; reconnecting clients will not find this one");
+            tracing::error!(%err, "the last compositor's display would not bind; reconnecting clients will not find this one");
             ListeningSocketSource::new_auto()?
         }
         None => ListeningSocketSource::new_auto()?,
@@ -1353,7 +1353,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             Some(session)
         }
         None => {
-            warn!(
+            error!(
                 "no --engine-socket, so no client window will be shown: the engine is what puts \
                  one on the page and the copy path that used to draw them here is gone. The \
                  chrome, input and the desktop all work as before"
@@ -1778,7 +1778,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     // A config that fails to parse keeps the live one and is
                     // recorded as the last error.
                     if let Err(err) = data.state.config.apply_watch(parsed) {
-                        tracing::warn!(%err, "keeping the last config that parsed");
+                        tracing::error!(%err, "keeping the last config that parsed");
                         return;
                     }
                     // Processes started after the reload get the new one.
@@ -1804,7 +1804,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         // A profile matches the plugged-in monitors but cannot
                         // be applied. The config is accepted; the current
                         // desktop stays.
-                        Err(err) => tracing::warn!(
+                        Err(err) => tracing::error!(
                             %err,
                             "keeping the desktop that is up; the reloaded profile does not \
                              describe one these monitors can make"
@@ -1817,7 +1817,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 })?;
             }
             Err(err) => {
-                tracing::warn!(%err, "not watching the config; its displays are fixed for this run");
+                tracing::error!(%err, "not watching the config; its displays are fixed for this run");
             }
         },
     }

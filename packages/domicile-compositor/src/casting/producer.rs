@@ -224,7 +224,7 @@ fn run(
     let gbm = node.and_then(|node| match Gbm::open(crate::gbm::LIBRARY, &node) {
         Ok(gbm) => Some(gbm),
         Err(why) => {
-            warn!(%why, "casts offer shm only");
+            tracing::error!(%why, "casts offer shm only");
             None
         }
     });
@@ -258,7 +258,7 @@ fn run(
     });
     let second = Some(Duration::from_secs(1));
     if let Err(why) = sweep.update_timer(second, second).into_result() {
-        warn!(%why, "idle sound nodes will not be swept");
+        tracing::error!(%why, "idle sound nodes will not be swept");
     }
     main_loop.run();
 }
@@ -333,7 +333,7 @@ impl Producer {
                 }
             }
             Err(why) => {
-                warn!(%why, ?id, "the cast did not start");
+                tracing::error!(%why, ?id, "the cast did not start");
                 self.shared.tell(ToWayland::Ended { stream: id });
                 listener(Event::Ended(Ended::Failed(why)));
             }
@@ -396,7 +396,7 @@ impl Producer {
 
     /// The daemon went away. Every stream ends, and the next start reconnects.
     fn lost(&self, message: &str) {
-        warn!(message, "PipeWire connection lost; ending every cast");
+        tracing::error!(message, "PipeWire connection lost; ending every cast");
         let casts: Vec<_> = self.casts.borrow().values().cloned().collect();
         for cast in casts {
             let steps = cast
@@ -597,7 +597,7 @@ impl Producer {
                     },
                 );
             }
-            Err(why) => warn!(%why, stream = ?cast, "the cast's sound node was not made"),
+            Err(why) => tracing::error!(%why, stream = ?cast, "the cast's sound node was not made"),
         }
     }
 
@@ -648,7 +648,7 @@ impl Producer {
                         debug!(%name, output, input, "linked sound into a sound node");
                         sound.links.insert(ports, link);
                     }
-                    Err(why) => warn!(%why, %name, "sound could not be linked"),
+                    Err(why) => tracing::error!(%why, %name, "sound could not be linked"),
                 }
             }
         }

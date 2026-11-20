@@ -30,7 +30,7 @@ use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::reexports::calloop::channel::Sender;
 use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
 use smithay::utils::Transform;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use crate::buffer_transform::{crop_in_buffer, upright_size, Sampled};
 use crate::casting::audio::Heard;
@@ -574,7 +574,7 @@ impl Streams {
                         // The view closed since the list was sent; the next
                         // list drops it.
                         Err(why) => {
-                            warn!(%why, view = %view.id, "a cast window's view could not be captured")
+                            tracing::error!(%why, view = %view.id, "a cast window's view could not be captured")
                         }
                     },
                 }
@@ -1106,7 +1106,7 @@ impl Streams {
             Err(why) => {
                 capturer.release(capture, id);
                 let engine_display = display;
-                warn!(%why, engine_display, "a captured frame could not be kept");
+                tracing::error!(%why, engine_display, "a captured frame could not be kept");
                 for stream in self.captures.streams_of(display) {
                     self.end_or_fail(stream, why.clone(), Some(&mut *capturer));
                 }
@@ -1190,7 +1190,7 @@ impl Streams {
             Ok(kept) => kept,
             Err(why) => {
                 capturer.release(capture, id);
-                warn!(%why, "a browser window view's captured frame could not be kept");
+                tracing::error!(%why, "a browser window view's captured frame could not be kept");
                 self.end(stream, Ended::Failed(why), Some(capturer));
                 return;
             }
@@ -1250,7 +1250,7 @@ impl Streams {
             Ok(kept) => kept,
             Err(why) => {
                 capturer.release(capture, id);
-                warn!(%why, "a browser window's captured frame could not be kept");
+                tracing::error!(%why, "a browser window's captured frame could not be kept");
                 self.end(stream, Ended::Failed(why), Some(capturer));
                 return;
             }
@@ -1640,7 +1640,7 @@ impl Streams {
     }
 
     fn fail(&mut self, stream: StreamId, why: &FillError) {
-        warn!(?stream, %why, "a cast frame could not be filled");
+        tracing::error!(?stream, %why, "a cast frame could not be filled");
         self.send(ToPipewire::End {
             stream,
             why: Ended::Failed(why.to_string()),

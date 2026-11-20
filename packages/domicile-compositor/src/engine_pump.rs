@@ -59,7 +59,7 @@ impl DomicileCompositor {
             // as `ConfigStore` does for an unparseable edit, and name the
             // config problem.
             Err(err) => {
-                tracing::warn!(
+                tracing::error!(
                     %err,
                     "the profile these monitors matched cannot be applied to them; \
                      keeping the desktop that is up"
@@ -122,7 +122,7 @@ impl DomicileCompositor {
                             self.frame_callbacks.submitted(&app_id, frame);
                         }
                         Some(Err(refused)) => {
-                            warn!(%app_id, "the engine would not take the frame that waited for this window");
+                            error!(%app_id, "the engine would not take the frame that waited for this window");
                             self.returned(refused.buffer);
                         }
                         Some(Ok(None)) | None => {}
@@ -273,7 +273,7 @@ impl DomicileCompositor {
                 engine::Event::GammaSizes(sizes) => self.gamma_sizes_reported(sizes),
                 // Acted on at the next hello, which is the new engine's.
                 engine::Event::Disconnected => {
-                    warn!("the engine this desktop was drawing through went away");
+                    error!("the engine this desktop was drawing through went away");
                     self.engine_disconnected = true;
                     // Its windows went with it.
                     self.hub.host.lock().unwrap().browser_windows(Vec::new());

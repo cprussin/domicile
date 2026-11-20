@@ -673,8 +673,8 @@ fn the_engines_libraries_go_in_front_of_whatever_was_there() {
 
 #[test]
 fn the_compositor_is_quiet_unless_asked_otherwise() {
-    // The default shows warnings plus the compositor's few `INFO` lines a
-    // person acts on. An explicit `RUST_LOG` wins.
+    // The default shows errors alone; `domicile set-log-level` turns it up.
+    // An explicit `RUST_LOG` wins.
     let quiet = compositor(
         Path::new("/b/c"),
         Path::new("/l/engine"),
@@ -685,10 +685,7 @@ fn the_compositor_is_quiet_unless_asked_otherwise() {
         false,
         &|_| None,
     );
-    assert_eq!(
-        env_of(&quiet, "RUST_LOG").unwrap(),
-        "warn,domicile_compositor=info,domicile=info"
-    );
+    assert_eq!(env_of(&quiet, "RUST_LOG").unwrap(), "error");
 
     let asked = |name: &str| (name == "RUST_LOG").then(|| "warn".to_string());
     let spawned = compositor(

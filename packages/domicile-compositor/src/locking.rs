@@ -53,7 +53,7 @@ impl DomicileCompositor {
             // keyboard straight back to the window.
             self.hand_the_keyboard_to_the_lock_screen();
         } else if !self.lock.locked() {
-            warn!(
+            error!(
                 why,
                 "this desktop does not lock: nothing could unlock it until the machine declares \
                  its PAM service (see docs/LOCK.md)"

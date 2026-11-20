@@ -849,7 +849,7 @@ fn read_chrome_messages(
                 // frame may hold keycodes or argv, and drifting
                 // `pointer_motion` would log 60 lines a second. The frame is
                 // already logged at trace above.
-                warn!(%err, "{}", grepped::UNPARSEABLE);
+                error!(%err, "{}", grepped::UNPARSEABLE);
                 Vec::new()
             }
         };
@@ -1044,7 +1044,7 @@ fn answer_an_app(
             Vec::new()
         }
         Err(err) => {
-            warn!(%err, "{}", grepped::UNPARSEABLE);
+            error!(%err, "{}", grepped::UNPARSEABLE);
             Vec::new()
         }
     }
@@ -1072,7 +1072,7 @@ fn call_the_system(
     match system.handle(id, request) {
         Handled::Done => {}
         Handled::NothingRunning => debug!(id, "a system call drove an id that has ended"),
-        Handled::Malformed => warn!(
+        Handled::Malformed => error!(
             id,
             "a system call drove an id with a request that does not fit it"
         ),

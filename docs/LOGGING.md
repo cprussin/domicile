@@ -13,6 +13,22 @@ Domicile checks `JOURNAL_STREAM` against its own stderr, as systemd documents,
 so a desktop started from a terminal inside a systemd service still writes to
 the terminal.
 
+## What they say
+
+By default, errors alone: something that broke and that you would notice.
+Turn more on with `domicile set-log-level` ([Levels](#levels)).
+
+Besides, the desktop says one line when it is up, on stdout:
+
+```text
+domicile is up. domicile 1.3.0 · shell /desk/shell.js · config ~/.config/domicile/domicile.json · profile ~/.local/share/domicile/profile · platform drm · DOMICILE_SOCK=/run/user/1000/domicile-ipc.4242.sock
+```
+
+`the engine composites on the CPU` joins it when the engine does. Scripts can
+wait for `domicile is up.` and read the control socket off the end. A desktop
+that ends cleanly says `domicile is down:` and why. On a terminal, it prints
+the same as a block instead.
+
 ## Names
 
 | Name | What |
@@ -20,6 +36,7 @@ the terminal.
 | `domicile-compositor` | The compositor's tracing, and its panics. |
 | `domicile-engine` | The engine and every process it starts. `DOMICILE_PID` is the process that said it. |
 | `domicile-shell` | The shell's `console` messages. |
+| `domicile` | The launcher: restarts, and what the desktop chose. |
 
 ## Reading them
 

@@ -602,7 +602,7 @@ pub fn serve(
             in_a_window,
             &changes,
         ) {
-            warn!(
+            tracing::error!(
                 %why,
                 "the desktop portal is not being answered; this desktop's \
                  clients will not follow its theme or show its dialogs"
@@ -963,7 +963,7 @@ fn idle_screen_cast(queue: &Arc<Queue>) -> ScreenCast {
 fn screen_cast(queue: &Arc<Queue>, casting: ScreenCasting, shoot: Shoot) -> ScreenCast {
     let grants = match casting.grants {
         Some(file) => Grants::load(file.clone()).unwrap_or_else(|why| {
-            warn!(%why, file = %file.display(), "saved screen cast grants are unreadable; applications will ask again");
+            tracing::error!(%why, file = %file.display(), "saved screen cast grants are unreadable; applications will ask again");
             Grants::default()
         }),
         None => Grants::default(),

@@ -66,10 +66,12 @@ Grouped `--help`, `domicile help <command>` for usage and examples, and man page
 - `domicile trace <file>` records the engine's frame production to a Perfetto trace. [The domicile command](CLI.md)
 - In the journal, logs carry their priority and a name per part: `domicile-compositor`, `domicile-engine`, `domicile-shell`. `journalctl --user -p err` finds errors. [Logs](LOGGING.md)
 - `domicile set-log-level trace input` turns the logs up while the desktop runs, for everything or for one subsystem, in the compositor and every engine process. `--reset` turns them back. [Levels](LOGGING.md#levels) · [`domicile set-log-level`](CLI.md#domicile-set-log-level-level-subsystem)
+- Quiet by default: each part logs errors alone, and the desktop says one `domicile is up.` line with what it chose and its `DOMICILE_SOCK`. [Logs](LOGGING.md#what-they-say)
 - Chromium 160. [#2023](https://github.com/cprussin/domicile/pull/2023)
 
 ### Breaking changes
 
+- Off a terminal, `domicile` no longer prints a `DOMICILE_SOCK=` line of its own: read the socket off the end of the `domicile is up.` line. [Logs](LOGGING.md#what-they-say)
 - `extensions.settings.<id>.private` and the SDK's `inPrivate` are gone: a private profile's extensions say what runs there. [Private browsing](SHELL-BROWSER-WINDOWS.md#private-browsing) · [#2237](https://github.com/cprussin/domicile/pull/2237)
 - `domicile pointer` no longer takes `press` and `release`: use `domicile drag`. Manganese's `exec` command is gone: `exec()` builds Domicile's `KeyAction.Exec`, and agents call `exec` instead of `send_shell ["exec", …]`.
 - `session.idleWarnings` and `idle.warn_before_seconds` are gone: use `session.idleAfter`. [Idle after a time](SHELL-IDLE-AND-LOCK.md#idle-after-a-time) · [#2073](https://github.com/cprussin/domicile/pull/2073)

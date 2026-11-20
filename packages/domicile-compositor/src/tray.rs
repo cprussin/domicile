@@ -157,7 +157,7 @@ pub fn serve(
     thread::spawn(move || {
         let icons = TrayIcons::new(data_dirs, theme);
         if let Err(why) = answer(heard, &events, icons, in_a_window, &traced, &publish) {
-            warn!(
+            tracing::error!(
                 %why,
                 "the system tray is not being hosted; this desktop's applications \
                  will show no tray icons"
@@ -356,7 +356,7 @@ fn listed(
         zbus::Result::Ok(())
     });
     if let Err(why) = said {
-        warn!(%why, "the tray could not say its items changed");
+        tracing::error!(%why, "the tray could not say its items changed");
     }
 }
 

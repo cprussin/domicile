@@ -242,7 +242,7 @@ impl XdgShellHandler for DomicileCompositor {
             state.positioner = positioner;
         });
         if let Err(err) = surface.send_configure() {
-            tracing::warn!(%err, "could not configure a popup");
+            tracing::error!(%err, "could not configure a popup");
         }
         // On the displays its window is on, at that window's scale. Nothing
         // else moved.

@@ -31,7 +31,7 @@ impl Email {
         let response = match (self.open)(&mailto(options)) {
             Ok(()) => 0,
             Err(why) => {
-                tracing::warn!(%why, %handle, %app_id, "an application's email was not opened");
+                tracing::error!(%why, %handle, %app_id, "an application's email was not opened");
                 2
             }
         };

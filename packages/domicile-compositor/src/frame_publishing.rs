@@ -11,7 +11,7 @@ use smithay::reexports::wayland_server::protocol::{wl_buffer, wl_surface::WlSurf
 use smithay::wayland::compositor::with_states;
 use smithay::wayland::dmabuf::get_dmabuf;
 use smithay::wayland::shm::with_buffer_contents;
-use tracing::{error, warn};
+use tracing::error;
 
 use crate::buffer_transform::Sampled;
 use crate::dmabuf_descriptor::descriptor_from;
@@ -293,7 +293,7 @@ impl DomicileCompositor {
             Ok(copied) => copied,
             Err(why) => {
                 if self.shm_refused.first(app_id) {
-                    warn!(app_id, %why, "this client's window will be blank");
+                    error!(app_id, %why, "this client's window will be blank");
                 }
                 return Published::NotShown;
             }

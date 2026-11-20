@@ -131,7 +131,7 @@ start_desktop() {
     sleep 0.1
     waited=$((waited + 1))
   done
-  UP_SOCK="$(sed -n 's/^DOMICILE_SOCK=//p' "$log")"
+  UP_SOCK="$(sed -n 's/^domicile is up..*DOMICILE_SOCK=//p' "$log")"
   if [ -z "$UP_SOCK" ]; then
     echo "FAIL: the desktop on $shell came up without saying where it answers."
     echo "      A socket nothing names is a socket nothing can reach:"

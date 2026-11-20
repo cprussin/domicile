@@ -482,7 +482,7 @@ impl Remembered {
     fn save(&self) {
         if let Some(path) = &self.path {
             if let Err(why) = write(path, &self.agents) {
-                warn!(%why, path = %path.display(), "could not save the remembered agents");
+                tracing::error!(%why, path = %path.display(), "could not save the remembered agents");
             }
         }
     }
@@ -496,7 +496,7 @@ fn read(path: &Path) -> Vec<RememberedAgent> {
         Ok(kept) => kept.agents,
         Err(why) => {
             if path.exists() {
-                warn!(%why, path = %path.display(), "remembered agents unreadable; each asks again");
+                tracing::error!(%why, path = %path.display(), "remembered agents unreadable; each asks again");
             }
             Vec::new()
         }

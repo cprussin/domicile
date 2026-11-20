@@ -100,7 +100,7 @@ fn gbm_or_surfaceless_display(
             Ok((display, Some(node), main_device))
         }
         Err(err) => {
-            tracing::warn!(%err, "no render node has GBM; using surfaceless EGL");
+            tracing::error!(%err, "no render node has GBM; using surfaceless EGL");
             // SAFETY: a surfaceless display wraps no native handle.
             let display = unsafe { EGLDisplay::new(EGLSurfacelessDisplay) }?;
             Ok((display, None, None))

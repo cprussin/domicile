@@ -229,7 +229,7 @@ impl DomicileCompositor {
     pub fn take_up_the_keymaps(&mut self, keyboard: &KeyboardConfig) {
         let keymaps = keyboard.keymaps();
         let compiled: Result<Vec<String>, _> = keymaps.iter().map(compiled_keymap).collect();
-        let Ok(compiled) = compiled.map_err(|why| warn!(%why, "{}", grepped::KEYMAP_REFUSED))
+        let Ok(compiled) = compiled.map_err(|why| error!(%why, "{}", grepped::KEYMAP_REFUSED))
         else {
             return;
         };
@@ -275,7 +275,7 @@ impl DomicileCompositor {
         }
         let keymap = self.keymap_named(&name);
         match compiled_keymap(&keymap) {
-            Err(why) => warn!(%why, "{}", grepped::KEYMAP_REFUSED),
+            Err(why) => error!(%why, "{}", grepped::KEYMAP_REFUSED),
             Ok(compiled) => {
                 self.hub.keymaps.list(Listed {
                     keymaps: listed.keymaps,
@@ -353,7 +353,7 @@ impl DomicileCompositor {
     /// [`take_up_the_keymaps`]: DomicileCompositor::take_up_the_keymaps
     pub fn rebind_the_keys(&mut self) {
         match shell_config::keys(&self.keymap_named(&self.active_keymap_name())) {
-            Err(why) => warn!(%why, "{}", grepped::KEYS_REFUSED),
+            Err(why) => error!(%why, "{}", grepped::KEYS_REFUSED),
             Ok(resolved) => {
                 // Store then broadcast, as in `retype_the_desktop`.
                 let told = {

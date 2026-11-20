@@ -214,10 +214,10 @@ domicile load-shell ./my-desktop/dist/shell.js
 
 `packages/dev-shell/bin/dev-shell.sh` is the watch script built on it:
 
-- The script starts the supervisor itself, so it reads the socket path from
-  the supervisor's `DOMICILE_SOCK=<path>` output line. It calls `load-shell`
-  only after the supervisor reports the desktop is up. Earlier calls are
-  refused because the socket exists before the engine does.
+- The script starts the supervisor itself, so it reads the socket path off
+  the end of the supervisor's `domicile is up.` line, which comes once the
+  engine runs: an earlier `load-shell` would be refused, because the socket
+  exists before the engine does.
 - `packages/dev-shell/bin/dev-shell-reload.sh` waits for the bundle to stop changing (a quiet
   period plus a cap). `vite build --watch` writes one build in several steps,
   and reloading mid-write would load a broken shell.

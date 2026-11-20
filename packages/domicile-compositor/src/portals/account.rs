@@ -182,7 +182,7 @@ pub fn login_name() -> String {
     match from_passwd(unsafe { libc::getuid() }) {
         Ok(user) => user.id,
         Err(why) => {
-            warn!(%why, "print jobs go to CUPS as user unknown");
+            tracing::error!(%why, "print jobs go to CUPS as user unknown");
             "unknown".into()
         }
     }

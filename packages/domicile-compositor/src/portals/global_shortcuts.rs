@@ -149,7 +149,7 @@ impl GlobalShortcuts {
                         )
                         .await
                         {
-                            warn!(%why, "an application was not told its global shortcuts changed");
+                            tracing::error!(%why, "an application was not told its global shortcuts changed");
                         }
                     }
                 },
@@ -206,7 +206,7 @@ impl Shortcuts {
     pub fn new(file: Option<PathBuf>) -> Self {
         let saved = match &file {
             Some(file) => Saved::load(file).unwrap_or_else(|why| {
-                warn!(%why, file = %file.display(), "saved global shortcuts are unreadable; applications will ask again");
+                tracing::error!(%why, file = %file.display(), "saved global shortcuts are unreadable; applications will ask again");
                 Saved::default()
             }),
             None => Saved::default(),
@@ -297,7 +297,7 @@ impl Shortcuts {
             }
         });
         if let Err(why) = sent {
-            warn!(%why, %shortcut, "an application did not hear its global shortcut");
+            tracing::error!(%why, %shortcut, "an application did not hear its global shortcut");
         }
     }
 
@@ -364,7 +364,7 @@ impl Shortcuts {
         let changed = change(&mut held);
         if let Some(file) = self.file.as_ref().filter(|_| *held.saved() != saved) {
             if let Err(why) = held.saved().store(file) {
-                warn!(%why, file = %file.display(), "global shortcut choices were not saved; applications will ask again next session");
+                tracing::error!(%why, file = %file.display(), "global shortcut choices were not saved; applications will ask again next session");
             }
         }
         if let Some(publish) = self.publish.get().filter(|_| held.bound() != bound) {

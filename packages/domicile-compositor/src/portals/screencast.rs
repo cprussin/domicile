@@ -260,7 +260,7 @@ impl ScreenCast {
         match session::open(server, &session_handle, move || closing.close()).await {
             Ok(_) => (0, HashMap::new()),
             Err(why) => {
-                warn!(%why, %session_handle, "a screen cast session could not be opened");
+                tracing::error!(%why, %session_handle, "a screen cast session could not be opened");
                 self.sessions.lock().unwrap().remove(&session_handle);
                 (2, HashMap::new())
             }
@@ -638,7 +638,7 @@ impl ScreenCast {
             fresh_token,
         );
         granted.unwrap_or_else(|why| {
-            warn!(%why, "a screen cast grant could not be saved; the application will ask again");
+            tracing::error!(%why, "a screen cast grant could not be saved; the application will ask again");
             None
         })
     }
@@ -780,7 +780,7 @@ impl Ending {
             .spawn(
                 async move {
                     if let Err(why) = session::end(connection.object_server(), &handle).await {
-                        warn!(%why, %handle, "an application was not told its screen cast ended");
+                        tracing::error!(%why, %handle, "an application was not told its screen cast ended");
                     }
                 },
                 "end a screen cast session",
@@ -795,7 +795,7 @@ pub(super) async fn preview(shoot: &Shoot) -> Option<FrozenDesk> {
     match shoot().await {
         Ok(desk) => Some(frozen(&desk)),
         Err(why) => {
-            warn!(%why, "the desk could not be shot to preview a screen cast's sources");
+            tracing::error!(%why, "the desk could not be shot to preview a screen cast's sources");
             None
         }
     }

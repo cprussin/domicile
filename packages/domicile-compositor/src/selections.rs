@@ -359,7 +359,7 @@ impl DomicileCompositor {
         let (ours, theirs) = match clipboard::pipe() {
             Ok(ends) => ends,
             Err(err) => {
-                warn!(%err, "no pipe to read a copy over, so nothing is told what was copied");
+                tracing::error!(%err, "no pipe to read a copy over, so nothing is told what was copied");
                 return None;
             }
         };

@@ -419,7 +419,7 @@ pub fn serve(
             in_a_window,
         };
         if let Err(why) = answer(serving, &events, &starting) {
-            warn!(
+            tracing::error!(
                 %why,
                 "this desktop is not the notification server; its applications' \
                  notifications will not be shown"
@@ -743,7 +743,7 @@ fn closed(server: &InterfaceRef<Server>, id: u32, reason: Reason) {
         reason as u32,
     ));
     if let Err(why) = said {
-        warn!(%why, %id, "a notification's closing could not be said");
+        tracing::error!(%why, %id, "a notification's closing could not be said");
     }
 }
 
@@ -759,7 +759,7 @@ fn pressed_on_the_bus(
 ) {
     let said = zbus::block_on(Server::activation_token(server.signal_emitter(), id, token));
     if let Err(why) = said {
-        warn!(%why, %id, "a notification's activation token could not be said");
+        tracing::error!(%why, %id, "a notification's activation token could not be said");
     }
     invoked(server, id, action);
     if closes {
@@ -771,7 +771,7 @@ fn pressed_on_the_bus(
 fn invoked(server: &InterfaceRef<Server>, id: u32, action: &str) {
     let said = zbus::block_on(Server::action_invoked(server.signal_emitter(), id, action));
     if let Err(why) = said {
-        warn!(%why, %id, "a notification's action could not be said");
+        tracing::error!(%why, %id, "a notification's action could not be said");
     }
 }
 
@@ -783,7 +783,7 @@ fn replied(server: &InterfaceRef<Server>, id: u32, text: &str) {
         text,
     ));
     if let Err(why) = said {
-        warn!(%why, %id, "a reply to a notification could not be said");
+        tracing::error!(%why, %id, "a reply to a notification could not be said");
     }
 }
 
@@ -912,7 +912,7 @@ impl Server {
             if let Err(why) =
                 Self::notification_closed(&emitter, evicted, Reason::Expired as u32).await
             {
-                warn!(%why, "a notification's closing could not be said");
+                tracing::error!(%why, "a notification's closing could not be said");
             }
         }
         notified.id
@@ -927,7 +927,7 @@ impl Server {
     ) {
         if self.store.change(|held| held.notifications.close(id)) {
             if let Err(why) = Self::notification_closed(&emitter, id, Reason::Closed as u32).await {
-                warn!(%why, "a notification's closing could not be said");
+                tracing::error!(%why, "a notification's closing could not be said");
             }
         }
     }
