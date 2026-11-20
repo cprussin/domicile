@@ -8,8 +8,9 @@ use domicile_launch::command::{
     configure_extension_line, delete_history_line, devtools_line, disable_while_typing_line,
     extensions_line, history_line, load_shell_line, load_unpacked_line, media_devices_line,
     open_app_line, open_url_line, pin_browser_site_line, reply, run_app_line,
-    set_extension_enabled_line, set_media_device_line, set_site_permission_line, site_data_line,
-    site_permissions_line, uninstall_extension_line, visits_line, Reply,
+    set_extension_enabled_line, set_log_levels_line, set_media_device_line,
+    set_site_permission_line, site_data_line, site_permissions_line, uninstall_extension_line,
+    visits_line, Reply,
 };
 use domicile_launch::control::AppReuse;
 use domicile_launch::extensions::{
@@ -446,6 +447,14 @@ fn disable_while_typing_is_asked_or_set() {
     assert_eq!(
         reply("{\"type\":\"disable_while_typing\",\"enabled\":true}").unwrap(),
         Reply::DisableWhileTyping { enabled: true }
+    );
+}
+
+#[test]
+fn log_levels_are_a_minimum_severity_and_vmodule_patterns() {
+    assert_eq!(
+        set_log_levels_line(0, "*/domicile/*=1"),
+        "{\"type\":\"set_log_levels\",\"version\":1,\"min_level\":0,\"vmodule\":\"*/domicile/*=1\"}\n"
     );
 }
 

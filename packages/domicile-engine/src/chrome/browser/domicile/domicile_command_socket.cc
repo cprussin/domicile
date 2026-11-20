@@ -54,6 +54,7 @@
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/domicile_log_levels.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/site_instance.h"
@@ -648,6 +649,11 @@ base::expected<bool, std::string> DisableTouchpadsWhileTyping(
   return *platform->GetDomicileDisableWhileTyping();
 }
 
+// Carries out `set_log_levels`. See content/public/browser/domicile_log_levels.h.
+void SetEngineLogLevels(int min_level, const std::string& vmodule) {
+  content::SetDomicileLogLevels(min_level, vmodule);
+}
+
 // One request line, answered from the UI thread.
 //
 // Runs on the UI thread because `ShellSource` is unlocked and UI-thread only,
@@ -682,7 +688,8 @@ void AnswerOnUIThread(const std::string& line, CommandReply reply) {
                  .list_site_data = &ListShellSiteData,
                  .clear_site_data = &ClearShellSiteData,
                  .disable_while_typing = &DisableTouchpadsWhileTyping,
-                 .send_devtools = &SendDevToolsToBrowserWindow},
+                 .send_devtools = &SendDevToolsToBrowserWindow,
+                 .set_log_levels = &SetEngineLogLevels},
                 std::move(reply));
 }
 

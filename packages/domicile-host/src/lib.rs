@@ -1189,6 +1189,7 @@ impl Host {
             | ChromeMessage::Watch { .. }
             | ChromeMessage::ActOnWindow { .. }
             | ChromeMessage::ConfigureDisplay { .. }
+            | ChromeMessage::SetLogLevels { .. }
             | ChromeMessage::ShootDesk { .. }
             | ChromeMessage::Emulate { .. }
             | ChromeMessage::ThemeCaptured { .. }

@@ -17,6 +17,7 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -52,6 +53,7 @@ constexpr char kClearBrowsingData[] = "clear_browsing_data";
 constexpr char kSiteData[] = "site_data";
 constexpr char kClearSiteData[] = "clear_site_data";
 constexpr char kDisableWhileTyping[] = "disable_while_typing";
+constexpr char kSetLogLevels[] = "set_log_levels";
 constexpr char kDevTools[] = "devtools";
 
 std::string Line(base::DictValue reply) {
@@ -124,6 +126,8 @@ void AnswerClearSiteData(const base::DictValue& request,
                          CommandReply reply);
 std::string AnswerDisableWhileTyping(const base::DictValue& request,
                                      DisableWhileTyping disable_while_typing);
+std::string AnswerSetLogLevels(const base::DictValue& request,
+                               SetLogLevels set_log_levels);
 void AnswerDevTools(const base::DictValue& request,
                     SendDevTools send_devtools,
                     CommandReply reply);
@@ -311,6 +315,10 @@ void AnswerCommand(std::string_view line,
     AnswerDevTools(*request, actions.send_devtools, std::move(reply));
     return;
   }
+  if (*type == kSetLogLevels) {
+    std::move(reply).Run(AnswerSetLogLevels(*request, actions.set_log_levels));
+    return;
+  }
   std::move(reply).Run(RefusedCommand(base::StrCat(
       {"\"", *type, "\" is not a command this engine knows; it takes \"",
        kLoadShell, "\", \"", kRunApp, "\", \"", kOpenUrl, "\", \"",
@@ -322,7 +330,8 @@ void AnswerCommand(std::string_view line,
        kMediaDevices, "\", \"", kSetMediaDevice, "\", \"", kHistory, "\", \"",
        kVisits, "\", \"", kDeleteHistory, "\", \"", kClearBrowsingData,
        "\", \"", kSiteData, "\", \"", kClearSiteData, "\", \"",
-       kDisableWhileTyping, "\" and \"", kDevTools, "\""})));
+       kDisableWhileTyping, "\", \"", kDevTools, "\" and \"", kSetLogLevels,
+       "\""})));
 }
 
 namespace {
@@ -1179,6 +1188,20 @@ std::string AnswerDisableWhileTyping(const base::DictValue& request,
   reply.Set("type", kDisableWhileTyping);
   reply.Set("enabled", rests.value());
   return Line(std::move(reply));
+}
+
+std::string AnswerSetLogLevels(const base::DictValue& request,
+                               SetLogLevels set_log_levels) {
+  const std::optional<int> min_level = request.FindInt("min_level");
+  const std::string* vmodule = request.FindString("vmodule");
+  if (!min_level || *min_level < logging::LOGGING_INFO ||
+      *min_level > logging::LOGGING_FATAL || !vmodule) {
+    return RefusedCommand(
+        "set_log_levels takes a \"min_level\" from 0 (INFO) to 3 (FATAL) and "
+        "a \"vmodule\" string");
+  }
+  set_log_levels(*min_level, *vmodule);
+  return Done("set");
 }
 
 void AnswerDevTools(const base::DictValue& request,

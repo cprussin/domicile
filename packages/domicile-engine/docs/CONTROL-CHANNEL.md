@@ -330,6 +330,9 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 {"type":"disable_while_typing","version":1,"enabled":false}
 {"type":"disable_while_typing","enabled":false}   |   {"type":"refused","why":"…"}
 
+{"type":"set_log_levels","version":1,"min_level":0,"vmodule":"*/domicile/*=2"}
+{"type":"set"}   |   {"type":"refused","why":"…"}
+
 {"type":"devtools","version":1,"window":"3","method":"DOM.getContentQuads","params":{"backendNodeId":42}}
 {"type":"devtools","result":{"quads":[[10,20,110,20,110,40,10,40]]}}   |   {"type":"refused","why":"…"}
 ```
@@ -430,6 +433,10 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
     data is left out.
   - `clear_site_data` removes everything one host stores, and replies once
     it is gone.
+- `set_log_levels` is `domicile set-log-level`: Chromium's minimum severity
+  (0 `INFO` to 3 `FATAL`) and `--vmodule`, in every engine process and those
+  started later, until the engine exits. The supervisor makes them from the
+  levels it was asked for ([Logs](/docs/LOGGING.md)).
 - `disable_while_typing` is `domicile disable-while-typing`
   ([RUNNING-A-DESKTOP.md](/docs/RUNNING-A-DESKTOP.md#disable-while-typing)).
   It sets whether the touchpads rest while a keyboard types when `enabled` is

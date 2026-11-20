@@ -3,14 +3,14 @@
 use std::path::Path;
 
 use domicile_launch::listing::{
-    agents_table, bindings_table, displays_table, inputs_table, shell_commands_table, status_table,
-    windows_table,
+    agents_table, bindings_table, displays_table, inputs_table, log_levels_table,
+    shell_commands_table, status_table, windows_table,
 };
 use domicile_launch::paint::Paint;
 use domicile_protocol::{
     AdaptiveSync, Capturing, CapturingKind, DesktopStatus, Devices, DisplayHdr, DisplayInfo,
     DisplayTransform, InputConnection, InputKind, ListedDisplay, ListedInput, ListedWindow,
-    ShellBinding, ShellCommandHelp, Theme, WindowKind,
+    LogLevel, LogLevels, ShellBinding, ShellCommandHelp, Subsystem, Theme, WindowKind,
 };
 
 #[test]
@@ -124,6 +124,32 @@ fn no_windows_prints_the_header_alone() {
     assert_eq!(
         windows_table(Paint::PLAIN, &[]),
         "ID  KIND  APP  PID  SIZE  TITLE\n"
+    );
+}
+
+#[test]
+fn the_log_levels_print_one_line_for_everything_and_one_per_subsystem() {
+    assert_eq!(
+        log_levels_table(Paint::PLAIN, &LogLevels::default()),
+        "everything  as it started\n"
+    );
+    assert_eq!(
+        log_levels_table(
+            Paint::PLAIN,
+            &LogLevels {
+                all: Some(LogLevel::Debug),
+                subsystems: [
+                    (Subsystem::Input, LogLevel::Trace),
+                    (Subsystem::Notifications, LogLevel::Info)
+                ]
+                .into(),
+            }
+        ),
+        "\
+everything     debug
+input          trace
+notifications  info
+"
     );
 }
 

@@ -31,8 +31,8 @@ use domicile_launch::command_socket::{
     browser_profiles, clear_browsing_data, clear_site_data, config_extensions, configure_extension,
     delete_history, devtools, disable_while_typing, extensions, history, load_shell, load_unpacked,
     media_devices, open_app, open_url, pin_browser_site, run_app, set_extension_enabled,
-    set_media_device, set_site_permission, site_data, site_permissions, uninstall_extension,
-    visits,
+    set_log_levels as set_engine_log_levels, set_media_device, set_site_permission, site_data,
+    site_permissions, uninstall_extension, visits,
 };
 use domicile_launch::commands;
 use domicile_launch::component_log::{self, Sink};
@@ -42,8 +42,8 @@ use domicile_launch::components::{
 };
 use domicile_launch::compositor_socket::{
     act_on_window, agents, configure_display, displays, emulate, forget_agent, idle_time, inputs,
-    launch, lock, monitors, power_displays, screen_record, screenshot, send_shell, shell_bindings,
-    shell_commands, shoot_desk, status, stop_agent, theme, windows,
+    launch, lock, monitors, power_displays, screen_record, screenshot, send_shell, set_log_levels,
+    shell_bindings, shell_commands, shoot_desk, status, stop_agent, theme, windows,
 };
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
@@ -60,6 +60,7 @@ use domicile_launch::electron_app::{app_icon, app_name, electron_app, UNSUPPORTE
 use domicile_launch::electron_schemes::{self, schemes_switch, with_known};
 use domicile_launch::electron_wrapper::{record, through_wrappers, WrapperError, RECORD};
 use domicile_launch::engine_log::EngineLog;
+use domicile_launch::engine_log_levels::{engine_levels, starting_switches};
 use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
 use domicile_launch::help::{command_help, error, overview, version_lines, with_usage};
@@ -67,8 +68,8 @@ use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::idle_inhibit::{exit_code, inhibit_idle};
 use domicile_launch::install_app::{data_home, install_app, Fetched};
 use domicile_launch::listing::{
-    agents_table, bindings_table, displays_table, inputs_table, shell_commands_table, status_table,
-    windows_table,
+    agents_table, bindings_table, displays_table, inputs_table, log_levels_table,
+    shell_commands_table, status_table, windows_table,
 };
 use domicile_launch::man;
 use domicile_launch::mcp;
@@ -101,7 +102,7 @@ use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVE
 use domicile_launch::trace::{self, producer_socket};
 use domicile_launch::uninstall_app::uninstall_app;
 use domicile_launch::version::engine as engine_version;
-use domicile_protocol::{Theme, WatchTopic, WindowKind};
+use domicile_protocol::{LogLevels, Theme, WatchTopic, WindowKind};
 
 /// How long each startup milestone may take. A debug build on a loaded
 /// machine takes seconds.
@@ -1056,6 +1057,10 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             println!("{result}");
             Ok(ExitCode::SUCCESS)
         }
+        Response::LogLevels { levels } => {
+            print!("{}", log_levels_table(out(), &levels));
+            Ok(ExitCode::SUCCESS)
+        }
         Response::Theme { theme } => {
             println!(
                 "{}",
@@ -1726,9 +1731,13 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     // yet.
     let control = take(&places.control).map_err(|why| why.to_string())?;
     let serving = Arc::new(Mutex::new(page));
+    // The levels `domicile set-log-level` set, which a restarted part starts
+    // at too. They reset with the run.
+    let levels = Arc::new(Mutex::new(LogLevels::default()));
     answering(
         &control,
         Arc::clone(&serving),
+        Arc::clone(&levels),
         files,
         places.command.clone(),
         places.chrome_socket.clone(),
@@ -1814,6 +1823,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         policy: &policy,
         said: &said,
         serving: &serving,
+        levels: &levels,
         sink: &sink,
     };
     // The last desktop's compositor output, repeated if the run gives up.
@@ -1886,6 +1896,9 @@ struct Desktop<'a> {
     said: &'a SaidSession,
     /// The shell the engine serves, which a new engine starts on.
     serving: &'a Mutex<Shell>,
+    /// The log levels set this run, which a new engine or compositor starts
+    /// at.
+    levels: &'a Mutex<LogLevels>,
     /// Where the components' stderr goes.
     sink: &'a Arc<Sink>,
 }
@@ -2095,8 +2108,26 @@ fn start_a_compositor(
         running,
         desktop.policy,
     )?;
+    // A compositor starts at its starting levels; give it those set since.
+    let levels = set_levels(desktop.levels);
+    if levels != LogLevels::default() {
+        set_log_levels(&desktop.places.chrome_socket, &levels, Some(ANSWER_WITHIN))
+            .map_err(|why| why.to_string())
+            .and_then(|set| set)
+            .map_err(|why| {
+                format!("the compositor did not take the log levels set before: {why}")
+            })?;
+    }
     desktop.said.say(desktop.places);
     Ok(())
+}
+
+/// The log levels set this run.
+fn set_levels(levels: &Mutex<LogLevels>) -> LogLevels {
+    levels
+        .lock()
+        .expect("nothing panics holding the log levels")
+        .clone()
 }
 
 /// Starts an engine and waits for its broker socket.
@@ -2122,6 +2153,11 @@ fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), Down>
     if let Some(schemes) = electron_schemes(desktop.env) {
         spawn.args.push(schemes.into());
     }
+    spawn.args.extend(
+        starting_switches(&set_levels(desktop.levels))
+            .into_iter()
+            .map(Into::into),
+    );
     let sink = Arc::clone(desktop.sink);
     let mut log = EngineLog::new();
     running
@@ -2190,6 +2226,7 @@ fn wait_or_notice_a_stop(wait: Duration) {
 fn answering(
     control: &Control,
     serving: Arc<Mutex<Shell>>,
+    levels: Arc<Mutex<LogLevels>>,
     files: SettingsFiles,
     engine: PathBuf,
     chrome: PathBuf,
@@ -2202,14 +2239,15 @@ fn answering(
         for connection in listener.incoming() {
             match connection {
                 Ok(stream) => {
-                    let (serving, files, engine, chrome) = (
+                    let (serving, levels, files, engine, chrome) = (
                         serving.clone(),
+                        levels.clone(),
                         files.clone(),
                         engine.clone(),
                         chrome.clone(),
                     );
                     std::thread::spawn(move || {
-                        answer_a_command(stream, &serving, &files, &engine, &chrome)
+                        answer_a_command(stream, &serving, &levels, &files, &engine, &chrome)
                     });
                 }
                 Err(why) => eprintln!("domicile: a command did not arrive: {why}"),
@@ -2223,6 +2261,7 @@ fn answering(
 fn answer_a_command(
     stream: UnixStream,
     serving: &Mutex<Shell>,
+    levels: &Mutex<LogLevels>,
     files: &SettingsFiles,
     engine: &Path,
     chrome: &Path,
@@ -2364,6 +2403,25 @@ fn answer_a_command(
                     configure_display: &|display, change| {
                         configure_display(chrome, display, change, Some(CONFIGURE_WITHIN))
                             .map_err(|why| why.to_string())?
+                    },
+                    log_levels: &|| set_levels(levels),
+                    // Kept, so a part that restarts starts at them too.
+                    set_log_levels: &|asked| {
+                        let mut set = levels
+                            .lock()
+                            .expect("nothing panics holding the log levels");
+                        set_log_levels(chrome, asked, Some(ANSWER_WITHIN))
+                            .map_err(|why| why.to_string())??;
+                        let engine_levels = engine_levels(asked);
+                        set_engine_log_levels(
+                            engine,
+                            engine_levels.min_level,
+                            &engine_levels.vmodule,
+                            ANSWER_WITHIN,
+                        )
+                        .map_err(|why| why.to_string())?;
+                        *set = asked.clone();
+                        Ok(())
                     },
                     monitors: &|| {
                         monitors(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())

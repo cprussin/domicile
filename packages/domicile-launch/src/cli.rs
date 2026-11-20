@@ -9,8 +9,8 @@ use crate::commands;
 use std::path::PathBuf;
 
 use domicile_protocol::{
-    DeskRect, DisplayChange, DisplayTransform, EmulatedInput, PointerButton, Scale, WatchTopic,
-    WindowAct,
+    DeskRect, DisplayChange, DisplayTransform, EmulatedInput, LogLevel, PointerButton, Scale,
+    Subsystem, WatchTopic, WindowAct,
 };
 
 use crate::control::{AppReuse, Request, Switch, ThemeChange};
@@ -187,6 +187,18 @@ pub enum CliError {
          and was given {said}."
     )]
     NotATheme { said: String },
+    #[error(
+        "set-log-level takes error, warn, info, debug or trace, then the \
+         subsystems to log at it, or --reset, or nothing to print the levels, \
+         and was given {said}."
+    )]
+    NotALogLevel { said: String },
+    #[error(
+        "set-log-level was given {said}, which is not a subsystem. The \
+         subsystems are {}.",
+        subsystem_names()
+    )]
+    NotASubsystem { said: String },
     #[error(
         "monitor takes a name and a size, and was given less:\n\n    \
          domicile monitor \"Left pane\" 1280x720\n"
@@ -635,6 +647,29 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                         request: Request::Theme { to: Some(to) },
                     }),
                 },
+            },
+            Verb::Leveling => match args.next() {
+                None => Ok(Invocation::Ask {
+                    request: Request::LogLevels,
+                }),
+                Some(flag) if flag == "--reset" => match args.next() {
+                    Some(extra) => Err(CliError::Extra {
+                        verb: format!("{first} {flag}"),
+                        extra,
+                    }),
+                    None => Ok(Invocation::Ask {
+                        request: Request::ResetLogLevels,
+                    }),
+                },
+                Some(said) => {
+                    let level = log_level(&said).ok_or(CliError::NotALogLevel { said })?;
+                    let subsystems = args
+                        .map(|said| subsystem(&said).ok_or(CliError::NotASubsystem { said }))
+                        .collect::<Result<_, _>>()?;
+                    Ok(Invocation::Ask {
+                        request: Request::SetLogLevel { level, subsystems },
+                    })
+                }
             },
             Verb::Capturing => match (args.next(), args.next()) {
                 (Some(flag), fit) if flag == "--fit" => {
@@ -1109,6 +1144,9 @@ enum Verb {
     Acting(WindowAct),
     /// `inhibit-idle`, which takes a command.
     Inhibiting,
+    /// `set-log-level`, which takes a level and subsystems, `--reset` or
+    /// nothing.
+    Leveling,
     /// `exec`, which takes a program and its arguments.
     Executing,
     /// `trace`, which takes a file and maybe `--seconds`.
@@ -1235,6 +1273,7 @@ fn verb(word: &str) -> Option<Verb> {
         "check-config" => Some(Verb::Checking),
         "disable-while-typing" => Some(Verb::Switching),
         "theme" => Some(Verb::Theming),
+        "set-log-level" => Some(Verb::Leveling),
         "sleep-displays" => Some(Verb::Sleeping(DisplayPower::Asleep)),
         "wake-displays" => Some(Verb::Sleeping(DisplayPower::Awake)),
         "power-off" => Some(Verb::Powering(Power::Off)),
@@ -1283,6 +1322,31 @@ fn topic(word: &str) -> Option<WatchTopic> {
         "status" => Some(WatchTopic::Status),
         _ => None,
     }
+}
+
+/// The [`LogLevel`] `word` names, if any.
+fn log_level(word: &str) -> Option<LogLevel> {
+    [
+        LogLevel::Error,
+        LogLevel::Warn,
+        LogLevel::Info,
+        LogLevel::Debug,
+        LogLevel::Trace,
+    ]
+    .into_iter()
+    .find(|level| level.name() == word)
+}
+
+/// The [`Subsystem`] `word` names, if any.
+fn subsystem(word: &str) -> Option<Subsystem> {
+    Subsystem::ALL
+        .into_iter()
+        .find(|subsystem| subsystem.name() == word)
+}
+
+/// Every subsystem's name, for an error.
+fn subsystem_names() -> String {
+    Subsystem::ALL.map(Subsystem::name).join(", ")
 }
 
 /// The [`Switch`] `word` names, if any.

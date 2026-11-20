@@ -222,6 +222,23 @@ at `file`. Open it at [ui.perfetto.dev](https://ui.perfetto.dev).
 domicile trace switch.pftrace
 ```
 
+## `domicile set-log-level [<level> [<subsystem>...]]`
+
+Log at `level` (`error`, `warn`, `info`, `debug` or `trace`) until the desktop
+restarts: for the subsystems named, or for everything with none. With nothing,
+print the levels set; with `--reset`, go back to the starting ones.
+
+- The compositor and every engine process change at once. A part that
+  restarts keeps the levels.
+- The subsystems are `input`, `displays`, `windows`, `rendering`, `cast`,
+  `portals`, `idle`, `clipboard`, `notifications`, `electron`, `agents`,
+  `shell` and `session`. [Logs](LOGGING.md#levels) says what each covers.
+
+```sh
+domicile set-log-level trace input
+domicile set-log-level --reset
+```
+
 ## `domicile send-shell <word>...`
 
 Run a shell command, as a keybinding bound to it does:

@@ -526,6 +526,15 @@ fn read_chrome_messages(
                     refused: configure_display(hub, display, change).err(),
                 }]
             }
+            // Only `domicile set-log-level` sends it, on a connection of its own.
+            Ok(ChromeMessage::SetLogLevels { levels }) => vec![HostMessage::LogLevelsSet {
+                refused: hub
+                    .log_filter
+                    .get()
+                    .expect("the log filter is set before any chrome connects")
+                    .set(&levels)
+                    .err(),
+            }],
             // Waits for a frame of every monitor. Only `domicile screenshot
             // --fit` sends it, on a connection of its own.
             Ok(ChromeMessage::ShootDesk { file, fit, area }) => {

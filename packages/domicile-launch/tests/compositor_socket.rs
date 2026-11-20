@@ -10,13 +10,13 @@ use domicile_host::system::DisplayPower;
 use domicile_launch::cli::MonitorMode;
 use domicile_launch::compositor_socket::{
     act_on_window, agent, agents, displays, forget_agent, inputs, launch, lock, monitors,
-    power_displays, screen_record, screenshot, send_shell, shell_bindings, shell_commands, status,
-    stop_agent, theme, virtual_monitor, windows, CompositorError,
+    power_displays, screen_record, screenshot, send_shell, set_log_levels, shell_bindings,
+    shell_commands, status, stop_agent, theme, virtual_monitor, windows, CompositorError,
 };
 use domicile_launch::control::Shot;
 use domicile_protocol::{
-    AgentReach, ConnectedAgent, DisplayHdr, KnownAgents, MonitorInfo, RememberedAgent, Scale,
-    Theme, WindowAct,
+    AgentReach, ConnectedAgent, DisplayHdr, KnownAgents, LogLevel, LogLevels, MonitorInfo,
+    RememberedAgent, Scale, Theme, WindowAct,
 };
 
 /// Reply timeout: long enough for a loaded machine, short enough for a fast
@@ -694,6 +694,27 @@ fn scratch() -> (tempfile::TempDir, PathBuf) {
     let directory = tempfile::tempdir().expect("a temp directory");
     let path = directory.path().join("chrome.sock");
     (directory, path)
+}
+
+#[test]
+fn log_levels_are_answered_with_why_not() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked(
+        &path,
+        "set_log_levels",
+        "{\"type\":\"log_levels_set\",\"refused\":\"no filter\"}\n",
+    );
+    let levels = LogLevels {
+        all: Some(LogLevel::Debug),
+        ..LogLevels::default()
+    };
+
+    assert_eq!(
+        set_log_levels(&path, &levels, Some(BRIEFLY)),
+        Ok(Err("no filter".to_string()))
+    );
+    let asked = heard.join().expect("the compositor was listening");
+    assert!(asked[0].contains("\"all\":\"debug\""), "{asked:?}");
 }
 
 #[test]

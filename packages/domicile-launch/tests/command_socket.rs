@@ -13,15 +13,16 @@ use domicile_launch::command::{
     browser_profiles_line, clear_browsing_data_line, clear_site_data_line, config_extensions_line,
     configure_extension_line, delete_history_line, devtools_line, disable_while_typing_line,
     extensions_line, history_line, load_shell_line, load_unpacked_line, media_devices_line,
-    open_url_line, pin_browser_site_line, set_extension_enabled_line, set_media_device_line,
-    set_site_permission_line, site_data_line, site_permissions_line, uninstall_extension_line,
-    visits_line,
+    open_url_line, pin_browser_site_line, set_extension_enabled_line, set_log_levels_line,
+    set_media_device_line, set_site_permission_line, site_data_line, site_permissions_line,
+    uninstall_extension_line, visits_line,
 };
 use domicile_launch::command_socket::{
     browser_profiles, clear_browsing_data, clear_site_data, config_extensions, configure_extension,
     delete_history, devtools, disable_while_typing, extensions, history, load_shell, load_unpacked,
-    media_devices, open_url, pin_browser_site, set_extension_enabled, set_media_device,
-    set_site_permission, site_data, site_permissions, uninstall_extension, visits, CommandError,
+    media_devices, open_url, pin_browser_site, set_extension_enabled, set_log_levels,
+    set_media_device, set_site_permission, site_data, site_permissions, uninstall_extension,
+    visits, CommandError,
 };
 use domicile_launch::extensions::{ExtensionSettings, InstalledExtension};
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
@@ -208,6 +209,19 @@ fn the_engine_is_sent_a_site_s_setting_and_says_it_stored_it() {
     assert_eq!(
         heard.join().expect("the engine was listening"),
         set_site_permission_line(&site)
+    );
+}
+
+#[test]
+fn the_engine_is_sent_log_levels_and_says_it_set_them() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(&path, Some("{\"type\":\"set\"}\n"));
+
+    set_log_levels(&path, 0, "*/domicile/*=1", BRIEFLY).expect("the engine set them");
+
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        set_log_levels_line(0, "*/domicile/*=1")
     );
 }
 

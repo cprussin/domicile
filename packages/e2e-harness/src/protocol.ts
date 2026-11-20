@@ -719,6 +719,13 @@ const displayConfiguredSchema = z.looseObject({
   type: z.literal("display_configured"),
 });
 
+// Answers `set_log_levels` on the asking connection only, for `domicile
+// set-log-level`: why not, or nothing.
+const logLevelsSetSchema = z.looseObject({
+  refused: z.string().optional(),
+  type: z.literal("log_levels_set"),
+});
+
 // Answers `shoot_desk` on the asking connection only, for `domicile
 // screenshot --fit`: what the PNG shows, or why there is none.
 const deskShotSchema = z.looseObject({
@@ -1011,6 +1018,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   idleTimeSchema,
   windowActedSchema,
   displayConfiguredSchema,
+  logLevelsSetSchema,
   deskShotSchema,
   emulatedSchema,
   executedSchema,
@@ -1080,6 +1088,7 @@ export type ShellBindingListMessage = z.infer<typeof shellBindingListSchema>;
 export type InputListMessage = z.infer<typeof inputListSchema>;
 export type WindowActedMessage = z.infer<typeof windowActedSchema>;
 export type DisplayConfiguredMessage = z.infer<typeof displayConfiguredSchema>;
+export type LogLevelsSetMessage = z.infer<typeof logLevelsSetSchema>;
 export type KeymapMessage = z.infer<typeof keymapSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;
