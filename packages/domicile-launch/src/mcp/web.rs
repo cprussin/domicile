@@ -39,7 +39,8 @@ pub const LETS_ENCRYPT: &str = "https://acme-v02.api.letsencrypt.org/directory";
 pub const RENEW_AFTER_MS: u64 = 60 * 24 * 60 * 60 * 1000;
 
 /// How often the desk tells the relay it's still there, so nothing between
-/// them drops a quiet connection.
+/// them drops a quiet connection; and how long the relay has to acknowledge
+/// it before the desk gives up on the connection and dials again.
 const HEARTBEAT: Duration = Duration::from_secs(30);
 
 /// The longest the desk waits before dialing a relay that hung up again.
@@ -151,6 +152,7 @@ pub struct Dialed {
 pub fn dial(relay: &str, seed: &[u8; 32]) -> io::Result<Dialed> {
     let key = SigningKey::from_bytes(seed);
     let mut stream = TcpStream::connect(relay)?;
+    given_up_unacknowledged(&stream, HEARTBEAT)?;
     let mut control = BufReader::new(stream.try_clone()?);
     said(
         &mut stream,
@@ -298,6 +300,30 @@ fn bridged(mut tls: TcpStream, config: &Arc<ServerConfig>, local: SocketAddr) ->
     let _ = tls.shutdown(Shutdown::Write);
     let _ = up.join();
     Ok(())
+}
+
+/// Sets `TCP_USER_TIMEOUT` on `stream`: data unacknowledged for `after`
+/// fails it. A connection made on a network the computer has left gets no
+/// acknowledgment, and without this the kernel probes it for good, so the
+/// desk never hears that it is gone and never dials again. The heartbeat
+/// keeps data in flight, so a dead relay is noticed within two of them.
+fn given_up_unacknowledged(stream: &TcpStream, after: Duration) -> io::Result<()> {
+    let after = libc::c_uint::try_from(after.as_millis()).map_err(io::Error::other)?;
+    // SAFETY: the descriptor is the stream's, open for this call, and the
+    // option is the size it says.
+    let set = unsafe {
+        libc::setsockopt(
+            std::os::fd::AsRawFd::as_raw_fd(stream),
+            libc::IPPROTO_TCP,
+            libc::TCP_USER_TIMEOUT,
+            std::ptr::from_ref(&after).cast(),
+            std::mem::size_of_val(&after) as libc::socklen_t,
+        )
+    };
+    match set {
+        0 => Ok(()),
+        _ => Err(io::Error::last_os_error()),
+    }
 }
 
 fn said(stream: &mut TcpStream, message: &DeskSays) -> io::Result<()> {
@@ -834,6 +860,31 @@ mod tests {
         retry_now(&status).expect("written again");
         waiting.join().expect("waiting does not panic");
         assert!(started.elapsed() < Duration::from_secs(10));
+    }
+
+    #[test]
+    fn a_relay_that_stops_acknowledging_the_heartbeat_is_given_up_on() {
+        let desks = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = desks.local_addr().unwrap().to_string();
+        let public = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let relay = domicile_relay::Relay::new("relay.example", || [1; 32]);
+        thread::spawn(move || relay.serve(public, desks));
+        let dialed = dial(&address, &[2; 32]).unwrap();
+        let mut timeout: libc::c_uint = 0;
+        let mut size = std::mem::size_of_val(&timeout) as libc::socklen_t;
+        // SAFETY: the descriptor is the control connection's, open for this
+        // call, and the option is the size it says.
+        let got = unsafe {
+            libc::getsockopt(
+                std::os::fd::AsRawFd::as_raw_fd(dialed.control.get_ref()),
+                libc::IPPROTO_TCP,
+                libc::TCP_USER_TIMEOUT,
+                std::ptr::from_mut(&mut timeout).cast(),
+                &mut size,
+            )
+        };
+        assert_eq!(got, 0);
+        assert_eq!(u128::from(timeout), HEARTBEAT.as_millis());
     }
 
     #[test]
