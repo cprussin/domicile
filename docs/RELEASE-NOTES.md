@@ -36,6 +36,12 @@ Profiles with their own sign-ins, site data and extensions, each opening the sit
 
 [The domicile command](CLI.md) · [#2121](https://github.com/cprussin/domicile/pull/2121) · [#2122](https://github.com/cprussin/domicile/pull/2122) · [#2134](https://github.com/cprussin/domicile/pull/2134) · [#2136](https://github.com/cprussin/domicile/pull/2136)
 
+### A friendlier `domicile` command
+
+Grouped `--help`, `domicile help <command>` for usage and examples, and man pages: `man domicile`. Tables and errors are colored on a terminal (`NO_COLOR` turns it off), and a mistyped command suggests the one you meant.
+
+[Output](CLI.md#output) · [`domicile help`](CLI.md#domicile-help-command) · [#2418](https://github.com/cprussin/domicile/pull/2418)
+
 ### Also new
 
 - Spell checking in pages and Electron apps, in the languages of `spellcheck`. A context menu event over a misspelling carries `misspelledWord`, `spellingSuggestions` and `replaceMisspelling()`, and runs `add-to-dictionary`. [`spellcheck`](SHELL-CONFIG.md#spelling) · [Context menus](SHELL-BROWSER-WINDOWS.md#the-keyboard)

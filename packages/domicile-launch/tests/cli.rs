@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 use domicile_launch::cli::{
     invocation, monitor_mode, monitor_size, CliError, Invocation, Listing, McpHttp, MonitorMode,
-    USAGE,
 };
+use domicile_launch::commands::COMMANDS;
 use domicile_launch::control::{AppReuse, Request, Switch, ThemeChange};
 use domicile_launch::power::Power;
 use domicile_protocol::{
@@ -658,9 +658,42 @@ fn sleep_and_wake_displays_take_a_display_or_nothing() {
 
 #[test]
 fn help_is_asked_for_by_flag_word_or_after_a_verb() {
-    for line in [&["--help"][..], &["-h"], &["help"], &["theme", "--help"]] {
-        assert_eq!(run(line), Ok(Invocation::Help), "{line:?}");
+    for line in [&["--help"][..], &["-h"], &["help"]] {
+        assert_eq!(
+            run(line),
+            Ok(Invocation::Help { command: None }),
+            "{line:?}"
+        );
     }
+    for line in [
+        &["theme", "--help"][..],
+        &["theme", "-h"],
+        &["help", "theme"],
+    ] {
+        assert_eq!(
+            run(line),
+            Ok(Invocation::Help {
+                command: Some("theme".to_string())
+            }),
+            "{line:?}"
+        );
+    }
+}
+
+#[test]
+fn help_with_man_writes_the_man_pages_to_a_directory() {
+    assert_eq!(
+        run(&["help", "--man", "share/man/man1"]),
+        Ok(Invocation::Manuals {
+            dir: PathBuf::from("share/man/man1")
+        })
+    );
+    assert_eq!(
+        run(&["help", "--man"]),
+        Err(CliError::FlagWithoutValue {
+            flag: "--man".to_string()
+        })
+    );
 }
 
 #[test]
@@ -703,26 +736,26 @@ fn a_flag_domicile_does_not_take_is_refused_and_named() {
 }
 
 #[test]
-fn help_takes_no_arguments() {
+fn help_takes_one_command_it_knows() {
     assert_eq!(
-        run(&["help", "theme"]),
+        run(&["help", "lsit-windows"]),
+        Err(CliError::UnknownCommand {
+            said: "lsit-windows".to_string(),
+            meant: Some("list-windows")
+        })
+    );
+    assert_eq!(
+        run(&["help", "theme", "lock"]),
         Err(CliError::Extra {
-            verb: "help".to_string(),
-            extra: "theme".to_string()
+            verb: "help theme".to_string(),
+            extra: "lock".to_string()
         })
     );
 }
 
 #[test]
-fn the_usage_lists_every_verb_and_each_one_parses() {
-    let listed: Vec<String> = USAGE
-        .lines()
-        .filter_map(|line| line.trim_start().strip_prefix("domicile "))
-        .filter_map(|rest| rest.split_whitespace().next())
-        .filter(|word| !word.starts_with(['<', '[', '-']))
-        .map(str::to_string)
-        .collect();
-    for verb in [
+fn every_command_in_the_help_parses_as_a_verb() {
+    let verbs = [
         "which-shell",
         "load-shell",
         "dev",
@@ -730,6 +763,7 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
         "install-app",
         "uninstall-app",
         "screenshot",
+        "screen-record",
         "send-shell",
         "check-config",
         "disable-while-typing",
@@ -740,12 +774,6 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
         "reboot",
         "log-out",
         "monitor",
-        "list-shell-commands",
-        "list-bindings",
-        "list-inputs",
-        "list-agents",
-        "stop-agent",
-        "forget-agent",
         "subscribe",
         "lock",
         "focus-window",
@@ -753,22 +781,45 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
         "kill-window",
         "inhibit-idle",
         "exec",
-        "drag",
+        "trace",
         "configure-display",
+        "list-displays",
+        "list-windows",
+        "status",
+        "list-shell-commands",
+        "list-bindings",
+        "list-inputs",
+        "idle-time",
+        "list-agents",
+        "stop-agent",
+        "forget-agent",
+        "mcp",
+        "agent",
+        "pointer",
+        "drag",
+        "scroll",
+        "key",
+        "type",
+        "devtools",
+        "accessibility",
+        "accessibility-act",
         "help",
-    ] {
+    ];
+    for verb in verbs {
         assert!(
-            listed.contains(&verb.to_string()),
+            COMMANDS.iter().any(|command| command.name == verb),
             "{verb} is not in --help"
         );
     }
-    for verb in &listed {
+    assert_eq!(COMMANDS.len(), verbs.len());
+    for command in COMMANDS {
         assert!(
             !matches!(
-                run(&[verb]),
+                run(&[command.name]),
                 Ok(Invocation::Run { .. }) | Err(CliError::TooMany { .. })
             ),
-            "--help lists {verb}, which is not a verb"
+            "--help lists {}, which is not a verb",
+            command.name
         );
     }
 }
@@ -874,17 +925,12 @@ fn check_config_takes_one_config_and_the_extra_word_is_named() {
 }
 
 #[test]
-fn every_verb_in_the_usage_has_a_section_in_the_cli_reference() {
+fn every_command_in_the_help_has_a_section_in_the_cli_reference() {
     let reference = std::fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/CLI.md"),
     )
     .expect("docs/CLI.md is the CLI reference");
-    let verbs = USAGE
-        .lines()
-        .filter_map(|line| line.trim_start().strip_prefix("domicile "))
-        .filter_map(|rest| rest.split_whitespace().next())
-        .filter(|word| !word.starts_with(['<', '[', '-']));
-    for verb in verbs {
+    for verb in COMMANDS.iter().map(|command| command.name) {
         assert!(
             reference.contains(&format!("## `domicile {verb}")),
             "docs/CLI.md has no section for {verb}"

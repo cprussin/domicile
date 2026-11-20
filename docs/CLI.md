@@ -661,10 +661,17 @@ that isn't remembered does nothing.
 Check a config file without a desktop. Exits non-zero with the reason the
 compositor would refuse it. home-manager runs it on the file it writes.
 
-## `domicile help`
+## `domicile help [command]`
 
-Print the commands. `--help` and `-h` do the same, also after a verb, except
-that `send-shell --help` prints the shell's own commands.
+Print the commands, grouped, or one command's usage, options and examples.
+`--help` and `-h` do the same, also after a command, except that
+`send-shell --help` prints the shell's own commands.
+
+- `domicile help --man <dir>` writes `domicile.1` and a `domicile-<command>.1`
+  for each command. The flake and the distribution packages install them, so
+  `man domicile-configure-display` works.
+- Help, man pages and the tests that keep `docs/CLI.md` in step come from one
+  table: `packages/domicile-launch/src/commands.rs`.
 
 ## `domicile --version`
 
@@ -683,6 +690,17 @@ engine   s2ffe1826ced0, checked build of Chromium 7703634 at 246fa60eff4e, built
 
 Any other flag before or after a shell is refused rather than taken as the
 shell.
+
+## Output
+
+- **Color** only on a terminal, and never with `NO_COLOR` set or `TERM=dumb`.
+  It uses the terminal's 16 colors, so its theme picks the shades.
+- **Errors** go to stderr as `error: <why>`. A refused command line also
+  prints the command's usage.
+- **`--json`** output never changes with the terminal. Scripts read it, not
+  the tables.
+- A typo of a command, such as `domicile wndows`, is refused with the command
+  it likely meant, unless a file of that name exists.
 
 ## While locked
 

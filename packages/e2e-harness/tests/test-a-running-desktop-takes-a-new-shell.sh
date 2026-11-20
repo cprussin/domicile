@@ -335,7 +335,7 @@ echo cancel >"$WORK/picked"
 if CANCELED="$(ask_desktop screenshot)"; then
   echo "FAIL: a dismissed screenshot exited 0: $CANCELED"
   FAILED=1
-elif [ "$CANCELED" = "domicile: the screenshot was canceled" ]; then
+elif [ "$CANCELED" = "error: the screenshot was canceled" ]; then
   echo "PASS: $CANCELED"
 else
   echo "FAIL: it failed for some other reason: $CANCELED"

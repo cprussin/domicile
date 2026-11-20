@@ -45,6 +45,8 @@ contents:
   - src: "@stage@/usr/share/doc/domicile"
     dst: /usr/share/doc/domicile
     type: tree
+  - src: "@stage@/usr/share/man/man1/*"
+    dst: /usr/share/man/man1/
   - src: "@stage@/usr/share/applications/*"
     dst: /usr/share/applications/
   - src: "@stage@/usr/share/wayland-sessions/*"

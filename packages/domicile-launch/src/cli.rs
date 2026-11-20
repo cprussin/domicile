@@ -5,6 +5,7 @@
 //! default.
 
 use crate::accessibility::Act;
+use crate::commands;
 use std::path::PathBuf;
 
 use domicile_protocol::{
@@ -15,146 +16,6 @@ use domicile_protocol::{
 use crate::control::{AppReuse, Request, Switch, ThemeChange};
 use crate::power::Power;
 use domicile_host::system::DisplayPower;
-
-/// What `domicile --help` prints.
-///
-/// Every verb in [`verb`] needs a line here; `tests/cli.rs` checks both ways.
-pub const USAGE: &str = "\
-Run a desktop:
-
-  domicile [shell] [--config <file>]
-      Run a desktop on <shell>, or on the shell the config names. The config
-      is ~/.config/domicile/domicile.{ts,tsx,js,mjs,json} unless --config
-      names one.
-
-Ask the running desktop:
-
-  domicile which-shell                  Print the shell it serves
-  domicile load-shell <shell>           Serve another shell, or a new build
-  domicile dev <entry>                  Serve a shell's source with hot module
-                                        replacement until stopped, then go
-                                        back to the shell it replaced
-  domicile open <file|folder|url>       Open with its default app, a link in
-                                        a browser window
-  domicile open --profile <id> <url>    Open a link in browser profile <id>
-  domicile open --app <url|module>      Open a site or app module as an app
-  domicile open --app --id <id> [--reuse new|focus|navigate] <url>
-                                        Open a site as app <id>; with focus or
-                                        navigate, reuse its open window
-  domicile open --app --profile <id> <url>
-                                        Open a site as an app in browser
-                                        profile <id>
-  domicile open --which <file|url>      Print the app open would use
-  domicile open --electron <entry|path> [-- <command>...]
-                                        Run an installed Electron app on the
-                                        desktop's engine; <command> is its own,
-                                        which runs it if the engine can't
-  domicile screenshot [file]            Take the shell's screenshot, or write a PNG
-  domicile screenshot --fit <px> [--area <x>,<y>,<w>x<h>] <file>
-                                        Write a PNG of the desk, or an area
-                                        of it in logical pixels, no wider or
-                                        taller than <px>, and print what it
-                                        shows as JSON
-  domicile pointer <x>,<y> [click|double-click|right-click|middle-click]
-                                        Move the pointer to a point of the desk,
-                                        in logical pixels from its top-left
-                                        corner, then click there
-  domicile drag <x>,<y> <x>,<y>         Press the left button at one point of
-                                        the desk, move to the other holding it,
-                                        and let go there
-  domicile scroll <dx>,<dy>             Scroll where the pointer is, in logical
-                                        pixels; positive is right and down
-  domicile key <chord>                  Press and release a chord such as
-                                        ctrl+shift+Tab or Return
-  domicile type <text>                  Type text on the desk's keyboard
-  domicile accessibility <window>       Print a native window's accessibility
-                                        tree, one element a line with its ref
-  domicile accessibility-act <window> <ref> click|focus|set-text <text>
-                                        Click, focus or set the text of an
-                                        element of a native window
-  domicile devtools [--view <view>] <window> <method> [params]
-                                        Send a DevTools Protocol method, with
-                                        its params as a JSON object, to a
-                                        browser window's page, or one of its
-                                        views, or the shell's page, and print
-                                        its result
-  domicile screen-record                Record the screen until the toolbar stops it
-  domicile trace [--seconds <n>] <file> Record the engine's trace events for 20
-                                        seconds, or n, to a Perfetto trace
-  domicile send-shell <word>...         Run a shell command, as a keybinding does,
-                                        and print what it answers
-  domicile list-shell-commands [--json] Print the commands send-shell takes,
-                                        as the shell describes them; also
-                                        send-shell --help
-  domicile list-bindings [--json]       Print the shell's keys and gestures in
-                                        each binding mode, and what they run
-  domicile theme [light|dark|toggle]    Set the theme, or print it
-  domicile sleep-displays [display]     Turn every monitor off until input,
-                                        or one until it is woken
-  domicile wake-displays [display]      Turn the monitors, or one, back on
-  domicile list-displays [--json]       Print each display: the names
-                                        sleep-displays takes, mode, layout
-  domicile list-windows [--json]        Print each window, native and browser
-  domicile list-inputs [--json]         Print each keyboard, pointer and touch
-                                        device
-  domicile lock                         Lock the desktop
-  domicile focus-window <id>            Ask the shell to show and focus a
-                                        window, by its list-windows id
-  domicile close-window <id>            Ask a window to close
-  domicile kill-window <id>             Kill a window's process
-  domicile exec <program> [<arg>...]    Start a program as the desktop starts
-                                        apps, <program> found on its PATH, or
-                                        fail saying why it did not start
-  domicile inhibit-idle -- <command>... Run a command, keeping the screens on
-                                        until it exits
-  domicile configure-display <display> <change>...
-                                        Change a monitor until the desktop
-                                        restarts: mode <W>x<H>[@Hz], scale <S>,
-                                        position <X>,<Y>, transform
-                                        normal|90|180|270, adaptive-sync on|off,
-                                        hdr on|off, sdr-white <nits>, enable,
-                                        disable, reset
-  domicile subscribe [windows|displays|inputs|status]...
-                                        Print each as a JSON line, then again
-                                        whenever it changes, until stopped
-  domicile status [--json]              Print the shell, theme, keymap, lock,
-                                        and what keeps the screens on or
-                                        captures the desktop
-  domicile idle-time [--json]           Print how many seconds nobody has used
-                                        the desktop
-  domicile disable-while-typing [on|off|toggle]
-                                        Set the touchpad setting, or print it
-  domicile monitor <name> <W>x<H>[@Hz] [scale]
-                                        Add a monitor with no screen until stdin
-                                        ends; each line read resizes it
-  domicile power-off                    Ask, then turn the computer off
-  domicile reboot                       Ask, then restart the computer
-  domicile log-out                      Ask, then end the login session
-  domicile mcp                          Serve the Model Context Protocol on
-                                        stdio, for agents to drive the desktop
-  domicile mcp --http <address> [--url <url>]
-                                        Serve it over HTTP, for agents that
-                                        sign in, reached at url
-  domicile mcp --relay [<relay>]        Serve it to agents on the web, such as
-                                        claude.ai, through a relay
-  domicile agent <name>                 Ask to let an agent in; print what the
-                                        user allowed and each change, then
-                                        list each line read as what it did,
-                                        until stopped
-  domicile list-agents [--json]         Print the agents let in now and those
-                                        remembered
-  domicile stop-agent <session>         Stop an agent, by its list-agents
-                                        session
-  domicile forget-agent <name>          Make a remembered agent ask again
-
-Without a desktop:
-
-  domicile check-config <file>          Fail with the reason a config is refused
-  domicile install-app <url>            Add a site to your applications
-  domicile uninstall-app <url>          Remove a site install-app added
-  domicile help                         Print this, as do --help and -h
-  domicile --version                    Print the version, commit and engine
-";
 
 /// An invalid `domicile` command line.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -407,6 +268,14 @@ pub enum CliError {
     TwoConfigs { second: String },
     #[error("{flag} is not a flag domicile takes. domicile --help lists what it takes.")]
     UnknownFlag { flag: String },
+    #[error(
+        "{said} is not a command.{}",
+        meant.map_or_else(String::new, |meant| format!(" Did you mean {meant}?"))
+    )]
+    UnknownCommand {
+        said: String,
+        meant: Option<&'static str>,
+    },
 }
 
 /// A parsed `domicile` command line.
@@ -526,8 +395,10 @@ pub enum Invocation {
     ///
     /// Kept as typed; the client makes it absolute.
     Trace { file: String, seconds: u64 },
-    /// Print [`USAGE`].
-    Help,
+    /// Print the list of commands, or `command`'s help; see [`crate::help`].
+    Help { command: Option<String> },
+    /// Write the man pages into `dir`; see [`crate::man`].
+    Manuals { dir: PathBuf },
     /// Print the version, the commit it was built from, and the engine's.
     Version,
 }
@@ -595,13 +466,38 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 .is_some_and(|next| HELP.contains(&next.as_str())))
     {
         return match (first.as_str(), args.next()) {
-            ("help", Some(extra)) => Err(CliError::Extra { verb: first, extra }),
+            ("help", Some(flag)) if flag == MAN => match (args.next(), args.next()) {
+                (Some(dir), None) => Ok(Invocation::Manuals {
+                    dir: PathBuf::from(dir),
+                }),
+                (None, _) => Err(CliError::FlagWithoutValue { flag }),
+                (Some(dir), Some(extra)) => Err(CliError::Extra {
+                    verb: format!("help {flag} {dir}"),
+                    extra,
+                }),
+            },
+            ("help", Some(command)) => match (commands::command(&command), args.next()) {
+                (None, _) => Err(CliError::UnknownCommand {
+                    meant: commands::meant(&command),
+                    said: command,
+                }),
+                (Some(_), Some(extra)) => Err(CliError::Extra {
+                    verb: format!("help {command}"),
+                    extra,
+                }),
+                (Some(_), None) => Ok(Invocation::Help {
+                    command: Some(command),
+                }),
+            },
             // What `send-shell` takes is up to the shell, so ask it.
             ("send-shell", _) => Ok(Invocation::List {
                 listing: Listing::ShellCommands,
                 json: false,
             }),
-            _ => Ok(Invocation::Help),
+            (verb, _) if HELP.contains(&verb) => Ok(Invocation::Help { command: None }),
+            _ => Ok(Invocation::Help {
+                command: Some(first),
+            }),
         };
     }
     if let Some(verb) = verb(&first) {
@@ -1077,8 +973,11 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
     Ok(Invocation::Run { shell, config })
 }
 
-/// The words that ask for [`USAGE`], first or right after a verb.
+/// The words that ask for help, first or right after a verb.
 const HELP: [&str; 3] = ["help", "--help", "-h"];
+
+/// `help`'s flag for writing the man pages.
+const MAN: &str = "--man";
 
 /// The flag that asks for [`Invocation::Version`].
 const VERSION: &str = "--version";

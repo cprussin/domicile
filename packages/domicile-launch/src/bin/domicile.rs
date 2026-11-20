@@ -26,7 +26,7 @@ use domicile_launch::accessibility::{self, AtSpi, Element};
 use domicile_launch::agent_lending::{admit, forward_actions, DECIDING_WITHIN};
 use domicile_launch::app_entry::app_entry;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
-use domicile_launch::cli::{invocation, CliError, Invocation, Listing, MonitorMode, USAGE};
+use domicile_launch::cli::{invocation, CliError, Invocation, Listing, MonitorMode};
 use domicile_launch::command_socket::{
     browser_profiles, clear_browsing_data, clear_site_data, config_extensions, configure_extension,
     delete_history, devtools, disable_while_typing, extensions, history, load_shell, load_unpacked,
@@ -34,6 +34,7 @@ use domicile_launch::command_socket::{
     set_media_device, set_site_permission, site_data, site_permissions, uninstall_extension,
     visits,
 };
+use domicile_launch::commands;
 use domicile_launch::components::{
     builder, components, electron_host, engine as engine_path, our_shell,
     perfetto as perfetto_path, version_file, Components,
@@ -59,6 +60,7 @@ use domicile_launch::electron_schemes::{self, schemes_switch, with_known};
 use domicile_launch::electron_wrapper::{record, through_wrappers, WrapperError, RECORD};
 use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
+use domicile_launch::help::{command_help, error, overview, version_lines, with_usage};
 use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::idle_inhibit::{exit_code, inhibit_idle};
 use domicile_launch::install_app::{data_home, install_app, Fetched};
@@ -66,11 +68,13 @@ use domicile_launch::listing::{
     agents_table, bindings_table, displays_table, inputs_table, shell_commands_table, status_table,
     windows_table,
 };
+use domicile_launch::man;
 use domicile_launch::mcp;
 use domicile_launch::milestones::{reach, Milestone, Stalled};
 use domicile_launch::monitor_lending::{forward_sizes, lend};
 use domicile_launch::notification;
 use domicile_launch::open::{app_opening, opener, opening, AppOpening, Opening, Places, DESKTOP};
+use domicile_launch::paint::{Paint, Style};
 use domicile_launch::platform::platform;
 use domicile_launch::power::{confirmed, Power};
 use domicile_launch::profile_claim::claim;
@@ -153,15 +157,56 @@ fn main() -> ExitCode {
     }
     match run() {
         Ok(code) => code,
-        Err(said) => {
-            eprintln!("domicile: {said}");
-            ExitCode::FAILURE
-        }
+        Err(said) => fail(&said),
+    }
+}
+
+/// How to paint what goes to stdout.
+fn out() -> Paint {
+    Paint::for_stream(std::io::stdout().is_terminal(), &|name| {
+        std::env::var(name).ok()
+    })
+}
+
+/// How to paint what goes to stderr.
+fn err() -> Paint {
+    Paint::for_stream(std::io::stderr().is_terminal(), &|name| {
+        std::env::var(name).ok()
+    })
+}
+
+/// Prints `said` as an error and fails.
+fn fail(said: &str) -> ExitCode {
+    eprint!("{}", error(err(), said));
+    ExitCode::FAILURE
+}
+
+/// A refused command line, with the usage of the command it named.
+fn refused(why: &CliError) -> String {
+    let named = std::env::args()
+        .nth(1)
+        .and_then(|first| commands::command(&first));
+    match (why, named) {
+        (CliError::UnknownCommand { .. }, _) | (_, None) => why.to_string(),
+        (_, Some(command)) => with_usage(err(), &why.to_string(), command),
     }
 }
 
 fn run() -> Result<ExitCode, String> {
-    match invocation(std::env::args().skip(1)).map_err(|why| why.to_string())? {
+    match invocation(std::env::args().skip(1)).map_err(|why| refused(&why))? {
+        // A typo of a command, rather than a shell: no path, no package.
+        Invocation::Run {
+            shell: Some(word), ..
+        } if !word.contains(['/', '.', '@', ':'])
+            && !Path::new(&word).exists()
+            && commands::meant(&word).is_some() =>
+        {
+            Err(CliError::UnknownCommand {
+                meant: commands::meant(&word),
+                said: word,
+            }
+            .to_string())
+        }
         Invocation::Run { shell, config } => desktop(shell.as_deref(), config.as_deref()),
         Invocation::Ask { request } => asked(&request),
         Invocation::Load { shell } => asked(&shell_to_load(&shell)?),
@@ -249,8 +294,25 @@ fn run() -> Result<ExitCode, String> {
             accessibility::act_on(&mut AtSpi::connected()?, pid, &element, &act)?;
             Ok(ExitCode::SUCCESS)
         }
-        Invocation::Help => {
-            print!("{USAGE}");
+        Invocation::Help { command: None } => {
+            print!("{}", overview(out()));
+            Ok(ExitCode::SUCCESS)
+        }
+        Invocation::Help {
+            command: Some(name),
+        } => {
+            let command = commands::command(&name).expect("the parser asks only for commands");
+            print!("{}", command_help(out(), command));
+            Ok(ExitCode::SUCCESS)
+        }
+        Invocation::Manuals { dir } => {
+            std::fs::create_dir_all(&dir)
+                .map_err(|why| format!("cannot make {}: {why}", dir.display()))?;
+            for (file, page) in man::pages() {
+                let path = dir.join(file);
+                std::fs::write(&path, page)
+                    .map_err(|why| format!("cannot write {}: {why}", path.display()))?;
+            }
             Ok(ExitCode::SUCCESS)
         }
         Invocation::Version => versioned(),
@@ -299,9 +361,12 @@ fn traced_to(file: &Path, duration: Duration) -> Result<ExitCode, String> {
         let _ = std::fs::remove_file(socket);
     }
     recorded?;
+    let paint = out();
     println!(
-        "Wrote {}. Open it at https://ui.perfetto.dev.",
-        file.display()
+        "{} Wrote {}. Open it at {}",
+        paint.style(Style::Good, "✓"),
+        paint.style(Style::Bold, &file.display().to_string()),
+        paint.style(Style::Placeholder, "https://ui.perfetto.dev"),
     );
     Ok(ExitCode::SUCCESS)
 }
@@ -315,8 +380,10 @@ fn recorded_with(
     duration: Duration,
     service: &mut std::process::Child,
 ) -> Result<(), String> {
+    let paint = err();
     eprintln!(
-        "Waiting {} s for the engine to attach...",
+        "{} Waiting {} s for the engine to attach",
+        paint.style(Style::Dim, "○"),
         trace::ATTACH_WITHIN.as_secs()
     );
     std::thread::sleep(trace::ATTACH_WITHIN);
@@ -325,7 +392,11 @@ fn recorded_with(
             "Perfetto's traced stopped before recording: {status}"
         ));
     }
-    eprintln!("Recording for {} s.", duration.as_secs());
+    eprintln!(
+        "{} Recording for {} s",
+        paint.style(Style::Placeholder, "●"),
+        duration.as_secs()
+    );
     let recorder = trace::record(perfetto, consumer, file);
     let mut recorder = Command::new(&recorder.program)
         .args(&recorder.args)
@@ -361,8 +432,7 @@ fn versioned() -> Result<ExitCode, String> {
     let provenance = engine.join("PROVENANCE");
     let engine = engine_version(&read(&provenance)?)
         .map_err(|why| format!("{why}, at {}", provenance.display()))?;
-    print!("{built}");
-    println!("{engine}");
+    print!("{}", version_lines(out(), &format!("{built}{engine}\n")));
     Ok(ExitCode::SUCCESS)
 }
 
@@ -1007,16 +1077,18 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         }
         // Nothing on stdout: there is no file.
         Response::Copied => {
-            eprintln!("domicile: the screenshot was copied to the clipboard");
+            eprintln!(
+                "{} Copied the screenshot to the clipboard",
+                err().style(Style::Good, "✓")
+            );
             Ok(ExitCode::SUCCESS)
         }
         // A failure, so `f=$(domicile screenshot) && …` stops here.
         Response::Canceled => {
-            match request {
-                Request::ScreenRecord => eprintln!("domicile: the screen recording was canceled"),
-                _ => eprintln!("domicile: the screenshot was canceled"),
-            }
-            Ok(ExitCode::FAILURE)
+            Ok(fail(match request {
+                Request::ScreenRecord => "the screen recording was canceled",
+                _ => "the screenshot was canceled",
+            }))
         }
         // Only `domicile monitor` asks for this, and holds the connection.
         Response::VirtualMonitor { .. }
@@ -1052,10 +1124,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             "the desktop answered {answer:?}, which no command asks for"
         )),
         // Print the desktop's own reason.
-        Response::Refused { why } => {
-            eprintln!("domicile: {why}");
-            Ok(ExitCode::FAILURE)
-        }
+        Response::Refused { why } => Ok(fail(&why)),
     }
 }
 
@@ -1362,30 +1431,27 @@ fn listed(listing: Listing, json: bool) -> Result<ExitCode, String> {
     let answer =
         ask(&socket, &listing.request(), Some(ANSWER_WITHIN)).map_err(|why| why.to_string())?;
     let printed = match (answer, json) {
-        (Response::Displays { displays }, false) => displays_table(&displays),
-        (Response::Windows { windows }, false) => windows_table(&windows),
+        (Response::Displays { displays }, false) => displays_table(out(), &displays),
+        (Response::Windows { windows }, false) => windows_table(out(), &windows),
         (Response::Displays { displays }, true) => as_json(&displays),
         (Response::Windows { windows }, true) => as_json(&windows),
-        (Response::Status { shell, status }, false) => status_table(&shell, &status),
+        (Response::Status { shell, status }, false) => status_table(out(), &shell, &status),
         (Response::Status { shell, status }, true) => {
             as_json(&serde_json::json!({ "shell": shell, "status": status }))
         }
-        (Response::ShellCommands { commands }, false) => shell_commands_table(&commands),
+        (Response::ShellCommands { commands }, false) => shell_commands_table(out(), &commands),
         (Response::ShellCommands { commands }, true) => as_json(&commands),
-        (Response::ShellBindings { bindings }, false) => bindings_table(&bindings),
+        (Response::ShellBindings { bindings }, false) => bindings_table(out(), &bindings),
         (Response::ShellBindings { bindings }, true) => as_json(&bindings),
-        (Response::Inputs { inputs }, false) => inputs_table(&inputs),
+        (Response::Inputs { inputs }, false) => inputs_table(out(), &inputs),
         (Response::Inputs { inputs }, true) => as_json(&inputs),
         (Response::IdleTime { seconds }, false) => format!("{seconds}\n"),
         (Response::IdleTime { seconds }, true) => {
             as_json(&serde_json::json!({ "seconds": seconds }))
         }
-        (Response::Agents { agents }, false) => agents_table(&agents),
+        (Response::Agents { agents }, false) => agents_table(out(), &agents),
         (Response::Agents { agents }, true) => as_json(&agents),
-        (Response::Refused { why }, _) => {
-            eprintln!("domicile: {why}");
-            return Ok(ExitCode::FAILURE);
-        }
+        (Response::Refused { why }, _) => return Ok(fail(&why)),
         (answer, _) => {
             return Err(format!(
                 "the desktop answered {answer:?} to a listing of {listing:?}"
@@ -1421,10 +1487,7 @@ fn monitored(name: String, mode: MonitorMode) -> Result<ExitCode, String> {
         .map_err(|why| why.to_string())?;
     match answer {
         Response::VirtualMonitor { output } => println!("{output}"),
-        Response::Refused { why } => {
-            eprintln!("domicile: {why}");
-            return Ok(ExitCode::FAILURE);
-        }
+        Response::Refused { why } => return Ok(fail(&why)),
         answer => return Err(format!("the desktop answered {answer:?} to a monitor")),
     }
     held.set_read_timeout(None)
@@ -1435,7 +1498,7 @@ fn monitored(name: String, mode: MonitorMode) -> Result<ExitCode, String> {
     // The desktop says nothing more: anything it does is a hang-up.
     std::thread::spawn(move || {
         let _ = std::io::Read::read(&mut &gone, &mut [0]);
-        eprintln!("domicile: the desktop took the monitor away");
+        eprint!("{}", error(err(), "the desktop took the monitor away"));
         std::process::exit(1);
     });
     forward_sizes(std::io::stdin().lock(), &held, std::io::stderr())
@@ -1466,10 +1529,7 @@ fn admitted(name: String) -> Result<ExitCode, String> {
             )
             .and_then(|()| stdout.flush());
         }
-        Response::Refused { why } => {
-            eprintln!("domicile: {why}");
-            return Ok(ExitCode::FAILURE);
-        }
+        Response::Refused { why } => return Ok(fail(&why)),
         answer => return Err(format!("the desktop answered {answer:?} to an agent")),
     }
     held.set_read_timeout(None)
@@ -1495,7 +1555,7 @@ fn admitted(name: String) -> Result<ExitCode, String> {
             )
             .and_then(|()| stdout.flush());
         }
-        eprintln!("domicile: the agent was stopped from the desktop");
+        eprint!("{}", error(err(), "the agent was stopped from the desktop"));
         std::process::exit(1);
     });
     forward_actions(std::io::stdin().lock(), &held)
@@ -1526,8 +1586,7 @@ fn subscribed(topics: Vec<WatchTopic>) -> Result<ExitCode, String> {
                 .is_ok()
             }
             Response::Refused { why } => {
-                eprintln!("domicile: {why}");
-                code = ExitCode::FAILURE;
+                code = fail(&why);
                 false
             }
             answer => {
@@ -1643,13 +1702,20 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     // quiet. Print the absolute module path, not its directory, so a wrong
     // file is visible.
     let interactive = std::io::stdout().is_terminal();
+    let paint = out();
+    let choice = |label: &str, value: &str| {
+        println!(
+            "  {}  {value}",
+            paint.style(Style::Dim, &format!("{label:<8}"))
+        );
+    };
     if interactive {
         let module = page.root.join(&page.module);
-        println!("shell: {}", module.display());
+        choice("shell", &module.display().to_string());
         // A wrong config is a common cause of a wrong monitor layout.
-        println!("config: {config}");
+        choice("config", &config.to_string());
         // The profile decides which sign-ins the desktop has.
-        println!("profile: {}", places.profile.display());
+        choice("profile", &places.profile.display().to_string());
     }
 
     // Bind before starting components, which inherit the path. The
@@ -1709,7 +1775,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     )
     .map_err(|why| why.to_string())?;
     if interactive {
-        println!("the engine is taking the {platform} platform");
+        choice("platform", &platform.to_string());
     }
     let on_the_cpu = on_the_cpu(
         &platform,
@@ -1856,10 +1922,19 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), Down> {
     start_an_engine(desktop, &mut running)?;
     start_a_compositor(desktop, &mut running, heard)?;
 
-    // Scripts wait for this line, so it prints off a terminal too.
-    println!("domicile is up. Apps connect to the WAYLAND_DISPLAY the compositor names above.");
-    if std::io::stdout().is_terminal() {
-        println!("Ctrl-C to stop.");
+    // Scripts wait for this line, so it prints as it is off a terminal.
+    match std::io::stdout().is_terminal() {
+        true => {
+            let paint = out();
+            println!(
+                "{} {}",
+                paint.style(Style::Heading, "✓ Desktop running."),
+                paint.style(Style::Dim, "Ctrl-C to stop.")
+            );
+        }
+        false => println!(
+            "domicile is up. Apps connect to the WAYLAND_DISPLAY the compositor names above."
+        ),
     }
 
     // Restart each part that dies; see `domicile_launch::restart`. `over`

@@ -74,6 +74,9 @@ for program in "${PROGRAMS[@]}"; do
   install -m 755 "$BINARIES/$program" "$USR/bin/$program"
 done
 
+# `man domicile` and `man domicile-<command>`, as in `flake.nix`.
+"$USR/bin/domicile" help --man "$USR/share/man/man1"
+
 # Unmodified. On a distribution, `libEGL.so.1` and the GSettings schemas are on
 # the default paths, so the engine needs no wrapper, unlike in `flake.nix`.
 cp -a "$ENGINE" "$LIBEXEC/engine"

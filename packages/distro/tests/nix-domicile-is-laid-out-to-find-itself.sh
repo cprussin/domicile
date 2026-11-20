@@ -52,6 +52,11 @@ for program in domicile-history domicile-settings domicile-app-host; do
     exit 1
   }
 done
+[ -f "$out/share/man/man1/domicile.1" ] && [ -f "$out/share/man/man1/domicile-list-windows.1" ] || {
+  echo "share/man/man1 lacks domicile.1 or domicile-list-windows.1, so" >&2
+  echo "  man domicile finds nothing" >&2
+  exit 1
+}
 for module in settings history; do
   [ -f "$out/libexec/domicile/app-modules/$module/$module.js" ] || {
     echo "libexec/domicile/app-modules/$module holds no $module.js, so" >&2

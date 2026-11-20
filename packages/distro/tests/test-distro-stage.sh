@@ -49,6 +49,13 @@ for binary in $FLAKE_BINARIES; do
   printf '#!/bin/sh\necho %s\n' "$binary" >"$BINARIES/$binary"
   chmod +x "$BINARIES/$binary"
 done
+# `help --man <dir>` writes the man pages, as the real one does.
+cat >"$BINARIES/domicile" <<'STUB'
+#!/bin/sh
+if [ "$1 $2" = "help --man" ]; then
+  mkdir -p "$3" && echo '.TH DOMICILE 1' >"$3/domicile.1"
+fi
+STUB
 
 ENGINE="$WORK/engine"
 mkdir -p "$ENGINE/locales"
@@ -154,6 +161,9 @@ expect "bin holds only what the flake installs" "$FLAKE_BINARIES" \
   ok "the engine is libexec/domicile/engine, as unpacked" ||
   fail "the engine is libexec/domicile/engine, as unpacked" \
     "$(ls -R "$LIBEXEC/engine" 2>&1)"
+[ -f "$USR/share/man/man1/domicile.1" ] &&
+  ok "the man pages are in share/man/man1" ||
+  fail "the man pages are in share/man/man1" "no $USR/share/man/man1/domicile.1"
 expect "libexec/domicile/version names the version and commit" \
   "$(printf 'domicile 0.0.0\ncommit   %s' "$REV")" "$(cat "$LIBEXEC/version" 2>&1)"
 for shell in manganese simple splash; do

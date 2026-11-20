@@ -6,6 +6,7 @@ use domicile_launch::listing::{
     agents_table, bindings_table, displays_table, inputs_table, shell_commands_table, status_table,
     windows_table,
 };
+use domicile_launch::paint::Paint;
 use domicile_protocol::{
     AdaptiveSync, Capturing, CapturingKind, DesktopStatus, Devices, DisplayHdr, DisplayInfo,
     DisplayTransform, InputConnection, InputKind, ListedDisplay, ListedInput, ListedWindow,
@@ -50,19 +51,19 @@ fn each_display_prints_every_name_sleep_displays_takes() {
     };
 
     assert_eq!(
-        displays_table(&[laptop, dock]),
+        displays_table(Paint::PLAIN, &[laptop, dock]),
         "\
-drm-1 (lit)
-  names     drm-1, eDP-1, BOE NE135A1M-NY1
-  mode      2256x1504 @ 59.999 Hz
-  layout    1128x752 at 0,0, scale 2, normal
-  color     HDR unsupported, adaptive sync off
+drm-1  ● lit
+  names   drm-1, eDP-1, BOE NE135A1M-NY1
+  mode    2256x1504 @ 59.999 Hz
+  layout  1128x752 at 0,0 · scale 2 · normal
+  color   HDR unsupported · adaptive sync off
 
-drm-2 (off)
-  names     drm-2
-  mode      2256x1504
-  layout    1080x1920 at 1128,0, scale 2, rotate-90
-  color     HDR on, adaptive sync off
+drm-2  ○ off
+  names   drm-2
+  mode    2256x1504
+  layout  1080x1920 at 1128,0 · scale 2 · rotate-90
+  color   HDR on · adaptive sync off
 "
     );
 }
@@ -108,19 +109,22 @@ fn windows_print_as_one_table_whoever_draws_them() {
     };
 
     assert_eq!(
-        windows_table(&[editor, terminal, mail]),
+        windows_table(Paint::PLAIN, &[editor, terminal, mail]),
         "\
 ID                                KIND     APP    PID   SIZE     TITLE
-kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA  native   emacs  4242  640x481  notes.org (focused)
-nW1zT5yB8vC2xF6hJ9pL4sR0gAkD3mQ7  native   -      7     640x481  - (urgent)
-Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox (private)
+kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA  native   emacs  4242  640x481  notes.org ● focused
+nW1zT5yB8vC2xF6hJ9pL4sR0gAkD3mQ7  native   -      7     640x481  - ▲ urgent
+Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox private
 "
     );
 }
 
 #[test]
 fn no_windows_prints_the_header_alone() {
-    assert_eq!(windows_table(&[]), "ID  KIND  APP  PID  SIZE  TITLE\n");
+    assert_eq!(
+        windows_table(Paint::PLAIN, &[]),
+        "ID  KIND  APP  PID  SIZE  TITLE\n"
+    );
 }
 
 #[test]
@@ -140,7 +144,7 @@ fn the_status_prints_one_line_per_question() {
         }],
     };
     assert_eq!(
-        status_table(Path::new("/desk/shell.js"), &status),
+        status_table(Paint::PLAIN, Path::new("/desk/shell.js"), &status),
         "\
 shell       /desk/shell.js
 theme       dark
@@ -153,6 +157,7 @@ capturing   org.example.Remote (input_capture)
     );
     assert_eq!(
         status_table(
+            Paint::PLAIN,
             Path::new("/desk/shell.js"),
             &DesktopStatus {
                 locked: true,
@@ -182,17 +187,20 @@ fn the_shells_commands_print_with_their_usage_lined_up() {
         description: description.to_string(),
     };
     assert_eq!(
-        shell_commands_table(&[
-            help("focus left|right|up|down", "Move focus."),
-            help("lock", "Lock the desktop."),
-        ]),
+        shell_commands_table(
+            Paint::PLAIN,
+            &[
+                help("focus left|right|up|down", "Move focus."),
+                help("lock", "Lock the desktop."),
+            ]
+        ),
         "\
 focus left|right|up|down  Move focus.
 lock                      Lock the desktop.
 "
     );
     assert_eq!(
-        shell_commands_table(&[]),
+        shell_commands_table(Paint::PLAIN, &[]),
         "The shell describes no commands.\n"
     );
 }
@@ -205,11 +213,14 @@ fn the_shells_bindings_print_mode_by_mode() {
         action: action.to_string(),
     };
     assert_eq!(
-        bindings_table(&[
-            binding("default", "Meta+Left", "send-shell focus left"),
-            binding("default", "Meta+r", "mode resize"),
-            binding("resize", "Escape", "mode default"),
-        ]),
+        bindings_table(
+            Paint::PLAIN,
+            &[
+                binding("default", "Meta+Left", "send-shell focus left"),
+                binding("default", "Meta+r", "mode resize"),
+                binding("resize", "Escape", "mode default"),
+            ]
+        ),
         "\
 default
   Meta+Left  send-shell focus left
@@ -219,7 +230,10 @@ resize
   Escape     mode default
 "
     );
-    assert_eq!(bindings_table(&[]), "The shell binds no keys.\n");
+    assert_eq!(
+        bindings_table(Paint::PLAIN, &[]),
+        "The shell binds no keys.\n"
+    );
 }
 
 #[test]
@@ -237,29 +251,32 @@ fn the_inputs_print_one_row_each_with_ids_as_lsusb_prints_them() {
             }
         };
     assert_eq!(
-        inputs_table(&[
-            input(
-                4,
-                InputKind::Keyboard,
-                InputConnection::Internal,
-                (1, 1),
-                "AT Translated Set 2 keyboard"
-            ),
-            input(
-                9,
-                InputKind::Mouse,
-                InputConnection::Bluetooth,
-                (0x046d, 0x4082),
-                "Logitech MX Master 3"
-            ),
-            input(
-                11,
-                InputKind::PointingStick,
-                InputConnection::Internal,
-                (0, 0),
-                "TPPS/2 IBM TrackPoint"
-            ),
-        ]),
+        inputs_table(
+            Paint::PLAIN,
+            &[
+                input(
+                    4,
+                    InputKind::Keyboard,
+                    InputConnection::Internal,
+                    (1, 1),
+                    "AT Translated Set 2 keyboard"
+                ),
+                input(
+                    9,
+                    InputKind::Mouse,
+                    InputConnection::Bluetooth,
+                    (0x046d, 0x4082),
+                    "Logitech MX Master 3"
+                ),
+                input(
+                    11,
+                    InputKind::PointingStick,
+                    InputConnection::Internal,
+                    (0, 0),
+                    "TPPS/2 IBM TrackPoint"
+                ),
+            ]
+        ),
         "\
 ID  KIND            CONNECTION  VENDOR:PRODUCT  NAME
 4   keyboard        internal    0001:0001       AT Translated Set 2 keyboard
@@ -268,7 +285,7 @@ ID  KIND            CONNECTION  VENDOR:PRODUCT  NAME
 "
     );
     assert_eq!(
-        inputs_table(&[]),
+        inputs_table(Paint::PLAIN, &[]),
         "ID  KIND  CONNECTION  VENDOR:PRODUCT  NAME\n"
     );
 }
@@ -278,28 +295,55 @@ fn agents_print_those_in_then_those_remembered() {
     use domicile_protocol::{
         AgentReach, AgentWindow, ConnectedAgent, KnownAgents, RememberedAgent,
     };
-    let printed = agents_table(&KnownAgents {
-        connected: vec![ConnectedAgent {
-            session: 12,
-            agent: "Claude Code".into(),
-            reach: AgentReach::Windows {
-                windows: vec![AgentWindow {
-                    id: "kD3m".into(),
-                    kind: WindowKind::Native,
-                    title: "Notes".into(),
-                    app: None,
-                }],
-            },
-        }],
-        remembered: vec![RememberedAgent {
-            agent: "Codex".into(),
-            last_used_ms: 0,
-        }],
-    });
+    let printed = agents_table(
+        Paint::PLAIN,
+        &KnownAgents {
+            connected: vec![ConnectedAgent {
+                session: 12,
+                agent: "Claude Code".into(),
+                reach: AgentReach::Windows {
+                    windows: vec![AgentWindow {
+                        id: "kD3m".into(),
+                        kind: WindowKind::Native,
+                        title: "Notes".into(),
+                        app: None,
+                    }],
+                },
+            }],
+            remembered: vec![RememberedAgent {
+                agent: "Codex".into(),
+                last_used_ms: 0,
+            }],
+        },
+    );
     assert_eq!(
         printed,
         "SESSION  STATE       REACH  AGENT\n\
-         12       in          kD3m   Claude Code\n\
+         12       ● in        kD3m   Claude Code\n\
          -        remembered  desk   Codex\n"
     );
+}
+
+#[test]
+fn on_a_terminal_states_are_colored_and_detail_dimmed() {
+    let window = ListedWindow {
+        id: "kD3m".to_string(),
+        kind: WindowKind::Native,
+        title: "notes.org".to_string(),
+        app: None,
+        pid: None,
+        size: None,
+        focused: true,
+        urgent: false,
+        private: false,
+        url: None,
+        engine_id: None,
+        views: Vec::new(),
+    };
+    let table = windows_table(Paint::COLOR, &[window]);
+    assert_eq!(
+        table.lines().nth(1).expect("a row"),
+        "\x1b[2mkD3m\x1b[0m  native  \x1b[2m-\x1b[0m    \x1b[2m-\x1b[0m    \x1b[2m-\x1b[0m     notes.org \x1b[32m● focused\x1b[0m"
+    );
+    assert!(table.starts_with("\x1b[1mID\x1b[0m"), "{table:?}");
 }

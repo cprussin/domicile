@@ -474,6 +474,8 @@
       #   libexec/domicile/app-modules/
       #                               Domicile's own app modules, which
       #                               `domicile-<name>` runs
+      #   share/man/man1/             `domicile(1)` and a `domicile-<command>(1)`
+      #                               for each command
       #   share/applications/         launcher entries for History,
       #                               Settings, Screenshot, Screen Record,
       #                               Shutdown, Reboot and Logout
@@ -501,6 +503,9 @@
           ${(builtins.fromJSON (builtins.readFile ./packages/domicile/package.json)).version} \
           ${self.rev or self.dirtyRev} > "$out/libexec/domicile/version"
         cp ${domicileBinaries}/bin/domicile "$out/bin/domicile"
+        # `man domicile` and `man domicile-<command>`, from the same
+        # definitions as `domicile --help`.
+        "$out/bin/domicile" help --man "$out/share/man/man1"
         cp ${domicileBinaries}/bin/domicile-compositor "$out/bin/domicile-compositor"
         # `BROWSER` inside a desktop. Copied for the same reason as above.
         cp ${domicileBinaries}/bin/domicile-open-url "$out/bin/domicile-open-url"
