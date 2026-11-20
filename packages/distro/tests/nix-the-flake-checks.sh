@@ -12,4 +12,11 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 require_nix
 cd "$ROOT"
 
-nix flake check --print-build-logs
+# NEVER MERGE: only the resize-freeze repro checks.
+rc=0
+nix build --keep-going --print-build-logs --no-link \
+  .#checks.x86_64-linux.resize-freeze-repro-1 .#checks.x86_64-linux.resize-freeze-repro-2 \
+  .#checks.x86_64-linux.resize-freeze-repro-3 .#checks.x86_64-linux.resize-freeze-repro-4 \
+  2>&1 | tee /tmp/flake-check.log || rc=$?
+grep -E 'REPRO[0-9]' /tmp/flake-check.log | sed -E 's/^.*(REPRO[0-9])/\1/' | cut -c1-3000 | tail -95
+exit $rc

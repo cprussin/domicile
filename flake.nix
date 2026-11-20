@@ -1587,7 +1587,7 @@
             imports = [ self.nixosModules.domicile ];
             programs.domicile.enable = true;
             virtualisation = {
-              memorySize = 4096;
+              memorySize = 6144;
               # The store as a disk image, not the host's over 9p. Over 9p the
               # engine's startup page faults stall behind the runner's other
               # builds, long enough that the desk misses the test's timeouts.
@@ -1715,7 +1715,7 @@
             imports = [ self.nixosModules.domicile ];
             programs.domicile.enable = true;
             virtualisation = {
-              memorySize = 4096;
+              memorySize = 6144;
               # Not over 9p; see `tty-on-a-card-with-no-3d`.
               useNixStoreImage = true;
               cores = 2;
@@ -1813,7 +1813,7 @@
             imports = [ self.nixosModules.domicile ];
             programs.domicile.enable = true;
             virtualisation = {
-              memorySize = 4096;
+              memorySize = 6144;
               # Not over 9p; see `tty-on-a-card-with-no-3d`.
               useNixStoreImage = true;
               cores = 2;
@@ -2125,7 +2125,7 @@
             imports = [ self.nixosModules.domicile ];
             programs.domicile.enable = true;
             virtualisation = {
-              memorySize = 4096;
+              memorySize = 6144;
               # Not over 9p; see `tty-on-a-card-with-no-3d`.
               useNixStoreImage = true;
               cores = 2;
@@ -2489,7 +2489,7 @@
             imports = [ self.nixosModules.domicile ];
             programs.domicile.enable = true;
             virtualisation = {
-              memorySize = 4096;
+              memorySize = 6144;
               cores = 2;
               # No EDID, so the head is named by its connector, `Virtual-1`,
               # as the config binds it.
@@ -3065,7 +3065,166 @@
                   raise
             '';
           };
-      };
+        # NEVER MERGE: hunts the resize freeze. Two monitors at different
+        # densities, tall pages, and a few minutes of moves, fullscreen and
+        # layout changes; fails with every domicile line once a widget's
+        # resize stays unacked.
+      } // (builtins.listToAttrs (map (seed: {
+        name = "resize-freeze-repro-${toString seed}";
+        value = pkgs.testers.runNixOSTest {
+          name = "resize-freeze-repro-${toString seed}";
+          # Well inside the job's hour, so a hung VM still prints its log.
+          globalTimeout = 1500;
+          nodes.machine = {
+            imports = [ self.nixosModules.domicile ];
+            programs.domicile.enable = true;
+            virtualisation = {
+              memorySize = 6144;
+              useNixStoreImage = true;
+              cores = 2;
+              qemu.options = [
+                "-vga none"
+                "-device '${builtins.toJSON {
+                  driver = "virtio-gpu-pci";
+                  id = "video0";
+                  max_outputs = 2;
+                  outputs = [
+                    { name = "left"; xres = 1280; yres = 800; }
+                    { name = "right"; xres = 1920; yres = 1200; }
+                  ];
+                }}'"
+              ];
+            };
+            users.users.alice = {
+              isNormalUser = true;
+              uid = 1000;
+              extraGroups = [ "domicile" "video" "input" ];
+            };
+            services.getty.autologinUser = "alice";
+            environment.etc."tall.html".text = ''
+              <!doctype html><meta charset=utf-8><title>tall</title>
+              <style>body{margin:0;font:16px sans-serif}
+              .b{height:180px;margin:8px;border-radius:12px;box-shadow:0 2px 8px #0004}
+              </style><body><script>
+              for (let i = 0; i < 400; i++) {
+                const d = document.createElement("div");
+                d.className = "b";
+                d.style.background = "linear-gradient(" + i * 7 + "deg, hsl(" + i * 37 % 360 + " 70% 60%), hsl(" + i * 53 % 360 + " 60% 40%))";
+                d.textContent = "Lorem ipsum dolor sit amet ".repeat(12) + i;
+                document.body.append(d);
+              }
+              </script>
+            '';
+            environment.loginShellInit = ''
+              if [ "$(tty)" = /dev/tty1 ]; then
+                mkdir -p ~/.config/domicile
+                cp ${pkgs.writeText "domicile.tsx" "import { runManganese } from \"@domicile-desktop/manganese\";\nexport const Shell = runManganese({});\n"} ~/.config/domicile/domicile.tsx
+                export DOMICILE_ENGINE_ARGS="--log-level=0"
+                export RUST_LOG=domicile_compositor=debug
+                exec ${self.packages.${system}.domicile}/bin/domicile >/tmp/domicile.log 2>&1
+              fi
+            '';
+            fonts.enableDefaultPackages = true;
+          };
+          testScript = ''
+            import random
+            import time
+            random.seed(${toString seed})
+            D = "${self.packages.${system}.domicile}/bin/domicile"
+
+            def as_alice(command):
+                sock = machine.succeed("ls /run/user/1000/domicile-ipc.*.sock | head -1").strip()
+                return machine.execute(f"timeout 20 su alice -c 'XDG_RUNTIME_DIR=/run/user/1000 DOMICILE_SOCK={sock} {D} {command}' 2>&1", timeout=40)[1]
+
+            def dump(why):
+                """At most ~30 lines, each tagged, since CI shows only the end."""
+                seed = ${toString seed}
+                fsid = why.split("STUCK ")[-1].split(" after")[0] if "STUCK " in why else "none"
+                lines = [why]
+                lines += ["windows: " + l for l in as_alice("list-windows").splitlines()[:6]]
+                lines += machine.execute(f"grep -F '{fsid}' /tmp/domicile.log | cut -c1-500 | tail -8")[1].splitlines()
+                lines += machine.execute("grep -E 'domicile: (compositor|a page)' /tmp/domicile.log | cut -c1-3000 | tail -3")[1].splitlines()
+                # The renderer the widget names (#2406 adds its pid): every line
+                # it logged, and what each of its threads is doing now.
+                pid = machine.execute(
+                    f"grep -F '{fsid} has not acked' /tmp/domicile.log | tail -1 | grep -oE '[(]pid [0-9]+' | grep -oE '[0-9]+'")[1].strip()
+                lines.append(f"renderer pid: {pid or 'not logged'}")
+                if pid:
+                    lines += machine.execute(f"grep -E '^\\[{pid}:' /tmp/domicile.log | cut -c1-1500 | tail -10")[1].splitlines()
+                    lines += machine.execute(
+                        f"for t in /proc/{pid}/task/*; do echo \"$(cat $t/comm) $(cut -d' ' -f3 $t/stat) $(cat $t/wchan)\"; done | sort | uniq -c | sort -rn | head -12")[1].splitlines()
+                for l in lines:
+                    print(f"REPRO{seed} {l}")
+
+            def stuck():
+                """A widget whose last unacked resize got no ack for 12 s."""
+                out = machine.execute(
+                    "grep -E 'domicile: widget FrameSinkId' /tmp/domicile.log | "
+                    "sed -E 's/^.*widget (FrameSinkId\\([0-9]+, [0-9]+\\)) (has not acked|acked).*$/\\1 \\2/' | "
+                    "awk '{k=$1\" \"$2; s[k]=$3\" \"$4} END {for (k in s) if (s[k] ~ /has not/) print k}'")[1].split("\n")
+                # A widget that never acked any size is a different bug (its
+                # first frame never came, as in the touchscreen-on-a-tty flake);
+                # reported once at the end, so it does not hide a freeze.
+                never = machine.execute(
+                    "grep -E 'domicile: widget FrameSinkId.*last acked 0x0' /tmp/domicile.log | "
+                    "grep -oE 'FrameSinkId\\([0-9]+, [0-9]+\\)' | sort -u")[1].split("\n")
+                return [w for w in out if w.strip() and w.strip() not in never]
+
+            machine.wait_for_unit("multi-user.target")
+            try:
+                machine.wait_until_succeeds("grep -q 'told the chrome about 2 display(s)' /tmp/domicile.log", timeout=300)
+            except Exception:
+                print("REPRO${toString seed} desk never came up; its log:")
+                print(machine.execute("tail -80 /tmp/domicile.log | cut -c1-400")[1])
+                raise
+            time.sleep(10)
+            print("displays:", as_alice("list-displays"))
+            names = [l.split()[0] for l in as_alice("list-displays").splitlines() if l and not l.startswith(" ")]
+            print("REPRO names", names)
+            if len(names) == 2:
+                print("REPRO${toString seed} configure:", as_alice(f"configure-display {names[1]} enable scale 2").strip()[:300])
+                print("REPRO${toString seed} configure:", as_alice(f"configure-display {names[0]} transform 90").strip()[:300])
+            time.sleep(5)
+            print("REPRO${toString seed} displays now:", " | ".join(as_alice("list-displays").splitlines()[:8]))
+            for _ in range(3):
+                print(as_alice("open file:///etc/tall.html"))
+                time.sleep(4)
+
+            keys = ["meta_l-shift-right", "meta_l-shift-left", "meta_l-f", "meta_l-e",
+                    "meta_l-w", "meta_l-s", "meta_l-shift-tab", "meta_l-right", "meta_l-left",
+                    "meta_l-2", "meta_l-1", "meta_l-shift-2", "meta_l-shift-1"]
+            seen: dict[str, float] = {}
+            start = time.time()
+            n = 0
+            while time.time() - start < 600:
+                n += 1
+                k = random.choice(keys)
+                machine.send_key(k)
+                if random.random() < 0.03:
+                    as_alice("open file:///etc/tall.html")
+                time.sleep(random.choice([0.05, 0.2, 0.5, 1.0, 2.0]))
+                if n % 20 == 0:
+                    now = time.time()
+                    for w in stuck():
+                        seen.setdefault(w, now)
+                    for w in list(seen):
+                        if w not in stuck():
+                            del seen[w]
+                        elif now - seen[w] > 12:
+                            # One long quiet stretch with no input before calling
+                            # it: a software-rastered desk spanning both monitors
+                            # can take many seconds in a 2-core VM, and slow is
+                            # not frozen.
+                            time.sleep(45)
+                            if w in stuck():
+                                dump(f"STUCK {w} after {n} actions")
+                                raise Exception(f"REPRO STUCK {w}")
+            print(f"REPRO${toString seed} no freeze in {n} actions")
+            print("REPRO${toString seed} never drew:", machine.execute(
+                "grep -E 'last acked 0x0' /tmp/domicile.log | cut -c1-400 | head -3")[1])
+          '';
+        };
+      }) [ 1 2 3 4 ]));
 
       apps.${system} = {
         # `nix run github:cprussin/domicile` runs `domicile`, which takes the
