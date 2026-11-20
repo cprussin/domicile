@@ -3071,6 +3071,23 @@
           meta.description = domicilePackage.meta.description;
         };
         inherit (domicileApps) manganese simple;
+        # `nix run github:cprussin/domicile/<ref>#site-preview` builds the
+        # site from <ref> and serves it on http://localhost:3000 (`PORT`).
+        site-preview =
+          let
+            script = pkgs.writeShellApplication {
+              name = "site-preview";
+              runtimeInputs = [ pkgs.bun bunAsNode pkgs.coreutils ];
+              text = ''
+                export SITE_SOURCE=${self}
+              '' + builtins.readFile ./packages/site/scripts/preview.sh;
+            };
+          in
+          {
+            type = "app";
+            program = pkgs.lib.getExe script;
+            meta.description = "Build domicile-desktop.com from this commit and serve it on localhost";
+          };
         # No `engine` app: running it would only start bare Chromium. Use
         # `nix build .#engine`.
       } // pkgs.lib.genAttrs [ "npm-claim" "npm-claim-cleanup" ] (name:
