@@ -774,7 +774,8 @@
       # Everything `bun install` fetches, as one fixed-output derivation.
       # Install scripts are skipped so the result is reproducible.
       #
-      # Update `outputHash` by hand whenever `bun.lock` changes. A stale hash
+      # Update `outputHash` whenever `bun.lock` changes (renovate-fixup.sh does
+      # on Renovate's pull requests). A stale hash
       # fails only on a store that has not built this path before; elsewhere
       # nix silently reuses the old modules. CI
       # (`.github/workflows/nix-build.yml`) builds on a cold store and
@@ -971,6 +972,10 @@
         dioxus-shell-example = dioxusShellDesktop;
         # The relay for agents on the web, for a server.
         relay = domicileRelay;
+        # The fixed-output `bun install`s, so renovate-fixup.sh can read their
+        # hashes after a lockfile change.
+        node-modules = nodeModules;
+        shell-modules = shellModules;
       };
 
       # The nixpkgs this flake builds with, so scripts take tools such as
