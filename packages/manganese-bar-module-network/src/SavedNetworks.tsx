@@ -90,7 +90,7 @@ export const SavedNetworks = ({
                   }}
                   rounded
                   size="xs"
-                  variant="ghost"
+                  variant="dangerGhost"
                 >
                   Forget
                 </Button>

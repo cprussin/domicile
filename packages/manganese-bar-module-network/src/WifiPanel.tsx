@@ -325,7 +325,7 @@ const Connection = ({
           onClick={onDisconnect}
           rounded
           size="xs"
-          variant="ghost"
+          variant="dangerGhost"
         >
           Disconnect
         </Button>

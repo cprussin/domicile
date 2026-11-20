@@ -81,7 +81,7 @@ describe(ListRow, () => {
       expect(screen.getByText("10.42.0.17")).toBeVisible();
     });
 
-    it("pads its drawer, centering a footer between its rule and the tile's edge, inset from its side", async () => {
+    it("pads its drawer tightly, centering a footer between its rule and the tile's edge, inset from its side", async () => {
       render(
         <List>
           <ListRow disclosure="Details" label="Centar">
@@ -96,6 +96,7 @@ describe(ListRow, () => {
         footer.parentElement as Element,
       );
       expect(drawer.paddingBlockStart).toBe("0.375rem");
+      expect(drawer.paddingBlockEnd).toBe("0.375rem");
       expect(drawer.paddingBlockEnd).toBe(
         globalThis.getComputedStyle(footer).paddingBlockStart,
       );
