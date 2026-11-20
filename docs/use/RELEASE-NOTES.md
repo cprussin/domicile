@@ -61,6 +61,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 
 ### Fixes
 
+- Menus, tooltips and dialogs show over a fullscreen window, such as Claude's menu button in fullscreen.
 - The pointer keeps your cursor theme and size after you undock.
 - Switching workspaces and tabs is smoother on battery: a window you come back to draws what it kept instead of drawing its whole page again.
 - Wi-Fi's Disconnect and a saved network's Forget are red, and a row's folded details sit tighter around their buttons.

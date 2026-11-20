@@ -621,10 +621,12 @@ export const domicilePreset = definePreset({
           // the veil blurs the whole desk. The highest z-index there is, since
           // a shell stacks its windows at depths of its own.
           lock: { value: "2147483647" },
-          modal: { value: "201" },
-          modalBackdrop: { value: "200" },
-          // Below modals so it never covers a dialog, and below the lock
-          // screen. Panda's default (1700) would be above both.
+          // Popups and dialogs: over every window, a fullscreen one's
+          // included, for the same reason.
+          modal: { value: "2147483646" },
+          modalBackdrop: { value: "2147483645" },
+          // Below windows a shell raises, such as a fullscreen one, and
+          // below modals so it never covers a dialog.
           toast: { value: "199" },
         },
       },
