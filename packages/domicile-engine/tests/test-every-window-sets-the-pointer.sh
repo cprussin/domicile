@@ -26,26 +26,25 @@ fail() {
   exit 1
 }
 
-# The last patch to touch a file has the newest context for it.
-last_touching() {
-  grep -l "^diff --git a/$1 " "$PATCHES"/*.patch | tail -1
-}
-
 # Any patch: later ones edit other parts of drm_cursor.cc.
 grep -l "^diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc " \
   "$PATCHES"/*.patch | xargs grep -q '^-.*window_ != window && window != desk_host_' || fail \
   "DrmCursor::SetCursor still takes a cursor only from the window under it" \
   "A cursor set while that window goes away never reaches the screen."
 
-MANAGER="$(last_touching ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc)"
-[ -n "$MANAGER" ] || fail "no patch edits desktop_native_cursor_manager.cc"
+MANAGERS="$(grep -l "^diff --git a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc " "$PATCHES"/*.patch)"
+[ -n "$MANAGERS" ] || fail "no patch edits desktop_native_cursor_manager.cc"
 for host in AddHost RemoveHost; do
-  awk -v host="$host" '
-    $0 ~ "DesktopNativeCursorManager::" host "\\(" { inside = 1 }
-    inside && /^[+ ]}/ { exit found ? 0 : 1 }
-    inside && /^\+.*RedrawSoon\(\)/ { found = 1 }
-    END { if (!inside) exit 1 }
-  ' "$MANAGER" || fail \
+  # Any patch: later ones edit other parts of the file.
+  for manager in $MANAGERS; do
+    awk -v host="$host" '
+      $0 ~ "DesktopNativeCursorManager::" host "\\(" { inside = 1 }
+      inside && /^[+ ]}/ { exit found ? 0 : 1 }
+      inside && /^\+.*RedrawSoon\(\)/ { found = 1 }
+      END { if (!inside) exit 1 }
+    ' "$manager" && continue 2
+  done
+  fail \
     "DesktopNativeCursorManager::$host does not set the cursor again" \
     "The window the pointer moves to keeps the cursor it last had."
 done

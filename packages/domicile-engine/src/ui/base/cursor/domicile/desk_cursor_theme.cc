@@ -34,8 +34,8 @@ void DeskCursorThemeSource::Set(std::optional<DeskCursorTheme> theme) {
   theme_ = std::move(theme);
   // The line to look for on hardware when the pointer did not change.
   if (theme_) {
-    LOG(INFO) << "domicile: the desk's pointer theme is \"" << theme_->name
-              << "\" at " << theme_->size << " px";
+    VLOG(1) << "domicile: the desk's pointer theme is \"" << theme_->name
+            << "\" at " << theme_->size << " px";
   } else {
     // At ERROR: the engine logs nothing quieter, and every pointer turning
     // into Chromium's art is what a person reports.

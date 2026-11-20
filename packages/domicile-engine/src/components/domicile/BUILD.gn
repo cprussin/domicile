@@ -1310,6 +1310,18 @@ source_set("desk_pointer") {
   ]
 }
 
+# Whether the pointer is drawn for the display its window is on. Its own
+# target for :pointer_warp's reason: the decision is here with its tests, and
+# aura's cursor client reaches it from //chrome/browser/domicile.
+source_set("cursor_display") {
+  sources = [
+    "browser/cursor_display.cc",
+    "browser/cursor_display.h",
+  ]
+
+  public_deps = [ "//ui/display" ]
+}
+
 # When the browser hides the pointer, from the `appearance` message to the
 # pointer. Its own target for :desk_activity's reason.
 source_set("desk_pointer_hiding") {
@@ -1477,6 +1489,7 @@ source_set("unit_tests") {
     "browser/command_protocol_unittest.cc",
     "browser/context_menu_unittest.cc",
     "browser/control_channel_unittest.cc",
+    "browser/cursor_display_unittest.cc",
     "browser/desk_activity_unittest.cc",
     "browser/desk_faults_unittest.cc",
     "browser/desk_gestures_unittest.cc",
@@ -1578,6 +1591,7 @@ source_set("unit_tests") {
     ":command_protocol",
     ":context_menu",
     ":control_channel",
+    ":cursor_display",
     ":cursor_shape",
     ":desk_activity",
     ":desk_faults",

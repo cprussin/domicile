@@ -61,6 +61,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 
 ### Fixes
 
+- The pointer keeps your cursor theme and size after you undock.
 - Wi-Fi's Disconnect and a saved network's Forget are red, and a row's folded details sit tighter around their buttons.
 - You can drag text, images and links within and between pages.
 - A nested tab group's last window drags out past the group when the group is the first or last tab.
