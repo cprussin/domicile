@@ -824,17 +824,40 @@ fn main() -> ExitCode {
     }
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
-    // Color only on a terminal. Logs usually go to a file, where escape codes
-    // break searches like `grep pid=1234`.
-    let colored = std::io::IsTerminal::is_terminal(&std::io::stdout());
-    match tracing_subscriber::EnvFilter::try_from_default_env() {
-        Ok(filter) => tracing_subscriber::fmt()
-            .with_ansi(colored)
+/// Starts tracing, at `RUST_LOG`'s levels or `INFO`.
+///
+/// When stdout is the journal, each event is an entry under
+/// `domicile-compositor` with its level as the priority, so `journalctl -p err`
+/// finds the compositor's errors. Otherwise events are formatted to stdout,
+/// colored only on a terminal: in a file, escape codes break searches like
+/// `grep pid=1234`.
+fn start_logging() -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::IsTerminal;
+    use std::os::fd::AsFd;
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    let stdout = std::io::stdout();
+    match domicile_launch::journal::is_the_journal(stdout.as_fd()) {
+        true => tracing_subscriber::registry()
+            .with(filter)
+            .with(
+                tracing_journald::layer()?
+                    .with_syslog_identifier(domicile_launch::component_log::COMPOSITOR.to_string()),
+            )
+            .init(),
+        false => tracing_subscriber::fmt()
+            .with_ansi(stdout.is_terminal())
             .with_env_filter(filter)
             .init(),
-        Err(_) => tracing_subscriber::fmt().with_ansi(colored).init(),
     }
+    Ok(())
+}
+
+fn run() -> Result<(), Box<dyn std::error::Error>> {
+    start_logging()?;
 
     // Read before any thread is raised, so the processes the desktop starts
     // run at the priority it was started at.

@@ -12,11 +12,9 @@ use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use crate::heard::Heard;
 use crate::spawn::Spawn;
 
 /// How often the short waits (startup, backoff, shutdown) check for an exit
@@ -67,13 +65,27 @@ impl Drop for Running {
             end_the_group(child);
         }
         // Join after the groups are gone: a listener's read ends only when
-        // every writer to the pipe has exited. Joining, not detaching,
-        // ensures the caller sees the last lines of stderr.
+        // every writer to the pipe has exited, so the caller sees the last
+        // lines of stderr. A process that left the group, such as an app the
+        // engine started with its own session, can hold the pipe open for as
+        // long as it runs; after `LAST_WORDS` its listener is left to carry
+        // on alone rather than holding up the end of the run.
         //
         // Ignore a panicked listener. Panicking in `Drop` during an unwind
         // would abort.
+        let deadline = std::time::Instant::now() + LAST_WORDS;
+        while self
+            .listeners
+            .iter()
+            .any(|listener| !listener.is_finished())
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(ASK_EVERY);
+        }
         for listener in self.listeners.drain(..) {
-            let _ = listener.join();
+            if listener.is_finished() {
+                let _ = listener.join();
+            }
         }
     }
 }
@@ -115,11 +127,13 @@ fn started(what: &'static str, spawn: &Spawn, stderr: fn() -> Stdio) -> Result<C
         })
 }
 
-/// Copies a component's stderr to ours and into `heard`, for repeating if the
-/// run gives up.
+/// Where each line of a heard component's stderr goes, without its newline.
+pub type Listener = Box<dyn FnMut(&str) + Send>;
+
+/// Hands each line of a component's stderr to `listener`.
 ///
 /// Reads bytes rather than `lines()`, which stops at the first invalid UTF-8.
-fn overhear(what: &'static str, stderr: std::process::ChildStderr, heard: &Mutex<Heard>) {
+fn overhear(what: &'static str, stderr: std::process::ChildStderr, mut listener: Listener) {
     let mut reader = BufReader::new(stderr);
     let mut line = Vec::new();
     loop {
@@ -129,12 +143,7 @@ fn overhear(what: &'static str, stderr: std::process::ChildStderr, heard: &Mutex
             Ok(0) => return,
             Ok(_) => {
                 let said = String::from_utf8_lossy(&line);
-                let said = said.trim_end_matches(['\n', '\r']);
-                eprintln!("{said}");
-                heard
-                    .lock()
-                    .expect("nothing panics holding what a component said")
-                    .line(said);
+                listener(said.trim_end_matches(['\n', '\r']));
             }
             // Unrecoverable. Report it; this thread has no caller to return to.
             Err(why) => {
@@ -168,20 +177,19 @@ impl Running {
         Ok(())
     }
 
-    /// Starts a component, echoing its stderr and keeping a copy in `heard`.
+    /// Starts a component, handing each line of its stderr to `listener`.
     ///
-    /// The copy is repeated if the run gives up; see [`crate::heard`].
-    pub fn start_overheard(
+    /// Every line reaches `listener` before the [`Running`] is dropped.
+    pub fn start_heard(
         &mut self,
         what: &'static str,
         spawn: &Spawn,
-        heard: &Arc<Mutex<Heard>>,
+        listener: Listener,
     ) -> Result<(), RunError> {
         let mut child = started(what, spawn, Stdio::piped)?;
         let listening = child.stderr.take().expect("stderr was asked for a pipe");
-        let heard = Arc::clone(heard);
         self.listeners.push(std::thread::spawn(move || {
-            overhear(what, listening, &heard)
+            overhear(what, listening, listener)
         }));
         self.components.push((what, child));
         Ok(())

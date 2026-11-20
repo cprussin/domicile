@@ -228,6 +228,7 @@ How to use, configure and debug Domicile. No authority level.
 | [/docs/IDLE.md](/docs/IDLE.md) | Idle blanking, `HostMessage::Idle`, idle inhibitors, sleeping the monitors on demand, and log lines to check on hardware. |
 | [/docs/LOCK.md](/docs/LOCK.md) | The screen lock: where it is enforced, request categories, ordering, verifiers, passphrase checks, fail-closed PAM, log lines. |
 | [/docs/TTY-SESSION.md](/docs/TTY-SESSION.md) | DRM master, console switching through logind, suspend, and input from logind. |
+| [/docs/LOGGING.md](/docs/LOGGING.md) | Where logs go: journal entries with priorities and a name per part, or plain lines on a terminal; reading them with `journalctl`. |
 | [/docs/TTY-DEBUGGING.md](/docs/TTY-DEBUGGING.md) | Seeing a modeset in logs, black screens with a clean log, and hosts where scanout and render cards differ. |
 | [/docs/contributing/COMPOSITOR-DEBUGGING.md](/docs/contributing/COMPOSITOR-DEBUGGING.md) | The compositor's frame report and slow-launch logs; rendering, Smithay and test-client pitfalls. |
 | [/docs/HARDWARE-CHECKS.md](/docs/HARDWARE-CHECKS.md) | Steps and expected log lines for each check that needs a lit panel (suspend, console switch, crashes, idle, PAM lock, latency, several monitors). |

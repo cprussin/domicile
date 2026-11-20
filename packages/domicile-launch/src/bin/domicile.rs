@@ -35,6 +35,7 @@ use domicile_launch::command_socket::{
     visits,
 };
 use domicile_launch::commands;
+use domicile_launch::component_log::{self, Sink};
 use domicile_launch::components::{
     builder, components, electron_host, engine as engine_path, our_shell,
     perfetto as perfetto_path, version_file, Components,
@@ -58,6 +59,7 @@ use domicile_launch::dev::{dev_socket, going_back, loading};
 use domicile_launch::electron_app::{app_icon, app_name, electron_app, UNSUPPORTED_EXIT};
 use domicile_launch::electron_schemes::{self, schemes_switch, with_known};
 use domicile_launch::electron_wrapper::{record, through_wrappers, WrapperError, RECORD};
+use domicile_launch::engine_log::EngineLog;
 use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
 use domicile_launch::help::{command_help, error, overview, version_lines, with_usage};
@@ -1800,6 +1802,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     let policy = Policy::default();
     // Held for the whole run. Dropping it ends the graphical session.
     let said = SaidSession::new(&platform);
+    let sink = Arc::new(Sink::here());
     let desktop = Desktop {
         browser: &browser,
         components: &components,
@@ -1811,6 +1814,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         policy: &policy,
         said: &said,
         serving: &serving,
+        sink: &sink,
     };
     // The last desktop's compositor output, repeated if the run gives up.
     // Only the last, since each attempt usually fails the same way.
@@ -1882,6 +1886,8 @@ struct Desktop<'a> {
     said: &'a SaidSession,
     /// The shell the engine serves, which a new engine starts on.
     serving: &'a Mutex<Shell>,
+    /// Where the components' stderr goes.
+    sink: &'a Arc<Sink>,
 }
 
 /// Runs one desktop until it ends or one of its parts keeps failing.
@@ -2064,8 +2070,24 @@ fn start_a_compositor(
     if the_engine_takes_input(desktop.platform) {
         let_the_engine_take_input(&mut spawn);
     }
+    let sink = Arc::clone(desktop.sink);
+    let heard = Arc::clone(heard);
     running
-        .start_overheard("compositor", &spawn, heard)
+        .start_heard(
+            "compositor",
+            &spawn,
+            Box::new(move |line| {
+                heard
+                    .lock()
+                    .expect("nothing panics holding what a component said")
+                    .line(line);
+                sink.say(
+                    &component_log::compositor(line),
+                    line,
+                    &mut std::io::stderr(),
+                );
+            }),
+        )
         .map_err(|why| why.to_string())?;
     wait_for(
         &session(&desktop.places.session),
@@ -2100,8 +2122,14 @@ fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), Down>
     if let Some(schemes) = electron_schemes(desktop.env) {
         spawn.args.push(schemes.into());
     }
+    let sink = Arc::clone(desktop.sink);
+    let mut log = EngineLog::new();
     running
-        .start("engine", &spawn)
+        .start_heard(
+            "engine",
+            &spawn,
+            Box::new(move |line| sink.say(&log.entry(line), line, &mut std::io::stderr())),
+        )
         .map_err(|why| why.to_string())?;
     wait_for(
         &broker(&desktop.places.broker, &desktop.components.engine),

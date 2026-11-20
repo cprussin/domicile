@@ -133,6 +133,7 @@ const AUTHOR_SECTIONS: readonly DocSection[] = [
       ),
       doc("shells/dialogs", "docs/PORTALS.md", "Dialogs and portals"),
       doc("shells/packaging", "docs/SHELL-PACKAGING.md", "Packaging"),
+      doc("shells/logs", "docs/LOGGING.md", "Logs"),
     ],
     product: "domicile",
     title: "Guides",

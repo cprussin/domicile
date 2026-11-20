@@ -29,6 +29,8 @@
 //! - `domicile accessibility`: a native window's AT-SPI tree, and acting on
 //!   its elements ([`accessibility`]).
 //! - Failed runs report the compositor's last output ([`heard`]).
+//! - The components' stderr goes to the journal as entries with priorities
+//!   ([`component_log`], [`engine_log`], [`journal`]), or to stderr as said.
 //! - The compositor's side: its command line ([`arguments`]), the session
 //!   document it publishes ([`session`]), and whether a page connected
 //!   ([`handshake`]).
@@ -48,6 +50,7 @@ pub mod cli;
 pub mod command;
 pub mod command_socket;
 pub mod commands;
+pub mod component_log;
 pub mod components;
 pub mod compositor_socket;
 pub mod config_check;
@@ -60,6 +63,7 @@ pub mod dev;
 pub mod electron_app;
 pub mod electron_schemes;
 pub mod electron_wrapper;
+pub mod engine_log;
 pub mod extensions;
 pub mod folder_chooser;
 pub mod graphical_session;
@@ -69,6 +73,7 @@ pub mod help;
 pub mod history;
 pub mod idle_inhibit;
 pub mod install_app;
+pub mod journal;
 pub mod listing;
 pub mod man;
 pub mod mcp;
