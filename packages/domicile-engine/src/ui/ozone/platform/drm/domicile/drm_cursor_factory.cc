@@ -171,8 +171,8 @@ void DrmCursorFactory::Loaded(
                   "XDG_DATA_HOME and XDG_DATA_DIRS); the pointer is "
                   "Chromium's own";
   } else {
-    LOG(INFO) << "domicile: loaded " << cursors.size() << " cursors from \""
-              << theme.name << "\" at " << size << " px";
+    VLOG(1) << "domicile: loaded " << cursors.size() << " cursors from \""
+            << theme.name << "\" at " << size << " px";
   }
   NotifyObserversOnThemeLoaded();
 }

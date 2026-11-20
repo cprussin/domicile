@@ -21,6 +21,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
 #include "base/task/sequenced_task_runner.h"
+#include "chrome/browser/domicile/domicile_cursor_display.h"
 #include "chrome/browser/domicile/domicile_desk_presenters.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -452,6 +453,9 @@ class ShellWindows : public display::DisplayObserver {
     // Route all input, on every monitor, to the host.
     ui::OzonePlatform::GetInstance()->SetDomicileDeskHost(
         window->GetHost()->GetAcceleratedWidget());
+    // And draw the pointer for the host's display, which a hotplug can leave
+    // it drawn for a display that is gone.
+    FitCursorToDisplayOf(window->GetRootWindow());
     const gfx::Rect page = PageBoundsOn(*on_host, desk->geometry.box);
     if (content::GetDomicileDeskPageBounds(window) != page) {
       content::SetDomicileDeskPageBounds(window, page);

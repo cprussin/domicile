@@ -38,6 +38,8 @@ source_set("domicile") {
     "domicile_chrome_dialogs.h",
     "domicile_command_socket.cc",
     "domicile_command_socket.h",
+    "domicile_cursor_display.cc",
+    "domicile_cursor_display.h",
     "domicile_desk.cc",
     "domicile_desk.h",
     "domicile_desk_activity.cc",
@@ -139,6 +141,7 @@ source_set("domicile") {
     "//components/domicile:electron_node_switches",
     "//components/domicile:common",
     # Somebody at the desk, from ui::UserActivityDetector in //ui/base.
+    "//components/domicile:cursor_display",
     "//components/domicile:desk_activity",
     # The desk's downloads, for the shell's Downloads pipe.
     "//components/domicile:desk_downloads",
