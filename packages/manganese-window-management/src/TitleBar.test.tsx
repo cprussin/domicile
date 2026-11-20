@@ -94,8 +94,11 @@ const fill = (
   }
 };
 
-/** A transition of `opacity` alone. */
-const OPACITY_ONLY = /^opacity [^,]*$/;
+/**
+ * A transition of `opacity` alone: no comma outside an easing function's
+ * arguments.
+ */
+const OPACITY_ONLY = /^opacity (?:[^,(]|\([^)]*\))*$/;
 
 /** Whether a layer or copy shows, faded all the way in. */
 const shows = (element: Element): boolean =>
