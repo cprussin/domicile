@@ -79,6 +79,8 @@ Ask the running desktop:
                                         views, or the shell's page, and print
                                         its result
   domicile screen-record                Record the screen until the toolbar stops it
+  domicile trace [--seconds <n>] <file> Record the engine's trace events for 20
+                                        seconds, or n, to a Perfetto trace
   domicile send-shell <word>...         Run a shell command, as a keybinding does,
                                         and print what it answers
   domicile list-shell-commands [--json] Print the commands send-shell takes,
@@ -353,6 +355,14 @@ pub enum CliError {
     )]
     NothingToExec,
     #[error(
+        "trace takes the file to write the trace to, and was given \
+         nothing:\n\n    \
+         domicile trace switch.pftrace\n"
+    )]
+    NoTraceFile,
+    #[error("--seconds takes a whole number of seconds, and was given {said}.")]
+    NotSeconds { said: String },
+    #[error(
         "configure-display takes a display, as domicile list-displays prints it, \
          and what to change, and was given nothing:\n\n    \
          domicile configure-display DP-1 mode 2560x1440@144 scale 1.25 position 1920,0\n"
@@ -511,6 +521,11 @@ pub enum Invocation {
         element: String,
         act: Act,
     },
+    /// Record the engine's trace events for `seconds` to `file`; see
+    /// [`crate::trace`].
+    ///
+    /// Kept as typed; the client makes it absolute.
+    Trace { file: String, seconds: u64 },
     /// Print [`USAGE`].
     Help,
     /// Print the version, the commit it was built from, and the engine's.
@@ -984,6 +999,21 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     Ok(Invocation::InhibitIdle { command })
                 }
             }
+            Verb::Tracing => {
+                let seconds = match args.peek().map(String::as_str) {
+                    Some("--seconds") => {
+                        args.next();
+                        let said = args.next().unwrap_or_else(|| "nothing".to_string());
+                        said.parse().map_err(|_| CliError::NotSeconds { said })?
+                    }
+                    _ => 20,
+                };
+                match (args.next(), args.next()) {
+                    (None, _) => Err(CliError::NoTraceFile),
+                    (Some(file), None) => Ok(Invocation::Trace { file, seconds }),
+                    (Some(_), Some(extra)) => Err(CliError::Extra { extra, verb: first }),
+                }
+            }
             Verb::Executing => {
                 let command: Vec<String> = args.collect();
                 match command.is_empty() {
@@ -1182,6 +1212,8 @@ enum Verb {
     Inhibiting,
     /// `exec`, which takes a program and its arguments.
     Executing,
+    /// `trace`, which takes a file and maybe `--seconds`.
+    Tracing,
     /// `configure-display`, which takes a display and what to change.
     Configuring,
     /// `sleep-displays` or `wake-displays`, which take a display or nothing.
@@ -1317,6 +1349,7 @@ fn verb(word: &str) -> Option<Verb> {
         "kill-window" => Some(Verb::Acting(WindowAct::Kill)),
         "inhibit-idle" => Some(Verb::Inhibiting),
         "exec" => Some(Verb::Executing),
+        "trace" => Some(Verb::Tracing),
         "configure-display" => Some(Verb::Configuring),
         "list-displays" => Some(Verb::Listing(Listing::Displays)),
         "list-windows" => Some(Verb::Listing(Listing::Windows)),

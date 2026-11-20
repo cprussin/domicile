@@ -487,6 +487,32 @@ fn the_compositor_carries_this_desktops_control_socket_to_everything_it_starts()
 }
 
 #[test]
+fn the_engine_reports_to_this_desktops_trace_socket_for_domicile_trace() {
+    let spawned = engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "wayland",
+        &runtime(),
+        None,
+    );
+    assert_eq!(
+        env_of(&spawned, "PERFETTO_PRODUCER_SOCK_NAME").unwrap(),
+        "/run/d/domicile-ipc.4242.trace.sock"
+    );
+    let args = args_of(&spawned);
+    let features = args
+        .iter()
+        .find_map(|arg| arg.strip_prefix("--enable-features="))
+        .unwrap();
+    assert!(
+        features
+            .split(',')
+            .any(|feature| feature == "EnablePerfettoSystemTracing"),
+        "{args:?}"
+    );
+}
+
+#[test]
 fn the_engine_carries_this_desktops_control_socket_to_what_it_starts() {
     // An app's `domicile-app-host`, started by the engine, reaches this
     // desktop with it.
@@ -788,6 +814,7 @@ fn a_machine_that_enables_features_keeps_libinput() {
         [
             "LibinputHandleTouchpad",
             "LibinputHandleMouse",
+            "EnablePerfettoSystemTracing",
             "Vulkan",
             "DefaultANGLEVulkan",
         ]

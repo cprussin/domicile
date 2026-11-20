@@ -35,7 +35,8 @@ use domicile_launch::command_socket::{
     visits,
 };
 use domicile_launch::components::{
-    builder, components, electron_host, engine as engine_path, our_shell, version_file, Components,
+    builder, components, electron_host, engine as engine_path, our_shell,
+    perfetto as perfetto_path, version_file, Components,
 };
 use domicile_launch::compositor_socket::{
     act_on_window, agents, configure_display, displays, emulate, forget_agent, idle_time, inputs,
@@ -91,6 +92,7 @@ use domicile_launch::spawn::{
 use domicile_launch::splash::{lay_out, tell, the_page_ends, Progress, ENDED};
 use domicile_launch::subscription::follow;
 use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
+use domicile_launch::trace::{self, producer_socket};
 use domicile_launch::uninstall_app::uninstall_app;
 use domicile_launch::version::engine as engine_version;
 use domicile_protocol::{Theme, WatchTopic, WindowKind};
@@ -252,8 +254,96 @@ fn run() -> Result<ExitCode, String> {
             Ok(ExitCode::SUCCESS)
         }
         Invocation::Version => versioned(),
+        Invocation::Trace { file, seconds } => {
+            // Absolute here, since the recorder may not share this working
+            // directory.
+            let file = std::path::absolute(&file)
+                .map_err(|why| format!("cannot tell where {file} is: {why}"))?;
+            traced_to(&file, Duration::from_secs(seconds))
+        }
         Invocation::InstallApp { url } => installed(&url),
         Invocation::UninstallApp { url } => uninstalled(&url),
+    }
+}
+
+/// Runs Perfetto's service where this desktop's engine reports, waits for the
+/// engine to attach, and records `duration` of trace events to `file`. See
+/// `domicile_launch::trace`.
+fn traced_to(file: &Path, duration: Duration) -> Result<ExitCode, String> {
+    let control =
+        advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
+    let env = |name: &str| std::env::var(name).ok();
+    let perfetto = perfetto_path(&myself()?, &env, &|path| path.exists())
+        .map_err(|missing| missing.to_string())?;
+    let producer = producer_socket(&control);
+    if producer.exists() {
+        return Err(format!(
+            "{} exists, so another domicile trace is recording this desktop. \
+             If none is, it was left by one that was killed: delete it.",
+            producer.display()
+        ));
+    }
+    let consumer = std::env::temp_dir().join(format!("domicile-trace.{}.sock", std::process::id()));
+    let service = trace::traced(&perfetto, &producer, &consumer);
+    let mut service = Command::new(&service.program)
+        .envs(service.env)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|why| format!("cannot run {}: {why}", service.program.display()))?;
+    let recorded = recorded_with(&perfetto, &consumer, file, duration, &mut service);
+    // `traced` leaves its sockets behind when killed.
+    let _ = service.kill();
+    let _ = service.wait();
+    for socket in [&producer, &consumer] {
+        let _ = std::fs::remove_file(socket);
+    }
+    recorded?;
+    println!(
+        "Wrote {}. Open it at https://ui.perfetto.dev.",
+        file.display()
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Waits for the engine to attach to `service`, then records `duration` to
+/// `file`.
+fn recorded_with(
+    perfetto: &Path,
+    consumer: &Path,
+    file: &Path,
+    duration: Duration,
+    service: &mut std::process::Child,
+) -> Result<(), String> {
+    eprintln!(
+        "Waiting {} s for the engine to attach...",
+        trace::ATTACH_WITHIN.as_secs()
+    );
+    std::thread::sleep(trace::ATTACH_WITHIN);
+    if let Some(status) = service.try_wait().map_err(|why| why.to_string())? {
+        return Err(format!(
+            "Perfetto's traced stopped before recording: {status}"
+        ));
+    }
+    eprintln!("Recording for {} s.", duration.as_secs());
+    let recorder = trace::record(perfetto, consumer, file);
+    let mut recorder = Command::new(&recorder.program)
+        .args(&recorder.args)
+        .envs(recorder.env)
+        .stdin(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|why| format!("cannot run {}: {why}", recorder.program.display()))?;
+    recorder
+        .stdin
+        .take()
+        .expect("the recorder's stdin is piped")
+        .write_all(trace::config(duration).as_bytes())
+        .map_err(|why| format!("cannot give perfetto its config: {why}"))?;
+    let status = recorder.wait().map_err(|why| why.to_string())?;
+    match status.success() {
+        true => Ok(()),
+        false => Err(format!("perfetto did not record: {status}")),
     }
 }
 

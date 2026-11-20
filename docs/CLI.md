@@ -203,6 +203,25 @@ Open the shell's screen cast picker and record what is picked, with its sound,
 until the toolbar's Stop. The video goes in `Videos/Screen recordings` and its
 path is printed. Exits 1 if it is dismissed or discarded.
 
+## `domicile trace [--seconds <n>] <file>`
+
+Record the engine's trace events for 20 seconds, or `n`, to a Perfetto trace
+at `file`. Open it at [ui.perfetto.dev](https://ui.perfetto.dev).
+
+- Covers frame production: the shell and pages (`cc`, `blink`), the display
+  compositor and GPU (`viz`, `gpu`), page flips (`drm`), input, and the
+  DevTools frame timeline.
+- Waits 31 seconds first for the engine's processes to attach, then records.
+  Do what is slow while it records.
+- Runs Perfetto's `traced` as you on a socket beside the control socket, where
+  every engine reports. It ships in `libexec/domicile/perfetto`;
+  `DOMICILE_PERFETTO` names another install (holding `bin/traced` and
+  `bin/perfetto`).
+
+```sh
+domicile trace switch.pftrace
+```
+
 ## `domicile send-shell <word>...`
 
 Run a shell command, as a keybinding bound to it does:

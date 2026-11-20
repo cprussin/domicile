@@ -91,6 +91,7 @@ pub mod spawn;
 pub mod splash;
 pub mod subscription;
 pub mod supervise;
+pub mod trace;
 pub mod uninstall_app;
 pub mod version;
 pub mod web_address;

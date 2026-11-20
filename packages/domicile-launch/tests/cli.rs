@@ -1563,3 +1563,39 @@ fn agents_are_listed_stopped_by_session_and_forgotten_by_name() {
         );
     }
 }
+
+#[test]
+fn trace_writes_a_file_for_twenty_seconds_or_as_long_as_asked() {
+    assert_eq!(
+        run(&["trace", "switch.pftrace"]),
+        Ok(Invocation::Trace {
+            file: "switch.pftrace".to_string(),
+            seconds: 20
+        })
+    );
+    assert_eq!(
+        run(&["trace", "--seconds", "5", "switch.pftrace"]),
+        Ok(Invocation::Trace {
+            file: "switch.pftrace".to_string(),
+            seconds: 5
+        })
+    );
+}
+
+#[test]
+fn trace_needs_a_file_and_a_whole_number_of_seconds() {
+    assert_eq!(run(&["trace"]), Err(CliError::NoTraceFile));
+    assert_eq!(
+        run(&["trace", "--seconds", "soon", "switch.pftrace"]),
+        Err(CliError::NotSeconds {
+            said: "soon".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["trace", "a.pftrace", "b.pftrace"]),
+        Err(CliError::Extra {
+            verb: "trace".to_string(),
+            extra: "b.pftrace".to_string()
+        })
+    );
+}

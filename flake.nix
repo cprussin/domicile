@@ -464,6 +464,7 @@
       #   libexec/domicile/builder    builds a shell from an entry or a package
       #   libexec/domicile/electron-host
       #                               runs an Electron app's main process
+      #   libexec/domicile/perfetto   what `domicile trace` records with
       #   libexec/domicile/graphics-probe
       #                               loads a graphics driver as the
       #                               compositor and the engine would
@@ -530,6 +531,8 @@
         cp ${./packages/distro/share/domicile-mimeapps.list} \
           "$out/share/applications/domicile-mimeapps.list"
         ln -s ${domicileEngine} "$out/libexec/domicile/engine"
+        # What `domicile trace` records the engine with.
+        ln -s ${pkgs.perfetto} "$out/libexec/domicile/perfetto"
         cp ${domicileBuilder} "$out/libexec/domicile/builder"
         cp ${domicileElectronHost} "$out/libexec/domicile/electron-host"
         cp ${domicileGraphicsProbe}/bin/domicile-graphics-probe "$out/libexec/domicile/graphics-probe"

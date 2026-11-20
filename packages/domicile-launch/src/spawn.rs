@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use crate::control_socket::VARIABLE;
 use crate::shell_path::{Shell, ShellFiles};
+use crate::trace::{producer_socket, PRODUCER_VARIABLE};
 
 /// The URL of the shell page the engine generates.
 ///
@@ -126,7 +127,10 @@ pub fn engine(
         // build handles them with `EventConverterEvdevImpl`, which ignores
         // touchpad motion and the mouse wheel, and has no pointer
         // acceleration. Both features are off by default.
-        ["--enable-features=LibinputHandleTouchpad,LibinputHandleMouse"]
+        //
+        // `EnablePerfettoSystemTracing` reports trace events to
+        // `domicile trace`; see `crate::trace`.
+        ["--enable-features=LibinputHandleTouchpad,LibinputHandleMouse,EnablePerfettoSystemTracing"]
             .into_iter()
             .chain(extra.enabled)
             .collect::<Vec<_>>()
@@ -178,9 +182,16 @@ pub fn engine(
     args.extend(extra.rest.into_iter().map(OsString::from));
     Spawn {
         args,
-        // For the programs the engine starts, such as an app's
-        // `domicile-app-host`, so they reach this desktop.
-        env: vec![(VARIABLE.to_string(), runtime.control.clone().into())],
+        env: vec![
+            // For the programs the engine starts, such as an app's
+            // `domicile-app-host`, so they reach this desktop.
+            (VARIABLE.to_string(), runtime.control.clone().into()),
+            // Where the engine reports trace events; see `crate::trace`.
+            (
+                PRODUCER_VARIABLE.to_string(),
+                producer_socket(&runtime.control).into(),
+            ),
+        ],
         program: engine.join("chrome"),
     }
 }

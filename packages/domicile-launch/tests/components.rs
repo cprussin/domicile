@@ -3,7 +3,8 @@
 use std::path::{Path, PathBuf};
 
 use domicile_launch::components::{
-    app_module, builder, components, electron_host, engine, our_shell, version_file, Components,
+    app_module, builder, components, electron_host, engine, our_shell, perfetto, version_file,
+    Components,
 };
 
 fn nothing(_: &str) -> Option<String> {
@@ -122,6 +123,22 @@ fn a_missing_builder_names_where_it_looked() {
         PathBuf::from("/usr/libexec/domicile/builder")
     );
     assert_eq!(missing.variable, "DOMICILE_BUILDER");
+}
+
+#[test]
+fn perfetto_is_beside_the_engine_or_where_the_environment_says() {
+    let beside = |path: &Path| path == Path::new("/usr/libexec/domicile/perfetto");
+    assert_eq!(
+        perfetto(Path::new("/usr/bin/domicile"), &nothing, &beside),
+        Ok(PathBuf::from("/usr/libexec/domicile/perfetto"))
+    );
+    let named = |name: &str| (name == "DOMICILE_PERFETTO").then(|| "/opt/perfetto".to_string());
+    assert_eq!(
+        perfetto(Path::new("/usr/bin/domicile"), &named, &|_| false),
+        Ok(PathBuf::from("/opt/perfetto"))
+    );
+    let missing = perfetto(Path::new("/usr/bin/domicile"), &nothing, &|_| false).unwrap_err();
+    assert_eq!(missing.variable, "DOMICILE_PERFETTO");
 }
 
 #[test]

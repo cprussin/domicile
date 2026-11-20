@@ -102,6 +102,22 @@ pub fn electron_host(
     )
 }
 
+/// The Perfetto install `domicile trace` records with, holding `bin/traced`
+/// and `bin/perfetto`: `DOMICILE_PERFETTO`, or `libexec/domicile/perfetto`.
+pub fn perfetto(
+    binary: &Path,
+    env: &dyn Fn(&str) -> Option<String>,
+    exists: &dyn Fn(&Path) -> bool,
+) -> Result<PathBuf, Missing> {
+    one(
+        "Perfetto",
+        "DOMICILE_PERFETTO",
+        libexec(binary).join("perfetto"),
+        env,
+        exists,
+    )
+}
+
 /// The directory of Domicile's prebuilt shell `name`, under
 /// `DOMICILE_SHELLS` or `libexec/domicile/shells`.
 pub fn our_shell(
