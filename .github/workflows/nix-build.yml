@@ -53,4 +53,9 @@ jobs:
       # from a checkout. Bun is here only to run turbo; a nix build has its own
       # node_modules.
       - uses: oven-sh/setup-bun@v2
+      # Built first, with its log streamed, so a stalled build shows where it
+      # stalled. Inside `test:nix` the check-runner keeps a check's log until
+      # it ends, and a job timeout ends it first.
+      - name: Build the desktops
+        run: nix build -L --no-link .#manganese .#simple
       - run: bun run turbo run test:nix
