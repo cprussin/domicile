@@ -31,10 +31,10 @@ priority) as JSON. Log only.
  3 files changed, 108 insertions(+)
 
 diff --git a/cc/tiles/tile_manager.cc b/cc/tiles/tile_manager.cc
-index 3d480ac..a58596e 100644
+index ab15690..6b8eed0 100644
 --- a/cc/tiles/tile_manager.cc
 +++ b/cc/tiles/tile_manager.cc
-@@ -1839,6 +1839,105 @@ bool TileManager::IsReadyToActivate() const {
+@@ -1754,6 +1754,105 @@ bool TileManager::IsReadyToActivate() const {
               RasterTilePriorityQueue::Type::REQUIRED_FOR_ACTIVATION);
  }
  
@@ -141,7 +141,7 @@ index 3d480ac..a58596e 100644
    TRACE_EVENT0("cc,benchmark", "TileManager::IsReadyToDraw");
    return pending_required_for_draw_callback_id_ == 0 &&
 diff --git a/cc/tiles/tile_manager.h b/cc/tiles/tile_manager.h
-index 5d425a4..8dd554e 100644
+index d3d20ea..dd6102d 100644
 --- a/cc/tiles/tile_manager.h
 +++ b/cc/tiles/tile_manager.h
 @@ -10,6 +10,7 @@
@@ -163,10 +163,10 @@ index 5d425a4..8dd554e 100644
  
    const PaintImageIdFlatSet& TakeImagesToInvalidateOnSyncTree();
 diff --git a/cc/trees/layer_tree_host_impl.cc b/cc/trees/layer_tree_host_impl.cc
-index 93ebd48..821fdc4 100644
+index 02b10d3..fe9f16d 100644
 --- a/cc/trees/layer_tree_host_impl.cc
 +++ b/cc/trees/layer_tree_host_impl.cc
-@@ -2061,6 +2061,11 @@ void LayerTreeHostImpl::DomicileReportTargetWait() {
+@@ -2093,6 +2093,11 @@ void LayerTreeHostImpl::DomicileReportTargetWait() {
               << ", evicted "
               << (evicted_local_surface_id_.is_valid() ? "yes" : "no")
               << ", frame sink " << (layer_tree_frame_sink_ ? "bound" : "none")
@@ -178,6 +178,3 @@ index 93ebd48..821fdc4 100644
               << ".";
  }
  
--- 
-2.43.0
-

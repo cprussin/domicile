@@ -59,7 +59,7 @@ expect "an engine with no port fails" "fail: never" "$(verdict 'no-port')"
 PATCH="$(grep -al '^+++ b/third_party/blink/renderer/core/frame/local_frame.cc' "$ENGINE"/patches/*.patch)"
 # shellcheck disable=SC2086 # one path per patch
 if [ -n "$PATCH" ] &&
-  grep -aqF '+        frame_view->IsDisplayLocked(), /*recurse=*/true);' $PATCH; then
+  grep -aqF '+        frame_view->IsDisplayLockThrottled(), /*recurse=*/true);' $PATCH; then
   printf '  ok    %s\n' "a shown frame un-throttles its children"
 else
   printf '  FAIL  %s\n' "no patch un-throttles a shown frame's children"

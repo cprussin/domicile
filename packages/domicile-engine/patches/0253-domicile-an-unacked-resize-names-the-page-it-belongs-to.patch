@@ -15,10 +15,10 @@ primary page, a prerender) and its page's URL.
  2 files changed, 29 insertions(+)
 
 diff --git a/content/browser/renderer_host/render_widget_host_impl.cc b/content/browser/renderer_host/render_widget_host_impl.cc
-index 79949119..13fb3a05 100644
+index c718819..7fef984 100644
 --- a/content/browser/renderer_host/render_widget_host_impl.cc
 +++ b/content/browser/renderer_host/render_widget_host_impl.cc
-@@ -1681,9 +1681,35 @@ void RenderWidgetHostImpl::DomicileReportAckWait() {
+@@ -1705,9 +1705,35 @@ void RenderWidgetHostImpl::DomicileReportAckWait() {
               << (view_ && view_->IsShowing() ? "showing" : "not showing")
               << ", renderer "
               << (GetProcess()->IsInitializedAndNotDead() ? "alive" : "dead")
@@ -55,10 +55,10 @@ index 79949119..13fb3a05 100644
    return is_unresponsive_;
  }
 diff --git a/content/browser/renderer_host/render_widget_host_impl.h b/content/browser/renderer_host/render_widget_host_impl.h
-index f0f3bb94..ab1b9f2f 100644
+index 6080916..4abbe29 100644
 --- a/content/browser/renderer_host/render_widget_host_impl.h
 +++ b/content/browser/renderer_host/render_widget_host_impl.h
-@@ -1525,6 +1525,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl
+@@ -1541,6 +1541,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl
    // past `kDomicileAckWait`; see `DomicileReportAckWait`.
    void DomicileWatchAck();
    void DomicileStopWatchingAck();
@@ -68,6 +68,3 @@ index f0f3bb94..ab1b9f2f 100644
    void DomicileReportAckWait();
    base::OneShotTimer domicile_ack_timer_;
    base::TimeTicks domicile_ack_wait_started_;
--- 
-2.43.0
-

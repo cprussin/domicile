@@ -1,8 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 17 Nov 2026 20:00:00 +0000
-Subject: [PATCH] domicile: an Electron page with Node.js gets its own
- renderer
+Subject: [PATCH] domicile: an Electron page with Node.js gets its own renderer
 
 An Electron app's window with Node.js in its page (nodeIntegration, or
 sandbox: false) runs its preload, and with integration its page, with
@@ -31,18 +30,18 @@ Co-Authored-By: Connor Prussin <connor@prussin.net>
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_011frZat42ZDYcF5LPSUETze
 ---
- chrome/browser/chrome_content_browser_client.cc   | 35 +++++++++++++++++++++
- chrome/browser/chrome_content_browser_client.h    |  2 ++
- .../child_process_launcher_helper_linux.cc        | 13 ++++++++
- .../renderer_host/render_frame_host_manager.cc    |  9 ++++++
- .../renderer_host/render_process_host_impl.cc     |  6 ++++
- ...enderer_sandboxed_process_launcher_delegate.cc |  3 ++
- ...renderer_sandboxed_process_launcher_delegate.h | 13 ++++++++
- content/public/browser/content_browser_client.h   |  8 +++++
+ .../browser/chrome_content_browser_client.cc  | 35 +++++++++++++++++++
+ .../browser/chrome_content_browser_client.h   |  2 ++
+ .../child_process_launcher_helper_linux.cc    | 13 +++++++
+ .../render_frame_host_manager.cc              |  9 +++++
+ .../renderer_host/render_process_host_impl.cc |  6 ++++
+ ...rer_sandboxed_process_launcher_delegate.cc |  3 ++
+ ...erer_sandboxed_process_launcher_delegate.h | 13 +++++++
+ .../public/browser/content_browser_client.h   |  8 +++++
  8 files changed, 89 insertions(+)
 
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index a9983dd..b60ebe7 100644
+index c7b8cbd..eef7367 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -5,6 +5,7 @@
@@ -53,7 +52,7 @@ index a9983dd..b60ebe7 100644
  #include "chrome/browser/domicile/domicile_identity_dialog.h"
  #include "chrome/browser/domicile/domicile_picture_in_picture.h"
  #include "components/domicile/browser/force_dark.h"
-@@ -2061,6 +2062,13 @@ bool ChromeContentBrowserClient::ShouldUseSpareRenderProcessHost(
+@@ -2070,6 +2071,13 @@ bool ChromeContentBrowserClient::ShouldUseSpareRenderProcessHost(
      const GURL& site_url,
      std::optional<SpareProcessRefusedByEmbedderReason>& refused_reason) {
    refused_reason = std::nullopt;
@@ -67,7 +66,7 @@ index a9983dd..b60ebe7 100644
    Profile* profile = Profile::FromBrowserContext(browser_context);
    if (!profile) {
      refused_reason = SpareProcessRefusedByEmbedderReason::NoProfile;
-@@ -2475,6 +2483,12 @@ bool ChromeContentBrowserClient::ShouldStayInParentProcessForNTP(
+@@ -2483,6 +2491,12 @@ bool ChromeContentBrowserClient::ShouldStayInParentProcessForNTP(
  bool ChromeContentBrowserClient::IsSuitableHost(
      content::RenderProcessHost* process_host,
      const content::SecurityPrincipal& security_principal) {
@@ -80,7 +79,7 @@ index a9983dd..b60ebe7 100644
    Profile* profile =
        Profile::FromBrowserContext(process_host->GetBrowserContext());
    // This may be nullptr during tests. In that case, just assume any site can
-@@ -2531,6 +2545,13 @@ bool ChromeContentBrowserClient::MayReuseHost(
+@@ -2539,6 +2553,13 @@ bool ChromeContentBrowserClient::MayReuseHost(
      return false;
    }
  
@@ -94,7 +93,7 @@ index a9983dd..b60ebe7 100644
    return true;
  }
  
-@@ -2605,9 +2626,19 @@ class NTPUserData : public base::SupportsUserData::Data {
+@@ -2601,9 +2622,19 @@ class NTPUserData : public base::SupportsUserData::Data {
  
  }  // namespace
  
@@ -114,7 +113,7 @@ index a9983dd..b60ebe7 100644
  
    Profile* profile =
        Profile::FromBrowserContext(site_instance->GetBrowserContext());
-@@ -3202,6 +3233,10 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
+@@ -3196,6 +3227,10 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
        for (auto& part : extra_parts_) {
          part->AppendExtraRendererCommandLineSwitches(command_line, *process);
        }
@@ -126,10 +125,10 @@ index a9983dd..b60ebe7 100644
  
  #if BUILDFLAG(IS_CHROMEOS)
 diff --git a/chrome/browser/chrome_content_browser_client.h b/chrome/browser/chrome_content_browser_client.h
-index 4f11640..9dca476 100644
+index ee7561f..33fd9d7 100644
 --- a/chrome/browser/chrome_content_browser_client.h
 +++ b/chrome/browser/chrome_content_browser_client.h
-@@ -310,6 +310,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
+@@ -307,6 +307,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
        content::RenderFrameHost* outermost_main_frame) override;
    void SiteInstanceGotProcessAndSite(
        content::SiteInstance* site_instance) override;
@@ -139,7 +138,7 @@ index 4f11640..9dca476 100644
        content::SiteInstance* site_instance,
        const GURL& current_effective_url,
 diff --git a/content/browser/child_process_launcher_helper_linux.cc b/content/browser/child_process_launcher_helper_linux.cc
-index 230b4d7..5cdd1da 100644
+index 84c3f31..1b3f7f8 100644
 --- a/content/browser/child_process_launcher_helper_linux.cc
 +++ b/content/browser/child_process_launcher_helper_linux.cc
 @@ -66,6 +66,19 @@ bool ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
@@ -163,10 +162,10 @@ index 230b4d7..5cdd1da 100644
    } else {
      CHECK(GetZygoteForLaunch(), base::NotFatalUntil::M159);
 diff --git a/content/browser/renderer_host/render_frame_host_manager.cc b/content/browser/renderer_host/render_frame_host_manager.cc
-index c95c55b..9f688fd 100644
+index cdc682a..20f11c3 100644
 --- a/content/browser/renderer_host/render_frame_host_manager.cc
 +++ b/content/browser/renderer_host/render_frame_host_manager.cc
-@@ -4995,6 +4995,15 @@ RenderFrameHostManager::GetSiteInstanceForNavigationRequest(
+@@ -4985,6 +4985,15 @@ RenderFrameHostManager::GetSiteInstanceForNavigationRequest(
      request->ResetStateForSiteInstanceChange();
    }
  
@@ -183,10 +182,10 @@ index c95c55b..9f688fd 100644
  }
  
 diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content/browser/renderer_host/render_process_host_impl.cc
-index ca7a5e6..0f89266 100644
+index e3fd221..cc0f864 100644
 --- a/content/browser/renderer_host/render_process_host_impl.cc
 +++ b/content/browser/renderer_host/render_process_host_impl.cc
-@@ -2148,6 +2148,12 @@ bool RenderProcessHostImpl::Init() {
+@@ -2157,6 +2157,12 @@ bool RenderProcessHostImpl::Init() {
      std::unique_ptr<SandboxedProcessLauncherDelegate> sandbox_delegate =
          std::make_unique<RendererSandboxedProcessLauncherDelegateWin>(
              *cmd_line, IsPdf(), IsJitDisabled(), GetID());
@@ -245,10 +244,10 @@ index 99a9fda..fa38175 100644
  
  #if BUILDFLAG(IS_WIN)
 diff --git a/content/public/browser/content_browser_client.h b/content/public/browser/content_browser_client.h
-index dc03ebe..0600d38 100644
+index 158d77d..c970284 100644
 --- a/content/public/browser/content_browser_client.h
 +++ b/content/public/browser/content_browser_client.h
-@@ -784,6 +784,14 @@ class CONTENT_EXPORT ContentBrowserClient {
+@@ -778,6 +778,14 @@ class CONTENT_EXPORT ContentBrowserClient {
    // subsequent navigation does.
    virtual void SiteInstanceGotProcessAndSite(SiteInstance* site_instance) {}
  

@@ -18,15 +18,15 @@ chrome/browser/domicile/domicile_electron_loader.h.
 Verified: not built. This repository cannot build Chromium; the engine
 job builds it on `crux`.
 ---
- chrome/browser/chrome_content_browser_client.cc    | 26 ++++++++++++++++++++++
- chrome/browser/chrome_content_browser_client.h     |  2 ++
- .../renderer_host/navigation_controller_impl.cc    |  8 ++++++-
- content/public/browser/content_browser_client.cc   |  5 +++++
- content/public/browser/content_browser_client.h    |  5 +++++
+ .../browser/chrome_content_browser_client.cc  | 26 +++++++++++++++++++
+ .../browser/chrome_content_browser_client.h   |  2 ++
+ .../navigation_controller_impl.cc             |  8 +++++-
+ .../public/browser/content_browser_client.cc  |  5 ++++
+ .../public/browser/content_browser_client.h   |  5 ++++
  5 files changed, 45 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index dec73dd..cb98fc4 100644
+index 4d82e0c..f085c05 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -4,6 +4,7 @@
@@ -37,7 +37,7 @@ index dec73dd..cb98fc4 100644
  #include "chrome/browser/domicile/domicile_identity_dialog.h"
  #include "chrome/browser/domicile/domicile_picture_in_picture.h"
  #include "components/domicile/browser/force_dark.h"
-@@ -6488,6 +6489,14 @@ base::FilePath DomicileShellRoot() {
+@@ -6493,6 +6494,14 @@ base::FilePath DomicileShellRoot() {
  
  }  // namespace
  
@@ -52,7 +52,7 @@ index dec73dd..cb98fc4 100644
  mojo::PendingRemote<network::mojom::URLLoaderFactory>
  ChromeContentBrowserClient::CreateNonNetworkNavigationURLLoaderFactory(
      const std::string& scheme,
-@@ -6501,6 +6510,14 @@ ChromeContentBrowserClient::CreateNonNetworkNavigationURLLoaderFactory(
+@@ -6506,6 +6515,14 @@ ChromeContentBrowserClient::CreateNonNetworkNavigationURLLoaderFactory(
      return domicile::ShellURLLoaderFactory::Create(DomicileShellRoot());
    }
  
@@ -67,7 +67,7 @@ index dec73dd..cb98fc4 100644
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE) || BUILDFLAG(IS_CHROMEOS) || \
      !BUILDFLAG(IS_ANDROID)
    content::WebContents* web_contents =
-@@ -6916,6 +6933,10 @@ void ChromeContentBrowserClient::
+@@ -6921,6 +6938,10 @@ void ChromeContentBrowserClient::
    factories->emplace(
        domicile::kDomicileScheme,
        domicile::ShellURLLoaderFactory::Create(DomicileShellRoot()));
@@ -78,7 +78,7 @@ index dec73dd..cb98fc4 100644
  
  #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(ENABLE_EXTENSIONS_CORE) || \
      !BUILDFLAG(IS_ANDROID)
-@@ -7036,6 +7057,11 @@ void ChromeContentBrowserClient::WillCreateURLLoaderFactory(
+@@ -7041,6 +7062,11 @@ void ChromeContentBrowserClient::WillCreateURLLoaderFactory(
      network::mojom::URLLoaderFactoryOverridePtr* factory_override,
      scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner,
      bool is_for_network_service) {
@@ -91,10 +91,10 @@ index dec73dd..cb98fc4 100644
    auto* web_request_api =
        extensions::BrowserContextKeyedAPIFactory<extensions::WebRequestAPI>::Get(
 diff --git a/chrome/browser/chrome_content_browser_client.h b/chrome/browser/chrome_content_browser_client.h
-index d5c5ea5..fff469e 100644
+index cbf8d2f..d21939f 100644
 --- a/chrome/browser/chrome_content_browser_client.h
 +++ b/chrome/browser/chrome_content_browser_client.h
-@@ -703,6 +703,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
+@@ -696,6 +696,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
    CreateURLLoaderThrottlesForKeepAlive(
        content::BrowserContext* browser_context,
        content::FrameTreeNodeId frame_tree_node_id) override;
@@ -104,10 +104,10 @@ index d5c5ea5..fff469e 100644
    CreateNonNetworkNavigationURLLoaderFactory(
        const std::string& scheme,
 diff --git a/content/browser/renderer_host/navigation_controller_impl.cc b/content/browser/renderer_host/navigation_controller_impl.cc
-index 6a32810..e88e3b1 100644
+index 8d7c49f..aff2b9f 100644
 --- a/content/browser/renderer_host/navigation_controller_impl.cc
 +++ b/content/browser/renderer_host/navigation_controller_impl.cc
-@@ -90,6 +90,7 @@
+@@ -91,6 +91,7 @@
  #include "content/public/browser/back_forward_transition_animation_manager.h"
  #include "content/public/browser/browser_context.h"
  #include "content/public/browser/content_browser_client.h"
@@ -115,7 +115,7 @@ index 6a32810..e88e3b1 100644
  #include "content/public/browser/disallow_activation_reason.h"
  #include "content/public/browser/invalidate_type.h"
  #include "content/public/browser/navigation_details.h"
-@@ -330,8 +331,13 @@ std::optional<NavigationNotStartedReason> CheckURLForNavigationError(
+@@ -331,8 +332,13 @@ std::optional<NavigationNotStartedReason> CheckURLForNavigationError(
            ->GetSecurityPrincipal()
            .IsGuest()) {
      auto* cpsp = content::ChildProcessSecurityPolicy::GetInstance();
@@ -131,10 +131,10 @@ index 6a32810..e88e3b1 100644
                     << dest_url.possibly_invalid_spec();
        return NavigationNotStartedReason::kDisallowedScheme;
 diff --git a/content/public/browser/content_browser_client.cc b/content/public/browser/content_browser_client.cc
-index 3b1deaf..8dc86db 100644
+index 36aa012..6fd964c 100644
 --- a/content/public/browser/content_browser_client.cc
 +++ b/content/public/browser/content_browser_client.cc
-@@ -1801,6 +1801,11 @@ bool ContentBrowserClient::IsFileSystemURLNavigationAllowed(
+@@ -1788,6 +1788,11 @@ bool ContentBrowserClient::IsFileSystemURLNavigationAllowed(
    return false;
  }
  
@@ -147,10 +147,10 @@ index 3b1deaf..8dc86db 100644
  bool ContentBrowserClient::IsContentSchemeURLNavigationAllowed(
      const GURL& url) {
 diff --git a/content/public/browser/content_browser_client.h b/content/public/browser/content_browser_client.h
-index 41e8367..34ce001 100644
+index 30a1fd0..94f5773 100644
 --- a/content/public/browser/content_browser_client.h
 +++ b/content/public/browser/content_browser_client.h
-@@ -3011,6 +3011,11 @@ class CONTENT_EXPORT ContentBrowserClient {
+@@ -3005,6 +3005,11 @@ class CONTENT_EXPORT ContentBrowserClient {
        content::BrowserContext* browser_context,
        const GURL& url);
  

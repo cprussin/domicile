@@ -37,11 +37,11 @@ Claude-Session: https://claude.ai/code/session_011frZauaqzJEB21JbKkZ1iZ
  4 files changed, 40 insertions(+), 4 deletions(-)
 
 diff --git a/components/viz/common/features.cc b/components/viz/common/features.cc
-index 9c7c8ee..2bd5c98 100644
+index e037739..31dfce7 100644
 --- a/components/viz/common/features.cc
 +++ b/components/viz/common/features.cc
-@@ -223,12 +223,11 @@ BASE_FEATURE(kVSyncAlignedPresentation, base::FEATURE_DISABLED_BY_DEFAULT);
- BASE_FEATURE(kUseDisplayRefreshRateForTimer, base::FEATURE_ENABLED_BY_DEFAULT);
+@@ -225,12 +225,11 @@ BASE_FEATURE(kForceMacVSyncTimerForDebugging,
+              base::FEATURE_DISABLED_BY_DEFAULT);
  #endif
  
 +// Domicile: on everywhere, as on the Mac. A window fading or scaling draws
@@ -57,10 +57,10 @@ index 9c7c8ee..2bd5c98 100644
  // if enabled, Any CompositorFrameSink of type video that defines a preferred
  // framerate that is below the display framerate will throttle OnBeginFrame
 diff --git a/third_party/blink/renderer/core/frame/remote_frame.cc b/third_party/blink/renderer/core/frame/remote_frame.cc
-index 5c917bf..040d1c7 100644
+index 5d1bd5b..a7ee444 100644
 --- a/third_party/blink/renderer/core/frame/remote_frame.cc
 +++ b/third_party/blink/renderer/core/frame/remote_frame.cc
-@@ -549,6 +549,13 @@ void RemoteFrame::SetInsecureRequestPolicy(
+@@ -593,6 +593,13 @@ void RemoteFrame::SetInsecureRequestPolicy(
  void RemoteFrame::FrameRectsChanged(const gfx::Size& local_frame_size,
                                      const gfx::Rect& rect_in_local_root) {
    pending_visual_properties_.rect_in_local_root = rect_in_local_root;
@@ -75,7 +75,7 @@ index 5c917bf..040d1c7 100644
    SynchronizeVisualProperties();
  }
 diff --git a/third_party/blink/renderer/core/frame/remote_frame_view.cc b/third_party/blink/renderer/core/frame/remote_frame_view.cc
-index b5c2456..8b43747 100644
+index b82f793..251d6dc 100644
 --- a/third_party/blink/renderer/core/frame/remote_frame_view.cc
 +++ b/third_party/blink/renderer/core/frame/remote_frame_view.cc
 @@ -292,6 +292,19 @@ void RemoteFrameView::UpdateCompositingRect() {

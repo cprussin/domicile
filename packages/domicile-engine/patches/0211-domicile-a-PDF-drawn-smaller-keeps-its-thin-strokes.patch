@@ -20,10 +20,10 @@ job builds it on `crux`. `guard-pdf-scaled-text.sh` checks it.
  1 file changed, 9 insertions(+), 1 deletion(-)
 
 diff --git a/pdf/pdf_view_web_plugin.cc b/pdf/pdf_view_web_plugin.cc
-index 81f6d1e..1dccd9d 100644
+index 9a7c7ad..f827e11 100644
 --- a/pdf/pdf_view_web_plugin.cc
 +++ b/pdf/pdf_view_web_plugin.cc
-@@ -104,6 +104,7 @@
+@@ -105,6 +105,7 @@
  #include "third_party/skia/include/core/SkImageInfo.h"
  #include "third_party/skia/include/core/SkRect.h"
  #include "third_party/skia/include/core/SkRefCnt.h"
@@ -31,7 +31,7 @@ index 81f6d1e..1dccd9d 100644
  #include "third_party/skia/include/core/SkSize.h"
  #include "ui/base/cursor/cursor.h"
  #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
-@@ -713,7 +714,14 @@ void PdfViewWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
+@@ -714,7 +715,14 @@ void PdfViewWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
      canvas->scale(snapshot_scale_, snapshot_scale_);
    }
  
@@ -47,6 +47,3 @@ index 81f6d1e..1dccd9d 100644
  
  #if BUILDFLAG(ENABLE_PDF_INK2)
    if (!ink_module_) {
--- 
-2.43.0
-

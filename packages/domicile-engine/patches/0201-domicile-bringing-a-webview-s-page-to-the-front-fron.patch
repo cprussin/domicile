@@ -18,7 +18,7 @@ guard-webview-activate presses with it.
  1 file changed, 11 insertions(+)
 
 diff --git a/content/browser/devtools/protocol/page_handler.cc b/content/browser/devtools/protocol/page_handler.cc
-index 5a2a450..df2de21 100644
+index 735203c..a369a04 100644
 --- a/content/browser/devtools/protocol/page_handler.cc
 +++ b/content/browser/devtools/protocol/page_handler.cc
 @@ -1958,6 +1958,17 @@ Response PageHandler::BringToFront() {

@@ -22,19 +22,19 @@ See components/domicile/common/electron_schemes.h.
 Verified: not built. This repository cannot build Chromium; the engine
 job builds it on `crux`.
 ---
- chrome/browser/BUILD.gn                           |  1 +
- chrome/browser/chrome_content_browser_client.cc   | 11 +++++++++++
- chrome/common/BUILD.gn                            |  1 +
- chrome/common/chrome_content_client.cc            | 23 +++++++++++++++++++++++
- chrome/renderer/BUILD.gn                          |  1 +
- chrome/renderer/chrome_content_renderer_client.cc | 12 ++++++++++++
+ chrome/browser/BUILD.gn                       |  1 +
+ .../browser/chrome_content_browser_client.cc  | 11 +++++++++
+ chrome/common/BUILD.gn                        |  1 +
+ chrome/common/chrome_content_client.cc        | 23 +++++++++++++++++++
+ chrome/renderer/BUILD.gn                      |  1 +
+ .../chrome_content_renderer_client.cc         | 12 ++++++++++
  6 files changed, 49 insertions(+)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index b859d97..7621557 100644
+index 010b1ef..b83c307 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2720,6 +2720,7 @@ source_set("browser") {
+@@ -2730,6 +2730,7 @@ source_set("browser") {
      "//components/domicile:color_scheme",
      "//components/domicile:control_channel",
      "//components/domicile:desktop_prefs",
@@ -43,7 +43,7 @@ index b859d97..7621557 100644
      "//components/domicile:keyboard_layout",
      "//components/domicile:shell_origin",
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index cb98fc4..0438014 100644
+index f085c05..6787f09 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -11,6 +11,7 @@
@@ -54,7 +54,7 @@ index cb98fc4..0438014 100644
  
  #include <algorithm>
  #include <iterator>
-@@ -3176,6 +3177,16 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
+@@ -3170,6 +3171,16 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
    command_line->CopySwitchesFrom(browser_command_line,
                                   kDinosaurEasterEggSwitches);
  
@@ -72,10 +72,10 @@ index cb98fc4..0438014 100644
    // On Chrome OS need to pass primary user homedir (in multi-profiles session).
    base::FilePath homedir;
 diff --git a/chrome/common/BUILD.gn b/chrome/common/BUILD.gn
-index f7d6f15..d4e3344 100644
+index 8826394..28718e4 100644
 --- a/chrome/common/BUILD.gn
 +++ b/chrome/common/BUILD.gn
-@@ -266,6 +266,7 @@ static_library("common_lib") {
+@@ -264,6 +264,7 @@ static_library("common_lib") {
    deps = [
      "//components/cdm/common:buildflags",
      "//components/crash/core/app",
@@ -125,7 +125,7 @@ index 93ad2c7..b102cff 100644
    schemes->referrer_schemes.push_back(content::kAndroidAppScheme);
    schemes->referrer_schemes.push_back(web_distiller::kWebDistillerScheme);
 diff --git a/chrome/renderer/BUILD.gn b/chrome/renderer/BUILD.gn
-index 9515718..62221a4 100644
+index 34907c7..13a30c7 100644
 --- a/chrome/renderer/BUILD.gn
 +++ b/chrome/renderer/BUILD.gn
 @@ -155,6 +155,7 @@ static_library("renderer") {
@@ -137,7 +137,7 @@ index 9515718..62221a4 100644
      "//components/facilitated_payments/core/features",
      "//components/feed:feature_list",
 diff --git a/chrome/renderer/chrome_content_renderer_client.cc b/chrome/renderer/chrome_content_renderer_client.cc
-index 013598b..8b0a63b 100644
+index 8bd462e..c9af7e1 100644
 --- a/chrome/renderer/chrome_content_renderer_client.cc
 +++ b/chrome/renderer/chrome_content_renderer_client.cc
 @@ -5,6 +5,7 @@
@@ -148,7 +148,7 @@ index 013598b..8b0a63b 100644
  #include "components/domicile/renderer/electron_preload.h"
  
  #include <functional>
-@@ -631,6 +632,17 @@ void ChromeContentRendererClient::RenderThreadStarted() {
+@@ -655,6 +656,17 @@ void ChromeContentRendererClient::RenderThreadStarted() {
    WebSecurityPolicy::RegisterURLSchemeAsSupportingFetchAPI(
        WebString::FromAscii(domicile::kDomicileScheme));
  

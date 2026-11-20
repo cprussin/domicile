@@ -14,15 +14,15 @@ A guest's delegate may now take a noopener window
 for, and content then makes none: a noopener window.open() answers null
 anyway. WebViewGuest takes an Electron page's, and asks the app.
 ---
- content/browser/browser_plugin/browser_plugin_guest.cc  | 10 ++++++++++
- content/browser/browser_plugin/browser_plugin_guest.h   |  7 +++++++
- content/browser/web_contents/web_contents_impl.cc       | 10 ++++++++++
- content/public/browser/browser_plugin_guest_delegate.cc |  9 +++++++++
- content/public/browser/browser_plugin_guest_delegate.h  | 14 ++++++++++++++
+ .../browser/browser_plugin/browser_plugin_guest.cc | 10 ++++++++++
+ .../browser/browser_plugin/browser_plugin_guest.h  |  7 +++++++
+ content/browser/web_contents/web_contents_impl.cc  | 10 ++++++++++
+ .../browser/browser_plugin_guest_delegate.cc       |  9 +++++++++
+ .../public/browser/browser_plugin_guest_delegate.h | 14 ++++++++++++++
  5 files changed, 50 insertions(+)
 
 diff --git a/content/browser/browser_plugin/browser_plugin_guest.cc b/content/browser/browser_plugin/browser_plugin_guest.cc
-index 791474a5..1e679fa5 100644
+index 791474a..1e679fa 100644
 --- a/content/browser/browser_plugin/browser_plugin_guest.cc
 +++ b/content/browser/browser_plugin/browser_plugin_guest.cc
 @@ -48,6 +48,16 @@ std::unique_ptr<WebContentsImpl> BrowserPluginGuest::CreateNewGuestWindow(
@@ -43,7 +43,7 @@ index 791474a5..1e679fa5 100644
    RenderWidgetHostImpl* rwhi =
        GetWebContents()->GetPrimaryMainFrame()->GetRenderWidgetHost();
 diff --git a/content/browser/browser_plugin/browser_plugin_guest.h b/content/browser/browser_plugin/browser_plugin_guest.h
-index 91c9f60d..3c4239f7 100644
+index 91c9f60..3c4239f 100644
 --- a/content/browser/browser_plugin/browser_plugin_guest.h
 +++ b/content/browser/browser_plugin/browser_plugin_guest.h
 @@ -58,6 +58,13 @@ class BrowserPluginGuest : public WebContentsObserver {
@@ -61,10 +61,10 @@ index 91c9f60d..3c4239f7 100644
    void DidStartNavigation(NavigationHandle* navigation_handle) override;
    void DidFinishNavigation(NavigationHandle* navigation_handle) override;
 diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
-index ba8a904a..6c37dfa2 100644
+index c6a9a25..7894736 100644
 --- a/content/browser/web_contents/web_contents_impl.cc
 +++ b/content/browser/web_contents/web_contents_impl.cc
-@@ -5828,6 +5828,16 @@ FrameTree* WebContentsImpl::CreateNewWindow(
+@@ -5839,6 +5839,16 @@ FrameTree* WebContentsImpl::CreateNewWindow(
        source_site_instance->GetSecurityPrincipal().IsGuest();
    CHECK(!guest_site_instance || is_guest);
  
@@ -82,7 +82,7 @@ index ba8a904a..6c37dfa2 100644
    // script-related windows), by passing in the current SiteInstance.  However,
    // if the opener is being suppressed, we need to ensure that the new
 diff --git a/content/public/browser/browser_plugin_guest_delegate.cc b/content/public/browser/browser_plugin_guest_delegate.cc
-index b6f34433..d731ea2a 100644
+index b6f3443..d731ea2 100644
 --- a/content/public/browser/browser_plugin_guest_delegate.cc
 +++ b/content/public/browser/browser_plugin_guest_delegate.cc
 @@ -11,6 +11,15 @@ std::unique_ptr<WebContents> BrowserPluginGuestDelegate::CreateNewGuestWindow(
@@ -102,7 +102,7 @@ index b6f34433..d731ea2a 100644
    return nullptr;
  }
 diff --git a/content/public/browser/browser_plugin_guest_delegate.h b/content/public/browser/browser_plugin_guest_delegate.h
-index 7c312d38..1c3b3ea0 100644
+index 7c312d3..1c3b3ea 100644
 --- a/content/public/browser/browser_plugin_guest_delegate.h
 +++ b/content/public/browser/browser_plugin_guest_delegate.h
 @@ -8,6 +8,10 @@

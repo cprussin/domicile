@@ -26,7 +26,7 @@ job builds it on `crux`.
  4 files changed, 30 insertions(+), 10 deletions(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 9ea049d..96576bc 100644
+index 74f7d15..c1c5e6c 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -10,6 +10,7 @@
@@ -37,7 +37,7 @@ index 9ea049d..96576bc 100644
  #include "chrome/browser/domicile/domicile_pointer_warp.h"
  #include "chrome/browser/domicile/domicile_shell_fetch.h"
  #include "chrome/browser/domicile/domicile_tab_helpers.h"
-@@ -701,6 +702,23 @@ void PopulateChromeFrameBinders(
+@@ -705,6 +706,23 @@ void PopulateChromeFrameBinders(
          domicile::BindDownloads(frame, std::move(receiver));
        }));
  
@@ -62,7 +62,7 @@ index 9ea049d..96576bc 100644
    //
    // Gated at BIND time like the browser windows, and for their reason: a page
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 1ddec54..dec73dd 100644
+index 3acda70..4d82e0c 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -5,6 +5,7 @@
@@ -73,7 +73,7 @@ index 1ddec54..dec73dd 100644
  #include "components/domicile/browser/force_dark.h"
  #include "components/domicile/browser/shell_source.h"
  #include "components/domicile/browser/shell_url_loader_factory.h"
-@@ -5074,15 +5075,9 @@ void ChromeContentBrowserClient::OverrideWebPreferences(
+@@ -5083,15 +5084,9 @@ void ChromeContentBrowserClient::OverrideWebPreferences(
        web_prefs->preferred_color_scheme ==
            blink::mojom::PreferredColorScheme::kDark);
  
@@ -92,7 +92,7 @@ index 1ddec54..dec73dd 100644
    web_prefs->payment_request_enabled = false;
  
    web_prefs->root_scrollbar_theme_color =
-@@ -7790,7 +7785,9 @@ bool ChromeContentBrowserClient::HandleExternalProtocol(
+@@ -7797,7 +7792,9 @@ bool ChromeContentBrowserClient::HandleExternalProtocol(
  std::unique_ptr<content::VideoOverlayWindow>
  ChromeContentBrowserClient::CreateWindowForVideoPictureInPicture(
      content::VideoPictureInPictureWindowController* controller) {
@@ -104,7 +104,7 @@ index 1ddec54..dec73dd 100644
  
  base::ScopedClosureRunner
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 5a15b20..1125b33 100644
+index 8bf334c..568590e 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -1570,6 +1570,8 @@ generated_enumeration_sources_in_modules = [
@@ -116,7 +116,7 @@ index 5a15b20..1125b33 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_action.cc",
-@@ -2361,6 +2363,8 @@ generated_interface_sources_in_modules = [
+@@ -2365,6 +2367,8 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_download.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.h",

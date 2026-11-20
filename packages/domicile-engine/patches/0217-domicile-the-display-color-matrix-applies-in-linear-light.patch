@@ -17,7 +17,7 @@ job builds it on `crux`.
  1 file changed, 5 insertions(+), 1 deletion(-)
 
 diff --git a/components/viz/service/display/skia_renderer.cc b/components/viz/service/display/skia_renderer.cc
-index 3eb7c87..ea74645 100644
+index bcc65a0..24032bc 100644
 --- a/components/viz/service/display/skia_renderer.cc
 +++ b/components/viz/service/display/skia_renderer.cc
 @@ -3125,8 +3125,12 @@ sk_sp<SkColorFilter> SkiaRenderer::GetContentColorFilter() {

@@ -39,7 +39,7 @@ error.
  7 files changed, 62 insertions(+), 1 deletion(-)
 
 diff --git a/ui/events/ozone/evdev/BUILD.gn b/ui/events/ozone/evdev/BUILD.gn
-index f23aa3c..1cd9816 100644
+index 95d0bce..c76b455 100644
 --- a/ui/events/ozone/evdev/BUILD.gn
 +++ b/ui/events/ozone/evdev/BUILD.gn
 @@ -51,6 +51,8 @@ component("evdev") {
@@ -209,10 +209,10 @@ index a25a686..ec49139 100644
  BASE_DECLARE_FEATURE(kEnableFakeMouseHeuristic);
  
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 76bd429..4b4eb3e 100644
+index c682ea6..5c0ba08 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
-@@ -275,6 +275,7 @@ source_set("gbm_unittests") {
+@@ -277,6 +277,7 @@ source_set("gbm_unittests") {
      # linked only into `events_unittests`, which no job here builds, and the
      # console is the one platform whose touchpad goes through libinput.
      "//ui/events/ozone/evdev/domicile/scroll_accelerator_unittest.cc",

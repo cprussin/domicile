@@ -27,7 +27,7 @@ job builds it on `crux`.
  1 file changed, 104 insertions(+), 29 deletions(-)
 
 diff --git a/content/common/gpu_pre_sandbox_hook_linux.cc b/content/common/gpu_pre_sandbox_hook_linux.cc
-index 44ce77d..02db20c 100644
+index cb0f0a6..db56824 100644
 --- a/content/common/gpu_pre_sandbox_hook_linux.cc
 +++ b/content/common/gpu_pre_sandbox_hook_linux.cc
 @@ -4,6 +4,7 @@
@@ -195,7 +195,7 @@ index 44ce77d..02db20c 100644
    for (const std::string& dir : library_dirs) {
      permissions->push_back(BrokerFilePermission::ReadOnlyRecursive(dir));
    }
-@@ -753,6 +827,7 @@ bool LoadLibrariesForGpu(
+@@ -761,6 +835,7 @@ bool LoadLibrariesForGpu(
          LoadChromecastV4L2Libraries();
        }
      }

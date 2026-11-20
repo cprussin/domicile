@@ -43,7 +43,7 @@ index ff2fa8f..88edc77 100644
      "domicile/native_gesture_sink.h",
      "domicile/scroll_metadata.h",
 diff --git a/ui/events/ozone/evdev/BUILD.gn b/ui/events/ozone/evdev/BUILD.gn
-index 0602b58..c48df6a 100644
+index 9bbb413..738817b 100644
 --- a/ui/events/ozone/evdev/BUILD.gn
 +++ b/ui/events/ozone/evdev/BUILD.gn
 @@ -57,6 +57,8 @@ component("evdev") {

@@ -28,7 +28,7 @@ job builds it on `crux`.
  5 files changed, 38 insertions(+)
 
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 0438014e..ea75289d 100644
+index 6787f09..9d96949 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -8,6 +8,7 @@
@@ -39,7 +39,7 @@ index 0438014e..ea75289d 100644
  #include "components/domicile/browser/shell_source.h"
  #include "components/domicile/browser/shell_url_loader_factory.h"
  #include "components/domicile/common/domicile_scheme.h"
-@@ -6508,6 +6509,15 @@ bool ChromeContentBrowserClient::MayGuestLoadUnsafeScheme(
+@@ -6513,6 +6514,15 @@ bool ChromeContentBrowserClient::MayGuestLoadUnsafeScheme(
    return domicile::MayElectronPageLoad(guest, url);
  }
  
@@ -56,10 +56,10 @@ index 0438014e..ea75289d 100644
  ChromeContentBrowserClient::CreateNonNetworkNavigationURLLoaderFactory(
      const std::string& scheme,
 diff --git a/chrome/browser/chrome_content_browser_client.h b/chrome/browser/chrome_content_browser_client.h
-index fff469e9..4f116407 100644
+index d21939f..ee7561f 100644
 --- a/chrome/browser/chrome_content_browser_client.h
 +++ b/chrome/browser/chrome_content_browser_client.h
-@@ -705,6 +705,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
+@@ -698,6 +698,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
        content::FrameTreeNodeId frame_tree_node_id) override;
    bool MayGuestLoadUnsafeScheme(content::WebContents* guest,
                                   const GURL& url) override;
@@ -69,10 +69,10 @@ index fff469e9..4f116407 100644
    CreateNonNetworkNavigationURLLoaderFactory(
        const std::string& scheme,
 diff --git a/content/browser/renderer_host/navigation_request.cc b/content/browser/renderer_host/navigation_request.cc
-index 04f8a0fe..8f326173 100644
+index 11a7090..69b923b 100644
 --- a/content/browser/renderer_host/navigation_request.cc
 +++ b/content/browser/renderer_host/navigation_request.cc
-@@ -12706,6 +12706,17 @@ NavigationRequest::ComputeCrossOriginIsolationKey() {
+@@ -12819,6 +12819,17 @@ NavigationRequest::ComputeCrossOriginIsolationKey() {
      return std::nullopt;
    }
  
@@ -91,10 +91,10 @@ index 04f8a0fe..8f326173 100644
    // empty CrossOriginIsolationKey.
    // TODO(crbug.com/342365083): Use a CrossOriginIsolationKey when the
 diff --git a/content/public/browser/content_browser_client.cc b/content/public/browser/content_browser_client.cc
-index 8dc86dbd..2667fda6 100644
+index 6fd964c..98abccb 100644
 --- a/content/public/browser/content_browser_client.cc
 +++ b/content/public/browser/content_browser_client.cc
-@@ -1806,6 +1806,12 @@ bool ContentBrowserClient::MayGuestLoadUnsafeScheme(WebContents* guest,
+@@ -1793,6 +1793,12 @@ bool ContentBrowserClient::MayGuestLoadUnsafeScheme(WebContents* guest,
    return false;
  }
  
@@ -108,10 +108,10 @@ index 8dc86dbd..2667fda6 100644
  bool ContentBrowserClient::IsContentSchemeURLNavigationAllowed(
      const GURL& url) {
 diff --git a/content/public/browser/content_browser_client.h b/content/public/browser/content_browser_client.h
-index 34ce001a..dc03ebe4 100644
+index 94f5773..158d77d 100644
 --- a/content/public/browser/content_browser_client.h
 +++ b/content/public/browser/content_browser_client.h
-@@ -3016,6 +3016,15 @@ class CONTENT_EXPORT ContentBrowserClient {
+@@ -3010,6 +3010,15 @@ class CONTENT_EXPORT ContentBrowserClient {
    // schemes only (see NavigationControllerImpl). By default, false.
    virtual bool MayGuestLoadUnsafeScheme(WebContents* guest, const GURL& url);
  

@@ -16,12 +16,12 @@ components/domicile/renderer/electron_preload.h.
 Verified: not built. This repository cannot build Chromium; the engine
 job builds it on `crux`.
 ---
- chrome/renderer/BUILD.gn                          | 1 +
- chrome/renderer/chrome_content_renderer_client.cc | 21 +++++++++++++++++++++
+ chrome/renderer/BUILD.gn                      |  1 +
+ .../chrome_content_renderer_client.cc         | 21 +++++++++++++++++++
  2 files changed, 22 insertions(+)
 
 diff --git a/chrome/renderer/BUILD.gn b/chrome/renderer/BUILD.gn
-index dd79a68..9515718 100644
+index cb340c1..34907c7 100644
 --- a/chrome/renderer/BUILD.gn
 +++ b/chrome/renderer/BUILD.gn
 @@ -154,6 +154,7 @@ static_library("renderer") {
@@ -33,7 +33,7 @@ index dd79a68..9515718 100644
      "//components/facilitated_payments/core/features",
      "//components/feed:feature_list",
 diff --git a/chrome/renderer/chrome_content_renderer_client.cc b/chrome/renderer/chrome_content_renderer_client.cc
-index bd1da01..013598b 100644
+index c048758..8bd462e 100644
 --- a/chrome/renderer/chrome_content_renderer_client.cc
 +++ b/chrome/renderer/chrome_content_renderer_client.cc
 @@ -5,6 +5,7 @@
@@ -44,7 +44,7 @@ index bd1da01..013598b 100644
  
  #include <functional>
  #include <memory>
-@@ -667,6 +668,11 @@ void ChromeContentRendererClient::RenderFrameCreated(
+@@ -691,6 +692,11 @@ void ChromeContentRendererClient::RenderFrameCreated(
  
    new prerender::NoStatePrefetchRenderFrameObserver(render_frame);
  
@@ -56,7 +56,7 @@ index bd1da01..013598b 100644
    auto content_settings_delegate =
        std::make_unique<ChromeContentSettingsAgentDelegate>(render_frame);
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
-@@ -1539,6 +1544,13 @@ void ChromeContentRendererClient::RunScriptsAtDocumentStart(
+@@ -1562,6 +1568,13 @@ ChromeContentRendererClient::CreateSpeechRecognitionClient(
  
  void ChromeContentRendererClient::RunScriptsAtDocumentStart(
      content::RenderFrame* render_frame) {
@@ -70,7 +70,7 @@ index bd1da01..013598b 100644
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
    extensions::ExtensionsRendererClient::Get()->RunScriptsAtDocumentStart(
        render_frame);
-@@ -1548,6 +1561,14 @@ void ChromeContentRendererClient::RunScriptsAtDocumentStart(
+@@ -1571,6 +1584,14 @@ void ChromeContentRendererClient::RunScriptsAtDocumentStart(
  
  void ChromeContentRendererClient::RunScriptsAtDocumentEnd(
      content::RenderFrame* render_frame) {

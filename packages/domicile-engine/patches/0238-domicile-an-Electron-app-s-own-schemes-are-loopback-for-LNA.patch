@@ -26,10 +26,10 @@ job builds it on `crux`.
  1 file changed, 12 insertions(+)
 
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index b60ebe7..dc82727 100644
+index eef7367..c2d1a74 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -2313,6 +2313,18 @@ ChromeContentBrowserClient::DetermineAddressSpaceFromURL(const GURL& url) {
+@@ -2322,6 +2322,18 @@ ChromeContentBrowserClient::DetermineAddressSpaceFromURL(const GURL& url) {
    if (url.SchemeIs(domicile::kDomicileScheme)) {
      return network::mojom::IPAddressSpace::kLoopback;
    }

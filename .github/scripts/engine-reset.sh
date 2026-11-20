@@ -169,7 +169,9 @@ fi
 #
 # - buildtools/reclient_cfgs/reproxy.cfg: configure_reclient_cfgs.py stopped
 #   writing it, and its ignore went, by Chromium 160.
-for stale in buildtools/reclient_cfgs/reproxy.cfg; do
+# - build/util/MINIBRANCH: the `minibranch` hook and its ignore went by
+#   Chromium 160.0.8174.
+for stale in buildtools/reclient_cfgs/reproxy.cfg build/util/MINIBRANCH; do
   [ -f "$CHROMIUM/$stale" ] || continue
   git -C "$CHROMIUM" ls-files --error-unmatch -- "$stale" >/dev/null 2>&1 && continue
   git -C "$CHROMIUM" check-ignore -q -- "$stale" && continue

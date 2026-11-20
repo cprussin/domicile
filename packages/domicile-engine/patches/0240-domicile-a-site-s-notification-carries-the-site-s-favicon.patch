@@ -20,11 +20,11 @@ Verified: not built. This repository cannot build Chromium; the engine
 job builds it on `crux`. guard-notification-site-icon.sh covers it.
 ---
  chrome/browser/notifications/BUILD.gn         |  6 ++
- .../notification_platform_bridge_linux.cc     | 92 +++++++++++++++++--
- 2 files changed, 88 insertions(+), 10 deletions(-)
+ .../notification_platform_bridge_linux.cc     | 90 ++++++++++++++++---
+ 2 files changed, 86 insertions(+), 10 deletions(-)
 
 diff --git a/chrome/browser/notifications/BUILD.gn b/chrome/browser/notifications/BUILD.gn
-index a4f80ee5..9ce57d5a 100644
+index f6ece22..093101c 100644
 --- a/chrome/browser/notifications/BUILD.gn
 +++ b/chrome/browser/notifications/BUILD.gn
 @@ -342,6 +342,12 @@ source_set("impl") {
@@ -41,7 +41,7 @@ index a4f80ee5..9ce57d5a 100644
      }
    }
 diff --git a/chrome/browser/notifications/notification_platform_bridge_linux.cc b/chrome/browser/notifications/notification_platform_bridge_linux.cc
-index 5a681f95..8631a7e1 100644
+index 27e973b..1a5cf31 100644
 --- a/chrome/browser/notifications/notification_platform_bridge_linux.cc
 +++ b/chrome/browser/notifications/notification_platform_bridge_linux.cc
 @@ -44,6 +44,7 @@
@@ -81,7 +81,7 @@ index 5a681f95..8631a7e1 100644
  // Notification on-screen time, in milliseconds.
  const int32_t kExpireTimeout = 25000;
  
-@@ -506,16 +515,36 @@ class NotificationPlatformBridgeLinuxImpl : public NotificationPlatformBridge {
+@@ -518,16 +527,36 @@ class NotificationPlatformBridgeLinuxImpl : public NotificationPlatformBridge {
        }
      }
  
@@ -94,7 +94,7 @@ index 5a681f95..8631a7e1 100644
 -        base::BindOnce(
 -            &NotificationPlatformBridgeLinuxImpl::OnFilesWrittenForDisplay,
 -            weak_factory_.GetWeakPtr(), notification_type, profile_id,
--            is_incognito, std::move(copy_notification), data->dbus_id));
+-            is_incognito, std::move(copy_notification)));
 +    // Domicile's engine fork: a site's notification is drawn with the site's
 +    // favicon in place of the browser's logo, so a page that gives no icon of
 +    // its own is still drawn as the site. A private page's profile keeps no
@@ -113,7 +113,7 @@ index 5a681f95..8631a7e1 100644
 +          base::BindOnce(
 +              &NotificationPlatformBridgeLinuxImpl::OnSiteIconFound,
 +              weak_factory_.GetWeakPtr(), notification_type, profile_id,
-+              is_incognito, std::move(copy_notification), data->dbus_id,
++              is_incognito, std::move(copy_notification),
 +              product_logo.As1xPNGBytes(), notification_icon.As1xPNGBytes(),
 +              notification_image.As1xPNGBytes()),
 +          &site_icon_tracker_);
@@ -121,14 +121,14 @@ index 5a681f95..8631a7e1 100644
 +    }
 +
 +    WriteFilesForDisplay(notification_type, profile_id, is_incognito,
-+                         std::move(copy_notification), data->dbus_id,
++                         std::move(copy_notification),
 +                         product_logo.As1xPNGBytes(),
 +                         notification_icon.As1xPNGBytes(),
 +                         notification_image.As1xPNGBytes());
    }
  
    void Close(Profile* profile, const std::string& notification_id) override {
-@@ -869,6 +898,46 @@ class NotificationPlatformBridgeLinuxImpl : public NotificationPlatformBridge {
+@@ -891,6 +920,44 @@ class NotificationPlatformBridgeLinuxImpl : public NotificationPlatformBridge {
                            COULD_NOT_CONNECT_TO_SIGNALS));
    }
  
@@ -139,14 +139,13 @@ index 5a681f95..8631a7e1 100644
 +      const std::string& profile_id,
 +      bool is_incognito,
 +      std::unique_ptr<message_center::Notification> notification,
-+      uint32_t dbus_id,
 +      scoped_refptr<base::RefCountedMemory> logo,
 +      scoped_refptr<base::RefCountedMemory> icon,
 +      scoped_refptr<base::RefCountedMemory> image,
 +      const favicon_base::FaviconRawBitmapResult& site_icon) {
 +    CHECK_CURRENTLY_ON(content::BrowserThread::UI, base::NotFatalUntil::M161);
 +    WriteFilesForDisplay(notification_type, profile_id, is_incognito,
-+                         std::move(notification), dbus_id,
++                         std::move(notification),
 +                         site_icon.is_valid() ? site_icon.bitmap_data
 +                                              : std::move(logo),
 +                         std::move(icon), std::move(image));
@@ -158,7 +157,6 @@ index 5a681f95..8631a7e1 100644
 +      const std::string& profile_id,
 +      bool is_incognito,
 +      std::unique_ptr<message_center::Notification> notification,
-+      uint32_t dbus_id,
 +      scoped_refptr<base::RefCountedMemory> logo,
 +      scoped_refptr<base::RefCountedMemory> icon,
 +      scoped_refptr<base::RefCountedMemory> image) {
@@ -169,15 +167,15 @@ index 5a681f95..8631a7e1 100644
 +        base::BindOnce(
 +            &NotificationPlatformBridgeLinuxImpl::OnFilesWrittenForDisplay,
 +            weak_factory_.GetWeakPtr(), notification_type, profile_id,
-+            is_incognito, std::move(notification), dbus_id));
++            is_incognito, std::move(notification)));
 +  }
 +
    void OnFilesWrittenForDisplay(
        NotificationHandler::Type notification_type,
        const std::string& profile_id,
-@@ -1704,6 +1773,9 @@ class NotificationPlatformBridgeLinuxImpl : public NotificationPlatformBridge {
- 
-   UnorderedUniqueSet<NotificationData> notifications_;
+@@ -1772,6 +1839,9 @@ class NotificationPlatformBridgeLinuxImpl : public NotificationPlatformBridge {
+   // Identifies the next "Notify" call (see NotificationData).
+   uint64_t next_notify_request_id_ = 1;
  
 +  // Domicile's engine fork: the favicon lookups for sites' notifications.
 +  base::CancelableTaskTracker site_icon_tracker_;

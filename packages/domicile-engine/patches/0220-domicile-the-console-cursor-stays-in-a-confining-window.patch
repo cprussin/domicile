@@ -28,7 +28,7 @@ job builds it on `crux`.
  7 files changed, 87 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 96576bc..9efe322 100644
+index c1c5e6c..71e1ab2 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -11,6 +11,7 @@
@@ -39,7 +39,7 @@ index 96576bc..9efe322 100644
  #include "chrome/browser/domicile/domicile_pointer_warp.h"
  #include "chrome/browser/domicile/domicile_shell_fetch.h"
  #include "chrome/browser/domicile/domicile_tab_helpers.h"
-@@ -573,6 +574,13 @@ void PopulateChromeFrameBinders(
+@@ -577,6 +578,13 @@ void PopulateChromeFrameBinders(
                      content::GetUIThreadTaskRunner({}),
                      base::BindRepeating(&domicile::WarpPointerIn,
                                          frame->GetGlobalId())),
@@ -54,7 +54,7 @@ index 96576bc..9efe322 100644
                  // theme is the process's color scheme, which is what a site's
                  // `prefers-color-scheme` reads. Bound here for the keymap's
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index a6174d8..664b302 100644
+index eed0f63..7be325e 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -61,6 +61,8 @@ source_set("gbm") {
@@ -218,10 +218,10 @@ index 4ebcb53..0d8a21c 100644
    // has the displays, so `InitScreen` and the device lists come first.
    void SetDomicileInputConfig(const std::string& config) override {
 diff --git a/ui/ozone/public/ozone_platform.cc b/ui/ozone/public/ozone_platform.cc
-index a86c32e..e6e372e 100644
+index 602e97b..5382371 100644
 --- a/ui/ozone/public/ozone_platform.cc
 +++ b/ui/ozone/public/ozone_platform.cc
-@@ -140,6 +140,12 @@ base::flat_map<int64_t, std::string> OzonePlatform::GetDomicileConnectors()
+@@ -136,6 +136,12 @@ base::flat_map<int64_t, std::string> OzonePlatform::GetDomicileConnectors()
    return {};
  }
  
@@ -235,7 +235,7 @@ index a86c32e..e6e372e 100644
      const {
    return {};
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index 2ddad73..b1d4749 100644
+index beb6456..385de5a 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
 @@ -24,6 +24,7 @@
@@ -246,7 +246,7 @@ index 2ddad73..b1d4749 100644
  #include "ui/gfx/geometry/size.h"
  #include "ui/gfx/native_ui_types.h"
  #include "ui/platform_window/platform_window.h"
-@@ -544,6 +545,14 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+@@ -531,6 +532,14 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
    // the platform's own devices. A headless desk and DRM: a nested desktop's
    // input is the host session's.
    virtual void InjectDomicileInput(const DomicileDeskInput& input) {}
@@ -261,6 +261,3 @@ index 2ddad73..b1d4749 100644
    // DOMICILE: what the compositor says is on one of the desktop's clipboards.
    //
    // THE BROWSER IS TOLD RATHER THAN ASKED. The compositor reads every
--- 
-2.43.0
-

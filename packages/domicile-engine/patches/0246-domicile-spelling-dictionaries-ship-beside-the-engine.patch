@@ -98,6 +98,3 @@ index b2e5bf2..a1225f2 100644
        break;
      case chrome::DIR_COMPONENTS:
        if (!GetComponentDirectory(&cur)) {
--- 
-2.43.0
-

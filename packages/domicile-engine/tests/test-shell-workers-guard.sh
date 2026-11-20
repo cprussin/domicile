@@ -74,12 +74,16 @@ expect "and says the shell never ran" yes "$(says "" "never ran")"
 
 echo
 echo "what it guards"
-# The hunk's context names the function, so the factory is added inside it.
-if cat "$ENGINE"/patches/*.patch | awk '
-  /^@@|^diff / { inside = 0 }
-  /^ +RegisterNonNetworkWorkerMainResourceURLLoaderFactories\(/ { inside = 1 }
-  inside && /^\+ +domicile::ShellURLLoaderFactory::Create/ { found = 1 }
-  END { exit !found }'; then
+# A patch names the function in its message and adds the factory in its file.
+# Its hunk's context can't say which function: that depends on how far the
+# insertion sits from the signature.
+if (for patch in "$ENGINE"/patches/*.patch; do
+  awk '
+    /ChromeContentBrowserClient::RegisterNonNetworkWorkerMainResourceURLLoaderFactories/ { named = 1 }
+    /^diff / { inside = ($0 ~ /chrome\/browser\/chrome_content_browser_client\.cc/) }
+    inside && /^\+ +domicile::ShellURLLoaderFactory::Create/ { added = 1 }
+    END { exit !(named && added) }' "$patch" && exit 0
+done; exit 1); then
   printf '  ok    %s\n' "the worker main-script loaders serve domicile://"
 else
   printf '  FAIL  %s\n    %s\n' "the worker main-script loaders serve domicile://" \

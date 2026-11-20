@@ -24,11 +24,11 @@ job builds it on `crux`.
  3 files changed, 20 insertions(+), 5 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/gpu/hardware_display_controller.cc b/ui/ozone/platform/drm/gpu/hardware_display_controller.cc
-index 3a9e8d8..c86d314 100644
+index 382ae44..e940fca 100644
 --- a/ui/ozone/platform/drm/gpu/hardware_display_controller.cc
 +++ b/ui/ozone/platform/drm/gpu/hardware_display_controller.cc
-@@ -247,7 +247,12 @@ void HardwareDisplayController::SchedulePageFlip(
-   CHECK(!page_flip_request_, base::NotFatalUntil::M163);
+@@ -249,7 +249,12 @@ void HardwareDisplayController::SchedulePageFlip(
+   DCHECK(!page_flip_request_);
    TRACE_EVENT0("drm", "HDC::SchedulePageFlip");
    scoped_refptr<PageFlipRequest> page_flip_request =
 -      base::MakeRefCounted<PageFlipRequest>(GetRefreshInterval());

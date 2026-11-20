@@ -35,10 +35,10 @@ Claude-Session: https://claude.ai/code/session_01LWjcAMeLzLP3yz4yH2gzBk
  2 files changed, 26 insertions(+), 4 deletions(-)
 
 diff --git a/cc/tiles/tile_manager.cc b/cc/tiles/tile_manager.cc
-index a58596e..23472ad 100644
+index 6b8eed0..eaaf894 100644
 --- a/cc/tiles/tile_manager.cc
 +++ b/cc/tiles/tile_manager.cc
-@@ -1091,6 +1091,19 @@ TileManager::PrioritizedWorkToSchedule TileManager::AssignGpuMemoryToTiles() {
+@@ -1006,6 +1006,19 @@ TileManager::PrioritizedWorkToSchedule TileManager::AssignGpuMemoryToTiles() {
        std::move(eviction_priority_queue), hard_memory_limit, &memory_usage,
        &work_to_schedule.required_for_draw_tile_state_changed);
  
@@ -59,10 +59,10 @@ index a58596e..23472ad 100644
    // couldn't go past even the NOW bin, this means we have evicted resources
    // from all tiles with a lower priority while we still might have resources
 diff --git a/cc/trees/layer_tree_host_impl.cc b/cc/trees/layer_tree_host_impl.cc
-index 821fdc4..eb4cc0a 100644
+index fe9f16d..cd7d97a 100644
 --- a/cc/trees/layer_tree_host_impl.cc
 +++ b/cc/trees/layer_tree_host_impl.cc
-@@ -1947,9 +1947,16 @@ void LayerTreeHostImpl::UpdateTileManagerMemoryPolicy(
+@@ -1979,9 +1979,16 @@ void LayerTreeHostImpl::UpdateTileManagerMemoryPolicy(
  
    global_tile_state_.hard_memory_limit_in_bytes = 0;
    global_tile_state_.soft_memory_limit_in_bytes = 0;
@@ -80,7 +80,7 @@ index 821fdc4..eb4cc0a 100644
      global_tile_state_.soft_memory_limit_in_bytes =
          (static_cast<int64_t>(global_tile_state_.hard_memory_limit_in_bytes) *
           settings_.max_memory_for_prepaint_percentage) /
-@@ -1958,10 +1965,10 @@ void LayerTreeHostImpl::UpdateTileManagerMemoryPolicy(
+@@ -1990,10 +1997,10 @@ void LayerTreeHostImpl::UpdateTileManagerMemoryPolicy(
    global_tile_state_.memory_limit_policy =
        ManagedMemoryPolicy::PriorityCutoffToTileMemoryLimitPolicy(
            visible_ ? policy.priority_cutoff_when_visible
@@ -93,7 +93,7 @@ index 821fdc4..eb4cc0a 100644
      // If |global_tile_state_.hard_memory_limit_in_bytes| is greater than 0, we
      // consider our contexts visible. Notify the contexts here. We handle
      // becoming invisible in NotifyAllTileTasksComplete to avoid interrupting
-@@ -2253,7 +2260,9 @@ void LayerTreeHostImpl::NotifyAllTileTasksCompleted() {
+@@ -2285,7 +2292,9 @@ void LayerTreeHostImpl::NotifyAllTileTasksCompleted() {
  
    // The tile tasks started by the most recent call to PrepareTiles have
    // completed. Now is a good time to free resources if necessary.
@@ -104,6 +104,3 @@ index 821fdc4..eb4cc0a 100644
      // Free image decode controller resources before notifying the
      // contexts of visibility change. This ensures that the imaged decode
      // controller has released all Skia refs at the time Skia's cleanup
--- 
-2.43.0
-

@@ -210,10 +210,10 @@ index 0d8a21c..a84ee16 100644
      if (window_manager_) {
        window_manager_->set_desk_host(host);
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index b1d4749..383ed1e 100644
+index 385de5a..cd496cf 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
-@@ -523,6 +523,13 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+@@ -510,6 +510,13 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
    // (docs/architecture/ONE-PAGE-FOR-THE-DESK.md). `gfx::kNullAcceleratedWidget`
    // gives each window its own events again. DRM only, like the layout above.
    virtual void SetDomicileDeskHost(gfx::AcceleratedWidget host) {}

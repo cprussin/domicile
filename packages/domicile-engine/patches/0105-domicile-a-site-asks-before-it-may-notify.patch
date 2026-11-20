@@ -29,10 +29,10 @@ job builds it on `crux`.
  4 files changed, 22 insertions(+), 7 deletions(-)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index fa0395a..8a7a34c 100644
+index 2a8f8b5..86df428 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
-@@ -1651,14 +1651,12 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
+@@ -1652,14 +1652,12 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
    // And every <webview> a tab of one window, to chrome.tabs, before an
    // extension's first call can ask.
    domicile::StartDesk(profile);
@@ -52,7 +52,7 @@ index fa0395a..8a7a34c 100644
    for (auto& chrome_extra_part : chrome_extra_parts_) {
      chrome_extra_part->PostProfileInit(profile, is_initial_profile);
 diff --git a/chrome/browser/notifications/BUILD.gn b/chrome/browser/notifications/BUILD.gn
-index e382933..884370a 100644
+index 18de59a..a447581 100644
 --- a/chrome/browser/notifications/BUILD.gn
 +++ b/chrome/browser/notifications/BUILD.gn
 @@ -205,6 +205,10 @@ source_set("impl") {
@@ -94,10 +94,10 @@ index a2b8508..5ee2163 100644
    // Extensions can declare the "notifications" permission in their manifest
    // that also grant permission to use the Web Notification API.
 diff --git a/chrome/browser/notifications/notification_platform_bridge_linux.cc b/chrome/browser/notifications/notification_platform_bridge_linux.cc
-index c4b8e61..6d82b7f 100644
+index d0fd125..9810511 100644
 --- a/chrome/browser/notifications/notification_platform_bridge_linux.cc
 +++ b/chrome/browser/notifications/notification_platform_bridge_linux.cc
-@@ -308,7 +308,11 @@ bool ShouldMarkPersistentNotificationsAsCritical(
+@@ -317,7 +317,11 @@ bool ShouldMarkPersistentNotificationsAsCritical(
    // For this reason, we mark a notification that should not time out as
    // critical unless we are on KDE Plasma or Raspberry Pi (wf-panel-pi)
    // which follows the notification spec.

@@ -24,10 +24,10 @@ before). Not built with the patch: the engine job builds it on crux.
  1 file changed, 9 insertions(+)
 
 diff --git a/third_party/blink/renderer/core/frame/local_frame.cc b/third_party/blink/renderer/core/frame/local_frame.cc
-index 64d0e9b..15f0b59 100644
+index de63a63..a9d1384 100644
 --- a/third_party/blink/renderer/core/frame/local_frame.cc
 +++ b/third_party/blink/renderer/core/frame/local_frame.cc
-@@ -2632,6 +2632,15 @@ void LocalFrame::WasShown() {
+@@ -2652,6 +2652,15 @@ void LocalFrame::WasShown() {
    hidden_ = false;
    if (LocalFrameView* frame_view = View()) {
      frame_view->ScheduleAnimation();
@@ -39,7 +39,7 @@ index 64d0e9b..15f0b59 100644
 +    // as the PDF viewer's page does after a tab switch.
 +    frame_view->UpdateRenderThrottlingStatus(
 +        frame_view->IsHiddenForThrottling(), frame_view->IsSubtreeThrottled(),
-+        frame_view->IsDisplayLocked(), /*recurse=*/true);
++        frame_view->IsDisplayLockThrottled(), /*recurse=*/true);
    }
  
    if (auto* content_capture_manager = GetOrResetContentCaptureManager()) {

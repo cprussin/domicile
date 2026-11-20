@@ -24,15 +24,10 @@ job builds it on `crux`.
  1 file changed, 8 insertions(+)
 
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index ea75289..a9983dd 100644
+index 9d96949..c7b8cbd 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -6640,16 +6640,24 @@ void ChromeContentBrowserClient::
-     RegisterNonNetworkWorkerMainResourceURLLoaderFactories(
-         content::BrowserContext* browser_context,
-         const std::optional<url::Origin>& request_initiator,
-         network::mojom::RequestDestination request_destination,
-         NonNetworkURLLoaderFactoryMap* factories) {
+@@ -6650,6 +6650,14 @@ void ChromeContentBrowserClient::
    CHECK(browser_context, base::NotFatalUntil::M163);
    CHECK(factories, base::NotFatalUntil::M163);
  
@@ -47,8 +42,3 @@ index ea75289..a9983dd 100644
  #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
      BUILDFLAG(IS_CHROMEOS)
    if (content::AreIsolatedWebAppsEnabled(browser_context) &&
-       !browser_context->ShutdownStarted()) {
-     std::optional<url::Origin> app_origin;
-     // The IsolatedWebAppURLLoaderFactory CHECKs that app_origin is an IWA
-     // origin if it is set. We only care about enforcing same-origin checks
-     // for IWA-to-IWA cross-origin requests (to prevent asset exfiltration),

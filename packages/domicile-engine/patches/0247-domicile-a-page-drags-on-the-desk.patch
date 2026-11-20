@@ -37,7 +37,7 @@ job builds it on `crux`.
  4 files changed, 25 insertions(+), 3 deletions(-)
 
 diff --git a/ui/views/BUILD.gn b/ui/views/BUILD.gn
-index 7e3d6beb..b6942968 100644
+index 7e3d6be..b694296 100644
 --- a/ui/views/BUILD.gn
 +++ b/ui/views/BUILD.gn
 @@ -948,7 +948,11 @@ component("views") {
@@ -54,7 +54,7 @@ index 7e3d6beb..b6942968 100644
          public += [
            "widget/desktop_aura/desktop_drag_drop_client_win.h",
 diff --git a/ui/views/widget/desktop_aura/desktop_drag_drop_client_ozone.cc b/ui/views/widget/desktop_aura/desktop_drag_drop_client_ozone.cc
-index f5508aef..28578868 100644
+index 03f0a87..8b0f465 100644
 --- a/ui/views/widget/desktop_aura/desktop_drag_drop_client_ozone.cc
 +++ b/ui/views/widget/desktop_aura/desktop_drag_drop_client_ozone.cc
 @@ -15,6 +15,7 @@
@@ -65,7 +65,7 @@ index f5508aef..28578868 100644
  #include "ui/aura/env.h"
  #include "ui/aura/window.h"
  #include "ui/aura/window_tracker.h"
-@@ -418,8 +419,9 @@ std::unique_ptr<ui::DropTargetEvent>
+@@ -432,8 +433,9 @@ std::unique_ptr<ui::DropTargetEvent>
  DesktopDragDropClientOzone::UpdateTargetAndCreateDropEvent() {
    CHECK(data_to_drop_, base::NotFatalUntil::M163);
  
@@ -78,10 +78,10 @@ index f5508aef..28578868 100644
    if (!window) {
      ResetDragDropTarget();
 diff --git a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
-index 92613650..c3093476 100644
+index 6b618c5..0d119e0 100644
 --- a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
 +++ b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
-@@ -392,6 +392,16 @@ DesktopWindowTreeHostPlatform::CreateTooltip() {
+@@ -397,6 +397,16 @@ DesktopWindowTreeHostPlatform::CreateTooltip() {
  std::unique_ptr<aura::client::DragDropClient>
  DesktopWindowTreeHostPlatform::CreateDragDropClient() {
    ui::WmDragHandler* drag_handler = ui::GetWmDragHandler(*(platform_window()));
@@ -99,7 +99,7 @@ index 92613650..c3093476 100644
  #if BUILDFLAG(IS_LINUX)
        std::make_unique<DesktopDragDropClientOzoneLinux>(window(), drag_handler);
 diff --git a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
-index 8fc30589..f7ad8596 100644
+index 8fc3058..f7ad859 100644
 --- a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
 +++ b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
 @@ -23,6 +23,7 @@

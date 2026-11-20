@@ -19,16 +19,16 @@ from the EDID is HDR10, which happens only on ChromeOS behind a flag.
 Verified: not built. This repository cannot build Chromium; the engine
 job builds it on `crux`.
 ---
- ui/display/mojom/display_configuration_params.mojom           |  2 ++
- ui/display/mojom/display_configuration_params_mojom_traits.cc |  1 +
- ui/display/mojom/display_configuration_params_mojom_traits.h  |  5 +++++
- ui/display/types/display_configuration_params.cc              |  7 +++++--
- ui/display/types/display_configuration_params.h               |  3 +++
- ui/ozone/platform/drm/BUILD.gn                                |  2 ++
- ui/ozone/platform/drm/gpu/drm_display.cc                      | 89 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++------------------------------
- ui/ozone/platform/drm/gpu/drm_display.h                       | 12 ++++++++++++
- ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc          |  9 +++++++++
- ui/ozone/public/ozone_platform.h                              | 23 +++++++++++++++++++++++
+ .../mojom/display_configuration_params.mojom  |  2 +
+ ...splay_configuration_params_mojom_traits.cc |  1 +
+ ...isplay_configuration_params_mojom_traits.h |  5 ++
+ .../types/display_configuration_params.cc     |  7 +-
+ .../types/display_configuration_params.h      |  3 +
+ ui/ozone/platform/drm/BUILD.gn                |  2 +
+ ui/ozone/platform/drm/gpu/drm_display.cc      | 89 ++++++++++++-------
+ ui/ozone/platform/drm/gpu/drm_display.h       | 12 +++
+ .../drm/gpu/drm_gpu_display_manager.cc        |  9 ++
+ ui/ozone/public/ozone_platform.h              | 23 +++++
  10 files changed, 121 insertions(+), 32 deletions(-)
 
 diff --git a/ui/display/mojom/display_configuration_params.mojom b/ui/display/mojom/display_configuration_params.mojom
@@ -117,7 +117,7 @@ index c1aad7a..afdb763 100644
  
  }  // namespace display
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 00ebc7e..a6174d8 100644
+index f79f43b..eed0f63 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -73,6 +73,8 @@ source_set("gbm") {
@@ -284,10 +284,10 @@ index bc5d05b..ac6cc26 100644
    std::optional<uint16_t> vsync_rate_min_from_edid_;
    std::optional<TileProperty> tile_property_;
 diff --git a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
-index 103aed3..98ef71c 100644
+index e6d09ee..7180ca4 100644
 --- a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
 +++ b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
-@@ -573,6 +573,7 @@ bool DrmGpuDisplayManager::ConfigureDisplays(
+@@ -597,6 +597,7 @@ bool DrmGpuDisplayManager::ConfigureDisplays(
          }
          out_requests.emplace_back(request.id, request.origin, out_mode.get(),
                                    request.enable_vrr);
@@ -295,7 +295,7 @@ index 103aed3..98ef71c 100644
        } else {
          out_requests.emplace_back(request);
        }
-@@ -611,6 +612,14 @@ bool DrmGpuDisplayManager::ConfigureDisplays(
+@@ -635,6 +636,14 @@ bool DrmGpuDisplayManager::ConfigureDisplays(
        for (const auto& controller : controllers_to_configure) {
          FindDisplay(controller.display_id)->SetOrigin(controller.origin);
        }
@@ -311,7 +311,7 @@ index 103aed3..98ef71c 100644
    } else {
      const std::string test_modest_outcome_histogram =
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index 5fbac18..2ddad73 100644
+index cfdb46b..beb6456 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
 @@ -107,6 +107,21 @@ struct DomicileDisplayLayout {

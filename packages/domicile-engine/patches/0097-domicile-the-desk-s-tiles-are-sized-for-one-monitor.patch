@@ -72,10 +72,10 @@ index 3471208..8487e82 100644
    gfx::OverlayTransform display_transform_hint = gfx::OVERLAY_TRANSFORM_NONE;
    gfx::Rect device_viewport_rect;
 diff --git a/cc/trees/layer_tree_host.cc b/cc/trees/layer_tree_host.cc
-index 0ead33d..c278764 100644
+index 649d5b2..c5d9d67 100644
 --- a/cc/trees/layer_tree_host.cc
 +++ b/cc/trees/layer_tree_host.cc
-@@ -1725,6 +1725,19 @@ void LayerTreeHost::SetDomicileTileBytes(size_t bytes) {
+@@ -1727,6 +1727,19 @@ void LayerTreeHost::SetDomicileTileBytes(size_t bytes) {
    SetNeedsCommit();
  }
  
@@ -96,7 +96,7 @@ index 0ead33d..c278764 100644
      const gfx::DisplayColorSpaces& display_color_spaces) {
    if (pending_commit_state()->display_color_spaces == display_color_spaces)
 diff --git a/cc/trees/layer_tree_host.h b/cc/trees/layer_tree_host.h
-index dec15b4..acf29cd 100644
+index 3965343..d633d91 100644
 --- a/cc/trees/layer_tree_host.h
 +++ b/cc/trees/layer_tree_host.h
 @@ -700,6 +700,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostDelegate {
@@ -110,10 +110,10 @@ index dec15b4..acf29cd 100644
    bool HasCompositorDrivenScrollAnimationForTesting() const {
      DCHECK(IsMainThread());
 diff --git a/third_party/blink/renderer/platform/widget/widget_base.cc b/third_party/blink/renderer/platform/widget/widget_base.cc
-index 87b48a9..1328838 100644
+index c36e698..8b27a28 100644
 --- a/third_party/blink/renderer/platform/widget/widget_base.cc
 +++ b/third_party/blink/renderer/platform/widget/widget_base.cc
-@@ -2039,6 +2039,8 @@ void WidgetBase::UpdateDomicileDisplayRegions() {
+@@ -2043,6 +2043,8 @@ void WidgetBase::UpdateDomicileDisplayRegions() {
    }
    LayerTreeHost()->SetDomicileDisplayRegions(cc::DomicileDisplayRegionsOf(
        displays, widget_screen_rect_.origin(), GetOriginalDeviceScaleFactor()));

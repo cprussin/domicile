@@ -20,7 +20,7 @@ job builds it on `crux`.
  2 files changed, 11 insertions(+), 2 deletions(-)
 
 diff --git a/chrome/browser/performance_manager/BUILD.gn b/chrome/browser/performance_manager/BUILD.gn
-index 30a7b16..f24996d 100644
+index 3cc792d..6091825 100644
 --- a/chrome/browser/performance_manager/BUILD.gn
 +++ b/chrome/browser/performance_manager/BUILD.gn
 @@ -176,6 +176,7 @@ source_set("impl") {

@@ -54,7 +54,7 @@ index 278a7ef..88474de 100644
  }
  
 diff --git a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
-index be3b4bc..1180c6b 100644
+index a13d8c1..bc62c00 100644
 --- a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
 +++ b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
 @@ -6,6 +6,7 @@
@@ -65,7 +65,7 @@ index be3b4bc..1180c6b 100644
  #include "base/trace_event/trace_event.h"
  #include "ui/aura/client/cursor_shape_client.h"
  #include "ui/aura/window_event_dispatcher.h"
-@@ -32,10 +33,12 @@ DesktopNativeCursorManager::~DesktopNativeCursorManager() {
+@@ -33,10 +34,12 @@ DesktopNativeCursorManager::~DesktopNativeCursorManager() {
  
  void DesktopNativeCursorManager::AddHost(aura::WindowTreeHost* host) {
    hosts_.insert(host);
@@ -78,7 +78,7 @@ index be3b4bc..1180c6b 100644
  }
  
  void DesktopNativeCursorManager::SetDisplay(
-@@ -126,6 +129,12 @@ void DesktopNativeCursorManager::OnThemeLoaded() {
+@@ -128,6 +131,12 @@ void DesktopNativeCursorManager::OnThemeLoaded() {
    Redraw();
  }
  

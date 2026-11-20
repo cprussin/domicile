@@ -9,8 +9,10 @@ until a new window opened, and the journal (ERROR only) said nothing:
 the cursor loader drew for a display at scale 1 and its other lines are
 quieter than the engine logs.
 
-- wm::CursorLoader::SetDisplay logs the display, scale and turn it
-  draws for (VLOG 1), and at ERROR when the display is not valid.
+- views::DesktopNativeCursorManager::SetDisplay logs the display, scale
+  and turn the pointer is drawn for (VLOG 1), and at ERROR when the
+  display is not valid. wm::CursorLoader only takes the rotation and
+  scale since Chromium 160.0.8174.0.
 - wm::CursorLoader logs at ERROR when the platform has no cursor and it
   falls back to Chromium's art, with the scale.
 - views::DesktopNativeCursorManager logs at ERROR when a cursor changes
@@ -19,12 +21,12 @@ quieter than the engine logs.
 Verified: not built. This repository cannot build Chromium; the engine
 job builds it on crux.
 ---
- .../widget/desktop_aura/desktop_native_cursor_manager.cc |  5 +++++
- ui/wm/core/cursor_loader.cc                              | 16 +++++++++++++++-
+ .../desktop_native_cursor_manager.cc             | 16 ++++++++++++++++
+ ui/wm/core/cursor_loader.cc                      |  5 ++++-
  2 files changed, 20 insertions(+), 1 deletion(-)
 
 diff --git a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
-index 1180c6b5..741c8855 100644
+index bc62c00..497b602 100644
 --- a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
 +++ b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
 @@ -5,6 +5,7 @@
@@ -35,7 +37,25 @@ index 1180c6b5..741c8855 100644
  #include "base/notimplemented.h"
  #include "base/task/sequenced_task_runner.h"
  #include "base/trace_event/trace_event.h"
-@@ -58,6 +59,10 @@ void DesktopNativeCursorManager::SetCursor(
+@@ -45,6 +46,17 @@ void DesktopNativeCursorManager::RemoveHost(aura::WindowTreeHost* host) {
+ void DesktopNativeCursorManager::SetDisplay(
+     const display::Display& display,
+     wm::NativeCursorManagerDelegate* delegate) {
++  // Domicile: the lines to look for when the pointer is the wrong size. A
++  // display that is not valid is one a hotplug passed mid-change; the pointer
++  // is drawn at its scale until the desk's host is fitted again.
++  if (display.is_valid()) {
++    VLOG(1) << "domicile: the pointer is drawn for display " << display.id()
++            << " at scale " << display.device_scale_factor() << ", turned "
++            << display.panel_rotation();
++  } else {
++    LOG(ERROR) << "domicile: the pointer is drawn for no display, at scale "
++               << display.device_scale_factor();
++  }
+   if (cursor_loader_.UpdateRotationAndScale(display.panel_rotation(),
+                                             display.device_scale_factor())) {
+     SetCursor(delegate->GetCursor(), delegate);
+@@ -60,6 +72,10 @@ void DesktopNativeCursorManager::SetCursor(
    delegate->CommitCursor(new_cursor);
  
    if (delegate->IsCursorVisible()) {
@@ -47,28 +67,10 @@ index 1180c6b5..741c8855 100644
        host->SetCursor(new_cursor);
      }
 diff --git a/ui/wm/core/cursor_loader.cc b/ui/wm/core/cursor_loader.cc
-index 97aedd97..bb714a77 100644
+index 52cc52d..d11f13b 100644
 --- a/ui/wm/core/cursor_loader.cc
 +++ b/ui/wm/core/cursor_loader.cc
-@@ -62,6 +62,17 @@ bool CursorLoader::SetDisplay(const display::Display& display) {
-   rotation_ = rotation;
-   scale_ = scale;
- 
-+  // Domicile: the lines to look for when the pointer is the wrong size. A
-+  // display that is not valid is one a hotplug passed mid-change; the pointer
-+  // is drawn at its scale until the desk's host is fitted again.
-+  if (display.is_valid()) {
-+    VLOG(1) << "domicile: the pointer is drawn for display " << display.id()
-+            << " at scale " << scale_ << ", turned " << rotation_;
-+  } else {
-+    LOG(ERROR) << "domicile: the pointer is drawn for no display, at scale "
-+               << scale_;
-+  }
-+
-   UnloadCursors();
-   return true;
- }
-@@ -217,7 +228,10 @@ scoped_refptr<ui::PlatformCursor> CursorLoader::CursorFromType(
+@@ -216,7 +216,10 @@ scoped_refptr<ui::PlatformCursor> CursorLoader::CursorFromType(
      // The cursor may fail to load if the cursor theme has just been reset.
      // We will be notified when the theme is loaded, but at this time we have to
      // fall back to the assets.
@@ -80,6 +82,3 @@ index 97aedd97..bb714a77 100644
    }
  
    // Loads the default Aura cursor bitmap for the cursor type. Falls back on
--- 
-2.43.0
-
