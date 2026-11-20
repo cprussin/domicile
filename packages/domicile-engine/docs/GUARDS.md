@@ -172,6 +172,7 @@ Headless.
 | `guard-webview-paused.sh` | a window whose page is paused on a `confirm()` slides and shrinks at the frame rate of one whose page runs (patch 0155) |
 | `guard-animation-main-frames.sh` | a composited transform slide runs without a main frame for each of its frames: the field trial testing config has no `CompositedAnimationsForceMainFrames` study (patch 0196); `NEGATIVE=1` forces them and must see one a frame |
 | `guard-webview-scale-animation.sh` | a window an animation scales keeps its page's raster scale, so the page is not rastered again each frame (patch 0233); `NEGATIVE=1` scales in static steps and must see a new surface each step |
+| `guard-webview-reshown-tiles.sh` | a window hidden and shown again draws from the tiles its page kept, so the page is not rastered again (patch 0252); `NEGATIVE=1` shows it again at a new scale and must see rasters |
 | `guard-webview-crash.sh` | a page whose renderer crashes sets `renderProcessGone` to `crashed`, its view draws nothing over the shell, and `reload()` brings it back (patch 0124) |
 | `guard-webview-permissions.sh` | a page's `getUserMedia` asks the shell over `domicile-permission-request`; the shell's allow reaches the page and is stored for the site (patch 0103) |
 | `guard-webview-media-devices.sh` | a `<webview>` lists the fake cameras, and `setMediaDevice` puts the chosen one first, the camera a page that names none gets (patch 0117) |
