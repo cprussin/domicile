@@ -62,6 +62,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 ### Fixes
 
 - The pointer keeps your cursor theme and size after you undock.
+- Slack's notifications show their Reply button instead of an empty row.
 - Switching workspaces and tabs is smoother on battery: a window you come back to draws what it kept instead of drawing its whole page again.
 - Wi-Fi's Disconnect and a saved network's Forget are red, and a row's folded details sit tighter around their buttons.
 - You can drag text, images and links within and between pages.

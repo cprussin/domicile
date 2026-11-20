@@ -110,6 +110,15 @@ describe(createNotification, () => {
     });
   });
 
+  it("labels a reply with no placeholder Reply, as macOS does", async () => {
+    const { calls, Notification, settle } = setUp();
+
+    new Notification({ hasReply: true, title: "Ping" }).show();
+    await settle();
+
+    expect(calls[0]?.actions).toEqual(["default", "", "inline-reply", "Reply"]);
+  });
+
   it("tells the app what the user did with it", async () => {
     const { Notification, settle, signals } = setUp();
     const notification = new Notification({ title: "Ping" });

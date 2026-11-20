@@ -76,6 +76,8 @@ const URGENCY = { critical: 2, low: 0, normal: 1 } as const;
 /** The click on the notification itself, as Electron's Linux build names it. */
 const DEFAULT_ACTION = "default";
 const REPLY_ACTION = "inline-reply";
+/** A reply's label when the app sets no placeholder: the button macOS shows. */
+const REPLY_LABEL = "Reply";
 
 /**
  * Makes the `Notification` class for the app `appId` (its desktop entry's
@@ -195,7 +197,14 @@ export const createNotification = (
         DEFAULT_ACTION,
         "",
         ...this.actions.flatMap((action, index) => [`${index}`, action.text]),
-        ...(this.hasReply ? [REPLY_ACTION, this.replyPlaceholder] : []),
+        ...(this.hasReply
+          ? [
+              REPLY_ACTION,
+              this.replyPlaceholder === ""
+                ? REPLY_LABEL
+                : this.replyPlaceholder,
+            ]
+          : []),
       ],
       appName: app.name,
       body: this.subtitle === "" ? this.body : `${this.subtitle}\n${this.body}`,

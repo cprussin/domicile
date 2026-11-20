@@ -92,8 +92,8 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key)
 - **Inline reply.** The server advertises `inline-reply`. An `inline-reply`
   action stays in `actions`, so the engine carries it unchanged. The shell
   draws it as a text field labeled with the action's label, with a send
-  button. Sending emits `NotificationReplied` and closes the notification as
-  an action does.
+  button. Manganese labels an empty one "Reply". Sending emits
+  `NotificationReplied` and closes the notification as an action does.
   - The `x-kde-reply-placeholder-text` hint is dropped: the field's label is
     its placeholder.
   - Portal notifications have no reply field.
