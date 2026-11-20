@@ -32,6 +32,7 @@ import userEvent from "@testing-library/user-event";
 
 import { token } from "../../styled-system/tokens";
 import { Button } from "../Button/Button";
+import { ModalDialog } from "../ModalDialog/ModalDialog";
 import { DisplayProvider } from "../Screen/DisplayProvider";
 import type { DisplaySource } from "../Screen/display-source";
 import type { DialogDesktop, PortalDialogsDesktop } from "./PortalDialogs";
@@ -2494,6 +2495,36 @@ describe("PortalDialogs", () => {
         ).toBeInTheDocument();
       });
 
+      it("draws over a dialog already up, such as the launcher", async () => {
+        const host = new FakeHost();
+        render(
+          <>
+            <ModalDialog open title="Launcher">
+              <input aria-label="Search" />
+            </ModalDialog>
+            <PortalDialogs domicile={host.domicile} />
+          </>,
+        );
+        host.push([frozen(1, "screenshot")]);
+        await userEvent.click(
+          await screen.findByRole("button", { name: "Select on screen" }),
+        );
+        const picker = screen.getByRole("application", {
+          name: "Drag to select an area",
+        });
+        const launcher = screen.getByRole("dialog", {
+          hidden: true,
+          name: "Launcher",
+        });
+
+        // Last on the body, so it stacks above the launcher's layer.
+        expect(picker.parentElement).toBe(document.body);
+        expect(
+          launcher.compareDocumentPosition(picker) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+      });
+
       it("fades out on Escape, then shows the dialog", async () => {
         const host = new FakeHost();
         render(<PortalDialogs domicile={host.domicile} />);
@@ -2501,11 +2532,11 @@ describe("PortalDialogs", () => {
         await userEvent.click(
           screen.getByRole("button", { name: "Select on screen" }),
         );
-        await userEvent.keyboard("{Escape}");
+        // Taken while up: the dialog back over it hides it from the tree.
         const picker = screen.getByRole("application", {
-          hidden: true,
           name: "Drag to select an area",
         });
+        await userEvent.keyboard("{Escape}");
 
         expect(picker).toHaveAttribute("data-leaving");
         transitionEnd(picker, "opacity");

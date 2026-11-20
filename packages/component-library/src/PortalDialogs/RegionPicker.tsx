@@ -1,6 +1,7 @@
 import type { FrozenDesk } from "@domicile-desktop/sdk/portal";
 import type { PointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
@@ -123,7 +124,9 @@ export const RegionPicker = ({
     };
   }, [actions, back, open, selected]);
 
-  return (
+  // On the page's body, after any dialog already up, such as the launcher,
+  // so it draws over that dialog and takes the pointer from it.
+  return createPortal(
     <div
       aria-label="Drag to select an area"
       className={deskStyles}
@@ -243,7 +246,8 @@ export const RegionPicker = ({
         </div>
       )}
       <p className={hintStyles}>Drag to select an area. Escape goes back.</p>
-    </div>
+    </div>,
+    document.body,
   );
 };
 
