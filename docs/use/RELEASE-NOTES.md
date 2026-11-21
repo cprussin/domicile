@@ -66,6 +66,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 - Menus, tooltips and dialogs show over a fullscreen window, such as Claude's menu button in fullscreen.
 - Menus, panels and tooltips close when the overview, a fullscreen window or the scratchpad moves or covers what they belong to, instead of floating out of place.
 - The pointer keeps your cursor theme and size after you undock.
+- In a virtual machine (VMware, VirtualBox, QEMU), the pointer's tip is where your clicks land. [#2432](https://github.com/cprussin/domicile/issues/2432)
 - Slack's notifications show their Reply button instead of an empty row.
 - Switching workspaces and tabs is smoother on battery: a window you come back to draws what it kept instead of drawing its whole page again.
 - Wi-Fi's Disconnect and a saved network's Forget are red, and a row's folded details sit tighter around their buttons.
@@ -96,7 +97,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 - The lock screen always gets your typing. [Locking and sleep](LOCK-AND-IDLE.md) · [#2039](https://github.com/cprussin/domicile/pull/2039) · [#2140](https://github.com/cprussin/domicile/pull/2140)
 - A notification says so when the desktop can't use your graphics card. [Graphics problems](TROUBLESHOOTING.md#graphics-problems) · [#2071](https://github.com/cprussin/domicile/pull/2071)
 
-Special thanks to: [ploug](https://github.com/ploug) & [mecattaf](https://github.com/mecattaf)
+Special thanks to: [ploug](https://github.com/ploug), [mecattaf](https://github.com/mecattaf) & [yanbab](https://github.com/yanbab)
 
 ## 1.2.0
 

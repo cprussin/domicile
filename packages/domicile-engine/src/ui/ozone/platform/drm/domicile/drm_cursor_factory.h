@@ -28,7 +28,7 @@ class PlatformCursor;
 // `wm::CursorLoader` uses any non-null platform cursor and loads assets only
 // on null. `BitmapCursorFactory` returns a typed cursor with no bitmap, which
 // suits compositors that draw cursors by type. ozone/drm passes that empty
-// bitmap to `drmModeSetCursor` with handle 0, which hides the cursor without
+// bitmap to `drmModeSetCursor2` with handle 0, which hides the cursor without
 // any error. Ash avoids this by building its loader with
 // `use_platform_cursors=false`; `views::DesktopNativeCursorManager` uses the
 // default, true.
