@@ -73,6 +73,7 @@ use domicile_launch::listing::{
     agents_table, bindings_table, displays_table, inputs_table, log_levels_table,
     shell_commands_table, status_table, windows_table,
 };
+use domicile_launch::log_export;
 use domicile_launch::man;
 use domicile_launch::mcp;
 use domicile_launch::milestones::{reach, Milestone, Stalled};
@@ -332,11 +333,7 @@ fn run() -> Result<ExitCode, String> {
         }
         Invocation::Logs { follow } => logs_printed(follow),
         Invocation::ExportLogs { file, redact } => {
-            let file = file.unwrap_or_else(|| {
-                let now = recent_log::now();
-                let at = (now / 1_000_000) as i64 + recent_log::local_offset(now);
-                format!("domicile-logs-{}.txt", recent_log::civil(at, "-", ""))
-            });
+            let file = file.unwrap_or_else(|| log_export::file_name(recent_log::now()));
             // Absolute here, since the desktop does not share this working
             // directory.
             asked(&Request::ExportLogs {
@@ -1082,6 +1079,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         Request::ConfigureDisplay { .. } => Some(CONFIGURE_WITHIN + ANSWER_WITHIN),
         Request::ShootDesk { .. } => Some(CAPTURE_WITHIN + ANSWER_WITHIN),
         Request::DevTools { .. } => Some(DEVTOOLS_WITHIN + ANSWER_WITHIN),
+        Request::ExportLogs { .. } => Some(log_export::EXPORT_WITHIN),
         // Longer than the supervisor waits for the compositor, so its own
         // failure reaches this terminal rather than a timeout.
         Request::Launch { .. } => Some(ANSWER_WITHIN + ANSWER_WITHIN + ANSWER_WITHIN),

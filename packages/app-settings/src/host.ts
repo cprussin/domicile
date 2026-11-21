@@ -16,6 +16,14 @@ import type {
 } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
+/** Logs Save logs wrote. */
+export type ExportedLogs = {
+  /** The file. */
+  path: string;
+  /** What could not be hidden, and why, if anything. */
+  unhidden: string | undefined;
+};
+
 /** The command that starts the host. */
 const HOST = ["domicile-app-host"];
 
@@ -349,6 +357,17 @@ export type SettingsHost = {
   signOutWebAgent: (client: string) => Promise<void>;
   /** Has the desk try for its certificate again now, not when it would. */
   retryWebAgents: () => Promise<void>;
+  /** Whether the desktop logs everything at debug, until it restarts. */
+  detailedLogging: () => Promise<boolean>;
+  /** Turns detailed logging on, or back to the starting levels. */
+  setDetailedLogging: (on: boolean) => Promise<boolean>;
+  /**
+   * Saves the desktop's logs to Downloads, hiding web addresses and window
+   * titles if `redact`.
+   */
+  exportLogs: (redact: boolean) => Promise<ExportedLogs>;
+  /** Opens the Downloads folder Save logs writes to. */
+  openDownloads: () => Promise<void>;
   /** Calls `listener` when a file changes on disk. Returns an unsubscribe. */
   onChange: (listener: () => void) => () => void;
 };
@@ -468,6 +487,22 @@ export const spawnedHost = (
         throw unexpected(reply, "stored");
       }
     },
+    detailedLogging: async () => {
+      const reply = await ask({ type: "detailed_logging" });
+      if (reply.type === "detailed_logging") {
+        return reply.on;
+      } else {
+        throw unexpected(reply, "detailed_logging");
+      }
+    },
+    exportLogs: async (redact) => {
+      const reply = await ask({ redact, type: "export_logs" });
+      if (reply.type === "exported_logs") {
+        return { path: reply.path, unhidden: reply.unhidden ?? undefined };
+      } else {
+        throw unexpected(reply, "exported_logs");
+      }
+    },
     extensions: async () => {
       const reply = await ask({ type: "extensions" });
       if (reply.type === "extensions") {
@@ -516,6 +551,12 @@ export const spawnedHost = (
         changes.delete(listener);
       };
     },
+    openDownloads: async () => {
+      const reply = await ask({ type: "open_downloads" });
+      if (reply.type !== "opened") {
+        throw unexpected(reply, "opened");
+      }
+    },
     openUrl: async (url) => {
       const reply = await ask({ type: "open_url", url });
       if (reply.type !== "opened") {
@@ -545,6 +586,14 @@ export const spawnedHost = (
       const reply = await ask({ type: "retry_web_agents" });
       if (reply.type !== "done") {
         throw unexpected(reply, "done");
+      }
+    },
+    setDetailedLogging: async (on) => {
+      const reply = await ask({ on, type: "set_detailed_logging" });
+      if (reply.type === "detailed_logging") {
+        return reply.on;
+      } else {
+        throw unexpected(reply, "detailed_logging");
       }
     },
     setExtensionEnabled: async (extension, enabled, profile) => {
@@ -705,6 +754,17 @@ const replySchema = z.discriminatedUnion("type", [
       webAgents: webAgentsSchema.parse({ signed_in, status }),
     })),
   z.object({ id: z.number(), type: z.literal("done") }),
+  z.object({
+    id: z.number(),
+    on: z.boolean(),
+    type: z.literal("detailed_logging"),
+  }),
+  z.object({
+    id: z.number(),
+    path: z.string(),
+    type: z.literal("exported_logs"),
+    unhidden: z.string().nullable(),
+  }),
   z.object({ id: z.number(), type: z.literal("refused"), why: z.string() }),
   z.object({ type: z.literal("changed") }),
 ]);

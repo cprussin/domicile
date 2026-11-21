@@ -7,6 +7,20 @@ use domicile_protocol::LogLevels;
 use crate::recent_log::Said;
 use crate::redact::redacted;
 
+/// How long an export may take: it asks the compositor three things and
+/// reads the journal.
+pub const EXPORT_WITHIN: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// The name an export takes at `now`, microseconds since the epoch:
+/// `domicile-logs-2026-11-27-091203.txt`, in local time.
+pub fn file_name(now: u64) -> String {
+    let at = (now / 1_000_000) as i64 + crate::recent_log::local_offset(now);
+    format!(
+        "domicile-logs-{}.txt",
+        crate::recent_log::civil(at, "-", "")
+    )
+}
+
 /// What goes into an export.
 pub struct Report<'a> {
     /// When it was exported, in local time.

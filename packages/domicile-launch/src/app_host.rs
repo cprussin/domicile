@@ -71,6 +71,14 @@
 //!   {"id":23,"type":"web_agents","status":{"address":"https://….mcp.domicile-desktop.com/mcp","ready":true,"problem":null},"signed_in":[{"client":"…","name":"claude.ai","last_used_ms":…}]}   (status null until `domicile mcp --relay` runs)
 //! {"id":24,"type":"sign_out_web_agent","client":"…"}
 //!   {"id":24,"type":"done"}
+//! {"id":25,"type":"detailed_logging"}
+//!   {"id":25,"type":"detailed_logging","on":false}
+//! {"id":26,"type":"set_detailed_logging","on":true}
+//!   {"id":26,"type":"detailed_logging","on":true}
+//! {"id":27,"type":"export_logs","redact":true}
+//!   {"id":27,"type":"exported_logs","path":"/home/me/Downloads/domicile-logs-2026-11-27-091203.txt","unhidden":null}
+//! {"id":28,"type":"open_downloads"}
+//!   {"id":28,"type":"opened"}
 //! any request
 //!   {"id":…,"type":"refused","why":"…"}
 //! pushed when a file changes on disk
@@ -91,6 +99,7 @@ use crate::history::{BrowsingData, HistoryQuery};
 use crate::media_devices::MediaKind;
 use crate::shell_options::problems;
 use crate::site_permissions::SitePermission;
+use domicile_protocol::{LogLevel, LogLevels};
 
 /// The largest message the host reads or writes. A page's file, or a page of
 /// history with its icons, is far smaller.
@@ -118,6 +127,44 @@ pub struct Host<'a> {
     /// Where `domicile mcp` keeps signed-in agents
     /// ([`crate::mcp::SIGNED_IN_FILE`]), if anywhere.
     pub signed_in: Option<&'a Path>,
+    /// Where Save logs writes ([`downloads`]), if anywhere.
+    pub downloads: Option<&'a Path>,
+    /// Opens a folder as `domicile open` does.
+    pub open: &'a dyn Fn(&Path) -> Result<(), String>,
+}
+
+/// The reply to a detailed-logging request: on while everything logs at
+/// debug or more.
+fn detailed(levels: &LogLevels) -> Value {
+    json!({
+        "type": "detailed_logging",
+        "on": levels.all.is_some_and(|level| level >= LogLevel::Debug),
+    })
+}
+
+/// The Downloads folder: `XDG_DOWNLOAD_DIR`, else the one `user-dirs.dirs`
+/// names (`user_dirs`, its text), else `~/Downloads`. `None` without a home.
+pub fn downloads(
+    env: &dyn Fn(&str) -> Option<String>,
+    user_dirs: Option<&str>,
+    home: Option<&Path>,
+) -> Option<PathBuf> {
+    let home = home?;
+    let named = env("XDG_DOWNLOAD_DIR")
+        .filter(|dir| !dir.is_empty())
+        .or_else(|| {
+            user_dirs?.lines().find_map(|line| {
+                let value = line.trim().strip_prefix("XDG_DOWNLOAD_DIR=")?;
+                Some(value.trim_matches('"').to_string())
+            })
+        });
+    Some(match named {
+        Some(dir) => match dir.strip_prefix("$HOME") {
+            Some(rest) => home.join(rest.trim_start_matches('/')),
+            None => PathBuf::from(dir),
+        },
+        None => home.join("Downloads"),
+    })
 }
 
 /// Answers one message from the app. The reply carries the request's `id`.
@@ -237,6 +284,14 @@ enum AppRequest {
         agent: String,
     },
     WebAgents,
+    DetailedLogging,
+    SetDetailedLogging {
+        on: bool,
+    },
+    ExportLogs {
+        redact: bool,
+    },
+    OpenDownloads,
     SignOutWebAgent {
         client: String,
     },
@@ -442,6 +497,46 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
             "status": host.web_status.and_then(crate::mcp::web::WebStatus::load),
             "signed_in": host.signed_in.map(crate::mcp::signed_in).unwrap_or_default(),
         })),
+        AppRequest::DetailedLogging => match (host.ask)(&Request::LogLevels)? {
+            Response::LogLevels { levels } => Ok(detailed(&levels)),
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::SetDetailedLogging { on } => {
+            let request = match on {
+                true => Request::SetLogLevel {
+                    level: LogLevel::Debug,
+                    subsystems: Vec::new(),
+                },
+                false => Request::ResetLogLevels,
+            };
+            match (host.ask)(&request)? {
+                Response::LogLevels { levels } => Ok(detailed(&levels)),
+                other => Err(refusal_or_surprise(other)),
+            }
+        }
+        AppRequest::ExportLogs { redact } => {
+            let folder = host
+                .downloads
+                .ok_or("HOME is not set, so there is no Downloads folder to save to")?;
+            std::fs::create_dir_all(folder)
+                .map_err(|why| format!("cannot make {}: {why}", folder.display()))?;
+            let file = folder.join(crate::log_export::file_name(crate::recent_log::now()));
+            match (host.ask)(&Request::ExportLogs { file, redact })? {
+                Response::ExportedLogs { file, unhidden } => Ok(json!({
+                    "type": "exported_logs",
+                    "path": file,
+                    "unhidden": unhidden,
+                })),
+                other => Err(refusal_or_surprise(other)),
+            }
+        }
+        AppRequest::OpenDownloads => {
+            let folder = host
+                .downloads
+                .ok_or("HOME is not set, so there is no Downloads folder to open")?;
+            (host.open)(folder)?;
+            Ok(json!({"type": "opened"}))
+        }
         AppRequest::SignOutWebAgent { client } => {
             let path = host
                 .signed_in

@@ -15,6 +15,7 @@ export enum PageId {
   Permissions,
   SiteData,
   Code,
+  Troubleshooting,
 }
 
 /** Each page's name and what it holds. */
@@ -92,5 +93,10 @@ export const PAGES = [
     description: "The config file and the shell, as code.",
     id: PageId.Code,
     title: "Code",
+  },
+  {
+    description: "Logs to send along when something goes wrong.",
+    id: PageId.Troubleshooting,
+    title: "Troubleshooting",
   },
 ] as const;

@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use domicile_launch::app_host::{answer, read_message, watched, write_message, Host};
+use domicile_launch::app_host::{answer, downloads, read_message, watched, write_message, Host};
 use domicile_launch::browser_profiles::{
     BrowserProfileList, ListedBrowserProfile, ListedBrowserSite, ProfileExtension,
 };
@@ -16,7 +16,7 @@ use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
-use domicile_protocol::{DisplayHdr, MonitorInfo};
+use domicile_protocol::{DisplayHdr, LogLevel, LogLevels, MonitorInfo};
 use serde_json::{json, Value};
 
 #[test]
@@ -724,6 +724,8 @@ struct Fake {
     written: RefCell<Vec<(PathBuf, String)>>,
     web_status: Option<PathBuf>,
     signed_in: Option<PathBuf>,
+    downloads: Option<PathBuf>,
+    opened: RefCell<Vec<PathBuf>>,
 }
 
 fn a_host(files: SettingsFiles) -> Fake {
@@ -740,6 +742,8 @@ impl Fake {
             written: RefCell::new(Vec::new()),
             web_status: None,
             signed_in: None,
+            downloads: None,
+            opened: RefCell::new(Vec::new()),
         }
     }
 
@@ -768,6 +772,19 @@ impl Fake {
                             }],
                         }),
                         Request::SetSitePermission { .. } => Response::Stored,
+                        Request::LogLevels | Request::ResetLogLevels => Response::LogLevels {
+                            levels: LogLevels::default(),
+                        },
+                        Request::SetLogLevel { level, .. } => Response::LogLevels {
+                            levels: LogLevels {
+                                all: Some(*level),
+                                ..LogLevels::default()
+                            },
+                        },
+                        Request::ExportLogs { file, .. } => Response::ExportedLogs {
+                            file: file.clone(),
+                            unhidden: None,
+                        },
                         Request::MediaDevices => Response::MediaDevices(MediaDevices {
                             cameras: vec![MediaDevice {
                                 id: "/dev/video2".to_string(),
@@ -894,7 +911,90 @@ impl Fake {
                 },
                 web_status: self.web_status.as_deref(),
                 signed_in: self.signed_in.as_deref(),
+                downloads: self.downloads.as_deref(),
+                open: &|folder| {
+                    self.opened.borrow_mut().push(folder.to_path_buf());
+                    Ok(())
+                },
             },
         )
     }
+}
+
+#[test]
+fn detailed_logging_is_everything_at_debug_until_turned_off() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 25, "type": "detailed_logging"})),
+        json!({"id": 25, "type": "detailed_logging", "on": false})
+    );
+    assert_eq!(
+        host.answer(&json!({"id": 26, "type": "set_detailed_logging", "on": true})),
+        json!({"id": 26, "type": "detailed_logging", "on": true})
+    );
+    assert_eq!(
+        host.answer(&json!({"id": 27, "type": "set_detailed_logging", "on": false})),
+        json!({"id": 27, "type": "detailed_logging", "on": false})
+    );
+    assert_eq!(
+        host.asked.take(),
+        [
+            Request::LogLevels,
+            Request::SetLogLevel {
+                level: LogLevel::Debug,
+                subsystems: Vec::new()
+            },
+            Request::ResetLogLevels,
+        ]
+    );
+}
+
+#[test]
+fn save_logs_exports_them_to_downloads() {
+    let dir = tempfile::tempdir().unwrap();
+    let downloads = dir.path().join("Downloads");
+    let mut host = a_host(FILES.clone());
+    host.downloads = Some(downloads.clone());
+    let reply = host.answer(&json!({"id": 28, "type": "export_logs", "redact": true}));
+    assert_eq!(reply["type"], "exported_logs", "{reply}");
+    assert!(downloads.is_dir(), "Downloads is made if missing");
+    let [Request::ExportLogs { file, redact: true }] = &host.asked.take()[..] else {
+        panic!("the export is the desktop's");
+    };
+    assert_eq!(file.parent(), Some(downloads.as_path()));
+    let name = file.file_name().unwrap().to_str().unwrap();
+    assert!(
+        name.starts_with("domicile-logs-") && name.ends_with(".txt"),
+        "{name}"
+    );
+    assert_eq!(reply["path"], json!(file));
+    assert_eq!(
+        host.answer(&json!({"id": 29, "type": "open_downloads"})),
+        json!({"id": 29, "type": "opened"})
+    );
+    assert_eq!(host.opened.take(), [downloads]);
+}
+
+#[test]
+fn the_downloads_folder_is_the_one_xdg_names() {
+    let home = Path::new("/home/me");
+    let none = |_: &str| None;
+    assert_eq!(
+        downloads(&none, None, Some(home)),
+        Some(PathBuf::from("/home/me/Downloads"))
+    );
+    assert_eq!(
+        downloads(
+            &none,
+            Some("# comment\nXDG_DOWNLOAD_DIR=\"$HOME/Hämtningar\"\n"),
+            Some(home)
+        ),
+        Some(PathBuf::from("/home/me/Hämtningar"))
+    );
+    let set = |name: &str| (name == "XDG_DOWNLOAD_DIR").then(|| "/data/dl".to_string());
+    assert_eq!(
+        downloads(&set, None, Some(home)),
+        Some(PathBuf::from("/data/dl"))
+    );
+    assert_eq!(downloads(&none, None, None), None);
 }

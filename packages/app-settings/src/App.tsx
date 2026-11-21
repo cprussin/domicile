@@ -30,6 +30,7 @@ import { ProfilesPage } from "./pages/ProfilesPage";
 import { ShellPage } from "./pages/ShellPage";
 import { SiteDataPage } from "./pages/SiteDataPage";
 import { StartupPage } from "./pages/StartupPage";
+import { TroubleshootingPage } from "./pages/TroubleshootingPage";
 import { Sidebar } from "./Sidebar";
 import { useSettingsFiles } from "./useSettingsFiles";
 
@@ -195,6 +196,8 @@ const PageContent = ({
       return (
         <AgentsPage {...named} editor={editor} host={host} report={report} />
       );
+    case PageId.Troubleshooting:
+      return <TroubleshootingPage {...named} host={host} report={report} />;
     case PageId.Code:
       return files === undefined ? (
         <Page {...named} />

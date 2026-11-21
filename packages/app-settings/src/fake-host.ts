@@ -36,6 +36,8 @@ export type FakeHostState = {
   webAgents?: WebAgents | undefined;
   /** The browser profiles the engine runs; one default profile if unset. */
   profiles?: BrowserProfiles | undefined;
+  /** Whether detailed logging is on; off by default. */
+  detailed?: boolean | undefined;
   /** The reason every write is refused, if any. */
   refuse?: string | undefined;
 };
@@ -60,6 +62,10 @@ export const fakeHost = (state: FakeHostState) => {
   const pinned: { site: string; profile: string }[] = [];
   /** How many times Try again asked the desk for a certificate now. */
   const retried = { times: 0 };
+  /** Each Save logs, by whether it hid addresses and titles. */
+  const exported: boolean[] = [];
+  /** How many times Downloads was opened. */
+  const downloadsOpened = { times: 0 };
   const host: SettingsHost = {
     agents: () =>
       Promise.resolve(
@@ -95,6 +101,14 @@ export const fakeHost = (state: FakeHostState) => {
         return Promise.resolve();
       }
     },
+    detailedLogging: () => Promise.resolve(state.detailed ?? false),
+    exportLogs: (redact) => {
+      exported.push(redact);
+      return Promise.resolve({
+        path: "/home/me/Downloads/domicile-logs-2026-11-27-091203.txt",
+        unhidden: undefined,
+      });
+    },
     extensions: () => Promise.resolve(structuredClone(state.installed)),
     forgetAgent: (agent) => {
       if (state.agents !== undefined) {
@@ -116,6 +130,10 @@ export const fakeHost = (state: FakeHostState) => {
         changes.delete(listener);
       };
     },
+    openDownloads: () => {
+      downloadsOpened.times += 1;
+      return Promise.resolve();
+    },
     openUrl: (url) => {
       opened.push(url);
       return Promise.resolve();
@@ -136,6 +154,10 @@ export const fakeHost = (state: FakeHostState) => {
     retryWebAgents: () => {
       retried.times += 1;
       return Promise.resolve();
+    },
+    setDetailedLogging: (on) => {
+      state.detailed = on;
+      return Promise.resolve(on);
     },
     setExtensionEnabled: (id, enabled, profile) => {
       if (profile !== undefined) {
@@ -230,6 +252,8 @@ export const fakeHost = (state: FakeHostState) => {
     change,
     chosen,
     configured,
+    downloadsOpened,
+    exported,
     host,
     loaded,
     opened,

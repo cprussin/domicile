@@ -3,6 +3,7 @@ import { CookieIcon } from "@phosphor-icons/react/dist/ssr/Cookie";
 import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
 import { HandPalmIcon } from "@phosphor-icons/react/dist/ssr/HandPalm";
 import { KeyboardIcon } from "@phosphor-icons/react/dist/ssr/Keyboard";
+import { LifebuoyIcon } from "@phosphor-icons/react/dist/ssr/Lifebuoy";
 import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { MonitorIcon } from "@phosphor-icons/react/dist/ssr/Monitor";
@@ -82,6 +83,8 @@ const PageIcon = ({ page }: { page: PageId }) => {
       return <CookieIcon size={18} />;
     case PageId.Code:
       return <CodeIcon size={18} />;
+    case PageId.Troubleshooting:
+      return <LifebuoyIcon size={18} />;
   }
 };
 

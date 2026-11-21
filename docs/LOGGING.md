@@ -47,6 +47,10 @@ runs on, web addresses and window titles hidden. See
 [`domicile logs`](CLI.md#domicile-logs---follow) and
 [`domicile export-logs`](CLI.md#domicile-export-logs---show-everything-file).
 
+Settings' Troubleshooting page does the same without a terminal: **Detailed
+logging** turns on debug for every part until the desktop restarts, and **Save
+logs** saves the export to Downloads ([SETTINGS.md](SETTINGS.md)).
+
 Off the journal, the desktop keeps its newest 10,000 lines for both, so logs
 that went to a closed terminal can still be read.
 

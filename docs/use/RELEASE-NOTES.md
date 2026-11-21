@@ -58,6 +58,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 - Key repeat settings. [#2024](https://github.com/cprussin/domicile/pull/2024)
 - Firefox animates with the desktop. [#2087](https://github.com/cprussin/domicile/pull/2087) · [#2089](https://github.com/cprussin/domicile/pull/2089)
 - Windows no longer freeze at their old size after you move or resize them on monitors of different sharpness.
+- Settings has a Troubleshooting page: turn on detailed logging, and save the logs to attach to a bug report.
 - Chromium 160. [#2023](https://github.com/cprussin/domicile/pull/2023)
 
 ### Fixes

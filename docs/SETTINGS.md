@@ -48,6 +48,12 @@ not in the Extensions page or any extension list.
   site gets when it does not ask for a particular one. A site that names a
   device still gets that device. Manganese's address bar site permissions panel picks
   the same device.
+- **Troubleshooting:** **Detailed logging**, which is
+  `domicile set-log-level debug` until it is turned off or the desktop
+  restarts, and **Save logs**, which is `domicile export-logs` into the
+  Downloads folder (`xdg-user-dir DOWNLOAD`), with **Open Downloads**. Web
+  addresses and window titles are hidden unless that switch is off
+  ([LOGGING.md](LOGGING.md#reading-them)).
 - **Code:** the config file and the shell's source in a plain text editor
   (line numbers, Tab indents, Enter keeps indentation, Ctrl+S saves).
 - Source and design: [`packages/app-settings`](/packages/app-settings/README.md).

@@ -1120,6 +1120,47 @@ describe(App, () => {
     });
   });
 
+  describe("troubleshooting", () => {
+    it("turns detailed logging on", async () => {
+      const { host, user } = await renderApp("Troubleshooting");
+      const detailed = await screen.findByRole("switch", {
+        name: "Detailed logging",
+      });
+      await waitFor(() => {
+        expect(detailed).toBeEnabled();
+      });
+      await user.click(detailed);
+      await waitFor(() => {
+        expect(host.state.detailed).toBe(true);
+      });
+      expect(detailed).toBeChecked();
+    });
+
+    it("saves the logs hidden, then opens Downloads", async () => {
+      const { host, user } = await renderApp("Troubleshooting");
+      await user.click(screen.getByRole("button", { name: "Save logs" }));
+      expect(
+        await screen.findByText(/Saved domicile-logs-2026-11-27-091203.txt/u),
+      ).toBeInTheDocument();
+      expect(host.exported).toEqual([true]);
+      await user.click(screen.getByRole("button", { name: "Open Downloads" }));
+      expect(host.downloadsOpened.times).toBe(1);
+    });
+
+    it("saves everything once hiding is off", async () => {
+      const { host, user } = await renderApp("Troubleshooting");
+      await user.click(
+        screen.getByRole("switch", {
+          name: "Hide web addresses and window titles",
+        }),
+      );
+      await user.click(screen.getByRole("button", { name: "Save logs" }));
+      await waitFor(() => {
+        expect(host.exported).toEqual([false]);
+      });
+    });
+  });
+
   describe("agents on the web", () => {
     const ADDRESS = "https://desk.mcp.domicile-desktop.com/mcp";
     const WEB: WebAgents = {

@@ -439,6 +439,58 @@ describe(spawnedHost, () => {
       expect(await canceled).toBeUndefined();
     });
 
+    it("reads and switches detailed logging", async () => {
+      const { asked, host, processes } = await started((host) =>
+        host.detailedLogging(),
+      );
+      expect(processes[0]?.sent.at(-1)).toEqual({
+        id: 1,
+        type: "detailed_logging",
+      });
+      processes[0]?.answer({ id: 1, on: false, type: "detailed_logging" });
+      expect(await asked).toBe(false);
+
+      const switched = host.setDetailedLogging(true);
+      await settled();
+      expect(processes[0]?.sent.at(-1)).toEqual({
+        id: 2,
+        on: true,
+        type: "set_detailed_logging",
+      });
+      processes[0]?.answer({ id: 2, on: true, type: "detailed_logging" });
+      expect(await switched).toBe(true);
+    });
+
+    it("saves the logs and opens Downloads", async () => {
+      const { asked, host, processes } = await started((host) =>
+        host.exportLogs(false),
+      );
+      expect(processes[0]?.sent.at(-1)).toEqual({
+        id: 1,
+        redact: false,
+        type: "export_logs",
+      });
+      processes[0]?.answer({
+        id: 1,
+        path: "/home/me/Downloads/domicile-logs.txt",
+        type: "exported_logs",
+        unhidden: "web addresses and window titles are not hidden",
+      });
+      expect(await asked).toEqual({
+        path: "/home/me/Downloads/domicile-logs.txt",
+        unhidden: "web addresses and window titles are not hidden",
+      });
+
+      const opened = host.openDownloads();
+      await settled();
+      expect(processes[0]?.sent.at(-1)).toEqual({
+        id: 2,
+        type: "open_downloads",
+      });
+      processes[0]?.answer({ id: 2, type: "opened" });
+      await opened;
+    });
+
     it("tells listeners a file changed on disk", async () => {
       const { asked, processes } = await started(
         (host) =>
