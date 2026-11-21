@@ -41,12 +41,30 @@ pub struct EngineLog {
     continued: bool,
 }
 
-/// The engine's lines that show at the levels set now. See [`Gate`].
+/// The engine's lines that show at the levels set now, or none to show every
+/// line. See [`Gate`], [`start`] and [`set`].
 static GATE: RwLock<Option<Gate>> = RwLock::new(None);
 
 /// Shows the engine's lines at `levels` from now on.
 pub fn set(levels: &LogLevels) {
     *GATE.write().expect("nothing panics holding the gate") = Some(Gate::new(levels));
+}
+
+/// Gates the engine's lines at the starting levels, unless `extra`, the
+/// engine's `DOMICILE_ENGINE_ARGS`, starts it at others: then every line it
+/// logs shows, as asked, until `domicile set-log-level` sets levels.
+pub fn start(extra: Option<&str>) {
+    *GATE.write().expect("nothing panics holding the gate") =
+        (!raises_logging(extra)).then(Gate::default);
+}
+
+/// Whether `extra` sets the engine's own levels.
+pub fn raises_logging(extra: Option<&str>) -> bool {
+    extra.unwrap_or_default().split_whitespace().any(|switch| {
+        ["--log-level=", "--v=", "--vmodule="]
+            .iter()
+            .any(|own| switch.starts_with(own))
+    })
 }
 
 impl EngineLog {
@@ -70,7 +88,10 @@ impl EngineLog {
     /// subsystem is turned up. See [`Gate`].
     pub fn heard(&mut self, line: &str) -> Option<Entry> {
         let gate = GATE.read().expect("nothing panics holding the gate");
-        self.through(line, gate.as_ref().unwrap_or(&Gate::default()))
+        match gate.as_ref() {
+            Some(gate) => self.through(line, gate),
+            None => Some(self.entry(line)),
+        }
     }
 
     /// The entry for `line`, if it shows through `gate`.
