@@ -129,6 +129,23 @@ last until the desktop restarts.
 Setting everything leaves Smithay and Chromium's own code at their starting
 levels; they log too much to read at `debug`.
 
+What `debug` and `trace` add, by subsystem. Each line names the window
+(`app_id`), surface, display or process it is about:
+
+| Subsystem | `debug` | `trace` |
+|---|---|---|
+| `windows` | Windows renamed, dialogs, popups placed and moved, menus grabbing and letting go of the keyboard, the engine's browser windows and their views | Each configure sent, with its size and serial |
+| `rendering` | | Each commit: surface, buffer size, GPU or memory, damage. Each frame the engine takes, draws and presents. Each layout the engine gives a window |
+| `displays` | Each monitor the engine reports, and each display of a new desktop: connector, mode, scale, refresh, HDR | |
+| `input` | The engine's input devices changing | |
+| `cast` | Captures ending | Each frame captured for a cast |
+| `clipboard` | Copies in the browser, by type | |
+| `shell` | | Every message between the desktop and the shell, by type and ids |
+| `session` | Each command on the control socket, by type; each part started, with its pid and arguments | |
+
+Lines leave out what someone typed or read: keys, titles, notification text and
+clipboard contents.
+
 To start at other levels:
 
 - **Compositor:** `RUST_LOG`, such as `RUST_LOG=debug`.

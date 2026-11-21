@@ -73,6 +73,7 @@ fn write_responses(
     let mut writer = writer.lock().unwrap();
     for message in responses {
         let message = freshened(hub, message);
+        crate::protocol_trace::trace("the shell that asked", &message);
         if writer.write_all(to_line(&message).as_bytes()).is_err() {
             return false;
         }
@@ -253,6 +254,7 @@ fn read_chrome_messages(
             move |message| {
                 // A failed write means the page is gone; this connection's
                 // reader then ends and drops `system`.
+                crate::protocol_trace::trace("the shell that asked", &message);
                 let mut writer = writer.lock().unwrap();
                 let _ = writer.write_all(to_line(&message).as_bytes());
                 let _ = writer.flush();

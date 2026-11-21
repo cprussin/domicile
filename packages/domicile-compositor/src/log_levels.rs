@@ -134,6 +134,7 @@ const MODULES: [(Subsystem, &[&str]); 13] = [
         &[
             "chrome_connection",
             "chrome_hub",
+            "protocol_trace",
             "chrome_editor",
             "outbound",
             "reply",
@@ -150,7 +151,17 @@ const MODULES: [(Subsystem, &[&str]); 13] = [
 ];
 
 /// Targets outside `domicile_compositor::` and the subsystem they belong to.
-const TARGETS: [(Subsystem, &str); 1] = [(Subsystem::Rendering, "domicile::engine::spike")];
+///
+/// `engine_pump` hears every engine event; its lines about other subsystems
+/// take these targets, so they follow those subsystems' levels.
+const TARGETS: [(Subsystem, &str); 6] = [
+    (Subsystem::Rendering, "domicile::engine::spike"),
+    (Subsystem::Displays, "domicile::engine::displays"),
+    (Subsystem::Windows, "domicile::engine::windows"),
+    (Subsystem::Input, "domicile::engine::input"),
+    (Subsystem::Cast, "domicile::engine::cast"),
+    (Subsystem::Clipboard, "domicile::engine::clipboard"),
+];
 
 /// The filter for `levels`, over the `starting` one (`RUST_LOG`, or `info`).
 ///
@@ -238,7 +249,7 @@ mod tests {
         };
         assert_eq!(
             directives("warn", &levels),
-            "warn,domicile_compositor::clipboard=trace,domicile_compositor::selections=trace"
+            "warn,domicile_compositor::clipboard=trace,domicile_compositor::selections=trace,domicile::engine::clipboard=trace"
         );
     }
 

@@ -151,7 +151,7 @@ fn started(
     stderr: fn() -> Stdio,
     stdout: fn() -> Stdio,
 ) -> Result<Child, RunError> {
-    command(spawn)
+    let child = command(spawn)
         .stderr(stderr())
         .stdout(stdout())
         .spawn()
@@ -159,7 +159,21 @@ fn started(
             program: spawn.program.clone(),
             source,
             what,
-        })
+        })?;
+    if crate::launcher_log::showing(domicile_protocol::LogLevel::Debug) {
+        crate::launcher_log::debug(&format!(
+            "started the {what} as pid {}: {} {}",
+            child.id(),
+            spawn.program.display(),
+            spawn
+                .args
+                .iter()
+                .map(|arg| arg.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ")
+        ));
+    }
+    Ok(child)
 }
 
 /// Where each line of a heard component's stderr goes, without its newline.
@@ -257,6 +271,7 @@ impl Running {
     /// hold the card. The entry must be removed, or [`Running::exited`] would
     /// report the old exit forever. An unknown name is a no-op.
     pub fn let_go_of(&mut self, what: &'static str) {
+        crate::launcher_log::debug(&format!("stopping the {what}'s processes"));
         for (held, child) in self.components.iter_mut().filter(|(held, _)| *held == what) {
             end_the_group(held, child);
         }
