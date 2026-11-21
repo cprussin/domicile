@@ -500,11 +500,12 @@ describe("a command", () => {
   });
 
   describe("searching the clipboard", () => {
-    const searched = (copied: readonly string[]) => {
+    const searched = (copied: readonly string[], onClipboard = true) => {
       const { host, result } = desktop([LEFT, RIGHT]);
       act(() => {
         host.fake.set({
           clipboard: copied.map((preview, at) => ({
+            current: onClipboard && at === 0,
             id: at,
             image: false,
             preview,
@@ -534,6 +535,10 @@ describe("a command", () => {
 
     it("opens nothing when nothing was copied", () => {
       expect(searched([])).toEqual([]);
+    });
+
+    it("opens nothing after the copy on the clipboard was removed", () => {
+      expect(searched(["hello world"], false)).toEqual([]);
     });
 
     it("opens a private window from a private one", () => {
@@ -570,7 +575,13 @@ describe("a command", () => {
       act(() => {
         host.fake.set({
           clipboard: [
-            { id: 0, image: false, preview: "hello world", thumbnail: "" },
+            {
+              current: true,
+              id: 0,
+              image: false,
+              preview: "hello world",
+              thumbnail: "",
+            },
           ],
         });
       });

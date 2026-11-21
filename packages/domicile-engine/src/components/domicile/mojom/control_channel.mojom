@@ -290,6 +290,9 @@ struct ClipboardEntry {
   // A small picture of an image with no text, as a PNG `data:` URL. Empty for
   // text, and for an image the compositor could not read.
   string thumbnail;
+  // What the clipboard holds. Only the newest row can be, and none is once
+  // RemoveClipboardEntry removes it.
+  bool current;
 };
 
 // One icon in the system tray: an application's StatusNotifierItem, as the
@@ -401,6 +404,10 @@ interface ControlChannel {
   // a Clipboard message carried; the compositor holds the row's full text,
   // which the page never sees.
   CopyClipboardEntry(uint32 entry);
+
+  // Drop a row of the clipboard's history and the copy it holds. Removing the
+  // current row also empties the clipboard.
+  RemoveClipboardEntry(uint32 entry);
 
   // Click an icon in the system tray. `id` is one a Tray message carried. What
   // the click does is the application's.

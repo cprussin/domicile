@@ -205,7 +205,13 @@ class FakeClient : public mojom::ControlChannelClient {
              const std::vector<std::string>&,
              uint32_t,
              bool) override {}
-  void Clipboard(std::vector<mojom::ClipboardEntryPtr>) override {}
+  void Clipboard(std::vector<mojom::ClipboardEntryPtr> entries) override {
+    for (const auto& entry : entries) {
+      heard_.push_back(base::StringPrintf("clipboard %u '%s'%s", entry->id,
+                                          entry->preview.c_str(),
+                                          entry->current ? " current" : ""));
+    }
+  }
   void Tray(std::vector<mojom::TrayItemPtr>) override {}
   void Notifications(std::vector<mojom::NotificationPtr> items) override {
     for (const auto& item : items) {
@@ -922,6 +928,33 @@ TEST_F(ControlChannelTest, APointerRegionReachesThePage) {
             (std::vector<std::string>{
                 "constraint game confine in 10,20 300x200 0,220 40x10",
                 "locked false"}));
+}
+
+// Which clipboard row is current reaches the page, and a row that does not
+// say is dropped.
+TEST_F(ControlChannelTest, TheCurrentClipboardRowReachesThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"clipboard\",\"entries\":["
+      "{\"id\":3,\"image\":false,\"preview\":\"now\",\"current\":true},"
+      "{\"id\":2,\"image\":false,\"preview\":\"before\",\"current\":false},"
+      "{\"id\":1,\"image\":false,\"preview\":\"unsaid\"}]}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{"clipboard 3 'now' current",
+                                      "clipboard 2 'before'", "locked false"}));
+}
+
+// Removing a clipboard row reaches the compositor as its id.
+TEST_F(ControlChannelTest, RemovingAClipboardRowReachesTheCompositor) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), kHello);
+  control_->RemoveClipboardEntry(7);
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), R"({"entry":7,"type":"remove_clipboard_entry"})");
 }
 
 // The page taking and letting go of the pointer reaches the compositor.

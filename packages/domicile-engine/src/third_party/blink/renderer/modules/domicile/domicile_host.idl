@@ -56,6 +56,13 @@
   // dropped sets nothing.
   [CallWith=ScriptState, RaisesException] undefined copyClipboardEntry(unsigned long entry);
 
+  // Drop a row of the clipboard's history and the copy it holds.
+  //
+  // Removing the current row also empties the clipboard, so nothing pastes it
+  // again. No answer: the next `clipboard` leaves the row out. An id the
+  // history has since dropped removes nothing.
+  [CallWith=ScriptState, RaisesException] undefined removeClipboardEntry(unsigned long entry);
+
   // Click an icon in the system tray, with the button `action` names.
   //
   // It names an icon `tray` lists and a button. What the click does is the

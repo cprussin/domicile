@@ -376,6 +376,7 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             ClientRequest::CloseApp { .. }
             | ClientRequest::Spawn { .. }
             | ClientRequest::CopyClipboardEntry { .. }
+            | ClientRequest::RemoveClipboardEntry { .. }
             | ClientRequest::ActivateTrayItem { .. }
             | ClientRequest::TrayMenuClicked { .. }
             | ClientRequest::DismissNotifications { .. }
@@ -916,6 +917,10 @@ mod tests {
             (
                 "a row of the clipboard put back on the seat",
                 ClientRequest::CopyClipboardEntry { entry: 1 },
+            ),
+            (
+                "a row of the clipboard removed",
+                ClientRequest::RemoveClipboardEntry { entry: 1 },
             ),
             (
                 "a tray icon clicked",

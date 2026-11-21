@@ -164,6 +164,7 @@ class MODULES_EXPORT DomicileHost final
                            const String& answer,
                            ExceptionState&);
   void copyClipboardEntry(ScriptState*, uint32_t entry, ExceptionState&);
+  void removeClipboardEntry(ScriptState*, uint32_t entry, ExceptionState&);
   void activateTrayItem(ScriptState*,
                         const String& id,
                         V8DomicileTrayAction action,
