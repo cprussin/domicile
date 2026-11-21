@@ -17,7 +17,7 @@ Slack, Element, Claude and other Electron apps run on the desktop's browser, wit
 
 ### Let agents use your desktop
 
-Claude Code, claude.ai and other agents can use your desktop, all of it or only the windows you pick. One pill in the bar lists every agent at work, and you can stop any of them at any time.
+Claude Code, claude.ai and other agents can use your desktop, all of it or only the windows you pick. One pill in the bar lists every agent at work, and you can stop any of them at any time. An agent can also leave on its own when it's done.
 
 [How to set it up](AGENTS.md)
 

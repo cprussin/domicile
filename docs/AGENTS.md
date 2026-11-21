@@ -27,6 +27,8 @@ The user guide's [Agents](use/AGENTS.md) page is the short version of this.
 4. An agent you cancel or stop is refused from then on, until you ask it to
    try again: its `ask_to_use_desktop` tool, or its next session, asks again.
    After a stop it asks even when it is remembered.
+   An agent done with the desktop ends its own session with
+   `stop_using_desktop`; its next tool call asks again, as its first did.
 5. **Settings › Agents** lists each agent connected now or remembered, with
    what it reaches and when it was last used. **Stop** ends its sessions;
    **Forget** makes it ask again.

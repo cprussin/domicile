@@ -52,3 +52,5 @@ ask to sign in again.
 - Agents can't use your desktop while it's locked.
 - Private browser windows are never offered to an agent.
 - An agent you cancel or stop asks again the next time it tries.
+- An agent can leave on its own when it's done, and its pill goes away. It
+  asks again the next time it needs your desktop.

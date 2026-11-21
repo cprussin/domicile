@@ -168,6 +168,7 @@ fn tools_list_describes_each_tool() {
             "app_focus",
             "app_set_text",
             "ask_to_use_desktop",
+            "stop_using_desktop",
         ]
     );
     for tool in tools {
@@ -969,6 +970,59 @@ fn an_agent_turned_away_can_ask_again() {
     assert_eq!(replies[1]["result"]["isError"], false);
     assert_eq!(replies[2]["result"]["isError"], false);
     assert_eq!(asked.get(), 2);
+}
+
+/// Sets its flag when dropped, as a grant's `domicile agent` ends.
+struct Ends(Rc<Cell<bool>>);
+
+impl Drop for Ends {
+    fn drop(&mut self) {
+        self.0.set(true);
+    }
+}
+
+#[test]
+fn stop_using_desktop_lets_go_of_the_grant_and_the_next_call_asks_again() {
+    let ended = Rc::new(Cell::new(false));
+    let asked = Rc::new(Cell::new(0));
+    let (ending, asking) = (Rc::clone(&ended), Rc::clone(&asked));
+    let replies = served_letting(
+        &[
+            call("status", json!({})),
+            call("stop_using_desktop", json!({})),
+            call("status", json!({})),
+        ],
+        |_| printed("{}"),
+        move |_| {
+            asking.set(asking.get() + 1);
+            if asking.get() == 2 {
+                assert!(ending.get(), "the first grant ends before it asks again");
+            }
+            let ends = Ends(Rc::clone(&ending));
+            Ok(Grant {
+                reach: Box::new(|| AgentReach::Desk),
+                stopped: Box::new(|| false),
+                did: Box::new(move |_| {
+                    let _ = &ends;
+                }),
+            })
+        },
+    );
+    assert_eq!(replies[1]["result"]["isError"], false);
+    let text = replies[1]["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("no longer uses"), "{text}");
+    assert_eq!(replies[2]["result"]["isError"], false);
+    assert_eq!(asked.get(), 2);
+}
+
+#[test]
+fn stop_using_desktop_before_any_use_asks_nothing() {
+    let replies = served_letting(&[call("stop_using_desktop", json!({}))], never_run, |_| {
+        panic!("asked the user")
+    });
+    assert_eq!(replies[0]["result"]["isError"], false);
+    let text = replies[0]["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("was not using"), "{text}");
 }
 
 #[test]

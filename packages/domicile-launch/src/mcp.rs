@@ -207,7 +207,7 @@ const INSTRUCTIONS: &str = "Read and act on windows as text first: list_windows,
     Each act answers what it changed in the window, so there is no need to look again. \
     Use screenshot only for what a tree can't show: images, layout, or an app that \
     doesn't support accessibility. Zoom into an area rather than taking the whole desk \
-    again.";
+    again. When you are done with the desktop, call stop_using_desktop.";
 
 /// What the client calls itself in `initialize`: its title, else its name.
 fn named(params: &Value) -> String {
@@ -254,6 +254,8 @@ enum Tool {
     AppAct(&'static str),
     /// Asks the user again, after they stopped the agent or turned it away.
     AskToUse,
+    /// Lets go of the desktop, ending the agent's grant.
+    StopUsing,
 }
 
 /// Where the last screenshot's top-left corner is on the desk, and how many
@@ -271,7 +273,7 @@ struct View {
 const FIT: u32 = 1280;
 
 /// Each tool, by name, in the order `tools/list` gives them.
-const TOOLS: [(&str, Tool); 30] = [
+const TOOLS: [(&str, Tool); 31] = [
     ("list_windows", Tool::Listing("list-windows")),
     ("list_displays", Tool::Listing("list-displays")),
     ("list_inputs", Tool::Listing("list-inputs")),
@@ -302,6 +304,7 @@ const TOOLS: [(&str, Tool); 30] = [
     ("app_focus", Tool::AppAct("focus")),
     ("app_set_text", Tool::AppAct("set-text")),
     ("ask_to_use_desktop", Tool::AskToUse),
+    ("stop_using_desktop", Tool::StopUsing),
 ];
 
 fn tool(name: &str) -> Option<Tool> {
@@ -466,6 +469,11 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             json!({}),
             vec![],
         ),
+        Tool::StopUsing => (
+            "Let go of the desktop once you are done with it, so the user sees you are gone. Your next tool call asks the user again.",
+            json!({}),
+            vec![],
+        ),
     }
 }
 
@@ -486,8 +494,10 @@ fn guarded(
         other => return Ok(said(false, format!("arguments are an object, not {other}"))),
     };
     let name = session.name.clone();
-    if let Tool::AskToUse = tool {
-        return Ok(asked_again(admit, session));
+    match tool {
+        Tool::AskToUse => return Ok(asked_again(admit, session)),
+        Tool::StopUsing => return Ok(let_go(session)),
+        _ => {}
     }
     let grant = match session.grant.get_or_insert_with(|| admitted(admit, &name)) {
         Ok(grant) => grant,
@@ -569,6 +579,20 @@ fn asked_again(
     };
     session.grant = Some(grant);
     answer
+}
+
+/// `stop_using_desktop`'s result: drops the grant, which ends the agent's
+/// `domicile agent` and its place in the bar, and what it read through it.
+fn let_go(session: &mut Session) -> Value {
+    let name = &session.name;
+    session.view = None;
+    session.read.clear();
+    match session.grant.take() {
+        Some(Ok(grant)) if !(grant.stopped)() => {
+            said(true, format!("{name} no longer uses this desktop."))
+        }
+        _ => said(true, format!("{name} was not using this desktop.")),
+    }
 }
 
 fn tool_is_listing_windows(tool: Tool) -> bool {
@@ -685,7 +709,9 @@ fn what_it_did(
         Tool::Browser(Browser::Navigate) => format!("Loaded a page in {}", window("window")),
         Tool::Browser(Browser::Screenshot) => format!("Took a screenshot of {}", window("window")),
         Tool::AppAct(_) => format!("Moved the focus in {}", window("window")),
-        Tool::AskToUse => unreachable!("guarded answers ask_to_use_desktop itself"),
+        Tool::AskToUse | Tool::StopUsing => {
+            unreachable!("guarded answers ask_to_use_desktop and stop_using_desktop itself")
+        }
     }
 }
 
@@ -859,7 +885,9 @@ fn commands(
             ]
             .concat()])
         }
-        Tool::AskToUse => unreachable!("guarded answers ask_to_use_desktop itself"),
+        Tool::AskToUse | Tool::StopUsing => {
+            unreachable!("guarded answers ask_to_use_desktop and stop_using_desktop itself")
+        }
     }
 }
 
