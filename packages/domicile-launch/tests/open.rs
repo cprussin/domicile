@@ -3,7 +3,9 @@
 use std::fs;
 use std::path::Path;
 
-use domicile_launch::open::{app_opening, opener, opening, AppOpening, OpenError, Opening, Places};
+use domicile_launch::open::{
+    app_opening, claimable, opener, opening, AppOpening, OpenError, Opening, Places,
+};
 
 /// A directory holding `files`, as relative paths and text.
 fn written(files: &[(&str, &str)]) -> tempfile::TempDir {
@@ -394,4 +396,15 @@ fn without_a_terminal_a_terminal_application_opens_nothing() {
         opening("a.md", home.path(), &places),
         Err(OpenError::NoApplication { .. })
     ));
+}
+
+#[test]
+fn a_shell_may_claim_a_link_but_not_a_web_address_or_a_file() {
+    assert!(claimable("mailto:a@example.com"));
+    assert!(claimable("MAILTO:a@example.com"));
+    assert!(claimable("zoommtg://zoom.us/join"));
+    assert!(!claimable("https://example.com/"));
+    assert!(!claimable("HTTP://example.com/"));
+    assert!(!claimable("file:///etc/hosts"));
+    assert!(!claimable("notes.md"));
 }

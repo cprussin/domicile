@@ -414,6 +414,13 @@ export const Shell = runManganese({
   one (app id `google-messages`). Don't also use the
   [Google Messages](#google-messages) item: Messages runs one web session at
   a time.
+- **Email links**: an inbox with a `write` writes email. While one does,
+  manganese claims `mailto:` links ([Links](../../../docs/WRITING-A-SHELL.md#links)):
+  from pages, apps, `domicile open` and the Email portal. A link asks which
+  address to write from, in a dialog listing every such inbox's addresses
+  (`MailPicker`), the one picked last first; with one address it writes at
+  once. `gmailInbox` writes from the account, in the account's window, with
+  Gmail's new message form open over the inbox.
 - Not on the lock screen, as the drawer is not.
 
 ## Sharing

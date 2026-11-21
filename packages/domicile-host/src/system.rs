@@ -1,10 +1,11 @@
-//! Files, watches, processes, D-Bus, screenshots, shell commands, idle
+//! Files, watches, processes, D-Bus, screenshots, shell commands, links, idle
 //! watches and holds, the lock's refusals, window states and keymaps for one
 //! chrome connection.
 //! The compositor takes the screenshots ([`System::screenshotting_with`]),
 //! sets window states ([`System::setting_window_states_with`]), adds virtual
 //! monitors ([`System::adding_virtual_monitors_with`]), shares the
-//! shell commands ([`System::sharing_shell_commands`]), idle watches
+//! shell commands ([`System::sharing_shell_commands`]), the pages that open
+//! links ([`System::sharing_links`]), idle watches
 //! ([`System::sharing_idle_watches`]), idle holds
 //! ([`System::sharing_idle_holds`]) and window requests
 //! ([`System::sharing_window_requests`]) between connections, sends the
@@ -48,6 +49,7 @@ use crate::fanout::Listener;
 use crate::idle_holds::{self, IdleHolds};
 use crate::idle_watches::{IdleWatches, Mark};
 use crate::keymaps::Keymaps;
+use crate::links::Links;
 use crate::lock_screen_readouts::is_a_readout;
 use crate::priority;
 use crate::shell_commands::ShellCommands;
@@ -94,6 +96,8 @@ pub struct System {
     preview: Option<Preview>,
     /// The pages that hear a `SystemRequest::SendShell`.
     shell_commands: ShellCommands,
+    /// The pages that open links, by scheme.
+    links: Links,
     /// The pages watching for the desk to go idle.
     idle_watches: IdleWatches,
     /// What holds the desktop awake, and the pages that hear it change.
@@ -350,6 +354,7 @@ pub fn reach(request: &SystemRequest) -> Reach {
         // Answering a command is part of listening for it.
         SystemRequest::ShellCommands { .. }
         | SystemRequest::AnswerShellCommand { .. }
+        | SystemRequest::ClaimLinks { .. }
         | SystemRequest::IdleAfter { .. }
         | SystemRequest::IdleBeforeBlanking { .. }
         | SystemRequest::IdleHolds
@@ -372,6 +377,7 @@ pub fn reach(request: &SystemRequest) -> Reach {
         | SystemRequest::ScreenRecord
         | SystemRequest::PreviewWindow { .. }
         | SystemRequest::SendShell { .. }
+        | SystemRequest::OpenLink { .. }
         | SystemRequest::VirtualMonitor { .. }
         | SystemRequest::Agent { .. }
         | SystemRequest::AgentDid { .. }
@@ -402,6 +408,8 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::PreviewWindow { .. }
         | SystemRequest::ShellCommands { .. }
         | SystemRequest::AnswerShellCommand { .. }
+        | SystemRequest::ClaimLinks { .. }
+        | SystemRequest::OpenLink { .. }
         | SystemRequest::IdleAfter { .. }
         | SystemRequest::IdleBeforeBlanking { .. }
         | SystemRequest::IdleHolds
@@ -464,6 +472,8 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         | SystemRequest::ShellCommands { .. }
         | SystemRequest::AnswerShellCommand { .. }
         | SystemRequest::SendShell { .. }
+        | SystemRequest::ClaimLinks { .. }
+        | SystemRequest::OpenLink { .. }
         | SystemRequest::IdleAfter { .. }
         | SystemRequest::IdleBeforeBlanking { .. }
         | SystemRequest::IdleHolds
@@ -522,6 +532,7 @@ impl System {
             screen_record: None,
             preview: None,
             shell_commands: ShellCommands::default(),
+            links: Links::default(),
             idle_watches: IdleWatches::new(|| {}),
             idle_holds: IdleHolds::default(),
             unlock_refusals: UnlockRefusals::default(),
@@ -590,6 +601,13 @@ impl System {
     /// instead of only its own.
     pub fn sharing_shell_commands(mut self, commands: ShellCommands) -> System {
         self.shell_commands = commands;
+        self
+    }
+
+    /// This system, claiming and handing over links through `links` instead
+    /// of only its own.
+    pub fn sharing_links(mut self, links: Links) -> System {
+        self.links = links;
         self
     }
 
@@ -1040,6 +1058,40 @@ impl System {
                     id,
                     reply: SystemReply::Set,
                 });
+                Handled::Done
+            }
+            SystemRequest::ClaimLinks { schemes } => self.starting(id, |system| {
+                let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
+                let listener = system.links.listen(
+                    schemes,
+                    Arc::new(move |(url, app_id): &(String, Option<String>)| {
+                        let Some(running) = running.upgrade() else {
+                            return;
+                        };
+                        // Under the lock, as for shell commands.
+                        let running = running.lock().unwrap();
+                        if matches!(running.get(&id), Some(Running::Listening(_))) {
+                            tell(HostMessage::SystemEvent {
+                                id,
+                                event: SystemEvent::Link {
+                                    url: url.clone(),
+                                    app_id: app_id.clone(),
+                                },
+                            });
+                        }
+                    }),
+                );
+                Ok((Running::Listening(listener), Box::new(|| {})))
+            }),
+            SystemRequest::OpenLink { url, app_id } => {
+                let reply = match self.links.open(&url, app_id.as_deref()) {
+                    true => SystemReply::Sent { output: None },
+                    false => failed(SystemError {
+                        kind: SystemErrorKind::NotFound,
+                        message: format!("no page of this desktop opens {url}"),
+                    }),
+                };
+                (self.tell)(HostMessage::SystemReply { id, reply });
                 Handled::Done
             }
             SystemRequest::UnlockRefusals => self.starting(id, |system| {

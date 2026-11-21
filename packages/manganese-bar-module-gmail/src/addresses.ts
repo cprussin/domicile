@@ -18,6 +18,22 @@ export const inboxAddress = (email: string, profile?: string): string =>
     : `${GMAIL_ORIGIN}/mail/`;
 
 /**
+ * The account's Gmail with a new message open over the inbox, filled in from
+ * the `mailto:` link `link`: its recipients, subject and body. Gmail's own
+ * handler for `mailto:` links, as a browser registers it.
+ */
+export const composeAddress = (
+  email: string,
+  link: string,
+  profile?: string,
+): string =>
+  `${GMAIL_ORIGIN}/mail/?${new URLSearchParams([
+    ...(profile === undefined ? [["authuser", email]] : []),
+    ["extsrc", "mailto"],
+    ["url", link],
+  ]).toString()}`;
+
+/**
  * Picks the signed-in account by its address. Gmail's `/mail/u/<n>/` takes an
  * account's index, not its address.
  */

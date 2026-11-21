@@ -5,6 +5,7 @@ import { PopupScene } from "@domicile-desktop/component-library/PopupScene";
 import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
 import { useTheme } from "@domicile-desktop/component-library/ThemeProvider";
 import { createToastManager } from "@domicile-desktop/component-library/Toaster";
+import { useApps } from "@domicile-desktop/component-library/useApps";
 import { usePictureUrl } from "@domicile-desktop/component-library/usePictureUrl";
 import { usePortalWallpaper } from "@domicile-desktop/component-library/usePortalWallpaper";
 import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
@@ -49,12 +50,16 @@ import { Lock } from "@domicile-desktop/manganese-lock/Lock";
 import { LockBar } from "@domicile-desktop/manganese-lock/LockBar";
 import { useLocked } from "@domicile-desktop/manganese-lock/useLocked";
 import type { Inbox } from "@domicile-desktop/manganese-notifications/inbox";
+import { MailPicker } from "@domicile-desktop/manganese-notifications/MailPicker";
 import { NotificationDrawer } from "@domicile-desktop/manganese-notifications/NotificationDrawer";
 import { NotificationToasts } from "@domicile-desktop/manganese-notifications/NotificationToasts";
 import type { NotificationsDrawer } from "@domicile-desktop/manganese-notifications/notifications-context";
 import { NotificationsContext } from "@domicile-desktop/manganese-notifications/notifications-context";
+import { useMailLinks } from "@domicile-desktop/manganese-notifications/useMailLinks";
 import { useNotifications } from "@domicile-desktop/manganese-notifications/useNotifications";
 import { useNow } from "@domicile-desktop/manganese-notifications/useNow";
+import type { ShellLinks } from "@domicile-desktop/manganese-page-requests/shell-links";
+import { ShellLinksContext } from "@domicile-desktop/manganese-page-requests/shell-links";
 import { useWallpapers } from "@domicile-desktop/manganese-wallpaper/useWallpapers";
 import { Wallpaper } from "@domicile-desktop/manganese-wallpaper/Wallpaper";
 import type { Wallpapers } from "@domicile-desktop/manganese-wallpaper/wallpapers";
@@ -335,6 +340,19 @@ export const Desktop = ({
     inboxes,
     onClose: closeNotifications,
   });
+  // Email links, from pages, apps and `domicile open`, open in an inbox.
+  const mailLinks = useMailLinks(
+    domicile,
+    inboxes,
+    inboxDrawer.drawer.readings,
+  );
+  const { open: openLink, opens: opensLink } = mailLinks;
+  const shellLinks = useMemo(
+    (): ShellLinks => ({ open: openLink, opens: opensLink }),
+    [openLink, opensLink],
+  );
+  const asker = mailLinks.asking?.appId;
+  const appOf = useApps(domicile, asker === undefined ? [] : [asker]);
   // Pressing an inbox's notification brings up its window too.
   const { invoke: invokeNotification, items: notificationItems } =
     notifications;
@@ -778,6 +796,7 @@ export const Desktop = ({
         holdKeyboard={holdKeyboard}
         keymap={shellOptions.keymap}
         launcher={launcherControl}
+        shellLinks={shellLinks}
         tray={trayState}
         workspaces={shownWorkspaces}
       >
@@ -983,6 +1002,19 @@ export const Desktop = ({
           shellChords={shellChords}
           shownWindows={shownWindows}
         />
+        {mailLinks.asking !== undefined && (
+          <MailPicker
+            asker={asker === undefined ? undefined : appOf(asker).name}
+            lastChoice={mailLinks.lastChoice}
+            link={mailLinks.asking.link}
+            onCancel={mailLinks.cancel}
+            onChoose={({ address }) => {
+              mailLinks.choose(address);
+            }}
+            screen={windows.focused}
+            senders={mailLinks.senders}
+          />
+        )}
         {/*
         Last, over every panel, so the modal launcher and clipboard cannot take
         input on a locked desk.
@@ -1026,7 +1058,7 @@ const lockBar = (screen: string) => (
   <LockBar layout={LOCK_BAR} screen={screen} />
 );
 
-/** Everything the bars' items read, desktop-wide. */
+/** Everything the bars' items and the windows read, desktop-wide. */
 const BarProviders = ({
   children,
   clock,
@@ -1034,6 +1066,7 @@ const BarProviders = ({
   holdKeyboard,
   keymap,
   launcher,
+  shellLinks,
   tray,
   workspaces,
 }: {
@@ -1043,6 +1076,7 @@ const BarProviders = ({
   holdKeyboard: HoldKeyboard;
   keymap: KeymapOptions;
   launcher: LauncherControl;
+  shellLinks: ShellLinks;
   tray: TrayState;
   workspaces: Workspaces;
 }) => (
@@ -1053,7 +1087,9 @@ const BarProviders = ({
           <PanelKeyboardContext value={holdKeyboard}>
             <ClockOptionsContext value={clock}>
               <KeymapOptionsContext value={keymap}>
-                {children}
+                <ShellLinksContext value={shellLinks}>
+                  {children}
+                </ShellLinksContext>
               </KeymapOptionsContext>
             </ClockOptionsContext>
           </PanelKeyboardContext>

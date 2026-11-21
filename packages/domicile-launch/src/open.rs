@@ -127,6 +127,25 @@ pub fn opener(target: &str, here: &Path, places: &Places) -> Result<Option<Strin
     })
 }
 
+/// Whether a shell page may claim `target`, an address whose scheme is
+/// neither a web address's nor `file`. `domicile open` hands such a link to
+/// the page that claims its scheme, if one does, before picking an
+/// application. See `domicile_protocol::SystemRequest::ClaimLinks`.
+pub fn claimable(target: &str) -> bool {
+    !matches!(
+        scheme_of(target).as_deref(),
+        None | Some("http" | "https" | "file")
+    )
+}
+
+/// `target`'s scheme, lowercase, or `None` when it is no address.
+fn scheme_of(target: &str) -> Option<String> {
+    has_scheme(target)
+        .then(|| target.split_once(':'))
+        .flatten()
+        .map(|(scheme, _)| scheme.to_ascii_lowercase())
+}
+
 /// [`opening`], with the application that runs.
 enum Resolved {
     Browse(String),
@@ -134,11 +153,7 @@ enum Resolved {
 }
 
 fn resolved(target: &str, here: &Path, places: &Places) -> Result<Resolved, OpenError> {
-    let scheme = has_scheme(target)
-        .then(|| target.split_once(':'))
-        .flatten()
-        .map(|(scheme, _)| scheme.to_ascii_lowercase());
-    match scheme.as_deref() {
+    match scheme_of(target).as_deref() {
         Some("http" | "https") => Ok(Resolved::Browse(target.to_string())),
         Some("file") => file_opening(target, &here.join(file_path(target)), places),
         Some(scheme) => {
