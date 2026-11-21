@@ -153,6 +153,7 @@ TOGETHER=(
   guard-electron-web-request
   guard-video-codecs
   guard-browser-brand
+  guard-clean-exit
 )
 
 # Run one at a time, after the rest. Latency measures time, so it runs alone.
