@@ -2266,7 +2266,11 @@ fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), Down>
         .start_heard(
             "engine",
             &spawn,
-            Box::new(move |line| sink.say(&log.entry(line), line, &mut std::io::stderr())),
+            Box::new(move |line| {
+                if let Some(entry) = log.heard(line) {
+                    sink.say(&entry, line, &mut std::io::stderr());
+                }
+            }),
         )
         .map_err(|why| why.to_string())?;
     wait_for(
@@ -2527,6 +2531,7 @@ fn answer_a_command(
                         )
                         .map_err(|why| why.to_string())?;
                         launcher_log::set(asked);
+                        domicile_launch::engine_log::set(asked);
                         *set = asked.clone();
                         Ok(())
                     },

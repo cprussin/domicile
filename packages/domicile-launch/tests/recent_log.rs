@@ -128,6 +128,7 @@ fn the_journal_is_read_for_every_part_this_boot() {
             "--identifier=domicile-compositor",
             "--identifier=domicile-engine",
             "--identifier=domicile-shell",
+            "--identifier=domicile-relay",
         ]
     );
 }

@@ -169,11 +169,12 @@ pub fn compositor_line(line: &str, at: u64) -> Said {
 }
 
 /// The parts' names, which `journalctl -t` takes to read a desktop's lines.
-pub const IDENTIFIERS: [&str; 4] = [
+pub const IDENTIFIERS: [&str; 5] = [
     "domicile",
     "domicile-compositor",
     "domicile-engine",
     "domicile-shell",
+    "domicile-relay",
 ];
 
 /// One line of `journalctl -o json`.

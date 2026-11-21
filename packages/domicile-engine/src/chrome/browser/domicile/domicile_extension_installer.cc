@@ -17,6 +17,7 @@
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/no_destructor.h"
 #include "base/one_shot_event.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
@@ -146,9 +147,16 @@ void OnUnpackedLoaded(base::WeakPtr<Profile> profile,
                       const base::FilePath& directory,
                       const std::u16string& error) {
   if (!extension) {
-    LOG(ERROR) << "domicile: the desk's config names " << directory
-               << " as an unpacked extension, and it did not load: "
-               << base::UTF16ToUTF8(error);
+    // Each profile loads it, at each start and each change to the config, so
+    // it is said once for each directory and reason until the engine exits.
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+    using Said = std::set<std::pair<base::FilePath, std::u16string>>;
+    static base::NoDestructor<Said> said;
+    if (said->insert({directory, error}).second) {
+      LOG(ERROR) << "domicile: the desk's config names " << directory
+                 << " as an unpacked extension, and it did not load: "
+                 << base::UTF16ToUTF8(error);
+    }
     return;
   }
   if (profile) {
