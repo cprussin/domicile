@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use domicile_host::data_dirs::data_dirs;
@@ -67,6 +67,7 @@ use domicile_launch::help::{command_help, error, overview, version_lines, with_u
 use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::idle_inhibit::{exit_code, inhibit_idle};
 use domicile_launch::install_app::{data_home, install_app, Fetched};
+use domicile_launch::journal::stderr_is_the_journal;
 use domicile_launch::launcher_log;
 use domicile_launch::listing::{
     agents_table, bindings_table, displays_table, inputs_table, log_levels_table,
@@ -83,6 +84,7 @@ use domicile_launch::platform::platform;
 use domicile_launch::power::{confirmed, Power};
 use domicile_launch::profile_claim::claim;
 use domicile_launch::profile_path::{profile_directory, state_directory};
+use domicile_launch::recent_log::{self, from_the_journal};
 use domicile_launch::restart::{
     clear_the_last_compositor, clear_the_last_engine, clear_the_last_one, keep_a_desktop_up,
     keep_the_parts_up, renderer_unavailable, restarts, Attempt, Ending, PartAttempt, Policy,
@@ -100,7 +102,7 @@ use domicile_launch::spawn::{
 use domicile_launch::splash::{lay_out, tell, the_page_ends, Progress, ENDED};
 use domicile_launch::startup::{up_line, Chosen};
 use domicile_launch::subscription::follow;
-use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
+use domicile_launch::supervise::{catch_interrupts, interrupted, Listener, Running, ASK_EVERY};
 use domicile_launch::trace::{self, producer_socket};
 use domicile_launch::uninstall_app::uninstall_app;
 use domicile_launch::version::engine as engine_version;
@@ -328,8 +330,56 @@ fn run() -> Result<ExitCode, String> {
                 .map_err(|why| format!("cannot tell where {file} is: {why}"))?;
             traced_to(&file, Duration::from_secs(seconds))
         }
+        Invocation::Logs { follow } => logs_printed(follow),
+        Invocation::ExportLogs { file, redact } => {
+            let file = file.unwrap_or_else(|| {
+                let now = recent_log::now();
+                let at = (now / 1_000_000) as i64 + recent_log::local_offset(now);
+                format!("domicile-logs-{}.txt", recent_log::civil(at, "-", ""))
+            });
+            // Absolute here, since the desktop does not share this working
+            // directory.
+            asked(&Request::ExportLogs {
+                file: std::path::absolute(&file)
+                    .map_err(|why| format!("cannot tell where {file} is: {why}"))?,
+                redact,
+            })
+        }
         Invocation::InstallApp { url } => installed(&url),
         Invocation::UninstallApp { url } => uninstalled(&url),
+    }
+}
+
+/// Prints the desktop's logs: with `journalctl` when they go to the journal,
+/// following them if `follow`; else the lines the desktop kept.
+fn logs_printed(follow: bool) -> Result<ExitCode, String> {
+    let socket =
+        advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
+    match ask(&socket, &Request::RecentLogs, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())? {
+        Response::RecentLogs { journal: true, .. } => {
+            let status = Command::new("journalctl")
+                .args(recent_log::journal_args())
+                .args(follow.then_some("--follow"))
+                .status()
+                .map_err(|why| format!("cannot run journalctl: {why}"))?;
+            Ok(ExitCode::from(exit_code(status)))
+        }
+        Response::RecentLogs { lines, .. } => {
+            for line in lines {
+                println!("{line}");
+            }
+            match follow {
+                false => Ok(ExitCode::SUCCESS),
+                true => Err("this desktop's logs go to the terminal or file it started \
+                     with, not the journal, so follow them there. Above are the newest \
+                     lines it kept."
+                    .to_string()),
+            }
+        }
+        Response::Refused { why } => Err(why),
+        other => Err(format!(
+            "the desktop answered recent_logs with {other:?}, which is not its logs"
+        )),
     }
 }
 
@@ -1063,6 +1113,25 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             print!("{}", log_levels_table(out(), &levels));
             Ok(ExitCode::SUCCESS)
         }
+        // `domicile logs` reads these itself; see `logs_printed`.
+        Response::RecentLogs { lines, .. } => {
+            for line in lines {
+                println!("{line}");
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Response::ExportedLogs { file, unhidden } => {
+            let paint = out();
+            println!(
+                "{} Wrote {}",
+                paint.style(Style::Good, "✓"),
+                paint.style(Style::Bold, &file.display().to_string()),
+            );
+            if let Some(unhidden) = unhidden {
+                eprintln!("domicile: {unhidden}");
+            }
+            Ok(ExitCode::SUCCESS)
+        }
         Response::Theme { theme } => {
             println!(
                 "{}",
@@ -1736,10 +1805,13 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     // The levels `domicile set-log-level` set, which a restarted part starts
     // at too. They reset with the run.
     let levels = Arc::new(Mutex::new(LogLevels::default()));
+    // The line the desktop says when it is up, for `domicile export-logs`.
+    let up_said = Arc::new(OnceLock::new());
     answering(
         &control,
         Arc::clone(&serving),
         Arc::clone(&levels),
+        Arc::clone(&up_said),
         files,
         places.command.clone(),
         places.chrome_socket.clone(),
@@ -1813,6 +1885,9 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         on_the_cpu,
         socket: &places.control,
     });
+    up_said
+        .set(up.clone())
+        .expect("the desktop comes up once a run");
 
     // Install before starting components. Each runs in its own process
     // group, so Ctrl-C reaches only this process, whose default action would
@@ -2101,24 +2176,36 @@ fn start_a_compositor(
         let_the_engine_take_input(&mut spawn);
     }
     let sink = Arc::clone(desktop.sink);
+    let journal = sink.is_the_journal();
     let heard = Arc::clone(heard);
-    running
-        .start_heard(
+    let stderr: Listener = Box::new(move |line| {
+        heard
+            .lock()
+            .expect("nothing panics holding what a component said")
+            .line(line);
+        sink.say(
+            &component_log::compositor(line),
+            line,
+            &mut std::io::stderr(),
+        );
+    });
+    match journal {
+        // Its tracing goes straight to the journal.
+        true => running.start_heard("compositor", &spawn, stderr),
+        // Its tracing is formatted to stdout, and kept for `domicile logs` on
+        // the way through.
+        false => running.start_heard_whole(
             "compositor",
             &spawn,
-            Box::new(move |line| {
-                heard
-                    .lock()
-                    .expect("nothing panics holding what a component said")
-                    .line(line);
-                sink.say(
-                    &component_log::compositor(line),
-                    line,
-                    &mut std::io::stderr(),
-                );
+            stderr,
+            Box::new(|line| {
+                recent_log::keep(recent_log::compositor_line(line, recent_log::now()));
+                // Nowhere is left to say a failed write.
+                let _ = writeln!(std::io::stdout(), "{line}");
             }),
-        )
-        .map_err(|why| why.to_string())?;
+        ),
+    }
+    .map_err(|why| why.to_string())?;
     wait_for(
         &session(&desktop.places.session),
         &desktop.places.session,
@@ -2244,6 +2331,7 @@ fn answering(
     control: &Control,
     serving: Arc<Mutex<Shell>>,
     levels: Arc<Mutex<LogLevels>>,
+    up: Arc<OnceLock<String>>,
     files: SettingsFiles,
     engine: PathBuf,
     chrome: PathBuf,
@@ -2256,15 +2344,16 @@ fn answering(
         for connection in listener.incoming() {
             match connection {
                 Ok(stream) => {
-                    let (serving, levels, files, engine, chrome) = (
+                    let (serving, levels, up, files, engine, chrome) = (
                         serving.clone(),
                         levels.clone(),
+                        up.clone(),
                         files.clone(),
                         engine.clone(),
                         chrome.clone(),
                     );
                     std::thread::spawn(move || {
-                        answer_a_command(stream, &serving, &levels, &files, &engine, &chrome)
+                        answer_a_command(stream, &serving, &levels, &up, &files, &engine, &chrome)
                     });
                 }
                 Err(why) => launcher_log::error(&format!("a command did not arrive: {why}")),
@@ -2279,10 +2368,12 @@ fn answer_a_command(
     stream: UnixStream,
     serving: &Mutex<Shell>,
     levels: &Mutex<LogLevels>,
+    up: &OnceLock<String>,
     files: &SettingsFiles,
     engine: &Path,
     chrome: &Path,
 ) {
+    let journal = stderr_is_the_journal();
     let lending = |lent| lend(lent, chrome, ANSWER_WITHIN);
     let following = |subscription| follow(subscription, chrome);
     let admitting = |admission| admit(admission, chrome, DECIDING_WITHIN);
@@ -2440,6 +2531,14 @@ fn answer_a_command(
                         launcher_log::set(asked);
                         *set = asked.clone();
                         Ok(())
+                    },
+                    up: up
+                        .get()
+                        .map_or("The desktop was not up yet.", String::as_str),
+                    logs_in_the_journal: journal,
+                    logs: &|| match journal {
+                        true => from_the_journal(),
+                        false => Ok(recent_log::kept()),
                     },
                     monitors: &|| {
                         monitors(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())

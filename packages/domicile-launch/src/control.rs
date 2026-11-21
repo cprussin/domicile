@@ -23,8 +23,11 @@ use serde::{Deserialize, Serialize};
 use crate::browser_profiles::BrowserProfileList;
 use crate::extensions::{ExtensionSettings, InstalledExtension};
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
+use crate::log_export::{report, Report};
 use crate::log_levels::changed;
 use crate::media_devices::{MediaDevices, MediaKind};
+use crate::paint::Paint;
+use crate::recent_log::{local_offset, Said};
 use crate::shell_path::{Shell, ShellFiles};
 use crate::site_data::SiteData;
 use crate::site_permissions::{SitePermission, SiteSettings};
@@ -261,6 +264,13 @@ pub enum Request {
     ResetLogLevels,
     /// The levels set since the desktop started.
     LogLevels,
+    /// The lines the desktop kept, when they did not go to the journal.
+    /// Answered with [`Response::RecentLogs`]. See `domicile logs`.
+    RecentLogs,
+    /// Write the desktop's logs, and what it is running on, to `file`, with
+    /// URLs and window titles hidden if `redact`. Answered with
+    /// [`Response::ExportedLogs`]. See `domicile export-logs`.
+    ExportLogs { file: PathBuf, redact: bool },
     /// Hear about `topics` for as long as the connection is open: each
     /// topic's answer at once, then again whenever it changes, each as a
     /// [`Response::Heard`]. See `domicile subscribe`.
@@ -426,6 +436,16 @@ pub enum Response {
     Theme { theme: Theme },
     /// The levels set since the desktop started.
     LogLevels { levels: LogLevels },
+    /// Answers `recent_logs`: on the journal, nothing, since `journalctl`
+    /// reads them; else the lines kept, oldest first.
+    RecentLogs { journal: bool, lines: Vec<String> },
+    /// The logs were written to `file`. `unhidden` says what redaction could
+    /// not hide, and why.
+    ExportedLogs {
+        file: PathBuf,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        unhidden: Option<String>,
+    },
 
     /// Answers `monitors`.
     Monitors { monitors: Vec<MonitorInfo> },
@@ -702,6 +722,10 @@ pub type ReadingLogLevels<'a> = &'a dyn Fn() -> LogLevels;
 /// Sets the desktop's log levels, replacing those set before.
 pub type SettingLogLevels<'a> = &'a dyn Fn(&LogLevels) -> Result<(), String>;
 
+/// The desktop's lines this boot, oldest first: from the journal, or those
+/// [`crate::recent_log`] kept.
+pub type ReadingLogs<'a> = &'a dyn Fn() -> Result<Vec<Said>, String>;
+
 /// Asks the compositor for the lit monitors.
 ///
 /// [`crate::compositor_socket::monitors`] in a desktop; a closure in tests.
@@ -805,6 +829,11 @@ pub struct Desktop<'a> {
     pub configure_display: ConfiguringDisplays<'a>,
     pub log_levels: ReadingLogLevels<'a>,
     pub set_log_levels: SettingLogLevels<'a>,
+    /// The line the desktop said when it came up.
+    pub up: &'a str,
+    /// Whether the desktop's lines go to the journal.
+    pub logs_in_the_journal: bool,
+    pub logs: ReadingLogs<'a>,
     pub monitors: ListMonitors<'a>,
     pub displays: ListDisplays<'a>,
     pub windows: ListWindows<'a>,
@@ -1141,6 +1170,28 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         Ok(Request::LogLevels) => to_line(&Response::LogLevels {
             levels: (desktop.log_levels)(),
         }),
+        Ok(Request::RecentLogs) => to_line(&match desktop.logs_in_the_journal {
+            true => Response::RecentLogs {
+                journal: true,
+                lines: Vec::new(),
+            },
+            false => match (desktop.logs)() {
+                Ok(logs) => Response::RecentLogs {
+                    journal: false,
+                    lines: logs
+                        .iter()
+                        .map(|said| said.line(local_offset(said.at)))
+                        .collect(),
+                },
+                Err(why) => Response::Refused { why },
+            },
+        }),
+        Ok(Request::ExportLogs { file, redact }) => {
+            to_line(&match exported(desktop, &file, redact) {
+                Ok(unhidden) => Response::ExportedLogs { file, unhidden },
+                Err(why) => Response::Refused { why },
+            })
+        }
         Ok(Request::SleepDisplays { display }) => {
             powered(DisplayPower::Asleep, display, desktop.power_displays)
         }
@@ -1179,6 +1230,49 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             ),
         }),
     }
+}
+
+/// Writes the desktop's logs to `file` for `Request::ExportLogs`, answering
+/// what redaction could not hide. Read failures besides the logs' own are
+/// said in the file: the logs matter most when part of the desktop is down.
+fn exported(desktop: &Desktop, file: &Path, redact: bool) -> Result<Option<String>, String> {
+    let logs = (desktop.logs)().map_err(|why| format!("cannot read the logs: {why}"))?;
+    let (titles, unhidden) = match redact {
+        false => (Vec::new(), None),
+        true => match (desktop.windows)() {
+            Ok(windows) => (
+                windows.into_iter().map(|window| window.title).collect(),
+                None,
+            ),
+            Err(why) => (
+                Vec::new(),
+                Some(format!(
+                    "the window titles were not read, so they may show: {why}"
+                )),
+            ),
+        },
+    };
+    let now = crate::recent_log::now();
+    let offset = local_offset(now);
+    let text = report(&Report {
+        at: &crate::recent_log::civil((now / 1_000_000) as i64 + offset, " ", ":"),
+        up: desktop.up,
+        levels: (desktop.log_levels)(),
+        displays: (desktop.displays)()
+            .map(|displays| crate::listing::displays_table(Paint::PLAIN, &displays)),
+        inputs: (desktop.inputs)()
+            .map(|inputs| crate::listing::inputs_table(Paint::PLAIN, &inputs)),
+        from: match desktop.logs_in_the_journal {
+            true => "the journal",
+            false => "the desktop's last lines",
+        },
+        logs: &logs,
+        offset,
+        titles: &titles,
+        redact,
+    });
+    std::fs::write(file, text).map_err(|why| format!("cannot write {}: {why}", file.display()))?;
+    Ok(unhidden)
 }
 
 /// Sets the desktop's log levels to `levels` with `set`, answering them, or

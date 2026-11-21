@@ -63,6 +63,17 @@ pub fn say(level: LogLevel, said: &str) {
     let journal = *JOURNAL.get_or_init(stderr_is_the_journal);
     // Nowhere is left to say a failed write.
     let _ = writeln!(std::io::stderr(), "{}", line(level, said, journal));
+    crate::recent_log::keep(crate::recent_log::Said {
+        at: crate::recent_log::now(),
+        identifier: "domicile".to_string(),
+        priority: match level {
+            LogLevel::Error => crate::journal::Priority::Error,
+            LogLevel::Warn => crate::journal::Priority::Warning,
+            LogLevel::Info => crate::journal::Priority::Info,
+            LogLevel::Debug | LogLevel::Trace => crate::journal::Priority::Debug,
+        },
+        message: said.to_string(),
+    });
 }
 
 /// Every level, in [`LogLevel`]'s order.

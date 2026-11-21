@@ -8,6 +8,7 @@
 use std::io::Write;
 
 use crate::journal::{self, Entry, Journal, Priority};
+use crate::recent_log::{self, Said};
 
 /// The name the compositor's entries carry.
 pub const COMPOSITOR: &str = "domicile-compositor";
@@ -39,9 +40,16 @@ impl Sink {
         }
     }
 
+    /// Whether lines go to the journal.
+    pub fn is_the_journal(&self) -> bool {
+        matches!(self, Sink::Journal(_))
+    }
+
     /// Says `line`, read as `entry`. A line the journal refuses, or any line
-    /// off the journal, is written to `stderr` as said.
+    /// off the journal, is written to `stderr` as said. Either way it is kept
+    /// for `domicile logs` ([`crate::recent_log`]).
     pub fn say(&self, entry: &Entry, line: &str, stderr: &mut dyn Write) {
+        recent_log::keep(Said::of(entry, recent_log::now()));
         let refused = match self {
             Sink::Journal(journal) => journal.send(entry).is_err(),
             Sink::Stderr => true,

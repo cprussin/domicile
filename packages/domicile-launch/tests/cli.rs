@@ -856,6 +856,8 @@ fn every_command_in_the_help_parses_as_a_verb() {
         "accessibility",
         "accessibility-act",
         "set-log-level",
+        "logs",
+        "export-logs",
         "help",
     ];
     for verb in verbs {
@@ -1695,6 +1697,47 @@ fn trace_needs_a_file_and_a_whole_number_of_seconds() {
         Err(CliError::Extra {
             verb: "trace".to_string(),
             extra: "b.pftrace".to_string()
+        })
+    );
+}
+
+#[test]
+fn logs_prints_them_or_follows_them() {
+    assert_eq!(run(&["logs"]), Ok(Invocation::Logs { follow: false }));
+    assert_eq!(
+        run(&["logs", "--follow"]),
+        Ok(Invocation::Logs { follow: true })
+    );
+    assert_eq!(run(&["logs", "-f"]), Ok(Invocation::Logs { follow: true }));
+    assert_eq!(
+        run(&["logs", "--errors"]),
+        Err(CliError::UnknownFlag {
+            flag: "--errors".to_string()
+        })
+    );
+}
+
+#[test]
+fn export_logs_hides_urls_and_titles_unless_asked_to_show_everything() {
+    assert_eq!(
+        run(&["export-logs"]),
+        Ok(Invocation::ExportLogs {
+            file: None,
+            redact: true
+        })
+    );
+    assert_eq!(
+        run(&["export-logs", "--show-everything", "bug.txt"]),
+        Ok(Invocation::ExportLogs {
+            file: Some("bug.txt".to_string()),
+            redact: false
+        })
+    );
+    assert_eq!(
+        run(&["export-logs", "bug.txt", "more.txt"]),
+        Err(CliError::Extra {
+            verb: "export-logs".to_string(),
+            extra: "more.txt".to_string()
         })
     );
 }

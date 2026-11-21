@@ -13,7 +13,9 @@ use domicile_launch::extensions::{
     ExtensionSettings, InstalledExtension, SiteAccess, SiteAccessMode,
 };
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
+use domicile_launch::journal::Priority;
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
+use domicile_launch::recent_log::Said;
 use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
@@ -1360,6 +1362,9 @@ fn nothing_dialed() -> Desktop<'static> {
         configure_display: &|_, _| panic!("only configure_display configures a display"),
         log_levels: &|| panic!("only the log level requests read the log levels"),
         set_log_levels: &|_| panic!("only the log level requests set log levels"),
+        up: "domicile is up. domicile 1.3.0",
+        logs_in_the_journal: false,
+        logs: &|| panic!("only recent_logs and export_logs read the logs"),
         monitors: &|| panic!("only monitors lists the monitors"),
         displays: &|| panic!("only displays lists the displays"),
         windows: &|| panic!("only windows lists the windows"),
@@ -1754,4 +1759,169 @@ fn agents_are_listed_stopped_and_forgotten_through_the_compositor() {
         Response::Done
     );
     assert_eq!(forgot.borrow().as_deref(), Some("Codex"));
+}
+
+fn engine_said(message: &str) -> Said {
+    Said {
+        at: 1_795_799_523_000_000,
+        identifier: "domicile-engine".to_string(),
+        priority: Priority::Error,
+        message: message.to_string(),
+    }
+}
+
+fn titled(title: &str) -> ListedWindow {
+    ListedWindow {
+        id: "kD3m".to_string(),
+        kind: WindowKind::Browser,
+        title: title.to_string(),
+        app: None,
+        pid: None,
+        size: None,
+        focused: false,
+        urgent: false,
+        url: None,
+        private: false,
+        engine_id: None,
+        views: Vec::new(),
+    }
+}
+
+#[test]
+fn recent_logs_are_the_lines_kept_off_the_journal() {
+    let kept = || Ok(vec![engine_said("the bus is gone")]);
+    let Response::RecentLogs { journal, lines } = reply_to(
+        "{\"type\":\"recent_logs\"}",
+        &Desktop {
+            logs_in_the_journal: false,
+            logs: &kept,
+            ..nothing_dialed()
+        },
+    ) else {
+        panic!("recent_logs answers with the lines");
+    };
+    assert!(!journal);
+    assert_eq!(lines.len(), 1);
+    assert!(
+        lines[0].ends_with("domicile-engine err: the bus is gone"),
+        "{lines:?}"
+    );
+}
+
+#[test]
+fn recent_logs_on_the_journal_send_the_client_there() {
+    // `domicile logs` runs journalctl, which follows and pages.
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"recent_logs\"}",
+            &Desktop {
+                logs_in_the_journal: true,
+                ..nothing_dialed()
+            },
+        ),
+        Response::RecentLogs {
+            journal: true,
+            lines: Vec::new()
+        }
+    );
+}
+
+#[test]
+fn export_logs_writes_them_with_urls_and_titles_hidden() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("logs.txt");
+    let logs = || {
+        Ok(vec![engine_said(
+            "Inbox - Mail failed https://mail.example/x",
+        )])
+    };
+    let desktop = Desktop {
+        logs: &logs,
+        windows: &|| Ok(vec![titled("Inbox - Mail")]),
+        displays: &|| Ok(Vec::new()),
+        inputs: &|| Ok(Vec::new()),
+        log_levels: &LogLevels::default,
+        ..nothing_dialed()
+    };
+    assert_eq!(
+        reply_to(
+            &format!(
+                "{{\"type\":\"export_logs\",\"file\":{:?},\"redact\":true}}",
+                file.display().to_string()
+            ),
+            &desktop,
+        ),
+        Response::ExportedLogs {
+            file: file.clone(),
+            unhidden: None
+        }
+    );
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(text.contains("err: <window title> failed <url>"), "{text}");
+    assert!(text.contains("domicile is up."), "{text}");
+
+    reply_to(
+        &format!(
+            "{{\"type\":\"export_logs\",\"file\":{:?},\"redact\":false}}",
+            file.display().to_string()
+        ),
+        &desktop,
+    );
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(
+        text.contains("err: Inbox - Mail failed https://mail.example/x"),
+        "{text}"
+    );
+}
+
+#[test]
+fn export_logs_without_the_compositor_still_exports_and_says_titles_may_show() {
+    // A desktop whose compositor is down is when its logs are wanted most.
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("logs.txt");
+    let logs = || Ok(vec![engine_said("gone")]);
+    let Response::ExportedLogs { unhidden, .. } = reply_to(
+        &format!(
+            "{{\"type\":\"export_logs\",\"file\":{:?},\"redact\":true}}",
+            file.display().to_string()
+        ),
+        &Desktop {
+            logs: &logs,
+            windows: &|| Err("the compositor is not running".to_string()),
+            displays: &|| Err("the compositor is not running".to_string()),
+            inputs: &|| Err("the compositor is not running".to_string()),
+            log_levels: &LogLevels::default,
+            ..nothing_dialed()
+        },
+    ) else {
+        panic!("the logs are exported anyway");
+    };
+    assert_eq!(
+        unhidden.as_deref(),
+        Some("the window titles were not read, so they may show: the compositor is not running")
+    );
+    assert!(std::fs::read_to_string(&file)
+        .unwrap()
+        .contains("err: gone"));
+}
+
+#[test]
+fn export_logs_that_cannot_be_read_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let logs = || Err("journalctl is not installed".to_string());
+    assert_eq!(
+        reply_to(
+            &format!(
+                "{{\"type\":\"export_logs\",\"file\":{:?},\"redact\":true}}",
+                dir.path().join("logs.txt").display().to_string()
+            ),
+            &Desktop {
+                logs: &logs,
+                ..nothing_dialed()
+            },
+        ),
+        Response::Refused {
+            why: "cannot read the logs: journalctl is not installed".to_string()
+        }
+    );
 }

@@ -200,6 +200,9 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                     set_log_levels: &|_| {
                         panic!("a question about this desktop reaches no compositor")
                     },
+                    up: "domicile is up.",
+                    logs_in_the_journal: false,
+                    logs: &|| panic!("a question about this desktop reads no logs"),
                     permissions: &|| panic!("a question about this desktop reaches no engine"),
                     set_permission: &|_| panic!("a question about this desktop reaches no engine"),
                     load_unpacked: &|_| panic!("a question about this desktop reaches no engine"),

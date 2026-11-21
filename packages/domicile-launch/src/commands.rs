@@ -803,7 +803,40 @@ pub const COMMANDS: &[Command] = &[
             "domicile set-log-level trace input",
             "domicile set-log-level --reset",
         ],
-        see_also: &["trace"],
+        see_also: &["trace", "logs"],
+    },
+    Command {
+        name: "logs",
+        group: Group::Capture,
+        takes: "[--follow]",
+        summary: "Print the desktop's logs",
+        forms: &["logs [--follow]"],
+        about: &[
+            "Prints what every part of the desktop logged since it started. On \
+             the journal it runs `journalctl` for them; otherwise it prints the \
+             newest lines the desktop kept. `--follow`, or `-f`, keeps printing \
+             new ones, on the journal.",
+        ],
+        sections: &[],
+        examples: &["domicile logs --follow"],
+        see_also: &["export-logs", "set-log-level"],
+    },
+    Command {
+        name: "export-logs",
+        group: Group::Capture,
+        takes: "[<file>]",
+        summary: "Save the logs to attach to a bug",
+        forms: &["export-logs [--show-everything] [<file>]"],
+        about: &[
+            "Writes the desktop's logs to one text file, with its version, \
+             shell, displays and inputs, to attach to a bug report. Without a \
+             file it writes `domicile-logs-<time>.txt` here.",
+            "Web addresses and window titles are hidden, since they say what \
+             someone was doing. `--show-everything` leaves them in.",
+        ],
+        sections: &[],
+        examples: &["domicile export-logs", "domicile export-logs ~/bug.txt"],
+        see_also: &["logs"],
     },
     // Agents and automation
     Command {

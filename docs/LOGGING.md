@@ -40,6 +40,18 @@ the same as a block instead.
 
 ## Reading them
 
+`domicile logs` prints every part's lines, wherever they went, and
+`domicile logs --follow` follows them on the journal. To share them, such as on
+a bug, `domicile export-logs` writes them to one file with what the desktop
+runs on, web addresses and window titles hidden. See
+[`domicile logs`](CLI.md#domicile-logs---follow) and
+[`domicile export-logs`](CLI.md#domicile-export-logs---show-everything-file).
+
+Off the journal, the desktop keeps its newest 10,000 lines for both, so logs
+that went to a closed terminal can still be read.
+
+With `journalctl`:
+
 ```sh
 journalctl --user -b -t domicile-shell           # the shell's console
 journalctl --user -b -t domicile-engine -p err   # the engine's errors

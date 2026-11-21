@@ -407,6 +407,13 @@ pub enum Invocation {
     ///
     /// Kept as typed; the client makes it absolute.
     Trace { file: String, seconds: u64 },
+    /// Print the desktop's logs, and keep printing them if `follow`.
+    Logs { follow: bool },
+    /// Write the desktop's logs to `file`, or a file named for the time, with
+    /// URLs and window titles hidden if `redact`.
+    ///
+    /// Kept as typed; the client makes it absolute.
+    ExportLogs { file: Option<String>, redact: bool },
     /// Print the list of commands, or `command`'s help; see [`crate::help`].
     Help { command: Option<String> },
     /// Write the man pages into `dir`; see [`crate::man`].
@@ -945,6 +952,25 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     (Some(_), Some(extra)) => Err(CliError::Extra { extra, verb: first }),
                 }
             }
+            Verb::Logging => match (args.next(), args.next()) {
+                (None, _) => Ok(Invocation::Logs { follow: false }),
+                (Some(flag), None) if flag == "--follow" || flag == "-f" => {
+                    Ok(Invocation::Logs { follow: true })
+                }
+                (Some(flag), _) if flag.starts_with('-') => Err(CliError::UnknownFlag { flag }),
+                (Some(said), _) => Err(CliError::Extra {
+                    verb: first,
+                    extra: said,
+                }),
+            },
+            Verb::Exporting => {
+                let redact = args.next_if(|said| said == "--show-everything").is_none();
+                match (args.next(), args.next()) {
+                    (Some(flag), _) if flag.starts_with('-') => Err(CliError::UnknownFlag { flag }),
+                    (Some(_), Some(extra)) => Err(CliError::Extra { verb: first, extra }),
+                    (file, _) => Ok(Invocation::ExportLogs { file, redact }),
+                }
+            }
             Verb::Executing => {
                 let command: Vec<String> = args.collect();
                 match command.is_empty() {
@@ -1147,6 +1173,10 @@ enum Verb {
     /// `set-log-level`, which takes a level and subsystems, `--reset` or
     /// nothing.
     Leveling,
+    /// `logs`, which takes `--follow` or nothing.
+    Logging,
+    /// `export-logs`, which takes `--show-everything` and a file, or neither.
+    Exporting,
     /// `exec`, which takes a program and its arguments.
     Executing,
     /// `trace`, which takes a file and maybe `--seconds`.
@@ -1274,6 +1304,8 @@ fn verb(word: &str) -> Option<Verb> {
         "disable-while-typing" => Some(Verb::Switching),
         "theme" => Some(Verb::Theming),
         "set-log-level" => Some(Verb::Leveling),
+        "logs" => Some(Verb::Logging),
+        "export-logs" => Some(Verb::Exporting),
         "sleep-displays" => Some(Verb::Sleeping(DisplayPower::Asleep)),
         "wake-displays" => Some(Verb::Sleeping(DisplayPower::Awake)),
         "power-off" => Some(Verb::Powering(Power::Off)),

@@ -115,10 +115,16 @@ fn end_the_group(child: &mut Child) {
     let _ = child.wait();
 }
 
-/// Starts one component with the given stderr.
-fn started(what: &'static str, spawn: &Spawn, stderr: fn() -> Stdio) -> Result<Child, RunError> {
+/// Starts one component with the given stderr and stdout.
+fn started(
+    what: &'static str,
+    spawn: &Spawn,
+    stderr: fn() -> Stdio,
+    stdout: fn() -> Stdio,
+) -> Result<Child, RunError> {
     command(spawn)
         .stderr(stderr())
+        .stdout(stdout())
         .spawn()
         .map_err(|source| RunError::Start {
             program: spawn.program.clone(),
@@ -130,11 +136,11 @@ fn started(what: &'static str, spawn: &Spawn, stderr: fn() -> Stdio) -> Result<C
 /// Where each line of a heard component's stderr goes, without its newline.
 pub type Listener = Box<dyn FnMut(&str) + Send>;
 
-/// Hands each line of a component's stderr to `listener`.
+/// Hands each line of a component's stderr or stdout to `listener`.
 ///
 /// Reads bytes rather than `lines()`, which stops at the first invalid UTF-8.
-fn overhear(what: &'static str, stderr: std::process::ChildStderr, mut listener: Listener) {
-    let mut reader = BufReader::new(stderr);
+fn overhear(what: &'static str, said: impl std::io::Read, mut listener: Listener) {
+    let mut reader = BufReader::new(said);
     let mut line = Vec::new();
     loop {
         line.clear();
@@ -172,7 +178,7 @@ impl Running {
 
     /// Starts a component that inherits our stderr.
     pub fn start(&mut self, what: &'static str, spawn: &Spawn) -> Result<(), RunError> {
-        let child = started(what, spawn, Stdio::inherit)?;
+        let child = started(what, spawn, Stdio::inherit, Stdio::inherit)?;
         self.components.push((what, child));
         Ok(())
     }
@@ -186,11 +192,32 @@ impl Running {
         spawn: &Spawn,
         listener: Listener,
     ) -> Result<(), RunError> {
-        let mut child = started(what, spawn, Stdio::piped)?;
+        let mut child = started(what, spawn, Stdio::piped, Stdio::inherit)?;
         let listening = child.stderr.take().expect("stderr was asked for a pipe");
         self.listeners.push(std::thread::spawn(move || {
             overhear(what, listening, listener)
         }));
+        self.components.push((what, child));
+        Ok(())
+    }
+
+    /// [`Running::start_heard`], handing each line of its stdout to `stdout`
+    /// too.
+    pub fn start_heard_whole(
+        &mut self,
+        what: &'static str,
+        spawn: &Spawn,
+        listener: Listener,
+        stdout: Listener,
+    ) -> Result<(), RunError> {
+        let mut child = started(what, spawn, Stdio::piped, Stdio::piped)?;
+        let listening = child.stderr.take().expect("stderr was asked for a pipe");
+        let out = child.stdout.take().expect("stdout was asked for a pipe");
+        self.listeners.push(std::thread::spawn(move || {
+            overhear(what, listening, listener)
+        }));
+        self.listeners
+            .push(std::thread::spawn(move || overhear(what, out, stdout)));
         self.components.push((what, child));
         Ok(())
     }

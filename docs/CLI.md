@@ -239,6 +239,38 @@ domicile set-log-level trace input
 domicile set-log-level --reset
 ```
 
+## `domicile logs [--follow]`
+
+Print what every part of the desktop logged since it started.
+
+- On the journal, it runs `journalctl` for the desktop's names this boot, and
+  `--follow` (or `-f`) keeps printing new lines.
+- Off the journal, it prints the newest 10,000 lines the desktop kept. Those
+  went to the terminal or file it started with, so follow them there.
+
+```sh
+domicile logs --follow
+```
+
+## `domicile export-logs [--show-everything] [<file>]`
+
+Write the desktop's logs to one text file to attach to a bug report, with its
+version, shell, log levels, displays and inputs. Without a file, it writes
+`domicile-logs-<time>.txt` in the current directory. Prints the file's path.
+
+- Web addresses and the open windows' titles are hidden, since they say what
+  someone was doing. `--show-everything` leaves them in. The desktop's own
+  `domicile://` addresses stay.
+- On the journal, it holds this boot's newest 20,000 lines; off it, the
+  desktop's newest 10,000.
+- Exports even when the compositor is down. Window titles cannot be read then,
+  so it warns that they may show.
+
+```sh
+domicile export-logs
+domicile export-logs --show-everything ~/bug.txt
+```
+
 ## `domicile send-shell <word>...`
 
 Run a shell command, as a keybinding bound to it does:
