@@ -560,8 +560,10 @@ const foundFilesSchema = z.looseObject({
 // Clipboard history, newest first. Pushed on change and on connect.
 //
 // Entries carry a preview and an id, not the full text, which limits exposure
-// of copied passwords. Copy one back with `copy_clipboard_entry`.
+// of copied passwords. Copy one back with `copy_clipboard_entry`; drop one
+// with `remove_clipboard_entry`. `current` marks what the clipboard holds.
 const clipboardEntrySchema = z.looseObject({
+  current: z.boolean(),
   id: z.number(),
   image: z.boolean(),
   preview: z.string(),

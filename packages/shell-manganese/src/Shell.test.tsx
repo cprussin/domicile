@@ -796,6 +796,7 @@ const browserWindow = (container: HTMLElement): HTMLElement => {
 /** The compositor reports the clipboard history, newest first. */
 const copied = (
   entries: readonly {
+    current: boolean;
     id: number;
     image: boolean;
     preview: string;
@@ -1320,9 +1321,27 @@ describe("Shell", () => {
       // The compositor pushes the history; the panel does not ask for it.
       await renderShell();
       copied([
-        { id: 3, image: false, preview: "the newest", thumbnail: "" },
-        { id: 2, image: false, preview: "the middle", thumbnail: "" },
-        { id: 1, image: false, preview: "the oldest", thumbnail: "" },
+        {
+          current: true,
+          id: 3,
+          image: false,
+          preview: "the newest",
+          thumbnail: "",
+        },
+        {
+          current: false,
+          id: 2,
+          image: false,
+          preview: "the middle",
+          thumbnail: "",
+        },
+        {
+          current: false,
+          id: 1,
+          image: false,
+          preview: "the oldest",
+          thumbnail: "",
+        },
       ]);
 
       press("v", true);
@@ -1330,9 +1349,10 @@ describe("Shell", () => {
       expect(
         screen.getByRole("group", { name: "On your clipboard" }).textContent,
       ).toContain("the newest");
-      expect(
-        screen.getAllByRole("option").map((row) => row.textContent),
-      ).toStrictEqual(["the middle", "the oldest"]);
+      expect(screen.getAllByRole("option")).toStrictEqual([
+        screen.getByRole("option", { name: "the middle" }),
+        screen.getByRole("option", { name: "the oldest" }),
+      ]);
     });
 
     it("opens on the screen the keyboard is on", async () => {
@@ -1350,8 +1370,20 @@ describe("Shell", () => {
       // on the seat's clipboard.
       await renderShell();
       copied([
-        { id: 8, image: false, preview: "the newest", thumbnail: "" },
-        { id: 7, image: false, preview: "ssh-rsa AAAA", thumbnail: "" },
+        {
+          current: true,
+          id: 8,
+          image: false,
+          preview: "the newest",
+          thumbnail: "",
+        },
+        {
+          current: false,
+          id: 7,
+          image: false,
+          preview: "ssh-rsa AAAA",
+          thumbnail: "",
+        },
       ]);
       press("v", true);
 
@@ -1360,6 +1392,31 @@ describe("Shell", () => {
       });
 
       expect(domicile.calls).toContainEqual(["copyClipboardEntry", 7]);
+    });
+
+    it("removes the row Delete was pressed on", async () => {
+      await renderShell();
+      copied([
+        {
+          current: true,
+          id: 8,
+          image: false,
+          preview: "the newest",
+          thumbnail: "",
+        },
+        {
+          current: false,
+          id: 7,
+          image: false,
+          preview: "ssh-rsa AAAA",
+          thumbnail: "",
+        },
+      ]);
+      press("v", true);
+
+      fireEvent.keyDown(screen.getByRole("combobox"), { key: "Delete" });
+
+      expect(domicile.calls).toContainEqual(["removeClipboardEntry", 7]);
     });
   });
 

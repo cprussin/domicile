@@ -31,7 +31,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # SystemCall 6, PortalRequest 3, FileChoice 13, DisplayCapture 9,
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, ForwardedKeys 5,
 # SitePermissions 11,
-# ControlChannel 28, DeviceChoices 9, SurfaceFrames 8, SurfaceHolds 4,
+# ControlChannel 30, DeviceChoices 9, SurfaceFrames 8, SurfaceHolds 4,
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4, SurfaceBacklog 4,
 # PrivatePages 3, ShellOrigin 4, AppRoots 4, AppChannel 3, AppDocument 3,
 # WebViewUrl 5, ShellFetch 22, BrowserWindowCaptureTarget 3, BrowserWindowListing 3, ShellWindowWait 4, ShellSwap 12,
@@ -49,6 +49,8 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # ShellDevServerLoad 4, ShellDevServerGone 1, ForCaptureTools 2, DeskDrag 6,
 # DomicileMonitorTwinActivation 1, CursorDisplay 4, DomicileHiddenPageTiles 4.
 #
+# 927, and it was 925 — removing one copy from the clipboard history, and the
+# current flag on each copy, is two more ControlChannel cases. Before that
 # 925, and it was 924 — VERBOSE for a shell's console.debug is one more
 # CommandProtocol case. Before that
 # 924, and it was 922 — `domicile set-log-level` is two CommandProtocol
@@ -330,7 +332,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=925
+FLOOR=927
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

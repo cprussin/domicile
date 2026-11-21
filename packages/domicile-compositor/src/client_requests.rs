@@ -11,7 +11,7 @@ use smithay::wayland::compositor::with_states;
 use smithay::wayland::shell::xdg::ToplevelSurface;
 use tracing::{debug, warn};
 
-use domicile_host::clipboard::Contents;
+use domicile_host::clipboard::{Contents, Removed};
 use domicile_host::system::DisplayPower;
 use domicile_host::theme_turnover::{Turnover, CAPTURE_WITHIN};
 use domicile_host::white_point::WhitePoint;
@@ -247,6 +247,11 @@ pub enum ClientRequest {
     /// The compositor owns this selection, so the entry stays pasteable after
     /// its original client exits.
     CopyClipboardEntry {
+        entry: u32,
+    },
+    /// The shell removed a clipboard history entry. Removing the current one
+    /// empties the seat's clipboard.
+    RemoveClipboardEntry {
         entry: u32,
     },
     /// The shell clicked a tray icon. Routed through this thread so a locked
@@ -594,6 +599,17 @@ impl DomicileCompositor {
                 None => warn!(
                     entry,
                     "the shell asked for a clipboard entry this desktop no longer holds"
+                ),
+            },
+            ClientRequest::RemoveClipboardEntry { entry } => match self.clipboard.remove(entry) {
+                Some(Removed::Earlier) => self.tell_the_chromes_the_clipboard(),
+                Some(Removed::Current) => {
+                    self.tell_the_chromes_the_clipboard();
+                    self.empty_the_clipboard();
+                }
+                None => warn!(
+                    entry,
+                    "the shell removed a clipboard entry this desktop no longer holds"
                 ),
             },
             ClientRequest::Unlock { passphrase } => self.offered_the_passphrase(&passphrase),

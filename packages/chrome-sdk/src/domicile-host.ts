@@ -459,7 +459,8 @@ export type DomicileCastSink = {
  */
 export type DomicileClipboardEntry = {
   /**
-   * What DomicileHost.copyClipboardEntry() names this row by.
+   * What DomicileHost.copyClipboardEntry() and removeClipboardEntry() name
+   * this row by.
    *
    * Assigned by the compositor and never reused, so an id a shell holds names
    * the row it was told about or nothing. Not a position: reordering the list
@@ -487,6 +488,11 @@ export type DomicileClipboardEntry = {
    * compositor could not read; its preview still names it.
    */
   readonly thumbnail: string;
+  /**
+   * Whether this is what the clipboard holds. Only the newest row can be, and
+   * none is after removeClipboardEntry() removes it, until the next copy.
+   */
+  readonly current: boolean;
 };
 
 /**
@@ -847,6 +853,14 @@ export type DomicileHost = {
    * dropped sets nothing.
    */
   copyClipboardEntry(entry: number): void;
+  /**
+   * Drop a row of the clipboard's history and the copy it holds.
+   *
+   * Removing the current row also empties the clipboard, so nothing pastes it
+   * again. No answer: the next `clipboard` leaves the row out. An id the
+   * history has since dropped removes nothing.
+   */
+  removeClipboardEntry(entry: number): void;
   /**
    * Click an icon in the system tray, with the button `action` names.
    *

@@ -8,9 +8,9 @@ use std::thread;
 use smithay::input::Seat;
 use smithay::wayland::{
     selection::data_device::{
-        current_data_device_selection_userdata, request_data_device_client_selection,
-        set_data_device_selection, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState,
-        ServerDndGrabHandler,
+        clear_data_device_selection, current_data_device_selection_userdata,
+        request_data_device_client_selection, set_data_device_selection, ClientDndGrabHandler,
+        DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
     },
     selection::ext_data_control::{
         DataControlHandler as ExtDataControlHandler, DataControlState as ExtDataControlState,
@@ -267,6 +267,15 @@ impl DomicileCompositor {
             Holder::Desk(Clipboard::Copy),
         );
         self.hub.portals.selection_changed(mimes, None);
+        self.tell_the_engine_a_clipboard(Clipboard::Copy);
+    }
+
+    /// Empty the clipboard, after the shell removed the copy on it, so nothing
+    /// pastes it again: not Wayland clients, portal sessions or the browser.
+    pub fn empty_the_clipboard(&mut self) {
+        self.holding[at(Clipboard::Copy)] = None;
+        clear_data_device_selection(&self.display_handle, &self.seat);
+        self.hub.portals.selection_changed(Vec::new(), None);
         self.tell_the_engine_a_clipboard(Clipboard::Copy);
     }
 

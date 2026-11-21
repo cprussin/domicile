@@ -1172,6 +1172,7 @@ impl Host {
             | ChromeMessage::Exec { .. }
             | ChromeMessage::SearchFiles { .. }
             | ChromeMessage::CopyClipboardEntry { .. }
+            | ChromeMessage::RemoveClipboardEntry { .. }
             | ChromeMessage::ActivateTrayItem { .. }
             | ChromeMessage::DismissNotifications { .. }
             | ChromeMessage::InvokeNotificationAction { .. }

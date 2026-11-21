@@ -670,6 +670,16 @@ void DomicileHost::copyClipboardEntry(ScriptState*,
   }
 }
 
+// An id, for copyClipboardEntry's reason: a page can forget a copy but cannot
+// name one that was never made.
+void DomicileHost::removeClipboardEntry(ScriptState*,
+                                        uint32_t entry,
+                                        ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->RemoveClipboardEntry(entry);
+  }
+}
+
 void DomicileHost::focusChrome(ScriptState*, ExceptionState& exception_state) {
   if (Ready(exception_state)) {
     FocusChromeKeyboard();
@@ -2170,7 +2180,8 @@ void DomicileHost::Clipboard(
   history.reserve(entries.size());
   for (const auto& entry : entries) {
     history.push_back(MakeGarbageCollected<DomicileClipboardEntry>(
-        entry->id, entry->image, entry->preview, entry->thumbnail));
+        entry->id, entry->image, entry->preview, entry->thumbnail,
+        entry->current));
   }
   clipboard_ = MakeGarbageCollected<FrozenArray<DomicileClipboardEntry>>(
       std::move(history));

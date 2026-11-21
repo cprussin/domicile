@@ -410,6 +410,7 @@ pub fn somebody_is_here(request: &ClientRequest) -> Option<&'static str> {
         // not pass through here.
         | ClientRequest::ClipboardCopied { .. }
         | ClientRequest::CopyClipboardEntry { .. }
+        | ClientRequest::RemoveClipboardEntry { .. }
         | ClientRequest::ActivateTrayItem { .. }
         | ClientRequest::TrayMenuClicked { .. }
         | ClientRequest::DismissNotifications { .. }
@@ -1327,6 +1328,10 @@ mod tests {
             (
                 "the shell putting a copy back on the clipboard",
                 ClientRequest::CopyClipboardEntry { entry: 1 },
+            ),
+            (
+                "the shell removing a copy from the clipboard history",
+                ClientRequest::RemoveClipboardEntry { entry: 1 },
             ),
             (
                 "the shell clicking a tray icon",
