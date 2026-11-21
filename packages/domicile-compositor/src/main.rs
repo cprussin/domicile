@@ -137,6 +137,7 @@ mod popups;
 mod portals;
 mod presentations;
 mod primary_node;
+mod protocol_trace;
 mod relative_pointer;
 mod reply;
 mod restatement;

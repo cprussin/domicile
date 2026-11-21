@@ -295,6 +295,22 @@ impl DomicileCompositor {
             retired = plan.retired.len(),
             "taking up a reloaded desktop"
         );
+        for advertised in screens.outputs() {
+            debug!(
+                name = %advertised.name,
+                connector = %advertised.connector,
+                display = ?advertised.display,
+                position = ?advertised.position,
+                logical = ?advertised.logical,
+                mode = ?advertised.mode,
+                scale = advertised.scale,
+                transform = ?advertised.transform,
+                refresh_mhz = advertised.refresh_mhz,
+                adaptive_sync = ?advertised.adaptive_sync,
+                hdr = ?advertised.hdr,
+                "a display of the new desktop"
+            );
+        }
         // Move all old outputs out first; the new list takes those it keeps,
         // and the rest are retired.
         let mut had: Vec<Option<LiveOutput>> = self.outputs.drain(..).map(Some).collect();

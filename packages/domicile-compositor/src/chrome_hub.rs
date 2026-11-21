@@ -363,6 +363,7 @@ pub fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
                 continue;
             }
         };
+        crate::protocol_trace::trace("every shell", &message);
         // Encoded once; every chrome gets the same line.
         let line = to_line(&message);
         let mut chromes = hub.chromes.lock().unwrap();

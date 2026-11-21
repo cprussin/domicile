@@ -215,6 +215,14 @@ impl DomicileCompositor {
             state.size = Some((resize.size.0 as i32, resize.size.1 as i32).into());
         });
         let serial = toplevel.send_configure();
+        tracing::trace!(
+            %app_id,
+            ?serial,
+            number = resize.number,
+            size = ?resize.size,
+            device_size = ?resize.device_size,
+            "configure -> client"
+        );
         let changed = self
             .configure_answers
             .get_mut(app_id)

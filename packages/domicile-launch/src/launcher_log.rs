@@ -99,3 +99,17 @@ pub fn warn(said: &str) {
 pub fn info(said: &str) {
     say(LogLevel::Info, said);
 }
+
+/// [`say`] at [`LogLevel::Debug`].
+pub fn debug(said: &str) {
+    say(LogLevel::Debug, said);
+}
+
+/// Whether a message at `level` would show now, so a costly one is built
+/// only when it will be said.
+pub fn showing(level: LogLevel) -> bool {
+    shown(
+        level,
+        LEVELS[usize::from(THRESHOLD.load(Ordering::Relaxed))],
+    )
+}
