@@ -405,7 +405,10 @@ Bind browser keys yourself:
   the same for its client.
 - `domicile-zoom-in-request` / `domicile-zoom-out-request`: Ctrl+wheel. They
   zoom nothing. Call `view.setZoom(factor)` (0.25 to 5). Zoom is per host, as
-  in Chrome.
+  in Chrome. A page an extension set to another zoom mode keeps it:
+  - `manual`, such as a PDF: the page zooms itself to `factor`, and `zoom`
+    reports it.
+  - `disabled`: nothing zooms, and `zoom` stays.
 - `view.find(text, backward)` searches; the same text again goes to the next
   match. `view.stopFinding()` ends it. A navigation ends it too. Matches are
   counted across all frames.

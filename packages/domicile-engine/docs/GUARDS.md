@@ -32,6 +32,7 @@ inside the toolchain shell ([BUILD-MACHINE.md](BUILD-MACHINE.md#toolchain-shell)
 | `guard_webview_devtools.py` | sends keys and clicks to a running engine over the debugging port |
 | `guard-shell-pdf-viewer.py` | asks Chrome's PDF viewer frame, over the debugging port, whether it started |
 | `guard-pdf-scaled-text.py` | screenshots the shell over the debugging port and measures how evenly a PDF's thin lines keep their ink |
+| `guard-pdf-zoom.py` | zooms the shell's `<webview>` over the debugging port and reads the page's `devicePixelRatio` and the PDF viewer's zoom |
 | `guard-pdf-after-hiding.py` | screenshots the shell over the debugging port, hides and shows its `<webview>`, and counts a PDF page's white pixels either side |
 | `guard-webview-guest-page.py` | the guest page for the keyboard and click guards |
 | `lib-annotate.sh` | reports where a guard stopped as a GitHub annotation |
@@ -114,6 +115,7 @@ Headless.
 | `guard-shell-workers.sh` | the shell starts dedicated and shared workers, classic and module, from scripts beside it, and each worker's own import loads (patch 0226) |
 | `guard-shell-pdf.sh` | Chrome's PDF viewer starts on a PDF from `domicile://home/` in the shell's `<iframe>`, as the launcher's preview shows one (patch 0154) |
 | `guard-pdf-scaled-text.sh` | a PDF in an `<iframe>` drawn at 0.8, as on a monitor below the desk's highest density, keeps its thin lines evenly: the viewer's bitmap is downscaled filtered, not nearest-neighbor (patch 0211) |
+| `guard-pdf-zoom.sh` | zooming a PDF in a `<webview>` zooms the document once, through the viewer, with its page at the default zoom: the desk takes `tabs.setZoomSettings`' manual mode, and refuses none of the viewer's calls |
 | `guard-pdf-after-hiding.sh` | a PDF in a `<webview>` draws its page again after the `<webview>` is hidden and shown, as a tab switched away and back: the viewer frame un-throttles the page's frame (patch 0214) |
 | `guard-video-codecs.sh` | the engine plays H.264 and AAC (`src/build/args/domicile_codecs.gn`); VP9 is the control |
 | `guard-browser-brand.sh` | sites are told the engine is Google Chrome in `navigator.userAgentData` and `Sec-CH-UA` (patch 0157); `Chromium` is the control |

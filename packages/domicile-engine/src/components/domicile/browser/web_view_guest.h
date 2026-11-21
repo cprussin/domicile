@@ -28,6 +28,8 @@
 #include "components/domicile/browser/web_view_partition.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/input/native_web_keyboard_event.h"
+#include "components/zoom/zoom_controller.h"
+#include "components/zoom/zoom_observer.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/download_manager.h"
@@ -299,6 +301,7 @@ class WebViewGuest : public mojom::WebViewGuest,
                      public content::WebContentsObserver,
                      public content_settings::Observer,
                      public content::DownloadManager::Observer,
+                     public zoom::ZoomObserver,
                      public mojom::PagePicker {
  public:
   // Creates a guest for `placeholder`, a child frame of `owner`, and starts
@@ -656,11 +659,19 @@ class WebViewGuest : public mojom::WebViewGuest,
                                    const gfx::Point& in_page)>;
   void TakeContextMenusWith(ContextMenuTaking taking);
 
-  // The page's zoom factor, for chrome.tabs. ZoomTo expects a factor already
-  // within blink's range (see DeskZoomFactor in
-  // //components/domicile:desk_tabs) and reports the change like SetZoom.
+  // The page's zoom factor, for chrome.tabs. In manual mode, the factor the
+  // page's own code zooms to, with the page itself at the default zoom.
   double GetZoomFactor() const;
-  void ZoomTo(double factor);
+  // Zooms to `factor`, already within blink's range (see DeskZoomFactor in
+  // //components/domicile:desk_tabs), and reports it like SetZoom. False in
+  // disabled mode, which zooms nothing.
+  bool ZoomTo(double factor);
+
+  // The page's zoom mode, which chrome.tabs.setZoomSettings sets. Chrome's
+  // ZoomController keeps it, and drops manual and per-tab modes when the page
+  // navigates away.
+  zoom::ZoomController::ZoomMode GetZoomMode() const;
+  void SetZoomMode(zoom::ZoomController::ZoomMode mode);
 
   // Runs `changed` on each zoom change, for tabs.onZoomChange.
   using ZoomChangedCallback =
@@ -1056,6 +1067,14 @@ class WebViewGuest : public mojom::WebViewGuest,
                          download::DownloadItem* item) override;
   void ManagerGoingDown(content::DownloadManager* manager) override;
 
+  // zoom::ZoomObserver:
+  //
+  // Reports each zoom change; ReportZoom skips an unchanged factor.
+  void OnZoomChanged(
+      const zoom::ZoomController::ZoomChangedEventData& data) override;
+  void OnZoomControllerDestroyed(
+      zoom::ZoomController* zoom_controller) override;
+
  private:
   WebViewGuest(content::RenderFrameHost& owner,
                mojo::PendingReceiver<mojom::WebViewGuest> receiver,
@@ -1204,9 +1223,13 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Reports load progress to the element if it changed.
   void ReportLoadProgress(double progress);
 
+  // The page's ZoomController, made with its WebContents.
+  zoom::ZoomController& Zoom() const;
+
   // Reports the page's zoom to the element if it changed. Zoom changes when
-  // the shell sets it, when another window on the same host changes it
-  // (HostZoomMap is per host), or on navigation to a differently zoomed site.
+  // the shell or chrome.tabs sets it or its mode, when another window on the
+  // same host changes it (HostZoomMap is per host), or on navigation to a
+  // differently zoomed site.
   void ReportZoom();
 
   // Reports find results to the element if they changed. `0, 0` means no
@@ -1372,9 +1395,11 @@ class WebViewGuest : public mojom::WebViewGuest,
                           content::DownloadManager::Observer>
       download_manager_observation_{this};
 
-  // HostZoomMap zoom changes, including from other windows on the same host.
-  // Dropped with the guest's WebContents, which ReportZoom reads.
-  base::CallbackListSubscription zoom_subscription_;
+  // The page's ZoomController, whose changes include other windows on the
+  // same host and manual zoom, which HostZoomMap never sees. Reset in
+  // WebContentsDestroyed, with the controller's WebContents.
+  base::ScopedObservation<zoom::ZoomController, zoom::ZoomObserver>
+      zoom_observation_{this};
 
   // See AddFocusedCallback.
   base::RepeatingClosureList focused_callbacks_;
