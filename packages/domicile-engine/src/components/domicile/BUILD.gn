@@ -683,6 +683,8 @@ source_set("web_view_guest") {
     # and may pass (ProceedPastWarning).
     "//components/security_interstitials/content:security_interstitial_page",
     "//components/security_interstitials/core",
+    # Chrome's zoom modes, which chrome.tabs.setZoomSettings sets.
+    "//components/zoom",
     "//content/public/browser",
     "//mojo/public/cpp/bindings",
     "//third_party/blink/public/common",
