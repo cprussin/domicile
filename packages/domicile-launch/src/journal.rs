@@ -136,3 +136,29 @@ impl Journal {
         self.socket.send(&encoded(entry)).map(|_| ())
     }
 }
+
+/// Where journald takes streams, as `systemd-cat` writes to it.
+pub const STREAM_SOCKET: &str = "/run/systemd/journal/stdout";
+
+/// The header that opens a journal stream: each line it carries becomes an
+/// entry under `identifier` at `priority`, unless it starts with a `<n>`
+/// prefix of its own. See systemd's `journald-stream.c`.
+pub fn stream_header(identifier: &str, priority: Priority) -> String {
+    // Identifier, unit, priority, level prefix, then forwarding to syslog,
+    // kmsg and the console, which are off.
+    format!("{identifier}\n\n{}\n1\n0\n0\n0\n", priority as u8)
+}
+
+/// A journal stream at `path`, usually [`STREAM_SOCKET`], for a child's
+/// stdout and stderr: its lines go under `identifier` at `priority`.
+pub fn stream(
+    path: &Path,
+    identifier: &str,
+    priority: Priority,
+) -> std::io::Result<std::os::unix::net::UnixStream> {
+    use std::io::Write as _;
+    let mut stream = std::os::unix::net::UnixStream::connect(path)?;
+    stream.write_all(stream_header(identifier, priority).as_bytes())?;
+    stream.shutdown(std::net::Shutdown::Read)?;
+    Ok(stream)
+}

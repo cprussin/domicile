@@ -8,7 +8,8 @@ use std::process::Command;
 use std::sync::Arc;
 use std::thread;
 
-use tracing::debug;
+use std::os::fd::AsFd as _;
+use tracing::{debug, warn};
 
 use domicile_host::desk_terminal;
 use domicile_host::priority;
@@ -51,6 +52,7 @@ pub fn spawn_client(
         activation_token,
     )
     .expect("the command has a program");
+    own_stream(&mut child, program);
     let mut child = child
         .spawn()
         .map_err(|err| format!("{program} could not be started: {err}"))?;
@@ -74,6 +76,36 @@ pub fn spawn_client(
         }
     });
     Ok(())
+}
+
+/// Gives an app its own journal stream, under its program's name at `info`,
+/// when the desktop's logs are in the journal. Otherwise an app writes to the
+/// compositor's stderr, and its chatter (an editor's startup, a toolkit's
+/// warnings) would read as the compositor's errors.
+///
+/// An app that can't have a stream writes where the compositor does, which
+/// is logged.
+pub fn own_stream(child: &mut Command, program: &str) {
+    if !domicile_launch::journal::is_the_journal(std::io::stdout().as_fd()) {
+        return;
+    }
+    let name = std::path::Path::new(program).file_name().map_or_else(
+        || program.to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    match domicile_launch::journal::stream(
+        std::path::Path::new(domicile_launch::journal::STREAM_SOCKET),
+        &name,
+        domicile_launch::journal::Priority::Info,
+    )
+    .and_then(|stream| Ok((stream.try_clone()?, stream)))
+    {
+        Ok((stdout, stderr)) => {
+            child.stdout(std::os::fd::OwnedFd::from(stdout));
+            child.stderr(std::os::fd::OwnedFd::from(stderr));
+        }
+        Err(why) => warn!("{name} writes to the compositor's stderr: no journal stream: {why}"),
+    }
 }
 
 /// [`spawn_client`] for a start nobody waits on, such as the config's startup

@@ -37,6 +37,8 @@ the same as a block instead.
 | `domicile-engine` | The engine and every process it starts. `DOMICILE_PID` is the process that said it. |
 | `domicile-shell` | The shell's `console` messages. |
 | `domicile` | The launcher: restarts, and what the desktop chose. |
+| `domicile-relay` | Agents on the web: reaching the relay, and its certificate. |
+| An app's own name, such as `emacs` | What an app the desktop started writes, at `info`, or at the `<n>` priority a line starts with. |
 
 ## Reading them
 
@@ -70,15 +72,16 @@ The compositor's also carry `TARGET`, the Rust module that said it.
 | Priority | Compositor | Engine |
 |---|---|---|
 | `crit` (2) | | `FATAL` |
-| `err` (3) | `ERROR`, and anything on its stderr | `ERROR` |
+| `err` (3) | `ERROR`, and its panics | `ERROR` |
 | `warning` (4) | `WARN` | `WARNING`, and lines without Chromium's prefix |
 | `notice` (5) | `INFO` | |
 | `info` (6) | `DEBUG` | `INFO` |
 | `debug` (7) | `TRACE` | `VERBOSE` |
 
-A line without Chromium's prefix takes the priority of the line before it, so
-a stack keeps its error's priority. Before any prefixed line, it is a warning:
-a library writing to stderr itself, such as Mesa.
+A line without Chromium's prefix continues the line before it, and takes its
+priority, when it is indented, as in a stack, or is the rest of a `console`
+message. Any other is a warning: a library writing to stderr itself, such as
+V8 or Mesa.
 
 ## Levels
 
@@ -125,6 +128,12 @@ last until the desktop restarts.
 | `agents` | Agents that use the desktop |
 | `shell` | The shell and its connection to the desktop |
 | `session` | Starting, stopping and the login session |
+
+A subsystem turned up shows its own lines and no others. Chromium has one
+level per process, so the engine logs everything at the level asked for; the
+desktop keeps only the lines from that subsystem's files. A page's or an
+extension's `console` shows only with everything at `info` or more, even its
+errors: they are the page's, not the desktop's.
 
 Setting everything leaves Smithay and Chromium's own code at their starting
 levels; they log too much to read at `debug`.
