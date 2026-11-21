@@ -13,6 +13,7 @@
 #include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/logging.h"
 #include "components/domicile/browser/brokered_frame_sink.h"
 #include "mojo/public/cpp/bindings/clone_traits.h"
 #include "gpu/command_buffer/client/client_shared_image.h"
@@ -140,6 +141,8 @@ void FrameSinkBroker::Embed(uint64_t requester,
                             EmbedCallback callback) {
   // Sent before the page heard its compositor went away.
   if (disconnected_embed_tokens_.contains(local_surface_id.embed_token())) {
+    VLOG(1) << "domicile: an embed of app " << app_id
+            << " arrived after its producer went; refused";
     std::move(callback).Run(std::nullopt);
     return;
   }
@@ -147,12 +150,20 @@ void FrameSinkBroker::Embed(uint64_t requester,
   if (!frame_sink) {
     // The <app> element can exist before its client connects, as on a shell
     // reload. Wait for this app's sink, not whichever is brokered next.
+    VLOG(1) << "domicile: an embed of app " << app_id << " in "
+            << parent_frame_sink_id.ToString() << " at " << size.ToString()
+            << " waits for its window";
     pending_embeds_.emplace_back(requester, app_id, parent_frame_sink_id,
                                  local_surface_id, size, scale, zoom,
                                  std::move(callback));
     return;
   }
 
+  VLOG(1) << "domicile: app " << app_id << " ("
+          << frame_sink->frame_sink_id().ToString() << ") embedded in "
+          << parent_frame_sink_id.ToString() << " at " << size.ToString()
+          << ", scale " << scale << ", zoom " << zoom << ", "
+          << local_surface_id.ToString();
   frame_sink->Embed(parent_frame_sink_id, local_surface_id, size, scale, zoom);
   embed_tokens_[frame_sink->frame_sink_id()].insert(
       local_surface_id.embed_token());
@@ -172,6 +183,8 @@ void FrameSinkBroker::CreateFrameSink(
     const std::string& app_id,
     CreateFrameSinkCallback callback) {
   const viz::FrameSinkId frame_sink_id = allocate_frame_sink_id_.Run();
+  VLOG(1) << "domicile: a frame sink for app " << app_id << ": "
+          << frame_sink_id.ToString();
 
   const auto none = base::BindRepeating(
       []() -> gpu::SharedImageInterface* { return nullptr; });
@@ -196,6 +209,10 @@ void FrameSinkBroker::CreateFrameSink(
       still_waiting.push_back(std::move(embed));
       continue;
     }
+    VLOG(1) << "domicile: app " << app_id << " (" << frame_sink_id.ToString()
+            << ") embedded where it waited, in "
+            << embed.parent_frame_sink_id.ToString() << " at "
+            << embed.size.ToString();
     raw_frame_sink->Embed(embed.parent_frame_sink_id, embed.local_surface_id,
                           embed.size, embed.scale, embed.zoom);
     embed_tokens_[frame_sink_id].insert(embed.local_surface_id.embed_token());
@@ -226,6 +243,9 @@ void FrameSinkBroker::EmbedFrameSink(const viz::FrameSinkId& child,
   if (!embedded || !OwnedFrameSink(parent)) {
     return;
   }
+  VLOG(1) << "domicile: subsurface " << child.ToString() << " embedded in "
+          << parent.ToString() << " at " << size.ToString() << ", scale "
+          << scale;
   // `scale` already carries the parent window's zoom (its client's logical
   // units in device pixels), so the subsurface is embedded unzoomed.
   embedded->Embed(parent, local_surface_id, size, scale, /*zoom=*/1.0);
@@ -272,6 +292,10 @@ void FrameSinkBroker::ImportBuffer(const viz::FrameSinkId& frame_sink_id,
   const uint64_t buffer_id =
       frame_sink->ImportBuffer(std::move(handle), size, fourcc,
                                color_space, &exported);
+  VLOG(3) << "domicile: imported buffer " << buffer_id << " for app "
+          << frame_sink->app_id() << " (" << frame_sink_id.ToString()
+          << "): " << size.ToString() << ", fourcc " << fourcc << ", "
+          << color_space.ToString();
   std::move(callback).Run(buffer_id, std::move(exported));
 }
 
@@ -280,6 +304,8 @@ void FrameSinkBroker::SubmitBuffer(const viz::FrameSinkId& frame_sink_id,
                                    const gfx::Rect& damage) {
   BrokeredFrameSink* frame_sink = OwnedFrameSink(frame_sink_id);
   if (frame_sink) {
+    VLOG(4) << "domicile: app " << frame_sink->app_id() << " submits buffer "
+            << buffer_id << ", damage " << damage.ToString();
     frame_sink->SubmitBuffer(buffer_id, damage);
   }
 }
@@ -298,12 +324,15 @@ void FrameSinkBroker::DestroyBuffer(const viz::FrameSinkId& frame_sink_id,
                                     uint64_t buffer_id) {
   BrokeredFrameSink* frame_sink = OwnedFrameSink(frame_sink_id);
   if (frame_sink) {
+    VLOG(3) << "domicile: app " << frame_sink->app_id() << " destroys buffer "
+            << buffer_id;
     frame_sink->DestroyBuffer(buffer_id);
   }
 }
 
 void FrameSinkBroker::ConfigureDisplays(
     std::vector<mojom::DisplayLayoutPtr> layout) {
+  VLOG(1) << "domicile: the producer lays out " << layout.size() << " displays";
   if (!set_display_layout_) {
     // No CRTC outside a tty. Not an error: the producer cannot know whether a
     // connector backs a display.
@@ -329,6 +358,8 @@ void FrameSinkBroker::ConfigureInput(const std::string& config) {
 
 void FrameSinkBroker::ConfigureVirtualDisplays(
     std::vector<mojom::VirtualDisplayPtr> displays) {
+  VLOG(1) << "domicile: the producer asks for " << displays.size()
+          << " virtual displays";
   if (!set_virtual_displays_) {
     // No CRTC outside a tty, so no desk to extend.
     return;
@@ -485,6 +516,9 @@ void FrameSinkBroker::CaptureDisplay(
   const std::optional<viz::FrameSinkId> target =
       get_display_capture_target_ ? get_display_capture_target_.Run(display_id)
                                   : std::nullopt;
+  VLOG(1) << "domicile: a capture of display " << display_id << " at "
+          << size.ToString() << ", " << max_fps << " fps: "
+          << (target.has_value() ? target->ToString() : "no window yet");
   if (!target.has_value()) {
     // Not a bad message: a display's window opens after the display appears.
     std::move(callback).Run(false);
@@ -509,6 +543,10 @@ void FrameSinkBroker::CaptureBrowserWindow(
       get_browser_window_capture_target_
           ? get_browser_window_capture_target_.Run(window_id)
           : std::nullopt;
+  VLOG(1) << "domicile: a capture of browser window " << window_id << ", " << max_fps
+          << " fps: "
+          << (target.has_value() ? target->frame_sink_id.ToString()
+                                 : "the window is gone");
   if (!target.has_value()) {
     // Not a bad message: the window may have closed since the producer heard
     // of it.
@@ -572,6 +610,7 @@ void FrameSinkBroker::OnProducerDisconnected() {
       owned.push_back(id);
     }
   }
+  VLOG(1) << "domicile: a producer went, with " << owned.size() << " frame sinks";
   for (const viz::FrameSinkId& id : owned) {
     EraseFrameSink(frame_sink_map_.find(id),
                    mojom::FrameSinkEnd::kProducerGone);
@@ -587,6 +626,10 @@ void FrameSinkBroker::EraseFrameSink(
     mojom::FrameSinkEnd end) {
   // Copied: `iter` is invalid after the erase.
   const viz::FrameSinkId frame_sink_id = iter->first;
+  VLOG(1) << "domicile: frame sink " << frame_sink_id.ToString() << " of app "
+          << iter->second->app_id() << " ended: "
+          << (end == mojom::FrameSinkEnd::kProducerGone ? "producer gone"
+                                                       : "closed");
   frame_sink_map_.erase(iter);
 
   auto tokens = embed_tokens_.find(frame_sink_id);
