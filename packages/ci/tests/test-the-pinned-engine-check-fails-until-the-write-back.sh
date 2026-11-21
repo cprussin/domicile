@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Tests that a pull request waiting on its engine write-back is skipped, not
-# failed.
+# Tests that a pull request waiting on its engine write-back fails, and says
+# to wait.
 #
 # `test-the-pinned-engine-is-this-series.sh` fails when the series differs
 # from the one `engine-release.nix` names. On a pull request that changes the
 # fork, `engine.yml` publishes the release and writes the file back to the
-# branch; until then the mismatch is expected. So on a pull request, a mismatch
-# with an engine run still going is a skip. Every other mismatch fails, and
-# each has a case:
+# branch; until then the mismatch is expected, but the pull request must not
+# look mergeable (#2425 merged with its engine run still queued). So a
+# mismatch with an engine run still going fails and says the write-back is
+# coming. Every other mismatch fails saying nothing will fix it, and each has
+# a case:
 #
 #   - main (no pull request named), whatever the engine is doing;
 #   - an engine run that finished and wrote nothing back;
@@ -105,9 +107,11 @@ echo
 echo "== a pull request waiting on its write-back =="
 
 restore; pins "$OLD"
-expect "an engine run in progress is a skip" 77 "$(check in_progress pr)"
-expect "and says why" 1 "$(grep -c '^SKIP: .*write-back' "$WORK/said")"
-expect "a queued one is too" 77 "$(check queued pr)"
+expect "an engine run in progress fails" 1 "$(check in_progress pr)"
+expect "and says to wait for the write-back" 1 \
+  "$(grep -c 'not mergeable yet' "$WORK/said")"
+expect "a queued one fails too" 1 "$(check queued pr)"
+expect "and says the same" 1 "$(grep -c 'not mergeable yet' "$WORK/said")"
 
 echo
 echo "== a pull request after its write-back =="
@@ -132,8 +136,8 @@ expect "and says so" 1 "$(grep -c 'not the base' "$WORK/said")"
 
 echo
 if [ "$FAILED" -eq 0 ]; then
-  echo "the-pinned-engine-check-waits-for-the-write-back: all cases passed"
+  echo "the-pinned-engine-check-fails-until-the-write-back: all cases passed"
 else
-  echo "the-pinned-engine-check-waits-for-the-write-back: $FAILED case(s) failed"
+  echo "the-pinned-engine-check-fails-until-the-write-back: $FAILED case(s) failed"
 fi
 exit "$FAILED"
