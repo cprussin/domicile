@@ -8,6 +8,7 @@
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/functional/bind.h"
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/scoped_refptr.h"
@@ -351,6 +352,8 @@ void DomicileWindowController::Add(content::WebContents& guest) {
   sessions::SessionTabHelper::FromWebContents(&guest)->SetWindowID(session_id_);
 
   const std::optional<int> before = tabs_.Active();
+  VLOG(1) << "domicile: tab " << tab_id << " joins extension window "
+          << GetWindowId() << (IsPopup() ? " (a popup)" : "");
   tabs_.Add(tab_id);
   by_id_.emplace(tab_id, std::make_unique<Tab>(*this, guest, tab_id));
 
@@ -381,6 +384,8 @@ DomicileWindowController& DomicileWindowController::OpenPopup() {
   std::unique_ptr<DomicileWindowController> made =
       base::WrapUnique(new DomicileWindowController(profile(), *this));
   DomicileWindowController& popup = *made;
+  VLOG(1) << "domicile: extension popup window " << popup.GetWindowId()
+          << " opens over window " << GetWindowId();
   popups_.emplace(popup.GetWindowId(), std::move(made));
   BroadcastWindowEvent(popup, /*created=*/true);
   return popup;
@@ -402,6 +407,7 @@ void DomicileWindowController::ClosePopup(int window_id) {
   CHECK_EQ(found->second->GetTabCount(), 0);
   std::unique_ptr<DomicileWindowController> popup = std::move(found->second);
   popups_.erase(found);
+  VLOG(1) << "domicile: extension popup window " << window_id << " closes";
   if (last_focused_ == window_id) {
     last_focused_ = GetWindowId();
   }
@@ -472,6 +478,8 @@ void DomicileWindowController::TookFocus() {
   CHECK(!IsPopup());
   const bool was_last = focused_at_ == FocusCount();
   focused_at_ = ++FocusCount();
+  VLOG(1) << "domicile: extension window " << GetWindowId()
+          << " took focus, last focused " << last_focused_;
   // From another desk: a profile's desk and its private profile's take turns
   // as the active tab's.
   if (!was_last) {

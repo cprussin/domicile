@@ -48,6 +48,7 @@ const FILES: [(Subsystem, &[&str]); 13] = [
         Subsystem::Displays,
         &[
             "drm_modeset",
+            "drm_screen",
             "drm_canvas",
             "drm_sleep",
             "drm_thread",
@@ -80,6 +81,7 @@ const FILES: [(Subsystem, &[&str]); 13] = [
         &[
             "brokered_frame_sink",
             "domicile_frame_sink_broker",
+            "frame_sink_broker",
             "external_surface_embedder",
             "surface_producer",
             "solid_color_submitter",
@@ -126,6 +128,7 @@ const FILES: [(Subsystem, &[&str]); 13] = [
             "shell_*",
             "domicile_command_socket",
             "domicile_extension_*",
+            "domicile_window_controller",
             "desk_downloads",
         ],
     ),
