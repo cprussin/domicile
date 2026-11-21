@@ -2261,12 +2261,24 @@ fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), Down>
             .map(Into::into),
     );
     let sink = Arc::clone(desktop.sink);
+    // A restarted engine keeps the levels `domicile set-log-level` set.
+    let levels = set_levels(desktop.levels);
+    match levels == LogLevels::default() {
+        true => {
+            domicile_launch::engine_log::start((desktop.env)("DOMICILE_ENGINE_ARGS").as_deref())
+        }
+        false => domicile_launch::engine_log::set(&levels),
+    }
     let mut log = EngineLog::new();
     running
         .start_heard(
             "engine",
             &spawn,
-            Box::new(move |line| sink.say(&log.entry(line), line, &mut std::io::stderr())),
+            Box::new(move |line| {
+                if let Some(entry) = log.heard(line) {
+                    sink.say(&entry, line, &mut std::io::stderr());
+                }
+            }),
         )
         .map_err(|why| why.to_string())?;
     wait_for(
@@ -2527,6 +2539,7 @@ fn answer_a_command(
                         )
                         .map_err(|why| why.to_string())?;
                         launcher_log::set(asked);
+                        domicile_launch::engine_log::set(asked);
                         *set = asked.clone();
                         Ok(())
                     },

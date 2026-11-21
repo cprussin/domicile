@@ -129,3 +129,136 @@ fn a_line_without_a_prefix_before_any_other_is_a_warning() {
     assert_eq!(entry.priority, Priority::Warning);
     assert_eq!(entry.fields, []);
 }
+
+#[test]
+fn a_library_line_after_an_error_is_a_warning_not_an_error() {
+    // V8 says a flag it rejects on stderr itself, between Chromium's lines.
+    let mut log = EngineLog::new();
+    log.entry("[1:1:1121/090510.773:ERROR:dbus/bus.cc:405] the bus is gone");
+    let v8 = log.entry("Error: unrecognized flag --scavenger_direct_old_allocation");
+    assert_eq!(v8.identifier, "domicile-engine");
+    assert_eq!(v8.priority, Priority::Warning);
+}
+
+#[test]
+fn the_rest_of_a_console_message_continues_it_until_its_source() {
+    let mut log = EngineLog::new();
+    log.entry("[1:1:1121/090510.773:ERROR:CONSOLE:88] \"[Background] channel: stable");
+    let middle = log.entry("os: Linux ()");
+    let end = log.entry("build: 8.11 (81100)\", source: chrome-extension://a/background.js (88)");
+    let after = log.entry("Fontconfig error: no such file");
+    assert_eq!(
+        [middle.priority, end.priority, after.priority],
+        [Priority::Error, Priority::Error, Priority::Warning]
+    );
+}
+
+mod gate {
+    use domicile_launch::engine_log::EngineLog;
+    use domicile_launch::engine_log_levels::Gate;
+    use domicile_protocol::{LogLevel, LogLevels, Subsystem};
+
+    fn levels(all: Option<LogLevel>, subsystems: &[(Subsystem, LogLevel)]) -> Gate {
+        Gate::new(&LogLevels {
+            all,
+            subsystems: subsystems.iter().copied().collect(),
+        })
+    }
+
+    /// The messages of `lines` that show through `gate`.
+    fn shown(gate: &Gate, lines: &[&str]) -> Vec<String> {
+        let mut log = EngineLog::new();
+        lines
+            .iter()
+            .filter_map(|line| log.through(line, gate))
+            .map(|entry| entry.message)
+            .collect()
+    }
+
+    const POINTER: &str =
+        "[1:1:1121/093029.359:INFO:ui/ozone/platform/drm/domicile/pointer_hiding.cc:88] domicile: hiding the pointer";
+    const WEBVIEW: &str =
+        "[1:1:1121/093041.923:INFO:extensions/browser/guest_view/web_view/web_view_guest.cc:12] domicile: <webview> SetFocused received=1";
+    const EVDEV: &str =
+        "[1:1:1121/093041.923:INFO:ui/events/ozone/evdev/domicile/fling_tracker.cc:40] domicile: a fling";
+    const PAGE: &str = "[1:1:1121/093043.697:INFO:CONSOLE:1] \"FetchHttpApi: --> GET https://example.com/sync\", source: vector://vector/webapp/init.js (1)";
+    const EXTENSION_ERROR: &str = "[1:1:1121/093039.296:ERROR:CONSOLE:88] \"[AppIntegration] Desktop app port disconnected.\", source: chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/background/background.js (88)";
+    const SHELL_DEBUG: &str =
+        "[1:1:1121/093043.697:VERBOSE1:CONSOLE:4] \"[bar] drew\", source: domicile://shell/main.js (4)";
+    const PAGE_DEBUG: &str =
+        "[1:1:1121/093043.697:VERBOSE1:CONSOLE:4] \"drew\", source: https://example.com/a.js (4)";
+    const ENGINE_ERROR: &str = "[1:1:1121/093029.359:ERROR:dbus/bus.cc:405] the bus is gone";
+    const VLOG: &str =
+        "[1:1:1121/093029.359:VERBOSE1:ui/ozone/platform/drm/gpu/drm_thread.cc:9] Got display event";
+
+    #[test]
+    fn a_subsystem_turned_up_shows_its_files_and_no_others() {
+        let input = levels(None, &[(Subsystem::Input, LogLevel::Debug)]);
+        assert_eq!(
+            shown(&input, &[POINTER, WEBVIEW, EVDEV, PAGE, ENGINE_ERROR]),
+            [
+                "domicile: hiding the pointer",
+                "domicile: a fling",
+                "the bus is gone"
+            ]
+        );
+    }
+
+    #[test]
+    fn everything_turned_up_shows_every_file_and_the_pages_consoles() {
+        let all = levels(Some(LogLevel::Info), &[]);
+        assert_eq!(shown(&all, &[POINTER, WEBVIEW, PAGE]).len(), 3);
+    }
+
+    #[test]
+    fn a_pages_or_extensions_console_stays_out_by_default_even_its_errors() {
+        let starting = Gate::default();
+        assert_eq!(
+            shown(&starting, &[PAGE, EXTENSION_ERROR, ENGINE_ERROR]),
+            ["the bus is gone"]
+        );
+        let warn = levels(Some(LogLevel::Warn), &[]);
+        assert_eq!(shown(&warn, &[EXTENSION_ERROR]), Vec::<String>::new());
+    }
+
+    #[test]
+    fn the_shell_at_debug_shows_its_console_and_no_pages() {
+        let shell = levels(None, &[(Subsystem::Shell, LogLevel::Debug)]);
+        assert_eq!(
+            shown(&shell, &[SHELL_DEBUG, PAGE_DEBUG, PAGE]),
+            ["\"[bar] drew\", source: domicile://shell/main.js (4)"]
+        );
+    }
+
+    #[test]
+    fn a_vlog_shows_when_its_subsystem_asked_for_it() {
+        let displays = levels(None, &[(Subsystem::Displays, LogLevel::Debug)]);
+        assert_eq!(shown(&displays, &[VLOG]), ["Got display event"]);
+        assert_eq!(shown(&Gate::default(), &[VLOG]), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_line_without_a_prefix_follows_the_line_it_continues() {
+        let starting = Gate::default();
+        assert_eq!(
+            shown(
+                &starting,
+                &[PAGE, "    at f (a.js:1)", ENGINE_ERROR, "    at g (b.js:2)"]
+            ),
+            ["the bus is gone", "    at g (b.js:2)"]
+        );
+    }
+}
+
+#[test]
+fn an_engine_started_at_its_own_levels_shows_every_line() {
+    // A guard or a developer passing `--log-level=0` reads the engine's INFO.
+    use domicile_launch::engine_log::raises_logging;
+    assert!(raises_logging(Some("--no-sandbox --log-level=0")));
+    assert!(raises_logging(Some("--vmodule=drm_modeset=1")));
+    assert!(raises_logging(Some("--v=1")));
+    assert!(!raises_logging(Some(
+        "--no-sandbox --disable-features=Vulkan"
+    )));
+    assert!(!raises_logging(None));
+}

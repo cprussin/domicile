@@ -9,6 +9,11 @@
 //! Every process the engine forks writes to the same stderr, so the pid is
 //! kept as `DOMICILE_PID`: journald's own `_PID` is the launcher's.
 
+use std::sync::RwLock;
+
+use domicile_protocol::LogLevels;
+
+use crate::engine_log_levels::Gate;
 use crate::journal::{Entry, Priority};
 
 /// The name the engine's entries carry.
@@ -26,11 +31,82 @@ const SHELL_SOURCE: &str = ", source: domicile://shell/";
 /// continues it, as a stack under a `console.error` does.
 pub struct EngineLog {
     last: Option<(&'static str, Priority)>,
+    /// Whether the last prefixed line showed, which a line it continues
+    /// follows.
+    showed: bool,
+    /// Whether a `console` message spread over lines has yet to end: Chromium
+    /// ends one with its `", source: …`.
+    open: bool,
+    /// Whether the last line continued the one before it.
+    continued: bool,
+}
+
+/// The engine's lines that show at the levels set now, or none to show every
+/// line. See [`Gate`], [`start`] and [`set`].
+static GATE: RwLock<Option<Gate>> = RwLock::new(None);
+
+/// Shows the engine's lines at `levels` from now on.
+pub fn set(levels: &LogLevels) {
+    *GATE.write().expect("nothing panics holding the gate") = Some(Gate::new(levels));
+}
+
+/// Gates the engine's lines at the starting levels, unless `extra`, the
+/// engine's `DOMICILE_ENGINE_ARGS`, starts it at others: then every line it
+/// logs shows, as asked, until `domicile set-log-level` sets levels.
+pub fn start(extra: Option<&str>) {
+    *GATE.write().expect("nothing panics holding the gate") =
+        (!raises_logging(extra)).then(Gate::default);
+}
+
+/// Whether `extra` sets the engine's own levels.
+pub fn raises_logging(extra: Option<&str>) -> bool {
+    extra.unwrap_or_default().split_whitespace().any(|switch| {
+        ["--log-level=", "--v=", "--vmodule="]
+            .iter()
+            .any(|own| switch.starts_with(own))
+    })
 }
 
 impl EngineLog {
+    /// Whether `line`, which has no prefix, continues the line before it: an
+    /// indented line, as in a stack, or the rest of a `console` message.
+    fn continues(&self, line: &str) -> bool {
+        self.open || line.starts_with(char::is_whitespace)
+    }
+
     pub fn new() -> Self {
-        EngineLog { last: None }
+        EngineLog {
+            last: None,
+            showed: true,
+            open: false,
+            continued: false,
+        }
+    }
+
+    /// The entry for one line of the engine's stderr, if it shows at the
+    /// levels [`set`]: Chromium logs more than was asked for when one
+    /// subsystem is turned up. See [`Gate`].
+    pub fn heard(&mut self, line: &str) -> Option<Entry> {
+        let gate = GATE.read().expect("nothing panics holding the gate");
+        match gate.as_ref() {
+            Some(gate) => self.through(line, gate),
+            None => Some(self.entry(line)),
+        }
+    }
+
+    /// The entry for `line`, if it shows through `gate`.
+    pub fn through(&mut self, line: &str, gate: &Gate) -> Option<Entry> {
+        let entry = self.entry(line);
+        match prefixed(line) {
+            Some(said) => {
+                self.showed = gate.shows(said.priority, said.file, entry.identifier == SHELL);
+            }
+            None if !self.continued => {
+                self.showed = gate.shows(entry.priority, "", false);
+            }
+            None => {}
+        }
+        self.showed.then_some(entry)
     }
 
     /// The entry for one line of the engine's stderr.
@@ -43,6 +119,8 @@ impl EngineLog {
                     false => ENGINE,
                 };
                 self.last = Some((identifier, said.priority));
+                self.open = said.file == "CONSOLE" && !said.message.contains(SOURCE);
+                self.continued = false;
                 let subsystem = shell
                     .then(|| subsystem(said.message))
                     .flatten()
@@ -54,10 +132,21 @@ impl EngineLog {
                     fields: said.fields().into_iter().chain(subsystem).collect(),
                 }
             }
-            // A library that writes to stderr itself, such as Mesa, has no
-            // level. It is rare, so it is shown.
+            // An indented line continues the one before, as a stack under a
+            // `console.error` does, and so does the rest of a `console`
+            // message spread over lines. Any other line is a library writing to
+            // stderr itself, such as V8 or Mesa, with no level: a warning,
+            // not whatever the line before it was.
             None => {
-                let (identifier, priority) = self.last.unwrap_or((ENGINE, Priority::Warning));
+                let continued = self.continues(line);
+                self.continued = continued;
+                if continued && line.contains(SOURCE) {
+                    self.open = false;
+                }
+                let (identifier, priority) = match continued {
+                    true => self.last.unwrap_or(UNLEVELED),
+                    false => UNLEVELED,
+                };
                 Entry {
                     identifier,
                     priority,
@@ -68,6 +157,12 @@ impl EngineLog {
         }
     }
 }
+
+/// A line without a level, and not continuing one.
+const UNLEVELED: (&str, Priority) = (ENGINE, Priority::Warning);
+
+/// How Chromium ends a `console` message, before saying where it came from.
+const SOURCE: &str = "\", source: ";
 
 impl Default for EngineLog {
     fn default() -> Self {
