@@ -44,6 +44,7 @@ Grouped `--help`, `domicile help <command>` for usage and examples, and man page
 
 ### Also new
 
+- `domicile.shell.links(["mailto"])` claims a scheme's links: `domicile open`, apps' links and the Email portal hand them to the shell instead of an app. [Links](WRITING-A-SHELL.md#links)
 - `clipboard.remove(id)` drops a clipboard history entry; removing the `current` one empties the clipboard. [System access](SHELL-SYSTEM-ACCESS.md)
 - Spell checking in pages and Electron apps, in the languages of `spellcheck`. A context menu event over a misspelling carries `misspelledWord`, `spellingSuggestions` and `replaceMisspelling()`, and runs `add-to-dictionary`. [`spellcheck`](SHELL-CONFIG.md#spelling) · [Context menus](SHELL-BROWSER-WINDOWS.md#the-keyboard)
 - HDR and 10-bit color. [`hdr`](SHELL-CONFIG.md#hdr) · [Design](architecture/COLOR.md) · [#1974](https://github.com/cprussin/domicile/issues/1974)

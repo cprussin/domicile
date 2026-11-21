@@ -626,6 +626,43 @@ fn a_refused_unlock_goes_to_each_page_that_listens_for_one() {
 /// The shell sets a window's `xdg_toplevel` states and hears what its client
 /// asks for.
 #[test]
+fn a_link_goes_to_the_page_that_claims_its_scheme() {
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":3,"request":{"call":"claim_links","schemes":["mailto"]}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 3,
+            request: SystemRequest::ClaimLinks {
+                schemes: vec!["mailto".into()],
+            },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":4,"request":{"call":"open_link","url":"mailto:a@example.com"}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 4,
+            request: SystemRequest::OpenLink {
+                url: "mailto:a@example.com".into(),
+                app_id: None,
+            },
+        }
+    );
+    assert_eq!(
+        host(&HostMessage::SystemEvent {
+            id: 3,
+            event: SystemEvent::Link {
+                url: "mailto:a@example.com".into(),
+                app_id: Some("org.gnome.Evince".into()),
+            },
+        }),
+        r#"{"type":"system_event","id":3,"event":{"kind":"link","url":"mailto:a@example.com","app_id":"org.gnome.Evince"}}"#
+    );
+}
+
+#[test]
 fn the_shell_sets_window_states_and_hears_what_clients_ask_for() {
     assert_eq!(
         chrome(

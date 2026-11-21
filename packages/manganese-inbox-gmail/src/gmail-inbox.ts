@@ -5,6 +5,7 @@ import {
 import type { GoogleClient } from "@domicile-desktop/manganese-bar-module-gmail/consent";
 import { deskInbox } from "@domicile-desktop/manganese-bar-module-gmail/desk-inbox";
 import type { Inbox as GmailReading } from "@domicile-desktop/manganese-bar-module-gmail/inbox";
+import { writeMail } from "@domicile-desktop/manganese-bar-module-gmail/write-mail";
 import type { InboxReading } from "@domicile-desktop/manganese-notifications/inbox";
 import {
   Inbox,
@@ -40,7 +41,8 @@ type Options = {
  * One Gmail account's inbox in the notification drawer and the launcher,
  * read with the Gmail API: its conversations, with the unread ones counted
  * toward the bell. A press opens it in the account's own Gmail window, or
- * brings that window up, or signs it in. Goes in `runManganese`'s `inboxes`.
+ * brings that window up, or signs it in. Writes email for `mailto:` links in
+ * that window, from the account. Goes in `runManganese`'s `inboxes`.
  */
 export const gmailInbox = ({
   client,
@@ -76,6 +78,9 @@ export const gmailInbox = ({
     read: perDesktop((domicile) =>
       asReadings(deskInbox(domicile)(email, client, nickname, profile).inbox),
     ),
+    write: (domicile, link) => {
+      writeMail(domicile.browser, email, link, profile);
+    },
   });
 
 /** `watch`'s readings, as the drawer reads them. */

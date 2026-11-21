@@ -277,6 +277,7 @@ fn read_chrome_messages(
         move |window| portals.preview(window)
     })
     .sharing_shell_commands(hub.shell_commands.clone())
+    .sharing_links(hub.portals.links())
     .sharing_idle_watches(hub.idle_watches.clone())
     .sharing_unlock_refusals(hub.unlock_refusals.clone())
     .setting_window_states_with({

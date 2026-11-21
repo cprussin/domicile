@@ -101,6 +101,11 @@ const systemEventSchema = z.looseObject({
       sent: z.number(),
     }),
     z.looseObject({
+      app_id: z.string().optional(),
+      kind: z.literal("link"),
+      url: z.string(),
+    }),
+    z.looseObject({
       idle: z.boolean(),
       kind: z.literal("idle"),
     }),

@@ -49,6 +49,24 @@ describe("shell", () => {
     ]);
   });
 
+  it("claims links through the compositor", async () => {
+    const fake = new FakeDomicileHost();
+    desktop(fake.host)
+      .shell.links(["mailto"])
+      .catch(() => {
+        /* never answered */
+      });
+    await Promise.resolve();
+
+    expect(fake.calls).toStrictEqual([
+      [
+        "callSystem",
+        1,
+        JSON.stringify({ call: "claim_links", schemes: ["mailto"] }),
+      ],
+    ]);
+  });
+
   it("says the options changed", async () => {
     const fake = new FakeDomicileHost();
     const changed = new Promise((resolve) => {

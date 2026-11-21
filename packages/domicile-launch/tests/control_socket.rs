@@ -163,6 +163,7 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                     },
                     run_app: &|_, _| panic!("a question about this desktop reaches no engine"),
                     launch: &|_| panic!("a question about this desktop reaches no compositor"),
+                    open_link: &|_| panic!("a question about this desktop reaches no compositor"),
                     send: &|_| panic!("a question about this desktop reaches no compositor"),
                     power_displays: &|_, _| {
                         panic!("a question about this desktop reaches no compositor")
