@@ -42,7 +42,8 @@ type Options = {
  * read with the Gmail API: its conversations, with the unread ones counted
  * toward the bell. A press opens it in the account's own Gmail window, or
  * brings that window up, or signs it in. Writes email for `mailto:` links in
- * that window, from the account. Goes in `runManganese`'s `inboxes`.
+ * that window, from the account or one of its Gmail aliases. Goes in
+ * `runManganese`'s `inboxes`.
  */
 export const gmailInbox = ({
   client,
@@ -78,8 +79,8 @@ export const gmailInbox = ({
     read: perDesktop((domicile) =>
       asReadings(deskInbox(domicile)(email, client, nickname, profile).inbox),
     ),
-    write: (domicile, link) => {
-      writeMail(domicile.browser, email, link, profile);
+    write: (domicile, link, from) => {
+      void writeMail(domicile, client, email, link, from, profile);
     },
   });
 

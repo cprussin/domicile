@@ -1,8 +1,22 @@
 import { describe, expect, it } from "bun:test";
 import { Err, Ok } from "@cprussin/option-result";
 
-import { inboxCounts, mailHeaders, unreadMail } from "./gmail-api";
-import { answering, HEADERS, INBOX, json, UNREAD } from "./held-google";
+import {
+  createDraft,
+  inboxCounts,
+  mailHeaders,
+  sendAsAddresses,
+  unreadMail,
+} from "./gmail-api";
+import {
+  answering,
+  DRAFTS,
+  HEADERS,
+  INBOX,
+  json,
+  SEND_AS,
+  UNREAD,
+} from "./held-google";
 
 describe("inboxCounts", () => {
   it("counts the inbox's conversations, with the access token", async () => {
@@ -177,6 +191,65 @@ describe("mailHeaders", () => {
         subject: "Hi",
         threadId: "1a",
       }),
+    );
+  });
+});
+
+describe("sendAsAddresses", () => {
+  it("lists the account's own address, then its verified aliases", async () => {
+    const { domicile } = answering({
+      [SEND_AS]: [
+        json(200, {
+          sendAs: [
+            { sendAsEmail: "me@work.example", verificationStatus: "accepted" },
+            { isPrimary: true, sendAsEmail: "me@example.com" },
+            { sendAsEmail: "me@old.example", verificationStatus: "pending" },
+          ],
+        }),
+      ],
+    });
+
+    expect(await sendAsAddresses(domicile, "acc3ss")).toStrictEqual(
+      Ok(["me@example.com", "me@work.example"]),
+    );
+  });
+
+  it("fails with Gmail's answer when it refuses", async () => {
+    const { domicile } = answering({ [SEND_AS]: [json(403, {})] });
+
+    expect(await sendAsAddresses(domicile, "acc3ss")).toStrictEqual(
+      Err("Gmail answered 403: {}"),
+    );
+  });
+});
+
+describe("createDraft", () => {
+  it("saves the message as a draft, in base64url, and names its message", async () => {
+    const { domicile, fetched } = answering({
+      [DRAFTS]: [json(200, { id: "r-1", message: { id: "18c2f0a" } })],
+    });
+
+    expect(await createDraft(domicile, "acc3ss", "Subject: é?>")).toStrictEqual(
+      Ok("18c2f0a"),
+    );
+    expect(fetched).toStrictEqual([
+      {
+        body: JSON.stringify({ message: { raw: "U3ViamVjdDogw6k_Pg==" } }),
+        headers: [
+          { name: "Authorization", value: "Bearer acc3ss" },
+          { name: "Content-Type", value: "application/json" },
+        ],
+        method: "POST",
+        url: DRAFTS,
+      },
+    ]);
+  });
+
+  it("fails with Gmail's answer when it refuses", async () => {
+    const { domicile } = answering({ [DRAFTS]: [json(403, {})] });
+
+    expect(await createDraft(domicile, "acc3ss", "")).toStrictEqual(
+      Err("Gmail answered 403: {}"),
     );
   });
 });

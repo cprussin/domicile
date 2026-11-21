@@ -34,6 +34,19 @@ export const composeAddress = (
   ]).toString()}`;
 
 /**
+ * The account's Gmail with draft `message` (its message id) open over the
+ * drafts list.
+ */
+export const draftAddress = (
+  email: string,
+  message: string,
+  profile?: string,
+): string =>
+  `${inboxAddress(email, profile)}#drafts?${new URLSearchParams({
+    compose: message,
+  }).toString()}`;
+
+/**
  * Picks the signed-in account by its address. Gmail's `/mail/u/<n>/` takes an
  * account's index, not its address.
  */

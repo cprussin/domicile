@@ -29,7 +29,8 @@ bell's panel, under **Inboxes**
   until you read them. Gmail also shows how many conversations it has.
 - Click a Gmail inbox to open it in a browser window.
 - An email link (`mailto:`), in a page or an app, asks which Gmail inbox
-  to write from, then opens a new message in that inbox's window. With one
-  inbox, it opens at once.
+  and address to write from, aliases included, then opens a new message in
+  that inbox's window. With one address, it opens at once. One from an
+  alias opens as a draft.
 - Click Messages to open it right in the panel. The back arrow returns to
   your notifications.

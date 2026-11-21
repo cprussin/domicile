@@ -419,8 +419,10 @@ export const Shell = runManganese({
   from pages, apps, `domicile open` and the Email portal. A link asks which
   address to write from, in a dialog listing every such inbox's addresses
   (`MailPicker`), the one picked last first; with one address it writes at
-  once. `gmailInbox` writes from the account, in the account's window, with
-  Gmail's new message form open over the inbox.
+  once. `gmailInbox` writes from the account and its Gmail aliases ("Send mail
+  as"), in the account's window: from the account, with Gmail's new message
+  form open over the inbox; from an alias, which that form can't be told,
+  by saving the message as a draft from the alias and opening the draft.
 - Not on the lock screen, as the drawer is not.
 
 ## Sharing
@@ -511,10 +513,12 @@ one account's inbox, read with the Gmail API. Not in `DEFAULT_BAR`.
   locked. Counts are conversations, as Gmail's inbox counts them.
 - How it reads:
   - `client` is a Google Cloud OAuth client of the Desktop app type, with the
-    Gmail API on and the `gmail.metadata` scope: labels and message headers,
-    never bodies. Publish its consent screen: one in Testing expires sign-ins
-    after 7 days. A refresh token granted without that scope signs the
-    account out, to sign in again.
+    Gmail API on and the `gmail.metadata`, `gmail.settings.basic` and
+    `gmail.compose` scopes: labels and message headers, never bodies; the
+    addresses the account sends from; and drafts, for email written from an
+    alias. Publish its consent screen: one in Testing expires sign-ins after
+    7 days. A refresh token granted without those scopes signs the account
+    out, to sign in again.
   - Sign-in is Google's desktop flow. Consent redirects the window to a
     loopback address nothing listens on; the item reads the code from the
     window's address, closes it, and trades the code for a refresh token.
