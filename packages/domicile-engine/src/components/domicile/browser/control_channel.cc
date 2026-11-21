@@ -650,6 +650,14 @@ void ControlChannel::CopyClipboardEntry(uint32_t entry) {
   SendMessage(std::move(message));
 }
 
+// An id, as CopyClipboardEntry's is: a page can forget a copy but not name one
+// that was never made.
+void ControlChannel::RemoveClipboardEntry(uint32_t entry) {
+  base::DictValue message = Typed("remove_clipboard_entry");
+  message.Set("entry", static_cast<int>(entry));
+  SendMessage(std::move(message));
+}
+
 // An icon and a button, and nothing about what the click does: that is the
 // application's. The wire names are `domicile_protocol::TrayAction`'s.
 void ControlChannel::ActivateTrayItem(const std::string& id,
@@ -1865,14 +1873,15 @@ void ControlChannel::DispatchLine(const std::string& line,
       std::optional<int> id = entry->FindInt("id");
       std::optional<bool> image = entry->FindBool("image");
       const std::string* preview = entry->FindString("preview");
-      if (!id || !image || !preview) {
+      std::optional<bool> current = entry->FindBool("current");
+      if (!id || !image || !preview || !current) {
         continue;
       }
       // Absent for a row with no picture, as a tray item's `icon` is.
       const std::string* thumbnail = entry->FindString("thumbnail");
       entries.push_back(mojom::ClipboardEntry::New(
           static_cast<uint32_t>(*id), *image, *preview,
-          thumbnail ? *thumbnail : std::string()));
+          thumbnail ? *thumbnail : std::string(), *current));
     }
     // Sent even when it is empty, for the reason `displays` and `files` are: a
     // desktop nothing has been copied on is an answer, and a panel that never
