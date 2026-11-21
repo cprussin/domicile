@@ -120,6 +120,31 @@ pub fn send_shell(
     }
 }
 
+/// Hands `url` to the shell page at `socket` that claims its scheme. Returns
+/// false when no page claims it.
+pub fn open_link(
+    socket: &Path,
+    url: &str,
+    patience: Option<Duration>,
+) -> Result<bool, CompositorError> {
+    let request = SystemRequest::OpenLink {
+        url: url.to_string(),
+        app_id: None,
+    };
+    let answer = called(socket, request, patience)?;
+    match answer.reply {
+        SystemReply::Sent { .. } => Ok(true),
+        SystemReply::Failed {
+            error:
+                SystemError {
+                    kind: SystemErrorKind::NotFound,
+                    ..
+                },
+        } => Ok(false),
+        reply => Err(not_done(socket, reply, answer.said)),
+    }
+}
+
 /// Tells the compositor at `socket` to start `command` as an app, as the
 /// launcher does, and waits to hear it started or why not.
 pub fn launch(

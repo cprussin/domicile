@@ -42,8 +42,8 @@ use domicile_launch::components::{
 };
 use domicile_launch::compositor_socket::{
     act_on_window, agents, configure_display, displays, emulate, forget_agent, idle_time, inputs,
-    launch, lock, monitors, power_displays, screen_record, screenshot, send_shell, set_log_levels,
-    shell_bindings, shell_commands, shoot_desk, status, stop_agent, theme, windows,
+    launch, lock, monitors, open_link, power_displays, screen_record, screenshot, send_shell,
+    set_log_levels, shell_bindings, shell_commands, shoot_desk, status, stop_agent, theme, windows,
 };
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
@@ -79,7 +79,9 @@ use domicile_launch::mcp;
 use domicile_launch::milestones::{reach, Milestone, Stalled};
 use domicile_launch::monitor_lending::{forward_sizes, lend};
 use domicile_launch::notification;
-use domicile_launch::open::{app_opening, opener, opening, AppOpening, Opening, Places, DESKTOP};
+use domicile_launch::open::{
+    app_opening, claimable, opener, opening, AppOpening, Opening, Places, DESKTOP,
+};
 use domicile_launch::paint::{Paint, Style};
 use domicile_launch::platform::platform;
 use domicile_launch::power::{confirmed, Power};
@@ -492,6 +494,11 @@ fn versioned() -> Result<ExitCode, String> {
 /// compositor, or in a browser window of the running desktop, in browser profile `profile` when
 /// given; see `domicile_launch::open`. Only a web address takes a profile.
 fn opened(target: &str, profile: Option<String>) -> Result<ExitCode, String> {
+    // A shell page that claims the link's scheme, such as manganese's inbox
+    // picker for `mailto:`, opens it instead of an application.
+    if claimable(target) && profile.is_none() && link_taken(target)? {
+        return Ok(ExitCode::SUCCESS);
+    }
     match opening(target, &typed_in()?, &places()).map_err(|why| why.to_string())? {
         Opening::Browse(url) => asked(&Request::OpenUrl { url, profile }),
         Opening::Run(_) if profile.is_some() => Err(CliError::ProfileForAFile {
@@ -502,6 +509,22 @@ fn opened(target: &str, profile: Option<String>) -> Result<ExitCode, String> {
         // such as the engine's `xdg-open`, may lack the desktop's
         // environment.
         Opening::Run(command) => asked(&Request::Launch { command }),
+    }
+}
+
+/// Hands `url` to the shell page that claims its scheme: true when one took
+/// it, false when none claims it.
+fn link_taken(url: &str) -> Result<bool, String> {
+    let socket =
+        advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
+    let request = Request::OpenLink {
+        url: url.to_string(),
+    };
+    match ask(&socket, &request, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())? {
+        Response::Opened => Ok(true),
+        Response::Unclaimed => Ok(false),
+        Response::Refused { why } => Err(why),
+        other => Err(format!("the desktop answered open_link with {other:?}")),
     }
 }
 
@@ -1172,6 +1195,8 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         | Response::Agent { .. }
         // `subscribed` asks for these.
         | Response::Heard { .. }
+        // Only `link_taken` asks for this.
+        | Response::Unclaimed
         // Only `domicile-app-host` asks for these.
         | Response::SettingsFiles { .. }
         | Response::SitePermissions(_)
@@ -2402,6 +2427,9 @@ fn answer_a_command(
                     launch: &|command| {
                         launch(chrome, command, Some(ANSWER_WITHIN + ANSWER_WITHIN))
                             .map_err(|why| why.to_string())
+                    },
+                    open_link: &|url| {
+                        open_link(chrome, url, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
                     },
                     // The interactive one waits for the user, however long that
                     // takes.

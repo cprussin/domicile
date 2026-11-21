@@ -20,6 +20,7 @@ import type { PreviewedWindow } from "../previewed-window";
 import { PreviewedWindowKind } from "../previewed-window";
 import type {
   CommandRan,
+  Link,
   ShellBinding,
   ShellCommand,
   ShellCommandHelp,
@@ -135,6 +136,15 @@ export type System = {
     commands: readonly ShellCommandHelp[],
     bindings: readonly ShellBinding[],
   ) => Promise<Result<Listening<ShellCommand>, SystemError>>;
+  /**
+   * Open links of `schemes`, such as `mailto`, for the desktop: hear each one
+   * `domicile open` (and so `xdg-open` and applications' links) and the
+   * Email portal hand over, instead of the application that opens the
+   * scheme. The page that claimed a scheme last gets its links.
+   */
+  claimLinks: (
+    schemes: readonly string[],
+  ) => Promise<Result<Listening<Link>, SystemError>>;
   /**
    * Say that this page ran the command numbered `sent`, with what
    * `domicile send-shell` prints if anything, or with `Err`, why it did not.
@@ -310,6 +320,12 @@ export const system = (host: SystemHost): System => {
       listening(calls, { call: "bells" }, (event) =>
         event.kind === "bell"
           ? { appId: event.app_id ?? undefined }
+          : unexpected(event),
+      ),
+    claimLinks: (schemes) =>
+      listening(calls, { call: "claim_links", schemes }, (event) =>
+        event.kind === "link"
+          ? { appId: event.app_id, url: event.url }
           : unexpected(event),
       ),
     createDir: (path) =>

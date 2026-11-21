@@ -236,6 +236,37 @@ fn a_desktop_told_to_launch_a_program_has_the_compositor_start_it() {
 }
 
 #[test]
+fn a_desktop_hands_a_link_to_the_shell_that_claims_it() {
+    let told = RefCell::new(None);
+    let answered = reply_to(
+        "{\"type\":\"open_link\",\"url\":\"mailto:a@example.com\"}",
+        &Desktop {
+            open_link: &|url| {
+                *told.borrow_mut() = Some(url.to_string());
+                Ok(true)
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(told.take(), Some("mailto:a@example.com".to_string()));
+    assert_eq!(answered, Response::Opened);
+}
+
+#[test]
+fn a_link_no_shell_claims_is_unclaimed() {
+    let answered = reply_to(
+        "{\"type\":\"open_link\",\"url\":\"zoommtg://zoom.us/join\"}",
+        &Desktop {
+            open_link: &|_| Ok(false),
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(answered, Response::Unclaimed);
+}
+
+#[test]
 fn a_desktop_told_to_open_an_app_tells_the_engine() {
     let told = Cell::new(None);
     let answered = reply_to(
@@ -1352,6 +1383,7 @@ fn nothing_dialed() -> Desktop<'static> {
         open_app: &|_, _, _, _| panic!("only open_app opens an app window"),
         run_app: &|_, _| panic!("only run_app runs an app module"),
         launch: &|_| panic!("only launch starts a program"),
+        open_link: &|_| panic!("only open_link hands over a link"),
         permissions: &|| panic!("only site_permissions lists site permissions"),
         power_displays: &|_, _| panic!("only sleep_displays and wake_displays power them"),
         lock: &|| panic!("only lock locks the desktop"),

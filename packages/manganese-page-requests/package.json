@@ -36,6 +36,7 @@
     "./PromptAsk": "./src/PromptAsk.tsx",
     "./permission-names": "./src/permission-names.tsx",
     "./SignInAsk": "./src/SignInAsk.tsx",
+    "./shell-links": "./src/shell-links.ts",
     "./site-permissions": "./src/site-permissions.ts",
     "./useDeviceRequest": "./src/useDeviceRequest.ts",
     "./useDialogRequest": "./src/useDialogRequest.ts",
