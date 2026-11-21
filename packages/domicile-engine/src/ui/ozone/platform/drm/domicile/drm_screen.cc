@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "base/check.h"
+#include "base/logging.h"
 #include "base/notreached.h"
 #include "base/containers/flat_set.h"
 #include "components/viz/common/resources/shared_image_format.h"
@@ -409,6 +410,15 @@ void DrmScreen::OnDisplaysChanged(
 
   // Not always the first snapshot: a profile may turn the laptop panel off.
   const size_t primary = PrimaryIndexForLayout(snapshots, layout);
+  VLOG(1) << "domicile: " << snapshots.size() << " monitors, "
+          << layout.size() << " laid out by the compositor, primary "
+          << displays[primary].id();
+  for (const display::Display& display : displays) {
+    const auto connector = connectors_.find(display.id());
+    VLOG(1) << "domicile: monitor " << display.id() << " ("
+            << (connector != connectors_.end() ? connector->second : "")
+            << "): " << display.ToString();
+  }
 
   // Add the primary first: DisplayList::AddDisplay DCHECKs it, and this
   // build has `dcheck_always_on`. The display event's mojom also promises
@@ -435,6 +445,7 @@ void DrmScreen::OnDisplaysChanged(
     }
   }
   for (const int64_t id : unplugged) {
+    VLOG(1) << "domicile: monitor " << id << " unplugged";
     display_list_.RemoveDisplay(id);
   }
 
@@ -446,6 +457,8 @@ void DrmScreen::OnDisplaysChanged(
     const auto is = panels_.find(display.id());
     if (was != before.end() && is != panels_.end() &&
         PanelChangedUnseen(was->second, is->second)) {
+      VLOG(1) << "domicile: monitor " << display.id()
+              << " changed only its refresh rate or adaptive sync";
       for (display::DisplayObserver& observer :
            *display_list_.observers()) {
         observer.OnDisplayMetricsChanged(display, /*changed_metrics=*/0);
