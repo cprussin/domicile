@@ -1724,6 +1724,9 @@ source_set("unit_tests") {
     # beside //ui/base/cursor for the same reason.
     "//ui/base/cursor/domicile:desk_cursor_theme",
     "//ui/base/cursor/domicile:unit_tests",
+    # A channel endpoint's disconnect queued behind its messages, beside the
+    # //ipc code that queues them.
+    "//ipc/domicile:unit_tests",
     # What the shell hides from captures of the desk, beside the viz code
     # that leaves it out.
     "//components/viz/service/display/domicile:unit_tests",
