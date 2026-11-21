@@ -414,6 +414,14 @@ export const Shell = runManganese({
   one (app id `google-messages`). Don't also use the
   [Google Messages](#google-messages) item: Messages runs one web session at
   a time.
+- **Email links**: an inbox with a `write` writes email. While one does,
+  manganese claims `mailto:` links ([Links](../../../docs/WRITING-A-SHELL.md#links)):
+  from pages, apps, `domicile open` and the Email portal. A link asks which
+  address to write from, in a dialog listing every such inbox's addresses
+  (`MailPicker`), the one picked last first; with one address it writes at
+  once. `gmailInbox` writes from the account and its Gmail aliases ("Send mail
+  as"), in the account's window, with Gmail's new message form open over the
+  inbox.
 - Not on the lock screen, as the drawer is not.
 
 ## Sharing
@@ -504,10 +512,11 @@ one account's inbox, read with the Gmail API. Not in `DEFAULT_BAR`.
   locked. Counts are conversations, as Gmail's inbox counts them.
 - How it reads:
   - `client` is a Google Cloud OAuth client of the Desktop app type, with the
-    Gmail API on and the `gmail.metadata` scope: labels and message headers,
-    never bodies. Publish its consent screen: one in Testing expires sign-ins
-    after 7 days. A refresh token granted without that scope signs the
-    account out, to sign in again.
+    Gmail API on and the `gmail.metadata` and `gmail.settings.basic` scopes:
+    labels, message headers and the addresses it sends from, never bodies.
+    Publish its consent screen: one in Testing expires sign-ins after 7 days.
+    A refresh token granted without those scopes signs the account out, to
+    sign in again.
   - Sign-in is Google's desktop flow. Consent redirects the window to a
     loopback address nothing listens on; the item reads the code from the
     window's address, closes it, and trades the code for a refresh token.

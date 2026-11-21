@@ -22,13 +22,16 @@ export type UnreadMessage = {
 export const InboxReading = {
   /**
    * Every conversation, and the unread ones, with the newest message of each
-   * of the newest unread conversations, newest first.
+   * of the newest unread conversations, newest first, and the addresses the
+   * account sends from, its own first, when known.
    */
   Counted: (
     total: number,
     unread: number,
     latest: readonly UnreadMessage[] = [],
+    addresses: readonly string[] = [],
   ) => ({
+    addresses,
     kind: InboxReadingKind.Counted as const,
     latest,
     total,
@@ -106,6 +109,12 @@ export const Inbox = {
       /** Opens it, or signs it in, for a press of its row. */
       open: (domicile: Domicile, reading: InboxReading | undefined) => void;
       /**
+       * Writes email from its account, for `mailto:` links: opens a new
+       * message from address `from`, filled in from the link `link`. Without
+       * it, the inbox writes no email. See {@link sendersOf}.
+       */
+      write?: (domicile: Domicile, link: string, from: string) => void;
+      /**
        * The app window it opens in, if any, which the launcher lists: app
        * `appId`'s, at `url`. With `pageNotifies`, its page notifies what the
        * inbox notifies already, so the page's are cleared as they arrive.
@@ -151,3 +160,23 @@ export const Inbox = {
 };
 
 export type Inbox = ReturnType<(typeof Inbox)[keyof typeof Inbox]>;
+
+/**
+ * The addresses `inbox` writes email from, given its `reading`: those the
+ * reading names, else its account's. None when it writes no email.
+ */
+export const sendersOf = (
+  inbox: Inbox,
+  reading: InboxReading | undefined,
+): readonly string[] => {
+  if (inbox.kind !== InboxKind.Watched || inbox.write === undefined) {
+    return [];
+  } else if (
+    reading?.kind === InboxReadingKind.Counted &&
+    reading.addresses.length > 0
+  ) {
+    return reading.addresses;
+  } else {
+    return inbox.account === undefined ? [] : [inbox.account];
+  }
+};

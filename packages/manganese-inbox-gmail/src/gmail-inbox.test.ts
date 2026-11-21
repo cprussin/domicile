@@ -83,6 +83,22 @@ describe(gmailInbox, () => {
     ]);
   });
 
+  it("writes email in the account's Gmail window, with a new message from the link", () => {
+    const fake = new FakeDomicileHost();
+
+    inbox().write?.(fake.domicile, "mailto:a@example.com", EMAIL);
+
+    expect(fake.calls).toEqual([
+      [
+        "openAppWindow",
+        "https://mail.google.com/mail/?authuser=me%40example.com&extsrc=mailto&url=mailto%3Aa%40example.com",
+        "gmail:me@example.com",
+        "navigate",
+        "",
+      ],
+    ]);
+  });
+
   it("is listed in the launcher by the name given, else its nickname, as its window, under its address", () => {
     expect(inbox().launcherName).toBeUndefined();
     expect(inbox().account).toBe(EMAIL);

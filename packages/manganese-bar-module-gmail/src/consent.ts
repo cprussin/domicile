@@ -16,9 +16,13 @@ export const REDIRECT = "http://127.0.0.1:47823/";
 
 /**
  * Read-only access to labels, which carry the inbox's counts, and to message
- * headers, which name a new message's sender and subject. Never bodies.
+ * headers, which name a new message's sender and subject. Never bodies. And
+ * the basic settings, which list the addresses the account sends from.
  */
-export const SCOPE = "https://www.googleapis.com/auth/gmail.metadata";
+export const SCOPES = [
+  "https://www.googleapis.com/auth/gmail.metadata",
+  "https://www.googleapis.com/auth/gmail.settings.basic",
+] as const;
 
 /**
  * Google's consent page for `email`. It redirects to {@link REDIRECT} with
@@ -36,7 +40,7 @@ export const consentAddress = (
     prompt: "consent",
     redirect_uri: REDIRECT,
     response_type: "code",
-    scope: SCOPE,
+    scope: SCOPES.join(" "),
     state,
   }).toString()}`;
 

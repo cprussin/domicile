@@ -2538,6 +2538,25 @@ pub enum SystemRequest {
     /// failure when every page refused it or none answered in time.
     /// `domicile send-shell` sends this.
     SendShell { command: Vec<String> },
+    /// Open links of `schemes` for the desktop: report each one
+    /// [`SystemRequest::OpenLink`] hands over. `domicile open`, and so
+    /// `xdg-open` and applications' links, and the Email portal hand them
+    /// over. Answered with [`SystemReply::Started`], then a
+    /// [`SystemEvent::Link`] per link. [`SystemRequest::Unwatch`] ends it.
+    ///
+    /// `schemes` are without the colon, such as `mailto`, in any case. A
+    /// link goes to the page that claimed its scheme last.
+    ClaimLinks { schemes: Vec<String> },
+    /// Hand `url` to the page that claimed its scheme with
+    /// [`SystemRequest::ClaimLinks`]. `app_id` is the desktop file id of the
+    /// application that asked, when known. Answered with
+    /// [`SystemReply::Sent`] once the page has it, or
+    /// [`SystemErrorKind::NotFound`] when no page claims its scheme.
+    OpenLink {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        app_id: Option<String>,
+    },
     /// Say whether this page ran the [`SystemEvent::ShellCommand`] numbered
     /// `sent`: `refused` says why not. A command that ran may answer with
     /// `output`, such as a query's JSON, which `domicile send-shell` prints.
@@ -2883,6 +2902,14 @@ pub enum SystemEvent {
     /// A command sent with [`SystemRequest::SendShell`], numbered `sent` for
     /// [`SystemRequest::AnswerShellCommand`].
     ShellCommand { command: Vec<String>, sent: u64 },
+    /// A link handed over with [`SystemRequest::OpenLink`], for the page to
+    /// open. `app_id` is the asking application's desktop file id, when
+    /// known.
+    Link {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        app_id: Option<String>,
+    },
     /// Whether nobody has been at the desktop for the time a
     /// [`SystemRequest::IdleAfter`] or [`SystemRequest::IdleBeforeBlanking`]
     /// named.

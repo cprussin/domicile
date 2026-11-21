@@ -1185,3 +1185,29 @@ describe("agents", () => {
     expect(await forgetting).toStrictEqual(Ok("set"));
   });
 });
+
+describe("links", () => {
+  it("streams each link of the claimed schemes until it is stopped", async () => {
+    const host = new FakeHost();
+    const listening = system(host).claimLinks(["mailto"]);
+    host.reply(1, { kind: "started" });
+    const links = started(await listening);
+    host.event(1, {
+      app_id: "slack",
+      kind: "link",
+      url: "mailto:a@example.com",
+    });
+    host.event(1, { kind: "link", url: "mailto:b@example.com" });
+    links.stop();
+    host.end(1, { kind: "stopped" });
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "claim_links", schemes: ["mailto"] }],
+      [1, { call: "unwatch" }],
+    ]);
+    expect(await Array.fromAsync(links.items)).toStrictEqual([
+      { appId: "slack", url: "mailto:a@example.com" },
+      { appId: undefined, url: "mailto:b@example.com" },
+    ]);
+  });
+});

@@ -88,6 +88,11 @@ pub enum Request {
     /// asks this for the handler it picks, so a link the engine opens starts
     /// its app as one the user started.
     Launch { command: Vec<String> },
+    /// Hand `url` to the shell page that claims its scheme, such as
+    /// `mailto`. Answered [`Response::Opened`], or [`Response::Unclaimed`]
+    /// when no page claims it. `domicile open` asks this before it picks
+    /// an application. See `SystemRequest::OpenLink`.
+    OpenLink { url: String },
     /// Write a PNG of the whole desk to this absolute path, or, with no
     /// `file`, take the shell's interactive screenshot.
     ///
@@ -379,6 +384,9 @@ pub enum Response {
     /// dialog, so no file was saved.
     Copied,
 
+    /// No page of the shell claims the link's scheme.
+    Unclaimed,
+
     /// A page of the shell ran the command, and printed `output` if it said
     /// anything, such as a query's JSON.
     Sent {
@@ -542,6 +550,12 @@ pub type RunApp<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
 ///
 /// [`crate::compositor_socket::launch`] in a desktop; a closure in tests.
 pub type Launch<'a> = &'a dyn Fn(&[String]) -> Result<(), String>;
+
+/// Hands a link to the shell page that claims its scheme: true when one took
+/// it, false when none claims it.
+///
+/// [`crate::compositor_socket::open_link`] in a desktop; a closure in tests.
+pub type OpenLink<'a> = &'a dyn Fn(&str) -> Result<bool, String>;
 
 /// Tells the compositor to take a screenshot, into the file if one is given.
 ///
@@ -797,6 +811,7 @@ pub struct Desktop<'a> {
     pub open_app: OpenApp<'a>,
     pub run_app: RunApp<'a>,
     pub launch: Launch<'a>,
+    pub open_link: OpenLink<'a>,
     pub capture: Screenshot<'a>,
     pub record: ScreenRecord<'a>,
     pub send: SendShell<'a>,
@@ -947,6 +962,11 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::Launch { command }) => to_line(&match (desktop.launch)(&command) {
             Ok(()) => Response::Opened,
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::OpenLink { url }) => to_line(&match (desktop.open_link)(&url) {
+            Ok(true) => Response::Opened,
+            Ok(false) => Response::Unclaimed,
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::Screenshot { file }) => to_line(&match (desktop.capture)(file.as_deref()) {

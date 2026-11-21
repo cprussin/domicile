@@ -484,7 +484,7 @@ now. See [AGENTS.md](AGENTS.md).
 | OpenURI | (frontend) | via AppChooser |
 | Access | `grant_label`, `deny_label`; Domicile's own `destructive` makes the yes a danger button | yes/no prompt with the app's name; none for Domicile's own questions |
 | Account | user name, avatar from `AccountsService`, else passwd | confirm; allowed with the `access` answer |
-| Email | opens the `mailto:` handler from `mimeapps.list` with the fields; attachments as `attach=`, which Thunderbird ignores | — |
+| Email | hands the `mailto:` link to the shell when it claims `mailto` ([Links](WRITING-A-SHELL.md#links)), else opens the handler from `mimeapps.list`, with the fields; attachments as `attach=`, which Thunderbird ignores | — |
 | Notification | v2, direct to `domicile_host::notifications` | existing drawer |
 | Inhibit | idle inhibit through `idle.rs`; logout/suspend inhibitors listed as `inhibit` requests; `QueryEndResponse` on session end (the desk has no session end yet, so no query-end is sent) | "X is preventing logout" |
 | Lockdown | properties from the config's `lockdown`; signaled on reload | — |

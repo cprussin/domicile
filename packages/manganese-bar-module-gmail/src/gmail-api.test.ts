@@ -1,8 +1,20 @@
 import { describe, expect, it } from "bun:test";
 import { Err, Ok } from "@cprussin/option-result";
 
-import { inboxCounts, mailHeaders, unreadMail } from "./gmail-api";
-import { answering, HEADERS, INBOX, json, UNREAD } from "./held-google";
+import {
+  inboxCounts,
+  mailHeaders,
+  sendAsAddresses,
+  unreadMail,
+} from "./gmail-api";
+import {
+  answering,
+  HEADERS,
+  INBOX,
+  json,
+  SEND_AS,
+  UNREAD,
+} from "./held-google";
 
 describe("inboxCounts", () => {
   it("counts the inbox's conversations, with the access token", async () => {
@@ -177,6 +189,34 @@ describe("mailHeaders", () => {
         subject: "Hi",
         threadId: "1a",
       }),
+    );
+  });
+});
+
+describe("sendAsAddresses", () => {
+  it("lists the account's own address, then its verified aliases", async () => {
+    const { domicile } = answering({
+      [SEND_AS]: [
+        json(200, {
+          sendAs: [
+            { sendAsEmail: "me@work.example", verificationStatus: "accepted" },
+            { isPrimary: true, sendAsEmail: "me@example.com" },
+            { sendAsEmail: "me@old.example", verificationStatus: "pending" },
+          ],
+        }),
+      ],
+    });
+
+    expect(await sendAsAddresses(domicile, "acc3ss")).toStrictEqual(
+      Ok(["me@example.com", "me@work.example"]),
+    );
+  });
+
+  it("fails with Gmail's answer when it refuses", async () => {
+    const { domicile } = answering({ [SEND_AS]: [json(403, {})] });
+
+    expect(await sendAsAddresses(domicile, "acc3ss")).toStrictEqual(
+      Err("Gmail answered 403: {}"),
     );
   });
 });

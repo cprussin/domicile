@@ -1,7 +1,8 @@
 // The commands `domicile send-shell` sends a shell, how a shell describes the
 // ones it runs for `domicile list-shell-commands` and the keys that run them
 // for `domicile list-bindings`, and how it answers each. See
-// docs/architecture/KEYBINDINGS.md.
+// docs/architecture/KEYBINDINGS.md. Also the links `domicile open` hands a
+// shell that claims their scheme; see docs/WRITING-A-SHELL.md#links.
 
 /** One command a shell runs, as `domicile list-shell-commands` prints it. */
 export type ShellCommandHelp = {
@@ -34,3 +35,15 @@ export type ShellBinding = {
  * `domicile send-shell` to print, such as a query's JSON.
  */
 export type CommandRan = "ran" | { readonly output: string };
+
+/**
+ * A link handed to the shell because it claims the link's scheme: from
+ * `domicile open` (and so `xdg-open` and applications' links) or the Email
+ * portal.
+ */
+export type Link = {
+  /** The link, such as `mailto:a@example.com?subject=Hi`. */
+  readonly url: string;
+  /** The desktop file id of the application that asked, when known. */
+  readonly appId: string | undefined;
+};

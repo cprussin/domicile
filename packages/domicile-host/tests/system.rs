@@ -1069,6 +1069,114 @@ mod shell_commands {
 /// Pages hearing when nobody has been at the desktop for a time each chose.
 /// The compositor says how long the desk has been still; these tests stand in
 /// for its clock.
+mod links {
+    use domicile_host::links::Links;
+
+    use super::*;
+
+    const LINK: &str = "mailto:a@example.com";
+
+    fn claiming(schemes: &[&str]) -> SystemRequest {
+        SystemRequest::ClaimLinks {
+            schemes: schemes.iter().map(|scheme| scheme.to_string()).collect(),
+        }
+    }
+
+    fn open(url: &str) -> SystemRequest {
+        SystemRequest::OpenLink {
+            url: url.into(),
+            app_id: Some("slack".into()),
+        }
+    }
+
+    /// A system sharing `links`, as each chrome connection does.
+    fn a_page(links: &Links) -> (System, Receiver<HostMessage>) {
+        let (system, heard) = system_in(&std::env::temp_dir());
+        (system.sharing_links(links.clone()), heard)
+    }
+
+    fn heard_link(heard: &Receiver<HostMessage>, id: u32) -> (String, Option<String>) {
+        match next(heard) {
+            HostMessage::SystemEvent {
+                id: from,
+                event: SystemEvent::Link { url, app_id },
+            } if from == id => (url, app_id),
+            other => panic!("expected a link on {id}, heard {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_link_goes_to_the_page_that_claims_its_scheme() {
+        let links = Links::default();
+        let (page, page_heard) = a_page(&links);
+        let (sender, sender_heard) = a_page(&links);
+        page.handle(7, claiming(&["mailto"]));
+        assert_eq!(reply(&page_heard, 7), SystemReply::Started);
+
+        sender.handle(1, open(LINK));
+
+        assert_eq!(
+            heard_link(&page_heard, 7),
+            (LINK.to_string(), Some("slack".to_string()))
+        );
+        assert_eq!(reply(&sender_heard, 1), SystemReply::Sent { output: None });
+    }
+
+    #[test]
+    fn a_scheme_matches_in_any_case() {
+        let links = Links::default();
+        let (page, page_heard) = a_page(&links);
+        page.handle(7, claiming(&["MailTo"]));
+        reply(&page_heard, 7);
+
+        assert!(links.open("MAILTO:a@example.com", None));
+        assert_eq!(heard_link(&page_heard, 7).0, "MAILTO:a@example.com");
+    }
+
+    #[test]
+    fn a_link_no_page_claims_is_not_found() {
+        let links = Links::default();
+        let (page, page_heard) = a_page(&links);
+        page.handle(7, claiming(&["mailto"]));
+        reply(&page_heard, 7);
+
+        page.handle(1, open("zoommtg://zoom.us/join"));
+
+        assert_eq!(failure(reply(&page_heard, 1)), SystemErrorKind::NotFound);
+        assert!(!links.claims("zoommtg://zoom.us/join"));
+    }
+
+    #[test]
+    fn the_page_that_claimed_last_gets_the_link() {
+        // A reloaded shell claims again before the old page lets go.
+        let links = Links::default();
+        let (old, old_heard) = a_page(&links);
+        let (new, new_heard) = a_page(&links);
+        old.handle(7, claiming(&["mailto"]));
+        reply(&old_heard, 7);
+        new.handle(8, claiming(&["mailto"]));
+        reply(&new_heard, 8);
+
+        assert!(links.open(LINK, None));
+
+        assert_eq!(heard_link(&new_heard, 8).0, LINK);
+        assert!(old_heard.try_recv().is_err());
+    }
+
+    #[test]
+    fn a_page_that_stopped_claiming_gets_no_more_links() {
+        let links = Links::default();
+        let (page, page_heard) = a_page(&links);
+        page.handle(7, claiming(&["mailto"]));
+        reply(&page_heard, 7);
+
+        page.handle(7, SystemRequest::Unwatch);
+
+        assert!(!links.claims(LINK));
+        assert!(!links.open(LINK, None));
+    }
+}
+
 mod idle_watches {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
@@ -1900,6 +2008,10 @@ mod locked {
             SystemRequest::SendShell {
                 command: vec!["focus".into(), "right".into()],
             },
+            SystemRequest::OpenLink {
+                url: "mailto:a@example.com".into(),
+                app_id: None,
+            },
             SystemRequest::ShortcutsInhibitor {
                 action: domicile_protocol::InhibitorAction::Toggle,
             },
@@ -1972,6 +2084,13 @@ mod apps {
                 sent: 1,
                 refused: None,
                 output: None,
+            },
+            SystemRequest::ClaimLinks {
+                schemes: vec!["mailto".into()],
+            },
+            SystemRequest::OpenLink {
+                url: "mailto:a@example.com".into(),
+                app_id: None,
             },
             SystemRequest::IdleAfter { seconds: 1 },
             SystemRequest::IdleBeforeBlanking { seconds: 1 },
