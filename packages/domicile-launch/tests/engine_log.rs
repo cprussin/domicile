@@ -249,3 +249,16 @@ mod gate {
         );
     }
 }
+
+#[test]
+fn an_engine_started_at_its_own_levels_shows_every_line() {
+    // A guard or a developer passing `--log-level=0` reads the engine's INFO.
+    use domicile_launch::engine_log::raises_logging;
+    assert!(raises_logging(Some("--no-sandbox --log-level=0")));
+    assert!(raises_logging(Some("--vmodule=drm_modeset=1")));
+    assert!(raises_logging(Some("--v=1")));
+    assert!(!raises_logging(Some(
+        "--no-sandbox --disable-features=Vulkan"
+    )));
+    assert!(!raises_logging(None));
+}
