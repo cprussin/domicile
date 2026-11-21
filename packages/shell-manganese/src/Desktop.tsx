@@ -1,6 +1,7 @@
 import { useDisplays } from "@domicile-desktop/component-library/DisplayProvider";
 import { applyFont } from "@domicile-desktop/component-library/font";
 import { createHandle } from "@domicile-desktop/component-library/Popover";
+import { PopupScene } from "@domicile-desktop/component-library/PopupScene";
 import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
 import { useTheme } from "@domicile-desktop/component-library/ThemeProvider";
 import { createToastManager } from "@domicile-desktop/component-library/Toaster";
@@ -78,6 +79,7 @@ import type {
 } from "@domicile-desktop/manganese-window-management/pointer-warp";
 import type { Rect } from "@domicile-desktop/manganese-window-management/rect";
 import { Stage } from "@domicile-desktop/manganese-window-management/Stage";
+import { popupSceneOf } from "@domicile-desktop/manganese-window-management/screens/popup-scene";
 import { shownWindowsOf } from "@domicile-desktop/manganese-window-management/screens/shown-windows";
 import type { StageScreen } from "@domicile-desktop/manganese-window-management/screens/stage-screens";
 import { useScreenFollowsPointer } from "@domicile-desktop/manganese-window-management/screens/useScreenFollowsPointer";
@@ -758,236 +760,242 @@ export const Desktop = ({
 
   useScreenFollowsPointer({ act, displays, focused: windows.focused });
 
+  // Popups close when the overview, a fullscreen window or a scratchpad
+  // window moves or covers what they point at.
+  const popupScene = popupSceneOf(windows, screens);
+
   return (
-    <BarProviders
-      clock={shellOptions.clock}
-      drawer={drawer}
-      holdKeyboard={holdKeyboard}
-      keymap={shellOptions.keymap}
-      launcher={launcherControl}
-      tray={trayState}
-      workspaces={shownWorkspaces}
-    >
-      {/*
+    <PopupScene scene={popupScene}>
+      <BarProviders
+        clock={shellOptions.clock}
+        drawer={drawer}
+        holdKeyboard={holdKeyboard}
+        keymap={shellOptions.keymap}
+        launcher={launcherControl}
+        tray={trayState}
+        workspaces={shownWorkspaces}
+      >
+        {/*
         First, so it paints under everything. It does not wait for the
         desktop to connect.
       */}
-      <Wallpaper
-        files={files}
-        held={flipping}
-        photos={listedWallpapers ?? NO_WALLPAPERS}
-        picture={backgroundPicture}
-        still={!shellOptions.wallpaper.rotate}
-        theme={theme}
-      />
-      {/*
+        <Wallpaper
+          files={files}
+          held={flipping}
+          photos={listedWallpapers ?? NO_WALLPAPERS}
+          picture={backgroundPicture}
+          still={!shellOptions.wallpaper.rotate}
+          theme={theme}
+        />
+        {/*
         Every display the desktop has taken up. A new display appears one
         render after the host reports it, once the reducer gives it a
         workspace.
       */}
-      {screens.map(({ geometry: { name } }) => (
-        <Monitor
-          bar={bar}
-          focused={name === windows.focused}
-          key={name}
-          name={name}
-        />
-      ))}
-      {/*
+        {screens.map(({ geometry: { name } }) => (
+          <Monitor
+            bar={bar}
+            focused={name === windows.focused}
+            key={name}
+            name={name}
+          />
+        ))}
+        {/*
         Under every window and over the wallpaper: the overview's dimmed
         screens, tiles and names.
       */}
-      {overviews !== undefined && (
-        <OverviewBackdrop
-          cards={windows.overviewCards}
-          closing={overviewPhase === "closing"}
-          onClosed={overviewClosed}
-          overviews={overviews}
-        />
-      )}
-      {/*
+        {overviews !== undefined && (
+          <OverviewBackdrop
+            cards={windows.overviewCards}
+            closing={overviewPhase === "closing"}
+            onClosed={overviewClosed}
+            overviews={overviews}
+          />
+        )}
+        {/*
         Every window, once for the desk and after every bar, so a window wins a
         tie with a bar it overlaps; see `Stage`.
       */}
-      {screens.length > 0 && (
-        <Stage
-          activeId={windows.activeId}
-          behindPanel={
-            windows.launcherOpen ||
-            windows.overviewOpen ||
-            windows.clipboardOpen ||
-            opened !== undefined ||
-            portal.url !== undefined ||
-            notificationsOpen ||
-            heldPanels > 0 ||
-            lock.locked
-          }
-          // While a desktop panel is open the page keeps the keyboard; see
-          // `AppWindow`. Extension popups, a portal's sign-in page,
-          // applications' dialogs and the lock screen count.
-          clientIcons={clientIcons}
-          domicile={domicile}
-          draggingId={windows.draggingId}
-          focusedId={windows.focusedId}
-          handed={windows.handed}
-          modifiers={modifiers}
-          {...stageActions}
-          overview={sight}
-          popups={windows.popups}
-          scratchpad={windows.scratchpad}
-          screens={screens}
-          shut={shut}
-          windows={windows.windows}
-        />
-      )}
-      {/*
+        {screens.length > 0 && (
+          <Stage
+            activeId={windows.activeId}
+            behindPanel={
+              windows.launcherOpen ||
+              windows.overviewOpen ||
+              windows.clipboardOpen ||
+              opened !== undefined ||
+              portal.url !== undefined ||
+              notificationsOpen ||
+              heldPanels > 0 ||
+              lock.locked
+            }
+            // While a desktop panel is open the page keeps the keyboard; see
+            // `AppWindow`. Extension popups, a portal's sign-in page,
+            // applications' dialogs and the lock screen count.
+            clientIcons={clientIcons}
+            domicile={domicile}
+            draggingId={windows.draggingId}
+            focusedId={windows.focusedId}
+            handed={windows.handed}
+            modifiers={modifiers}
+            {...stageActions}
+            overview={sight}
+            popups={windows.popups}
+            scratchpad={windows.scratchpad}
+            screens={screens}
+            shut={shut}
+            windows={windows.windows}
+          />
+        )}
+        {/*
         Over every window and under the toasts and panels, on every
         workspace. Not on the lock screen.
       */}
-      <PictureInPictureFloats
-        pageFor={pageOfThisDocument}
-        pictureInPicture={domicile.pictureInPicture}
-        shown={screens.length > 0 && !lock.locked}
-        workspaceFor={pictureInPictureWorkspace}
-      />
-      {/* Over every window, while the overview is open. */}
-      {overviews !== undefined && overviewPhase === "open" && (
-        <OverviewPicker
-          aim={windows.overviewAim}
-          cards={windows.overviewCards}
-          focused={windows.focused}
-          onAim={overviewAimed}
-          onDismiss={overviewDismissed}
-          onMove={windowMovedTo}
-          onPick={overviewPicked}
-          onPickWindow={overviewWindowPicked}
-          overviews={overviews}
+        <PictureInPictureFloats
+          pageFor={pageOfThisDocument}
+          pictureInPicture={domicile.pictureInPicture}
+          shown={screens.length > 0 && !lock.locked}
+          workspaceFor={pictureInPictureWorkspace}
         />
-      )}
-      {/* Panels cover the whole desktop, not one screen. */}
-      <Launcher
-        fromPrivate={activeIsPrivate(windows)}
-        glances={glances}
-        onClosed={launcherClosed}
-        onDismiss={launcherDismissed}
-        onLaunch={launched}
-        open={windows.launcherOpen}
-        opening={opening}
-        opens={opensFile}
-        preview={preview}
-        screen={windows.focused}
-        search={search}
-        searchApps={apps.search}
-      />
-      {openingWith !== undefined && (
-        <OpenWith
-          domicile={domicile}
-          onClose={() => {
-            setOpeningWith(undefined);
-          }}
-          onOpen={(argv) => {
-            setOpeningWith(undefined);
-            act(WindowAction.AppLaunched(argv));
-          }}
-          path={openingWith}
+        {/* Over every window, while the overview is open. */}
+        {overviews !== undefined && overviewPhase === "open" && (
+          <OverviewPicker
+            aim={windows.overviewAim}
+            cards={windows.overviewCards}
+            focused={windows.focused}
+            onAim={overviewAimed}
+            onDismiss={overviewDismissed}
+            onMove={windowMovedTo}
+            onPick={overviewPicked}
+            onPickWindow={overviewWindowPicked}
+            overviews={overviews}
+          />
+        )}
+        {/* Panels cover the whole desktop, not one screen. */}
+        <Launcher
+          fromPrivate={activeIsPrivate(windows)}
+          glances={glances}
+          onClosed={launcherClosed}
+          onDismiss={launcherDismissed}
+          onLaunch={launched}
+          open={windows.launcherOpen}
+          opening={opening}
+          opens={opensFile}
+          preview={preview}
+          screen={windows.focused}
+          search={search}
+          searchApps={apps.search}
+        />
+        {openingWith !== undefined && (
+          <OpenWith
+            domicile={domicile}
+            onClose={() => {
+              setOpeningWith(undefined);
+            }}
+            onOpen={(argv) => {
+              setOpeningWith(undefined);
+              act(WindowAction.AppLaunched(argv));
+            }}
+            path={openingWith}
+            screen={windows.focused}
+          />
+        )}
+        {/* Over the windows, on the screen with the keyboard. */}
+        <PortalSignIn
+          onDismiss={portal.dismiss}
+          screen={windows.focused}
+          url={portal.url}
+        />
+        {/* Over the whole desktop, like the launcher. */}
+        <Clipboard
+          entries={clipboard}
+          onCopy={copied}
+          onDismiss={clipboardDismissed}
+          open={windows.clipboardOpen}
           screen={windows.focused}
         />
-      )}
-      {/* Over the windows, on the screen with the keyboard. */}
-      <PortalSignIn
-        onDismiss={portal.dismiss}
-        screen={windows.focused}
-        url={portal.url}
-      />
-      {/* Over the whole desktop, like the launcher. */}
-      <Clipboard
-        entries={clipboard}
-        onCopy={copied}
-        onDismiss={clipboardDismissed}
-        open={windows.clipboardOpen}
-        screen={windows.focused}
-      />
-      {/*
+        {/*
         Over the windows and under every panel, so a toast never covers the
         launcher. On the screen with the keyboard. Hidden while locked or
         casting so notifications are not shown on the lock screen or a TV.
       */}
-      <NotificationToasts
-        manager={toasts}
-        now={now}
-        onAction={pressNotification}
-        onReply={notifications.reply}
-        screen={windows.focused}
-        shown={!(lock.locked || casting)}
-      />
-      {/* Like the toasts, on the screen with the keyboard. */}
-      <LevelNotice press={levelPress} screen={windows.focused} />
-      <KeymapNotice
-        press={
-          keymapSwitches === 0 || keymaps === undefined
-            ? undefined
-            : {
-                count: keymapSwitches,
-                description: keymaps.keymaps.find(
-                  ({ name }) => name === keymaps.active,
-                )?.description,
-                keymap: keymaps.active,
-              }
-        }
-        screen={windows.focused}
-      />
-      {/* Under the bell that opened it. */}
-      <NotificationDrawer
-        handle={notificationsHandle}
-        inboxes={inboxes.length === 0 ? undefined : inboxDrawer.drawer}
-        items={notifications.items}
-        now={now}
-        onAction={pressNotification}
-        onClose={closeNotifications}
-        onDismiss={notifications.dismiss}
-        onOpen={openNotifications}
-        onPause={notifications.pauseFor}
-        onReply={notifications.reply}
-        onResume={notifications.resume}
-        open={notificationsOpen && !lock.locked}
-        pause={notifications.pause}
-        screen={notificationsOn}
-      />
-      {/*
+        <NotificationToasts
+          manager={toasts}
+          now={now}
+          onAction={pressNotification}
+          onReply={notifications.reply}
+          screen={windows.focused}
+          shown={!(lock.locked || casting)}
+        />
+        {/* Like the toasts, on the screen with the keyboard. */}
+        <LevelNotice press={levelPress} screen={windows.focused} />
+        <KeymapNotice
+          press={
+            keymapSwitches === 0 || keymaps === undefined
+              ? undefined
+              : {
+                  count: keymapSwitches,
+                  description: keymaps.keymaps.find(
+                    ({ name }) => name === keymaps.active,
+                  )?.description,
+                  keymap: keymaps.active,
+                }
+          }
+          screen={windows.focused}
+        />
+        {/* Under the bell that opened it. */}
+        <NotificationDrawer
+          handle={notificationsHandle}
+          inboxes={inboxes.length === 0 ? undefined : inboxDrawer.drawer}
+          items={notifications.items}
+          now={now}
+          onAction={pressNotification}
+          onClose={closeNotifications}
+          onDismiss={notifications.dismiss}
+          onOpen={openNotifications}
+          onPause={notifications.pauseFor}
+          onReply={notifications.reply}
+          onResume={notifications.resume}
+          open={notificationsOpen && !lock.locked}
+          pause={notifications.pause}
+          screen={notificationsOn}
+        />
+        {/*
         Applications' dialogs, over every panel, on the screen of the window
         that asked. A dialog with no parent window goes on the focused screen.
         Screen casts show in the bar's sharing item when it has one.
       */}
-      <PortalDialogs
-        closedBrowsers={closedBrowsers}
-        domicile={domicile}
-        holdKeyboard={holdKeyboard}
-        omitAgents={showsSharing(bar)}
-        omitScreenCasts={showsSharing(bar)}
-        screen={windows.focused}
-        screenOf={screenOf}
-        shellChords={shellChords}
-        shownWindows={shownWindows}
-      />
-      {/*
+        <PortalDialogs
+          closedBrowsers={closedBrowsers}
+          domicile={domicile}
+          holdKeyboard={holdKeyboard}
+          omitAgents={showsSharing(bar)}
+          omitScreenCasts={showsSharing(bar)}
+          screen={windows.focused}
+          screenOf={screenOf}
+          shellChords={shellChords}
+          shownWindows={shownWindows}
+        />
+        {/*
         Last, over every panel, so the modal launcher and clipboard cannot take
         input on a locked desk.
 
         Input is already blocked by the compositor; only the compositor
         unlocks. See `lock/Lock.tsx`.
       */}
-      <Lock
-        bar={lockBar}
-        checking={lock.checking}
-        locked={lock.locked}
-        onUnlock={lock.unlock}
-        picture={lockPicture}
-        refusals={lock.refusals}
-        refused={lock.refused}
-        screen={windows.focused}
-      />
-      <NoScreens />
-    </BarProviders>
+        <Lock
+          bar={lockBar}
+          checking={lock.checking}
+          locked={lock.locked}
+          onUnlock={lock.unlock}
+          picture={lockPicture}
+          refusals={lock.refusals}
+          refused={lock.refused}
+          screen={windows.focused}
+        />
+        <NoScreens />
+      </BarProviders>
+    </PopupScene>
   );
 };
 

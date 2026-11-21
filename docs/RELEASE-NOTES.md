@@ -82,6 +82,7 @@ Grouped `--help`, `domicile help <command>` for usage and examples, and man page
 - A renderer that answers the wrong request crashes instead of hanging. [#2215](https://github.com/cprussin/domicile/pull/2215) · [#2248](https://github.com/cprussin/domicile/pull/2248)
 - No re-raster while a window animates; hidden windows don't tick the display. [#2227](https://github.com/cprussin/domicile/pull/2227) · [#2143](https://github.com/cprussin/domicile/pull/2143)
 - A stuck page flip no longer freezes the desktop. [#2043](https://github.com/cprussin/domicile/pull/2043)
+- Popups close when their `PopupScene` changes, such as when an overview opens, and when their `PopupBoundary` moves.
 
 Special thanks to: [ploug](https://github.com/ploug) & [mecattaf](https://github.com/mecattaf)
 

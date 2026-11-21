@@ -1,11 +1,13 @@
 import { Menu as BaseMenu } from "@base-ui/react/menu";
 import { Menubar as BaseMenubar } from "@base-ui/react/menubar";
 import type { ReactNode } from "react";
+import { useRef } from "react";
 import { css } from "../../styled-system/css";
 import { ContextMenu, chooseByMnemonic } from "../ContextMenu/ContextMenu";
 import { popupStyles, positionerStyles } from "../ContextMenu/menu-popup";
 import type { ExtendProps } from "../extend-props";
 import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
+import { useClosedWithScene } from "../PopupScene/PopupScene";
 import "../stylesheet";
 
 type Props = ExtendProps<
@@ -45,7 +47,10 @@ type MenuProps = ExtendProps<
   }
 >;
 
-/** One menu on the bar: its name, and the items under it when open. */
+/**
+ * One menu on the bar: its name, and the items under it when open. Closes when
+ * its `PopupScene` changes.
+ */
 const Menu = ({
   children,
   disabled,
@@ -54,8 +59,11 @@ const Menu = ({
   ...rootProps
 }: MenuProps) => {
   const { boundary } = usePopupBoundary(false);
+  const ownActions = useRef<BaseMenu.Root.Actions | null>(null);
+  const actions = rootProps.actionsRef ?? ownActions;
+  const heard = useClosedWithScene(actions, rootProps);
   return (
-    <BaseMenu.Root {...rootProps}>
+    <BaseMenu.Root {...rootProps} actionsRef={actions} onOpenChange={heard}>
       {/* Named outright: the mnemonic's span splits the text for some readers. */}
       <BaseMenu.Trigger
         aria-label={label}

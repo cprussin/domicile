@@ -36,6 +36,7 @@ import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import {
+  WEBVIEW_CONTEXT_MENU_EVENT,
   WEBVIEW_DESCRIPTION_CHANGE_EVENT,
   WEBVIEW_FAVICON_CHANGE_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
@@ -53,6 +54,7 @@ import {
   render,
   screen,
   waitFor,
+  waitForElementToBeRemoved,
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -3907,6 +3909,21 @@ describe("Shell", () => {
       );
       expect(Number(appBox(container, "term").style.zIndex)).toBeGreaterThan(0);
     });
+    it("hides a tab's tooltip as a window it shows slides over the tab", async () => {
+      const { container } = await renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      clientAppears("notes");
+      press("minus", true);
+      motionsPlayOut(container);
+      await userEvent.hover(screen.getByText("one", { selector: "span" }));
+      await screen.findByRole("tooltip");
+
+      press("minus");
+
+      await waitForElementToBeRemoved(() => screen.queryByRole("tooltip"));
+    });
+
     // It hangs from the top edge, so its top corners are square.
     it("hangs a window it shows from the top edge of the screen", async () => {
       const { container } = await renderShell();
@@ -4235,6 +4252,25 @@ describe("the overview", () => {
 
     fireEvent.keyDown(overview() ?? document, { key: "Escape" });
     expect(appElement(container, "two").hasAttribute("resizing")).toBe(false);
+  });
+
+  it("closes a page's menu left open, which would float over it", async () => {
+    const { container } = await renderShell();
+    press("space");
+    await userEvent
+      .setup()
+      .type(screen.getByRole("combobox"), "example.com{Enter}");
+    await launched();
+    const view = container.querySelector("webview");
+    if (view === null) {
+      throw new Error("test: no browser window");
+    }
+    fireEvent(view, pageMenuAsked());
+    await screen.findByRole("menu", { name: "Page" });
+
+    press("o");
+
+    expect(screen.queryByRole("menu", { name: "Page" })).toBeNull();
   });
 
   it("closes on Escape", async () => {
@@ -4570,3 +4606,34 @@ describe("the launcher", () => {
     expect(barFor(container, "app:two").dataset.focus).toBe("focused");
   });
 });
+
+/** The engine's context menu event for a right click on a page's background. */
+const pageMenuAsked = (): Event =>
+  Object.assign(new Event(WEBVIEW_CONTEXT_MENU_EVENT), {
+    canCopy: false,
+    canCut: false,
+    canDelete: false,
+    canPaste: false,
+    canPictureInPicture: false,
+    canRedo: false,
+    canSelectAll: false,
+    canUndo: false,
+    hasImageContents: false,
+    inPictureInPicture: false,
+    isEditable: false,
+    linkText: "",
+    linkUrl: "",
+    mediaType: "none",
+    misspelledWord: "",
+    replaceMisspelling: () => {
+      throw new Error("test: no misspelling to replace");
+    },
+    run: () => {
+      throw new Error("test: no action to run");
+    },
+    selectionText: "",
+    spellingSuggestions: [],
+    srcUrl: "",
+    x: 10,
+    y: 20,
+  });

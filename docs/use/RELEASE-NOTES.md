@@ -62,6 +62,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 ### Fixes
 
 - Menus, tooltips and dialogs show over a fullscreen window, such as Claude's menu button in fullscreen.
+- Menus, panels and tooltips close when the overview, a fullscreen window or the scratchpad moves or covers what they belong to, instead of floating out of place.
 - The pointer keeps your cursor theme and size after you undock.
 - Slack's notifications show their Reply button instead of an empty row.
 - Switching workspaces and tabs is smoother on battery: a window you come back to draws what it kept instead of drawing its whole page again.

@@ -104,6 +104,7 @@
     "./PanelSection": "./src/PanelSection/PanelSection.tsx",
     "./Popover": "./src/Popover/Popover.tsx",
     "./PopupBoundary": "./src/PopupBoundary/PopupBoundary.tsx",
+    "./PopupScene": "./src/PopupScene/PopupScene.tsx",
     "./PortalDialogs": "./src/PortalDialogs/PortalDialogs.tsx",
     "./Provider": "./src/Provider/Provider.tsx",
     "./pandacss-preset": "./src/pandacss-preset.ts",

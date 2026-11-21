@@ -1,9 +1,11 @@
 import { Menu as BaseMenu } from "@base-ui/react/menu";
 import type { ReactElement, ReactNode } from "react";
+import { useRef } from "react";
 import { ContextMenu } from "../ContextMenu/ContextMenu";
 import { popupStyles, positionerStyles } from "../ContextMenu/menu-popup";
 import type { ExtendProps } from "../extend-props";
 import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
+import { useClosedWithScene } from "../PopupScene/PopupScene";
 import "../stylesheet";
 
 type Props = ExtendProps<
@@ -17,12 +19,16 @@ type Props = ExtendProps<
 
 /**
  * A menu opened from a button, under its end, and named by it. Its items are
- * `ContextMenu`'s. It stays inside its `PopupBoundary`, such as its window.
+ * `ContextMenu`'s. It stays inside its `PopupBoundary`, such as its window,
+ * and closes when its `PopupScene` changes.
  */
 const MenuComponent = ({ children, trigger, ...rootProps }: Props) => {
   const { boundary } = usePopupBoundary(false);
+  const ownActions = useRef<BaseMenu.Root.Actions | null>(null);
+  const actions = rootProps.actionsRef ?? ownActions;
+  const heard = useClosedWithScene(actions, rootProps);
   return (
-    <BaseMenu.Root {...rootProps}>
+    <BaseMenu.Root {...rootProps} actionsRef={actions} onOpenChange={heard}>
       <BaseMenu.Trigger render={trigger} />
       <BaseMenu.Portal>
         <BaseMenu.Positioner

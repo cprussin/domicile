@@ -54,6 +54,7 @@
     "./Stage": "./src/Stage.tsx",
     "./screens/fixture": "./src/screens/fixture.tsx",
     "./screens/host-displays": "./src/screens/host-displays.ts",
+    "./screens/popup-scene": "./src/screens/popup-scene.ts",
     "./screens/shown-windows": "./src/screens/shown-windows.ts",
     "./screens/stage-screens": "./src/screens/stage-screens.ts",
     "./screens/useScreenFollowsPointer": "./src/screens/useScreenFollowsPointer.ts",

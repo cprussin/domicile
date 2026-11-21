@@ -12,6 +12,7 @@ import { flex } from "../../styled-system/patterns";
 import { useStableRef } from "../_control/useStableRef";
 import type { ExtendProps } from "../extend-props";
 import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
+import { useClosedWithScene } from "../PopupScene/PopupScene";
 import { Tooltip } from "../Tooltip/Tooltip";
 import "../stylesheet";
 
@@ -103,7 +104,8 @@ type Props = ExtendProps<
  *
  * Closes on an outside press, Escape, or focus leaving it. The focus check
  * catches presses inside out-of-process frames, which the document can't
- * see. Portaled content such as a `Select` list counts as inside.
+ * see. Portaled content such as a `Select` list counts as inside. Also
+ * closes when its `PopupScene` changes.
  */
 const PopoverComponent = ({
   actionsRef,
@@ -143,21 +145,25 @@ const PopoverComponent = ({
   const openedAt = useRef(0);
   const within = useRef<FocusEvent | undefined>(undefined);
   const container = useContext(PopoverContainer);
+  const heard = useClosedWithScene(actions, {
+    defaultOpen: rootProps.defaultOpen,
+    onOpenChange: (
+      open: boolean,
+      details: BasePopover.Root.ChangeEventDetails,
+    ) => {
+      if (open) {
+        openedAt.current = performance.now();
+      }
+      if (open && details.trigger !== undefined) {
+        opener.current = details.trigger;
+        attach(details.trigger);
+      }
+      onOpenChange?.(open, details);
+    },
+    open: rootProps.open,
+  });
   return (
-    <BasePopover.Root
-      actionsRef={actions}
-      onOpenChange={(open, details) => {
-        if (open) {
-          openedAt.current = performance.now();
-        }
-        if (open && details.trigger !== undefined) {
-          opener.current = details.trigger;
-          attach(details.trigger);
-        }
-        onOpenChange?.(open, details);
-      }}
-      {...rootProps}
-    >
+    <BasePopover.Root actionsRef={actions} onOpenChange={heard} {...rootProps}>
       {trigger !== undefined && (
         <Trigger
           attach={attachTrigger}
