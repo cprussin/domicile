@@ -176,9 +176,18 @@ pub fn engine(
     if platform == NESTED_PLATFORM {
         args.push("--domicile-inhibit-host-shortcuts".into());
     }
-    if !extra.disabled.is_empty() {
-        args.push(format!("{DISABLE_FEATURES}{}", extra.disabled.join(",")).into());
-    }
+    args.push(
+        format!(
+            "{DISABLE_FEATURES}{}",
+            DISABLED
+                .iter()
+                .copied()
+                .chain(extra.disabled)
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+        .into(),
+    );
     args.extend(extra.rest.into_iter().map(OsString::from));
     Spawn {
         args,
@@ -365,6 +374,16 @@ fn data_dirs(
 const ENABLE_FEATURES: &str = "--enable-features=";
 
 const DISABLE_FEATURES: &str = "--disable-features=";
+
+/// Features the engine starts with off.
+///
+/// `V8Flag_scavenger_direct_old_allocation`: Chromium's field trial testing
+/// config, which a build that isn't Chrome-branded applies, turns it on for
+/// Linux, and the feature passes `--scavenger_direct_old_allocation` to V8.
+/// The pinned V8 has no such flag, so every process that starts V8 wrote
+/// "Error: unrecognized flag" to the logs, hundreds of times a boot. Remove
+/// it once a pin's V8 has the flag (`d8 --help`).
+pub const DISABLED: [&str; 1] = ["V8Flag_scavenger_direct_old_allocation"];
 
 /// The `extra` engine switches, with the feature lists apart from the rest.
 struct Extra<'a> {

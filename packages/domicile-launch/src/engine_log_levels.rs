@@ -9,6 +9,8 @@
 
 use domicile_protocol::{LogLevel, LogLevels, Subsystem};
 
+use crate::journal::Priority;
+
 /// What the engine's `set_log_levels` takes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineLevels {
@@ -227,4 +229,112 @@ pub fn starting_switches(levels: &LogLevels) -> Vec<String> {
         format!("--log-level={min_level}"),
         format!("--vmodule={vmodule}"),
     ]
+}
+
+/// Which of the engine's lines show at the levels set.
+///
+/// Chromium has one minimum severity per process, so a subsystem turned up to
+/// `info` or more makes every file in the engine log at `INFO`, and the shell
+/// at `debug` makes every page's console log at `VERBOSE`. The gate keeps a
+/// line below the level everything is at only when it comes from a file of a
+/// subsystem turned up that far.
+///
+/// A page's or an extension's console is the page's business, not the
+/// desktop's: its lines show only when everything is at `info` or more,
+/// whatever severity the page gave them. The shell's console is the `shell`
+/// subsystem's.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Gate {
+    /// The least severe priority every line shows at.
+    all: Priority,
+    /// Each subsystem turned up past `all`, with the least severe priority
+    /// its lines show at.
+    subsystems: Vec<(Subsystem, Priority)>,
+}
+
+/// Where Chromium says a `console` line came from.
+const CONSOLE: &str = "CONSOLE";
+
+impl Gate {
+    /// The gate for `levels`.
+    pub fn new(levels: &LogLevels) -> Gate {
+        let all = levels.all.map_or(Priority::Error, priority);
+        Gate {
+            all,
+            subsystems: levels
+                .subsystems
+                .iter()
+                .map(|(subsystem, level)| (*subsystem, priority(*level)))
+                .filter(|(_, shown)| less_severe(*shown, all))
+                .collect(),
+        }
+    }
+
+    /// Whether a line at `at` from `file` shows. `shell` says whether it is
+    /// the shell's console.
+    pub fn shows(&self, at: Priority, file: &str, shell: bool) -> bool {
+        if file == CONSOLE && !shell {
+            return !less_severe(at, self.all) && !less_severe(Priority::Info, self.all);
+        }
+        if !less_severe(at, self.all) {
+            return true;
+        }
+        self.subsystems.iter().any(|(subsystem, shown)| {
+            !less_severe(at, *shown)
+                && match file == CONSOLE {
+                    true => *subsystem == Subsystem::Shell,
+                    false => files(*subsystem).any(|pattern| covers(pattern, file)),
+                }
+        })
+    }
+}
+
+impl Default for Gate {
+    fn default() -> Self {
+        Gate::new(&LogLevels::default())
+    }
+}
+
+/// The journal priority `level` shows down to.
+fn priority(level: LogLevel) -> Priority {
+    match level {
+        LogLevel::Error => Priority::Error,
+        LogLevel::Warn => Priority::Warning,
+        LogLevel::Info => Priority::Info,
+        LogLevel::Debug | LogLevel::Trace => Priority::Debug,
+    }
+}
+
+/// Whether `a` is less severe than `b`.
+fn less_severe(a: Priority, b: Priority) -> bool {
+    a as u8 > b as u8
+}
+
+/// Whether the `--vmodule` pattern `pattern` covers `file`, a path as
+/// Chromium's log prefix gives it. As in Chromium, a pattern with a slash
+/// matches the whole path, and one without matches the file's name without
+/// its extension or `-inl`.
+fn covers(pattern: &str, file: &str) -> bool {
+    match pattern.contains('/') {
+        true => glob(pattern.as_bytes(), file.as_bytes()),
+        false => {
+            let name = file.rsplit('/').next().unwrap_or(file);
+            let name = name.split_once('.').map_or(name, |(stem, _)| stem);
+            let name = name.strip_suffix("-inl").unwrap_or(name);
+            glob(pattern.as_bytes(), name.as_bytes())
+        }
+    }
+}
+
+/// Whether `text` matches `pattern`, where `*` is any run and `?` any one.
+fn glob(pattern: &[u8], text: &[u8]) -> bool {
+    match (pattern.first(), text.first()) {
+        (None, None) => true,
+        (Some(b'*'), _) => {
+            glob(&pattern[1..], text) || (!text.is_empty() && glob(pattern, &text[1..]))
+        }
+        (Some(b'?'), Some(_)) => glob(&pattern[1..], &text[1..]),
+        (Some(p), Some(t)) if p == t => glob(&pattern[1..], &text[1..]),
+        _ => false,
+    }
 }

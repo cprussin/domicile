@@ -536,7 +536,7 @@ pub struct Reach {
 
 /// Dials in to `reach.relay` and keeps the desk reachable there, in the
 /// background: dialing again when it hangs up, and getting and renewing the
-/// certificate for its address. Returns the address.
+/// certificate for its address. Returns the address once the relay answers.
 pub fn reach(reach: Reach) -> io::Result<String> {
     let mut kept = Kept::load(reach.state.as_deref());
     let seed = kept.seed().expect("a kept seed reads back");
@@ -544,9 +544,7 @@ pub fn reach(reach: Reach) -> io::Result<String> {
         path: reach.status.clone(),
         status: Mutex::new(WebStatus::default()),
     });
-    let dialed = dial(&reach.relay, &seed).inspect_err(|why| {
-        told.update(|status| status.problem = Some(format!("Can't reach the relay: {why}")));
-    })?;
+    let dialed = first_dial(&reach.relay, &seed, &told);
     let host = dialed.host.clone();
     if kept.account.is_none() {
         kept.account = Some(hex(AccountKey::generate().pkcs8()));
@@ -579,6 +577,37 @@ pub fn reach(reach: Reach) -> io::Result<String> {
         thread::spawn(move || kept_certified(&certificates, kept, &reach, &host, &told));
     }
     Ok(host)
+}
+
+/// Dials `relay` until it answers, waiting longer each time. At login the
+/// network is often not up yet, so failing here would only start over: the
+/// first failure is said once, and the rest are in the status.
+fn first_dial(relay: &str, seed: &[u8; 32], told: &Told) -> Dialed {
+    let mut backoff = Duration::from_secs(1);
+    let mut said = false;
+    loop {
+        match dial(relay, seed) {
+            Ok(dialed) => {
+                if said {
+                    eprintln!("domicile: reached the relay at {relay}");
+                }
+                return dialed;
+            }
+            Err(why) => {
+                if !said {
+                    eprintln!(
+                        "domicile: can't reach the relay at {relay} yet ({why}); trying until it answers"
+                    );
+                    said = true;
+                }
+                told.update(|status| {
+                    status.problem = Some(format!("Can't reach the relay: {why}"))
+                });
+            }
+        }
+        thread::sleep(backoff);
+        backoff = (backoff * 2).min(MOST_BACKOFF);
+    }
 }
 
 /// Serves `dialed`, and dials again each time the relay hangs up, waiting

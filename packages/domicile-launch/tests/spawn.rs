@@ -834,7 +834,22 @@ fn a_machine_that_disables_features_gets_one_flag_for_them() {
         .collect();
     assert_eq!(
         lists,
-        ["--disable-features=Vulkan,LibinputHandleMouse"],
+        ["--disable-features=V8Flag_scavenger_direct_old_allocation,Vulkan,LibinputHandleMouse"],
+        "{args:?}"
+    );
+}
+
+#[test]
+fn the_engine_starts_without_the_v8_flag_its_v8_rejects() {
+    let args = args_of(&engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "drm",
+        &runtime(),
+        None,
+    ));
+    assert!(
+        args.contains(&"--disable-features=V8Flag_scavenger_direct_old_allocation".to_string()),
         "{args:?}"
     );
 }

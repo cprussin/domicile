@@ -1537,6 +1537,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         || "domicile".to_string(),
                         |binary| binary.display().to_string(),
                     );
+                // Its own name in the journal: what it says is how the relay
+                // is going, not the compositor's errors.
                 crate::spawning::client_command(
                     &[domicile, "mcp".into(), "--relay".into()],
                     &display,
@@ -1545,6 +1547,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     0,
                     None,
                 )
+                .map(|mut relay| {
+                    crate::spawning::own_stream(&mut relay, "domicile-relay");
+                    relay
+                })
             })
         }),
         display_sleep: crate::display_sleep::DisplaySleep::default(),

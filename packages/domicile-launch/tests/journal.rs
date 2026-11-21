@@ -67,3 +67,29 @@ fn a_sent_entry_reaches_the_socket_as_encoded() {
         journal::encoded(&entry("the bus is gone"))
     );
 }
+
+#[test]
+fn a_stream_names_its_lines_and_lets_them_say_their_own_priority() {
+    // As `systemd-cat -t emacs -p info --level-prefix=true` opens one.
+    assert_eq!(
+        domicile_launch::journal::stream_header("emacs", Priority::Info),
+        "emacs\n\n6\n1\n0\n0\n0\n"
+    );
+}
+
+#[test]
+fn a_stream_sends_its_header_then_the_childs_lines() {
+    let directory = std::env::temp_dir().join(format!("journal-stream-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&directory);
+    let path = directory.join("stdout");
+    let _ = std::fs::remove_file(&path);
+    let listener = std::os::unix::net::UnixListener::bind(&path).unwrap();
+    let mut stream = domicile_launch::journal::stream(&path, "emacs", Priority::Info).unwrap();
+    std::io::Write::write_all(&mut stream, b"Starting Emacs daemon.\n").unwrap();
+    drop(stream);
+    let (mut heard, _) = listener.accept().unwrap();
+    let mut text = String::new();
+    std::io::Read::read_to_string(&mut heard, &mut text).unwrap();
+    assert_eq!(text, "emacs\n\n6\n1\n0\n0\n0\nStarting Emacs daemon.\n");
+    let _ = std::fs::remove_dir_all(directory);
+}
