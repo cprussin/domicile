@@ -158,3 +158,8 @@ Each line starts with `[notifications]`, and the journal files the name as
 ```sh
 journalctl --user -b -t domicile-shell DOMICILE_SUBSYSTEM=notifications
 ```
+
+manganese logs each window action as `windows` at `debug`: the action, the
+windows, screens and workspaces it names, then what changed, such as
+`overview=false->true` or `shown=DP-1:1->DP-1:2`. Titles, addresses and
+commands are left out.
