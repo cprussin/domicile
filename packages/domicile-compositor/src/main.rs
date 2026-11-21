@@ -112,6 +112,7 @@ mod gamma_control;
 mod gbm;
 mod held_frames;
 mod idle;
+mod input_trace;
 mod keymap;
 mod latency;
 mod latency_run;

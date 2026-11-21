@@ -3,7 +3,7 @@
 
 use std::time::Instant;
 
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 use domicile_host::unlock_refusals::Refused;
 use domicile_protocol::Passphrase;
@@ -35,7 +35,7 @@ impl DomicileCompositor {
     /// screen mid-passphrase.
     pub fn shut_the_desk(&mut self, why: &str) {
         if self.lock.shut() {
-            debug!("{why}");
+            info!("{why}");
             // Release held keys. Input is dropped while locked, including
             // releases, so a key pressed before locking would stay down. With
             // `Caps_Lock`, xkb clears the lock only on that release. Held
@@ -101,7 +101,7 @@ impl DomicileCompositor {
     pub fn heard_the_verdict(&mut self, verdict: Verdict) {
         match self.lock.answered(verdict, Instant::now()) {
             Unlocking::Opened => {
-                debug!("the passphrase opened this desktop");
+                info!("the passphrase opened this desktop");
                 self.tell_the_chromes_whether_the_desk_is_locked();
             }
             Unlocking::Refused(refused) => {

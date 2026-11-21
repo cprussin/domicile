@@ -26,6 +26,7 @@ const MODULES: [(Subsystem, &[&str]); 13] = [
             "shortcuts_inhibit",
             "text_input",
             "cursor_surface",
+            "input_trace",
         ],
     ),
     (

@@ -17,7 +17,7 @@ use domicile_protocol::{
     negotiate, ChromeMessage, DeskRect, DeskShot, DisplayChange, EmulatedInput, HostMessage,
     KnownAgents, SystemError, SystemErrorKind, SystemRequest, Theme, WindowAct, PROTOCOL_VERSION,
 };
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::chrome_hub::{broadcast_focus_request, Chrome, ChromeHub};
 use crate::client_requests::ClientRequest;
@@ -144,7 +144,7 @@ pub fn serve_chrome(hub: Arc<ChromeHub>, listener: UnixListener, handshake: Arc<
         }));
         // Not a broadcast target until its `hello` agrees a protocol version.
         // `read_chrome_messages` adds it then.
-        debug!("chrome client connected");
+        info!("chrome client connected");
         handshake.connected();
         let hub = hub.clone();
         let handshake = handshake.clone();
@@ -169,7 +169,7 @@ fn chrome_connection(
         .unwrap()
         .retain(|held| !Arc::ptr_eq(&held.writer, &writer));
     hub.watchers.forget(&writer);
-    debug!("chrome client disconnected");
+    info!("chrome client disconnected");
 }
 
 /// The pinch, swipe or hold a connection began ends with it.

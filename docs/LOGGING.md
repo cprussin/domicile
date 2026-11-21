@@ -66,6 +66,20 @@ a library writing to stderr itself, such as Mesa.
 
 ## Levels
 
+What each level adds:
+
+| Level | Says |
+|---|---|
+| `error` | Something broke that you would notice. The default. |
+| `warn` | Something unexpected that the desktop got past. |
+| `info` | What changed: windows opening and closing, the screens going dark and coming back, the desktop locking and unlocking, screen casts starting and ending, displays being set up again. |
+| `debug` | Why: the requests each part handled and what it decided. |
+| `trace` | Everything: every input event, with where it landed. |
+
+`trace input` says that a key went down, never which key or what was typed,
+so a log of it is safe to share.
+
+
 Turn the logs up while the desktop runs, for everything or for the subsystems
 you are looking into, with `domicile set-log-level`:
 

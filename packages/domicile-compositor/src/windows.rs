@@ -12,7 +12,7 @@ use smithay::wayland::{
     compositor::with_states,
     shell::xdg::{SurfaceCachedState, ToplevelSurface, XdgToplevelSurfaceData},
 };
-use tracing::debug;
+use tracing::{debug, info};
 
 use domicile_protocol::HostMessage;
 
@@ -129,7 +129,7 @@ impl DomicileCompositor {
         // Collected so the host is unlocked before broadcasting. See
         // `title_changed`.
         let announce = self.hub.host.lock().unwrap().app_mapped(app_id, mapped);
-        debug!(%app_id, ?mapped, "toplevel drew -> app_appeared");
+        info!(%app_id, ?mapped, "toplevel drew -> app_appeared");
         for message in announce {
             self.hub.broadcast(message);
         }
@@ -292,7 +292,7 @@ impl DomicileCompositor {
             self.pointer_surface = None;
         }
         self.forget_pointer_constraint(app_id);
-        debug!(%app_id, "gone -> Host::app_closed");
+        info!(%app_id, "gone -> Host::app_closed");
         broadcast_closed(&self.hub, app_id);
     }
 

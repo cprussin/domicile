@@ -313,6 +313,7 @@ pub enum ClientRequest {
 impl DomicileCompositor {
     /// Handle a request from a chrome on the Wayland thread.
     pub fn handle_client_request(&mut self, event: ClientRequest) {
+        crate::input_trace::trace(&event);
         // First, for every request: this is how the compositor knows someone is
         // present.
         self.keep_the_desktop_awake(&event);

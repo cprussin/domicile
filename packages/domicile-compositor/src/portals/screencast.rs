@@ -32,7 +32,7 @@ use domicile_protocol::{
     Captured, CapturedMonitor, CapturingKind, CastPick, CastSource, FrozenDesk, PortalAnswer,
     PortalKind, ScreenCastDialog,
 };
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 use zbus::object_server::ObjectServer;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
@@ -894,11 +894,12 @@ fn listener(stream: StreamId, ready: Replier<u32>, ending: Ending) -> crate::cas
     Box::new(move |event| match event {
         Event::Ready { node, .. } => {
             if let Some(ready) = ready.take() {
+                info!(?node, handle = %ending.handle, "a screen cast stream started");
                 ready.send(node);
             }
         }
         Event::Ended(why) => {
-            debug!(?why, handle = %ending.handle, "a screen cast stream ended");
+            info!(?why, handle = %ending.handle, "a screen cast stream ended");
             // Dropping `ready` unsent fails a stream that never started.
             ready = None;
             ending.ended(stream);

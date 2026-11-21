@@ -31,7 +31,7 @@ use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::Buffer as _;
 use smithay::reexports::calloop::channel::Sender;
 use spa::pod::Pod;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::casting::audio::{self, Graph, Heard, Holders};
 use crate::casting::cursor::{arrow, within, CursorMode, Plan, Sprite};
@@ -879,7 +879,7 @@ impl Cast {
                     }
                 }
                 Step::End(why) => {
-                    debug!(stream = ?self.id, ?why, "cast ended");
+                    info!(stream = ?self.id, ?why, "cast ended");
                     self.shared.tell(ToWayland::Ended { stream: self.id });
                     self.hear(Event::Ended(why));
                     // Fails only once the reaper is gone, at exit.

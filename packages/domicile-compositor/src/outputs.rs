@@ -14,7 +14,7 @@ use smithay::wayland::{
     shell::xdg::ToplevelSurface,
 };
 use smithay::{delegate_fractional_scale, delegate_output};
-use tracing::debug;
+use tracing::{debug, info};
 
 use domicile_config::Config;
 
@@ -290,7 +290,7 @@ impl DomicileCompositor {
             return;
         }
         let plan = self.screens.rearranged_into(&screens);
-        debug!(
+        info!(
             displays = screens.outputs().count(),
             retired = plan.retired.len(),
             "taking up a reloaded desktop"
