@@ -19,7 +19,8 @@ describe("consentAddress", () => {
       prompt: "consent",
       redirect_uri: REDIRECT,
       response_type: "code",
-      scope: "https://www.googleapis.com/auth/gmail.metadata",
+      scope:
+        "https://www.googleapis.com/auth/gmail.metadata https://www.googleapis.com/auth/gmail.settings.basic",
       state: "st4te",
     });
   });

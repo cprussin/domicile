@@ -73,6 +73,8 @@ window ([LAUNCHER.md](LAUNCHER.md#opening-files)).
   - `--reuse focus` brings `<id>`'s open window to the front instead of
     opening another; `--reuse navigate` also loads the address in it. Both
     need `--id`. `new`, the default, always opens a window.
+- A link of a scheme the shell claims, such as manganese's `mailto:`, goes to
+  the shell instead of an app ([Links](WRITING-A-SHELL.md#links)).
 - `domicile open --which <file|url>` prints the app `open` would use.
 - `domicile open --electron <entry|path> [-- <command>...]` runs an installed
   Electron app on the desktop's engine instead of the Electron it ships:

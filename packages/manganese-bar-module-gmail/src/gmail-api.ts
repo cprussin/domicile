@@ -8,6 +8,10 @@ import { jsonText } from "./json-text";
 /** The Gmail API's messages for the signed-in account. */
 const MESSAGES = "https://gmail.googleapis.com/gmail/v1/users/me/messages";
 
+/** The Gmail API's addresses the account sends from. */
+const SEND_AS =
+  "https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs";
+
 /** The Gmail API's inbox label, which carries its counts. */
 const INBOX = "https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX";
 
@@ -59,6 +63,16 @@ export const unreadMail = (
   accessToken: string,
 ): Promise<Result<Unread[], string>> =>
   ask(domicile, accessToken, UNREAD, unreadSchema);
+
+/**
+ * Asks the Gmail API for the addresses the account sends from: its own,
+ * then the aliases it verified, in Gmail's order.
+ */
+export const sendAsAddresses = (
+  domicile: Fetch,
+  accessToken: string,
+): Promise<Result<string[], string>> =>
+  ask(domicile, accessToken, SEND_AS, sendAsSchema);
 
 /** Asks the Gmail API for message `id`'s sender, subject and arrival. */
 export const mailHeaders = (
@@ -127,6 +141,32 @@ const unreadSchema = jsonText.pipe(
     .transform(({ messages }) =>
       messages.map(({ id, threadId }) => ({ id, threadId })),
     ),
+);
+
+// An alias Gmail has not verified cannot send yet. The primary address has
+// no verification status.
+const sendAsSchema = jsonText.pipe(
+  z
+    .object({
+      sendAs: z.array(
+        z.object({
+          isPrimary: z.boolean().optional(),
+          sendAsEmail: z.string(),
+          verificationStatus: z.string().optional(),
+        }),
+      ),
+    })
+    .transform(({ sendAs }) => [
+      ...sendAs
+        .filter(({ isPrimary }) => isPrimary === true)
+        .map(({ sendAsEmail }) => sendAsEmail),
+      ...sendAs
+        .filter(
+          ({ isPrimary, verificationStatus }) =>
+            isPrimary !== true && verificationStatus === "accepted",
+        )
+        .map(({ sendAsEmail }) => sendAsEmail),
+    ]),
 );
 
 /**

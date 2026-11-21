@@ -507,6 +507,7 @@ mod tests {
             client,
             queue: Arc::clone(&backends.queue),
             portals: Portals {
+                links: domicile_host::links::Links::default(),
                 agents: crate::portals::agent::Door::new(
                     Arc::clone(&backends.queue),
                     None,
