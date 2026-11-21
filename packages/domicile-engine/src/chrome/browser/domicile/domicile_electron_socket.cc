@@ -20,6 +20,8 @@
 #include "base/containers/flat_set.h"
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/functional/bind.h"
+#include "base/json/json_reader.h"
+#include "base/strings/strcat.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -55,6 +57,20 @@ namespace {
 constexpr int kBacklog = 16;
 
 constexpr int kReadBufferSize = 16 * 1024;
+
+// A line's `type` and `id`, for the log: never what it carries, which can be
+// a page's IPC, a cookie or a file.
+std::string Described(std::string_view line) {
+  const std::optional<base::DictValue> parsed =
+      base::JSONReader::ReadDict(line, base::JSON_PARSE_RFC);
+  if (!parsed) {
+    return "a line that is not JSON";
+  }
+  const std::string* type = parsed->FindString("type");
+  const std::string* id = parsed->FindString("id");
+  return base::StrCat({type ? *type : "no type", id ? " for window " : "",
+                       id ? *id : ""});
+}
 
 // Accepts only peers running as this user. The socket's directory already
 // limits access; this is a second check.
@@ -322,18 +338,22 @@ class Connection {
       if (result < 0) {
         LOG(ERROR) << "domicile: lost an Electron app: "
                    << net::ErrorToString(result);
+      } else {
+        VLOG(1) << "domicile: an Electron app closed its connection";
       }
       Close();
       return;
     }
     for (std::string& line : framer_.Take(std::string_view(
              read_buffer_->data(), static_cast<size_t>(result)))) {
+      VLOG(2) << "domicile: an Electron app asks " << Described(line);
       app_.AsyncCall(&AppOnUIThread::Take).WithArgs(std::move(line));
     }
     Read();
   }
 
   void Send(std::string line) {
+    VLOG(3) << "domicile: an Electron app hears " << Described(line);
     pending_.push_back(std::move(line));
     if (!writing_) {
       Write();
