@@ -4,6 +4,10 @@
 # See patch 0245. A page told a new size draws nothing until a tree at the new
 # surface activates. Its LayerTreeHost must log at ERROR a wait past 2 s.
 #
+# See patch 0260. On lyra the line fired for one page whose own pipeline was
+# fine. It must name the page (pid, URL), count frames the display dropped
+# undrawn, and say when the page last showed a frame.
+#
 # Reads the series rather than a build, so it runs on every push.
 set -u
 
@@ -36,6 +40,10 @@ want "$host" 'domicile_target_committed_ = true;'
 want "$host" '++domicile_frames_presented_since_target_;'
 want "$host" '<< " has drawn nothing at its new surface "'
 want "$host" 'if (domicile_frames_presented_since_target_ > 0 || !visible_) {'
+want "$host" 'domicile_source_url_ = url.possibly_invalid_spec().substr(0, 200);'
+want "$host" '<< base::GetCurrentProcId() << ", page at "'
+want "$host" '++domicile_frames_undrawn_since_target_;'
+want "$host" 'domicile_last_presented_at_ = base::TimeTicks::Now();'
 
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: $fails of the logs for a page stuck before its new size are missing"
