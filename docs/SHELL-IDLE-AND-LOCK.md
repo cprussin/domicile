@@ -187,7 +187,7 @@ domicile.session.lock();        // lock now; the lock screen goes up when `locke
 The compositor enforces the lock. While `locked` is `true`:
 
 - No client receives any key, click, scroll or pointer motion.
-- `windows.close`, `processes.launch` and `clipboard.copy` do nothing and log a warning.
+- `windows.close`, `processes.launch`, `clipboard.copy` and `clipboard.remove` do nothing and log a warning.
 - `files.search` never settles. Retry once `locked` is `false`.
 - `browser.fetch` rejects. The engine refuses it, from the compositor's
   `locked` message.

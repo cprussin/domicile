@@ -160,6 +160,7 @@ class ControlChannel : public mojom::ControlChannel {
   void CallSystem(uint32_t id, const std::string& request) override;
   void AnswerPortalRequest(uint32_t id, const std::string& answer) override;
   void CopyClipboardEntry(uint32_t entry) override;
+  void RemoveClipboardEntry(uint32_t entry) override;
   void ActivateTrayItem(const std::string& id,
                         mojom::TrayAction action) override;
   void DismissNotifications(const std::vector<uint32_t>& ids) override;

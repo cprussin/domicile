@@ -385,6 +385,13 @@ pub enum ChromeMessage {
     /// `domicile_host::clipboard`.
     CopyClipboardEntry { entry: u32 },
 
+    /// Drop a clipboard history entry and its contents.
+    ///
+    /// Removing the [`ClipboardEntry::current`] entry also empties the
+    /// clipboard, so it can no longer be pasted. An unknown id is logged and
+    /// ignored. The next [`HostMessage::Clipboard`] leaves the entry out.
+    RemoveClipboardEntry { entry: u32 },
+
     /// The user picked a theme from the shell's toggle or `domicile theme`.
     ///
     /// The compositor applies it to the clients too (see
@@ -2998,7 +3005,8 @@ pub enum SystemErrorKind {
 /// One clipboard history entry.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClipboardEntry {
-    /// The id [`ChromeMessage::CopyClipboardEntry`] uses.
+    /// The id [`ChromeMessage::CopyClipboardEntry`] and
+    /// [`ChromeMessage::RemoveClipboardEntry`] use.
     ///
     /// Never reused, so a stale id matches nothing. Not a position. 32 bits
     /// because the browser process carries it in a `base::Value`, whose
@@ -3022,6 +3030,11 @@ pub struct ClipboardEntry {
     /// Absent for text, and for an image the compositor could not read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thumbnail: Option<String>,
+
+    /// Whether this is what the clipboard holds. Only the newest entry can
+    /// be, and none is after the current entry is removed, until the next
+    /// copy or restore.
+    pub current: bool,
 }
 
 /// One display, in logical units (CSS pixels).

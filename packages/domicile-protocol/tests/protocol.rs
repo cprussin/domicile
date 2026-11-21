@@ -83,6 +83,7 @@ fn chrome_messages_round_trip() {
         command: vec!["kitty".into(), "--hold".into()],
     });
     chrome_round_trip(&ChromeMessage::CopyClipboardEntry { entry: 7 });
+    chrome_round_trip(&ChromeMessage::RemoveClipboardEntry { entry: 7 });
     chrome_round_trip(&ChromeMessage::PointerMotion {
         app_id: "term".into(),
         x: 12.5,
@@ -283,12 +284,14 @@ fn a_clipboard_row_is_an_id_and_enough_to_recognize_it_by() {
                 image: false,
                 preview: "the newest".into(),
                 thumbnail: None,
+                current: true,
             },
             ClipboardEntry {
                 id: 1,
                 image: true,
                 preview: "Image, 3 × 2".into(),
                 thumbnail: Some("data:image/png;base64,iVBORw0KGgo=".into()),
+                current: false,
             },
         ],
     })
@@ -297,9 +300,9 @@ fn a_clipboard_row_is_an_id_and_enough_to_recognize_it_by() {
     assert_eq!(
         v["entries"],
         serde_json::json!([
-            {"id": 3, "image": false, "preview": "the newest"},
+            {"id": 3, "image": false, "preview": "the newest", "current": true},
             {"id": 1, "image": true, "preview": "Image, 3 × 2",
-             "thumbnail": "data:image/png;base64,iVBORw0KGgo="},
+             "thumbnail": "data:image/png;base64,iVBORw0KGgo=", "current": false},
         ])
     );
 }
