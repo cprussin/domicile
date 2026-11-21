@@ -70,6 +70,7 @@ Grouped `--help`, `domicile help <command>` for usage and examples, and man page
 - Quiet by default: each part logs errors alone, and the desktop says one `domicile is up.` line with what it chose and its `DOMICILE_SOCK`. [Logs](LOGGING.md#what-they-say)
 - `domicile set-log-level info` tells what changed: windows opening and closing, the screens going dark, the lock, screen casts. `trace input` logs every input event, never which key. [Levels](LOGGING.md#levels)
 - A shell's `console.error` is an error in the desktop's logs, shown by default, and `console.debug` shows at `domicile set-log-level debug shell`. `logger("notifications")` from `@domicile-desktop/sdk/logger` names the part of the shell that said each line, as `DOMICILE_SUBSYSTEM` in the journal. [A shell's logs](LOGGING.md#a-shells-logs)
+- `domicile set-log-level trace` logs enough to debug from: every message between the desktop and the shell, each commit and frame, each configure, popups, monitors and each control command, each naming its window, surface or display. [Levels](LOGGING.md#levels)
 - `domicile logs` prints every part's logs, wherever they went, and `domicile export-logs` saves them to one file to attach to a bug, with web addresses and window titles hidden. [Reading them](LOGGING.md#reading-them) · [`domicile export-logs`](CLI.md#domicile-export-logs---show-everything-file)
 - Chromium 160. [#2023](https://github.com/cprussin/domicile/pull/2023)
 

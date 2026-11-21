@@ -169,6 +169,7 @@ fn serve(
     let mut asking = BufReader::new(stream.try_clone()?);
     let mut line = String::new();
     asking.read_line(&mut line)?;
+    crate::launcher_log::debug(&format!("a command: {}", command_type(&line)));
     let Some(lenders) = lenders else {
         let mut answering = stream;
         return answering.write_all(answer(&line).as_bytes());
@@ -219,6 +220,18 @@ fn serve(
             let mut answering = stream;
             answering.write_all(answer(&line).as_bytes())
         }
+    }
+}
+
+/// The type of the request on `line`, without what it carries: an `exec`'s
+/// command line or a file path stays out of the log.
+fn command_type(line: &str) -> String {
+    match serde_json::from_str::<serde_json::Value>(line.trim()) {
+        Ok(serde_json::Value::Object(request)) => match request.get("type") {
+            Some(serde_json::Value::String(kind)) => kind.clone(),
+            _ => "one with no type".to_string(),
+        },
+        _ => "one that is not JSON".to_string(),
     }
 }
 
@@ -405,5 +418,23 @@ fn unreachable_desktop(path: &Path, why: &std::io::Error) -> AskError {
             kind,
             path: path.display().to_string(),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_command_is_logged_by_its_type_alone() {
+        assert_eq!(
+            command_type(r#"{"type":"exec","command":"rm -rf ~/secret"}"#),
+            "exec"
+        );
+    }
+
+    #[test]
+    fn a_line_that_is_not_a_command_says_so() {
+        assert_eq!(command_type("hello"), "one that is not JSON");
     }
 }

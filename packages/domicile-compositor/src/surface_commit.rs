@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::Buffer as _;
+use smithay::reexports::wayland_server::Resource as _;
 use smithay::reexports::wayland_server::{
     protocol::{wl_buffer, wl_surface::WlSurface},
     Client,
@@ -160,6 +161,18 @@ pub enum CommittedBuffer {
     Gpu(Dmabuf),
 }
 
+impl Role {
+    /// What a log line calls this role.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Role::Toplevel(_) => "toplevel",
+            Role::Popup(_) => "popup",
+            Role::Subsurface => "subsurface",
+            Role::Candidates => "candidates",
+        }
+    }
+}
+
 impl CommittedBuffer {
     /// The buffer's size, known without reading pixels.
     pub fn size(&self) -> (u32, u32) {
@@ -313,6 +326,19 @@ impl DomicileCompositor {
             Some(buffer) => committed_buffer(buffer).map(|committed| committed.size()),
             None => remaps,
         };
+        tracing::trace!(
+            surface = ?surface.id(),
+            ?committer,
+            role = role.name(),
+            buffer = ?buffer_size,
+            gpu = matches!(attached.as_ref().and_then(committed_buffer), Some(CommittedBuffer::Gpu(_))),
+            remapped = remaps.is_some(),
+            unmapped,
+            scale = buffer_scale,
+            damage = ?damage.as_ref().map(|region| (region.x, region.y, region.width, region.height)),
+            callbacks = callbacks.len(),
+            "a commit"
+        );
         // A buffer of no known kind cannot be shown again.
         if let (Committer::App(app_id), true) = (
             &committer,

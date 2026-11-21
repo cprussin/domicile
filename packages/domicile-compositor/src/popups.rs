@@ -155,6 +155,9 @@ impl DomicileCompositor {
 
     /// Every grabbing popup dismissed, innermost first, as xdg-shell wants.
     pub fn dismiss_the_menus(&mut self) {
+        if !self.grabbing.is_empty() {
+            debug!(menus = self.grabbing.len(), "dismissing the open menus");
+        }
         for menu in self.grabbing.drain(..).rev() {
             menu.send_popup_done();
         }
