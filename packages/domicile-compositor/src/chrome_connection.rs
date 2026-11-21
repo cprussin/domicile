@@ -571,6 +571,10 @@ fn read_chrome_messages(
                 hub.send_request(ClientRequest::CopyClipboardEntry { entry });
                 Vec::new()
             }
+            Ok(ChromeMessage::RemoveClipboardEntry { entry }) => {
+                hub.send_request(ClientRequest::RemoveClipboardEntry { entry });
+                Vec::new()
+            }
             // Sent to the Wayland thread so a locked desktop can refuse it.
             Ok(ChromeMessage::ActivateTrayItem { id, action }) => {
                 hub.send_request(ClientRequest::ActivateTrayItem { id, action });

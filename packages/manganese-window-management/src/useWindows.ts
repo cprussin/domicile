@@ -345,16 +345,16 @@ const takeScreenshot = (domicile: Pick<Domicile, "capture">) => {
 };
 
 /**
- * The newest copy as a site or a search URL, or `undefined` when the clipboard
- * holds no text.
+ * The copy on the clipboard as a site or a search URL, or `undefined` when the
+ * clipboard holds no text.
  *
  * Reads the row's preview, so a long copy is cut short.
  */
 const clipboardUrl = (
   domicile: Pick<Domicile, "clipboard">,
 ): string | undefined => {
-  const newest = domicile.clipboard.entries?.[0];
-  return newest === undefined ? undefined : typedAddress(newest.preview)?.url;
+  const current = domicile.clipboard.entries?.find((entry) => entry.current);
+  return current === undefined ? undefined : typedAddress(current.preview)?.url;
 };
 
 /** Asks the compositor or the engine to close each window in `ids`. */

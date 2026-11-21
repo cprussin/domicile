@@ -627,6 +627,12 @@ export const Desktop = ({
     },
     [domicile],
   );
+  const removed = useCallback(
+    (entry: number) => {
+      domicile.clipboard.remove(entry);
+    },
+    [domicile],
+  );
   const clipboardDismissed = useCallback(() => {
     act(WindowAction.ClipboardDismissed());
   }, [act]);
@@ -904,6 +910,7 @@ export const Desktop = ({
         entries={clipboard}
         onCopy={copied}
         onDismiss={clipboardDismissed}
+        onRemove={removed}
         open={windows.clipboardOpen}
         screen={windows.focused}
       />

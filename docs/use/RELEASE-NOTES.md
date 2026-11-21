@@ -32,6 +32,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 
 ### Also new
 
+- Remove a copy from the clipboard history with its Remove button or the Delete key. Removing what is on your clipboard empties it. [Clipboard](CLIPBOARD.md)
 - Spell checking in every text field: right-click a misspelled word for suggestions, or add it to your dictionary. [Spelling](BROWSER.md#spelling)
 - Drag text, a link or an image onto a group's tabs to open it in a new tab there. [The browser](BROWSER.md)
 - Pop a video out of its page to float it over everything. [#2077](https://github.com/cprussin/domicile/pull/2077) · [#2116](https://github.com/cprussin/domicile/pull/2116) · [#2177](https://github.com/cprussin/domicile/pull/2177)
