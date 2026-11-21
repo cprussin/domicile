@@ -46,9 +46,14 @@ pub struct Exit {
 
 /// Grace period between `SIGTERM` and `SIGKILL`.
 ///
-/// `SIGTERM` lets Chromium save its profile. The console does not depend on
-/// it: logind restores the VT when the engine's bus connection closes, however
-/// the engine exits.
+/// `SIGTERM` lets Chromium save its profile and record a clean exit. It waits
+/// up to 10 s for those writes (`kEndSessionTimeout`), so 3 s cut it short
+/// and every start counted a crash. The console does not depend on it: logind
+/// restores the VT when the engine's bus connection closes, however the
+/// engine exits.
+const TO_STOP: Duration = Duration::from_secs(15);
+
+/// How long the end of a run waits for the last of a component's stderr.
 const LAST_WORDS: Duration = Duration::from_secs(3);
 
 /// Children killed when the run ends, however it ends.
@@ -61,8 +66,8 @@ pub struct Running {
 
 impl Drop for Running {
     fn drop(&mut self) {
-        for (_, child) in &mut self.components {
-            end_the_group(child);
+        for (what, child) in &mut self.components {
+            end_the_group(what, child);
         }
         // Join after the groups are gone: a listener's read ends only when
         // every writer to the pipe has exited, so the caller sees the last
@@ -92,27 +97,51 @@ impl Drop for Running {
 
 /// Stops a component and everything it started.
 ///
-/// Chromium forks GPU and zygote processes that `Child::kill` would miss. An
-/// orphaned one can keep DRM master and lock up the console. So each
-/// component leads a process group, which gets `SIGTERM`, then `SIGKILL`
-/// after [`LAST_WORDS`].
+/// `SIGTERM` goes to the component alone. Chromium ends its own GPU, zygote
+/// and other processes, and needs them until it does: signaling them with it
+/// is a crash under it. Once it exits, or after [`TO_STOP`], its whole process
+/// group gets `SIGKILL`, since an orphaned GPU process can keep DRM master and
+/// lock up the console. `Child::kill` would miss the group.
 ///
 /// The group outlives its leader while it has members, so signaling it by the
 /// leader's pid works after the leader is reaped.
-fn end_the_group(child: &mut Child) {
+fn end_the_group(what: &str, child: &mut Child) {
     let group = child.id() as libc::pid_t;
-    signal_group(group, libc::SIGTERM);
+    // Already exited, so its pid may be someone else's by now. Its group is
+    // not reused while it has members.
+    if let Ok(Some(_)) = child.try_wait() {
+        signal_group(group, libc::SIGKILL);
+        return;
+    }
+    // SAFETY: `kill` takes a pid and a signal. The pid is our unreaped
+    // child's. The only reachable error is `ESRCH`.
+    unsafe {
+        libc::kill(group, libc::SIGTERM);
+    }
 
-    let deadline = std::time::Instant::now() + LAST_WORDS;
-    while std::time::Instant::now() < deadline {
+    let asked = std::time::Instant::now();
+    let mut stopped = None;
+    while stopped.is_none() && asked.elapsed() < TO_STOP {
         match child.try_wait() {
-            Ok(Some(_)) => break,
+            Ok(Some(status)) => stopped = Some(status),
             _ => std::thread::sleep(ASK_EVERY),
         }
     }
 
     signal_group(group, libc::SIGKILL);
-    let _ = child.wait();
+    match stopped {
+        Some(status) => crate::launcher_log::info(&format!(
+            "the {what} stopped {} ms after SIGTERM ({status})",
+            asked.elapsed().as_millis()
+        )),
+        None => {
+            let _ = child.wait();
+            crate::launcher_log::error(&format!(
+                "the {what} was still running {} s after SIGTERM, so it was killed",
+                TO_STOP.as_secs()
+            ));
+        }
+    }
 }
 
 /// Starts one component with the given stderr and stdout.
@@ -228,8 +257,8 @@ impl Running {
     /// hold the card. The entry must be removed, or [`Running::exited`] would
     /// report the old exit forever. An unknown name is a no-op.
     pub fn let_go_of(&mut self, what: &'static str) {
-        for (_, child) in self.components.iter_mut().filter(|(held, _)| *held == what) {
-            end_the_group(child);
+        for (held, child) in self.components.iter_mut().filter(|(held, _)| *held == what) {
+            end_the_group(held, child);
         }
         self.components.retain(|(held, _)| *held != what);
     }
