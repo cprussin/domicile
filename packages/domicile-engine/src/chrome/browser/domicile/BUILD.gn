@@ -278,6 +278,8 @@ source_set("domicile") {
     "//chrome/browser/printing",
     # Tab zoom factors and range.
     "//third_party/blink/public/common",
+    # Tab zoom modes, which the guest's ZoomController keeps.
+    "//components/zoom",
     "//ui/base/mojom:ui_base_types",
     "//ui/gfx/geometry",
     # Pointer warps move the cursor through an aura WindowTreeHost.

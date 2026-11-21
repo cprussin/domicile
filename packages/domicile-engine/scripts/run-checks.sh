@@ -138,6 +138,7 @@ TOGETHER=(
   guard-shell-pdf
   guard-pdf-scaled-text
   guard-pdf-after-hiding
+  guard-pdf-zoom
   guard-app-module
   guard-electron-socket
   guard-electron-window-open
@@ -191,6 +192,7 @@ ONCE=(
   guard-held-moments
   guard-pdf-scaled-text
   guard-pdf-after-hiding
+  guard-pdf-zoom
   guard-portal-requests
   guard-shell-handover
   guard-shell-pdf

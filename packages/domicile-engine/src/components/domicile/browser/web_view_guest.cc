@@ -880,16 +880,11 @@ std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
       permissions::PermissionsClient::Get()->GetSettingsMap(context));
   download_manager_observation_.Observe(context->GetDownloadManager());
 
-  // Unretained is safe: the subscription is a member, reset in
-  // WebContentsDestroyed.
-  zoom_subscription_ =
-      content::HostZoomMap::GetForWebContents(guest_contents_)
-          ->AddZoomLevelChangedCallback(base::BindRepeating(
-              [](WebViewGuest* guest,
-                 const content::HostZoomMap::ZoomLevelChange& change) {
-                guest->ReportZoom();
-              },
-              base::Unretained(this)));
+  // Chrome's zoom modes, for chrome.tabs.setZoomSettings. The PDF viewer
+  // zooms its own page in manual mode.
+  zoom::ZoomController::CreateForWebContents(guest_contents_);
+  zoom_observation_.Observe(
+      zoom::ZoomController::FromWebContents(guest_contents_));
   return contents;
 }
 
@@ -1643,6 +1638,8 @@ void WebViewGuest::SetZoom(double factor) {
         "domicile: a <webview> asked for a zoom outside the browser's range.");
     return;
   }
+  // A page in disabled mode keeps its zoom, as Chrome's zoom keys leave it.
+  // The element's `zoom` is unchanged, which tells the shell.
   ZoomTo(factor);
 }
 
@@ -1686,22 +1683,40 @@ void WebViewGuest::StopFinding(bool keep_selection) {
 }
 
 double WebViewGuest::GetZoomFactor() const {
-  CHECK(guest_contents_);
-  return blink::ZoomLevelToZoomFactor(
-      content::HostZoomMap::GetZoomLevel(guest_contents_));
+  return blink::ZoomLevelToZoomFactor(Zoom().GetZoomLevel());
 }
 
-void WebViewGuest::ZoomTo(double factor) {
-  CHECK(guest_contents_);
+bool WebViewGuest::ZoomTo(double factor) {
   CHECK(factor >= blink::kMinimumBrowserZoomFactor &&
         factor <= blink::kMaximumBrowserZoomFactor);
+  const double level = blink::ZoomFactorToZoomLevel(factor);
 
-  // Sets the site's zoom, not this window's, as Chrome does.
-  content::HostZoomMap::SetZoomLevel(guest_contents_,
-                                     blink::ZoomFactorToZoomLevel(factor));
+  switch (Zoom().zoom_mode()) {
+    case zoom::ZoomController::ZOOM_MODE_DISABLED:
+      return false;
+    case zoom::ZoomController::ZOOM_MODE_MANUAL:
+      // Keeps the factor and reports it; the page zooms itself.
+      return Zoom().SetZoomLevel(level);
+    case zoom::ZoomController::ZOOM_MODE_DEFAULT:
+    case zoom::ZoomController::ZOOM_MODE_ISOLATED:
+      // The site's zoom, or this tab's when isolated, as Chrome does.
+      content::HostZoomMap::SetZoomLevel(guest_contents_, level);
+      // The controller already reported this for pages with a host. This
+      // covers error pages and uncommitted guests; ReportZoom skips
+      // duplicates.
+      ReportZoom();
+      return true;
+  }
+}
 
-  // The subscription already reported this for pages with a host. This covers
-  // error pages and uncommitted guests; ReportZoom skips duplicates.
+zoom::ZoomController::ZoomMode WebViewGuest::GetZoomMode() const {
+  return Zoom().zoom_mode();
+}
+
+void WebViewGuest::SetZoomMode(zoom::ZoomController::ZoomMode mode) {
+  Zoom().SetZoomMode(mode);
+  // Entering manual mode notifies before the controller keeps the factor, so
+  // the report it caused can be stale.
   ReportZoom();
 }
 
@@ -3343,6 +3358,24 @@ void WebViewGuest::KeepFullFrameRate() {
   UnfocusedWebViews::Get().Untrack(this);
 }
 
+void WebViewGuest::OnZoomChanged(
+    const zoom::ZoomController::ZoomChangedEventData& data) {
+  ReportZoom();
+}
+
+void WebViewGuest::OnZoomControllerDestroyed(
+    zoom::ZoomController* zoom_controller) {
+  zoom_observation_.Reset();
+}
+
+zoom::ZoomController& WebViewGuest::Zoom() const {
+  CHECK(guest_contents_);
+  zoom::ZoomController* zoom =
+      zoom::ZoomController::FromWebContents(guest_contents_);
+  CHECK(zoom);
+  return *zoom;
+}
+
 base::CallbackListSubscription WebViewGuest::AddZoomChangedCallback(
     ZoomChangedCallback changed) {
   return zoom_callbacks_.Add(std::move(changed));
@@ -3350,7 +3383,7 @@ base::CallbackListSubscription WebViewGuest::AddZoomChangedCallback(
 
 void WebViewGuest::WebContentsDestroyed() {
   UnfocusedWebViews::Get().Untrack(this);
-  zoom_subscription_ = {};
+  zoom_observation_.Reset();
   settings_observation_.Reset();
   download_manager_observation_.Reset();
   guest_contents_ = nullptr;
