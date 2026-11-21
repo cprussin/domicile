@@ -13,6 +13,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
 #include "base/values.h"
+#include "chrome/browser/extensions/api/tabs/tabs_api.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/window_controller_list.h"
@@ -221,7 +222,7 @@ class DomicileWindowController::Tab : public content::WebContentsObserver {
   void OnFocused() { window_->Focused(tab_id_, *web_contents()); }
 
   void OnZoomed(double old_factor, double new_factor) {
-    window_->Zoomed(tab_id_, old_factor, new_factor);
+    window_->Zoomed(tab_id_, *web_contents(), old_factor, new_factor);
   }
 
   // Returns `property`, plus `url` if the URL changed since last reported.
@@ -242,10 +243,12 @@ class DomicileWindowController::Tab : public content::WebContentsObserver {
   base::CallbackListSubscription zoomed_;
 };
 
-extensions::api::tabs::ZoomSettings DeskZoomSettings() {
+extensions::api::tabs::ZoomSettings DeskZoomSettings(
+    content::WebContents& tab) {
+  WebViewGuest* guest = WebViewGuest::FromWebContents(&tab);
+  CHECK(guest);
   extensions::api::tabs::ZoomSettings settings;
-  settings.mode = extensions::api::tabs::ZoomSettingsMode::kAutomatic;
-  settings.scope = extensions::api::tabs::ZoomSettingsScope::kPerOrigin;
+  extensions::ZoomModeToZoomSettings(guest->GetZoomMode(), &settings);
   return settings;
 }
 
@@ -674,13 +677,14 @@ void DomicileWindowController::Updated(int tab_id,
 // Fires tabs.onZoomChange as TabsEventRouter::OnZoomChanged does, without a
 // default factor in the settings.
 void DomicileWindowController::Zoomed(int tab_id,
+                                      content::WebContents& tab,
                                       double old_factor,
                                       double new_factor) {
   extensions::api::tabs::OnZoomChange::ZoomChangeInfo info;
   info.tab_id = tab_id;
   info.old_zoom_factor = old_factor;
   info.new_zoom_factor = new_factor;
-  info.zoom_settings = DeskZoomSettings();
+  info.zoom_settings = DeskZoomSettings(tab);
   Broadcast(profile(),
             std::make_unique<extensions::Event>(
                 extensions::events::TABS_ON_ZOOM_CHANGE,

@@ -342,8 +342,8 @@ Mutations:
 | `windows.get`, `getCurrent`, `getLastFocused`, `getAll` | The desk |
 | `windows.create({type: "popup", url})` | A popup window (below) |
 | `windows.remove(id)` | A popup window's tab, as `tabs.remove`. Refused for the desk window. |
-| `tabs.setZoom`, `getZoom` | The guest: `WebViewGuest::ZoomTo`, per site via `HostZoomMap`. The element gets `domicile-zoom-change`. `0` is the default. Values outside Blink's browser range are refused. |
-| `tabs.getZoomSettings`, `setZoomSettings` | The desk: `automatic`, `per-origin` only. Other settings are refused. |
+| `tabs.setZoom`, `getZoom` | The guest: `WebViewGuest::ZoomTo`, per site via `HostZoomMap`, or per tab in its zoom mode. The element gets `domicile-zoom-change`. `0` is the default. Values outside Blink's browser range are refused, and so is any zoom in `disabled` mode. |
+| `tabs.getZoomSettings`, `setZoomSettings` | The guest's zoom mode, kept by Chrome's `ZoomController` as for a Chrome tab. `manual` keeps the page at the default zoom and reports the factor; the PDF viewer zooms its own pages this way. Manual and per-tab modes end when the page navigates away. |
 | `action.openPopup()` | The shell's tray (above) |
 | `sidePanel.open()`, `sidePanel.close()` | A popup window showing the side panel (above) |
 | `tabs.move`, `group`, `ungroup`, `discard`, `duplicate`, `createSplit`, `unsplit`; `tabs.update`'s `pinned`, `openerTabId`, `autoDiscardable`; `windows.update` bounds and state; any `windows.create` other than a `popup` with one `url` | Error: `not supported on a Domicile desk` |
