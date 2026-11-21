@@ -3,7 +3,8 @@
 //! Chromium starts each line with `[pid:tid:time:LEVEL:file:line]`. The level
 //! becomes the entry's priority and the file and line its `CODE_FILE` and
 //! `CODE_LINE`. The shell's `console` lines go under `domicile-shell`, so a
-//! shell author reads them apart from the engine's.
+//! shell author reads them apart from the engine's, and those the SDK's
+//! `logger` wrote carry its subsystem as `DOMICILE_SUBSYSTEM`.
 //!
 //! Every process the engine forks writes to the same stderr, so the pid is
 //! kept as `DOMICILE_PID`: journald's own `_PID` is the launcher's.
@@ -36,17 +37,21 @@ impl EngineLog {
     pub fn entry(&mut self, line: &str) -> Entry {
         match prefixed(line) {
             Some(said) => {
-                let identifier = match said.file == "CONSOLE" && said.message.contains(SHELL_SOURCE)
-                {
+                let shell = said.file == "CONSOLE" && said.message.contains(SHELL_SOURCE);
+                let identifier = match shell {
                     true => SHELL,
                     false => ENGINE,
                 };
                 self.last = Some((identifier, said.priority));
+                let subsystem = shell
+                    .then(|| subsystem(said.message))
+                    .flatten()
+                    .map(|name| ("DOMICILE_SUBSYSTEM", name.to_string()));
                 Entry {
                     identifier,
                     priority: said.priority,
                     message: said.message.to_string(),
-                    fields: said.fields(),
+                    fields: said.fields().into_iter().chain(subsystem).collect(),
                 }
             }
             // A library that writes to stderr itself, such as Mesa, has no
@@ -68,6 +73,17 @@ impl Default for EngineLog {
     fn default() -> Self {
         EngineLog::new()
     }
+}
+
+/// The subsystem a shell's console line names, as the SDK's `logger` starts
+/// it: `"[notifications] ...`.
+fn subsystem(message: &str) -> Option<&str> {
+    let (name, _) = message.strip_prefix("\"[")?.split_once("] ")?;
+    (!name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+    .then_some(name)
 }
 
 /// A line with Chromium's prefix, split up.

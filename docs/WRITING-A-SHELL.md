@@ -194,7 +194,10 @@ export const Shell = (root, domicile) => {
   for. Develop against a real desktop.
 
 **Errors:** log to the console. Page logs reach the terminal Domicile started
-from, or the journal as `domicile-shell` ([Logs](LOGGING.md)). Invalid calls (an empty argv, a keycode of zero, a malformed chord)
+from, or the journal as `domicile-shell` ([Logs](LOGGING.md)), at
+the severity you logged them. `logger("name")` from
+`@domicile-desktop/sdk/logger` names the part of the shell that said each line
+([A shell's logs](LOGGING.md#a-shells-logs)). Invalid calls (an empty argv, a keycode of zero, a malformed chord)
 throw, because they are bugs in the page.
 
 ## With React

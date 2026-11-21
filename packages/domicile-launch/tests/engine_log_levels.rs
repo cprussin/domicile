@@ -35,7 +35,8 @@ fn error_warn_and_info_are_chromiums_severities() {
 fn debug_and_trace_turn_on_domiciles_vlogs_and_no_one_elses() {
     // `--v` would turn on every VLOG in Chromium.
     let debug = engine_levels(&all(LogLevel::Debug));
-    assert_eq!(debug.min_level, 0);
+    // VERBOSE, so the shell's `console.debug` shows too.
+    assert_eq!(debug.min_level, -1);
     assert!(
         debug.vmodule.starts_with("*/domicile/*=1,"),
         "{}",
@@ -111,4 +112,20 @@ fn a_restarted_engine_starts_at_the_levels_set_before() {
             format!("--vmodule={}", set.vmodule)
         ]
     );
+}
+
+#[test]
+fn the_shell_at_debug_shows_its_console_debug_and_no_other_subsystem_does() {
+    // The shell's `console.debug` is Chromium's VERBOSE, -1. VLOGs are not
+    // held back by the minimum severity, so other subsystems need only INFO.
+    let shell = LogLevels {
+        all: None,
+        subsystems: [(Subsystem::Shell, LogLevel::Debug)].into(),
+    };
+    assert_eq!(engine_levels(&shell).min_level, -1);
+    let input = LogLevels {
+        all: None,
+        subsystems: [(Subsystem::Input, LogLevel::Trace)].into(),
+    };
+    assert_eq!(engine_levels(&input).min_level, 0);
 }

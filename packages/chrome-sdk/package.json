@@ -206,6 +206,10 @@
       "types": "./dist/notification.d.ts",
       "default": "./dist/notification.js"
     },
+    "./logger": {
+      "types": "./dist/logger.d.ts",
+      "default": "./dist/logger.js"
+    },
     "./options": {
       "types": "./dist/options.d.ts",
       "default": "./dist/options.js"

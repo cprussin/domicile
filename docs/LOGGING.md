@@ -118,3 +118,27 @@ To start at other levels:
 - **Compositor:** `RUST_LOG`, such as `RUST_LOG=debug`.
 - **Engine:** `DOMICILE_ENGINE_ARGS`, such as `DOMICILE_ENGINE_ARGS='--log-level=0'`
   or `--v=1`. See [Running a desktop](RUNNING-A-DESKTOP.md).
+
+## A shell's logs
+
+A shell's `console` messages keep their severity: `console.error` is an error,
+shown by default, and `console.debug` is a debug line, shown once
+`domicile set-log-level debug shell` asks for it. They are filed as
+`domicile-shell`.
+
+The SDK's `logger` names the part of the shell that said each line:
+
+```ts
+import { logger } from "@domicile-desktop/sdk/logger";
+
+const log = logger("notifications");
+log.error("no layout for", id);
+log.debug("shown", count);
+```
+
+Each line starts with `[notifications]`, and the journal files the name as
+`DOMICILE_SUBSYSTEM`:
+
+```sh
+journalctl --user -b -t domicile-shell DOMICILE_SUBSYSTEM=notifications
+```

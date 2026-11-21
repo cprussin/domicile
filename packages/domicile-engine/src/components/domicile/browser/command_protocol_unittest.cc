@@ -1318,12 +1318,25 @@ TEST(CommandProtocolTest, SetsTheLogLevels) {
   EXPECT_EQ(told.vmodule, "*/domicile/*=2");
 }
 
+TEST(CommandProtocolTest, SetsVerboseForTheShellsConsoleDebug) {
+  // A shell's console.debug is VERBOSE, which `domicile set-log-level debug
+  // shell` asks for.
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(
+                R"({"type":"set_log_levels","version":1,"min_level":-1,)"
+                R"("vmodule":""})",
+                &told)),
+            "set");
+  EXPECT_EQ(told.min_log_level, -1);
+}
+
 TEST(CommandProtocolTest, RefusesALogLevelChromiumHasNot) {
-  // 0 is INFO and 3 is FATAL. Below 0 is a VLOG level, which `vmodule` sets
-  // per file instead of turning on all of Chromium's.
+  // -1 is VERBOSE, a shell's console.debug, and 3 is FATAL. Below -1 is a
+  // VLOG level, which `vmodule` sets per file instead of turning on all of
+  // Chromium's.
   Told told;
   for (const char* line :
-       {R"({"type":"set_log_levels","version":1,"min_level":-1,"vmodule":""})",
+       {R"({"type":"set_log_levels","version":1,"min_level":-2,"vmodule":""})",
         R"({"type":"set_log_levels","version":1,"min_level":4,"vmodule":""})",
         R"({"type":"set_log_levels","version":1,"vmodule":""})",
         R"({"type":"set_log_levels","version":1,"min_level":2})"}) {

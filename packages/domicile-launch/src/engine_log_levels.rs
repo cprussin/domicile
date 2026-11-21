@@ -12,7 +12,7 @@ use domicile_protocol::{LogLevel, LogLevels, Subsystem};
 /// What the engine's `set_log_levels` takes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineLevels {
-    /// Chromium's minimum severity: 0 `INFO` to 3 `FATAL`.
+    /// Chromium's minimum severity: -1 `VERBOSE` to 3 `FATAL`.
     pub min_level: i32,
     /// Chromium's `--vmodule`.
     pub vmodule: String,
@@ -146,11 +146,16 @@ const FILES: [(Subsystem, &[&str]); 13] = [
 
 /// The engine's levels for `levels`.
 pub fn engine_levels(levels: &LogLevels) -> EngineLevels {
-    let asked = levels
-        .all
-        .into_iter()
-        .chain(levels.subsystems.values().copied());
-    let min_level = asked.map(severity).fold(STARTING, i32::min);
+    // Each level asked for, and whether it covers the shell.
+    let asked = levels.all.map(|level| (level, true)).into_iter().chain(
+        levels
+            .subsystems
+            .iter()
+            .map(|(subsystem, level)| (*level, *subsystem == Subsystem::Shell)),
+    );
+    let min_level = asked
+        .map(|(level, shell)| severity(level, shell))
+        .fold(STARTING, i32::min);
     let all = levels.all.and_then(vlog).map(|vlog| {
         std::iter::once(DOMICILE)
             .chain(FILES.iter().flat_map(|(_, files)| files.iter().copied()))
@@ -176,13 +181,16 @@ pub fn engine_levels(levels: &LogLevels) -> EngineLevels {
     }
 }
 
-/// Chromium's minimum severity for `level`. `debug` and `trace` are `INFO`
-/// plus VLOGs.
-fn severity(level: LogLevel) -> i32 {
-    match level {
-        LogLevel::Error => 2,
-        LogLevel::Warn => 1,
-        LogLevel::Info | LogLevel::Debug | LogLevel::Trace => 0,
+/// Chromium's minimum severity for `level`, over the shell when `shell`.
+/// `debug` and `trace` are `INFO` plus VLOGs, and VERBOSE for the shell.
+fn severity(level: LogLevel, shell: bool) -> i32 {
+    match (level, shell) {
+        (LogLevel::Error, _) => 2,
+        (LogLevel::Warn, _) => 1,
+        // The shell's `console.debug` is VERBOSE. VLOGs are not held back by
+        // the minimum severity, so nothing else needs it.
+        (LogLevel::Debug | LogLevel::Trace, true) => -1,
+        (LogLevel::Info | LogLevel::Debug | LogLevel::Trace, _) => 0,
     }
 }
 

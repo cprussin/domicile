@@ -22,7 +22,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 56,
 # WindowDiff 7, EngineEventQueue 9, ShortcutRegistry 17, ShellURLLoaderFactory
-# 16, ShellDocument 13, ShellSource 6, CursorShape 3, CommandProtocol 74,
+# 16, ShellDocument 13, ShellSource 6, CursorShape 3, CommandProtocol 75,
 # DomicileDisplayList 13, DomicileKeyboardLayout 3, ShellWindows 10,
 # ShellWindowPlaces 8, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # SurfaceTransform 3, SurfaceAlpha 2, BufferColor 4, ExtensionInstaller 3,
@@ -49,6 +49,8 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # ShellDevServerLoad 4, ShellDevServerGone 1, ForCaptureTools 2, DeskDrag 6,
 # DomicileMonitorTwinActivation 1, CursorDisplay 4, DomicileHiddenPageTiles 4.
 #
+# 925, and it was 924 — VERBOSE for a shell's console.debug is one more
+# CommandProtocol case. Before that
 # 924, and it was 922 — `domicile set-log-level` is two CommandProtocol
 # cases. Before that 922, and it was 918 — a hidden page keeping the tiles it draws is the
 # DomicileHiddenPageTiles suite. Before that 918, and it was 914 — the display the pointer is drawn for is the
@@ -328,7 +330,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=924
+FLOOR=925
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

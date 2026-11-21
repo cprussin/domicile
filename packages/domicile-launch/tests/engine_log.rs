@@ -73,6 +73,34 @@ fn the_shells_console_is_the_shells_log() {
 }
 
 #[test]
+fn a_shell_loggers_subsystem_is_a_field() {
+    // `logger("notifications").error(...)` from the SDK starts its message
+    // with the name, so `journalctl DOMICILE_SUBSYSTEM=notifications` finds it.
+    let entry = one(
+        "[1:1:1013/000000.000000:VERBOSE1:CONSOLE:12] \"[notifications] shown 3\", source: domicile://shell/main.js (12)",
+    );
+    assert_eq!(entry.priority, Priority::Debug);
+    assert!(
+        entry
+            .fields
+            .contains(&("DOMICILE_SUBSYSTEM", "notifications".to_string())),
+        "{:?}",
+        entry.fields
+    );
+    let plain = one(
+        "[1:1:1013/000000.000000:ERROR:CONSOLE:30] \"no layout\", source: domicile://shell/main.js (30)",
+    );
+    assert!(
+        !plain
+            .fields
+            .iter()
+            .any(|(name, _)| *name == "DOMICILE_SUBSYSTEM"),
+        "{:?}",
+        plain.fields
+    );
+}
+
+#[test]
 fn a_pages_console_stays_the_engines() {
     let entry =
         one("[1:1:1013/000000.000000:INFO:CONSOLE:3] \"hi\", source: https://example.com/a.js (3)");

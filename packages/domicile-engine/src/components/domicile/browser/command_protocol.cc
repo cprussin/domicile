@@ -1194,11 +1194,11 @@ std::string AnswerSetLogLevels(const base::DictValue& request,
                                SetLogLevels set_log_levels) {
   const std::optional<int> min_level = request.FindInt("min_level");
   const std::string* vmodule = request.FindString("vmodule");
-  if (!min_level || *min_level < logging::LOGGING_INFO ||
+  if (!min_level || *min_level < logging::LOGGING_VERBOSE ||
       *min_level > logging::LOGGING_FATAL || !vmodule) {
     return RefusedCommand(
-        "set_log_levels takes a \"min_level\" from 0 (INFO) to 3 (FATAL) and "
-        "a \"vmodule\" string");
+        "set_log_levels takes a \"min_level\" from -1 (VERBOSE) to 3 (FATAL) "
+        "and a \"vmodule\" string");
   }
   set_log_levels(*min_level, *vmodule);
   return Done("set");

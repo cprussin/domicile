@@ -68,6 +68,7 @@ Grouped `--help`, `domicile help <command>` for usage and examples, and man page
 - `domicile set-log-level trace input` turns the logs up while the desktop runs, for everything or for one subsystem, in the compositor and every engine process. `--reset` turns them back. [Levels](LOGGING.md#levels) · [`domicile set-log-level`](CLI.md#domicile-set-log-level-level-subsystem)
 - Quiet by default: each part logs errors alone, and the desktop says one `domicile is up.` line with what it chose and its `DOMICILE_SOCK`. [Logs](LOGGING.md#what-they-say)
 - `domicile set-log-level info` tells what changed: windows opening and closing, the screens going dark, the lock, screen casts. `trace input` logs every input event, never which key. [Levels](LOGGING.md#levels)
+- A shell's `console.error` is an error in the desktop's logs, shown by default, and `console.debug` shows at `domicile set-log-level debug shell`. `logger("notifications")` from `@domicile-desktop/sdk/logger` names the part of the shell that said each line, as `DOMICILE_SUBSYSTEM` in the journal. [A shell's logs](LOGGING.md#a-shells-logs)
 - Chromium 160. [#2023](https://github.com/cprussin/domicile/pull/2023)
 
 ### Breaking changes
