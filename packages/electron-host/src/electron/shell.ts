@@ -2,6 +2,7 @@
 // `domicile open`, which picks the user's default app as the desktop does.
 
 import { dirname } from "node:path";
+import { Priority, say } from "../journal";
 
 /** Runs a command, answering its exit code and what it printed. */
 export type Run = (
@@ -36,8 +37,9 @@ export const createShell = (run: Run) => {
       open(dirname(path)).then(
         (why) => {
           if (why !== undefined) {
-            // biome-ignore lint/suspicious/noConsole: Electron's showItemInFolder answers nothing, so the log is the only place for why
-            console.error(`electron-host: ${why}`);
+            // Electron's showItemInFolder answers nothing, so the log is
+            // the only place for why.
+            say(Priority.Error, `electron-host: ${why}`);
           }
         },
         (error: unknown) => {

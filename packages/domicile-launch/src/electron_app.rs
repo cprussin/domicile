@@ -236,6 +236,24 @@ pub fn app_name(resources: &Path) -> Result<String, String> {
         .ok_or_else(|| "its package.json has no productName or name".to_string())
 }
 
+/// The journal name for what the app `target` names, in `resources`, writes:
+/// an entry's id, or for a path, the app's own name, else the path's file
+/// name.
+pub fn journal_name(target: &str, resources: &Path) -> String {
+    match target.contains('/') {
+        false => target
+            .strip_suffix(".desktop")
+            .unwrap_or(target)
+            .to_string(),
+        true => app_name(resources).unwrap_or_else(|_| {
+            Path::new(target).file_name().map_or_else(
+                || target.to_string(),
+                |name| name.to_string_lossy().into_owned(),
+            )
+        }),
+    }
+}
+
 /// The `package.json` an `app.asar` holds. The archive opens with a pickle
 /// giving its header's size, then the header, a pickle holding a JSON
 /// index whose offsets count from the header's end.

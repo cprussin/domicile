@@ -7,6 +7,9 @@ const hooks = () => {
   const said: string[] = [];
   return {
     hooks: {
+      absent: (why: string) => {
+        said.push(`absent: ${why}`);
+      },
       unsupported: (why: string): never => {
         said.push(`unsupported: ${why}`);
         throw new Error(why);
@@ -58,7 +61,7 @@ describe(completeElectron, () => {
     expect(app.makeCoffee).toBeUndefined();
     expect(app.then).toBeUndefined();
     expect(said).toEqual([
-      "warn: Slack reached for app.makeCoffee, which Electron 45.2.1 doesn't have on Linux",
+      "absent: Slack reached for app.makeCoffee, which Electron 45.2.1 doesn't have on Linux",
     ]);
   });
 

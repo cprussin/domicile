@@ -162,3 +162,21 @@ pub fn stream(
     stream.shutdown(std::net::Shutdown::Read)?;
     Ok(stream)
 }
+
+/// Points `child`'s stdout and stderr at a new journal stream at `path`,
+/// usually [`STREAM_SOCKET`], under `identifier` at `info`. Sets
+/// `JOURNAL_STREAM` to that stream, as systemd does for a service, so the
+/// child can tell its stderr is the journal and give its lines their
+/// priorities with a `<n>` prefix.
+pub fn give_stream(
+    child: &mut std::process::Command,
+    path: &Path,
+    identifier: &str,
+) -> std::io::Result<()> {
+    let stdout = stream(path, identifier, Priority::Info)?;
+    let stat = fstat(stdout.as_fd());
+    child.env("JOURNAL_STREAM", format!("{}:{}", stat.st_dev, stat.st_ino));
+    child.stderr(std::os::fd::OwnedFd::from(stdout.try_clone()?));
+    child.stdout(std::os::fd::OwnedFd::from(stdout));
+    Ok(())
+}

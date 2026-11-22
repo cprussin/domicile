@@ -38,7 +38,8 @@ the same as a block instead.
 | `domicile-shell` | The shell's `console` messages. |
 | `domicile` | The launcher: restarts, and what the desktop chose. |
 | `domicile-relay` | Agents on the web: reaching the relay, and its certificate. |
-| An app's own name, such as `emacs` | What an app the desktop started writes, at `info`, or at the `<n>` priority a line starts with. |
+| `domicile-cli` | The `domicile` command when the desktop runs it, such as from a binding. |
+| An app's own name, such as `emacs` | What an app the desktop started writes, at `info`, or at the `<n>` priority a line starts with. An Electron app's is its entry's id, such as `element-desktop`; `electron-host` gives its own lines their priority. |
 
 ## Reading them
 

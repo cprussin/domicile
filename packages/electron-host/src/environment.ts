@@ -7,6 +7,8 @@ const schema = z.object({
   DBUS_SESSION_BUS_ADDRESS: z.string().optional(),
   /** The engine's Electron socket, which the desktop names to its apps. */
   DOMICILE_ELECTRON_SOCK: z.string().optional(),
+  /** systemd's `<device>:<inode>` of the journal stream stderr may be. */
+  JOURNAL_STREAM: z.string().optional(),
   XDG_CACHE_HOME: z.string().optional(),
   XDG_CONFIG_HOME: z.string().optional(),
   /** The desktop, by which Chromium picks where safeStorage keeps its key. */

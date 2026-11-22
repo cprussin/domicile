@@ -59,6 +59,7 @@ import { createWebRequests } from "./electron/web-request";
 import { connectEngine, connectEngineWhenUp } from "./engine";
 import type { Environment } from "./environment";
 import { readEnvironment } from "./environment";
+import { Priority, say } from "./journal";
 import { mirrorResources } from "./mirror";
 import { electronPaths } from "./paths";
 import { quirksOf } from "./quirks";
@@ -182,8 +183,7 @@ const main = async ([resources, ...args]: string[]) => {
       engine.send,
       (window) => webContentsOf(window),
       (warning) => {
-        // biome-ignore lint/suspicious/noConsole: what the engine does not do for this app, for the app's developer
-        console.warn(`electron-host: ${warning}`);
+        say(Priority.Warning, `electron-host: ${warning}`);
       },
     );
     engine.events.on("permissionRequest", permissions.hear);
@@ -286,8 +286,8 @@ const main = async ([resources, ...args]: string[]) => {
         isDirectory: (path) =>
           statSync(path, { throwIfNoEntry: false })?.isDirectory() ?? false,
         printError: (text) => {
-          // biome-ignore lint/suspicious/noConsole: Electron's error box on a desktop with no dialog for it, for the supervisor's log
-          console.error(text);
+          // Electron's error box on a desktop with no dialog for it.
+          say(Priority.Error, text);
         },
       }),
       globalShortcut: createGlobalShortcut(warn),
@@ -346,7 +346,7 @@ const main = async ([resources, ...args]: string[]) => {
       WebContentsView,
       webContents,
     };
-    completeElectron(electron, app.getName(), { unsupported, warn });
+    completeElectron(electron, app.getName(), { absent, unsupported, warn });
     completeInstances(
       {
         BrowserView: BrowserView.prototype,
@@ -365,7 +365,7 @@ const main = async ([resources, ...args]: string[]) => {
         WebFrameMain: WebFrameMain.prototype,
       },
       app.getName(),
-      { unsupported, warn },
+      { absent, unsupported, warn },
     );
     Bun.plugin({
       name: "electron",
@@ -393,8 +393,12 @@ const main = async ([resources, ...args]: string[]) => {
 
 /** What the app reached for that Electron has and Domicile doesn't do, for its developer. */
 const warn = (why: string) => {
-  // biome-ignore lint/suspicious/noConsole: an Electron API that does less on Domicile, for the desktop's log
-  console.error(`electron-host: ${why}`);
+  say(Priority.Warning, `electron-host: ${why}`);
+};
+
+/** What the app reached for that not even Electron has on Linux, for its developer. */
+const absent = (why: string) => {
+  say(Priority.Debug, `electron-host: ${why}`);
 };
 
 /** The desktop's displays now, from `domicile list-displays --json`. */
@@ -539,14 +543,12 @@ const UNSUPPORTED_EXIT = 3;
 
 /** Gives up on an app the engine can't run yet, whatever the app catches. */
 const unsupported = (why: string): never => {
-  // biome-ignore lint/suspicious/noConsole: why the app runs on its own Electron, for the desktop's log
-  console.error(`electron-host: ${why}`);
+  say(Priority.Error, `electron-host: ${why}`);
   process.exit(UNSUPPORTED_EXIT);
 };
 
 const fail = (why: string): never => {
-  // biome-ignore lint/suspicious/noConsole: the reason the app can't start, for the supervisor's log
-  console.error(`electron-host: ${why}`);
+  say(Priority.Error, `electron-host: ${why}`);
   process.exit(1);
 };
 

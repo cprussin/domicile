@@ -56,7 +56,9 @@ use domicile_launch::control_socket::{
     PATIENCE as ANSWER_WITHIN, VARIABLE,
 };
 use domicile_launch::dev::{dev_socket, going_back, loading};
-use domicile_launch::electron_app::{app_icon, app_name, electron_app, UNSUPPORTED_EXIT};
+use domicile_launch::electron_app::{
+    app_icon, app_name, electron_app, journal_name, UNSUPPORTED_EXIT,
+};
 use domicile_launch::electron_schemes::{self, schemes_switch, with_known};
 use domicile_launch::electron_wrapper::{record, through_wrappers, WrapperError, RECORD};
 use domicile_launch::engine_log::EngineLog;
@@ -67,7 +69,7 @@ use domicile_launch::help::{command_help, error, overview, version_lines, with_u
 use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::idle_inhibit::{exit_code, inhibit_idle};
 use domicile_launch::install_app::{data_home, install_app, Fetched};
-use domicile_launch::journal::stderr_is_the_journal;
+use domicile_launch::journal::{self, stderr_is_the_journal};
 use domicile_launch::launcher_log;
 use domicile_launch::listing::{
     agents_table, bindings_table, displays_table, inputs_table, log_levels_table,
@@ -575,6 +577,8 @@ fn electron_opened(target: &str, command: &[String]) -> Result<ExitCode, String>
             run.args(&app.args);
         }
     }
+    let journal = journal_name(target, &app.resources);
+    own_stream(&mut run, &journal);
     let status = run
         .status()
         .map_err(|why| format!("cannot run {}: {why}", host.display()))?;
@@ -601,12 +605,24 @@ fn electron_opened(target: &str, command: &[String]) -> Result<ExitCode, String>
             let (program, args) = fallback
                 .split_first()
                 .expect("an app's command has a program");
-            Err(format!(
-                "cannot run {program}: {}",
-                Command::new(program).args(args).exec()
-            ))
+            let mut fallback = Command::new(program);
+            fallback.args(args);
+            own_stream(&mut fallback, &journal);
+            Err(format!("cannot run {program}: {}", fallback.exec()))
         }
         _ => Ok(ExitCode::from(exit_code(status))),
+    }
+}
+
+/// Gives an Electron app its own journal stream under `name`, when this
+/// command's output is the journal, so the app's lines are not the
+/// `domicile` command's. Without one, it writes where this command does.
+fn own_stream(run: &mut Command, name: &str) {
+    if !journal::is_the_journal(std::os::fd::AsFd::as_fd(&std::io::stdout())) {
+        return;
+    }
+    if let Err(why) = journal::give_stream(run, Path::new(journal::STREAM_SOCKET), name) {
+        eprintln!("domicile: {name} writes where this command does: no journal stream: {why}");
     }
 }
 

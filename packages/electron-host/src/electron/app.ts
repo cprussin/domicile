@@ -5,6 +5,7 @@ import { EventEmitter } from "node:events";
 import { cwd, env as processEnv } from "node:process";
 
 import type { AppPackage } from "../app-package";
+import { Priority, say } from "../journal";
 import type { PathName } from "../paths";
 import { nativeImage } from "./native-image";
 import type { SecondInstance } from "./single-instance";
@@ -322,8 +323,9 @@ export class ElectronApp extends EventEmitter {
   };
 
   readonly showAboutPanel = () => {
-    // biome-ignore lint/suspicious/noConsole: Electron's about panel is a GTK dialog, which Domicile has no stand-in for
-    console.error(
+    // Electron's about panel is a GTK dialog, which Domicile has no stand-in for.
+    say(
+      Priority.Warning,
       `electron-host: ${this.#name} asked for its about panel, which Domicile doesn't show: ${JSON.stringify(this.#aboutPanel)}`,
     );
   };

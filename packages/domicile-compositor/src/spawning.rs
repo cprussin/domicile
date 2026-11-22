@@ -78,7 +78,7 @@ pub fn spawn_client(
     Ok(())
 }
 
-/// Gives an app its own journal stream, under its program's name at `info`,
+/// Gives an app its own journal stream, named by [`stream_name`], at `info`,
 /// when the desktop's logs are in the journal. Otherwise an app writes to the
 /// compositor's stderr, and its chatter (an editor's startup, a toolkit's
 /// warnings) would read as the compositor's errors.
@@ -89,22 +89,27 @@ pub fn own_stream(child: &mut Command, program: &str) {
     if !domicile_launch::journal::is_the_journal(std::io::stdout().as_fd()) {
         return;
     }
-    let name = std::path::Path::new(program).file_name().map_or_else(
+    let name = stream_name(program);
+    if let Err(why) = domicile_launch::journal::give_stream(
+        child,
+        Path::new(domicile_launch::journal::STREAM_SOCKET),
+        &name,
+    ) {
+        warn!("{name} writes to the compositor's stderr: no journal stream: {why}");
+    }
+}
+
+/// The journal name for what `program` writes: its file name. The `domicile`
+/// command, which a binding may run, is `domicile-cli`, apart from the
+/// launcher's own `domicile`.
+fn stream_name(program: &str) -> String {
+    let name = Path::new(program).file_name().map_or_else(
         || program.to_string(),
         |name| name.to_string_lossy().into_owned(),
     );
-    match domicile_launch::journal::stream(
-        std::path::Path::new(domicile_launch::journal::STREAM_SOCKET),
-        &name,
-        domicile_launch::journal::Priority::Info,
-    )
-    .and_then(|stream| Ok((stream.try_clone()?, stream)))
-    {
-        Ok((stdout, stderr)) => {
-            child.stdout(std::os::fd::OwnedFd::from(stdout));
-            child.stderr(std::os::fd::OwnedFd::from(stderr));
-        }
-        Err(why) => warn!("{name} writes to the compositor's stderr: no journal stream: {why}"),
+    match name.as_str() {
+        "domicile" => "domicile-cli".to_string(),
+        _ => name,
     }
 }
 
@@ -309,7 +314,24 @@ pub fn home_directory() -> Option<std::path::PathBuf> {
 mod tests {
     use std::ffi::{OsStr, OsString};
 
-    use super::client_command;
+    use super::{client_command, stream_name};
+
+    #[test]
+    fn an_app_logs_under_its_programs_name() {
+        assert_eq!(stream_name("/run/current-system/sw/bin/emacs"), "emacs");
+        assert_eq!(stream_name("foot"), "foot");
+    }
+
+    #[test]
+    fn the_domicile_command_logs_apart_from_the_launcher() {
+        // `domicile` is the launcher's own name. A command a binding runs,
+        // such as a screen recording, says its output under its own.
+        assert_eq!(stream_name("domicile"), "domicile-cli");
+        assert_eq!(
+            stream_name("/nix/store/x-domicile/bin/domicile"),
+            "domicile-cli"
+        );
+    }
 
     /// The value `client_command` sets for `name`; `None` means cleared.
     fn child_env(command: &[String], display: &str, name: &str) -> Option<OsString> {

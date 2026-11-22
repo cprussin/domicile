@@ -9,6 +9,7 @@
 // hardcoded password with `setUsePlainTextEncryption`.
 
 import { createCipheriv, createDecipheriv, pbkdf2Sync } from "node:crypto";
+import { Priority, say } from "../journal";
 
 /** The app's Secret Service password, or none when there's no Secret Service. */
 export type SafeStoragePassword = { readonly password: string | undefined };
@@ -128,8 +129,9 @@ const readPassword = (
   try {
     return dependencies.password();
   } catch (why) {
-    // biome-ignore lint/suspicious/noConsole: the desktop's keyring failed, which only the log can say
-    console.error(
+    // The desktop's keyring failed, which only the log can say.
+    say(
+      Priority.Error,
       `electron-host: safeStorage has no key, as reading it failed: ${why instanceof Error ? why.message : String(why)}`,
     );
     return { password: undefined };

@@ -4,7 +4,9 @@ use std::fs;
 use std::os::unix::fs::{symlink, PermissionsExt as _};
 use std::path::{Path, PathBuf};
 
-use domicile_launch::electron_app::{app_icon, app_name, electron_app, ElectronApp, ElectronError};
+use domicile_launch::electron_app::{
+    app_icon, app_name, electron_app, journal_name, ElectronApp, ElectronError,
+};
 
 /// Writes `text` at `path` under `root`, making its directories.
 fn write(root: &Path, path: &str, text: &str) -> PathBuf {
@@ -389,6 +391,45 @@ fn an_app_whose_package_cannot_be_read_says_why() {
     let why = app_name(&root.path().join("resources")).unwrap_err();
 
     assert!(why.contains("app.asar"), "{why}");
+}
+
+#[test]
+fn an_app_from_an_entry_logs_under_the_entrys_id() {
+    let root = tempfile::tempdir().unwrap();
+
+    assert_eq!(
+        journal_name("element-desktop.desktop", &root.path().join("resources")),
+        "element-desktop"
+    );
+    assert_eq!(
+        journal_name("slack", &root.path().join("resources")),
+        "slack"
+    );
+}
+
+#[test]
+fn an_app_from_a_path_logs_under_its_name() {
+    let root = tempfile::tempdir().unwrap();
+    write(
+        root.path(),
+        "resources/app/package.json",
+        r#"{"name":"codium"}"#,
+    );
+
+    assert_eq!(
+        journal_name("/opt/codium/codium", &root.path().join("resources")),
+        "codium"
+    );
+}
+
+#[test]
+fn an_app_from_a_path_without_a_readable_name_logs_under_its_files_name() {
+    let root = tempfile::tempdir().unwrap();
+
+    assert_eq!(
+        journal_name("/opt/codium/codium", &root.path().join("resources")),
+        "codium"
+    );
 }
 
 #[test]

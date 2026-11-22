@@ -17,6 +17,7 @@ import type {
   ViewPlacement,
   WindowEvent,
 } from "../engine";
+import { Priority, say } from "../journal";
 import type { ElectronApp } from "./app";
 import type { ContextMenuAsked } from "./context-menu";
 import { contextMenuParams } from "./context-menu";
@@ -215,8 +216,8 @@ const warned = new Set<string>();
 const warnOnce = (key: string, why: string) => {
   if (!warned.has(key)) {
     warned.add(key);
-    // biome-ignore lint/suspicious/noConsole: the app's log is where a stated answer is told
-    console.warn(`electron-host: ${why}`);
+    // The app's log is where a stated answer is told.
+    say(Priority.Warning, `electron-host: ${why}`);
   }
 };
 
@@ -1184,8 +1185,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         .catch((error: unknown) => {
           // Only the engine's connection failing gets here, and losing it
           // ends the app on its own.
-          // biome-ignore lint/suspicious/noConsole: why a page's invoke went unanswered, for the supervisor's log
-          console.error("electron-host: couldn't answer an invoke", error);
+          say(
+            Priority.Error,
+            `electron-host: couldn't answer an invoke: ${error instanceof Error ? error.stack : String(error)}`,
+          );
         });
     };
 
@@ -1193,8 +1196,8 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       const loads = this.#loads.splice(0);
       const sent = (sentTo.get(this.id) ?? []).join(", ");
       // An app may swallow its load's rejection; the log keeps why.
-      // biome-ignore lint/suspicious/noConsole: a refused window is the engine's word on the app, for the supervisor's log
-      console.error(
+      say(
+        Priority.Error,
         `electron-host: the engine refused window ${this.id} (last sent: ${sent}): ${why}`,
       );
       if (loads.length > 0) {

@@ -3,7 +3,8 @@
 // has a function. A method Electron has only on macOS or Windows does
 // nothing, as Electron's does on Linux. One Domicile has no stand-in for hands the app back to its
 // own Electron when called, naming the API; see `unsupported` in main.ts.
-// Reads of what not even Electron has are logged, for the app's developer.
+// Reads of what not even Electron has are logged at debug, for the app's
+// developer.
 // See "Every API" in docs/architecture/ELECTRON-APPS.md.
 
 import { ELECTRON_INSTANCES, ELECTRON_SURFACE } from "./surface";
@@ -25,8 +26,13 @@ const PROBED = new Set([
 type Hooks = {
   /** Gives up on running the app here; never returns. */
   readonly unsupported: (why: string) => never;
-  /** Logs what the app reached for, once per name. */
+  /** Logs what the app reached for that Domicile doesn't have, once per name. */
   readonly warn: (why: string) => void;
+  /**
+   * Logs what the app reached for that not even Electron has on Linux, once
+   * per name, for the app's developer. Electron gives the same `undefined`.
+   */
+  readonly absent: (why: string) => void;
 };
 
 /** A stand-in for `module.member` that hands the app back when called. */
@@ -57,10 +63,10 @@ export const completeElectron = (
   hooks: Hooks,
 ) => {
   const warned = new Set<string>();
-  const warnOnce = (name: string, why: string) => {
+  const once = (name: string, say: (why: string) => void, why: string) => {
     if (!warned.has(name)) {
       warned.add(name);
-      hooks.warn(`${app} reached for ${name}, which ${why}`);
+      say(`${app} reached for ${name}, which ${why}`);
     }
   };
   for (const [name, { elsewhere, kind, methods, properties }] of Object.entries(
@@ -101,8 +107,9 @@ export const completeElectron = (
         Object.defineProperty(module, property, {
           configurable: true,
           get: () => {
-            warnOnce(
+            once(
               `${name}.${property}`,
+              hooks.warn,
               "Domicile's Electron doesn't have yet",
             );
             return undefined;
@@ -120,8 +127,9 @@ export const completeElectron = (
                 !PROBED.has(key) &&
                 !(key in target)
               ) {
-                warnOnce(
+                once(
                   `${name}.${key}`,
+                  hooks.absent,
                   `Electron ${ELECTRON_VERSION} doesn't have on Linux`,
                 );
               }

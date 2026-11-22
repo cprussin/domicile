@@ -93,3 +93,30 @@ fn a_stream_sends_its_header_then_the_childs_lines() {
     assert_eq!(text, "emacs\n\n6\n1\n0\n0\n0\nStarting Emacs daemon.\n");
     let _ = std::fs::remove_dir_all(directory);
 }
+
+#[test]
+fn a_child_given_a_stream_writes_to_it_and_is_told_it_is_the_journal() {
+    // As systemd does for a service, so the child can tell its stderr is the
+    // journal and prefix its lines with their priority.
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let path = directory.path().join("stdout");
+    let listener = std::os::unix::net::UnixListener::bind(&path).unwrap();
+    let mut child = std::process::Command::new("sh");
+    child.args([
+        "-c",
+        r#"stat -L -c '%d:%i' /proc/self/fd/1; echo "$JOURNAL_STREAM" >&2"#,
+    ]);
+    journal::give_stream(&mut child, &path, "element-desktop").unwrap();
+    let status = child.status().unwrap();
+    drop(child);
+    assert!(status.success());
+    let (mut heard, _) = listener.accept().unwrap();
+    let mut text = String::new();
+    std::io::Read::read_to_string(&mut heard, &mut text).unwrap();
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines[0], "element-desktop");
+    assert_eq!(
+        lines[7], lines[8],
+        "JOURNAL_STREAM names the child's stream"
+    );
+}
