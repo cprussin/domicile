@@ -239,7 +239,14 @@ path:
 domicile ./my-desktop/dist/shell.js
 ```
 
-- Pass the module, not the directory. A directory is refused.
+- Or pass the directory, with the module named in its `package.json`, as a
+  package does:
+
+  ```json
+  { "domicile": { "shell": "dist/shell.js" } }
+  ```
+
+  A directory with no `domicile.shell` is refused.
 - Files next to the module are served. Nothing above its directory is.
 
 `domicile` can also build a shell from source:
@@ -253,8 +260,9 @@ domicile @domicile-desktop/manganese     # Domicile's own, prebuilt
 
 - `domicile load-shell` and a JSON config's `shell` take the same forms.
   Relative paths resolve from the working directory, or from the config file.
-- A `.js` with no bare imports is a bundle and is served as is. Any other
-  `.js`, `.ts` or `.tsx` is an entry and is built.
+- A `.js` with no bare imports is a bundle and is served as is. So is one the
+  nearest `package.json` names in `domicile.shell`. Any other `.js`, `.ts` or
+  `.tsx` is an entry and is built.
 - An entry's packages go in the nearest `package.json` and `bun.lock` above
   it, created next to it if there are none.
 - `@domicile-desktop/*` and React always come from the running Domicile.

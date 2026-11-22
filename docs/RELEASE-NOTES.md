@@ -44,6 +44,7 @@ Grouped `--help`, `domicile help <command>` for usage and examples, and man page
 
 ### Also new
 
+- A local shell can name its prebuilt module in `package.json` as a package does, `"domicile": { "shell": "dist/shell.js" }`, and `domicile ./my-desktop` serves it without a build. [Distributing](SHELL-PACKAGING.md#distributing) · [#2468](https://github.com/cprussin/domicile/issues/2468)
 - `domicile.shell.links(["mailto"])` claims a scheme's links: `domicile open`, apps' links (`xdg-open`, `xdg-email`), pages' `mailto:` links and the Email portal hand them to the shell instead of an app. [Links](WRITING-A-SHELL.md#links)
 - `clipboard.remove(id)` drops a clipboard history entry; removing the `current` one empties the clipboard. [System access](SHELL-SYSTEM-ACCESS.md)
 - Spell checking in pages and Electron apps, in the languages of `spellcheck`. A context menu event over a misspelling carries `misspelledWord`, `spellingSuggestions` and `replaceMisspelling()`, and runs `add-to-dictionary`. [`spellcheck`](SHELL-CONFIG.md#spelling) · [Context menus](SHELL-BROWSER-WINDOWS.md#the-keyboard)

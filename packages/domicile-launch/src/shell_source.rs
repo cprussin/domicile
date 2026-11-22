@@ -17,7 +17,8 @@ use oxc_allocator::Allocator;
 use oxc_parser::Parser;
 use oxc_span::SourceType;
 
-use crate::shell_path::{shell_module, Shell, ShellPathError};
+use crate::shell_manifest::is_declared_shell;
+use crate::shell_path::{located_module, Shell, ShellPathError};
 
 /// Where a shell comes from.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,8 +39,10 @@ const OURS: &str = "@domicile-desktop/";
 
 /// Classifies `argument`.
 ///
-/// Paths follow [`shell_module`]'s rules. `read` returns a file's text, used
-/// to tell a bundle from a JavaScript entry.
+/// Paths follow [`shell_module`](crate::shell_path::shell_module)'s rules. `read` returns a file's text, used
+/// to tell a bundle from a JavaScript entry. A module the nearest
+/// `package.json` names in `"domicile": { "shell": ... }` is prebuilt and
+/// never built.
 pub fn shell_source(
     argument: &str,
     handed_in: Option<&str>,
@@ -60,13 +63,15 @@ pub fn shell_source(
             return Ok(ShellSource::Package(argument.to_string()));
         }
     }
-    let shell = shell_module(argument, handed_in, here, home, exists)?;
+    let (shell, declared) = located_module(argument, handed_in, here, home, exists, read)?;
     let file = shell.root.join(&shell.module);
-    Ok(if needs_building(&file, read) {
-        ShellSource::Entry(file)
-    } else {
-        ShellSource::Module(shell)
-    })
+    Ok(
+        if !declared && !is_declared_shell(&file, read)? && needs_building(&file, read) {
+            ShellSource::Entry(file)
+        } else {
+            ShellSource::Module(shell)
+        },
+    )
 }
 
 /// Whether `argument` names a package: a `github:` or `npm:` prefix, a scope,

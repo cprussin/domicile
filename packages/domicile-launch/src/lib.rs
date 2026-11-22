@@ -97,6 +97,7 @@ pub mod redact;
 pub mod restart;
 pub mod serving;
 pub mod session;
+mod shell_manifest;
 mod shell_options;
 pub mod shell_path;
 pub mod shell_source;
