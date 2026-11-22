@@ -191,10 +191,11 @@ Other rules:
 - **Dependencies:** the bundle must contain everything. Nothing resolves at
   run time and there is no `node_modules`. Vite's browser build does this by
   default.
-- **Theme flash:** nothing paints before `Shell` returns, and `domicile.theme`
-  can be `null` for a few milliseconds. Either paint in a default theme and
-  switch on the first `themechanged`, or paint in the last theme you saw
-  (manganese does this) and correct on the first `themechanged`.
+- **Theme flash:** the screen stays black until `Shell` returns, and
+  `domicile.theme` can be `null` for a few milliseconds. Either paint in a
+  default theme and switch on the first `themechanged`, or paint in the last
+  theme you saw (manganese does this) and correct on the first
+  `themechanged`.
 
 ## Scripts
 
