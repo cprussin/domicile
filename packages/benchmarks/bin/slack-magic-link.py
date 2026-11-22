@@ -13,6 +13,7 @@ import re
 import sys
 from typing import NoReturn
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
 
 WORKSPACE = os.environ["BENCH_SLACK_WORKSPACE"]
@@ -52,10 +53,15 @@ with sync_playwright() as playwright:
     # It never fires `load`: it navigates to the app scheme first.
     page.goto(f"{BASE}/ssb/redirect", wait_until="commit")
     page.wait_for_timeout(5_000)
-    if "sign_in" in page.url or "signin" in page.url:
+    # A signed-out session lands on the sign-in page, or on the workspace's
+    # front page with the page it wanted in `redir`.
+    if any(part in page.url for part in ("sign_in", "signin", "redir=")):
         fail(page, "BENCH_SLACK_COOKIE isn't a signed-in session")
     if found() is None:
-        page.get_by_text("Open Slack", exact=True).first.click()
+        try:
+            page.get_by_text("Open Slack", exact=True).first.click(timeout=30_000)
+        except PlaywrightTimeout:
+            fail(page, "Slack gave no magic-login link and no 'Open Slack' button")
         page.wait_for_timeout(5_000)
     link = found()
     if link is None:

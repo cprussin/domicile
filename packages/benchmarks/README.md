@@ -10,7 +10,8 @@ bun packages/benchmarks/src/main.ts results
 ```
 
 `benchmarks.yml` runs every desktop on GitHub's runners when started by hand,
-or with `host: crux` one at a time on crux's GPU (see below).
+or with `host: crux` one at a time on crux's GPU (see below), holding both of
+crux's runners so no other CI shares the machine.
 
 ## Desktops
 
@@ -61,6 +62,8 @@ and the engines' GPU flags as proof of what drew.
 `BENCH_SLACK_WORKSPACE` and a signed-in browser's `d` cookie in
 `BENCH_SLACK_COOKIE`, then fetches the one-time `slack://` link that signs the
 desktop app in. A password sign-in from a fresh machine asks for an emailed
-code, so the cookie stands in for it. On failure it prints the page's text
+code, so the cookie stands in for it. The cookie expires: when the run says
+it "isn't a signed-in session", sign in to the workspace in a browser and
+set the secret to its new `d` cookie. On failure it prints the page's text
 and saves a screenshot to `BENCH_SLACK_DEBUG`, never its HTML, which holds the
 session's tokens.
