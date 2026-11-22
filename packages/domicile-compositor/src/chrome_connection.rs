@@ -785,7 +785,7 @@ fn read_chrome_messages(
             // `Host` decides focus and the seat follows its answer, so the
             // keyboard and the page always agree on the focused window.
             Ok(ChromeMessage::FocusApp { app_id }) => {
-                let (out, holder) = {
+                let (out, holder, window) = {
                     let mut host = hub.host.lock().unwrap();
                     let out = apply_chrome_message(
                         &mut host,
@@ -794,9 +794,10 @@ fn read_chrome_messages(
                             app_id: app_id.clone(),
                         },
                     );
-                    (out, host.focus_holder())
+                    let window = host.window_under_popups(&app_id).to_string();
+                    (out, host.focus_holder(), window)
                 };
-                if holder.as_deref() != Some(app_id.as_str()) {
+                if holder.as_deref() != Some(window.as_str()) {
                     debug!(app_id = %app_id, "keyboard focus -> a window this compositor does not know; the keyboard stays where it was");
                 }
                 hub.send_request(ClientRequest::KeyboardFocus { app_id: holder });

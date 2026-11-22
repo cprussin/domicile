@@ -965,6 +965,25 @@ fn a_popup_is_announced_as_its_own_app_over_its_window() {
         .is_none());
 }
 
+/// A press on a menu belongs to the window under it, so focusing a menu (or a
+/// submenu) focuses that window and the menu's grab holds.
+#[test]
+fn focusing_a_popup_focuses_its_window() {
+    let mut host = Host::new();
+    let window = drawn(&mut host);
+    let (menu, _) = host
+        .popup_placed(&window, (12.0, 30.0), (180.0, 240.0), true)
+        .unwrap();
+    let (submenu, _) = host
+        .popup_placed(&menu, (180.0, 0.0), (100.0, 100.0), true)
+        .unwrap();
+
+    host.handle_chrome_message(ChromeMessage::FocusApp { app_id: submenu })
+        .unwrap();
+
+    assert_eq!(host.focus_holder(), Some(window));
+}
+
 #[test]
 fn a_popup_moved_is_placed_again_and_closed_like_a_window() {
     let mut host = Host::new();

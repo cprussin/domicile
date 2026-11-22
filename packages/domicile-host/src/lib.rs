@@ -894,6 +894,15 @@ impl Host {
             .collect()
     }
 
+    /// The window under the popup `app_id`, however many popups deep, or
+    /// `app_id` itself if it names no popup.
+    pub fn window_under_popups<'a>(&'a self, app_id: &'a str) -> &'a str {
+        match self.popups.get(app_id) {
+            Some(popup) => self.window_under_popups(&popup.parent),
+            None => app_id,
+        }
+    }
+
     /// Whether the chromes have heard of the window `app_id`.
     fn is_announced(&self, app_id: &str) -> bool {
         self.apps
@@ -1157,11 +1166,14 @@ impl Host {
                 // size.
             }
             ChromeMessage::FocusApp { app_id } => {
-                // Any mapped window can take focus. See `Scene::focus_app`.
-                if !self.apps.contains_key(&app_id) {
+                // Any mapped window can take focus. See `Scene::focus_app`. A
+                // popup's window takes it for the popup: a press on a menu is
+                // a press in its window, and the menu's grab holds.
+                let window = self.window_under_popups(&app_id).to_string();
+                if !self.apps.contains_key(&window) {
                     return Err(HostError::UnknownApp(app_id));
                 }
-                self.scene.focus_app(&app_id);
+                self.scene.focus_app(&window);
             }
             ChromeMessage::FocusChrome => {
                 self.scene.focus_chrome();

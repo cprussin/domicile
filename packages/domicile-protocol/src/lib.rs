@@ -260,7 +260,8 @@ pub enum ChromeMessage {
         size: [f64; 2],
     },
 
-    /// Request keyboard focus for an app.
+    /// Request keyboard focus for an app. A popup's id focuses the window
+    /// under it, and an open menu keeps the keyboard.
     FocusApp { app_id: String },
 
     /// Return keyboard focus to the chrome.

@@ -271,6 +271,40 @@ fn a_grabbing_popup_goes_when_the_keyboard_leaves_its_window() {
     );
 }
 
+/// A shell can focus a menu's own `<app>` on a press there. The menu stays, so
+/// the press reaches it.
+#[test]
+fn a_grabbing_popup_stays_when_the_keyboard_moves_to_it() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let mut client = compositor.client_with("a window with a menu", &["--popup-grab"]);
+    let HostMessage::PopupPlaced { app_id: popup, .. } = popup_of(&mut chrome) else {
+        unreachable!("the wait matched on this variant")
+    };
+    let surface = popup_surface(&mut client);
+
+    chrome
+        .say(&ChromeMessage::FocusApp {
+            app_id: popup.clone(),
+        })
+        .expect("the chrome can move the keyboard");
+    // Answered after the focus, so the focus has been handled once it arrives.
+    chrome
+        .say(&ChromeMessage::PointerMotion {
+            app_id: popup,
+            x: 1.0,
+            y: 1.0,
+            moved: true,
+        })
+        .expect("the chrome can move the pointer");
+    assert!(client.wait_for_trace(&format!("{surface}, 1, 1)"), 1));
+    assert!(
+        !client.trace().contains("popup_done()"),
+        "the menu went when the keyboard moved to it:\n{}",
+        client.trace()
+    );
+}
+
 /// A box as the chrome is told it: its position and its size.
 fn placement((x, y, width, height): (i32, i32, i32, i32)) -> ([f64; 2], [f64; 2]) {
     (
