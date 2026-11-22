@@ -1,6 +1,6 @@
-//! A hangup of the terminal ends the wait for an exit, as a stop request does,
-//! and points stdout and stderr at `/dev/null`: logging out of a tty login
-//! hangs up the launcher's terminal.
+//! `SIGHUP` ends the wait for an exit, as a stop request does, and points
+//! stdout and stderr at `/dev/null`: a logout sends it to every process in the
+//! login session.
 //!
 //! Its own test binary, since the interrupt is process-wide and would end
 //! every other test's wait too.

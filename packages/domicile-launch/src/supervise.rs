@@ -373,8 +373,9 @@ static INTERRUPT_WRITE: AtomicI32 = AtomicI32::new(-1);
 /// `/dev/null`, opened by [`catch_interrupts`] for [`note_the_hangup`].
 static DEV_NULL: AtomicI32 = AtomicI32::new(-1);
 
-/// A hangup is a stop, and the terminal is gone: stdout and stderr go to
-/// `/dev/null` so writes during the teardown don't fail with `EIO` and panic.
+/// A hangup is a stop, and what stdout and stderr wrote to (the tty, or the
+/// display manager's `systemd-cat`) is ending with the session: they go to
+/// `/dev/null` so writes during the teardown don't fail and panic.
 extern "C" fn note_the_hangup(signal: libc::c_int) {
     // SAFETY: `dup2` is async-signal-safe. `errno` is put back for the code
     // the signal interrupted.
@@ -409,10 +410,10 @@ extern "C" fn note_the_interrupt(_signal: libc::c_int) {
 ///
 /// Components run in their own process groups, so Ctrl-C reaches only this
 /// process. Without a handler it would die before `Running::drop` stopped
-/// them and before the graphical session ended. Logging out of a tty login
-/// sends `SIGTERM`, then hangs up the terminal, which sends `SIGHUP` to this
-/// process, the foreground group. The handler sets a flag, which the wait
-/// loops check, and wakes [`Running::until_one_exits`].
+/// them and before the graphical session ended. A logout, from a display
+/// manager or a tty, sends `SIGTERM` and then `SIGHUP` to every process in the
+/// login session (logind's scopes have `SendSIGHUP=yes`). The handler sets a
+/// flag, which the wait loops check, and wakes [`Running::until_one_exits`].
 ///
 /// Panics if the pipe or `/dev/null` cannot be opened.
 pub fn catch_interrupts() {
