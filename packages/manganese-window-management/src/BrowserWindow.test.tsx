@@ -42,6 +42,7 @@ import { css } from "../styled-system/css";
 import { BrowserWindow } from "./BrowserWindow";
 import { CROSSING } from "./placement";
 import { recordedSettles } from "./recorded-settles";
+import { SlidingScreen } from "./sliding-screen";
 
 /** A desktop whose system calls these tests never answer. */
 const fakeDesk = new FakeDomicileHost().domicile;
@@ -321,6 +322,39 @@ const nothingEnded = () => {
 };
 
 describe("BrowserWindow", () => {
+  // A float hanging off its screen would slide into view beside its
+  // workspace.
+  it("clips itself to its workspace while a switch slides it", () => {
+    render(
+      <SlidingScreen value={{ height: 1000, width: 1280, x: 0, y: 0 }}>
+        <BrowserWindow
+          behindPanel={false}
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          motion="leaving-to-start"
+          onDescription={noDescription}
+          onFocusRequest={() => undefined}
+          onIcon={noIcon}
+          onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          resizing={false}
+          url="https://example.com"
+          window="1"
+        />
+      </SlidingScreen>,
+    );
+
+    expect(browser().style.clip).toBe("rect(-32px, 1280px, 968px, 0px)");
+  });
+
   describe("its corners", () => {
     usesStylesheet();
 

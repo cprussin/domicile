@@ -8,7 +8,7 @@ import { PopupBoundary } from "@domicile-desktop/component-library/PopupBoundary
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import type { ReactElement, PointerEvent as ReactPointerEvent } from "react";
-import { useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
 
 import { css, cva, cx } from "../styled-system/css";
 import { hstack, vstack } from "../styled-system/patterns";
@@ -17,6 +17,7 @@ import { endsOwnAnimation } from "./own-animation";
 import { CROSSING, raised } from "./placement";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
+import { SlidingScreen } from "./sliding-screen";
 import type { TitleFocus } from "./title-focus";
 import type { StripPlace, TabLayout } from "./tree/frames";
 import { Layout } from "./tree/node";
@@ -28,6 +29,7 @@ import type { WindowMotion } from "./window-motion";
 import { isLeaving, isMoving } from "./window-motion";
 import {
   clickThroughStyles,
+  clippedAlong,
   collapsedAlong,
   edgeStyles,
   heldStyles,
@@ -214,6 +216,7 @@ export const TitleBar = ({
     strip?.open === true ? raised(windowDepth) : windowDepth;
   const shownDepth = shownAt(depth);
   const lowered = useLowered(shownDepth);
+  const sliding = useContext(SlidingScreen);
   useSettling({
     element,
     origin,
@@ -277,6 +280,7 @@ export const TitleBar = ({
       ref={element}
       style={{
         ...placedAt(rect, shownDepth),
+        ...clippedAlong(sliding, rect),
         ...originAt(origin),
         ...shuffledBy(restack),
         ...collapsedAlong(tabbed),

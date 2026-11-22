@@ -439,7 +439,8 @@ with windows, and the shown one.
   (`DrawnWindow.rewound`). The backdrop fades with the slides.
 - Workspace switch: the new workspace slides in; the old one slides out.
   Each window is clipped to its screen meanwhile, so it never shows on the
-  next one.
+  next one, and to its workspace, so a float hanging off the screen never
+  slides into view.
 - Tab switch: crossfade. On a workspace sliding in, the tab switched to
   slides with it instead. Parts first drawn partway through (a hidden tab's
   contents, the strip it opens) start where the slide has got to
@@ -533,6 +534,9 @@ Rules:
   compositor applies to client surfaces too. Parts are `position: absolute`
   so the wrapper's clip reaches them; the wrapper has no `z-index`, so each
   part still stacks by its own.
+- Each part also clips itself to its workspace (`clippedAlong`), with `clip`
+  in its own box so the clip moves with the slide. The wrapper hands it the
+  screen through `SlidingScreen` while a switch slides it.
 - Durations live in the Panda tokens only. The shell waits for each CSS
   animation's end event.
 

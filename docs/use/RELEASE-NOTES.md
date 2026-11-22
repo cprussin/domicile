@@ -65,6 +65,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 
 ### Fixes
 
+- Switching workspaces keeps a floating window that hangs off the screen on its own workspace, instead of sliding its off-screen part into view.
 - The screen stays black from the boot screen until the desktop draws, instead of flashing white. [#2467](https://github.com/cprussin/domicile/issues/2467)
 - Menus, tooltips and dialogs show over a fullscreen window, such as Claude's menu button in fullscreen.
 - Menus, panels and tooltips close when the overview, a fullscreen window or the scratchpad moves or covers what they belong to, instead of floating out of place.

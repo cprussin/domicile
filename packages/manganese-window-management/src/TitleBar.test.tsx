@@ -12,6 +12,7 @@ import { css } from "../styled-system/css";
 import { CROSSING, raised } from "./placement";
 import { recordedSettles } from "./recorded-settles";
 import { SettleHandoffs } from "./SettleHandoffs";
+import { SlidingScreen } from "./sliding-screen";
 import { TitleBar } from "./TitleBar";
 import type { StripPlace } from "./tree/frames";
 import { Layout } from "./tree/node";
@@ -194,6 +195,18 @@ describe("TitleBar's icon", () => {
 });
 
 describe("TitleBar", () => {
+  // A float hanging off its screen would slide into view beside its
+  // workspace.
+  it("clips itself to its workspace while a switch slides it", () => {
+    const { container } = render(
+      <SlidingScreen value={{ height: 1000, width: 1280, x: 0, y: 0 }}>
+        <TitleBar {...barProps} motion="leaving-to-start" />
+      </SlidingScreen>,
+    );
+
+    expect(bar(container).style.clip).toBe("rect(-32px, 1280px, 968px, 0px)");
+  });
+
   it("plays the motion the window it names is playing", () => {
     const { container } = render(<TitleBar {...barProps} motion="opening" />);
 

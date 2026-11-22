@@ -8,11 +8,13 @@ import { seenAt, seenClip, seenStyles } from "./overview/seen-styles";
 import type { Seen } from "./overview/sight";
 import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
+import { SlidingScreen } from "./sliding-screen";
 import type { WindowMotion } from "./window-motion";
 import {
   clippedTo,
   screenClipStyles,
   slidAcross,
+  slidingAcross,
   unedgedOn,
 } from "./window-styles";
 
@@ -77,7 +79,8 @@ const KEY_DELIVERED = new Set([
  *
  * Takes no space, stacking or pointer of its own (see `screenClipStyles`).
  * Its children inherit the slide distances and tab edge from it, and it clips
- * them to their screen during a workspace switch. In the overview, it shows
+ * them to their screen during a workspace switch. Each part also clips itself
+ * to its workspace then (see `clippedAlong`). In the overview, it shows
  * them through their workspace's tile.
  */
 export const WindowFrame = ({
@@ -144,7 +147,13 @@ export const WindowFrame = ({
         })}
         style={seenAt(seen, screen)}
       >
-        <PopupBoundary box={frame}>{children}</PopupBoundary>
+        <SlidingScreen
+          value={
+            screen === undefined ? undefined : slidingAcross(screen, motion)
+          }
+        >
+          <PopupBoundary box={frame}>{children}</PopupBoundary>
+        </SlidingScreen>
       </div>
     </div>
   );

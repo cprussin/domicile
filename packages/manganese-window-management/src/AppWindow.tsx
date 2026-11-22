@@ -8,7 +8,7 @@ import {
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { WindowState } from "@domicile-desktop/sdk/window-state";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 
 import { css, cx } from "../styled-system/css";
 import { AppPopup } from "./AppPopup";
@@ -17,6 +17,7 @@ import { CROSSING, raised } from "./placement";
 import type { WindowPopup } from "./popup";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
+import { SlidingScreen } from "./sliding-screen";
 import { useLowered } from "./useLowered";
 import { usePointerConfinement } from "./usePointerConfinement";
 import type { Settler } from "./useSettling";
@@ -27,6 +28,7 @@ import { isLeaving, isMoving, isSlidingIn } from "./window-motion";
 import {
   bottomCornerStyles,
   clickThroughStyles,
+  clippedAlong,
   contentsScaledAbout,
   edgeStyles,
   heldStyles,
@@ -189,6 +191,7 @@ export const AppWindow = ({
   // its layout effect reads it.
   const box = useRef<HTMLDivElement>(null);
   const lowered = useLowered(depth);
+  const sliding = useContext(SlidingScreen);
   // The box the window eases from, while it settles.
   const [settlingFrom, setSettlingFrom] = useState<Rect | undefined>(undefined);
   // Its popups, which ease along with it.
@@ -364,7 +367,11 @@ export const AppWindow = ({
         style={
           rect === undefined || frame === undefined
             ? undefined
-            : { ...placedAt(rect, depth), ...moved }
+            : {
+                ...placedAt(rect, depth),
+                ...clippedAlong(sliding, rect),
+                ...moved,
+              }
         }
       >
         <app
@@ -403,7 +410,11 @@ export const AppWindow = ({
           data-motion={motion}
           inert={leaving}
           ref={layer}
-          style={{ ...placedAt(rect, raised(depth)), ...moved }}
+          style={{
+            ...placedAt(rect, raised(depth)),
+            ...clippedAlong(sliding, rect),
+            ...moved,
+          }}
         >
           {popups.map((popup) => (
             <AppPopup key={popup.appId} popup={popup} />

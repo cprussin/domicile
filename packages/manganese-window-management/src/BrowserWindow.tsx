@@ -34,7 +34,14 @@ import {
   WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
 import type { FocusEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { css, cx } from "../styled-system/css";
 import { flex } from "../styled-system/patterns";
 import { AddressBar } from "./browser/AddressBar";
@@ -72,6 +79,7 @@ import { endsOwnAnimation } from "./own-animation";
 import { CROSSING } from "./placement";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
+import { SlidingScreen } from "./sliding-screen";
 import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useLoading } from "./useLoading";
 import { useLoadProgress } from "./useLoadProgress";
@@ -90,6 +98,7 @@ import { isLeaving, isMoving, isSlidingIn } from "./window-motion";
 import {
   bottomCornerStyles,
   clickThroughStyles,
+  clippedAlong,
   contentsScaledAbout,
   edgeStyles,
   heldStyles,
@@ -288,6 +297,7 @@ export const BrowserWindow = ({
   // into a new box. A ref because only effects read it.
   const element = useRef<HTMLElement>(null);
   const lowered = useLowered(depth);
+  const sliding = useContext(SlidingScreen);
   // The box the window eases from, while it settles.
   const [settlingFrom, setSettlingFrom] = useState<Rect | undefined>(undefined);
   useSettling({
@@ -801,6 +811,7 @@ export const BrowserWindow = ({
           ? undefined
           : {
               ...placedAt(rect, depth),
+              ...clippedAlong(sliding, rect),
               ...contentsScaledAbout(motion, frame, tab, rect),
               ...shuffledBy(restack),
             }

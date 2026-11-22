@@ -39,6 +39,7 @@ import { SelectionTint } from "./SelectionTint";
 import { SettleHandoffs } from "./SettleHandoffs";
 import type { StageScreen } from "./screens/stage-screens";
 import { useShared } from "./screens/useShared";
+import { SlidingScreen } from "./sliding-screen";
 import { TabStrip } from "./TabStrip";
 import type { Aim, DropTargets, TabTarget, Target } from "./tiled/aim";
 import { bordersOf } from "./tiled/borders";
@@ -63,7 +64,12 @@ import type { ShellWindow } from "./window";
 import { browserIdOf, WindowKind } from "./window";
 import type { WindowMotion } from "./window-motion";
 import { barMotion } from "./window-motion";
-import { clippedTo, screenClipStyles, slidAcross } from "./window-styles";
+import {
+  clippedTo,
+  screenClipStyles,
+  slidAcross,
+  slidingAcross,
+} from "./window-styles";
 
 type Props = {
   /** The window the user is working in. */
@@ -1392,7 +1398,8 @@ const ContainerTab = memo(
 
 /**
  * Gives its children the distances that slide `frame` off screen `on`, and
- * clips them to it during a workspace switch. See `screenClipStyles`. In the
+ * clips them to it during a workspace switch, outside and inside the slide
+ * (see `clippedAlong`). See `screenClipStyles`. In the
  * overview, shows them through their tile; see `seenAt`.
  */
 const Sliding = ({
@@ -1432,7 +1439,15 @@ const Sliding = ({
       })}
       style={seenAt(seen, on?.geometry.screen)}
     >
-      {children}
+      <SlidingScreen
+        value={
+          on === undefined
+            ? undefined
+            : slidingAcross(on.geometry.screen, motion)
+        }
+      >
+        {children}
+      </SlidingScreen>
     </div>
   </div>
 );
