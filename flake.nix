@@ -453,6 +453,7 @@
       #   bin/domicile-compositor
       #   bin/domicile-open-url       what `BROWSER` names inside a desktop
       #   bin/domicile-xdg-open       what `xdg-open` is inside a desktop
+      #   bin/domicile-xdg-email      what `xdg-email` is inside a desktop
       #   bin/domicile-history        opens the History app
       #   bin/domicile-settings       opens the Settings app
       #   bin/domicile-app-host       what Domicile's apps spawn for the
@@ -509,8 +510,10 @@
         cp ${domicileBinaries}/bin/domicile-compositor "$out/bin/domicile-compositor"
         # `BROWSER` inside a desktop. Copied for the same reason as above.
         cp ${domicileBinaries}/bin/domicile-open-url "$out/bin/domicile-open-url"
-        # `xdg-open` inside a desktop, first on every app's PATH.
+        # `xdg-open` and `xdg-email` inside a desktop, first on every app's
+        # PATH.
         cp ${domicileBinaries}/bin/domicile-xdg-open "$out/bin/domicile-xdg-open"
+        cp ${domicileBinaries}/bin/domicile-xdg-email "$out/bin/domicile-xdg-email"
         # Opens the History app. Copied for the same reason as above.
         cp ${domicileBinaries}/bin/domicile-history "$out/bin/domicile-history"
         # Opens the Settings app. Copied for the same reason.
@@ -710,7 +713,7 @@
         cargoBuildFlags = [
           "-p" "domicile-compositor" "--bin" "domicile-compositor"
           "-p" "domicile-recorder" "--bin" "domicile-recorder"
-          "-p" "domicile-launch" "--bin" "domicile" "--bin" "domicile-open-url" "--bin" "domicile-xdg-open" "--bin" "domicile-history" "--bin" "domicile-settings" "--bin" "domicile-app-host"
+          "-p" "domicile-launch" "--bin" "domicile" "--bin" "domicile-open-url" "--bin" "domicile-xdg-open" "--bin" "domicile-xdg-email" "--bin" "domicile-history" "--bin" "domicile-settings" "--bin" "domicile-app-host"
           "-p" "domicile-miracast" "--bin" "domicile-miracast"
         ];
 

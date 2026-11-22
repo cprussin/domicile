@@ -1094,7 +1094,7 @@ Manganese draws it over the page it pauses
 
 ## Links for applications
 
-A link for an application, such as `zoommtg:` or `mailto:`, fires
+A link for an application, such as `zoommtg:`, fires
 `domicile-external-app` instead of Chrome's "Open xdg-open?" dialog:
 
 <!-- tab: React -->
@@ -1137,7 +1137,10 @@ frame.addEventListener(WEBVIEW_EXTERNAL_APP_EVENT, (event) => {
 - **`open(remember)`:** launches the scheme's default application. With
   `remember` and `mayRemember` (secure sites only), the site opens these links
   without asking from then on.
-- **Not fired** for a blocked scheme or a site already remembered.
+- **Not fired** for a blocked scheme or a site already remembered, or for
+  `mailto:`, which Chrome opens without asking through `xdg-email`. A shell
+  that claims `mailto:` gets it from `domicile.shell.links`
+  ([Links](WRITING-A-SHELL.md#links)).
 - **One at a time.** A newer one replaces the open one, which opens nothing
   and fires `domicile-external-app-withdrawn`.
 

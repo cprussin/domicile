@@ -1788,6 +1788,12 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         "xdg-open",
         &binary.with_file_name("domicile-xdg-open"),
     )?;
+    // Chromium runs `xdg-email` for a page's `mailto:` link.
+    shim(
+        &places.shims,
+        "xdg-email",
+        &binary.with_file_name("domicile-xdg-email"),
+    )?;
     // This desktop's own `domicile`, whatever is installed: the launcher
     // asks it what `open` would run.
     shim(&places.shims, "domicile", &binary)?;

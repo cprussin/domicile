@@ -905,9 +905,10 @@ claimed.match({
 });
 ```
 
-- Links come from `domicile open`, and so `xdg-open` and apps' links, and from
-  the Email portal (`appId` names the app that asked).
-- A page's link (`<webview>`'s `WEBVIEW_EXTERNAL_APP_EVENT`) still goes to the
+- Links come from `domicile open`, and so `xdg-open`, `xdg-email` and apps'
+  links, and from the Email portal (`appId` names the app that asked).
+- A page's `mailto:` link opens through `xdg-email`, so it comes here too.
+- A page's other links (`<webview>`'s `WEBVIEW_EXTERNAL_APP_EVENT`) go to the
   page's listener. Handle claimed schemes there too.
 - The page that claimed a scheme last gets its links. `stop()` gives them
   back to the apps.

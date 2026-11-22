@@ -63,6 +63,7 @@ pub mod dev;
 pub mod electron_app;
 pub mod electron_schemes;
 pub mod electron_wrapper;
+pub mod email;
 pub mod engine_log;
 pub mod engine_log_levels;
 pub mod extensions;

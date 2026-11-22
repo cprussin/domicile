@@ -209,7 +209,10 @@ fn run(
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let again = matches!(program.as_str(), "xdg-open" | "domicile-xdg-open")
+    let again = matches!(
+        program.as_str(),
+        "xdg-open" | "domicile-xdg-open" | "xdg-email" | "domicile-xdg-email"
+    )
         // `open --app` opens an app window, and `open --electron` runs an
         // Electron app, not the type's default.
         || (program == "domicile"

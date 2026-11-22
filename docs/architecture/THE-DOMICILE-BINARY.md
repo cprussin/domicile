@@ -421,8 +421,13 @@ Several desktops per session:
   to `domicile-xdg-open`, which runs `domicile open`. Web links open in this
   desktop regardless of `mimeapps.list`; anything else opens with its type's
   default, as the launcher's Enter does.
+- Its `xdg-email` links to `domicile-xdg-email`, which runs `domicile open`
+  on the `mailto:` link its arguments make. A shell that claims `mailto:`
+  gets the link.
 - The engine gets the same `PATH` and `XDG_DATA_DIRS`, so a page's app link
-  (`slack:`, `zoommtg:`) opens the app its "Open …?" prompt named.
+  (`slack:`, `zoommtg:`) opens the app its "Open …?" prompt named, and a
+  page's `mailto:` link, which Chromium opens with `xdg-email` without
+  asking, reaches the shell that claims it.
 - `domicile open` picks the handler itself, then has the compositor start it
   as the launcher would: the desktop's environment, its own scope, and an
   activation token. Whoever asked, such as the engine, may lack those.

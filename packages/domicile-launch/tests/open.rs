@@ -222,6 +222,23 @@ fn a_handler_that_would_open_it_again_is_an_error() {
 }
 
 #[test]
+fn a_mail_handler_that_runs_xdg_email_is_an_error() {
+    // The desktop's `xdg-email` is `domicile open` too.
+    let desk = desk();
+    fs::write(
+        desk.path().join("applications/mailer.desktop"),
+        app("xdg-email %u", "x-scheme-handler/mailto;"),
+    )
+    .unwrap();
+    let places = places(desk.path(), "x-scheme-handler/mailto=mailer.desktop\n");
+
+    assert!(matches!(
+        opening("mailto:a@example.com", Path::new("/"), &places),
+        Err(OpenError::Loop { .. })
+    ));
+}
+
+#[test]
 fn a_handler_that_opens_an_app_window_is_no_loop() {
     let desk = desk();
     fs::write(

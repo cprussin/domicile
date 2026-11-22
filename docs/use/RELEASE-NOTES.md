@@ -32,7 +32,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 
 ### Also new
 
-- Email links ask which Gmail inbox or alias to write from, then open a new message in that inbox. Each Gmail account signs in once more, for its aliases. [Notifications](NOTIFICATIONS.md#inboxes)
+- Email links, in apps and on web pages, ask which Gmail inbox or alias to write from, then open a new message in that inbox. Each Gmail account signs in once more, for its aliases. [Notifications](NOTIFICATIONS.md#inboxes)
 - Remove a copy from the clipboard history with its Remove button or the Delete key. Removing what is on your clipboard empties it. [Clipboard](CLIPBOARD.md)
 - Spell checking in every text field: right-click a misspelled word for suggestions, or add it to your dictionary. [Spelling](BROWSER.md#spelling)
 - Drag text, a link or an image onto a group's tabs to open it in a new tab there. [The browser](BROWSER.md)

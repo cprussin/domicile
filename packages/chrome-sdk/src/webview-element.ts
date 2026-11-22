@@ -506,15 +506,16 @@ export const WEBVIEW_DIALOG_EVENT = "domicile-dialog";
 export const WEBVIEW_DIALOG_WITHDRAWN_EVENT = "domicile-dialog-withdrawn";
 
 /**
- * Fired when the page opens a link for an application, such as `zoommtg:` or
- * `mailto:`, that the browser would ask about. Nothing opens until it is
- * answered. Bubbles.
+ * Fired when the page opens a link for an application, such as `zoommtg:`,
+ * that the browser would ask about. Nothing opens until it is answered.
+ * Bubbles.
  *
  * The browser draws no dialog. Call `preventDefault()` to handle it, then
  * answer with {@link DomicileExternalAppEvent.open} or
  * {@link DomicileExternalAppEvent.dismiss}. If no listener calls
  * `preventDefault()`, nothing opens. A site the user let open these links
- * without asking, and a blocked scheme, fire nothing.
+ * without asking, a blocked scheme, and `mailto:`, which the browser opens
+ * without asking through `xdg-email`, fire nothing.
  */
 export const WEBVIEW_EXTERNAL_APP_EVENT = "domicile-external-app";
 

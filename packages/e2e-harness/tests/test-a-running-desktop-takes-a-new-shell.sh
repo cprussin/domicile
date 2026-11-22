@@ -427,6 +427,14 @@ else
   echo "      is not $TARGET/debug/domicile-xdg-open"
   FAILED=1
 fi
+# Chromium runs `xdg-email` for a page's `mailto:` link.
+if [ "$(readlink "$SHIMS/xdg-email")" = "$TARGET/debug/domicile-xdg-email" ]; then
+  echo "PASS: $SHIMS/xdg-email"
+else
+  echo "FAIL: the first directory on the apps' PATH is '$SHIMS', and its xdg-email"
+  echo "      is not $TARGET/debug/domicile-xdg-email"
+  FAILED=1
+fi
 if [ "$(readlink "$SHIMS/domicile-app-host")" = "$TARGET/debug/domicile-app-host" ]; then
   echo "PASS: $SHIMS/domicile-app-host, which Domicile's apps spawn"
 else

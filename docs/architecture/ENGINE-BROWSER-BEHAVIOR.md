@@ -119,11 +119,13 @@ Patch `0110`:
 
 ## Links for applications
 
-- A link for an application (`zoommtg:`, `mailto:`) asks the shell
+- A link for an application (`zoommtg:`) asks the shell
   (`domicile-external-app`), not Chrome's dialog. Chrome's dialog anchors to
   the outermost WebContents, which for a guest is the shell's own window.
 - Patch `0176` adds `ExternalProtocolHandler::SetDialogOverride`;
   `chrome/browser/domicile/domicile_external_apps.h` sets it.
+- Chrome opens `mailto:` without asking, through `xdg-email`, which is
+  `domicile open` (see [THE-DOMICILE-BINARY.md](THE-DOMICILE-BINARY.md#opening-links)).
 - Chrome still decides whether to ask: blocked schemes open nothing, a
   remembered site opens at once. "Always allow" is Chrome's, in the profile.
 - A page outside any guest opens nothing.

@@ -53,8 +53,9 @@ pub struct Runtime {
     pub control: PathBuf,
     /// The engine profile, kept between runs. See [`crate::profile_path`].
     pub profile: PathBuf,
-    /// A per-run directory put first on every app's `PATH`. Its `xdg-open` is
-    /// `domicile-xdg-open`, which runs `domicile open`; see [`crate::open`].
+    /// A per-run directory put first on every app's `PATH`. Its `xdg-open` and
+    /// `xdg-email` are `domicile-xdg-open` and `domicile-xdg-email`, which run
+    /// `domicile open`; see [`crate::open`] and [`crate::email`].
     pub shims: PathBuf,
     /// The session file the compositor writes once it is serving.
     ///
