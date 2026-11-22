@@ -479,9 +479,10 @@ The engine draws every pointer on a tty, including a window's, from
   nearest loaded size stands in; before any has loaded, the pointer is
   Chromium's.
 - The engine logs these at `ERROR`, which reaches the journal:
-  `the pointer is Chromium's until "<theme>" at <size> px loads`,
   `has no cursor for type <n>`, `no cursor theme "<theme>" on the XCursor
-  path`, and `the desk names no pointer theme`.
+  path`, and `the desk names no pointer theme`. Chromium's pointer while the
+  first size loads is a debug line, `the pointer is Chromium's until
+  "<theme>" at <size> px loads`.
 - A cursor larger than the GPU's cursor plane, often 64 or 256 pixels, is
   cut off.
 

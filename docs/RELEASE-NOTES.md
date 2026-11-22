@@ -86,6 +86,8 @@ Grouped `--help`, `domicile help <command>` for usage and examples, and man page
 ### Fixes
 
 - Quiet logs: turning up one subsystem shows only its engine lines, pages' and extensions' consoles stay out unless everything is up, and apps the desktop starts log under their own names. [Levels](LOGGING.md#levels) · [Names](LOGGING.md#names)
+- A page that has never drawn, such as a new page or an empty ad frame, no longer logs as stalled; a page that drew and stopped still does.
+- The pointer theme loading on start no longer logs errors; a missing theme or cursor still does. [Theme](SHELL-CONFIG.md#theme)
 - Loud failures: software rendering, a stuck fullscreen page and a checked engine each notify and log. [#2071](https://github.com/cprussin/domicile/pull/2071) · [#2088](https://github.com/cprussin/domicile/pull/2088) · [#2051](https://github.com/cprussin/domicile/pull/2051)
 - `PortalDialogs` animates a dialog out once answered. `AppChooser` takes `open` and `onOpenChangeComplete` to do the same. [Dialogs and portals](PORTALS.md)
 - Captures the engine can't take fail at once. [#2184](https://github.com/cprussin/domicile/pull/2184)
