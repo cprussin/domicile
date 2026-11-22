@@ -96,7 +96,7 @@ released versions. To ship a site fix without a release, merge it to main,
 then run **Site** (`site.yml`) with its main commit(s):
 
 - Picks each onto `site` with `cherry-pick -x` (`.github/scripts/site-sync.sh`).
-- Each release resets `site` to `release` and picks again only the fixes the
+- Each release merges `release` onto `site`, picking again only the fixes the
   release lacks.
 - Refuses a commit not on main, and a commit on `site` that is no pick.
 
