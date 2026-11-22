@@ -90,6 +90,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 - "Open Slack" and other buttons that open an app from a page work again.
 - A key bound to a program that isn't installed says so in a notification instead of doing nothing.
 - Logging out ends Miracast casting, instead of leaving it running into your next session.
+- Logging out of a desk started from a text console (tty) ends its programs, such as Miracast casting, instead of leaving them running into your next login.
 - Agents can start programs, drag on pages, and press Enter by typing a new line.
 - The tray's menu of every icon opens after you drag icons around. A right click anywhere on an app's row opens its menu, and long extension names are cut short instead of pushing their buttons out.
 - Extensions keep their sign-ins and settings when the desktop restarts, instead of starting over.

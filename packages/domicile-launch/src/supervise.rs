@@ -370,6 +370,24 @@ static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 static INTERRUPT_READ: AtomicI32 = AtomicI32::new(-1);
 static INTERRUPT_WRITE: AtomicI32 = AtomicI32::new(-1);
 
+/// `/dev/null`, opened by [`catch_interrupts`] for [`note_the_hangup`].
+static DEV_NULL: AtomicI32 = AtomicI32::new(-1);
+
+/// A hangup is a stop, and the terminal is gone: stdout and stderr go to
+/// `/dev/null` so writes during the teardown don't fail with `EIO` and panic.
+extern "C" fn note_the_hangup(signal: libc::c_int) {
+    // SAFETY: `dup2` is async-signal-safe. `errno` is put back for the code
+    // the signal interrupted.
+    unsafe {
+        let errno = *libc::__errno_location();
+        let null = DEV_NULL.load(Ordering::Relaxed);
+        libc::dup2(null, libc::STDOUT_FILENO);
+        libc::dup2(null, libc::STDERR_FILENO);
+        *libc::__errno_location() = errno;
+    }
+    note_the_interrupt(signal);
+}
+
 extern "C" fn note_the_interrupt(_signal: libc::c_int) {
     INTERRUPTED.store(true, Ordering::Relaxed);
     // SAFETY: `write` is async-signal-safe. The end is non-blocking, so a
@@ -386,14 +404,17 @@ extern "C" fn note_the_interrupt(_signal: libc::c_int) {
     }
 }
 
-/// Makes `SIGINT` and `SIGTERM` end the run instead of killing this process.
+/// Makes `SIGINT`, `SIGTERM` and `SIGHUP` end the run instead of killing this
+/// process.
 ///
 /// Components run in their own process groups, so Ctrl-C reaches only this
 /// process. Without a handler it would die before `Running::drop` stopped
-/// them. The handler sets a flag, which the wait loops check, and wakes
-/// [`Running::until_one_exits`].
+/// them and before the graphical session ended. Logging out of a tty login
+/// sends `SIGTERM`, then hangs up the terminal, which sends `SIGHUP` to this
+/// process, the foreground group. The handler sets a flag, which the wait
+/// loops check, and wakes [`Running::until_one_exits`].
 ///
-/// Panics if the pipe cannot be opened, which only fd exhaustion causes.
+/// Panics if the pipe or `/dev/null` cannot be opened.
 pub fn catch_interrupts() {
     let mut ends = [0; 2];
     // SAFETY: `ends` has room for the two fds `pipe2` writes.
@@ -407,14 +428,24 @@ pub fn catch_interrupts() {
     // Open for the life of the process: the handler may fire at any time.
     INTERRUPT_READ.store(ends[0], Ordering::Relaxed);
     INTERRUPT_WRITE.store(ends[1], Ordering::Relaxed);
-    for signal in [libc::SIGINT, libc::SIGTERM] {
-        // SAFETY: `note_the_interrupt` touches one atomic and nothing else,
-        // which is what a handler is permitted to do.
+    // SAFETY: the path is a NUL-terminated C string.
+    let null = unsafe { libc::open(c"/dev/null".as_ptr(), libc::O_WRONLY | libc::O_CLOEXEC) };
+    assert!(
+        null >= 0,
+        "opening /dev/null failed: {}",
+        std::io::Error::last_os_error()
+    );
+    DEV_NULL.store(null, Ordering::Relaxed);
+    let handlers: [(libc::c_int, extern "C" fn(libc::c_int)); 3] = [
+        (libc::SIGINT, note_the_interrupt),
+        (libc::SIGTERM, note_the_interrupt),
+        (libc::SIGHUP, note_the_hangup),
+    ];
+    for (signal, handler) in handlers {
+        // SAFETY: the handlers call only async-signal-safe functions and
+        // touch only atomics.
         unsafe {
-            libc::signal(
-                signal,
-                note_the_interrupt as *const () as libc::sighandler_t,
-            );
+            libc::signal(signal, handler as *const () as libc::sighandler_t);
         }
     }
 }
