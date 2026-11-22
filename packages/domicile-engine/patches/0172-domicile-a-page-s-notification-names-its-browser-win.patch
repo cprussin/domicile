@@ -29,10 +29,10 @@ job builds it on `crux`. guard-notification-window.sh covers it.
  5 files changed, 49 insertions(+)
 
 diff --git a/chrome/browser/notifications/BUILD.gn b/chrome/browser/notifications/BUILD.gn
-index a447581..f6ece22 100644
+index 3a220f9..5948541 100644
 --- a/chrome/browser/notifications/BUILD.gn
 +++ b/chrome/browser/notifications/BUILD.gn
-@@ -338,6 +338,10 @@ source_set("impl") {
+@@ -340,6 +340,10 @@ source_set("impl") {
        deps += [
          "//chrome/app/theme:chrome_unscaled_resources_grit",
          "//chrome/browser/themes",
@@ -41,13 +41,13 @@ index a447581..f6ece22 100644
 +        # notification came from.
 +        "//components/domicile:notification_window",
        ]
-     }
-   }
+ 
+       if (use_glib && use_gio) {
 diff --git a/chrome/browser/notifications/notification_platform_bridge_linux.cc b/chrome/browser/notifications/notification_platform_bridge_linux.cc
-index 66f17ec..27e973b 100644
+index 5c20e20..9f6ec4f 100644
 --- a/chrome/browser/notifications/notification_platform_bridge_linux.cc
 +++ b/chrome/browser/notifications/notification_platform_bridge_linux.cc
-@@ -69,6 +69,7 @@
+@@ -70,6 +70,7 @@
  #include "components/dbus/utils/read_value.h"
  #include "components/dbus/utils/variant.h"
  #include "components/dbus/xdg/portal.h"
@@ -55,7 +55,7 @@ index 66f17ec..27e973b 100644
  #include "components/url_formatter/elide_url.h"
  #include "content/public/browser/browser_task_traits.h"
  #include "content/public/browser/browser_thread.h"
-@@ -132,6 +133,8 @@ const char kCapabilityPersistence[] = "persistence";
+@@ -141,6 +142,8 @@ const char kCapabilityPersistence[] = "persistence";
  const char kCapabilityXKdeOriginName[] = "x-kde-origin-name";
  const char kCapabilityXKdeReplyPlaceholderText[] =
      "x-kde-reply-placeholder-text";
@@ -64,7 +64,7 @@ index 66f17ec..27e973b 100644
  
  // Button IDs.
  const char kCloseButtonId[] = "close";
-@@ -1090,6 +1093,18 @@ class NotificationPlatformBridgeLinuxImpl : public NotificationPlatformBridge {
+@@ -1175,6 +1178,18 @@ class NotificationPlatformBridgeLinuxImpl : public NotificationPlatformBridge {
            dbus_utils::Variant::Wrap<"s">(std::move(context_display_text)));
      }
  

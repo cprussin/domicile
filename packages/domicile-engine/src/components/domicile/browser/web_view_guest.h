@@ -826,7 +826,7 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // Asks the shell whether to send the page's form again. See kResendForm in
   // the mojom. Content's default does nothing, so the reload never happens.
-  void ShowRepostFormWarningDialog(content::WebContents* source) override;
+  bool ShowRepostFormWarningDialog(content::WebContents* source) override;
 
   // Asks the shell whether to end a page that stopped responding, and
   // withdraws it when the page responds again. See kUnresponsive in the mojom.

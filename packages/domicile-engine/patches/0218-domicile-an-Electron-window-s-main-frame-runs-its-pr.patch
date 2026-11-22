@@ -33,7 +33,7 @@ index cb340c1..34907c7 100644
      "//components/facilitated_payments/core/features",
      "//components/feed:feature_list",
 diff --git a/chrome/renderer/chrome_content_renderer_client.cc b/chrome/renderer/chrome_content_renderer_client.cc
-index c048758..8bd462e 100644
+index f99854e..5a1ce37 100644
 --- a/chrome/renderer/chrome_content_renderer_client.cc
 +++ b/chrome/renderer/chrome_content_renderer_client.cc
 @@ -5,6 +5,7 @@
@@ -56,7 +56,7 @@ index c048758..8bd462e 100644
    auto content_settings_delegate =
        std::make_unique<ChromeContentSettingsAgentDelegate>(render_frame);
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
-@@ -1562,6 +1568,13 @@ ChromeContentRendererClient::CreateSpeechRecognitionClient(
+@@ -1560,6 +1566,13 @@ ChromeContentRendererClient::CreateSpeechRecognitionClient(
  
  void ChromeContentRendererClient::RunScriptsAtDocumentStart(
      content::RenderFrame* render_frame) {
@@ -70,7 +70,7 @@ index c048758..8bd462e 100644
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
    extensions::ExtensionsRendererClient::Get()->RunScriptsAtDocumentStart(
        render_frame);
-@@ -1571,6 +1584,14 @@ void ChromeContentRendererClient::RunScriptsAtDocumentStart(
+@@ -1569,6 +1582,14 @@ void ChromeContentRendererClient::RunScriptsAtDocumentStart(
  
  void ChromeContentRendererClient::RunScriptsAtDocumentEnd(
      content::RenderFrame* render_frame) {

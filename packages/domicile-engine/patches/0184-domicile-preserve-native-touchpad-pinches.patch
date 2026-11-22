@@ -447,7 +447,7 @@ index 9236885..abd90ab 100644
  };
  
 diff --git a/ui/events/ozone/evdev/event_factory_evdev.cc b/ui/events/ozone/evdev/event_factory_evdev.cc
-index d7107e2..70f4665 100644
+index 7d147d2..92306a5 100644
 --- a/ui/events/ozone/evdev/event_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/event_factory_evdev.cc
 @@ -3,7 +3,6 @@
@@ -456,9 +456,9 @@ index d7107e2..70f4665 100644
  #include "ui/events/ozone/evdev/event_factory_evdev.h"
 -#include "ui/events/domicile/scroll_metadata.h"
  
+ #include <optional>
  #include <utility>
- 
-@@ -18,6 +17,8 @@
+@@ -20,6 +19,8 @@
  #include "ui/events/devices/keyboard_device.h"
  #include "ui/events/devices/microphone_mute_switch_monitor.h"
  #include "ui/events/devices/touchpad_device.h"
@@ -467,7 +467,7 @@ index d7107e2..70f4665 100644
  #include "ui/events/event_utils.h"
  #include "ui/events/ozone/device/device_event.h"
  #include "ui/events/ozone/device/device_manager.h"
-@@ -389,6 +390,9 @@ void EventFactoryEvdev::DispatchPinchEvent(const PinchEventParams& params) {
+@@ -416,6 +417,9 @@ void EventFactoryEvdev::DispatchPinchEvent(const PinchEventParams& params) {
    }
    GestureEvent event(params.location.x(), params.location.y(), 0,
                       params.timestamp, details);

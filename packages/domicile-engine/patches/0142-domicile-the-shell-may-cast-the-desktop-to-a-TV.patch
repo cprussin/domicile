@@ -18,7 +18,7 @@ job builds it on `crux`.
  3 files changed, 19 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 3b6cc17..7fd608f 100644
+index 0182048..649bd0a 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -7,6 +7,7 @@
@@ -29,7 +29,7 @@ index 3b6cc17..7fd608f 100644
  #include "chrome/browser/domicile/domicile_extension_tray.h"
  #include "chrome/browser/domicile/domicile_pointer_warp.h"
  #include "chrome/browser/domicile/domicile_shell_fetch.h"
-@@ -673,6 +674,21 @@ void PopulateChromeFrameBinders(
+@@ -701,6 +702,21 @@ void PopulateChromeFrameBinders(
          domicile::BindBrowserWindows(frame, std::move(receiver));
        }));
  

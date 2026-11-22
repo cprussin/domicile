@@ -61,7 +61,7 @@ index eaeae25..b938e08 100644
    for (auto& chrome_extra_part : chrome_extra_parts_) {
      chrome_extra_part->PostProfileInit(profile, is_initial_profile);
 diff --git a/chrome/browser/extensions/BUILD.gn b/chrome/browser/extensions/BUILD.gn
-index 0a65e15..7d1b2de 100644
+index 2e1c0d7..1e9ce4b 100644
 --- a/chrome/browser/extensions/BUILD.gn
 +++ b/chrome/browser/extensions/BUILD.gn
 @@ -275,6 +275,8 @@ source_set("extensions") {

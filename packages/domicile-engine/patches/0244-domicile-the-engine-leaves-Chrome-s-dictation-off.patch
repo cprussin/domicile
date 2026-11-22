@@ -22,10 +22,10 @@ job builds it on `crux`.
  1 file changed, 22 deletions(-)
 
 diff --git a/testing/variations/fieldtrial_testing_config.json b/testing/variations/fieldtrial_testing_config.json
-index 5edb15c..9ba4662 100644
+index 61f4047..f5c4526 100644
 --- a/testing/variations/fieldtrial_testing_config.json
 +++ b/testing/variations/fieldtrial_testing_config.json
-@@ -7495,28 +7495,6 @@
+@@ -7478,28 +7478,6 @@
              ]
          }
      ],

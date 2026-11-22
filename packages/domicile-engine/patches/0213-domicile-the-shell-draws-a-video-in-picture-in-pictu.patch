@@ -26,7 +26,7 @@ job builds it on `crux`.
  4 files changed, 30 insertions(+), 10 deletions(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 74f7d15..c1c5e6c 100644
+index 1c75e2e..5614094 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -10,6 +10,7 @@
@@ -37,7 +37,7 @@ index 74f7d15..c1c5e6c 100644
  #include "chrome/browser/domicile/domicile_pointer_warp.h"
  #include "chrome/browser/domicile/domicile_shell_fetch.h"
  #include "chrome/browser/domicile/domicile_tab_helpers.h"
-@@ -705,6 +706,23 @@ void PopulateChromeFrameBinders(
+@@ -733,6 +734,23 @@ void PopulateChromeFrameBinders(
          domicile::BindDownloads(frame, std::move(receiver));
        }));
  
@@ -62,7 +62,7 @@ index 74f7d15..c1c5e6c 100644
    //
    // Gated at BIND time like the browser windows, and for their reason: a page
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 3acda70..4d82e0c 100644
+index 6539d09..0643e8f 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -5,6 +5,7 @@
@@ -73,7 +73,7 @@ index 3acda70..4d82e0c 100644
  #include "components/domicile/browser/force_dark.h"
  #include "components/domicile/browser/shell_source.h"
  #include "components/domicile/browser/shell_url_loader_factory.h"
-@@ -5083,15 +5084,9 @@ void ChromeContentBrowserClient::OverrideWebPreferences(
+@@ -5073,15 +5074,9 @@ void ChromeContentBrowserClient::OverrideWebPreferences(
        web_prefs->preferred_color_scheme ==
            blink::mojom::PreferredColorScheme::kDark);
  
@@ -92,7 +92,7 @@ index 3acda70..4d82e0c 100644
    web_prefs->payment_request_enabled = false;
  
    web_prefs->root_scrollbar_theme_color =
-@@ -7797,7 +7792,9 @@ bool ChromeContentBrowserClient::HandleExternalProtocol(
+@@ -7789,7 +7784,9 @@ bool ChromeContentBrowserClient::HandleExternalProtocol(
  std::unique_ptr<content::VideoOverlayWindow>
  ChromeContentBrowserClient::CreateWindowForVideoPictureInPicture(
      content::VideoPictureInPictureWindowController* controller) {

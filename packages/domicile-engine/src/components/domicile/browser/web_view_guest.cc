@@ -1621,9 +1621,8 @@ void WebViewGuest::Stop() {
 
 void WebViewGuest::Reload() {
   CHECK(guest_contents_);
-  // With `check_for_repost`, reloading a POST result calls content's no-op
-  // ShowRepostFormWarningDialog, so it does nothing instead of reposting
-  // without asking.
+  // With `check_for_repost`, reloading a POST result asks first, through
+  // ShowRepostFormWarningDialog, instead of reposting without asking.
   guest_contents_->GetController().Reload(content::ReloadType::NORMAL,
                                           /*check_for_repost=*/true);
 }
@@ -2288,7 +2287,7 @@ gfx::Point WebViewGuest::PointerInPage(
           gfx::PointF(pointer_))));
 }
 
-void WebViewGuest::ShowRepostFormWarningDialog(content::WebContents* source) {
+bool WebViewGuest::ShowRepostFormWarningDialog(content::WebContents* source) {
   CHECK(guest_contents_);
   AskPrompt(
       mojom::WebViewPrompt::New(
@@ -2314,6 +2313,7 @@ void WebViewGuest::ShowRepostFormWarningDialog(content::WebContents* source) {
             }
           },
           weak_factory_.GetWeakPtr()));
+  return true;
 }
 
 void WebViewGuest::RendererUnresponsive(

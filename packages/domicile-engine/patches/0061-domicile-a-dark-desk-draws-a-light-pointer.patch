@@ -114,7 +114,7 @@ index d5613c8..dae5128 100644
 +
  }  // namespace views
 diff --git a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
-index 9029e3d..fcb66b2 100644
+index 2a6a639..bfb6e8e 100644
 --- a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
 +++ b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
 @@ -24,6 +24,9 @@ class NativeCursorManagerDelegate;
@@ -128,7 +128,7 @@ index 9029e3d..fcb66b2 100644
  // state. Similar to NativeCursorManagerAsh, it also communicates these changes
  // to all root windows.
 @@ -68,7 +71,20 @@ class VIEWS_EXPORT DesktopNativeCursorManager : public wm::NativeCursorManager {
-   using Hosts = std::set<raw_ptr<aura::WindowTreeHost, SetExperimental>>;
+   using Hosts = std::set<raw_ptr<aura::WindowTreeHost>>;
    Hosts hosts_;
  
 +  // Domicile: recolors `cursor_loader_`'s art, and the cursor on screen with

@@ -23,10 +23,10 @@ does not fail closed instead of drawing a Chrome box over the desktop.
  3 files changed, 43 insertions(+)
 
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 8417c2d..64b0f68 100644
+index 5165548..389454d 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -5082,6 +5082,17 @@ void ChromeContentBrowserClient::OverrideWebPreferences(
+@@ -5072,6 +5072,17 @@ void ChromeContentBrowserClient::OverrideWebPreferences(
        web_prefs->preferred_color_scheme ==
            blink::mojom::PreferredColorScheme::kDark);
  

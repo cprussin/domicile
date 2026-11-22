@@ -159,10 +159,10 @@ index 7480180..2e1e117 100644
      "input_device_opener_evdev.cc",
      "input_device_opener_evdev.h",
 diff --git a/ui/events/ozone/evdev/event_factory_evdev.cc b/ui/events/ozone/evdev/event_factory_evdev.cc
-index 8ab5e34..ac47ef3 100644
+index 91bed31..fb52c08 100644
 --- a/ui/events/ozone/evdev/event_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/event_factory_evdev.cc
-@@ -220,9 +220,11 @@ PointerDetails GetTransformedEventPointerDetails(const T& params) {
+@@ -222,9 +222,11 @@ PointerDetails GetTransformedEventPointerDetails(const T& params) {
  
  }  // namespace
  
@@ -177,15 +177,15 @@ index 8ab5e34..ac47ef3 100644
      : device_manager_(device_manager),
        gamepad_provider_(GamepadProviderOzone::GetInstance()),
        keyboard_(
-@@ -236,6 +238,7 @@ EventFactoryEvdev::EventFactoryEvdev(CursorDelegateEvdev* cursor,
-       input_controller_(&keyboard_,
-                         &mouse_button_map_,
+@@ -240,6 +242,7 @@ EventFactoryEvdev::EventFactoryEvdev(CursorDelegateEvdev* cursor,
                          &pointing_stick_button_map_),
+       exclude_dispatch_from_safety_checks_(
+           base::FeatureList::IsEnabled(kExcludeEvdevDispatchFromSafetyChecks)),
 +      opener_factory_(std::move(opener_factory)),
        touch_id_generator_(0) {
    CHECK(device_manager_, base::NotFatalUntil::M163);
  }
-@@ -598,7 +601,7 @@ void EventFactoryEvdev::StartThread() {
+@@ -637,7 +640,7 @@ void EventFactoryEvdev::StartThread() {
    thread_.Start(std::move(proxy_dispatcher), cursor_,
                  base::BindOnce(&EventFactoryEvdev::OnThreadStarted,
                                 weak_ptr_factory_.GetWeakPtr()),
@@ -195,7 +195,7 @@ index 8ab5e34..ac47ef3 100644
  
  void EventFactoryEvdev::OnThreadStarted(
 diff --git a/ui/events/ozone/evdev/event_factory_evdev.h b/ui/events/ozone/evdev/event_factory_evdev.h
-index c252511..b374fc8 100644
+index afedc60..7dd8822 100644
 --- a/ui/events/ozone/evdev/event_factory_evdev.h
 +++ b/ui/events/ozone/evdev/event_factory_evdev.h
 @@ -17,6 +17,8 @@
@@ -225,9 +225,9 @@ index c252511..b374fc8 100644
  
    EventFactoryEvdev(const EventFactoryEvdev&) = delete;
    EventFactoryEvdev& operator=(const EventFactoryEvdev&) = delete;
-@@ -175,6 +182,9 @@ class COMPONENT_EXPORT(EVDEV) EventFactoryEvdev : public DeviceEventObserver,
-   // Whether we've set up the device factory.
-   bool initialized_ = false;
+@@ -177,6 +184,9 @@ class COMPONENT_EXPORT(EVDEV) EventFactoryEvdev : public DeviceEventObserver,
+ 
+   bool exclude_dispatch_from_safety_checks_ = false;
  
 +  // Handed to the evdev thread when it starts, and run there.
 +  InputDeviceOpenerFactory opener_factory_;

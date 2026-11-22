@@ -29,7 +29,7 @@ job builds it on crux.
  4 files changed, 58 insertions(+), 2 deletions(-)
 
 diff --git a/components/viz/common/frame_sinks/begin_frame_source.cc b/components/viz/common/frame_sinks/begin_frame_source.cc
-index 9b5c568..e7e7beb 100644
+index c455af7..10d5031 100644
 --- a/components/viz/common/frame_sinks/begin_frame_source.cc
 +++ b/components/viz/common/frame_sinks/begin_frame_source.cc
 @@ -14,6 +14,7 @@
@@ -64,7 +64,7 @@ index 9b5c568..e7e7beb 100644
    if (RequestCallbackOnGpuAvailable()) {
      pending_begin_frame_args_ = args;
 @@ -634,11 +648,28 @@ void ExternalBeginFrameSource::OnBeginFrame(const BeginFrameArgs& args) {
-   base::flat_set<raw_ptr<BeginFrameObserver, CtnExperimental>> observers(
+   base::flat_set<raw_ptr<BeginFrameObserver, DanglingUntriaged>> observers(
        observers_);
  
 +  // Domicile: an observer also drops, unanswered, a begin frame older than
@@ -94,7 +94,7 @@ index 9b5c568..e7e7beb 100644
  }
  
 diff --git a/components/viz/common/frame_sinks/begin_frame_source.h b/components/viz/common/frame_sinks/begin_frame_source.h
-index 6c80d23..1de49f7 100644
+index 1a58564..1905da8 100644
 --- a/components/viz/common/frame_sinks/begin_frame_source.h
 +++ b/components/viz/common/frame_sinks/begin_frame_source.h
 @@ -513,6 +513,13 @@ class VIZ_COMMON_EXPORT ExternalBeginFrameSource : public BeginFrameSource {

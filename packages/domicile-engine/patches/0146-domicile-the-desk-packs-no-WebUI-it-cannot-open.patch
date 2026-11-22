@@ -63,7 +63,7 @@ index 264349e..49667d7 100644
  
  #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
 diff --git a/chrome/chrome_paks.gni b/chrome/chrome_paks.gni
-index bcbd188..35a3a06 100644
+index 445d42d..ed2a054 100644
 --- a/chrome/chrome_paks.gni
 +++ b/chrome/chrome_paks.gni
 @@ -170,14 +170,7 @@ template("chrome_extra_paks") {

@@ -59,7 +59,7 @@ index 6b8eed0..eaaf894 100644
    // couldn't go past even the NOW bin, this means we have evicted resources
    // from all tiles with a lower priority while we still might have resources
 diff --git a/cc/trees/layer_tree_host_impl.cc b/cc/trees/layer_tree_host_impl.cc
-index fe9f16d..cd7d97a 100644
+index 1f7f1e4..f6759ad 100644
 --- a/cc/trees/layer_tree_host_impl.cc
 +++ b/cc/trees/layer_tree_host_impl.cc
 @@ -1979,9 +1979,16 @@ void LayerTreeHostImpl::UpdateTileManagerMemoryPolicy(

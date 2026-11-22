@@ -537,7 +537,7 @@ index 88b116e..34461b1 100644
    bool is_drawing_layer_ = false;
  };
 diff --git a/cc/trees/commit_state.h b/cc/trees/commit_state.h
-index 0fd6e14..e550d55 100644
+index cd15505..b5e6e8b 100644
 --- a/cc/trees/commit_state.h
 +++ b/cc/trees/commit_state.h
 @@ -19,6 +19,7 @@
@@ -558,10 +558,10 @@ index 0fd6e14..e550d55 100644
    gfx::OverlayTransform display_transform_hint = gfx::OVERLAY_TRANSFORM_NONE;
    gfx::Rect device_viewport_rect;
 diff --git a/cc/trees/layer_tree_host.cc b/cc/trees/layer_tree_host.cc
-index ca1f195..5ae9fb5 100644
+index d1b8f46..a0f8304 100644
 --- a/cc/trees/layer_tree_host.cc
 +++ b/cc/trees/layer_tree_host.cc
-@@ -1711,6 +1711,14 @@ void LayerTreeHost::SetRecordingScaleFactor(float recording_scale_factor) {
+@@ -1717,6 +1717,14 @@ void LayerTreeHost::SetRecordingScaleFactor(float recording_scale_factor) {
    recording_scale_factor_ = recording_scale_factor;
  }
  
@@ -577,7 +577,7 @@ index ca1f195..5ae9fb5 100644
      const gfx::DisplayColorSpaces& display_color_spaces) {
    if (pending_commit_state()->display_color_spaces == display_color_spaces)
 diff --git a/cc/trees/layer_tree_host.h b/cc/trees/layer_tree_host.h
-index 780484c..f2d96a1 100644
+index d730db4..acd6012 100644
 --- a/cc/trees/layer_tree_host.h
 +++ b/cc/trees/layer_tree_host.h
 @@ -32,6 +32,7 @@
@@ -588,7 +588,7 @@ index 780484c..f2d96a1 100644
  #include "cc/input/browser_controls_offset_tag_modifications.h"
  #include "cc/input/browser_controls_state.h"
  #include "cc/input/compositor_input_interfaces.h"
-@@ -693,6 +694,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostDelegate {
+@@ -703,6 +704,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostDelegate {
      return pending_commit_state()->display_color_spaces;
    }
  
@@ -600,10 +600,10 @@ index 780484c..f2d96a1 100644
      DCHECK(IsMainThread());
      return scroll_animation_.in_progress;
 diff --git a/cc/trees/layer_tree_impl.cc b/cc/trees/layer_tree_impl.cc
-index edb92bc..3c92d4c 100644
+index 09169d3..87351a4 100644
 --- a/cc/trees/layer_tree_impl.cc
 +++ b/cc/trees/layer_tree_impl.cc
-@@ -940,6 +940,7 @@ void LayerTreeImpl::PullLayerTreePropertiesFrom(CommitState& commit_state) {
+@@ -943,6 +943,7 @@ void LayerTreeImpl::PullLayerTreePropertiesFrom(CommitState& commit_state) {
                                      commit_state.bottom_controls_shown_ratio);
  
    SetDisplayColorSpaces(commit_state.display_color_spaces);
@@ -611,7 +611,7 @@ index edb92bc..3c92d4c 100644
    SetExternalPageScaleFactor(commit_state.external_page_scale_factor);
  
    set_painted_device_scale_factor(commit_state.painted_device_scale_factor);
-@@ -1066,6 +1067,7 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
+@@ -1073,6 +1074,7 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
    target_tree->set_overscroll_behavior(overscroll_behavior_);
  
    target_tree->SetDisplayColorSpaces(display_color_spaces_);
@@ -619,7 +619,7 @@ index edb92bc..3c92d4c 100644
  
    target_tree->set_painted_device_scale_factor(painted_device_scale_factor());
    target_tree->SetDeviceScaleFactor(device_scale_factor());
-@@ -1759,6 +1761,15 @@ void LayerTreeImpl::SetDisplayColorSpaces(
+@@ -1766,6 +1768,15 @@ void LayerTreeImpl::SetDisplayColorSpaces(
    display_color_spaces_ = display_color_spaces;
  }
  
@@ -636,7 +636,7 @@ index edb92bc..3c92d4c 100644
      float external_page_scale_factor) {
    if (external_page_scale_factor_ == external_page_scale_factor)
 diff --git a/cc/trees/layer_tree_impl.h b/cc/trees/layer_tree_impl.h
-index 8844b27..889c3c7 100644
+index edfadc8..e0882a6 100644
 --- a/cc/trees/layer_tree_impl.h
 +++ b/cc/trees/layer_tree_impl.h
 @@ -19,6 +19,7 @@
@@ -660,7 +660,7 @@ index 8844b27..889c3c7 100644
    const ViewportPropertyIds& viewport_property_ids() const {
      return viewport_property_ids_;
    }
-@@ -968,6 +975,7 @@ class CC_EXPORT LayerTreeImpl {
+@@ -971,6 +978,7 @@ class CC_EXPORT LayerTreeImpl {
    float device_scale_factor_;
    float painted_device_scale_factor_;
    gfx::DisplayColorSpaces display_color_spaces_;

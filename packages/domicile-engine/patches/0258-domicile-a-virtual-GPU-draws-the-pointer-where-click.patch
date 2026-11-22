@@ -37,7 +37,7 @@ properties have nothing to carry.
  20 files changed, 115 insertions(+), 33 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/common/drm_wrapper.cc b/ui/ozone/platform/drm/common/drm_wrapper.cc
-index 2c3beca7..45e7f81d 100644
+index 2c3beca..45e7f81 100644
 --- a/ui/ozone/platform/drm/common/drm_wrapper.cc
 +++ b/ui/ozone/platform/drm/common/drm_wrapper.cc
 @@ -190,12 +190,13 @@ bool DrmWrapper::MoveCursor(uint32_t crtc_id, const gfx::Point& point) {
@@ -58,7 +58,7 @@ index 2c3beca7..45e7f81d 100644
  
  /************
 diff --git a/ui/ozone/platform/drm/common/drm_wrapper.h b/ui/ozone/platform/drm/common/drm_wrapper.h
-index bb7486b5..650c34cc 100644
+index bb7486b..650c34c 100644
 --- a/ui/ozone/platform/drm/common/drm_wrapper.h
 +++ b/ui/ozone/platform/drm/common/drm_wrapper.h
 @@ -124,9 +124,16 @@ class DrmWrapper {
@@ -80,7 +80,7 @@ index bb7486b5..650c34cc 100644
    /************
     * DRM Master
 diff --git a/ui/ozone/platform/drm/gpu/crtc_controller.cc b/ui/ozone/platform/drm/gpu/crtc_controller.cc
-index b6c83e66..8acf8dd8 100644
+index b6c83e6..8acf8dd 100644
 --- a/ui/ozone/platform/drm/gpu/crtc_controller.cc
 +++ b/ui/ozone/platform/drm/gpu/crtc_controller.cc
 @@ -81,11 +81,13 @@ std::vector<uint64_t> CrtcController::GetFormatModifiers(uint32_t format) {
@@ -102,7 +102,7 @@ index b6c83e66..8acf8dd8 100644
  }
  
 diff --git a/ui/ozone/platform/drm/gpu/crtc_controller.h b/ui/ozone/platform/drm/gpu/crtc_controller.h
-index d91d3b3a..0824f409 100644
+index d91d3b3..0824f40 100644
 --- a/ui/ozone/platform/drm/gpu/crtc_controller.h
 +++ b/ui/ozone/platform/drm/gpu/crtc_controller.h
 @@ -63,7 +63,9 @@ class CrtcController {
@@ -117,7 +117,7 @@ index d91d3b3a..0824f409 100644
  
    // Adds trace records to |context|.
 diff --git a/ui/ozone/platform/drm/gpu/drm_thread.cc b/ui/ozone/platform/drm/gpu/drm_thread.cc
-index 39b026e0..95c52c14 100644
+index 39b026e..95c52c1 100644
 --- a/ui/ozone/platform/drm/gpu/drm_thread.cc
 +++ b/ui/ozone/platform/drm/gpu/drm_thread.cc
 @@ -338,10 +338,12 @@ void DrmThread::SetWindowBounds(gfx::AcceleratedWidget widget,
@@ -135,7 +135,7 @@ index 39b026e0..95c52c14 100644
  
  void DrmThread::MoveCursor(gfx::AcceleratedWidget widget,
 diff --git a/ui/ozone/platform/drm/gpu/drm_thread.h b/ui/ozone/platform/drm/gpu/drm_thread.h
-index b32835b6..aeac0fb0 100644
+index b32835b..aeac0fb 100644
 --- a/ui/ozone/platform/drm/gpu/drm_thread.h
 +++ b/ui/ozone/platform/drm/gpu/drm_thread.h
 @@ -216,6 +216,7 @@ class DrmThread : public base::Thread,
@@ -147,7 +147,7 @@ index b32835b6..aeac0fb0 100644
                   base::TimeDelta frame_delay) override;
    void MoveCursor(gfx::AcceleratedWidget widget,
 diff --git a/ui/ozone/platform/drm/gpu/drm_window.cc b/ui/ozone/platform/drm/gpu/drm_window.cc
-index 7d4e17b7..b597f439 100644
+index 7d4e17b..b597f43 100644
 --- a/ui/ozone/platform/drm/gpu/drm_window.cc
 +++ b/ui/ozone/platform/drm/gpu/drm_window.cc
 @@ -65,9 +65,11 @@ void DrmWindow::SetBounds(const gfx::Rect& bounds) {
@@ -176,7 +176,7 @@ index 7d4e17b7..b597f439 100644
  }
  
 diff --git a/ui/ozone/platform/drm/gpu/drm_window.h b/ui/ozone/platform/drm/gpu/drm_window.h
-index 0ed29432..e82c02f6 100644
+index 0ed2943..e82c02f 100644
 --- a/ui/ozone/platform/drm/gpu/drm_window.h
 +++ b/ui/ozone/platform/drm/gpu/drm_window.h
 @@ -77,8 +77,10 @@ class DrmWindow {
@@ -200,7 +200,7 @@ index 0ed29432..e82c02f6 100644
    int cursor_frame_ = 0;
  
 diff --git a/ui/ozone/platform/drm/gpu/drm_window_unittest.cc b/ui/ozone/platform/drm/gpu/drm_window_unittest.cc
-index 854fc8cb..ad465a5c 100644
+index 854fc8c..ad465a5 100644
 --- a/ui/ozone/platform/drm/gpu/drm_window_unittest.cc
 +++ b/ui/ozone/platform/drm/gpu/drm_window_unittest.cc
 @@ -175,7 +175,7 @@ TEST_F(DrmWindowTest, SetCursorImage) {
@@ -267,7 +267,7 @@ index 854fc8cb..ad465a5c 100644
    DrmOverlayPlaneList planes;
    planes.push_back(DrmOverlayPlane::TestPlane(CreateBuffer()));
 diff --git a/ui/ozone/platform/drm/gpu/fake_drm_device.cc b/ui/ozone/platform/drm/gpu/fake_drm_device.cc
-index 3207cc88..247f69ee 100644
+index 3207cc8..247f69e 100644
 --- a/ui/ozone/platform/drm/gpu/fake_drm_device.cc
 +++ b/ui/ozone/platform/drm/gpu/fake_drm_device.cc
 @@ -815,8 +815,10 @@ bool FakeDrmDevice::SetObjectProperty(uint32_t object_id,
@@ -283,7 +283,7 @@ index 3207cc88..247f69ee 100644
  }
  
 diff --git a/ui/ozone/platform/drm/gpu/fake_drm_device.h b/ui/ozone/platform/drm/gpu/fake_drm_device.h
-index 5ea0f5bc..81fb3e1f 100644
+index 5ea0f5b..81fb3e1 100644
 --- a/ui/ozone/platform/drm/gpu/fake_drm_device.h
 +++ b/ui/ozone/platform/drm/gpu/fake_drm_device.h
 @@ -249,6 +249,11 @@ class FakeDrmDevice : public DrmDevice {
@@ -317,7 +317,7 @@ index 5ea0f5bc..81fb3e1f 100644
    std::set<uint32_t> framebuffer_ids_;
    std::map<uint32_t, uint32_t> crtc_fb_;
 diff --git a/ui/ozone/platform/drm/gpu/hardware_display_controller.cc b/ui/ozone/platform/drm/gpu/hardware_display_controller.cc
-index e940fcae..bbec2ca3 100644
+index e940fca..bbec2ca 100644
 --- a/ui/ozone/platform/drm/gpu/hardware_display_controller.cc
 +++ b/ui/ozone/platform/drm/gpu/hardware_display_controller.cc
 @@ -499,7 +499,9 @@ void HardwareDisplayController::MoveCursor(const gfx::Point& location) {
@@ -341,7 +341,7 @@ index e940fcae..bbec2ca3 100644
  }
  
 diff --git a/ui/ozone/platform/drm/gpu/hardware_display_controller.h b/ui/ozone/platform/drm/gpu/hardware_display_controller.h
-index 1cdf54e7..05124faa 100644
+index 1cdf54e..05124fa 100644
 --- a/ui/ozone/platform/drm/gpu/hardware_display_controller.h
 +++ b/ui/ozone/platform/drm/gpu/hardware_display_controller.h
 @@ -164,8 +164,9 @@ class HardwareDisplayController {
@@ -365,7 +365,7 @@ index 1cdf54e7..05124faa 100644
  
    // Maps each fourcc_format to its preferred modifier which was generated
 diff --git a/ui/ozone/platform/drm/gpu/hardware_display_controller_unittest.cc b/ui/ozone/platform/drm/gpu/hardware_display_controller_unittest.cc
-index c3d8c30d..26d6c3e8 100644
+index c3d8c30..26d6c3e 100644
 --- a/ui/ozone/platform/drm/gpu/hardware_display_controller_unittest.cc
 +++ b/ui/ozone/platform/drm/gpu/hardware_display_controller_unittest.cc
 @@ -1728,15 +1728,15 @@ TEST_F(HardwareDisplayControllerTest, DynamicCursorSize) {
@@ -388,7 +388,7 @@ index c3d8c30d..26d6c3e8 100644
  }
  
 diff --git a/ui/ozone/platform/drm/gpu/hardware_display_plane_manager.cc b/ui/ozone/platform/drm/gpu/hardware_display_plane_manager.cc
-index 6422816d..f228441d 100644
+index 6422816..f228441 100644
 --- a/ui/ozone/platform/drm/gpu/hardware_display_plane_manager.cc
 +++ b/ui/ozone/platform/drm/gpu/hardware_display_plane_manager.cc
 @@ -548,7 +548,8 @@ void HardwareDisplayPlaneManager::UpdateCrtcAndPlaneStatesAfterModeset(
@@ -402,7 +402,7 @@ index 6422816d..f228441d 100644
                      << drm_->device_path().value()
                      << " crtc:" << crtc_request.crtc_id();
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
-index f4f3ac8a..44df3019 100644
+index f4f3ac8..44df301 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.cc
 +++ b/ui/ozone/platform/drm/host/drm_cursor.cc
 @@ -41,6 +41,7 @@ class NullProxy : public DrmCursorProxy {
@@ -449,7 +449,7 @@ index f4f3ac8a..44df3019 100644
  
  void DrmCursor::MoveLockTested(gfx::AcceleratedWidget window,
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.h b/ui/ozone/platform/drm/host/drm_cursor.h
-index 8cab80f7..acec3817 100644
+index 8cab80f..acec381 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.h
 +++ b/ui/ozone/platform/drm/host/drm_cursor.h
 @@ -38,8 +38,11 @@ class DrmCursorProxy {
@@ -473,7 +473,7 @@ index 8cab80f7..acec3817 100644
                             base::TimeDelta frame_delay);
    void MoveLockTested(gfx::AcceleratedWidget window, const gfx::Point& point);
 diff --git a/ui/ozone/platform/drm/host/host_cursor_proxy.cc b/ui/ozone/platform/drm/host/host_cursor_proxy.cc
-index 0efa110a..bf1f7bcb 100644
+index 0efa110..bf1f7bc 100644
 --- a/ui/ozone/platform/drm/host/host_cursor_proxy.cc
 +++ b/ui/ozone/platform/drm/host/host_cursor_proxy.cc
 @@ -40,13 +40,14 @@ HostCursorProxy::~HostCursorProxy() {
@@ -494,7 +494,7 @@ index 0efa110a..bf1f7bcb 100644
  }
  
 diff --git a/ui/ozone/platform/drm/host/host_cursor_proxy.h b/ui/ozone/platform/drm/host/host_cursor_proxy.h
-index 16b7d6f9..8192f1c6 100644
+index 16b7d6f..8192f1c 100644
 --- a/ui/ozone/platform/drm/host/host_cursor_proxy.h
 +++ b/ui/ozone/platform/drm/host/host_cursor_proxy.h
 @@ -37,6 +37,7 @@ class HostCursorProxy : public DrmCursorProxy {
@@ -506,7 +506,7 @@ index 16b7d6f9..8192f1c6 100644
                   base::TimeDelta frame_delay) override;
    void Move(gfx::AcceleratedWidget window, const gfx::Point& point) override;
 diff --git a/ui/ozone/platform/drm/mojom/device_cursor.mojom b/ui/ozone/platform/drm/mojom/device_cursor.mojom
-index 202f25e6..33613cfb 100644
+index 202f25e..33613cf 100644
 --- a/ui/ozone/platform/drm/mojom/device_cursor.mojom
 +++ b/ui/ozone/platform/drm/mojom/device_cursor.mojom
 @@ -14,9 +14,11 @@ import "ui/gfx/mojom/accelerated_widget.mojom";

@@ -230,7 +230,7 @@ index cdbb550..bf09ed2 100644
      static SupportsForTest override_supports_per_window_scaling_for_test;
  
 diff --git a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
-index a9b10b5..b3b2e2d 100644
+index 2ca10f8..6954fee 100644
 --- a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
 +++ b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
 @@ -17,6 +17,7 @@
@@ -390,7 +390,7 @@ index a9b10b5..b3b2e2d 100644
    // error, the converted result may become slightly larger than expected value,
    // such as 3000.0005. Allow error to round down in such case. This is
 diff --git a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
-index e8926ee..54afd9e 100644
+index 6a3589c..bd3a9ed 100644
 --- a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
 +++ b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
 @@ -153,6 +153,8 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform

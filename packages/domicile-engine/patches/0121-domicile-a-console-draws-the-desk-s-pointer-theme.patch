@@ -30,7 +30,7 @@ job builds it on `crux`.
  4 files changed, 47 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 6a46e45..f2cb32d 100644
+index 7c93170..803836d 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -21,6 +21,7 @@
@@ -41,7 +41,7 @@ index 6a46e45..f2cb32d 100644
  
  #include <utility>
  
-@@ -591,6 +592,13 @@ void PopulateChromeFrameBinders(
+@@ -619,6 +620,13 @@ void PopulateChromeFrameBinders(
                          &domicile::InstallExtensionsInto,
                          Profile::FromBrowserContext(frame->GetBrowserContext())
                              ->GetWeakPtr())),
@@ -110,7 +110,7 @@ index dae5128..a13d8c1 100644
    // set and so before there is anything on screen to redraw.
    if (delegate_) {
 diff --git a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
-index fcb66b2..59e423c 100644
+index bfb6e8e..65de2f2 100644
 --- a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
 +++ b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
 @@ -10,6 +10,8 @@

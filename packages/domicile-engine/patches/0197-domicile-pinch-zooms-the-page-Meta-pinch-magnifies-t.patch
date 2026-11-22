@@ -195,10 +195,10 @@ index 790368a..9b7535d 100644
  
  void RenderWidgetHostViewAura::ProcessAckedTouchEvent(
 diff --git a/ui/events/ozone/evdev/event_factory_evdev.cc b/ui/events/ozone/evdev/event_factory_evdev.cc
-index c7e9210..ed6a5ee 100644
+index 6d4111d..baccb52 100644
 --- a/ui/events/ozone/evdev/event_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/event_factory_evdev.cc
-@@ -391,8 +391,10 @@ void EventFactoryEvdev::DispatchPinchEvent(const PinchEventParams& params) {
+@@ -418,8 +418,10 @@ void EventFactoryEvdev::DispatchPinchEvent(const PinchEventParams& params) {
    if (params.type == EventType::kGesturePinchUpdate) {
      details.set_scale(params.scale);
    }

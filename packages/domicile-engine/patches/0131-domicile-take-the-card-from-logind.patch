@@ -291,7 +291,7 @@ index 83b7385..5597a38 100644
         RecreateBuffersOnOldPlanesPageFlipFailure) {
    DrmOverlayPlaneList planes;
 diff --git a/ui/ozone/platform/drm/host/drm_display_host_manager.cc b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-index cbc85f3..6811f97 100644
+index 1daca27..2e1613f 100644
 --- a/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 +++ b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 @@ -111,7 +111,8 @@ base::FilePath MapDevPathToSysPath(const base::FilePath& device_path) {

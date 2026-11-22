@@ -481,10 +481,10 @@ TEST(DrmScreenTest, AnHdrPanelNotAskedForHdrStaysSdr) {
 }
 
 TEST(DrmScreenTest, NoSnapshotsAtAllStillYieldsOnePrimaryDisplay) {
-  // `raw_ptr<T>` and `raw_ptr<T, VectorExperimental>` are distinct types, and
+  // `raw_ptr<T>` and `raw_ptr<T, DanglingUntriaged>` are distinct types, and
   // vectors of them do not convert.
   const std::vector<display::Display> displays = DisplaysFromSnapshots(
-      std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>(), {});
+      std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>>(), {});
 
   ASSERT_EQ(displays.size(), 1u)
       << "a tty with nothing plugged in still has to answer GetPrimaryDisplay";
@@ -492,9 +492,9 @@ TEST(DrmScreenTest, NoSnapshotsAtAllStillYieldsOnePrimaryDisplay) {
 }
 
 // Returns raw pointers to `owned`, as the delegate passes snapshots.
-std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> Pointers(
+std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>> Pointers(
     const std::vector<std::unique_ptr<display::DisplaySnapshot>>& owned) {
-  std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> pointers;
+  std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>> pointers;
   for (const std::unique_ptr<display::DisplaySnapshot>& snapshot : owned) {
     pointers.push_back(snapshot.get());
   }

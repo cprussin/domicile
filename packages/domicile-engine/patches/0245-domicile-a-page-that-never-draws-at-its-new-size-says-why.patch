@@ -29,7 +29,7 @@ job builds it on crux.
  2 files changed, 86 insertions(+)
 
 diff --git a/cc/trees/layer_tree_host.cc b/cc/trees/layer_tree_host.cc
-index c5d9d67..e2c03fb 100644
+index c7b24a4..bc04697 100644
 --- a/cc/trees/layer_tree_host.cc
 +++ b/cc/trees/layer_tree_host.cc
 @@ -465,6 +465,16 @@ std::unique_ptr<CommitState> LayerTreeHost::WillCommit(
@@ -49,7 +49,7 @@ index c5d9d67..e2c03fb 100644
  
    {
      base::AutoReset<bool> in_will_commit(&inside_will_commit_, true);
-@@ -971,6 +981,19 @@ void LayerTreeHost::SetVisible(bool visible) {
+@@ -977,6 +987,19 @@ void LayerTreeHost::SetVisible(bool visible) {
    if (visible_ == visible)
      return;
    visible_ = visible;
@@ -69,7 +69,7 @@ index c5d9d67..e2c03fb 100644
    // If the page becomes invisible, corresponding metrics will be discarded
    // because they are invalid. The metrics will be measured when the page
    // becomes visible again.
-@@ -980,6 +1003,49 @@ void LayerTreeHost::SetVisible(bool visible) {
+@@ -986,6 +1009,49 @@ void LayerTreeHost::SetVisible(bool visible) {
    proxy_->SetVisible(visible);
  }
  
@@ -119,7 +119,7 @@ index c5d9d67..e2c03fb 100644
  bool LayerTreeHost::IsVisible() const {
    DCHECK(IsMainThread());
    return visible_;
-@@ -1046,6 +1112,11 @@ void LayerTreeHost::DidPresentCompositorFrame(
+@@ -1052,6 +1118,11 @@ void LayerTreeHost::DidPresentCompositorFrame(
          successful_presentation_callbacks,
      const viz::FrameTimingDetails& frame_timing_details) {
    DCHECK(IsMainThread());
@@ -131,7 +131,7 @@ index c5d9d67..e2c03fb 100644
    for (auto& callback : presentation_callbacks)
      std::move(callback).Run(frame_timing_details.presentation_feedback);
    for (auto& callback : successful_presentation_callbacks)
-@@ -1570,6 +1641,7 @@ void LayerTreeHost::SetViewportRectAndScale(
+@@ -1576,6 +1647,7 @@ void LayerTreeHost::SetViewportRectAndScale(
            local_surface_id_from_parent &&
        device_viewport_rect_changed) {
      SetTargetLocalSurfaceId(local_surface_id_from_parent);
@@ -140,7 +140,7 @@ index c5d9d67..e2c03fb 100644
  
    if (device_viewport_rect_changed || painted_device_scale_factor_changed ||
 diff --git a/cc/trees/layer_tree_host.h b/cc/trees/layer_tree_host.h
-index d633d91..d1b2dd0 100644
+index 85ad1cf..21527e9 100644
 --- a/cc/trees/layer_tree_host.h
 +++ b/cc/trees/layer_tree_host.h
 @@ -27,6 +27,7 @@
@@ -151,7 +151,7 @@ index d633d91..d1b2dd0 100644
  #include "base/types/optional_ref.h"
  #include "cc/base/completion_event.h"
  #include "cc/benchmarks/micro_benchmark.h"
-@@ -1180,6 +1181,19 @@ class CC_EXPORT LayerTreeHost : public MutatorHostDelegate {
+@@ -1190,6 +1191,19 @@ class CC_EXPORT LayerTreeHost : public MutatorHostDelegate {
    // State cached until impl side is initialized.
    raw_ptr<TaskGraphRunner> task_graph_runner_;
  

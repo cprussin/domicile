@@ -303,7 +303,7 @@ gfx::Size DisplayPhysicalSizeMm(const display::DisplaySnapshot& snapshot) {
 }
 
 std::vector<display::Display> DisplaysFromSnapshots(
-    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+    const std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>>&
         snapshots,
     const std::vector<DomicileDisplayLayout>& layout) {
   if (snapshots.empty()) {
@@ -332,7 +332,7 @@ std::vector<display::Display> DisplaysFromSnapshots(
 }
 
 std::vector<gfx::Point> OriginsForLayout(
-    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+    const std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>>&
         snapshots,
     const std::vector<DomicileDisplayLayout>& layout) {
   // Unplaced connectors start at the right edge of everything the layout
@@ -363,7 +363,7 @@ std::vector<gfx::Point> OriginsForLayout(
 }
 
 size_t PrimaryIndexForLayout(
-    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+    const std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>>&
         snapshots,
     const std::vector<DomicileDisplayLayout>& layout) {
   if (layout.empty()) {
@@ -389,7 +389,7 @@ DrmScreen::DrmScreen(DrmWindowHostManager* window_manager, DrmCursor* cursor)
 DrmScreen::~DrmScreen() = default;
 
 void DrmScreen::OnDisplaysChanged(
-    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+    const std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>>&
         snapshots,
     const std::vector<DomicileDisplayLayout>& layout) {
   // A hotplug sends the whole list, so a display missing from it was

@@ -240,10 +240,10 @@ index d11fe06..5cab996 100644
  #if BUILDFLAG(IS_WIN)
    if (event.native_event().message && event.type() != EventType::kMouseExited) {
 diff --git a/ui/events/ozone/evdev/event_factory_evdev.cc b/ui/events/ozone/evdev/event_factory_evdev.cc
-index ed6a5ee..d6f3c14 100644
+index baccb52..4248d21 100644
 --- a/ui/events/ozone/evdev/event_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/event_factory_evdev.cc
-@@ -19,6 +19,7 @@
+@@ -21,6 +21,7 @@
  #include "ui/events/devices/touchpad_device.h"
  #include "ui/events/domicile/pinch_metadata.h"
  #include "ui/events/domicile/scroll_metadata.h"
@@ -251,7 +251,7 @@ index ed6a5ee..d6f3c14 100644
  #include "ui/events/event_utils.h"
  #include "ui/events/ozone/device/device_event.h"
  #include "ui/events/ozone/device/device_manager.h"
-@@ -299,6 +300,11 @@ void EventFactoryEvdev::DispatchMouseMoveEvent(
+@@ -314,6 +315,11 @@ void EventFactoryEvdev::DispatchMouseMoveEvent(
    event.set_location_f(location);
    event.set_root_location_f(location);
    event.set_source_device_id(params.device_id);

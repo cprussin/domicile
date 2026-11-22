@@ -146,10 +146,10 @@ index fd10b64..c8ca640 100644
      {
        name: "xmp",
 diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-index b8051d1..d7a210d 100644
+index 5927ef0..6c7c7af 100644
 --- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
 +++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-@@ -2836,33 +2836,29 @@
+@@ -2832,33 +2832,29 @@
        name: "DocumentPolicyJSProfilingMode",
        status: "experimental",
      },

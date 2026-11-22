@@ -17,10 +17,10 @@ built here; the engine job builds it on crux.
  1 file changed, 3 insertions(+), 2 deletions(-)
 
 diff --git a/chrome/browser/ui/color/chrome_color_mixer.cc b/chrome/browser/ui/color/chrome_color_mixer.cc
-index 460e9ae..ba35296 100644
+index 8e3c1d6..0095079 100644
 --- a/chrome/browser/ui/color/chrome_color_mixer.cc
 +++ b/chrome/browser/ui/color/chrome_color_mixer.cc
-@@ -859,8 +859,9 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
+@@ -862,8 +862,9 @@ void AddChromeColorMixer(ui::ColorProvider* provider,
        GetToolbarTopSeparatorColorTransform(kColorToolbar,
                                             ui::kColorFrameInactive);
    mixer[kColorSettingsWebuiPageBackground] = {ui::kColorSysSurface2};

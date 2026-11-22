@@ -37,7 +37,7 @@ each hunk applies to was rebuilt from the pin and the patches before it.
  8 files changed, 31 insertions(+), 17 deletions(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 9c2e110..26f0e64 100644
+index eebf9e1..02501b7 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -6,6 +6,7 @@
@@ -48,7 +48,7 @@ index 9c2e110..26f0e64 100644
  #include "chrome/browser/domicile/domicile_extension_tray.h"
  #include "chrome/browser/domicile/domicile_pointer_warp.h"
  #include "chrome/browser/domicile/domicile_tab_helpers.h"
-@@ -641,6 +642,23 @@ void PopulateChromeFrameBinders(
+@@ -669,6 +670,23 @@ void PopulateChromeFrameBinders(
          domicile::BindExtensionTray(frame, std::move(receiver));
        }));
  

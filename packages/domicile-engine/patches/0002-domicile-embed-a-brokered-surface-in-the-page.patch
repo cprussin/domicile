@@ -43,7 +43,7 @@ Edits seven files Chromium owns, five of them Blink's. The design doc's
  7 files changed, 129 insertions(+), 1 deletion(-)
 
 diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
-index 59d88ae..4e599e4 100644
+index 6686394..fc7b4d1 100644
 --- a/content/browser/BUILD.gn
 +++ b/content/browser/BUILD.gn
 @@ -162,8 +162,9 @@ source_set("browser") {
@@ -57,7 +57,7 @@ index 59d88ae..4e599e4 100644
      "//components/download/public/common:public",
      "//components/embedder_support",
      "//components/embedder_support:user_agent",
-@@ -969,6 +970,8 @@ source_set("browser") {
+@@ -967,6 +968,8 @@ source_set("browser") {
      "dom_storage/session_storage_namespace_handle_impl.h",
      "domicile/domicile_frame_sink_broker.cc",
      "domicile/domicile_frame_sink_broker.h",
@@ -286,10 +286,10 @@ index bb366ef..4c89845 100644
      "graphics/filters/distant_light_source.h",
      "graphics/filters/fe_blend.cc",
 diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-index 5a49a1f..9908066 100644
+index 1b8e077..9d2295d 100644
 --- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
 +++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-@@ -2836,6 +2836,16 @@
+@@ -2832,6 +2832,16 @@
        name: "DocumentPolicyJSProfilingMode",
        status: "experimental",
      },

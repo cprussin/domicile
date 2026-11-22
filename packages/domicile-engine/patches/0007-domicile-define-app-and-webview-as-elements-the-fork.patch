@@ -103,10 +103,10 @@ index 338fb76..f4f41cf 100644
    "//third_party/blink/renderer/core/html/html_head_element.idl",
    "//third_party/blink/renderer/core/html/html_heading_element.idl",
 diff --git a/third_party/blink/renderer/core/css/resolver/style_adjuster.cc b/third_party/blink/renderer/core/css/resolver/style_adjuster.cc
-index ea1ad8e..3cd64b7 100644
+index 3066c15..411a62b 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_adjuster.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_adjuster.cc
-@@ -1728,11 +1728,20 @@ StyleAdjuster::ElementTypeForCache StyleAdjuster::GetElementTypeCacheKey(
+@@ -1729,11 +1729,20 @@ StyleAdjuster::ElementTypeForCache StyleAdjuster::GetElementTypeCacheKey(
      case ElementType::kHTMLIFrameElement:
      case ElementType::kHTMLFencedFrameElement:
      case ElementType::kHTMLPersistentWidgetElement:

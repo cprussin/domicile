@@ -61,7 +61,7 @@ index 74dc250..d5980ce 100644
        device_viewport_rect(prev.device_viewport_rect),
        visual_device_viewport_size(prev.visual_device_viewport_size),
 diff --git a/cc/trees/commit_state.h b/cc/trees/commit_state.h
-index e550d55..3471208 100644
+index b5e6e8b..f7296b0 100644
 --- a/cc/trees/commit_state.h
 +++ b/cc/trees/commit_state.h
 @@ -102,6 +102,7 @@ struct CC_EXPORT CommitState {
@@ -73,10 +73,10 @@ index e550d55..3471208 100644
    gfx::OverlayTransform display_transform_hint = gfx::OVERLAY_TRANSFORM_NONE;
    gfx::Rect device_viewport_rect;
 diff --git a/cc/trees/layer_tree_host.cc b/cc/trees/layer_tree_host.cc
-index 5ae9fb5..649d5b2 100644
+index a0f8304..18099d9 100644
 --- a/cc/trees/layer_tree_host.cc
 +++ b/cc/trees/layer_tree_host.cc
-@@ -1719,6 +1719,14 @@ void LayerTreeHost::SetDomicileDisplayRegions(DomicileDisplayRegions regions) {
+@@ -1725,6 +1725,14 @@ void LayerTreeHost::SetDomicileDisplayRegions(DomicileDisplayRegions regions) {
    SetNeedsCommit();
  }
  
@@ -92,10 +92,10 @@ index 5ae9fb5..649d5b2 100644
      const gfx::DisplayColorSpaces& display_color_spaces) {
    if (pending_commit_state()->display_color_spaces == display_color_spaces)
 diff --git a/cc/trees/layer_tree_host.h b/cc/trees/layer_tree_host.h
-index f2d96a1..3965343 100644
+index acd6012..93fa2bc 100644
 --- a/cc/trees/layer_tree_host.h
 +++ b/cc/trees/layer_tree_host.h
-@@ -697,6 +697,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostDelegate {
+@@ -707,6 +707,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostDelegate {
    // DOMICILE: where this page is shown on monitors less dense than it is
    // rastered for. See cc/domicile/display_regions.h.
    void SetDomicileDisplayRegions(DomicileDisplayRegions regions);
@@ -106,7 +106,7 @@ index f2d96a1..3965343 100644
    bool HasCompositorDrivenScrollAnimationForTesting() const {
      DCHECK(IsMainThread());
 diff --git a/cc/trees/layer_tree_host_impl.cc b/cc/trees/layer_tree_host_impl.cc
-index 5efd1e1..ad2a3b3 100644
+index 7b9f649..da5d072 100644
 --- a/cc/trees/layer_tree_host_impl.cc
 +++ b/cc/trees/layer_tree_host_impl.cc
 @@ -4252,6 +4252,9 @@ void LayerTreeHostImpl::SetNeedsRedraw(bool animation_only,
@@ -135,7 +135,7 @@ index 5efd1e1..ad2a3b3 100644
    active_tree_->ReleaseResources();
    if (pending_tree_) {
 diff --git a/cc/trees/layer_tree_host_impl.h b/cc/trees/layer_tree_host_impl.h
-index 96446ee..b98df34 100644
+index cb51b8b..778e151 100644
 --- a/cc/trees/layer_tree_host_impl.h
 +++ b/cc/trees/layer_tree_host_impl.h
 @@ -693,6 +693,9 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,

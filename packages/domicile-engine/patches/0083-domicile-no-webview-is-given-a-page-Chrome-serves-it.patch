@@ -30,10 +30,10 @@ and both blobs are that file's.
  2 files changed, 13 insertions(+)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index cd96fa6..0e21e70 100644
+index 0b8ebc8..cbe74c3 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -1321,6 +1321,11 @@ source_set("core") {
+@@ -1322,6 +1322,11 @@ source_set("core") {
      "//components/data_sharing/public:features",
      "//components/desktop_to_mobile_promos",
      "//components/device_event_log",

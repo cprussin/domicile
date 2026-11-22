@@ -52,10 +52,10 @@ index 2a8f8b5..86df428 100644
    for (auto& chrome_extra_part : chrome_extra_parts_) {
      chrome_extra_part->PostProfileInit(profile, is_initial_profile);
 diff --git a/chrome/browser/notifications/BUILD.gn b/chrome/browser/notifications/BUILD.gn
-index 18de59a..a447581 100644
+index 3ad497b..3a220f9 100644
 --- a/chrome/browser/notifications/BUILD.gn
 +++ b/chrome/browser/notifications/BUILD.gn
-@@ -205,6 +205,10 @@ source_set("impl") {
+@@ -207,6 +207,10 @@ source_set("impl") {
      "//chrome/browser/updates/announcement_notification",
      "//components/content_settings/browser",
      "//components/content_settings/core/browser",
@@ -94,13 +94,13 @@ index a2b8508..5ee2163 100644
    // Extensions can declare the "notifications" permission in their manifest
    // that also grant permission to use the Web Notification API.
 diff --git a/chrome/browser/notifications/notification_platform_bridge_linux.cc b/chrome/browser/notifications/notification_platform_bridge_linux.cc
-index d0fd125..9810511 100644
+index c9dec3c..1de62d5 100644
 --- a/chrome/browser/notifications/notification_platform_bridge_linux.cc
 +++ b/chrome/browser/notifications/notification_platform_bridge_linux.cc
-@@ -317,7 +317,11 @@ bool ShouldMarkPersistentNotificationsAsCritical(
-   // For this reason, we mark a notification that should not time out as
-   // critical unless we are on KDE Plasma or Raspberry Pi (wf-panel-pi)
-   // which follows the notification spec.
+@@ -345,7 +345,11 @@ bool ShouldMarkPersistentNotificationsAsCritical(
+   // For this reason, mark a notification that should not time out as
+   // critical unless on KDE Plasma or Raspberry Pi (wf-panel-pi), which follow
+   // the notification spec.
 -  return server_name != "Plasma" && server_name != "wf-panel-pi";
 +  //
 +  // Domicile's engine fork: so does Domicile's compositor, and its shell

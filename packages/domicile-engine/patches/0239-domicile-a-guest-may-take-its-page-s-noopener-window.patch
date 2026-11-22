@@ -61,10 +61,10 @@ index 91c9f60..3c4239f 100644
    void DidStartNavigation(NavigationHandle* navigation_handle) override;
    void DidFinishNavigation(NavigationHandle* navigation_handle) override;
 diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
-index c6a9a25..7894736 100644
+index 3a2ef76..5f6b5b7 100644
 --- a/content/browser/web_contents/web_contents_impl.cc
 +++ b/content/browser/web_contents/web_contents_impl.cc
-@@ -5839,6 +5839,16 @@ FrameTree* WebContentsImpl::CreateNewWindow(
+@@ -5837,6 +5837,16 @@ FrameTree* WebContentsImpl::CreateNewWindow(
        source_site_instance->GetSecurityPrincipal().IsGuest();
    CHECK(!guest_site_instance || is_guest);
  

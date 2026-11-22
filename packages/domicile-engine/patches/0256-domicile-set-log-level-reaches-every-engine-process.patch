@@ -21,7 +21,7 @@ VLOG patterns, leaking the old ones as `--vmodule` does in tests.
  9 files changed, 38 insertions(+)
 
 diff --git a/base/logging.cc b/base/logging.cc
-index e2506e23..a4c2d2b8 100644
+index e2506e2..a4c2d2b 100644
 --- a/base/logging.cc
 +++ b/base/logging.cc
 @@ -556,6 +556,15 @@ int GetMinLogLevel() {
@@ -41,7 +41,7 @@ index e2506e23..a4c2d2b8 100644
    return g_logging_destination;
  }
 diff --git a/base/logging.h b/base/logging.h
-index 26bed110..829fdd3e 100644
+index 26bed11..829fdd3 100644
 --- a/base/logging.h
 +++ b/base/logging.h
 @@ -231,6 +231,10 @@ BASE_EXPORT void SetMinLogLevel(int level);
@@ -56,10 +56,10 @@ index 26bed110..829fdd3e 100644
  BASE_EXPORT bool ShouldCreateLogMessage(int severity);
  
 diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
-index 5b7a4278..d0517a8b 100644
+index ba0b58f..3c7e8f4 100644
 --- a/content/browser/BUILD.gn
 +++ b/content/browser/BUILD.gn
-@@ -972,6 +972,8 @@ source_set("browser") {
+@@ -970,6 +970,8 @@ source_set("browser") {
      "domicile/domicile_desk.h",
      "domicile/domicile_frame_sink_broker.cc",
      "domicile/domicile_frame_sink_broker.h",
@@ -69,7 +69,7 @@ index 5b7a4278..d0517a8b 100644
      "domicile/domicile_spike_probe.h",
      "download/download_item_utils.cc",
 diff --git a/content/browser/child_process_host_impl.cc b/content/browser/child_process_host_impl.cc
-index dd5da3d9..3290ff2c 100644
+index dd5da3d..3290ff2 100644
 --- a/content/browser/child_process_host_impl.cc
 +++ b/content/browser/child_process_host_impl.cc
 @@ -22,6 +22,7 @@
@@ -89,7 +89,7 @@ index dd5da3d9..3290ff2c 100644
        mojo_invitation_->AttachMessagePipe(
            kChildProcessHostRemoteAttachmentName)));
 diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content/browser/renderer_host/render_process_host_impl.cc
-index cc0f864b..9732e495 100644
+index ea2c83a..f3a2b83 100644
 --- a/content/browser/renderer_host/render_process_host_impl.cc
 +++ b/content/browser/renderer_host/render_process_host_impl.cc
 @@ -102,6 +102,7 @@
@@ -108,7 +108,7 @@ index cc0f864b..9732e495 100644
  
    // We'll bind this receiver to |io_thread_host_impl_| when it is created.
    child_host_pending_receiver_ = mojo::PendingReceiver<mojom::ChildProcessHost>(
-@@ -2627,6 +2629,11 @@ void RenderProcessHostImpl::SetBatterySaverMode(
+@@ -2633,6 +2635,11 @@ void RenderProcessHostImpl::SetBatterySaverMode(
    child_process_->SetBatterySaverMode(battery_saver_mode_enabled);
  }
  
@@ -121,7 +121,7 @@ index cc0f864b..9732e495 100644
  void RenderProcessHostImpl::CreateOOPVideoDecoder(
      mojo::PendingReceiver<media::mojom::VideoDecoder> receiver) {
 diff --git a/content/browser/renderer_host/render_process_host_impl.h b/content/browser/renderer_host/render_process_host_impl.h
-index abe5c132..02225cdb 100644
+index abe5c13..02225cd 100644
 --- a/content/browser/renderer_host/render_process_host_impl.h
 +++ b/content/browser/renderer_host/render_process_host_impl.h
 @@ -382,6 +382,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
@@ -134,7 +134,7 @@ index abe5c132..02225cdb 100644
    bool IsOnlyHostingPrerenderedFramesOrEmpty() override;
    bool HasLoadingFrames() const override;
 diff --git a/content/child/child_thread_impl.cc b/content/child/child_thread_impl.cc
-index 9e10d8c6..2c08e287 100644
+index 9e10d8c..2c08e28 100644
 --- a/content/child/child_thread_impl.cc
 +++ b/content/child/child_thread_impl.cc
 @@ -479,6 +479,13 @@ class ChildThreadImpl::IOThreadState
@@ -152,7 +152,7 @@ index 9e10d8c6..2c08e287 100644
    const base::WeakPtr<ChildThreadImpl> weak_main_thread_;
    const base::RepeatingClosure quit_closure_;
 diff --git a/content/common/child_process.mojom b/content/common/child_process.mojom
-index 049049b4..cf7a6237 100644
+index 049049b..cf7a623 100644
 --- a/content/common/child_process.mojom
 +++ b/content/common/child_process.mojom
 @@ -119,4 +119,8 @@ interface ChildProcess {
@@ -165,7 +165,7 @@ index 049049b4..cf7a6237 100644
 +  SetLogLevels(int32 min_level, string vmodule);
  };
 diff --git a/content/public/browser/BUILD.gn b/content/public/browser/BUILD.gn
-index 81e0d08a..453d1804 100644
+index 81e0d08..453d180 100644
 --- a/content/public/browser/BUILD.gn
 +++ b/content/public/browser/BUILD.gn
 @@ -169,6 +169,7 @@ source_set("browser_sources") {

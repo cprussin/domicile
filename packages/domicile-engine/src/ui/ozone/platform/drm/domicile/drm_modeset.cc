@@ -94,7 +94,7 @@ std::unique_ptr<display::DisplaySnapshot> VirtualSnapshot(
 
 std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
-                              VectorExperimental>>& snapshots,
+                              DanglingUntriaged>>& snapshots,
     const std::vector<DomicileDisplayLayout>& layout,
     const base::flat_set<int64_t>& refused) {
   // Shared with the display list so both agree on each display's origin.
@@ -148,7 +148,7 @@ base::flat_set<int64_t> AdaptiveSyncAskedIn(
 
 std::string DescribeSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
-                              VectorExperimental>>& snapshots) {
+                              DanglingUntriaged>>& snapshots) {
   std::vector<std::string> described;
   described.reserve(snapshots.size());
   for (const display::DisplaySnapshot* snapshot : snapshots) {
@@ -267,7 +267,7 @@ void DrmModeset::OnDisplaySnapshotsInvalidated() {
 std::vector<display::DisplayConfigurationParams> ModesetParamsThatChange(
     const std::vector<display::DisplayConfigurationParams>& asked,
     const std::vector<display::DisplayConfigurationParams>& wanted,
-    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+    const std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>>&
         snapshots) {
   std::vector<display::DisplayConfigurationParams> changed;
   for (const display::DisplayConfigurationParams& one : wanted) {
@@ -287,7 +287,7 @@ std::vector<display::DisplayConfigurationParams> ModesetParamsThatChange(
 
 void DrmModeset::OnDisplaysReceived(
     const std::vector<raw_ptr<display::DisplaySnapshot,
-                              VectorExperimental>>& connectors) {
+                              DanglingUntriaged>>& connectors) {
   reading_ = false;
   TakeReading(connectors);
   // A request made while this one was in flight: see `Read`.
@@ -298,13 +298,13 @@ void DrmModeset::OnDisplaysReceived(
 
 void DrmModeset::TakeReading(
     const std::vector<raw_ptr<display::DisplaySnapshot,
-                              VectorExperimental>>& connectors) {
+                              DanglingUntriaged>>& connectors) {
   // Log every reading, including its modes. See `DescribeSnapshots`.
   VLOG(1) << "domicile: DRM reports " << DescribeSnapshots(connectors);
 
   // The virtual displays go after the connectors, so they never take the
   // primary from a lit connector when no layout names one.
-  std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> snapshots =
+  std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>> snapshots =
       connectors;
   for (const std::unique_ptr<display::DisplaySnapshot>& snapshot : virtual_) {
     snapshots.push_back(snapshot.get());

@@ -108,7 +108,7 @@ index 7edcac8..f811dd3 100644
    // TODO(devlin): This method is yucky - callers probably only care about one
    // prompt type. We just need to comb through and figure out what it is.
 diff --git a/chrome/browser/file_system_access/chrome_file_system_access_permission_context.cc b/chrome/browser/file_system_access/chrome_file_system_access_permission_context.cc
-index cf14036..d1b9e16 100644
+index cde3f42..b0cdd04 100644
 --- a/chrome/browser/file_system_access/chrome_file_system_access_permission_context.cc
 +++ b/chrome/browser/file_system_access/chrome_file_system_access_permission_context.cc
 @@ -207,6 +207,9 @@ const char kTimestampKey[] = "timestamp";

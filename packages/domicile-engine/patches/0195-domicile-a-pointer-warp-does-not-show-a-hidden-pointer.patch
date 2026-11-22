@@ -24,10 +24,10 @@ job builds it on `crux`.
  2 files changed, 14 insertions(+), 1 deletion(-)
 
 diff --git a/ui/events/ozone/evdev/event_factory_evdev.cc b/ui/events/ozone/evdev/event_factory_evdev.cc
-index fa16886..c7e9210 100644
+index ae5caca..6d4111d 100644
 --- a/ui/events/ozone/evdev/event_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/event_factory_evdev.cc
-@@ -583,13 +583,19 @@ void EventFactoryEvdev::WarpCursorTo(gfx::AcceleratedWidget widget,
+@@ -623,13 +623,19 @@ void EventFactoryEvdev::WarpCursorTo(gfx::AcceleratedWidget widget,
  
    cursor_->MoveCursorTo(widget, location);
  

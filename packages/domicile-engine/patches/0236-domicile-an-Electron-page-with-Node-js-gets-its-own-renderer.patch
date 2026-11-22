@@ -41,7 +41,7 @@ Claude-Session: https://claude.ai/code/session_011frZat42ZDYcF5LPSUETze
  8 files changed, 89 insertions(+)
 
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index c7b8cbd..eef7367 100644
+index 27f9c93..983f7f7 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -5,6 +5,7 @@
@@ -52,7 +52,7 @@ index c7b8cbd..eef7367 100644
  #include "chrome/browser/domicile/domicile_identity_dialog.h"
  #include "chrome/browser/domicile/domicile_picture_in_picture.h"
  #include "components/domicile/browser/force_dark.h"
-@@ -2070,6 +2071,13 @@ bool ChromeContentBrowserClient::ShouldUseSpareRenderProcessHost(
+@@ -2069,6 +2070,13 @@ bool ChromeContentBrowserClient::ShouldUseSpareRenderProcessHost(
      const GURL& site_url,
      std::optional<SpareProcessRefusedByEmbedderReason>& refused_reason) {
    refused_reason = std::nullopt;
@@ -66,7 +66,7 @@ index c7b8cbd..eef7367 100644
    Profile* profile = Profile::FromBrowserContext(browser_context);
    if (!profile) {
      refused_reason = SpareProcessRefusedByEmbedderReason::NoProfile;
-@@ -2483,6 +2491,12 @@ bool ChromeContentBrowserClient::ShouldStayInParentProcessForNTP(
+@@ -2473,6 +2481,12 @@ bool ChromeContentBrowserClient::ShouldStayInParentProcessForNTP(
  bool ChromeContentBrowserClient::IsSuitableHost(
      content::RenderProcessHost* process_host,
      const content::SecurityPrincipal& security_principal) {
@@ -79,7 +79,7 @@ index c7b8cbd..eef7367 100644
    Profile* profile =
        Profile::FromBrowserContext(process_host->GetBrowserContext());
    // This may be nullptr during tests. In that case, just assume any site can
-@@ -2539,6 +2553,13 @@ bool ChromeContentBrowserClient::MayReuseHost(
+@@ -2529,6 +2543,13 @@ bool ChromeContentBrowserClient::MayReuseHost(
      return false;
    }
  
@@ -93,7 +93,7 @@ index c7b8cbd..eef7367 100644
    return true;
  }
  
-@@ -2601,9 +2622,19 @@ class NTPUserData : public base::SupportsUserData::Data {
+@@ -2591,9 +2612,19 @@ class NTPUserData : public base::SupportsUserData::Data {
  
  }  // namespace
  
@@ -113,7 +113,7 @@ index c7b8cbd..eef7367 100644
  
    Profile* profile =
        Profile::FromBrowserContext(site_instance->GetBrowserContext());
-@@ -3196,6 +3227,10 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
+@@ -3186,6 +3217,10 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
        for (auto& part : extra_parts_) {
          part->AppendExtraRendererCommandLineSwitches(command_line, *process);
        }
@@ -125,7 +125,7 @@ index c7b8cbd..eef7367 100644
  
  #if BUILDFLAG(IS_CHROMEOS)
 diff --git a/chrome/browser/chrome_content_browser_client.h b/chrome/browser/chrome_content_browser_client.h
-index ee7561f..33fd9d7 100644
+index 2b5a97d..9acb4af 100644
 --- a/chrome/browser/chrome_content_browser_client.h
 +++ b/chrome/browser/chrome_content_browser_client.h
 @@ -307,6 +307,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
@@ -182,7 +182,7 @@ index cdc682a..20f11c3 100644
  }
  
 diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content/browser/renderer_host/render_process_host_impl.cc
-index e3fd221..cc0f864 100644
+index 15ca37d..ea2c83a 100644
 --- a/content/browser/renderer_host/render_process_host_impl.cc
 +++ b/content/browser/renderer_host/render_process_host_impl.cc
 @@ -2157,6 +2157,12 @@ bool RenderProcessHostImpl::Init() {
@@ -244,7 +244,7 @@ index 99a9fda..fa38175 100644
  
  #if BUILDFLAG(IS_WIN)
 diff --git a/content/public/browser/content_browser_client.h b/content/public/browser/content_browser_client.h
-index 158d77d..c970284 100644
+index dbdac9e..9fa3b88 100644
 --- a/content/public/browser/content_browser_client.h
 +++ b/content/public/browser/content_browser_client.h
 @@ -778,6 +778,14 @@ class CONTENT_EXPORT ContentBrowserClient {

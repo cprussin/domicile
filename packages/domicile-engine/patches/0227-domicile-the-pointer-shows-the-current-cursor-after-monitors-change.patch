@@ -92,7 +92,7 @@ index a13d8c1..bc62c00 100644
    // The first colors arrive from the constructor, before any cursor has been
    // set and so before there is anything on screen to redraw.
 diff --git a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
-index 59e423c..76763a8 100644
+index 65de2f2..c646a72 100644
 --- a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
 +++ b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
 @@ -10,6 +10,7 @@

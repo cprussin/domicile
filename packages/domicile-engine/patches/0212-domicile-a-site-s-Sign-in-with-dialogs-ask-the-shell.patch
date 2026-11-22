@@ -25,7 +25,7 @@ job builds it on `crux`.
  4 files changed, 15 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 64b0f68..3acda70 100644
+index 389454d..6539d09 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -4,6 +4,7 @@
@@ -36,7 +36,7 @@ index 64b0f68..3acda70 100644
  #include "components/domicile/browser/force_dark.h"
  #include "components/domicile/browser/shell_source.h"
  #include "components/domicile/browser/shell_url_loader_factory.h"
-@@ -9004,7 +9005,9 @@ bool ChromeContentBrowserClient::HasErrorPage(int http_status_code) {
+@@ -8996,7 +8997,9 @@ bool ChromeContentBrowserClient::HasErrorPage(int http_status_code) {
  std::unique_ptr<content::IdentityRequestDialogController>
  ChromeContentBrowserClient::CreateIdentityRequestDialogController(
      content::WebContents* web_contents) {

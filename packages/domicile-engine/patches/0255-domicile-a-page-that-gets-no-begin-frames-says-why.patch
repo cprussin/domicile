@@ -157,7 +157,7 @@ index 12c0532..9f3efd1 100644
    // notifications. This is different from BeginFrameNeeded() for cases where we
    // temporarily stop drawing. Unsubscribing and re-subscribing to BeginFrame
 diff --git a/cc/trees/layer_tree_host_impl.cc b/cc/trees/layer_tree_host_impl.cc
-index cd7d97a..6b07f4f 100644
+index f6759ad..716dde3 100644
 --- a/cc/trees/layer_tree_host_impl.cc
 +++ b/cc/trees/layer_tree_host_impl.cc
 @@ -2075,12 +2075,29 @@ void LayerTreeHostImpl::DomicileReportTargetWait() {

@@ -31,10 +31,10 @@ job builds it on `crux`.
  6 files changed, 49 insertions(+)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 010b1ef..b83c307 100644
+index 1a7d630..e649e21 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2730,6 +2730,7 @@ source_set("browser") {
+@@ -2731,6 +2731,7 @@ source_set("browser") {
      "//components/domicile:color_scheme",
      "//components/domicile:control_channel",
      "//components/domicile:desktop_prefs",
@@ -43,7 +43,7 @@ index 010b1ef..b83c307 100644
      "//components/domicile:keyboard_layout",
      "//components/domicile:shell_origin",
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index f085c05..6787f09 100644
+index 97b926f..e313249 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -11,6 +11,7 @@
@@ -54,7 +54,7 @@ index f085c05..6787f09 100644
  
  #include <algorithm>
  #include <iterator>
-@@ -3170,6 +3171,16 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
+@@ -3160,6 +3161,16 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
    command_line->CopySwitchesFrom(browser_command_line,
                                   kDinosaurEasterEggSwitches);
  
@@ -72,7 +72,7 @@ index f085c05..6787f09 100644
    // On Chrome OS need to pass primary user homedir (in multi-profiles session).
    base::FilePath homedir;
 diff --git a/chrome/common/BUILD.gn b/chrome/common/BUILD.gn
-index 8826394..28718e4 100644
+index d3eef09..06607e3 100644
 --- a/chrome/common/BUILD.gn
 +++ b/chrome/common/BUILD.gn
 @@ -264,6 +264,7 @@ static_library("common_lib") {
@@ -137,7 +137,7 @@ index 34907c7..13a30c7 100644
      "//components/facilitated_payments/core/features",
      "//components/feed:feature_list",
 diff --git a/chrome/renderer/chrome_content_renderer_client.cc b/chrome/renderer/chrome_content_renderer_client.cc
-index 8bd462e..c9af7e1 100644
+index 5a1ce37..aa1ff0f 100644
 --- a/chrome/renderer/chrome_content_renderer_client.cc
 +++ b/chrome/renderer/chrome_content_renderer_client.cc
 @@ -5,6 +5,7 @@

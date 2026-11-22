@@ -65,7 +65,7 @@ display::GammaCurve GammaCurveOf(const DomicileGammaRamp& ramp);
 // docs/DISPLAYS.md#adaptive-sync.
 std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
-                              VectorExperimental>>& snapshots,
+                              DanglingUntriaged>>& snapshots,
     const std::vector<DomicileDisplayLayout>& layout,
     const base::flat_set<int64_t>& refused = {});
 
@@ -81,7 +81,7 @@ base::flat_set<int64_t> AdaptiveSyncAskedIn(
 // `--vmodule=screen_manager=1`; see docs/TTY-DEBUGGING.md#seeing-a-modeset.
 std::string DescribeSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
-                              VectorExperimental>>& snapshots);
+                              DanglingUntriaged>>& snapshots);
 
 // The requests in `wanted` that differ from the last confirmed modeset,
 // `asked`, or that light a display whose CRTC `snapshots` read as dark. Empty
@@ -106,7 +106,7 @@ std::string DescribeSnapshots(
 std::vector<display::DisplayConfigurationParams> ModesetParamsThatChange(
     const std::vector<display::DisplayConfigurationParams>& asked,
     const std::vector<display::DisplayConfigurationParams>& wanted,
-    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+    const std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>>&
         snapshots);
 
 // Drives `NativeDisplayDelegate` to modeset off ChromeOS, where
@@ -171,12 +171,12 @@ class DrmModeset : public display::NativeDisplayObserver {
   void Read();
   void OnDisplaysReceived(
       const std::vector<raw_ptr<display::DisplaySnapshot,
-                                VectorExperimental>>& snapshots);
+                                DanglingUntriaged>>& snapshots);
   // What one reading does: lays the screen out, notes the connectors, applies
   // their ramps and modesets if anything changed.
   void TakeReading(
       const std::vector<raw_ptr<display::DisplaySnapshot,
-                                VectorExperimental>>& snapshots);
+                                DanglingUntriaged>>& snapshots);
   // Sends each display in `display_ids_` its ramp in `ramps_`, if it has one.
   void ApplyGamma();
   // Sends display `id` its ramp.

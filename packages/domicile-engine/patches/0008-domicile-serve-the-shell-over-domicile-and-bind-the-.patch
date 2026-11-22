@@ -75,7 +75,7 @@ protocol members, and shellDocument still lives in TypeScript.
  chrome/browser/chrome_browser_main.cc         | 12 ++++
  .../browser/chrome_content_browser_client.cc  | 64 +++++++++++++++++++
  chrome/browser/profiles/profile_io_data.cc    |  8 +++
- .../ui/startup/startup_browser_creator.cc     | 18 +++++-
+ .../ui/startup/startup_browser_creator.cc     | 28 ++++++--
  chrome/browser/ui/startup/url_util.cc         | 15 ++++-
  chrome/common/BUILD.gn                        |  1 +
  chrome/common/chrome_content_client.cc        | 14 ++++
@@ -84,13 +84,13 @@ protocol members, and shellDocument still lives in TypeScript.
  .../core/events/event_target_names.json5      |  2 +
  third_party/blink/renderer/modules/BUILD.gn   |  1 +
  .../platform/runtime_enabled_features.json5   | 18 ++++++
- 14 files changed, 209 insertions(+), 2 deletions(-)
+ 14 files changed, 216 insertions(+), 5 deletions(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 1e9e43c..28385b4 100644
+index fef22e7..cb4fc50 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2713,6 +2713,14 @@ source_set("browser") {
+@@ -2714,6 +2714,14 @@ source_set("browser") {
      "//components/crash/core/app",
      "//components/device_event_log",
      "//components/domain_reliability",
@@ -106,7 +106,7 @@ index 1e9e43c..28385b4 100644
      "//components/embedder_support:user_agent",
      "//components/enterprise/net/content",
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index d2299aa..ca71a04 100644
+index 4b8785a..6e77240 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -4,6 +4,11 @@
@@ -121,7 +121,7 @@ index d2299aa..ca71a04 100644
  #include <utility>
  
  #include "base/feature_list.h"
-@@ -496,6 +501,41 @@ void PopulateChromeFrameBinders(
+@@ -524,6 +529,41 @@ void PopulateChromeFrameBinders(
    if (render_frame_host->GetProcess()->IsPrivileged()) {
      map->Add<pwc::mojom::PrivilegedBridge>(&pwc::BindPrivilegedBridge);
    }
@@ -194,7 +194,7 @@ index 7b2ff46..0798370 100644
      chrome_extra_part->PostBrowserStart();
    }
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 02e2f89..12ff5af 100644
+index 67fef1e..647e4b2 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -4,6 +4,10 @@
@@ -208,7 +208,7 @@ index 02e2f89..12ff5af 100644
  #include <algorithm>
  #include <iterator>
  #include <map>
-@@ -2596,6 +2600,25 @@ void ChromeContentBrowserClient::SiteInstanceGotProcessAndSite(
+@@ -2586,6 +2590,25 @@ void ChromeContentBrowserClient::SiteInstanceGotProcessAndSite(
  
    const GURL& site_url =
        site_instance->GetSecurityPrincipal().GetDeprecatedSiteURL();
@@ -234,7 +234,7 @@ index 02e2f89..12ff5af 100644
    if (search::IsNTPURL(site_url)) {
      site_instance->GetProcess()->SetUserData(search::kIsNTPProcessKey,
                                               std::make_unique<NTPUserData>());
-@@ -6417,10 +6440,39 @@ ChromeContentBrowserClient::CreateURLLoaderThrottlesForKeepAlive(
+@@ -6407,10 +6430,39 @@ ChromeContentBrowserClient::CreateURLLoaderThrottlesForKeepAlive(
    return result;
  }
  
@@ -274,7 +274,7 @@ index 02e2f89..12ff5af 100644
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE) || BUILDFLAG(IS_CHROMEOS) || \
      !BUILDFLAG(IS_ANDROID)
    content::WebContents* web_contents =
-@@ -6825,6 +6877,18 @@ void ChromeContentBrowserClient::
+@@ -6815,6 +6867,18 @@ void ChromeContentBrowserClient::
          int render_frame_id,
          const std::optional<url::Origin>& request_initiator_origin,
          NonNetworkURLLoaderFactoryMap* factories) {
@@ -320,7 +320,7 @@ index bc36eda..9d66016 100644
      BUILDFLAG(IS_CHROMEOS)
        webapps::kIsolatedAppScheme,
 diff --git a/chrome/browser/ui/startup/startup_browser_creator.cc b/chrome/browser/ui/startup/startup_browser_creator.cc
-index ca15bbc..c509c97 100644
+index f1ddc81..8d1fdbe 100644
 --- a/chrome/browser/ui/startup/startup_browser_creator.cc
 +++ b/chrome/browser/ui/startup/startup_browser_creator.cc
 @@ -4,6 +4,8 @@
@@ -332,7 +332,7 @@ index ca15bbc..c509c97 100644
  #include <stddef.h>
  
  #include <optional>
-@@ -428,8 +430,22 @@ bool MaybeLaunchAppShortcutWindow(const base::CommandLine& command_line,
+@@ -446,15 +448,33 @@ bool MaybeLaunchAppShortcutWindow(const base::CommandLine& command_line,
    if (!url.is_empty() && url.is_valid()) {
      content::ChildProcessSecurityPolicy* policy =
          content::ChildProcessSecurityPolicy::GetInstance();
@@ -353,9 +353,23 @@ index ca15bbc..c509c97 100644
 -        policy->IsWebSafeScheme(url.GetScheme())) {
 +        policy->IsWebSafeScheme(url.GetScheme()) ||
 +        url.SchemeIs(domicile::kDomicileScheme)) {
-       const content::WebContents* web_contents =
-           apps::OpenExtensionAppShortcutWindow(profile, url);
-       if (web_contents) {
+ #if !BUILDFLAG(IS_CHROMEOS)
+       // Open the URL in an installed web app whose scope contains it, so the
+       // window gets the app's identity (e.g. taskbar grouping). Hosted
+       // extension apps keep using the shortcut window path.
+-      if (CanOpenWebApp(profile) && !extensions::ExtensionRegistry::Get(profile)
+-                                         ->enabled_extensions()
+-                                         .GetAppByURL(url)) {
++      //
++      // Domicile: the shell is no web app, so it opens straight away rather
++      // than after an asynchronous lookup.
++      if (CanOpenWebApp(profile) && !url.SchemeIs(domicile::kDomicileScheme) &&
++          !extensions::ExtensionRegistry::Get(profile)
++               ->enabled_extensions()
++               .GetAppByURL(url)) {
+         web_app::startup::HandleWebAppLaunchByUrl(
+             command_line, cur_dir, profile, is_first_run, url,
+             base::BindOnce(base::IgnoreResult(&LaunchAppShortcutWindow),
 diff --git a/chrome/browser/ui/startup/url_util.cc b/chrome/browser/ui/startup/url_util.cc
 index 1ea5da4..dff370f 100644
 --- a/chrome/browser/ui/startup/url_util.cc
@@ -392,7 +406,7 @@ index 1ea5da4..dff370f 100644
      return true;
    }
 diff --git a/chrome/common/BUILD.gn b/chrome/common/BUILD.gn
-index 69d0833..8826394 100644
+index d634887..d3eef09 100644
 --- a/chrome/common/BUILD.gn
 +++ b/chrome/common/BUILD.gn
 @@ -382,6 +382,7 @@ static_library("common_lib") {
@@ -500,10 +514,10 @@ index 208d4f9..1eb9129 100644
      "//third_party/blink/renderer/modules/deviceboundsessions",
      "//third_party/blink/renderer/modules/dictation",
 diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-index 0854cf1..b8051d1 100644
+index cd3a0b2..5927ef0 100644
 --- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
 +++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-@@ -2853,6 +2853,24 @@
+@@ -2849,6 +2849,24 @@
        name: "DomicileExternalSurface",
        status: "stable",
      },

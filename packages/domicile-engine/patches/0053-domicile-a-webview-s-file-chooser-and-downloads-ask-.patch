@@ -62,7 +62,7 @@ index af8e430..fea3651 100644
      "//components/enterprise/common/proto:connectors_proto_gen",
      "//components/enterprise/connectors/core",
 diff --git a/chrome/browser/download/chrome_download_manager_delegate.cc b/chrome/browser/download/chrome_download_manager_delegate.cc
-index 20a8b0c..23a9123 100644
+index 00eb218..c8fde5f 100644
 --- a/chrome/browser/download/chrome_download_manager_delegate.cc
 +++ b/chrome/browser/download/chrome_download_manager_delegate.cc
 @@ -4,6 +4,8 @@

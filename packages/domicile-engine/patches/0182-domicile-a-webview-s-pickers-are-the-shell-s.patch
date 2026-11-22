@@ -23,10 +23,10 @@ through domicile::mojom::PagePicker, and the shell draws the picker.
  5 files changed, 45 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index a013135..74f7d15 100644
+index 094efe1..1c75e2e 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
-@@ -749,6 +749,23 @@ void PopulateChromeFrameBinders(
+@@ -777,6 +777,23 @@ void PopulateChromeFrameBinders(
              base::BindOnce(&domicile::BindAppChannel, std::move(receiver)));
        }));
  

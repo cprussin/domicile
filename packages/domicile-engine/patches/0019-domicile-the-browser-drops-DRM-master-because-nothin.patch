@@ -313,7 +313,7 @@ index 74b672e..928933e 100644
  
    // There is a circular reference between DrmDevice and
 diff --git a/ui/ozone/platform/drm/host/drm_display_host_manager.cc b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-index 00e7048..269a57a 100644
+index f7f97f0..d2f8510 100644
 --- a/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 +++ b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 @@ -217,6 +217,15 @@ void OpenDeviceAsync(const base::FilePath& device_path,

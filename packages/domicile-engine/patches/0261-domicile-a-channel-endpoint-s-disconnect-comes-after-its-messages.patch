@@ -28,10 +28,10 @@ covers it.
  1 file changed, 45 insertions(+), 7 deletions(-)
 
 diff --git a/ipc/ipc_mojo_bootstrap.cc b/ipc/ipc_mojo_bootstrap.cc
-index 9e48103..b696d71 100644
+index 9fa3071..a02b9c2 100644
 --- a/ipc/ipc_mojo_bootstrap.cc
 +++ b/ipc/ipc_mojo_bootstrap.cc
-@@ -997,20 +997,48 @@ class ChannelAssociatedGroupController
+@@ -996,20 +996,48 @@ class ChannelAssociatedGroupController
        base::AutoUnlock unlocker(lock_);
        client->NotifyError(reason);
      } else {
@@ -83,7 +83,7 @@ index 9e48103..b696d71 100644
      base::AutoLock locker(lock_);
      auto iter = endpoints_.find(id);
      if (iter == endpoints_.end() || iter->second.get() != endpoint)
-@@ -1018,7 +1046,19 @@ class ChannelAssociatedGroupController
+@@ -1017,7 +1045,19 @@ class ChannelAssociatedGroupController
      if (!endpoint->client())
        return;
  
@@ -104,7 +104,7 @@ index 9e48103..b696d71 100644
      NotifyEndpointOfError(endpoint, false /* force_async */);
    }
  
-@@ -1116,9 +1156,7 @@ class ChannelAssociatedGroupController
+@@ -1115,9 +1155,7 @@ class ChannelAssociatedGroupController
        // dispatch there. In that case `was_bound_off_sequence()` will be true to
        // signal that we should really use that task runner.
        const scoped_refptr<base::SequencedTaskRunner> task_runner =
@@ -115,6 +115,3 @@ index 9e48103..b696d71 100644
  
        ScopedUrgentMessageNotification scoped_urgent_message_notification(
            message->has_flag(mojo::Message::kFlagIsUrgent)
--- 
-2.43.0
-

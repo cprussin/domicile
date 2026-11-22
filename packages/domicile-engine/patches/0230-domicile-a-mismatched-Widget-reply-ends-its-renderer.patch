@@ -25,10 +25,10 @@ job builds it on crux.
  1 file changed, 39 insertions(+), 10 deletions(-)
 
 diff --git a/mojo/public/cpp/bindings/lib/interface_endpoint_client.cc b/mojo/public/cpp/bindings/lib/interface_endpoint_client.cc
-index b027734..2c7a3cb 100644
+index 7c5c801..b60f48d 100644
 --- a/mojo/public/cpp/bindings/lib/interface_endpoint_client.cc
 +++ b/mojo/public/cpp/bindings/lib/interface_endpoint_client.cc
-@@ -254,6 +254,19 @@ class ThreadSafeInterfaceEndpointClientProxy : public ThreadSafeProxy {
+@@ -253,6 +253,19 @@ class ThreadSafeInterfaceEndpointClientProxy : public ThreadSafeProxy {
    const base::Location location_;
  };
  
@@ -48,7 +48,7 @@ index b027734..2c7a3cb 100644
  }  // namespace
  
  // ----------------------------------------------------------------------------
-@@ -949,8 +962,10 @@ bool InterfaceEndpointClient::HandleValidatedMessage(Message* message) {
+@@ -948,8 +961,10 @@ bool InterfaceEndpointClient::HandleValidatedMessage(Message* message) {
      // interfaces, this means the remote side sends a
      // PeerAssociatedEndpointClosed event but continues to send more messages
      // for the same interface. Close the pipe because this shouldn't happen.
@@ -61,7 +61,7 @@ index b027734..2c7a3cb 100644
      return false;
    }
  
-@@ -1002,18 +1017,32 @@ bool InterfaceEndpointClient::HandleValidatedMessage(Message* message) {
+@@ -1001,18 +1016,32 @@ bool InterfaceEndpointClient::HandleValidatedMessage(Message* message) {
      std::optional<PendingAsyncResponse> pending_response;
      {
        base::AutoLock lock(async_responders_lock_);

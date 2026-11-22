@@ -33,7 +33,7 @@ and both blobs are that file's.
  3 files changed, 37 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index ede855f..1a89232 100644
+index 1ccf46e..42092d7 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -6,7 +6,9 @@
@@ -46,7 +46,7 @@ index ede855f..1a89232 100644
  #include "components/domicile/browser/color_scheme.h"
  #include "components/domicile/browser/control_channel.h"
  #include "components/domicile/browser/keyboard_layout.h"
-@@ -607,7 +609,32 @@ void PopulateChromeFrameBinders(
+@@ -635,7 +637,32 @@ void PopulateChromeFrameBinders(
                "domicile: only a domicile:// document may ask for a guest.");
            return;
          }

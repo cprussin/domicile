@@ -24,10 +24,10 @@ Log only.
  3 files changed, 34 insertions(+)
 
 diff --git a/cc/trees/layer_tree_host.cc b/cc/trees/layer_tree_host.cc
-index 454ce0e..4a5dc64 100644
+index 9087172..bea2286 100644
 --- a/cc/trees/layer_tree_host.cc
 +++ b/cc/trees/layer_tree_host.cc
-@@ -1027,6 +1027,21 @@ void LayerTreeHost::DomicileReportTargetWait() {
+@@ -1033,6 +1033,21 @@ void LayerTreeHost::DomicileReportTargetWait() {
    if (domicile_frames_presented_since_target_ > 0 || !visible_) {
      return;
    }
@@ -50,7 +50,7 @@ index 454ce0e..4a5dc64 100644
               << base::GetCurrentProcId() << ", page at "
               << (domicile_source_url_.empty() ? "no URL yet"
 diff --git a/cc/trees/layer_tree_host_impl.cc b/cc/trees/layer_tree_host_impl.cc
-index 6b07f4f..71c2e22 100644
+index 716dde3..f63dc3d 100644
 --- a/cc/trees/layer_tree_host_impl.cc
 +++ b/cc/trees/layer_tree_host_impl.cc
 @@ -2072,6 +2072,15 @@ void LayerTreeHostImpl::DomicileReportTargetWait() {

@@ -26,7 +26,7 @@ Verified: not built. Applies on the pin with 0072, 0088, 0097 and 0245
  2 files changed, 33 insertions(+), 5 deletions(-)
 
 diff --git a/cc/trees/layer_tree_host.cc b/cc/trees/layer_tree_host.cc
-index e2c03fb..454ce0e 100644
+index bc04697..9087172 100644
 --- a/cc/trees/layer_tree_host.cc
 +++ b/cc/trees/layer_tree_host.cc
 @@ -26,6 +26,7 @@
@@ -37,7 +37,7 @@ index e2c03fb..454ce0e 100644
  #include "base/strings/string_number_conversions.h"
  #include "base/strings/stringprintf.h"
  #include "base/task/common/task_annotator.h"
-@@ -1009,6 +1010,7 @@ void LayerTreeHost::DomicileWatchTarget(const viz::LocalSurfaceId& target) {
+@@ -1015,6 +1016,7 @@ void LayerTreeHost::DomicileWatchTarget(const viz::LocalSurfaceId& target) {
    domicile_commits_since_target_ = 0;
    domicile_target_committed_ = false;
    domicile_frames_presented_since_target_ = 0;
@@ -45,7 +45,7 @@ index e2c03fb..454ce0e 100644
    if (!domicile_target_timer_.IsRunning()) {
      domicile_target_timer_.SetTaskRunner(
          base::WrapRefCounted(task_runner_provider_->MainThreadTaskRunner()));
-@@ -1025,8 +1027,11 @@ void LayerTreeHost::DomicileReportTargetWait() {
+@@ -1031,8 +1033,11 @@ void LayerTreeHost::DomicileReportTargetWait() {
    if (domicile_frames_presented_since_target_ > 0 || !visible_) {
      return;
    }
@@ -59,7 +59,7 @@ index e2c03fb..454ce0e 100644
               << domicile_target_.ToString() << " in "
               << (base::TimeTicks::Now() - domicile_target_set_at_)
               << ": committed it "
-@@ -1043,6 +1048,14 @@ void LayerTreeHost::DomicileReportTargetWait() {
+@@ -1049,6 +1054,14 @@ void LayerTreeHost::DomicileReportTargetWait() {
               << ", frame sink "
               << (current_layer_tree_frame_sink_ ? "bound" : "none")
               << (new_layer_tree_frame_sink_ ? " (new one initializing)" : "")
@@ -74,7 +74,7 @@ index e2c03fb..454ce0e 100644
               << ".";
  }
  
-@@ -1113,9 +1126,17 @@ void LayerTreeHost::DidPresentCompositorFrame(
+@@ -1119,9 +1132,17 @@ void LayerTreeHost::DidPresentCompositorFrame(
      const viz::FrameTimingDetails& frame_timing_details) {
    DCHECK(IsMainThread());
    // DOMICILE: see DomicileWatchTarget.
@@ -95,7 +95,7 @@ index e2c03fb..454ce0e 100644
    }
    for (auto& callback : presentation_callbacks)
      std::move(callback).Run(frame_timing_details.presentation_feedback);
-@@ -2331,6 +2352,8 @@ void LayerTreeHost::SetSourceURL(ukm::SourceId source_id, const GURL& url) {
+@@ -2337,6 +2358,8 @@ void LayerTreeHost::SetSourceURL(ukm::SourceId source_id, const GURL& url) {
    // produced by this host so far.
    pending_commit_state()->clear_caches_on_next_commit = true;
    proxy_->SetSourceURL(source_id, url);
@@ -105,10 +105,10 @@ index e2c03fb..454ce0e 100644
    if (!url.SchemeIsHTTPOrHTTPS())
      pending_commit_state()->debug_state.TurnOffHudInfoDisplay();
 diff --git a/cc/trees/layer_tree_host.h b/cc/trees/layer_tree_host.h
-index d1b2dd0..a26bcf3 100644
+index 21527e9..b244a5e 100644
 --- a/cc/trees/layer_tree_host.h
 +++ b/cc/trees/layer_tree_host.h
-@@ -1192,6 +1192,11 @@ class CC_EXPORT LayerTreeHost : public MutatorHostDelegate {
+@@ -1202,6 +1202,11 @@ class CC_EXPORT LayerTreeHost : public MutatorHostDelegate {
    int domicile_commits_since_target_ = 0;
    bool domicile_target_committed_ = false;
    int domicile_frames_presented_since_target_ = 0;

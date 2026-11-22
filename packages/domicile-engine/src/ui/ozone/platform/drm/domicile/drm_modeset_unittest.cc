@@ -125,9 +125,9 @@ class SnapshotBuilder {
   std::vector<Other> others_;
 };
 
-std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> Pointers(
+std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>> Pointers(
     const std::vector<std::unique_ptr<display::DisplaySnapshot>>& owned) {
-  std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> pointers;
+  std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>> pointers;
   for (const std::unique_ptr<display::DisplaySnapshot>& snapshot : owned) {
     pointers.push_back(snapshot.get());
   }
@@ -690,7 +690,7 @@ class FakeDelegate : public display::NativeDisplayDelegate {
   }
 
   void SetSnapshots(
-      std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> s) {
+      std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>> s) {
     snapshots_ = std::move(s);
   }
 
@@ -745,7 +745,7 @@ class FakeDelegate : public display::NativeDisplayDelegate {
   }
 
  private:
-  std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> snapshots_;
+  std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>> snapshots_;
   std::vector<std::vector<display::DisplayConfigurationParams>> asked_;
   display::ConfigureCallback pending_;
   std::optional<bool> inline_answer_;

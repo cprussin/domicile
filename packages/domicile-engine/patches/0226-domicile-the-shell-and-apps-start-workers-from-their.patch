@@ -24,10 +24,10 @@ job builds it on `crux`.
  1 file changed, 8 insertions(+)
 
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 9d96949..c7b8cbd 100644
+index a893213..27f9c93 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -6650,6 +6650,14 @@ void ChromeContentBrowserClient::
+@@ -6640,6 +6640,14 @@ void ChromeContentBrowserClient::
    CHECK(browser_context, base::NotFatalUntil::M163);
    CHECK(factories, base::NotFatalUntil::M163);
  

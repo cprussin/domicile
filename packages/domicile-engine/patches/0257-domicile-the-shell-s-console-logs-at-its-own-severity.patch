@@ -12,10 +12,10 @@ is an error, and a console.debug is VERBOSE.
  1 file changed, 7 insertions(+)
 
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index c2d1a74..d532be4 100644
+index 7a5496f..095741c 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -8341,6 +8341,13 @@ std::optional<gfx::ImageSkia> ChromeContentBrowserClient::GetProductLogo() {
+@@ -8333,6 +8333,13 @@ std::optional<gfx::ImageSkia> ChromeContentBrowserClient::GetProductLogo() {
  bool ChromeContentBrowserClient::IsBuiltinComponent(
      content::BrowserContext* browser_context,
      const url::Origin& origin) {

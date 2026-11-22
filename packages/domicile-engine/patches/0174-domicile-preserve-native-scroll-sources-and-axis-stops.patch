@@ -348,7 +348,7 @@ index f49f9b6..9236885 100644
  };
  
 diff --git a/ui/events/ozone/evdev/event_factory_evdev.cc b/ui/events/ozone/evdev/event_factory_evdev.cc
-index ac47ef3..d7107e2 100644
+index fb52c08..7d147d2 100644
 --- a/ui/events/ozone/evdev/event_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/event_factory_evdev.cc
 @@ -3,6 +3,7 @@
@@ -357,9 +357,9 @@ index ac47ef3..d7107e2 100644
  #include "ui/events/ozone/evdev/event_factory_evdev.h"
 +#include "ui/events/domicile/scroll_metadata.h"
  
+ #include <optional>
  #include <utility>
- 
-@@ -373,6 +374,8 @@ void EventFactoryEvdev::DispatchMouseWheelEvent(
+@@ -396,6 +397,8 @@ void EventFactoryEvdev::DispatchMouseWheelEvent(
    event.set_location_f(params.location);
    event.set_root_location_f(params.location);
    event.set_source_device_id(params.device_id);
@@ -368,7 +368,7 @@ index ac47ef3..d7107e2 100644
    DispatchUiEvent(&event);
  }
  
-@@ -400,6 +403,8 @@ void EventFactoryEvdev::DispatchScrollEvent(const ScrollEventParams& params) {
+@@ -431,6 +434,8 @@ void EventFactoryEvdev::DispatchScrollEvent(const ScrollEventParams& params) {
    event.set_location_f(params.location);
    event.set_root_location_f(params.location);
    event.set_source_device_id(params.device_id);

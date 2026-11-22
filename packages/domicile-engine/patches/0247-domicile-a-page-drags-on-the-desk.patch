@@ -78,7 +78,7 @@ index 03f0a87..8b0f465 100644
    if (!window) {
      ResetDragDropTarget();
 diff --git a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
-index 6b618c5..0d119e0 100644
+index 83aae7b..0456a41 100644
 --- a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
 +++ b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
 @@ -397,6 +397,16 @@ DesktopWindowTreeHostPlatform::CreateTooltip() {
@@ -99,7 +99,7 @@ index 6b618c5..0d119e0 100644
  #if BUILDFLAG(IS_LINUX)
        std::make_unique<DesktopDragDropClientOzoneLinux>(window(), drag_handler);
 diff --git a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
-index 8fc3058..f7ad859 100644
+index 675393f..92aade0 100644
 --- a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
 +++ b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
 @@ -23,6 +23,7 @@

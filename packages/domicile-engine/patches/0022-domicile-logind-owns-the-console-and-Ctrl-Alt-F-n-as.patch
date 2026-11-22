@@ -128,7 +128,7 @@ index 778cb26..2d9c208 100644
      "//ui/gfx/linux:drm",
      "//ui/gfx/linux:gbm",
 diff --git a/ui/ozone/platform/drm/host/drm_display_host_manager.cc b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-index 269a57a..5f279fe 100644
+index d2f8510..aa4a984 100644
 --- a/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 +++ b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 @@ -742,9 +742,10 @@ void DrmDisplayHostManager::GpuRelinquishedDisplayControl(bool status) {

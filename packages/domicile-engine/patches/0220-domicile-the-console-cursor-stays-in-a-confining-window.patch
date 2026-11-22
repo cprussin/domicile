@@ -28,7 +28,7 @@ job builds it on `crux`.
  7 files changed, 87 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index c1c5e6c..71e1ab2 100644
+index 5614094..8c3d30c 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -11,6 +11,7 @@
@@ -39,7 +39,7 @@ index c1c5e6c..71e1ab2 100644
  #include "chrome/browser/domicile/domicile_pointer_warp.h"
  #include "chrome/browser/domicile/domicile_shell_fetch.h"
  #include "chrome/browser/domicile/domicile_tab_helpers.h"
-@@ -577,6 +578,13 @@ void PopulateChromeFrameBinders(
+@@ -605,6 +606,13 @@ void PopulateChromeFrameBinders(
                      content::GetUIThreadTaskRunner({}),
                      base::BindRepeating(&domicile::WarpPointerIn,
                                          frame->GetGlobalId())),
