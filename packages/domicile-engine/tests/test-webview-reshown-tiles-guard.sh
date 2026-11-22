@@ -5,6 +5,9 @@
 #
 #   - The claim passes on a few rasters and fails on a viewport's worth,
 #     naming patch 0252.
+#   - A page whose viewport went to 0x0 fails in either mode, naming patch
+#     0265. A trace with no viewport sizes for the page fails: it could not
+#     have seen one.
 #   - The control passes only on many, so the claim's few are the build's
 #     doing.
 #   - A shell that never ran, a page never attached, hidden or shown again,
@@ -63,37 +66,47 @@ says() { # $1 MEASURED, $2 what the sentence must contain
 }
 
 # MEASURED is "<mode> <shell> <attached> <hidden> <shown-again> <traced>
-# <rasters>".
+# <rasters> <sizes> <emptied>".
 echo "the claim — the engine as built"
-expect "no rasters is the pass" "pass" "$(verdict "claim 1 1 1 1 1 0")"
-expect "the limit itself passes" "pass" "$(verdict "claim 1 1 1 1 1 2")"
-expect "a viewport's worth is a failure" "fail" "$(verdict "claim 1 1 1 1 1 24")"
-expect "and names the patch" "yes" "$(says "claim 1 1 1 1 1 24" "patch 0252")"
+expect "no rasters is the pass" "pass" "$(verdict "claim 1 1 1 1 1 0 3 0")"
+expect "the limit itself passes" "pass" "$(verdict "claim 1 1 1 1 1 2 3 0")"
+expect "a viewport's worth is a failure" "fail" \
+  "$(verdict "claim 1 1 1 1 1 24 3 0")"
+expect "and names the patch" "yes" \
+  "$(says "claim 1 1 1 1 1 24 3 0" "patch 0252")"
+expect "a viewport emptied while hidden is a failure" "fail" \
+  "$(verdict "claim 1 1 1 1 1 0 5 2")"
+expect "and names the patch" "yes" \
+  "$(says "claim 1 1 1 1 1 0 5 2" "patch 0265")"
+expect "no viewport sizes in the trace is a failure" "fail" \
+  "$(verdict "claim 1 1 1 1 1 0 0 0")"
 expect "a trace that missed the reshow is a failure" "fail" \
-  "$(verdict "claim 1 1 1 1 0 none")"
+  "$(verdict "claim 1 1 1 1 0 none none none")"
 expect "and says to trace longer" "yes" \
-  "$(says "claim 1 1 1 1 0 none" "TRACE_SECONDS")"
+  "$(says "claim 1 1 1 1 0 none none none" "TRACE_SECONDS")"
 expect "an unreadable trace is a failure" "fail" \
-  "$(verdict "claim 1 1 1 1 1 none")"
+  "$(verdict "claim 1 1 1 1 1 none none none")"
 expect "a page never shown again is a failure" "fail" \
-  "$(verdict "claim 1 1 1 0 1 0")"
+  "$(verdict "claim 1 1 1 0 1 0 3 0")"
 expect "a page never hidden is a failure" "fail" \
-  "$(verdict "claim 1 1 0 1 1 0")"
+  "$(verdict "claim 1 1 0 1 1 0 3 0")"
 expect "and points at the hiding guard" "yes" \
-  "$(says "claim 1 1 0 1 1 0" "guard-webview-hidden")"
+  "$(says "claim 1 1 0 1 1 0 3 0" "guard-webview-hidden")"
 expect "a page never attached is a failure" "fail" \
-  "$(verdict "claim 1 0 0 0 0 none")"
+  "$(verdict "claim 1 0 0 0 0 none none none")"
 expect "a shell that never ran is a failure" "fail" \
-  "$(verdict "claim 0 0 0 0 0 none")"
+  "$(verdict "claim 0 0 0 0 0 none none none")"
 
 echo
 echo "the control — a new scale"
 expect "many rasters is the control's pass" "pass" \
-  "$(verdict "control 1 1 1 1 1 24")"
+  "$(verdict "control 1 1 1 1 1 24 3 0")"
 expect "a few is the control's failure" "fail" \
-  "$(verdict "control 1 1 1 1 1 1")"
+  "$(verdict "control 1 1 1 1 1 1 3 0")"
 expect "and says the claim then means nothing" "yes" \
-  "$(says "control 1 1 1 1 1 1" "says nothing")"
+  "$(says "control 1 1 1 1 1 1 3 0" "says nothing")"
+expect "a viewport emptied while hidden is its failure too" "fail" \
+  "$(verdict "control 1 1 1 1 1 24 5 2")"
 
 echo
 if [ "$FAILED" -eq 0 ]; then

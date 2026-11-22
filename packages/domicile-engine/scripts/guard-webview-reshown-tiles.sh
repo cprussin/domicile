@@ -25,6 +25,10 @@
 #   the trace saw it      the shell's `done` came before the trace ended
 #   few rasters           the page rastered at most MAX_RASTERS tiles after
 #                         the reshow
+#   a kept viewport       the page's compositor viewport never went to 0x0.
+#                         A hidden <webview>'s did, which threw its tiles
+#                         away on a laptop's GPU; this small software-rastered
+#                         page hides that from the raster count (patch 0265)
 #
 # Control: NEGATIVE=1 shows the box again at half its scale, set while it was
 # hidden. No kept tile fits a new scale, so the page must raster again, and
@@ -177,6 +181,39 @@ for _ in $(seq 1 $((TRACE_SECONDS * 4))); do
   sleep 0.25
 done
 
+# "<sizes> <emptied>": how many compositor viewport sizes the trace holds
+# outside the shell's process, and how many went from a real size to 0x0.
+# `none none` when the trace does not parse or holds no TimeStamp.
+viewports() {
+  python3 -I - "$TRACE" <<'EOF' 2>/dev/null || echo "none none"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as trace:
+    events = json.load(trace)["traceEvents"]
+marks = [
+    event
+    for event in events
+    if event.get("name") == "TimeStamp"
+    and "GUARD reshowing" in json.dumps(event.get("args", {}))
+]
+if not marks:
+    sys.exit(1)
+shell = marks[0]["pid"]
+sizes = [
+    event["args"]
+    for event in events
+    if "ResourcePool::NotifyOfViewportSizeChange" in event.get("name", "")
+    and event.get("pid") != shell
+]
+emptied = sum(
+    1 for size in sizes if size["new_size"] == "0x0" and size["old_size"] != "0x0"
+)
+print(len(sizes), emptied)
+EOF
+}
+VIEWPORTS="$(viewports)"
+
 saw() { # $1 pattern
   grep -qF -- "$1" "$ENGINE_LOG" && echo 1 || echo 0
 }
@@ -208,17 +245,18 @@ covered() {
   fi
 }
 
-MEASURED="$MODE $(saw "GUARD shell-loaded") $(saw "GUARD attached") $HIDDEN $AFTER $(covered) $RASTERS"
+MEASURED="$MODE $(saw "GUARD shell-loaded") $(saw "GUARD attached") $HIDDEN $AFTER $(covered) $RASTERS $VIEWPORTS"
 echo
 echo "measured: $MEASURED (max $MAX_RASTERS)"
-echo "  (mode shell attached hidden shown-again traced rasters-after-reshow)"
+echo "  (mode shell attached hidden shown-again traced rasters-after-reshow"
+echo "   viewport-sizes viewports-emptied)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-webview-reshown-tiles-guard.sh`
 # runs this block directly. MEASURED is "<mode> <shell> <attached> <hidden>
-# <shown-again> <traced> <rasters>"; MAX_RASTERS is the bar.
+# <shown-again> <traced> <rasters> <sizes> <emptied>"; MAX_RASTERS is the bar.
 FAILURE=""
 PASSED=""
-read -r M_MODE M_SHELL M_ATTACHED M_HIDDEN M_SHOWN M_TRACED M_RASTERS <<<"$MEASURED"
+read -r M_MODE M_SHELL M_ATTACHED M_HIDDEN M_SHOWN M_TRACED M_RASTERS M_SIZES M_EMPTIED <<<"$MEASURED"
 if [ "$M_SHELL" != "1" ]; then
   FAILURE="the shell page never ran, so nothing here was set up: the module \
 did not load, or it threw, and the engine log has its console"
@@ -240,6 +278,15 @@ elif [ "$M_RASTERS" = "none" ]; then
 'GUARD reshowing' TimeStamp, so there is nothing to count: the engine died \
 before --trace-startup-duration ended, or console.timeStamp no longer \
 reaches devtools.timeline"
+elif [ "$M_SIZES" = "0" ]; then
+  FAILURE="the trace holds no compositor viewport size for the page, so it \
+could not see one go to 0x0: cc no longer traces \
+ResourcePool::NotifyOfViewportSizeChange, or it was renamed"
+elif [ "$M_EMPTIED" -gt 0 ]; then
+  FAILURE="a hidden page's compositor viewport went to 0x0 $M_EMPTIED time(s). \
+An empty viewport throws away its tiles, so the page rasters its whole \
+viewport when it is shown again. A hidden <webview> keeps its compositing \
+rect (RemoteFrameView::UpdateCompositingRect, patch 0265)"
 elif [ "$M_MODE" = "claim" ] && [ "$M_RASTERS" -gt "$MAX_RASTERS" ]; then
   FAILURE="a page shown again rastered $M_RASTERS tiles, over $MAX_RASTERS: \
 it dropped its tiles while hidden and rastered its whole viewport again. A \
