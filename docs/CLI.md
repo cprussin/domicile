@@ -26,6 +26,26 @@ domicile ./shell.js --config ./desk.json  # with another config file
 - In a Wayland session it opens in a window; from a console login it takes
   the screen.
 
+On a terminal it says what it chose, then each part as it comes up:
+
+```text
+domicile 1.3.0
+  shell     @domicile-desktop/manganese
+  config    ~/.config/domicile/domicile.ts
+  profile   ~/.local/state/domicile/profile
+  platform  drm
+  socket    /run/user/1000/domicile-ipc.4242.sock
+
+  ✓ Shell built in 2.4 s
+  ✓ Engine up
+  ✓ Compositor up · WAYLAND_DISPLAY=wayland-1
+
+Desktop running. Ctrl-C to stop.
+```
+
+`socket` is the `DOMICILE_SOCK` for commands from a terminal outside the
+desktop. Off a terminal it says one line instead ([Logs](LOGGING.md#what-they-say)).
+
 ## `domicile which-shell`
 
 Print the shell the running desktop serves.

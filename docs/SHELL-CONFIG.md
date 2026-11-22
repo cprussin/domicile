@@ -22,7 +22,7 @@ For what a shell does with these settings, see
 - `domicile` prints which config it used before starting:
 
 ```
-config: /home/you/.config/domicile/domicile.json, found where a config lives
+config: /home/you/.config/domicile/domicile.json
 config: ./desk.json, because --config names it
 config: none -- no domicile.{ts,tsx,js,mjs,json} in /home/you/.config/domicile -- so the compositor's defaults
 ```

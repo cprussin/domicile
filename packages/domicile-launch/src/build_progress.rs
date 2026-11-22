@@ -8,6 +8,7 @@ use std::path::PathBuf;
 
 use serde::Deserialize;
 
+use crate::paint::{Paint, Style};
 use crate::shell_path::{Shell, ShellFiles};
 
 /// A build step.
@@ -68,16 +69,17 @@ pub fn heard(line: &str) -> Heard {
     }
 }
 
-/// Renders `step` as a terminal progress line.
-pub fn bar(step: &Step) -> String {
-    let (done, saying) = match step {
-        Step::Resolving => (1, "reading what it imports".to_string()),
-        Step::Installing(packages) => (2, format!("installing {}", packages.join(", "))),
-        Step::Bundling => (3, "bundling".to_string()),
+/// Renders `step` as a terminal progress line, its mark filling with the
+/// steps.
+pub fn bar(paint: Paint, step: &Step) -> String {
+    let (mark, saying) = match step {
+        Step::Resolving => ("⠁", "reading what it imports".to_string()),
+        Step::Installing(packages) => ("⠃", format!("installing {}", packages.join(", "))),
+        Step::Bundling => ("⠇", "bundling".to_string()),
     };
     format!(
-        "[{}{}] building the shell: {saying}",
-        "#".repeat(done),
-        "-".repeat(3 - done)
+        "  {} Building shell {} {saying}",
+        paint.style(Style::Placeholder, mark),
+        paint.style(Style::Dim, "·")
     )
 }

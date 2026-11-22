@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use domicile_launch::build_progress::{bar, heard, Heard, Step};
+use domicile_launch::paint::Paint;
 use domicile_launch::shell_path::{Shell, ShellFiles};
 
 #[test]
@@ -68,12 +69,15 @@ fn anything_else_is_the_build_s_log() {
 #[test]
 fn the_bar_fills_with_the_steps() {
     assert_eq!(
-        bar(&Step::Resolving),
-        "[#--] building the shell: reading what it imports"
+        bar(Paint::PLAIN, &Step::Resolving),
+        "  ⠁ Building shell · reading what it imports"
     );
     assert_eq!(
-        bar(&Step::Installing(vec!["date-fns".into()])),
-        "[##-] building the shell: installing date-fns"
+        bar(Paint::PLAIN, &Step::Installing(vec!["date-fns".into()])),
+        "  ⠃ Building shell · installing date-fns"
     );
-    assert_eq!(bar(&Step::Bundling), "[###] building the shell: bundling");
+    assert_eq!(
+        bar(Paint::COLOR, &Step::Bundling),
+        "  \x1b[36m⠇\x1b[0m Building shell \x1b[2m·\x1b[0m bundling"
+    );
 }

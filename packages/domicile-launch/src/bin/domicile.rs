@@ -103,7 +103,7 @@ use domicile_launch::spawn::{
     send_frames_in_memory, the_engine_takes_input, Runtime,
 };
 use domicile_launch::splash::{lay_out, tell, the_page_ends, Progress, ENDED};
-use domicile_launch::startup::{up_line, Chosen};
+use domicile_launch::startup::{self, at_home, built_in, done, heading, row, up_line, Chosen};
 use domicile_launch::subscription::follow;
 use domicile_launch::supervise::{catch_interrupts, interrupted, Listener, Running, ASK_EVERY};
 use domicile_launch::trace::{self, producer_socket};
@@ -741,6 +741,21 @@ enum Wanted {
 }
 
 impl Wanted {
+    /// The shell as asked for: a package by its name, anything else by its
+    /// file.
+    fn shown(&self) -> String {
+        match self {
+            Wanted::Ready(page) | Wanted::Ours(page) => {
+                page.root.join(&page.module).display().to_string()
+            }
+            Wanted::Built(asked) => asked
+                .last()
+                .expect("the builder is asked for something")
+                .to_string_lossy()
+                .into_owned(),
+        }
+    }
+
     /// The file the shell is written in, which the Settings app edits: a
     /// module served as is, or an entry the builder builds. A package has
     /// none.
@@ -839,7 +854,7 @@ fn built(
             // quiet.
             BuilderHeard::Step(step) => {
                 if terminal {
-                    eprint!("\r\x1b[K{}", bar(&step));
+                    eprint!("\r\x1b[K{}", bar(err(), &step));
                     let _ = std::io::stderr().flush();
                 }
                 stepped(&step);
@@ -992,7 +1007,7 @@ fn developing(
         match heard_from.recv_timeout(ASK_EVERY) {
             Ok(BuilderHeard::Step(step)) => {
                 if terminal {
-                    eprint!("\r\x1b[K{}", bar(&step));
+                    eprint!("\r\x1b[K{}", bar(err(), &step));
                     let _ = std::io::stderr().flush();
                 }
             }
@@ -1750,6 +1765,55 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
 
     // A per-run directory for sockets, so concurrent desktops do not collide.
     let runtime = tempdir().map_err(|why| format!("no runtime directory: {why}"))?;
+    let control = address(env("XDG_RUNTIME_DIR").as_deref(), std::process::id());
+
+    let platform = platform(
+        env("OZONE").as_deref(),
+        env("WAYLAND_DISPLAY").as_deref(),
+        env("DISPLAY").as_deref(),
+        env("XDG_VTNR").as_deref(),
+    )
+    .map_err(|why| why.to_string())?;
+    let on_the_cpu = on_the_cpu(
+        &platform,
+        env(software_compositing::VARIABLE).as_deref(),
+        Path::new("/sys/class/drm"),
+        software_compositing::vmwgfx_has_3d,
+    )
+    .map_err(|why| why.to_string())?;
+    let version = std::fs::read_to_string(version_file(&binary)).ok();
+    let version = version.as_deref().and_then(|said| said.lines().next());
+
+    // On a terminal, print the choices before starting anything, so later
+    // failures can be read against them. A login session's journal stays
+    // quiet.
+    let interactive = std::io::stdout().is_terminal();
+    if interactive {
+        let paint = out();
+        let home = env("HOME").map(PathBuf::from);
+        let at_home = |said: &str| at_home(said, home.as_deref());
+        println!("{}", heading(paint, version));
+        // What was asked for, so a wrong shell is visible.
+        println!("{}", row(paint, "shell", &at_home(&wanted.shown())));
+        // A wrong config is a common cause of a wrong monitor layout.
+        println!("{}", row(paint, "config", &at_home(&config.to_string())));
+        // The profile decides which sign-ins the desktop has.
+        println!(
+            "{}",
+            row(
+                paint,
+                "profile",
+                &at_home(&profile.path.display().to_string())
+            )
+        );
+        println!("{}", row(paint, "platform", &platform.to_string()));
+        if on_the_cpu {
+            println!("{}", row(paint, "engine", "composites on the CPU"));
+        }
+        // What `DOMICILE_SOCK` is in a terminal outside the desktop.
+        println!("{}", row(paint, "socket", &control.display().to_string()));
+        println!();
+    }
 
     // What the Settings app edits. A module config is evaluated to
     // `config.json` in the runtime directory, below. The shell's options are
@@ -1776,7 +1840,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         chrome_socket: runtime.join("chrome.sock"),
         command: runtime.join("command.sock"),
         electron: runtime.join("electron.sock"),
-        control: address(env("XDG_RUNTIME_DIR").as_deref(), std::process::id()),
+        control,
         profile: profile.path.clone(),
         shims: runtime.join("bin"),
         session: runtime.join("session.json"),
@@ -1798,26 +1862,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         &binary.with_file_name("domicile-app-host"),
     )?;
 
-    // On a terminal, print the choices before starting anything, so later
-    // failures can be read against them. A login session's journal stays
-    // quiet. Print the absolute module path, not its directory, so a wrong
-    // file is visible.
-    let interactive = std::io::stdout().is_terminal();
-    let paint = out();
-    let choice = |label: &str, value: &str| {
-        println!(
-            "  {}  {value}",
-            paint.style(Style::Dim, &format!("{label:<8}"))
-        );
-    };
     let module = page.root.join(&page.module);
-    if interactive {
-        choice("shell", &module.display().to_string());
-        // A wrong config is a common cause of a wrong monitor layout.
-        choice("config", &config.to_string());
-        // The profile decides which sign-ins the desktop has.
-        choice("profile", &places.profile.display().to_string());
-    }
 
     // Bind before starting components, which inherit the path. The
     // supervisor owns it because it routes commands to the engine and the
@@ -1839,9 +1884,6 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         places.command.clone(),
         places.chrome_socket.clone(),
     )?;
-    if interactive {
-        println!("{VARIABLE}={}", places.control.display());
-    }
     if let Some(building) = building {
         replacing_the_splash(
             building,
@@ -1877,30 +1919,9 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         _ => None,
     };
 
-    let platform = platform(
-        env("OZONE").as_deref(),
-        env("WAYLAND_DISPLAY").as_deref(),
-        env("DISPLAY").as_deref(),
-        env("XDG_VTNR").as_deref(),
-    )
-    .map_err(|why| why.to_string())?;
-    if interactive {
-        choice("platform", &platform.to_string());
-    }
-    let on_the_cpu = on_the_cpu(
-        &platform,
-        env(software_compositing::VARIABLE).as_deref(),
-        Path::new("/sys/class/drm"),
-        software_compositing::vmwgfx_has_3d,
-    )
-    .map_err(|why| why.to_string())?;
-    if interactive && on_the_cpu {
-        choice("engine", "composites on the CPU");
-    }
     // Off a terminal, the one line the desktop says when it is up.
-    let version = std::fs::read_to_string(version_file(&binary)).ok();
     let up = up_line(&Chosen {
-        version: version.as_deref().and_then(|said| said.lines().next()),
+        version,
         shell: &module,
         config: &config.to_string(),
         profile: &places.profile,
@@ -2061,12 +2082,8 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), Down> {
     // Scripts wait for this line, so it prints as it is off a terminal.
     match std::io::stdout().is_terminal() {
         true => {
-            let paint = out();
-            println!(
-                "{} {}",
-                paint.style(Style::Heading, "✓ Desktop running."),
-                paint.style(Style::Dim, "Ctrl-C to stop.")
-            );
+            println!();
+            println!("{}", startup::running(out()));
         }
         false => println!("{}", desktop.up),
     }
@@ -2246,7 +2263,22 @@ fn start_a_compositor(
             })?;
     }
     desktop.said.say(desktop.places);
+    if std::io::stdout().is_terminal() {
+        let display = format!(
+            "WAYLAND_DISPLAY={}",
+            published(desktop.places)?.wayland_display
+        );
+        println!("{}", done(out(), "Compositor up", Some(&display)));
+    }
     Ok(())
+}
+
+/// The session document the compositor published.
+fn published(places: &Runtime) -> Result<Session, String> {
+    let at = places.session.display();
+    let published = std::fs::read_to_string(&places.session)
+        .map_err(|why| format!("cannot read {at}: {why}"))?;
+    serde_json::from_str(&published).map_err(|why| format!("{at} is not a session: {why}"))
 }
 
 /// The log levels set this run.
@@ -2311,7 +2343,11 @@ fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), Down>
         &desktop.places.broker,
         running,
         desktop.policy,
-    )
+    )?;
+    if std::io::stdout().is_terminal() {
+        println!("{}", done(out(), "Engine up", None));
+    }
+    Ok(())
 }
 
 /// The engine switch registering the Electron apps' own schemes, read again
@@ -2745,8 +2781,14 @@ fn first_build(
         // The receiver is gone only if the run ended, and then nobody waits.
         let _ = answer.send(page);
     });
+    let started = Instant::now();
     match building.recv_timeout(SPLASH_AFTER) {
-        Ok(page) => page.map(|page| (page, None)),
+        Ok(page) => page.map(|page| {
+            if std::io::stdout().is_terminal() {
+                println!("{}", built_in(out(), started.elapsed()));
+            }
+            (page, None)
+        }),
         Err(_) => {
             let env = |name: &str| std::env::var(name).ok();
             let bundle = our_shell(binary, "splash", &env, &|path| path.exists())
@@ -2965,11 +3007,7 @@ impl SaidSession {
     }
 
     fn said(places: &Runtime) -> Result<(zbus::blocking::Connection, Vec<String>), String> {
-        let at = places.session.display();
-        let published = std::fs::read_to_string(&places.session)
-            .map_err(|why| format!("cannot read {at}: {why}"))?;
-        let session: Session = serde_json::from_str(&published)
-            .map_err(|why| format!("{at} is not a session: {why}"))?;
+        let session = published(places)?;
         let manager = notification::session_bus().map_err(|why| why.to_string())?;
         let earlier = graphical_session::begin(&manager, &session.wayland_display, &places.control)
             .map_err(|why| why.to_string())?;

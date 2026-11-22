@@ -38,7 +38,7 @@ Profiles with their own sign-ins, site data and extensions, each opening the sit
 
 ### A friendlier `domicile` command
 
-Grouped `--help`, `domicile help <command>` for usage and examples, and man pages: `man domicile`. Tables and errors are colored on a terminal (`NO_COLOR` turns it off), and a mistyped command suggests the one you meant.
+Grouped `--help`, `domicile help <command>` for usage and examples, and man pages: `man domicile`. Tables and errors are colored on a terminal (`NO_COLOR` turns it off), and a mistyped command suggests the one you meant. Starting a desktop on a terminal shows what it chose and ticks off each part as it comes up.
 
 [Output](CLI.md#output) · [`domicile help`](CLI.md#domicile-help-command) · [#2418](https://github.com/cprussin/domicile/pull/2418)
 
