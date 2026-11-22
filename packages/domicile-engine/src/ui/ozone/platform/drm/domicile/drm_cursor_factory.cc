@@ -89,10 +89,11 @@ scoped_refptr<PlatformCursor> DrmCursorFactory::GetTurnedDefaultCursor(
         base::BindOnce(load_, *theme, size),
         base::BindOnce(&DrmCursorFactory::Loaded, weak_factory_.GetWeakPtr(),
                        *theme, size));
-    if (loaded_.empty()) {
-      LOG(ERROR) << "domicile: the pointer is Chromium's until \""
-                 << theme->name << "\" at " << size << " px loads";
-    }
+    // Expected on every start, so not an error: `Loaded` says at ERROR when
+    // the theme turns out to be missing.
+    VLOG_IF(1, loaded_.empty())
+        << "domicile: the pointer is Chromium's until \"" << theme->name
+        << "\" at " << size << " px loads";
   }
   // Until `size` loads, the nearest loaded size stands in: a monitor at a new
   // density draws the theme a little off size rather than Chromium's art.

@@ -272,18 +272,16 @@ TEST_F(DrmCursorFactoryThemeTest, TheNearestLoadedSizeStandsInWhileOneLoads) {
   EXPECT_EQ(loaded->cursor_image_scale_factor(), 1.75f);
 }
 
-// Chromium's art while the first size loads is expected, and said once at
-// ERROR, the level the engine logs at, so a pointer that stays Chromium's
-// shows in the journal.
-TEST_F(DrmCursorFactoryThemeTest, DrawingChromiumsArtWhileTheThemeLoadsIsSaid) {
+// Chromium's art while the first size loads is expected on every start, so
+// it is no error: the theme's own failures are.
+TEST_F(DrmCursorFactoryThemeTest,
+       DrawingChromiumsArtWhileTheThemeLoadsIsNoError) {
   source_.Set(DeskCursorTheme{.name = "Amber", .size = 24});
   base::test::MockLog log;
   EXPECT_CALL(log, Log).Times(testing::AnyNumber());
-  EXPECT_CALL(
-      log,
-      Log(logging::LOGGING_ERROR, testing::_, testing::_, testing::_,
-          testing::HasSubstr("is Chromium's until \"Amber\" at 48 px loads")))
-      .Times(1);
+  EXPECT_CALL(log, Log(logging::LOGGING_ERROR, testing::_, testing::_,
+                       testing::_, testing::_))
+      .Times(0);
   log.StartCapturingLogs();
 
   factory_.GetDefaultCursor(mojom::CursorType::kPointer, 2.0f);
