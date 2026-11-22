@@ -84,6 +84,9 @@ Settings live in `~/.config/domicile/domicile.json` (or `.ts`/`.js`). Reference:
   cgroup. A nested desktop leaves its apps to the host session.
 - An app's own children stay in its scope: `systemctl --user status` shows them
   under it.
+- Each scope is `PartOf=graphical-session.target`: when the desk's session
+  ends, its apps stop, daemons they left behind (such as `emacs --daemon`)
+  included.
 
 ### Links open on the desktop
 

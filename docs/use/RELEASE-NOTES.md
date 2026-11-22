@@ -89,6 +89,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 - A site's notifications show the site's icon instead of the browser's.
 - "Open Slack" and other buttons that open an app from a page work again.
 - A key bound to a program that isn't installed says so in a notification instead of doing nothing.
+- Logging out closes the apps you started from the desk, and what they left running in the background, instead of leaving them running into your next login.
 - Logging out ends Miracast casting, instead of leaving it running into your next session.
 - Agents can start programs, drag on pages, and press Enter by typing a new line.
 - The tray's menu of every icon opens after you drag icons around. A right click anywhere on an app's row opens its menu, and long extension names are cut short instead of pushing their buttons out.
