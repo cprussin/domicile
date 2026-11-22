@@ -68,6 +68,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 - Menus, tooltips and dialogs show over a fullscreen window, such as Claude's menu button in fullscreen.
 - Menus, panels and tooltips close when the overview, a fullscreen window or the scratchpad moves or covers what they belong to, instead of floating out of place.
 - The pointer keeps your cursor theme and size after you undock.
+- GTK3 apps and Firefox no longer burn CPU and stutter while they draw their windows. [#2466](https://github.com/cprussin/domicile/issues/2466)
 - In a virtual machine (VMware, VirtualBox, QEMU), the pointer's tip is where your clicks land. [#2432](https://github.com/cprussin/domicile/issues/2432)
 - Logging out, restarting or shutting down no longer counts as a browser crash, so the browser saves your profile on the way out.
 - Slack's notifications show their Reply button instead of an empty row.

@@ -499,6 +499,10 @@ struct Selections {
 /// [`Client::copy_what_was_asked_for`].
 struct CopyRole;
 
+/// User data for the `wl_display.sync` after asking again for client-side
+/// decorations. See the `org_kde_kwin_server_decoration` dispatch.
+struct InsistRole;
+
 /// User data for a popup's objects, so their events reach separate handlers
 /// from the window's.
 struct PopupRole;
@@ -2319,6 +2323,22 @@ impl Dispatch<wl_callback::WlCallback, CopyRole> for Client {
     }
 }
 
+/// The compositor has handled an insisting ask for client-side decorations.
+impl Dispatch<wl_callback::WlCallback, InsistRole> for Client {
+    fn event(
+        _: &mut Client,
+        _: &wl_callback::WlCallback,
+        event: wl_callback::Event,
+        _: &InsistRole,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        if let wl_callback::Event::Done { .. } = event {
+            crate::trace::say(format_args!("insisted on drawing its own frame"));
+        }
+    }
+}
+
 impl Dispatch<wl_buffer::WlBuffer, usize> for Client {
     fn event(
         client: &mut Client,
@@ -2743,11 +2763,17 @@ impl Dispatch<org_kde_kwin_server_decoration::OrgKdeKwinServerDecoration, ()> fo
         decoration: &org_kde_kwin_server_decoration::OrgKdeKwinServerDecoration,
         event: org_kde_kwin_server_decoration::Event,
         _: &(),
-        _: &Connection,
-        _: &QueueHandle<Client>,
+        connection: &Connection,
+        handle: &QueueHandle<Client>,
     ) {
         if let org_kde_kwin_server_decoration::Event::Mode { mode } = event {
             crate::say!(decoration.id(), "mode({})", named(mode));
+            // Insist on client side, as GTK3 and Firefox do. The sync's
+            // callback arrives after any answer to the ask.
+            if mode == WEnum::Value(org_kde_kwin_server_decoration::Mode::Server) {
+                decoration.request_mode(org_kde_kwin_server_decoration::Mode::Client);
+                connection.display().sync(handle, InsistRole);
+            }
         }
     }
 }
