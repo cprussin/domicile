@@ -139,6 +139,8 @@ launcher logout "$ROOT/packages/distro/share/launcher"
 
 fill "$ROOT/packages/distro/share/net.domicile.Miracast.service" \
   "$USR/share/dbus-1/services/net.domicile.Miracast.service"
+fill "$ROOT/packages/distro/share/domicile-miracast.service" \
+  "$USR/lib/systemd/user/domicile-miracast.service"
 
 install -D -m 644 "$ROOT/packages/distro/share/domicile.portal" \
   "$USR/share/xdg-desktop-portal/portals/domicile.portal"

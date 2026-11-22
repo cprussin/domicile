@@ -223,6 +223,11 @@ echo "the session and what it starts"
 SESSION="$USR/share/wayland-sessions/domicile.desktop"
 holds_line "the session runs domicile" "$SESSION" "Exec=/usr/bin/domicile"
 holds_line "the session names the desktop" "$SESSION" "DesktopNames=domicile"
+MIRACAST="$USR/lib/systemd/user/domicile-miracast.service"
+holds_line "D-Bus starts Miracast as a unit" "$USR/share/dbus-1/services/net.domicile.Miracast.service" \
+  "SystemdService=domicile-miracast.service"
+holds_line "the Miracast unit runs domicile-miracast" "$MIRACAST" "ExecStart=/usr/bin/domicile-miracast"
+holds_line "the Miracast unit ends with the desk" "$MIRACAST" "PartOf=graphical-session.target"
 for unit in domicile-session.target domicile-session-shutdown.target; do
   cmp -s "$ROOT/packages/distro/share/$unit" "$USR/lib/systemd/user/$unit" &&
     ok "$unit is the flake's" ||
