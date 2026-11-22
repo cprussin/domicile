@@ -140,6 +140,7 @@ export const WindowFrame = ({
         className={seenStyles({
           arriving: seen?.arriving !== undefined,
           placed: frame !== undefined,
+          seen: seen !== undefined,
           shut: seen?.shut ?? false,
         })}
         style={seenAt(seen, screen)}

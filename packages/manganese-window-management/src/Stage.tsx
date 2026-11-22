@@ -1428,6 +1428,7 @@ const Sliding = ({
     <div
       className={seenStyles({
         arriving: seen?.arriving !== undefined,
+        seen: seen !== undefined,
         shut: seen?.shut ?? false,
       })}
       style={seenAt(seen, on?.geometry.screen)}
