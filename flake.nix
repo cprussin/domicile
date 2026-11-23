@@ -438,7 +438,13 @@
       # What runs an installed Electron app's main process on the desktop's
       # engine, for `domicile open --electron`. A script, because
       # `electron-host` is TypeScript run by bun.
+      #
+      # `PATH`, after the user's own: `wl-copy` and `wl-paste`, which the
+      # app's `clipboard` runs (`packages/electron-host/src/electron/clipboard.ts`),
+      # and `xdg-mime` and `xdg-settings`, which its `app` asks for link
+      # handlers (`packages/electron-host/src/electron/app.ts`).
       domicileElectronHost = pkgs.writeShellScript "electron-host" ''
+        export PATH="''${PATH:+$PATH:}${pkgs.lib.makeBinPath [ pkgs.wl-clipboard pkgs.xdg-utils ]}"
         exec ${pkgs.bun}/bin/bun ${shellWorkspace}/packages/electron-host/src/main.ts "$@"
       '';
 
@@ -2761,10 +2767,11 @@
               {"name":"fixture","productName":"Fixture","version":"1.0.0","main":"main.js"}
               EOF
               cat >"$app/main.js" <<'EOF'
-              const { app, BrowserWindow } = require("electron");
+              const { app, BrowserWindow, clipboard } = require("electron");
               app.whenReady().then(() => {
                 const window = new BrowserWindow({ width: 640, height: 480 });
                 window.loadFile("index.html");
+                clipboard.writeText("copied by fixture");
               });
               EOF
               cat >"$app/index.html" <<'EOF'
@@ -2880,6 +2887,16 @@
                   retry(lambda _: blue_share("on-the-engine") > 0.1, timeout=WAIT)
                   machine.succeed("pgrep -u alice -f 'electron-host/src/main.ts'")
                   machine.fail("pgrep -u alice -f '${pkgs.electron}'")
+                  # The app's clipboard works with no `wl-clipboard` installed.
+                  machine.fail("command -v wl-copy")
+                  machine.wait_until_succeeds(
+                      in_the_desk(
+                          "WAYLAND_DISPLAY=$(basename $(ls /run/user/1000/wayland-[0-9] | head -1)) "
+                          "${pkgs.wl-clipboard}/bin/wl-paste"
+                      )
+                      + " | grep -qx 'copied by fixture'",
+                      timeout=60,
+                  )
                   machine.sleep(15)
                   return pss_kib() - before
 

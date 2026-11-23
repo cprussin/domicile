@@ -125,6 +125,10 @@ overrides:
       - libgl1-mesa-dri
       - libgtk-3-0
       - libpulse0
+      # `wl-copy` and `wl-paste`, for Electron apps' clipboard.
+      - wl-clipboard
+      # `xdg-mime` and `xdg-settings`, for Electron apps' link handlers.
+      - xdg-utils
       # Miracast casts: Wi-Fi Direct, LAN TVs, and the encoding pipeline.
       # The bad plugins also let screen recordings encode on the GPU.
       - network-manager
@@ -183,6 +187,10 @@ overrides:
       - gsettings-desktop-schemas
       - libgtk-3.so.0()(64bit)
       - libpulse.so.0()(64bit)
+      # `wl-copy` and `wl-paste`, for Electron apps' clipboard.
+      - wl-clipboard
+      # `xdg-mime` and `xdg-settings`, for Electron apps' link handlers.
+      - xdg-utils
       # Miracast casts: Wi-Fi Direct, LAN TVs, and the encoding pipeline.
       # The bad plugins also let screen recordings encode on the GPU.
       - NetworkManager
