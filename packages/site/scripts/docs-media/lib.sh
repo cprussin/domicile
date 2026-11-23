@@ -413,8 +413,8 @@ scene_cleanup() {
   # DIAGNOSTIC (not for merge): what the desk said, for the blank-window hunt.
   echo "::group::domicile.log of this scene" >&2
   "$DOMICILE_BIN" list-windows >&2 || true
-  grep -avE "system_bus_socket|UPower|ambient light|brightness|no battery" \
-    "$SCENE_TMP/domicile.log" | tail -600 >&2 || true
+  grep -aE "DIAG|mailbox|promise|frame_sink_broker|engine_pump|surface_commit|FATAL" \
+    "$SCENE_TMP/domicile.log" | tail -3000 >&2 || true
   echo "::endgroup::" >&2
   if grep -aq "the engine exited" "$SCENE_TMP/domicile.log" 2>/dev/null; then
     echo "the engine exited during the scene. Its fatal lines:" >&2
