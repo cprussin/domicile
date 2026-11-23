@@ -1,6 +1,7 @@
 # The manganese tour's browser: a document beside a browser window.
 
 desktop @domicile-desktop/manganese
+"$DOMICILE_BIN" set-log-level trace rendering >&2
 document
 "$DOMICILE_BIN" open https://github.com/cprussin/domicile
 # Long enough for the wallpaper and the page to load.
