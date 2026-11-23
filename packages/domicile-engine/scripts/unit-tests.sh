@@ -47,9 +47,11 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4,
 # BrowserProfiles 12, UnfocusedWebViews 7, HistoryMenu 2, ShellDevServer 7,
 # ShellDevServerLoad 4, ShellDevServerGone 1, ForCaptureTools 2, DeskDrag 6,
-# DomicileMonitorTwinActivation 1, CursorDisplay 4, DomicileHiddenPageTiles 4,
+# DomicileMonitorTwinActivation 1, CursorDisplay 7, DomicileHiddenPageTiles 4,
 # ChannelDisconnectOrder 2.
 #
+# 933, and it was 930 — which display changes refit the pointer is three
+# more CursorDisplay cases. Before that
 # 930, and it was 929 — claiming a named, installed extension the record
 # lacks is one more ExtensionInstaller case. Before that
 # 929, and it was 927 — a channel endpoint's disconnect queued behind its
@@ -337,7 +339,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=930
+FLOOR=933
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

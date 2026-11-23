@@ -28,6 +28,7 @@
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
+#include "components/domicile/browser/cursor_display.h"
 #include "components/domicile/browser/desk_geometry.h"
 #include "components/domicile/browser/shell_windows.h"
 #include "components/domicile/common/domicile_scheme.h"
@@ -261,6 +262,13 @@ class ShellWindows : public display::DisplayObserver {
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override {
     if ((changed_metrics & DISPLAY_METRIC_BOUNDS) == 0) {
+      // Bounds are in pixels, so a new scale or turn moves no window. The
+      // pointer is still drawn for the old one until `Present` fits it: after
+      // an undock the panel is added at scale 1 and only then scaled, which
+      // left the pointer at 1x.
+      if (DisplayChangeRefitsPointer(changed_metrics)) {
+        ReconcileSoon();
+      }
       return;
     }
     const std::vector<ShellWindow> held = ShellWindowsNow();

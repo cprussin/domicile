@@ -5,6 +5,7 @@
 
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/display.h"
+#include "ui/display/display_observer.h"
 
 namespace domicile {
 namespace {
@@ -35,6 +36,23 @@ TEST(CursorDisplayTest, TheSameDisplayTurnedIsStale) {
   display::Display was = Laptop();
   was.set_panel_rotation(display::Display::ROTATE_270);
   EXPECT_TRUE(CursorDisplayStale(was, Laptop()));
+}
+
+// After an undock the laptop's panel is added at scale 1, then the layout
+// scales it: a change of scale alone, with its bounds still in pixels.
+TEST(CursorDisplayTest, AScaleChangeRefitsThePointer) {
+  EXPECT_TRUE(DisplayChangeRefitsPointer(
+      display::DisplayObserver::DISPLAY_METRIC_DEVICE_SCALE_FACTOR));
+}
+
+TEST(CursorDisplayTest, ATurnRefitsThePointer) {
+  EXPECT_TRUE(DisplayChangeRefitsPointer(
+      display::DisplayObserver::DISPLAY_METRIC_ROTATION));
+}
+
+TEST(CursorDisplayTest, ARefreshRateChangeLeavesThePointer) {
+  EXPECT_FALSE(DisplayChangeRefitsPointer(
+      display::DisplayObserver::DISPLAY_METRIC_REFRESH_RATE));
 }
 
 }  // namespace

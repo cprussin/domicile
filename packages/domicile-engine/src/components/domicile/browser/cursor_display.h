@@ -4,6 +4,8 @@
 #ifndef COMPONENTS_DOMICILE_BROWSER_CURSOR_DISPLAY_H_
 #define COMPONENTS_DOMICILE_BROWSER_CURSOR_DISPLAY_H_
 
+#include <cstdint>
+
 #include "ui/display/display.h"
 
 namespace domicile {
@@ -13,6 +15,11 @@ namespace domicile {
 // pointer's size and turn come from the display it is drawn for.
 bool CursorDisplayStale(const display::Display& drawn_for,
                         const display::Display& now);
+
+// Whether a display change of `changed_metrics`, a
+// `display::DisplayObserver::DisplayMetric` mask, changes how the pointer is
+// drawn on that display: its scale or its turn.
+bool DisplayChangeRefitsPointer(uint32_t changed_metrics);
 
 }  // namespace domicile
 
