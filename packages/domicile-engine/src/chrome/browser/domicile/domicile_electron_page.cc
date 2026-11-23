@@ -22,8 +22,13 @@
 #include "base/supports_user_data.h"
 #include "base/types/expected.h"
 #include "base/values.h"
+#include "components/domicile/browser/electron_downloads.h"
 #include "components/domicile/browser/electron_protocol.h"
+#include "components/domicile/browser/web_view_guest.h"
 #include "components/domicile/common/electron_node_switches.h"
+#include "components/download/public/common/download_item.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -116,6 +121,8 @@ ElectronPage::ElectronPage(content::WebContents* contents,
       session_(std::move(session)) {
   // The protocol keeps a Node page's preload in node_->preload.
   CHECK(!node_.has_value() || preload_.empty());
+  download_manager_observation_.Observe(
+      contents->GetBrowserContext()->GetDownloadManager());
 }
 
 ElectronPage::~ElectronPage() = default;
@@ -248,6 +255,21 @@ base::WeakPtr<ElectronSession> ElectronPage::SessionOf(
     return nullptr;
   }
   return page->session_;
+}
+
+void ElectronPage::OnDownloadCreated(content::DownloadManager* manager,
+                                     download::DownloadItem* item) {
+  if (content::DownloadItemUtils::GetWebContents(item) != web_contents() ||
+      !session_) {
+    return;
+  }
+  const WebViewGuest* guest = WebViewGuest::FromWebContents(web_contents());
+  CHECK(guest) << "domicile: an Electron page is always a <webview>'s";
+  MarkElectronDownload(*item, session_, guest->window_id());
+}
+
+void ElectronPage::ManagerGoingDown(content::DownloadManager* manager) {
+  download_manager_observation_.Reset();
 }
 
 void ElectronPage::Deliver(const std::string& channel,
