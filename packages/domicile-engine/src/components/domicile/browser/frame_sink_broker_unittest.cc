@@ -1948,6 +1948,31 @@ TEST_F(FrameSinkBrokerTest, AFencedBufferIsReadOnlyAfterItsFence) {
   EXPECT_EQ(sii_->fenced(), std::vector<gpu::Mailbox>{mailbox});
 }
 
+// Viz returns a buffer before its GPU is done reading it. The image goes only
+// after that read, or the read finds no image and viz draws its fallback over
+// the window until the client draws again.
+TEST_F(FrameSinkBrokerTest, ADestroyedBufferGoesAfterVizsLastReadOfIt) {
+  UseTheGpu();
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const auto [buffer_id, mailbox] = ImportABuffer(remote, frame_sink_id);
+  gpu::SyncToken read_done(gpu::CommandBufferNamespace::GPU_IO,
+                           gpu::CommandBufferId::FromUnsafeValue(7),
+                           /*release_count=*/42);
+  read_done.SetVerifyFlush();
+
+  remote->DestroyBuffer(frame_sink_id, buffer_id, read_done);
+  remote.FlushForTesting();
+
+  EXPECT_FALSE(sii_->CheckSharedImageExists(mailbox));
+  EXPECT_EQ(sii_->MostRecentDestroyTokens(),
+            std::vector<gpu::SyncToken>{read_done});
+}
+
 TEST_F(FrameSinkBrokerTest, FencingABufferNeverImportedIsRefused) {
   UseTheGpu();
   mojo::Remote<mojom::FrameSinkBroker> remote;

@@ -154,7 +154,10 @@ source_set("surface_holds") {
     "surface_holds.h",
   ]
 
-  public_deps = [ "//base" ]
+  public_deps = [
+    "//base",
+    "//gpu/command_buffer/common",
+  ]
 }
 
 source_set("surface_holds_unit_tests") {
@@ -164,6 +167,7 @@ source_set("surface_holds_unit_tests") {
 
   deps = [
     ":surface_holds",
+    "//gpu/command_buffer/common",
     "//testing/gtest",
   ]
 }
