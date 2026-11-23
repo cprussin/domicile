@@ -119,6 +119,14 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // Wayland session that offers no render node: captures then come in shared
   // memory.
   using DmabufCaptureChecker = base::RepeatingCallback<bool()>;
+  // Runs the closure once the browser's GPU channel passes the sync token.
+  // Injected because the channel's context comes from //ui/aura. An import
+  // answers only once its SharedImage exists: the producer's frame reaches
+  // viz on another pipe than the one that made it, and viz drew a frame
+  // naming an image the GPU had not made yet, which left the window blank.
+  // Required whenever `get_shared_image_interface` returns an interface.
+  using SyncTokenSignaler =
+      base::RepeatingCallback<void(const gpu::SyncToken&, base::OnceClosure)>;
 
   // `get_shared_image_interface` gives imported dmabufs a GPU. Injected because
   // this target does not depend on //ui/aura. It returns null when headless.
@@ -146,7 +154,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       InputConfigSetter set_input_config = InputConfigSetter(),
       DisplayRedrawer redraw_display = DisplayRedrawer(),
       ColorMatrixSetter set_color_matrix = ColorMatrixSetter(),
-      DmabufCaptureChecker can_capture_into_dmabufs = DmabufCaptureChecker());
+      DmabufCaptureChecker can_capture_into_dmabufs = DmabufCaptureChecker(),
+      SyncTokenSignaler signal_sync_token = SyncTokenSignaler());
 
   FrameSinkBroker(const FrameSinkBroker&) = delete;
   FrameSinkBroker& operator=(const FrameSinkBroker&) = delete;
@@ -365,6 +374,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   const ColorMatrixSetter set_color_matrix_;
   // See DmabufCaptureChecker.
   const DmabufCaptureChecker can_capture_into_dmabufs_;
+  // See SyncTokenSignaler.
+  const SyncTokenSignaler signal_sync_token_;
 
   mojo::ReceiverSet<mojom::FrameSinkBroker> receivers_;
   base::RepeatingClosure producer_gone_;

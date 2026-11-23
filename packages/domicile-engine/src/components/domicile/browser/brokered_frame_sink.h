@@ -136,6 +136,11 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
                         const gfx::ColorSpace& color_space,
                         std::optional<gpu::ExportedSharedImage>* exported);
 
+  // The token that passes once the GPU has made `buffer_id`'s SharedImage.
+  // Nullopt for an image in shared memory, which the GPU does not make, or
+  // for no such buffer.
+  std::optional<gpu::SyncToken> GpuCreationToken(uint64_t buffer_id) const;
+
   // Submits a frame showing `buffer_id`. False if there is no such buffer, or
   // no surface to submit to yet.
   bool SubmitBuffer(uint64_t buffer_id, const gfx::Rect& damage);
@@ -182,6 +187,8 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
     scoped_refptr<gpu::ClientSharedImage> shared_image;
     viz::TransferableResource resource;
     gfx::Size size;
+    // Made by the GPU from a dmabuf, rather than over shared memory.
+    bool on_gpu = false;
   };
 
   // Turns viz's returned resources into wl_buffer.release, by way of the

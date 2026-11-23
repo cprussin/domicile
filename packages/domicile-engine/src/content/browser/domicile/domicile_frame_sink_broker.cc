@@ -38,6 +38,7 @@
 #include "content/public/browser/gpu_utils.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "ui/aura/env.h"
@@ -86,6 +87,26 @@ gpu::SharedImageInterface* GetSharedImageInterface() {
     return nullptr;
   }
   return context_provider->SharedImageInterface();
+}
+
+// Runs `done` once the GPU channel GetSharedImageInterface's images are made
+// on passes `sync_token`. The same channel carries the images' creation, so
+// the wait is ordered after it. Drops `done` if the context is gone or lost
+// first.
+void SignalSyncToken(const gpu::SyncToken& sync_token,
+                     base::OnceClosure done) {
+  ui::ContextFactory* context_factory =
+      aura::Env::GetInstance()->context_factory();
+  CHECK(context_factory) << "domicile: a GPU import without a context factory";
+  scoped_refptr<viz::RasterContextProvider> context_provider =
+      context_factory->SharedMainThreadRasterContextProvider();
+  if (!context_provider) {
+    LOG(ERROR) << "domicile: the GPU context went before an imported buffer "
+                  "was made; the import is refused";
+    return;
+  }
+  context_provider->ContextSupport()->SignalSyncToken(sync_token,
+                                                      std::move(done));
 }
 
 // Whether the GPU can make the dmabufs viz captures a display into: BGRA, for
@@ -501,7 +522,8 @@ class DomicileBrowserService : public content::GpuDataManagerObserver,
                 base::BindRepeating(&SetInputConfig),
                 base::BindRepeating(&RedrawDisplay),
                 base::BindRepeating(&SetColorMatrix),
-                base::BindRepeating(&CanCaptureIntoDmabufs)),
+                base::BindRepeating(&CanCaptureIntoDmabufs),
+                base::BindRepeating(&SignalSyncToken)),
         provider_(&broker_) {
     // Registered on every platform so copies made in a page reach the producer.
     // `SetClipboard` handles copies made outside. Unretained is safe: this is a

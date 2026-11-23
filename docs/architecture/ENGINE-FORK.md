@@ -309,7 +309,10 @@ The browser imports each dmabuf. The producer submits its own frames.
    (`components/exo/buffer.cc`). That code needs `aura::Env`, which only the
    browser has.
 3. The browser returns a `gpu::ExportedSharedImage`: a mailbox, metadata and a
-   verified sync token.
+   verified sync token. It answers only once its GPU channel passes the
+   image's creation token. The producer's frame reaches viz on another pipe,
+   and viz could draw it before the GPU had made the image, leaving the
+   window blank until it was replaced.
 4. The producer calls `gpu::ClientSharedImage::ImportUnowned`, builds its own
    `viz::TransferableResource` and submits its own `CompositorFrame`.
 5. Viz returns the resource through the producer's own sink, which fires

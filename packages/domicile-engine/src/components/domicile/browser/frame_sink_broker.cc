@@ -15,6 +15,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "components/domicile/browser/brokered_frame_sink.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/clone_traits.h"
 #include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
@@ -91,7 +92,8 @@ FrameSinkBroker::FrameSinkBroker(
     InputConfigSetter set_input_config,
     DisplayRedrawer redraw_display,
     ColorMatrixSetter set_color_matrix,
-    DmabufCaptureChecker can_capture_into_dmabufs)
+    DmabufCaptureChecker can_capture_into_dmabufs,
+    SyncTokenSignaler signal_sync_token)
     : host_frame_sink_manager_(host_frame_sink_manager),
       allocate_frame_sink_id_(std::move(allocate_frame_sink_id)),
       get_shared_image_interface_(std::move(get_shared_image_interface)),
@@ -109,7 +111,8 @@ FrameSinkBroker::FrameSinkBroker(
       set_input_config_(std::move(set_input_config)),
       redraw_display_(std::move(redraw_display)),
       set_color_matrix_(std::move(set_color_matrix)),
-      can_capture_into_dmabufs_(std::move(can_capture_into_dmabufs)) {
+      can_capture_into_dmabufs_(std::move(can_capture_into_dmabufs)),
+      signal_sync_token_(std::move(signal_sync_token)) {
   CHECK(host_frame_sink_manager);
   CHECK(allocate_frame_sink_id_);
   receivers_.set_disconnect_handler(base::BindRepeating(
@@ -296,7 +299,28 @@ void FrameSinkBroker::ImportBuffer(const viz::FrameSinkId& frame_sink_id,
           << frame_sink->app_id() << " (" << frame_sink_id.ToString()
           << "): " << size.ToString() << ", fourcc " << fourcc << ", "
           << color_space.ToString();
-  std::move(callback).Run(buffer_id, std::move(exported));
+  const std::optional<gpu::SyncToken> created =
+      frame_sink->GpuCreationToken(buffer_id);
+  if (!created.has_value()) {
+    std::move(callback).Run(buffer_id, std::move(exported));
+    return;
+  }
+  CHECK(signal_sync_token_)
+      << "domicile: the embedder gave the broker a GPU but no way to wait "
+         "for it";
+  // A GPU channel lost first drops the closure: the import is then refused,
+  // since the image may never have been made.
+  signal_sync_token_.Run(
+      *created,
+      base::BindOnce(
+          [](ImportBufferCallback callback, uint64_t buffer_id,
+             std::optional<gpu::ExportedSharedImage> exported) {
+            std::move(callback).Run(buffer_id, std::move(exported));
+          },
+          mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+              std::move(callback), uint64_t{0},
+              std::optional<gpu::ExportedSharedImage>()),
+          buffer_id, std::move(exported)));
 }
 
 void FrameSinkBroker::SubmitBuffer(const viz::FrameSinkId& frame_sink_id,

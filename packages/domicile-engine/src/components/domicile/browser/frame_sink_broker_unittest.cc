@@ -578,6 +578,9 @@ class FrameSinkBrokerTest : public testing::Test {
         base::BindRepeating(&FrameSinkBrokerTest::RecordRedraw,
                             base::Unretained(this)),
         base::BindRepeating(&FrameSinkBrokerTest::RecordColorMatrix,
+                            base::Unretained(this)),
+        FrameSinkBroker::DmabufCaptureChecker(),
+        base::BindRepeating(&FrameSinkBrokerTest::SignalSyncToken,
                             base::Unretained(this)));
     page_ = broker_->NewEmbedRequester();
   }
@@ -610,6 +613,20 @@ class FrameSinkBrokerTest : public testing::Test {
 
   // Gives the broker a GPU.
   void UseTheGpu() { gpu_ = sii_.get(); }
+
+  // Fake for the browser's GPU channel: passes each token at once, unless a
+  // test holds them.
+  void SignalSyncToken(const gpu::SyncToken& sync_token,
+                       base::OnceClosure done) {
+    if (!hold_signals_) {
+      std::move(done).Run();
+      return;
+    }
+    held_signals_.emplace_back(sync_token, std::move(done));
+  }
+
+  // Makes the fake GPU channel hold each token until the test passes it.
+  void HoldSignals() { hold_signals_ = true; }
 
   // Fake for the browser's software compositing: off, unless a test turns it
   // on.
@@ -694,6 +711,11 @@ class FrameSinkBrokerTest : public testing::Test {
 
   // How many browser window captures keep their page drawing.
   int drawing_holds_ = 0;
+
+  // Set by HoldSignals. The tokens the broker waits on, in order, with what
+  // runs once each passes.
+  bool hold_signals_ = false;
+  std::vector<std::pair<gpu::SyncToken, base::OnceClosure>> held_signals_;
 
   // Fake for the browser's frame sink id allocator.
   viz::FrameSinkIdAllocator allocator_{kBrowserClientId};
@@ -1924,6 +1946,64 @@ TEST_F(FrameSinkBrokerTest, ABrowserWindowThatIsNotOpenIsRefused) {
   EXPECT_FALSE(capture.is_connected());
 }
 
+// The producer's frames reach viz on another pipe than the one the browser
+// made the image on. An import answers only once the GPU has made the image,
+// or viz can draw a frame naming an image that is not there yet and leave the
+// window blank.
+TEST_F(FrameSinkBrokerTest, AnImportAnswersOnceTheGpuHasMadeItsImage) {
+  UseTheGpu();
+  HoldSignals();
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  base::test::TestFuture<uint64_t, std::optional<gpu::ExportedSharedImage>>
+      imported;
+
+  remote->ImportBuffer(frame_sink_id, ADmabuf(kBufferSize), kBufferSize,
+                       kArgb8888, gfx::ColorSpace::CreateSRGB(),
+                       imported.GetCallback());
+  remote.FlushForTesting();
+
+  EXPECT_FALSE(imported.IsReady());
+  ASSERT_EQ(held_signals_.size(), 1u);
+  std::move(held_signals_[0].second).Run();
+  auto [buffer_id, exported] = imported.Take();
+  EXPECT_NE(buffer_id, 0u);
+  ASSERT_TRUE(exported.has_value());
+  EXPECT_EQ(held_signals_[0].first,
+            gpu::ClientSharedImage::ImportUnowned(std::move(exported).value())
+                ->creation_sync_token());
+}
+
+// A GPU channel lost before the image is made drops the wait. The image may
+// never exist, so the import is refused rather than left unanswered, which
+// would hang a producer waiting on it.
+TEST_F(FrameSinkBrokerTest, AnImportIsRefusedIfTheGpuGoesBeforeItsImage) {
+  UseTheGpu();
+  HoldSignals();
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  base::test::TestFuture<uint64_t, std::optional<gpu::ExportedSharedImage>>
+      imported;
+  remote->ImportBuffer(frame_sink_id, ADmabuf(kBufferSize), kBufferSize,
+                       kArgb8888, gfx::ColorSpace::CreateSRGB(),
+                       imported.GetCallback());
+  remote.FlushForTesting();
+
+  held_signals_.clear();
+
+  auto [buffer_id, exported] = imported.Take();
+  EXPECT_EQ(buffer_id, 0u);
+  EXPECT_FALSE(exported.has_value());
+}
+
 // The producer submits without waiting for its draw. The GPU waits for the
 // draw's fence before reading the buffer, and the token orders viz's read
 // after the fence is in place.
@@ -2079,6 +2159,28 @@ TEST_F(FrameSinkBrokerTest, ABufferIsImportedInTheColorSpaceAskedFor) {
 
   ASSERT_TRUE(shared_image);
   EXPECT_EQ(shared_image->color_space(), pq);
+}
+
+// The GPU does not make an image over shared memory, so its import has
+// nothing to wait for.
+TEST_F(FrameSinkBrokerTest, AnImportInSharedMemoryAnswersAtOnce) {
+  CompositeInSoftware();
+  HoldSignals();
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  constexpr uint32_t kStride = 4 * 64;
+
+  auto [buffer_id, exported] = ImportShm(
+      remote, frame_sink_id,
+      base::UnsafeSharedMemoryRegion::Create(kStride * 48), kStride);
+
+  EXPECT_NE(buffer_id, 0u);
+  EXPECT_TRUE(exported.has_value());
+  EXPECT_TRUE(held_signals_.empty());
 }
 
 // A window drawn into shared memory, on a browser that composites in

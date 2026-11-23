@@ -181,7 +181,8 @@ uint64_t BrokeredFrameSink::ImportBuffer(
 
   scoped_refptr<gpu::ClientSharedImage> shared_image;
   gpu::SharedImageInterface* sii = nullptr;
-  if (handle.type == gfx::SHARED_MEMORY_BUFFER) {
+  const bool handle_was_dmabuf = handle.type != gfx::SHARED_MEMORY_BUFFER;
+  if (!handle_was_dmabuf) {
     sii = get_software_shared_image_interface_.Run();
     if (!sii) {
       LOG(ERROR) << "domicile: a window in shared memory, but the browser "
@@ -222,6 +223,7 @@ uint64_t BrokeredFrameSink::ImportBuffer(
 
   ImportedBuffer buffer;
   buffer.size = size;
+  buffer.on_gpu = handle_was_dmabuf;
   buffer.resource = viz::TransferableResource::Make(
       shared_image, viz::TransferableResource::ResourceSource::kUI,
       sii->GenVerifiedSyncToken());
@@ -237,6 +239,15 @@ uint64_t BrokeredFrameSink::ImportBuffer(
   resource_to_buffer_[buffer.resource.id] = buffer_id;
   buffers_[buffer_id] = std::move(buffer);
   return buffer_id;
+}
+
+std::optional<gpu::SyncToken> BrokeredFrameSink::GpuCreationToken(
+    uint64_t buffer_id) const {
+  auto iter = buffers_.find(buffer_id);
+  if (iter == buffers_.end() || !iter->second.on_gpu) {
+    return std::nullopt;
+  }
+  return iter->second.shared_image->creation_sync_token();
 }
 
 bool BrokeredFrameSink::SubmitBuffer(uint64_t buffer_id,
