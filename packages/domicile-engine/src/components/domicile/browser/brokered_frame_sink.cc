@@ -327,11 +327,15 @@ std::optional<gpu::SyncToken> BrokeredFrameSink::FenceBuffer(
   return sii->GenVerifiedSyncToken();
 }
 
-void BrokeredFrameSink::DestroyBuffer(uint64_t buffer_id) {
+void BrokeredFrameSink::DestroyBuffer(uint64_t buffer_id,
+                                      const gpu::SyncToken& read_done) {
   auto iter = buffers_.find(buffer_id);
   if (iter == buffers_.end()) {
     return;
   }
+  // The GPU destroys the image once viz's read of it lands, as
+  // exo::Buffer::Texture does for a released buffer.
+  iter->second.shared_image->UpdateDestructionSyncToken(read_done);
   resource_to_buffer_.erase(iter->second.resource.id);
   buffers_.erase(iter);
 }

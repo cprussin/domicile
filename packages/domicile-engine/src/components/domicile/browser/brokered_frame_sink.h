@@ -148,8 +148,10 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
 
   // Drops an imported buffer and its SharedImage, which this holds the only
   // reference to. Viz draws a fallback image over any frame still showing it,
-  // so call this only once viz has returned it. No release is sent for it.
-  void DestroyBuffer(uint64_t buffer_id);
+  // so call this only once viz has returned it. The image goes once
+  // `read_done`, the token viz returned it with, passes: viz's GPU may still
+  // be reading it. No release is sent for it.
+  void DestroyBuffer(uint64_t buffer_id, const gpu::SyncToken& read_done);
 
   // viz::HostFrameSinkClient implementation.
   void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;

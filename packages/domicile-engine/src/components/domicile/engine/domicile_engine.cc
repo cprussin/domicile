@@ -208,7 +208,7 @@ class Surface : public mojom::SurfaceObserver,
     resource.id = next_resource_id_;
     resource.hdr_metadata = hdr_metadata;
     next_resource_id_ = viz::ResourceId(next_resource_id_.GetUnsafeValue() + 1);
-    resource_to_buffer_[resource.id] = buffer_id;
+    resource_to_buffer_[resource.id] = {buffer_id, shared_image};
     buffers_[buffer_id] = {std::move(shared_image), std::move(resource),
                            has_alpha};
   }
@@ -217,16 +217,17 @@ class Surface : public mojom::SurfaceObserver,
   // it: the browser holds the only reference to its SharedImage, and viz draws
   // a fallback image over any it cannot find.
   void Forget(uint64_t buffer_id) {
-    const bool unheld = holds_.Destroyed(buffer_id);
+    const std::optional<gpu::SyncToken> read_done =
+        holds_.Destroyed(buffer_id);
     auto iter = buffers_.find(buffer_id);
     if (iter != buffers_.end()) {
-      if (unheld) {
+      if (read_done.has_value()) {
         resource_to_buffer_.erase(iter->second.resource.id);
       }
       buffers_.erase(iter);
     }
-    if (unheld) {
-      broker_->DestroyBuffer(frame_sink_id_, buffer_id);
+    if (read_done.has_value()) {
+      broker_->DestroyBuffer(frame_sink_id_, buffer_id, *read_done);
     }
   }
 
@@ -525,7 +526,7 @@ class Surface : public mojom::SurfaceObserver,
   void OnBeginFrame(const viz::BeginFrameArgs& args,
                     const viz::FrameTimingDetailsMap& timing_details,
                     std::vector<viz::ReturnedResource> resources) override {
-    Release(resources);
+    Release(std::move(resources));
     for (const auto& [frame_token, details] : timing_details) {
       const std::optional<uint64_t> number = frames_.Presented(frame_token);
       if (number.has_value()) {
@@ -542,7 +543,7 @@ class Surface : public mojom::SurfaceObserver,
   // the client's wl_surface.frame then.
   void DidReceiveCompositorFrameAck(
       std::vector<viz::ReturnedResource> resources) override {
-    Release(resources);
+    Release(std::move(resources));
     const std::optional<uint64_t> number = frames_.Acked();
     if (!number.has_value()) {
       LOG(ERROR) << "domicile: viz acked a frame this window never sent";
@@ -557,7 +558,7 @@ class Surface : public mojom::SurfaceObserver,
   }
   void ReclaimResources(
       std::vector<viz::ReturnedResource> resources) override {
-    Release(resources);
+    Release(std::move(resources));
   }
   void OnBeginFramePausedChanged(bool paused) override {}
   void OnCompositorFrameTransitionDirectiveProcessed(
@@ -583,14 +584,16 @@ class Surface : public mojom::SurfaceObserver,
   // Forwards returned resources as wl_buffer.release, so the client may draw
   // into the buffer again, and drops the imports of destroyed buffers viz no
   // longer holds.
-  void Release(const std::vector<viz::ReturnedResource>& resources) {
-    for (const viz::ReturnedResource& resource : resources) {
+  void Release(std::vector<viz::ReturnedResource> resources) {
+    for (viz::ReturnedResource& resource : resources) {
       auto iter = resource_to_buffer_.find(resource.id);
       if (iter == resource_to_buffer_.end()) {
         continue;
       }
-      const uint64_t buffer = iter->second;
-      switch (holds_.Returned(buffer, resource.count)) {
+      const uint64_t buffer = iter->second.buffer;
+      const gpu::SyncToken read_done = iter->second.shared_image->EndExport(
+          std::move(resource.shared_image_export_result));
+      switch (holds_.Returned(buffer, resource.count, read_done)) {
         case SurfaceHolds::Return::kRelease:
           queue_->Push({.type = EngineEvent::Type::kReleased,
                         .surface = id_,
@@ -598,7 +601,7 @@ class Surface : public mojom::SurfaceObserver,
           break;
         case SurfaceHolds::Return::kDestroy:
           resource_to_buffer_.erase(iter);
-          broker_->DestroyBuffer(frame_sink_id_, buffer);
+          broker_->DestroyBuffer(frame_sink_id_, buffer, read_done);
           break;
         case SurfaceHolds::Return::kKeep:
           break;
@@ -641,7 +644,13 @@ class Surface : public mojom::SurfaceObserver,
   // The synced frame submits go up at.
   uint32_t frame_ = 0;
   base::flat_map<uint64_t, Adopted> buffers_;
-  base::flat_map<viz::ResourceId, uint64_t> resource_to_buffer_;
+  // A resource's buffer, and the SharedImage that unpacks viz's returns of
+  // it. The SharedImage outlives the buffer's Forget until viz returns it.
+  struct Resource {
+    uint64_t buffer = 0;
+    scoped_refptr<gpu::ClientSharedImage> shared_image;
+  };
+  base::flat_map<viz::ResourceId, Resource> resource_to_buffer_;
   viz::ResourceId next_resource_id_{1};
   viz::FrameTokenGenerator next_frame_token_;
   SurfaceFrames frames_;
