@@ -156,6 +156,55 @@ describe(connectEngine, () => {
     expect(await heard).toEqual(event);
   });
 
+  it("passes on a page's download and how it goes", async () => {
+    fake = await startFakeEngine();
+    const engine = await connected(fake);
+    const asked = new Promise((resolve) =>
+      engine.events.on("willDownload", resolve),
+    );
+    const updated = new Promise((resolve) =>
+      engine.events.on("downloadUpdated", resolve),
+    );
+    const willDownload = {
+      content_disposition: "",
+      download: 1,
+      etag: "",
+      filename: "a.csv",
+      has_user_gesture: false,
+      initiator_origin: "",
+      last_modified: "",
+      mime_type: "text/csv",
+      session: "",
+      start_time: 1.5,
+      total_bytes: 34_498,
+      type: "will_download",
+      url: "https://files.test/a.csv",
+      url_chain: ["https://files.test/a.csv"],
+      window: 1,
+    };
+    const update = {
+      bytes_per_second: 0,
+      can_resume: false,
+      done: true,
+      download: 1,
+      end_time: 2.5,
+      filename: "a.csv",
+      mime_type: "text/csv",
+      paused: false,
+      received_bytes: 34_498,
+      save_path: "/home/me/a.csv",
+      state: "completed",
+      total_bytes: 34_498,
+      type: "download_updated",
+    };
+
+    fake.say(willDownload);
+    fake.say(update);
+
+    expect(await asked).toEqual(willDownload);
+    expect(await updated).toEqual(update);
+  });
+
   it("passes on each session result, with its result or its error", async () => {
     fake = await startFakeEngine();
     const engine = await connected(fake);

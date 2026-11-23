@@ -149,6 +149,8 @@ source_set("domicile") {
     "//components/domicile:desk_downloads",
     # Electron apps' windows, for the Electron socket.
     "//components/domicile:electron_app",
+    # Marks the downloads an Electron app's pages start as the app's.
+    "//components/domicile:electron_downloads",
     # The engine's user agent and version, which Electron's user agent names.
     "//components/embedder_support:user_agent",
     "//components/version_info",

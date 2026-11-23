@@ -18,6 +18,7 @@ import { completeElectron, completeInstances } from "./electron/complete";
 import { createCrashReporter } from "./electron/crash-reporter";
 import { desktopCapturer } from "./electron/desktop-capturer";
 import { createDialog } from "./electron/dialog";
+import { createDownloads } from "./electron/downloads";
 import { createGlobalShortcut } from "./electron/global-shortcut";
 import { createIpcMain } from "./electron/ipc-main";
 import type { MenuEntry } from "./electron/menu";
@@ -202,6 +203,13 @@ const main = async ([resources, ...args]: string[]) => {
       permissions,
       appEvents.sessionCreated,
     );
+    const downloads = createDownloads(
+      engine.send,
+      (partition) => session.fromPartition(partition),
+      (window) => webContentsOf(window),
+    );
+    engine.events.on("willDownload", downloads.hearWillDownload);
+    engine.events.on("downloadUpdated", downloads.hearUpdate);
     // Read before the app's main runs, as an app reads its theme as it starts.
     const desktop = await reachDesktop(env);
     const theme: { changed?: (next: Appearance) => void } = {};

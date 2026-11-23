@@ -446,6 +446,21 @@ The host carries out the webContents members that act on the page with
   ([`domicile_permissions.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_permissions.h)).
   Not yet: `setPermissionCheckHandler`, which Electron calls synchronously;
   checks answer from what Chrome kept.
+- **Downloads** go where the session's `will-download` says. The engine
+  marks each download an app's page starts as the app's, so it reaches the
+  app after its page closes (Slack downloads from a hidden window it closes at
+  once). Before any picker, it sends `will_download {download, session,
+  window?, url, url_chain, filename, ...}`; the host emits `will-download`
+  with a `DownloadItem` and answers `download_answer {download, path?,
+  cancel?}`: the save path the app set, a cancel for `preventDefault` or
+  `cancel()`, or neither, and the shell's picker asks, as Electron's save
+  dialog does. Then `download_updated` says how it goes, which the item emits
+  as `updated` and, once done, `done`; `pause`, `resume` and `cancel` go back
+  as `download_control`. An app that goes first cancels the downloads it
+  never answered
+  ([`electron_downloads.h`](../../packages/domicile-engine/src/components/domicile/browser/electron_downloads.h),
+  `src/electron/downloads.ts`). Not yet: `session.downloadURL`,
+  `webContents.downloadURL`, `setDownloadPath`, `createInterruptedDownload`.
 
 ### Desktop pieces
 
