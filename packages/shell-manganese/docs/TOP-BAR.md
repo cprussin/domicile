@@ -333,7 +333,10 @@ button, and their controls in one panel, each labeled in words.
   - A muted device's or stream's row is gray.
   - Names wrap instead of truncating. `Select` lists stay over the panel.
   - A PipeWire filter's own stream (e.g. laptop speaker correction) isn't
-    listed under Apps.
+    listed under Apps. The hardware behind the filter isn't offered as a
+    device unless it is in use.
+  - A filter shows as muted when the hardware behind it is; unmuting it
+    unmutes both.
 - Sliders stop at 100%. A device set higher elsewhere shows its value.
 - Level meters run only while the mixer is open, for the devices it shows.
   They show -60 to 0 dB.
