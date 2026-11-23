@@ -24,6 +24,7 @@
 #include "base/containers/flat_map.h"
 #include "base/files/scoped_file.h"
 #include "base/functional/bind.h"
+#include "base/containers/flat_set.h"
 #include "base/logging.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/memory/platform_shared_memory_region.h"
@@ -437,10 +438,12 @@ class Surface : public mojom::SurfaceObserver,
     if (submit.sync_token.HasData()) {
       resource.set_sync_token(submit.sync_token);
     }
-    VLOG(3) << "DIAG submits buffer " << submit.buffer << " "
-               << resource.mailbox().ToDebugString() << " resource "
-               << resource.id.GetUnsafeValue() << " token "
-               << resource.sync_token().ToDebugString();
+    if (diag_seen_.insert(submit.buffer).second) {
+      LOG(ERROR) << "DIAG first submits buffer " << submit.buffer << " "
+                 << resource.mailbox().ToDebugString() << " resource "
+                 << resource.id.GetUnsafeValue() << " token "
+                 << resource.sync_token().ToDebugString();
+    }
     frame.resource_list.push_back(resource);
     frame.render_pass_list.push_back(std::move(pass));
 
@@ -651,6 +654,7 @@ class Surface : public mojom::SurfaceObserver,
   // The synced frame submits go up at.
   uint32_t frame_ = 0;
   base::flat_map<uint64_t, Adopted> buffers_;
+  base::flat_set<uint64_t> diag_seen_;
   // A resource's buffer, and the SharedImage that unpacks viz's returns of
   // it. The SharedImage outlives the buffer's Forget until viz returns it.
   struct Resource {

@@ -8,6 +8,8 @@
 #include <ostream>
 #include <utility>
 
+#include "base/containers/flat_set.h"
+#include "base/no_destructor.h"
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "components/viz/common/quads/compositor_frame.h"
@@ -300,6 +302,9 @@ bool BrokeredFrameSink::SubmitBuffer(uint64_t buffer_id,
   // window nobody sees. This sink never asks for BeginFrames to draw, so
   // there is nothing to throttle; let the timing go.
   frame.metadata.may_throttle_if_undrawn_frames = false;
+  LOG(ERROR) << "DIAG browser submits " << buffer_id << " "
+             << buffer.resource.mailbox().ToDebugString() << " token "
+             << buffer.resource.sync_token().ToDebugString();
   frame.resource_list.push_back(buffer.resource);
   frame.render_pass_list.push_back(std::move(pass));
 
@@ -325,6 +330,16 @@ std::optional<gpu::SyncToken> BrokeredFrameSink::FenceBuffer(
   sii->UpdateSharedImage(gpu::SyncToken(),
                          std::make_unique<gfx::GpuFence>(std::move(fence)),
                          iter->second.shared_image->mailbox());
+  {
+    static base::NoDestructor<base::flat_set<uint64_t>> diag_fenced;
+    if (diag_fenced->insert(buffer_id).second) {
+      gpu::SyncToken diag_token = sii->GenVerifiedSyncToken();
+      LOG(ERROR) << "DIAG fences buffer " << buffer_id << " "
+                 << iter->second.shared_image->mailbox().ToDebugString()
+                 << " token " << diag_token.ToDebugString();
+      return diag_token;
+    }
+  }
   // Verified because the producer has no GPU channel to verify it with, and a
   // frame carrying an unverified token is refused.
   return sii->GenVerifiedSyncToken();
