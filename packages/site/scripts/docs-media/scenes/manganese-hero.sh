@@ -3,6 +3,7 @@
 # then Settings, and a notification.
 
 desktop @domicile-desktop/manganese
+"$DOMICILE_BIN" set-log-level trace rendering >&2
 # Blender as the launcher lists it, and its preferences without the splash
 # screen.
 ln -sf "$(dirname "$(command -v blender)")/../share/applications/blender.desktop" \
