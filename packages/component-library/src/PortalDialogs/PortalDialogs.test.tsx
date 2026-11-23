@@ -2013,10 +2013,14 @@ describe("PortalDialogs", () => {
       const notes = await screen.findByRole("radio", {
         name: "Firefox: Notes",
       });
+      // The radio can carry the app's name before the app's icon has loaded,
+      // while it still shows the page's (seen in CI).
+      await waitFor(() => {
+        expect(
+          within(notes).getByRole("presentation").getAttribute("src"),
+        ).toStartWith("data:image/svg+xml");
+      });
       element.remove();
-      expect(
-        within(notes).getByRole("presentation").getAttribute("src"),
-      ).toStartWith("data:image/svg+xml");
     });
 
     it("saves a window the shell shows from its own frame, without what is over it", async () => {
