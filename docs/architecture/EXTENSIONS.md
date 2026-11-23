@@ -60,11 +60,15 @@ Once `ExtensionSystem::ready()`, reconciling:
   Paths are compared after `base::MakeAbsoluteFilePath`.
 - Uninstalls an extension it added that the list no longer names, with
   `UNINSTALL_REASON_ORPHANED_EXTERNAL_EXTENSION`. The pref
-  `domicile.extensions.added` records what it added. It leaves other
-  extensions alone.
+  `domicile.extensions.added` records what it added, and claims a listed,
+  installed id it lacks. It leaves other extensions alone.
 
 Listing an extension is consent. There is no install prompt, and manifest
-permissions are granted as declared.
+permissions are granted as declared (`GrantPermissionsOf`), at install, at
+each update and at each start. A Web Store install with no prompt grants
+none, and Chrome switches off a `kInternal` extension whose active
+permissions exceed its granted ones (`DISABLE_PERMISSIONS_INCREASE`).
+Switching an extension on grants its permissions too.
 
 Each browser profile is a Chrome profile of its own, so the lists are
 reconciled once per profile: each gets every extension, switched on or off

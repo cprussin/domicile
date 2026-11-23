@@ -509,7 +509,11 @@ void BrowserProfileRegistry::SwitchExtensions(base::WeakPtr<Profile> profile) {
   extensions::ExtensionRegistry* registry =
       extensions::ExtensionRegistry::Get(profile.get());
   for (const std::string& id : ConfigExtensionIds()) {
-    if (registry->GetInstalledExtension(id) != nullptr) {
+    const extensions::Extension* extension =
+        registry->GetInstalledExtension(id);
+    if (extension != nullptr) {
+      // Chrome switched it off as it loaded if it was never granted them.
+      GrantPermissionsOf(*profile, *extension);
       SwitchExtension(*profile, *as, id, /*installed_now=*/false);
     }
   }
@@ -546,7 +550,8 @@ void BrowserProfileRegistry::SwitchExtension(Profile& profile,
   extensions::ExtensionRegistrar* registrar =
       extensions::ExtensionRegistrar::Get(&profile);
   if (on) {
-    registrar->EnableExtension(id);
+    registrar->GrantPermissionsAndEnableExtension(
+        *registry->GetInstalledExtension(id));
   } else {
     registrar->DisableExtension(
         id, {extensions::disable_reason::DISABLE_USER_ACTION});
@@ -755,9 +760,14 @@ void BrowserProfileRegistry::OnExtensionInstalled(
     bool is_update) {
   Profile* profile = Profile::FromBrowserContext(context);
   const BrowserProfile* as = AsBrowserProfile(*profile);
-  if (!is_update && as != nullptr &&
-      (std::ranges::contains(ConfigExtensionIds(), extension->id()) ||
-       AsUserExtension(*extension).has_value())) {
+  const bool configured =
+      std::ranges::contains(ConfigExtensionIds(), extension->id());
+  const bool user = AsUserExtension(*extension).has_value();
+  // An update may ask for more; the config consents to that too.
+  if (as != nullptr && (configured || (user && !is_update))) {
+    GrantPermissionsOf(*profile, *extension);
+  }
+  if (!is_update && as != nullptr && (configured || user)) {
     SwitchExtension(*profile, *as, extension->id(), /*installed_now=*/true);
   }
   if (!is_update) {

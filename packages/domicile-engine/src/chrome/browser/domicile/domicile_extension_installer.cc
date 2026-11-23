@@ -40,6 +40,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/pending_extension_manager.h"
+#include "extensions/browser/permissions/permissions_updater.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/browser/unpacked_installer.h"
 #include "extensions/common/extension.h"
@@ -188,6 +189,9 @@ void Reconcile(base::WeakPtr<Profile> profile, const ExtensionList& wanted) {
 
   const ExtensionChanges changes =
       ReconcileExtensions(wanted, installed, unpacked, added);
+  for (const std::string& id : changes.claim) {
+    Remember(pref_service, id);
+  }
 
   // Uninstall first, so an unpacked extension that moved (same id, new path)
   // is gone before the new path loads.
@@ -382,8 +386,9 @@ std::vector<InstalledExtension> ExtensionsOf(Profile& profile) {
 base::expected<void, std::string> SetExtensionEnabledIn(Profile& profile,
                                                         const std::string& id,
                                                         bool enabled) {
-  if (extensions::ExtensionRegistry::Get(&profile)->GetInstalledExtension(
-          id) == nullptr) {
+  const extensions::Extension* extension =
+      extensions::ExtensionRegistry::Get(&profile)->GetInstalledExtension(id);
+  if (extension == nullptr) {
     return base::unexpected(
         base::StrCat({"no extension ", id, " is installed"}));
   }
@@ -395,12 +400,36 @@ base::expected<void, std::string> SetExtensionEnabledIn(Profile& profile,
   extensions::ExtensionRegistrar* registrar =
       extensions::ExtensionRegistrar::Get(&profile);
   if (enabled) {
-    registrar->EnableExtension(id);
+    // The user's switch is the consent, as chrome://extensions' prompt is.
+    registrar->GrantPermissionsAndEnableExtension(*extension);
   } else {
     registrar->DisableExtension(
         id, {extensions::disable_reason::DISABLE_USER_ACTION});
   }
   return base::ok();
+}
+
+void GrantPermissionsOf(Profile& profile,
+                        const extensions::Extension& extension) {
+  const extensions::DisableReasonSet reasons =
+      extensions::ExtensionPrefs::Get(&profile)->GetDisableReasons(
+          extension.id());
+  constexpr extensions::disable_reason::DisableReason kIncrease =
+      extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE;
+  if (reasons == extensions::DisableReasonSet{kIncrease}) {
+    LOG(INFO) << "domicile: extension " << extension.id()
+              << " was off for want of permissions; granted them and "
+                 "switched it on.";
+    extensions::ExtensionRegistrar::Get(&profile)
+        ->GrantPermissionsAndEnableExtension(extension);
+    return;
+  }
+  extensions::PermissionsUpdater(&profile).GrantActivePermissions(&extension);
+  if (reasons.contains(kIncrease)) {
+    // Off for another reason too, such as the user's switch, which stays.
+    extensions::ExtensionPrefs::Get(&profile)->RemoveDisableReason(
+        extension.id(), kIncrease);
+  }
 }
 
 void RegisterExtensionInstallerPrefs(PrefRegistrySimple* registry) {

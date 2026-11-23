@@ -98,7 +98,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 - Logging out of a desk started from a text console (tty) ends its programs, such as Miracast casting, instead of leaving them running into your next login.
 - Agents can start programs, drag on pages, and press Enter by typing a new line.
 - The tray's menu of every icon opens after you drag icons around. A right click anywhere on an app's row opens its menu, and long extension names are cut short instead of pushing their buttons out.
-- Extensions keep their sign-ins and settings when the desktop restarts, instead of starting over.
+- Extensions stay on and keep their sign-ins and settings when the desktop restarts, instead of starting over or switching off. [#2481](https://github.com/cprussin/domicile/issues/2481)
 - A Gmail notification opens its mail beside your inbox, once Gmail has synced it. [Inboxes](NOTIFICATIONS.md#inboxes) · [#2284](https://github.com/cprussin/domicile/pull/2284)
 - Zooming a PDF zooms the document once, and the viewer's toolbar keeps its size. [#2437](https://github.com/cprussin/domicile/pull/2437)
 - PDFs stay sharp and no longer go blank. [#2038](https://github.com/cprussin/domicile/pull/2038) · [#2080](https://github.com/cprussin/domicile/pull/2080) · [#2100](https://github.com/cprussin/domicile/pull/2100)

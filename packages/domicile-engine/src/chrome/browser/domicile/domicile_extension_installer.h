@@ -21,6 +21,10 @@ namespace base {
 class FilePath;
 }
 
+namespace extensions {
+class Extension;
+}
+
 namespace domicile {
 
 // Registers the pref of extension ids `InstallExtensionsInto` added, so it
@@ -28,6 +32,15 @@ namespace domicile {
 // (domicile_extension_settings.h), and the sites the user pinned to a browser
 // profile (domicile_browser_profiles.h): the desk's profile prefs.
 void RegisterExtensionInstallerPrefs(PrefRegistrySimple* registry);
+
+// Grants `extension` its active permissions in `profile`, as the Web Store's
+// prompt does, and lifts DISABLE_PERMISSIONS_INCREASE.
+//
+// A Web Store install with no prompt grants nothing, so Chrome switches it
+// off at every start. Call only where consent exists: the config's
+// extensions, and ones mirrored from a profile where the user installed them.
+void GrantPermissionsOf(Profile& profile,
+                        const extensions::Extension& extension);
 
 // Takes every extension the desk's config names, for the shell in `shell`:
 // resolves their directories, then has BrowserProfileRegistry install into
