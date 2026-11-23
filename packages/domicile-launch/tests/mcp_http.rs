@@ -27,6 +27,8 @@ struct Desk {
     asked: Arc<Mutex<Vec<AskedUser>>>,
     /// How many agents have been let go.
     gone: Arc<AtomicU8>,
+    /// How many times the user was asked to let an agent in.
+    admitted: Arc<AtomicU8>,
 }
 
 /// What one request got back.
@@ -57,6 +59,7 @@ fn desk() -> Desk {
     let now = Arc::new(AtomicU64::new(1_000));
     let asked = Arc::new(Mutex::new(Vec::new()));
     let gone = Arc::new(AtomicU8::new(0));
+    let admitted = Arc::new(AtomicU8::new(0));
     let counter = AtomicU8::new(0);
     let web = Web {
         listener,
@@ -81,9 +84,11 @@ fn desk() -> Desk {
         sweep_every: Duration::from_millis(10),
     };
     let gone_too = Arc::clone(&gone);
+    let admitted_too = Arc::clone(&admitted);
     thread::spawn(move || {
         serve_http(web, move || {
             let counted = Counted(Arc::clone(&gone_too));
+            let admitted = Arc::clone(&admitted_too);
             Agent::new(
                 |_args: &[String]| -> io::Result<Ran> {
                     Ok(Ran {
@@ -93,6 +98,7 @@ fn desk() -> Desk {
                     })
                 },
                 move |_name: &str| {
+                    admitted.fetch_add(1, Ordering::SeqCst);
                     let held = Counted(Arc::clone(&counted.0));
                     Ok(Grant {
                         reach: Box::new(|| AgentReach::Desk),
@@ -112,6 +118,7 @@ fn desk() -> Desk {
         now,
         asked,
         gone,
+        admitted,
     }
 }
 
@@ -359,6 +366,82 @@ fn an_idle_session_ends_and_lets_its_agent_go() {
         &json!({"jsonrpc": "2.0", "id": 2, "method": "ping"}),
     );
     assert_eq!(after.status, 404);
+}
+
+/// A tool call in the conversation ChatGPT names `chat`.
+fn called_in(chat: &str, tool: &str) -> Value {
+    json!({
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": tool, "_meta": {"openai/session": chat}}
+    })
+}
+
+impl Desk {
+    /// Starts an MCP session and makes one call in it, as ChatGPT does for
+    /// each tool call.
+    fn called_once(&self, token: &str, call: &Value) -> Got {
+        let session = self.mcp(token, None, &initialize()).headers["mcp-session-id"].clone();
+        self.mcp(token, Some(&session), call)
+    }
+}
+
+#[test]
+fn sessions_in_one_conversation_share_one_grant() {
+    let desk = desk();
+    let token = desk.signed_in();
+    for tool in ["list_windows", "status", "list_windows"] {
+        let called = desk.called_once(&token, &called_in("chat-1", tool));
+        assert_eq!(called.json()["result"]["isError"], false, "{}", called.body);
+    }
+    assert_eq!(desk.admitted.load(Ordering::SeqCst), 1);
+
+    desk.called_once(&token, &called_in("chat-2", "list_windows"));
+    assert_eq!(desk.admitted.load(Ordering::SeqCst), 2, "another chat asks");
+    let other = desk.signed_in();
+    desk.called_once(&other, &called_in("chat-1", "list_windows"));
+    assert_eq!(
+        desk.admitted.load(Ordering::SeqCst),
+        3,
+        "another client's chat asks, though its id is the same"
+    );
+
+    let stopped = desk.called_once(&token, &called_in("chat-1", "stop_using_desktop"));
+    assert_eq!(
+        stopped.json()["result"]["isError"],
+        false,
+        "{}",
+        stopped.body
+    );
+    wait_until(|| desk.gone.load(Ordering::SeqCst) >= 1);
+    desk.called_once(&token, &called_in("chat-1", "list_windows"));
+    assert_eq!(
+        desk.admitted.load(Ordering::SeqCst),
+        4,
+        "it asks again once"
+    );
+    desk.called_once(&token, &called_in("chat-1", "list_windows"));
+    assert_eq!(desk.admitted.load(Ordering::SeqCst), 4);
+}
+
+#[test]
+fn sessions_with_no_conversation_each_ask() {
+    let desk = desk();
+    let token = desk.signed_in();
+    let call = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "list_windows"}});
+    desk.called_once(&token, &call);
+    desk.called_once(&token, &call);
+    assert_eq!(desk.admitted.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn an_idle_conversation_lets_its_agent_go() {
+    let desk = desk();
+    let token = desk.signed_in();
+    desk.called_once(&token, &called_in("chat-1", "list_windows"));
+    desk.now.fetch_add(IDLE_MS, Ordering::SeqCst);
+    wait_until(|| desk.gone.load(Ordering::SeqCst) >= 1);
+    desk.called_once(&token, &called_in("chat-1", "list_windows"));
+    assert_eq!(desk.admitted.load(Ordering::SeqCst), 2);
 }
 
 #[test]

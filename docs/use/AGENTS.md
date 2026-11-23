@@ -14,14 +14,20 @@ claude mcp add domicile -- domicile mcp
 
 Other agents that run on your computer take the same command, `domicile mcp`.
 
-## claude.ai
+## claude.ai and ChatGPT
 
 1. Open **Settings**, then **Agents**, and turn on **Connect from the web**.
    In the config file, that's `{ "agents": { "web": true } }`.
-2. Copy your desktop's address from there, and add it to claude.ai as a
-   custom connector.
-3. Connect. Your desktop asks whether to let Claude sign in: click **Allow**
-   if it shows the same number as your browser.
+2. Copy your desktop's address from there.
+3. Add it to the agent:
+   - **claude.ai**: add it as a custom connector.
+   - **ChatGPT**: turn on **Developer mode** in **Settings › Apps › Advanced
+     settings**, then **Create** an app with the address as its MCP server
+     URL and OAuth to sign in.
+4. Connect. Your desktop asks whether to let it sign in: click **Allow** if
+   it shows the same number as your browser.
+
+Each chat asks to use your desktop on its own, and has its own pill.
 
 ## Letting an agent in
 

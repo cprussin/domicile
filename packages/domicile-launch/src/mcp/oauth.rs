@@ -489,13 +489,16 @@ impl Auth {
         }
     }
 
-    /// Whether `token` is an access token this server issued that is still
-    /// good.
-    pub(super) fn allows(&mut self, token: &str) -> bool {
+    /// The client `token` signs in, if it is an access token this server
+    /// issued that is still good.
+    pub(super) fn client_of(&mut self, token: &str) -> Option<String> {
         self.reread();
         let now = (self.clock)();
         self.access.retain(|access| access.expires_ms > now);
-        self.access.iter().any(|access| access.token == token)
+        self.access
+            .iter()
+            .find(|access| access.token == token)
+            .map(|access| access.client.clone())
     }
 
     fn tokens(&mut self, client: String, now: u64) -> Value {
@@ -1002,8 +1005,11 @@ mod tests {
         let code = desk.code(&client);
         let tokens = desk.exchanged(&client, &code).unwrap();
         assert_eq!(tokens["token_type"], "Bearer");
-        assert!(desk.auth.allows(tokens["access_token"].as_str().unwrap()));
-        assert!(!desk.auth.allows("made-up"));
+        assert!(desk
+            .auth
+            .client_of(tokens["access_token"].as_str().unwrap())
+            .is_some());
+        assert!(desk.auth.client_of("made-up").is_none());
         assert_eq!(
             desk.exchanged(&client, &code).unwrap_err()["error"],
             "invalid_grant"
@@ -1038,7 +1044,10 @@ mod tests {
         let code = desk.code(&client);
         let tokens = desk.exchanged(&client, &code).unwrap();
         desk.now.fetch_add(ACCESS_LIFETIME_MS, Ordering::SeqCst);
-        assert!(!desk.auth.allows(tokens["access_token"].as_str().unwrap()));
+        assert!(desk
+            .auth
+            .client_of(tokens["access_token"].as_str().unwrap())
+            .is_none());
     }
 
     #[test]
@@ -1061,7 +1070,10 @@ mod tests {
             ("refresh_token", &refresh),
         ]);
         let tokens = second.auth.token(&refreshing).unwrap();
-        assert!(second.auth.allows(tokens["access_token"].as_str().unwrap()));
+        assert!(second
+            .auth
+            .client_of(tokens["access_token"].as_str().unwrap())
+            .is_some());
         assert_eq!(
             second.auth.token(&refreshing).unwrap_err()["error"],
             "invalid_grant"
@@ -1088,7 +1100,7 @@ mod tests {
 
         sign_out(&path, &client).unwrap();
         assert_eq!(signed_in(&path), Vec::new());
-        assert!(!desk.auth.allows(&access));
+        assert!(desk.auth.client_of(&access).is_none());
         let refreshing = params(&[
             ("grant_type", "refresh_token"),
             ("client_id", &client),

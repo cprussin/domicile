@@ -134,7 +134,17 @@ agent ── MCP (stdio) ── domicile mcp ── domicile agent <name> ──
   that one ask busy, but not get past it. A token only reaches `/mcp`;
   each session is an `Agent`, as on stdio, on a thread of its own, and asks
   at its first tool call. Access tokens last an hour and refresh tokens
-  rotate. The `Host` and `Origin` checks keep
+  rotate.
+- **A conversation is one agent, however many sessions it opens.** ChatGPT
+  opens a session for each tool call, and names its chat in the call's
+  `_meta["openai/session"]`. A tool call that names a conversation goes to
+  that conversation's `Agent`, shared by every session of the same signed-in
+  client in it, so a chat asks once, shows one pill, and `stop_using_desktop`
+  ends it whichever session sends it. A call that names none goes to its
+  session's own `Agent`, which is how Claude, with one session per chat,
+  stays per chat. Conversations, like sessions, end after 30 minutes unused.
+  The first tool call of each session logs its client and its `_meta` keys,
+  to see what another client names its chats with. The `Host` and `Origin` checks keep
   a web page on another site from reaching a server on `localhost`.
 
 ## The relay

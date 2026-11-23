@@ -18,7 +18,7 @@ Electron apps run on the desktop's engine, and your shell draws their windows, m
 
 ### Let agents drive the desktop
 
-Claude Code and other agents can see and use the desktop, with the user's permission: `claude mcp add domicile -- domicile mcp`. Agents on the web, like claude.ai, connect with `agents.web`. An agent lets go when it's done with `stop_using_desktop`. Your shell draws the permission prompt with `<PortalDialogs />`.
+Claude Code and other agents can see and use the desktop, with the user's permission: `claude mcp add domicile -- domicile mcp`. Agents on the web, like claude.ai and ChatGPT, connect with `agents.web`, one session per chat. An agent lets go when it's done with `stop_using_desktop`. Your shell draws the permission prompt with `<PortalDialogs />`.
 
 [Agents](AGENTS.md) · [`domicile mcp`](CLI.md#domicile-mcp) · [`agents.web`](SHELL-CONFIG.md#agents) · [Dialogs and portals](PORTALS.md#agents)
 

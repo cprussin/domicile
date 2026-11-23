@@ -6,8 +6,11 @@
 //! opens no event stream. `initialize` starts a session, named by the
 //! `Mcp-Session-Id` header, and each session is one [`Agent`] on a thread of
 //! its own, asking the user to let it in at its first tool call as `domicile
-//! mcp` on stdio does. A session unused for [`IDLE_MS`] ends, which lets its
-//! agent go. Every other path is the authorization server
+//! mcp` on stdio does. A tool call that names its conversation in `_meta`
+//! ([`CONVERSATION`]) goes instead to that conversation's agent, shared by
+//! every session of the same client in it, since some clients start a session
+//! for each call. A session or conversation unused for [`IDLE_MS`] ends, which
+//! lets its agent go. Every other path is the authorization server
 //! ([`super::oauth`]). See `docs/AGENTS.md`.
 
 use std::collections::HashMap;
@@ -28,6 +31,10 @@ use super::Agent;
 
 /// How long a session may go unused before it ends.
 pub const IDLE_MS: u64 = 30 * 60 * 1000;
+
+/// The `_meta` key on a tool call that names the conversation it is in.
+/// ChatGPT sends it.
+const CONVERSATION: &str = "openai/session";
 
 /// The largest request body read.
 const MOST_BYTES: u64 = 1 << 20;
@@ -62,11 +69,25 @@ type Asked = (Value, Sender<io::Result<Option<Value>>>);
 struct Session {
     asks: Sender<Asked>,
     used_ms: u64,
+    /// The client that signed it in.
+    client: String,
+    /// Its `initialize`, which starts each conversation's agent it reaches.
+    initialize: Value,
+    /// Whether what its first tool call carried has been logged.
+    logged: bool,
+}
+
+/// The agent of a conversation, shared by its client's sessions in it.
+struct Conversation {
+    asks: Sender<Asked>,
+    used_ms: u64,
 }
 
 struct Shared {
     auth: Mutex<Auth>,
     sessions: Mutex<HashMap<String, Session>>,
+    /// By client and conversation.
+    conversations: Mutex<HashMap<(String, String), Conversation>>,
     random: Random,
     clock: Arc<dyn Fn() -> u64 + Send + Sync>,
     base: String,
@@ -98,6 +119,7 @@ pub fn serve_http(
             web.ask,
         )),
         sessions: Mutex::new(HashMap::new()),
+        conversations: Mutex::new(HashMap::new()),
         random,
         clock: web.clock,
         base: web.base,
@@ -141,7 +163,8 @@ fn answered_at_once(listener: &TcpListener) -> io::Result<()> {
     }
 }
 
-/// Ends each session unused for [`IDLE_MS`], which lets its agent go.
+/// Ends each session and conversation unused for [`IDLE_MS`], which lets its
+/// agent go.
 fn swept(shared: &Shared) {
     let now = (shared.clock)();
     shared
@@ -149,6 +172,11 @@ fn swept(shared: &Shared) {
         .lock()
         .unwrap()
         .retain(|_, session| now.saturating_sub(session.used_ms) < IDLE_MS);
+    shared
+        .conversations
+        .lock()
+        .unwrap()
+        .retain(|_, conversation| now.saturating_sub(conversation.used_ms) < IDLE_MS);
 }
 
 fn answered(mut request: Request, shared: &Shared, agent: &Maker) -> io::Result<()> {
@@ -189,17 +217,16 @@ fn answered(mut request: Request, shared: &Shared, agent: &Maker) -> io::Result<
                 Err(refused) => as_json(400, &refused),
             }
         }
-        (method, "/mcp") => {
-            if !signed_in(&request, shared) {
+        (method, "/mcp") => match signed_in(&request, shared) {
+            Some(client) => mcp(method, &mut request, client, shared, agent)?,
+            None => {
                 let metadata = format!(
                     "Bearer resource_metadata=\"{}/.well-known/oauth-protected-resource\"",
                     shared.base
                 );
                 text(401, "Sign in first.").with_header(header("WWW-Authenticate", &metadata))
-            } else {
-                mcp(method, &mut request, shared, agent)?
             }
-        }
+        },
         _ => text(404, "Not found."),
     };
     request.respond(response)
@@ -225,16 +252,18 @@ fn trusted(request: &Request, shared: &Shared) -> bool {
     host_ok && origin_ok
 }
 
-fn signed_in(request: &Request, shared: &Shared) -> bool {
+/// The client the request's token signs in, if it does.
+fn signed_in(request: &Request, shared: &Shared) -> Option<String> {
     header_value(request, "Authorization")
         .and_then(|value| value.strip_prefix("Bearer ").map(str::to_string))
-        .is_some_and(|token| shared.auth.lock().unwrap().allows(token.trim()))
+        .and_then(|token| shared.auth.lock().unwrap().client_of(token.trim()))
 }
 
 /// `/mcp`, signed in.
 fn mcp(
     method: Method,
     request: &mut Request,
+    client: String,
     shared: &Shared,
     agent: &Maker,
 ) -> io::Result<Response<io::Cursor<Vec<u8>>>> {
@@ -267,14 +296,26 @@ fn mcp(
     let (id, asks) = match (id, starting) {
         (_, true) => {
             let id = base64url(&(shared.random.lock().unwrap())());
-            (id.clone(), started(agent, id.clone(), shared, now))
+            let asks = started(agent);
+            shared.sessions.lock().unwrap().insert(
+                id.clone(),
+                Session {
+                    asks: asks.clone(),
+                    used_ms: now,
+                    client,
+                    initialize: message.clone(),
+                    logged: false,
+                },
+            );
+            (id, asks)
         }
         (Some(id), false) => {
             let mut sessions = shared.sessions.lock().unwrap();
             match sessions.get_mut(&id) {
                 Some(session) => {
                     session.used_ms = now;
-                    (id, session.asks.clone())
+                    let asks = joined(&message, session, shared, agent, now);
+                    (id, asks)
                 }
                 None => return Ok(text(404, "No such session. Initialize again.")),
             }
@@ -295,25 +336,67 @@ fn mcp(
     Ok(response.with_header(header("Mcp-Session-Id", &id)))
 }
 
-/// Starts a session's thread, with an agent made on it.
-fn started(agent: &Maker, id: String, shared: &Shared, now: u64) -> Sender<Asked> {
+/// Starts a thread for a session or conversation, with an agent made on it.
+fn started(agent: &Maker) -> Sender<Asked> {
     let (asks, asked) = mpsc::channel::<Asked>();
     let agent = Arc::clone(agent);
     thread::spawn(move || {
         let mut agent = agent();
-        // Ends when the session does, which drops the agent and lets it go.
+        // Ends when its session or conversation does, which drops the agent
+        // and lets it go.
         for (message, reply) in asked {
             let _ = reply.send(agent.answer(&message));
         }
     });
-    shared.sessions.lock().unwrap().insert(
-        id,
-        Session {
-            asks: asks.clone(),
-            used_ms: now,
-        },
-    );
     asks
+}
+
+/// Where `session`'s `message` goes: the agent of the conversation a tool
+/// call names, started with the session's `initialize` if it is new, or else
+/// the session's own.
+fn joined(
+    message: &Value,
+    session: &mut Session,
+    shared: &Shared,
+    agent: &Maker,
+    now: u64,
+) -> Sender<Asked> {
+    let calling = message["method"] == "tools/call";
+    let meta = &message["params"]["_meta"];
+    let named = meta[CONVERSATION]
+        .as_str()
+        .filter(|conversation| calling && !conversation.is_empty());
+    if calling && !session.logged {
+        session.logged = true;
+        let keys = meta
+            .as_object()
+            .map(|meta| meta.keys().cloned().collect::<Vec<_>>())
+            .unwrap_or_default();
+        eprintln!(
+            "domicile: {} ({}) called a tool; _meta keys: {keys:?}; {}",
+            session.initialize["params"]["clientInfo"]["name"],
+            session.initialize["params"]["clientInfo"]["version"],
+            match named {
+                Some(_) => "it names its conversation",
+                None => "it names no conversation, so the session is its own",
+            }
+        );
+    }
+    let Some(named) = named else {
+        return session.asks.clone();
+    };
+    let mut conversations = shared.conversations.lock().unwrap();
+    let conversation = conversations
+        .entry((session.client.clone(), named.to_string()))
+        .or_insert_with(|| {
+            let asks = started(agent);
+            // Its answer was the session's, long since sent.
+            let (unheard, _) = mpsc::channel();
+            let _ = asks.send((session.initialize.clone(), unheard));
+            Conversation { asks, used_ms: now }
+        });
+    conversation.used_ms = now;
+    conversation.asks.clone()
 }
 
 /// How often the waiting page looks again for the user's answer.
