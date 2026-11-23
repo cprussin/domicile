@@ -119,7 +119,7 @@ FOOT_EOF
   XDG_DATA_HOME="$SCENE_TMP/home/.local/share" \
   XDG_CONFIG_HOME="$SCENE_TMP/config" \
   XDG_STATE_HOME="$SCENE_TMP/state" \
-  DOMICILE_ENGINE_ARGS="--no-sandbox --disable-component-update --window-size=${size/x/,}" \
+  DOMICILE_ENGINE_ARGS="--log-level=0 --no-sandbox --disable-component-update --window-size=${size/x/,}" \
   RUST_LOG="info,domicile_compositor=debug" \
     "$DOMICILE_BIN" "$1" >"$log" 2>&1 &
   STARTED+=($!)
@@ -410,6 +410,12 @@ document() {
 # `|| true`: a stopped process's status is not the scene's, and `set -e` would
 # fail a scene that captured everything.
 scene_cleanup() {
+  # DIAGNOSTIC (not for merge): what the desk said, for the blank-window hunt.
+  echo "::group::domicile.log of this scene" >&2
+  "$DOMICILE_BIN" list-windows >&2 || true
+  grep -avE "system_bus_socket|UPower|ambient light|brightness|no battery" \
+    "$SCENE_TMP/domicile.log" | tail -600 >&2 || true
+  echo "::endgroup::" >&2
   if grep -aq "the engine exited" "$SCENE_TMP/domicile.log" 2>/dev/null; then
     echo "the engine exited during the scene. Its fatal lines:" >&2
     grep -aiE "fatal|check failed|received signal|the engine exited" \
