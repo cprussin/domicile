@@ -63,6 +63,7 @@ import { Priority, say } from "./journal";
 import { mirrorResources } from "./mirror";
 import { electronPaths } from "./paths";
 import { quirksOf } from "./quirks";
+import { keepRunningOnUncaughtErrors } from "./uncaught-errors";
 
 /**
  * A window as the app's menus hand it to a click and pop up over: one of its
@@ -384,6 +385,9 @@ const main = async ([resources, ...args]: string[]) => {
     // Electron's Chromium has made it before the app's main runs, and apps
     // write there at once: Slack's first local settings did not save.
     await mkdir(app.getPath("userData"), { recursive: true });
+    keepRunningOnUncaughtErrors(process, (text) => {
+      say(Priority.Error, `electron-host: ${text}`);
+    });
     await import(pkg.main);
     // Before the app's windows, under the name its main gave it.
     userAgentFallback.announce();

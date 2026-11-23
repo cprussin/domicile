@@ -86,6 +86,9 @@ A bun workspace package, `packages/electron-host`, run by Bun.
 - Sets `process.type`, `process.versions.electron`, `process.resourcesPath`
   and `app.getPath()` as Electron does. `userData` is the app's existing
   directory (`~/.config/Claude`), so logins and settings carry over.
+- An exception or rejection nothing catches is logged as an error, and the
+  app runs on, as on Electron. Bun alone would exit. An app's own
+  `uncaughtException` or `unhandledRejection` handler takes it instead.
 - Native modules load as they are. N-API is runtime-independent, and every
   native module in the apps inspected (below) is N-API.
 - `utilityProcess.fork()` is a child process of the same runtime. Its module
