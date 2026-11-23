@@ -508,6 +508,16 @@ on a wrong answer, such as `getFocusedWindow()` always `null`) or `honest`
 (right on Domicile, such as `setPosition`, since the desktop places
 windows), with why. A new stub, or one that went, fails until it is filed.
 
+Events are held too. A listener on an event that never fires looks like a
+working API: Slack's `will-download` listener was there, and nothing called
+it. The surface lists each emitter's Linux events (`ELECTRON_EVENTS`), and
+`event-coverage.test.ts` counts an event fired when its emitter's host
+sources name it. Each one never fired is filed in
+`src/__integration__/events.json`, under `gaps` (an app misses it) or
+`honest` (nothing to report on Domicile, such as `move`, since the desktop
+places windows), with why. A new one, or one that starts firing, fails
+until it is filed; the weekly pull request lists each new one.
+
 A preload's side is held the same way. The surface also lists what
 `electron.d.ts` gives a renderer, its `electron` modules without what only
 the main process has, and what Electron adds to `process`.

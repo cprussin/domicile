@@ -44,6 +44,13 @@ contains() {
 SURFACE=packages/electron-host/src/electron/surface.ts
 COVERAGE=packages/electron-host/src/__integration__/coverage.json
 PRELOAD_COVERAGE=packages/electron-host/src/__integration__/preload-coverage.json
+EVENTS=packages/electron-host/src/__integration__/events.json
+OLD_EVENTS='{
+  "gaps": {
+    "App.old": "not fired yet"
+  },
+  "honest": {}
+}'
 
 # A repository whose main covers Electron 45.2.1 with one gap, pushed to a
 # bare remote, with a detached checkout as `actions/checkout` leaves it.
@@ -61,6 +68,7 @@ setup() {
   printf '// GENERATED\n// 45.2.1.\n' >"$WORK/repo/$SURFACE"
   printf '[\n  "app.old missing"\n]\n' >"$WORK/repo/$COVERAGE"
   printf '[\n  "webFrame.old absent"\n]\n' >"$WORK/repo/$PRELOAD_COVERAGE"
+  printf '%s\n' "$OLD_EVENTS" >"$WORK/repo/$EVENTS"
   git -C "$WORK/repo" add -A
   git -C "$WORK/repo" commit -qm main
   git -C "$WORK/repo" remote add origin "$WORK/remote"
@@ -72,7 +80,7 @@ setup() {
   : >"$WORK/calls"
   # The generator writes the versions it covered; the coverage test writes
   # the gaps it measured, the host's and the preload's. FAKE_VERSIONS,
-  # FAKE_GAPS and FAKE_PRELOAD_GAPS say what they find.
+  # FAKE_GAPS, FAKE_PRELOAD_GAPS and FAKE_EVENTS say what they find.
   cat >"$WORK/bin/bun" <<'BUN'
 #!/usr/bin/env bash
 case "$*" in
@@ -81,7 +89,8 @@ case "$*" in
     printf '%s\n' "$FAKE_GAPS" >src/__integration__/coverage.json
     printf '%s\n' "${FAKE_PRELOAD_GAPS:-[
   \"webFrame.old absent\"
-]}" >src/__integration__/preload-coverage.json ;;
+]}" >src/__integration__/preload-coverage.json
+    printf '%s\n' "${FAKE_EVENTS:-$OLD_EVENTS}" >src/__integration__/events.json ;;
   (*) echo "unexpected bun $*" >&2; exit 1 ;;
 esac
 BUN
@@ -114,7 +123,7 @@ CURL
 
 refresh() { # extra env assignments
   local out
-  if out="$(cd "$WORK/repo" && env PATH="$WORK/bin:$PATH" FAKE_CALLS="$WORK/calls" \
+  if out="$(cd "$WORK/repo" && env PATH="$WORK/bin:$PATH" FAKE_CALLS="$WORK/calls" OLD_EVENTS="$OLD_EVENTS" \
               DOMICILE_WRITEBACK_TOKEN=token GITHUB_REPOSITORY=owner/repo \
               "$@" bash .github/scripts/electron-surface-refresh.sh 2>&1)"; then
     printf 'ok\n%s\n' "$out"
@@ -167,6 +176,25 @@ expect "with the surface, the preload's list and a changeset" \
   ".changeset/electron-surface-refresh.md $PRELOAD_COVERAGE $SURFACE" \
   "$(git -C "$WORK/remote" diff --name-only "$tip^" "$tip" | sort | tr '\n' ' ' | sed 's/ $//')"
 contains "listing the gap as the preload's" 'preload `webFrame.new absent`' "$(cat "$WORK/calls")"
+
+echo "== an event the host never fires is a pull request naming it an event =="
+
+setup
+out="$(refresh FAKE_VERSIONS="46.0.0, 45.2.1" FAKE_GAPS='[
+  "app.old missing"
+]' FAKE_EVENTS='{
+  "gaps": {
+    "App.new": "new in Electron: the host does not fire it yet",
+    "App.old": "not fired yet"
+  },
+  "honest": {}
+}')"
+expect "the refresh succeeds" ok "$(status "$out")"
+tip="$(pushed electron-surface-refresh)"
+expect "with the surface, the events list and a changeset" \
+  ".changeset/electron-surface-refresh.md $EVENTS $SURFACE" \
+  "$(git -C "$WORK/remote" diff --name-only "$tip^" "$tip" | sort | tr '\n' ' ' | sed 's/ $//')"
+contains "listing it as an event" 'event `App.new`' "$(cat "$WORK/calls")"
 
 echo "== a pull request a previous run left open is brought up to date =="
 

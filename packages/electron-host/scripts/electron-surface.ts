@@ -199,6 +199,68 @@ const INSTANCES: Record<string, string | undefined> = {
   WebRequest: undefined,
 };
 
+/**
+ * The main process's event emitters, as electron.d.ts declares each, and
+ * the one each extends: an app's objects and the modules it listens to.
+ */
+const EMITTERS: Record<string, string | undefined> = {
+  App: undefined,
+  AutoUpdater: undefined,
+  BaseWindow: undefined,
+  BrowserWindow: "BaseWindow",
+  ClientRequest: undefined,
+  Cookies: undefined,
+  Debugger: undefined,
+  DownloadItem: undefined,
+  Extensions: undefined,
+  IncomingMessage: undefined,
+  Menu: undefined,
+  MessagePortMain: undefined,
+  NativeTheme: undefined,
+  Notification: undefined,
+  PowerMonitor: undefined,
+  Screen: undefined,
+  ServiceWorkers: undefined,
+  Session: undefined,
+  SystemPreferences: undefined,
+  Tray: undefined,
+  UtilityProcess: undefined,
+  View: undefined,
+  WebContents: undefined,
+  WebContentsView: "View",
+  WebFrameMain: undefined,
+};
+
+/**
+ * The emitter `name`'s block, a class or an interface, or nothing in an
+ * Electron from before it.
+ */
+const emitterBlock = (types: string, name: string) => {
+  if (types.includes(`\n  interface ${name} `)) {
+    return block(types, `interface ${name} `);
+  }
+  return types.includes(`\n  class ${name} `)
+    ? block(types, `class ${name} `)
+    : "";
+};
+
+/**
+ * The events a block declares for Linux, by the `@platform` of the comment
+ * right before each `on(event: …)`.
+ */
+const eventsOf = (text: string) => {
+  const events = new Set<string>();
+  const pattern =
+    /(\/\*\*(?:(?!\*\/)[\s\S])*\*\/\s*)?\n {4}on\(event: '([\w-]+)'/g;
+  for (const [, doc = "", name = ""] of text.matchAll(pattern)) {
+    const platforms = /@platform ([\w,]+)/.exec(doc)?.[1];
+    if (platforms === undefined || platforms.split(",").includes("linux")) {
+      events.add(name);
+    }
+  }
+  return [...events];
+};
+
 const merge = (known: Members | undefined, found: Members): Members =>
   known === undefined
     ? found
@@ -226,6 +288,7 @@ const mergeSurface = (into: Surface, found: Surface) => {
 };
 
 const instances: Record<string, Members> = {};
+const events: Record<string, string[]> = {};
 const surface: Surface = {};
 const preload: Surface = {};
 let preloadProcess: Members | undefined;
@@ -238,6 +301,13 @@ for (const version of covered) {
       found = merge(found, membersOf(block(types, `class ${parent} `), false));
     }
     instances[name] = merge(instances[name], found);
+  }
+  for (const [name, parent] of Object.entries(EMITTERS)) {
+    const found = [
+      ...eventsOf(emitterBlock(types, name)),
+      ...(parent === undefined ? [] : eventsOf(emitterBlock(types, parent))),
+    ];
+    events[name] = [...new Set([...(events[name] ?? []), ...found])].sort();
   }
   mergeSurface(surface, surfaceOf(types, ["Main", "Common"]));
   mergeSurface(preload, surfaceOf(types, ["Renderer", "Common"], true));
@@ -311,6 +381,10 @@ export const ELECTRON_INSTANCES = ${JSON.stringify(
     null,
     2,
   )} as const;
+
+// The events each of the main process's emitters has on Linux, with those of
+// what it extends (\`events.test.ts\`).
+export const ELECTRON_EVENTS = ${JSON.stringify(sortedOf(events), null, 2)} as const;
 
 // Every module a preload can require, sandboxed or with Node, and what
 // Electron adds to its \`process\`: what the engine's preload bootstrap
