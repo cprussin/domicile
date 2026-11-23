@@ -966,6 +966,26 @@ source_set("electron_app") {
   ]
 }
 
+# An Electron app's downloads: the mark on each DownloadItem one of its pages
+# starts, which asks its session's will-download where it goes and tells the
+# app how it goes.
+source_set("electron_downloads") {
+  sources = [
+    "browser/electron_downloads.cc",
+    "browser/electron_downloads.h",
+  ]
+
+  public_deps = [
+    ":electron_app",
+    "//base",
+  ]
+
+  deps = [
+    "//components/download/public/common:public",
+    "//url",
+  ]
+}
+
 # The Electron socket's protocol, which `electron-host` speaks for an Electron
 # app's windows. Its own target for the reason :file_choice is one: it needs no
 # browser, which is where its tests are.
