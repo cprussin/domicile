@@ -92,6 +92,21 @@ void ElectronSession::AskPermission(
   app_->StartPermissionAsk(name_, window, details, std::move(answered));
 }
 
+int ElectronSession::AskDownload(
+    const std::string& window,
+    const ElectronDownloadDetails& details,
+    base::WeakPtr<ElectronDownloadControl> control,
+    base::OnceCallback<void(ElectronDownloadAnswer)> decided) {
+  return app_->StartDownloadAsk(name_, window, details, std::move(control),
+                                std::move(decided));
+}
+
+void ElectronSession::DownloadUpdated(
+    int download,
+    const ElectronDownloadProgress& progress) {
+  app_->DownloadUpdated(download, progress);
+}
+
 void ElectronSession::TellWebRequest(ElectronWebRequestEvent event,
                                      const std::optional<std::string>& window,
                                      ElectronWebRequestDetails details) {
@@ -175,6 +190,13 @@ ElectronApp::~ElectronApp() {
   // Nor is a permission the handler never answered granted.
   for (auto& [number, answered] : std::exchange(permission_asks_, {})) {
     std::move(answered).Run(false);
+  }
+  // Nor is a download the app never placed saved anywhere.
+  for (auto& [number, download] : std::exchange(downloads_, {})) {
+    if (download.decided) {
+      std::move(download.decided)
+          .Run(ElectronDownloadAnswer{.download = number, .cancel = true});
+    }
   }
   // Nor does a window the app never allowed open: a held one closes.
   window_open_asks_.clear();
@@ -320,6 +342,11 @@ void ElectronApp::Take(std::string_view line) {
   } else if (auto* permission =
                  std::get_if<ElectronPermissionAnswer>(&*request)) {
     AnswerPermission(*permission);
+  } else if (auto* download = std::get_if<ElectronDownloadAnswer>(&*request)) {
+    AnswerDownload(std::move(*download));
+  } else if (auto* control =
+                 std::get_if<ElectronDownloadControlCall>(&*request)) {
+    ControlDownload(*control);
   } else if (auto* window_open =
                  std::get_if<ElectronWindowOpenAnswer>(&*request)) {
     AnswerWindowOpen(std::move(*window_open));
@@ -1030,6 +1057,72 @@ void ElectronApp::AnswerPermission(const ElectronPermissionAnswer& answer) {
   base::OnceCallback<void(bool granted)> answered = std::move(found->second);
   permission_asks_.erase(found);
   std::move(answered).Run(answer.granted);
+}
+
+int ElectronApp::StartDownloadAsk(
+    const std::string& session,
+    const std::string& window,
+    const ElectronDownloadDetails& details,
+    base::WeakPtr<ElectronDownloadControl> control,
+    base::OnceCallback<void(ElectronDownloadAnswer)> decided) {
+  const int number = next_download_++;
+  downloads_.emplace(number, Download{.decided = std::move(decided),
+                                      .control = std::move(control)});
+  send_.Run(ElectronWillDownload(number, NumberOf(window), session, details));
+  return number;
+}
+
+void ElectronApp::AnswerDownload(ElectronDownloadAnswer answer) {
+  auto found = downloads_.find(answer.download);
+  if (found == downloads_.end() || !found->second.decided) {
+    send_.Run(
+        ElectronRefused(base::StrCat({"no download is waiting for answer ",
+                                      base::NumberToString(answer.download)})));
+    return;
+  }
+  std::move(found->second.decided).Run(std::move(answer));
+}
+
+void ElectronApp::DownloadUpdated(int number,
+                                  const ElectronDownloadProgress& progress) {
+  // A download canceled as the app goes updates after the app let it go.
+  auto found = downloads_.find(number);
+  if (found == downloads_.end()) {
+    return;
+  }
+  // Electron's item says nothing before will-download is answered, nor
+  // after it is done.
+  Download& download = found->second;
+  if (download.decided || download.done) {
+    return;
+  }
+  download.done = progress.done;
+  send_.Run(ElectronDownloadUpdated(number, progress));
+}
+
+void ElectronApp::ControlDownload(const ElectronDownloadControlCall& call) {
+  auto found = downloads_.find(call.download);
+  if (found == downloads_.end()) {
+    send_.Run(ElectronRefused(base::StrCat(
+        {"no download is numbered ", base::NumberToString(call.download)})));
+    return;
+  }
+  // A download that is done or gone ignores it, as Electron's does.
+  ElectronDownloadControl* control = found->second.control.get();
+  if (control == nullptr || found->second.done) {
+    return;
+  }
+  switch (call.action) {
+    case ElectronDownloadAction::kPause:
+      control->Pause();
+      return;
+    case ElectronDownloadAction::kResume:
+      control->Resume();
+      return;
+    case ElectronDownloadAction::kCancel:
+      control->Cancel();
+      return;
+  }
 }
 
 void ElectronApp::HandleProtocol(const ElectronHandleProtocol& handle) {

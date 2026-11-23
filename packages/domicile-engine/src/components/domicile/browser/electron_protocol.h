@@ -4,6 +4,7 @@
 #ifndef COMPONENTS_DOMICILE_BROWSER_ELECTRON_PROTOCOL_H_
 #define COMPONENTS_DOMICILE_BROWSER_ELECTRON_PROTOCOL_H_
 
+#include <cstdint>
 #include <optional>
 #include <set>
 #include <string>
@@ -839,6 +840,81 @@ struct ElectronPermissionAnswer {
                          const ElectronPermissionAnswer&) = default;
 };
 
+// The app's answer to will_download `download`: save it at `path`, cancel it,
+// or, with neither, ask the user where it goes, as Electron's save dialog
+// does.
+struct ElectronDownloadAnswer {
+  int download = 0;
+  std::optional<base::FilePath> path;
+  bool cancel = false;
+
+  friend bool operator==(const ElectronDownloadAnswer&,
+                         const ElectronDownloadAnswer&) = default;
+};
+
+// What the app does to download `download`: DownloadItem's pause, resume
+// and cancel.
+enum class ElectronDownloadAction { kPause, kResume, kCancel };
+struct ElectronDownloadControlCall {
+  int download = 0;
+  ElectronDownloadAction action = ElectronDownloadAction::kPause;
+
+  friend bool operator==(const ElectronDownloadControlCall&,
+                         const ElectronDownloadControlCall&) = default;
+};
+
+// A download a page started, as will-download's DownloadItem first reads it.
+struct ElectronDownloadDetails {
+  GURL url;
+  // The redirects it followed, `url` last.
+  std::vector<GURL> url_chain;
+  // The name it is saved under unless the app says otherwise.
+  std::string filename;
+  std::string mime_type;
+  // 0 when the server did not say.
+  int64_t total_bytes = 0;
+  std::string content_disposition;
+  bool has_user_gesture = false;
+  // In seconds since the epoch.
+  double start_time = 0;
+  std::string etag;
+  std::string last_modified;
+  // The origin that started it; empty when none did, as for a typed address.
+  std::string initiator_origin;
+
+  friend bool operator==(const ElectronDownloadDetails&,
+                         const ElectronDownloadDetails&) = default;
+};
+
+// A download's DownloadItem state.
+enum class ElectronDownloadState {
+  kProgressing,
+  kCompleted,
+  kCanceled,
+  kInterrupted,
+};
+
+// How a download goes, for its DownloadItem's `updated` and `done`.
+struct ElectronDownloadProgress {
+  ElectronDownloadState state = ElectronDownloadState::kProgressing;
+  // Finished for good: completed, canceled, or interrupted past resuming.
+  bool done = false;
+  bool paused = false;
+  bool can_resume = false;
+  int64_t received_bytes = 0;
+  int64_t total_bytes = 0;
+  int64_t bytes_per_second = 0;
+  // Where it is saved; empty until that is decided.
+  base::FilePath save_path;
+  std::string filename;
+  std::string mime_type;
+  // In seconds since the epoch, once it is done.
+  std::optional<double> end_time;
+
+  friend bool operator==(const ElectronDownloadProgress&,
+                         const ElectronDownloadProgress&) = default;
+};
+
 // A window a page asked for, as setWindowOpenHandler's details have it.
 struct ElectronWindowOpenDetails {
   GURL url;
@@ -1028,6 +1104,8 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronSessionCall,
                                      ElectronPermissionHandler,
                                      ElectronPermissionAnswer,
+                                     ElectronDownloadAnswer,
+                                     ElectronDownloadControlCall,
                                      ElectronWindowOpenAnswer,
                                      ElectronSetViews,
                                      ElectronSetMenuBar,
@@ -1182,6 +1260,15 @@ std::string ElectronPermissionRequest(int ask,
                                       std::optional<ElectronWindow> window,
                                       std::string_view session,
                                       const ElectronPermissionDetails& details);
+// Download `download` in session `session`, started by window `window`'s
+// page when it was one; it waits for download_answer.
+std::string ElectronWillDownload(int download,
+                                 std::optional<ElectronWindow> window,
+                                 std::string_view session,
+                                 const ElectronDownloadDetails& details);
+// How download `download` goes.
+std::string ElectronDownloadUpdated(int download,
+                                    const ElectronDownloadProgress& progress);
 std::string ElectronProtocolRequest(int request,
                                     std::string_view session,
                                     const ElectronFetch& fetch);

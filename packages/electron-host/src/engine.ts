@@ -6,6 +6,11 @@ import { createConnection } from "node:net";
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 import { z } from "zod";
+import type {
+  DownloadMessage,
+  IncomingDownloadUpdate,
+  IncomingWillDownload,
+} from "./electron/downloads";
 import type { MenuEntry } from "./electron/menu";
 import type { ShowMessageBoxMessage } from "./electron/message-boxes";
 import type { PortRequest } from "./electron/message-port-main";
@@ -252,7 +257,8 @@ export type EngineRequest =
   | ProtocolRequest
   | WebRequestMessage
   | SessionCallMessage
-  | PermissionMessage;
+  | PermissionMessage
+  | DownloadMessage;
 
 const engineEvent = z.discriminatedUnion("type", [
   z.object({
@@ -548,6 +554,38 @@ const engineEvent = z.discriminatedUnion("type", [
     type: z.literal("permission_request"),
     window: z.number().optional(),
   }),
+  z.object({
+    content_disposition: z.string(),
+    download: z.number(),
+    etag: z.string(),
+    filename: z.string(),
+    has_user_gesture: z.boolean(),
+    initiator_origin: z.string(),
+    last_modified: z.string(),
+    mime_type: z.string(),
+    session: z.string(),
+    start_time: z.number(),
+    total_bytes: z.number(),
+    type: z.literal("will_download"),
+    url: z.string(),
+    url_chain: z.array(z.string()),
+    window: z.number().optional(),
+  }),
+  z.object({
+    bytes_per_second: z.number(),
+    can_resume: z.boolean(),
+    done: z.boolean(),
+    download: z.number(),
+    end_time: z.number().optional(),
+    filename: z.string(),
+    mime_type: z.string(),
+    paused: z.boolean(),
+    received_bytes: z.number(),
+    save_path: z.string(),
+    state: z.enum(["progressing", "completed", "canceled", "interrupted"]),
+    total_bytes: z.number(),
+    type: z.literal("download_updated"),
+  }),
 ]);
 
 export type EngineEvent = z.infer<typeof engineEvent>;
@@ -593,6 +631,10 @@ export type Engine = {
     cookieChanged: [change: CookieChanged];
     /** A page's permission request, for its session's handler. */
     permissionRequest: [request: IncomingPermissionRequest];
+    /** A page's download, for its session's will-download. */
+    willDownload: [download: IncomingWillDownload];
+    /** How one of the app's downloads goes. */
+    downloadUpdated: [update: IncomingDownloadUpdate];
   }>;
 };
 
@@ -656,6 +698,10 @@ export const connectEngine = (
         events.emit("cookieChanged", parsed.data);
       } else if (parsed.data.type === "permission_request") {
         events.emit("permissionRequest", parsed.data);
+      } else if (parsed.data.type === "will_download") {
+        events.emit("willDownload", parsed.data);
+      } else if (parsed.data.type === "download_updated") {
+        events.emit("downloadUpdated", parsed.data);
       } else if ("window" in parsed.data) {
         events.emit("window", parsed.data);
       } else {

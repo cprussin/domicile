@@ -1557,6 +1557,167 @@ TEST_F(ElectronAppTest, AnAppThatGoesDeniesItsWaitingPermissions) {
   EXPECT_EQ(got, false);
 }
 
+// A download's control that records what the app did to it.
+class FakeDownloadControl final : public ElectronDownloadControl {
+ public:
+  void Pause() override { done.push_back("pause"); }
+  void Resume() override { done.push_back("resume"); }
+  void Cancel() override { done.push_back("cancel"); }
+
+  base::WeakPtr<ElectronDownloadControl> GetWeakPtr() {
+    return weak_factory_.GetWeakPtr();
+  }
+
+  std::vector<std::string> done;
+
+ private:
+  base::WeakPtrFactory<FakeDownloadControl> weak_factory_{this};
+};
+
+base::OnceCallback<void(ElectronDownloadAnswer)> Into(
+    std::optional<ElectronDownloadAnswer>& got) {
+  return base::BindOnce(
+      [](std::optional<ElectronDownloadAnswer>* got,
+         ElectronDownloadAnswer answer) { *got = std::move(answer); },
+      &got);
+}
+
+ElectronDownloadDetails Csv() {
+  return {.url = GURL("https://files.test/a.csv"),
+          .url_chain = {GURL("https://files.test/a.csv")},
+          .filename = "a.csv",
+          .mime_type = "text/csv"};
+}
+
+TEST_F(ElectronAppTest, AnAppsWillDownloadSaysWhereADownloadGoes) {
+  Hello();
+  app_->Take(kOpenOwn);
+  sent_.clear();
+  FakeDownloadControl control;
+  std::optional<ElectronDownloadAnswer> answer;
+
+  const int number = desk_.sessions.at("10")->AskDownload(
+      "10", Csv(), control.GetWeakPtr(), Into(answer));
+  // Before the answer the download has no item in the app to hear of it.
+  desk_.sessions.at("10")->DownloadUpdated(number, {});
+  EXPECT_EQ(answer, std::nullopt);
+  app_->Take(R"({"type":"download_answer","download":1,"path":"/a.csv"})");
+
+  EXPECT_EQ(number, 1);
+  EXPECT_EQ(answer, (ElectronDownloadAnswer{.download = 1,
+                                            .path = base::FilePath("/a.csv")}));
+  EXPECT_EQ(sent_, Lines{R"({"content_disposition":"","download":1,)"
+                         R"("etag":"","filename":"a.csv",)"
+                         R"("has_user_gesture":false,"initiator_origin":"",)"
+                         R"("last_modified":"",)"
+                         R"("mime_type":"text/csv","session":"",)"
+                         R"("start_time":0.0,"total_bytes":0.0,)"
+                         R"("type":"will_download",)"
+                         R"("url":"https://files.test/a.csv",)"
+                         R"("url_chain":["https://files.test/a.csv"],)"
+                         R"("window":1})"
+                         "\n"});
+}
+
+TEST_F(ElectronAppTest, AnAppHearsHowItsDownloadGoesUntilItIsDone) {
+  Hello();
+  app_->Take(kOpenOwn);
+  FakeDownloadControl control;
+  std::optional<ElectronDownloadAnswer> answer;
+  ElectronSession& session = *desk_.sessions.at("10");
+  const int number =
+      session.AskDownload("10", Csv(), control.GetWeakPtr(), Into(answer));
+  app_->Take(R"({"type":"download_answer","download":1,"path":"/a.csv"})");
+  sent_.clear();
+
+  session.DownloadUpdated(number, {.received_bytes = 5});
+  session.DownloadUpdated(
+      number, {.state = ElectronDownloadState::kCompleted, .done = true});
+  // Chromium may update a finished item; Electron's has said `done`.
+  session.DownloadUpdated(
+      number, {.state = ElectronDownloadState::kCompleted, .done = true});
+
+  EXPECT_EQ(sent_, (Lines{ElectronDownloadUpdated(1, {.received_bytes = 5}),
+                          ElectronDownloadUpdated(
+                              1, {.state = ElectronDownloadState::kCompleted,
+                                  .done = true})}));
+}
+
+TEST_F(ElectronAppTest, AnAppPausesResumesAndCancelsItsDownload) {
+  Hello();
+  app_->Take(kOpenOwn);
+  FakeDownloadControl control;
+  std::optional<ElectronDownloadAnswer> answer;
+  ElectronSession& session = *desk_.sessions.at("10");
+  const int number =
+      session.AskDownload("10", Csv(), control.GetWeakPtr(), Into(answer));
+  app_->Take(R"({"type":"download_answer","download":1})");
+  sent_.clear();
+
+  app_->Take(R"({"type":"download_control","download":1,"action":"pause"})");
+  app_->Take(R"({"type":"download_control","download":1,"action":"resume"})");
+  app_->Take(R"({"type":"download_control","download":1,"action":"cancel"})");
+  session.DownloadUpdated(
+      number, {.state = ElectronDownloadState::kCanceled, .done = true});
+  // A download that is done ignores the app, as Electron's does.
+  app_->Take(R"({"type":"download_control","download":1,"action":"resume"})");
+
+  EXPECT_EQ(control.done,
+            (std::vector<std::string>{"pause", "resume", "cancel"}));
+  EXPECT_EQ(sent_.size(), 1u);
+}
+
+TEST_F(ElectronAppTest, ADownloadThatIsGoneIgnoresTheApp) {
+  Hello();
+  app_->Take(kOpenOwn);
+  std::optional<ElectronDownloadAnswer> answer;
+  {
+    FakeDownloadControl control;
+    desk_.sessions.at("10")->AskDownload("10", Csv(), control.GetWeakPtr(),
+                                         Into(answer));
+  }
+  sent_.clear();
+
+  app_->Take(R"({"type":"download_control","download":1,"action":"cancel"})");
+
+  EXPECT_EQ(sent_, Lines{});
+}
+
+TEST_F(ElectronAppTest, ADownloadAnswerOrControlForNoDownloadIsRefused) {
+  Hello();
+  app_->Take(kOpenOwn);
+  FakeDownloadControl control;
+  std::optional<ElectronDownloadAnswer> answer;
+  desk_.sessions.at("10")->AskDownload("10", Csv(), control.GetWeakPtr(),
+                                       Into(answer));
+  app_->Take(R"({"type":"download_answer","download":1})");
+  sent_.clear();
+
+  // Answered once already.
+  app_->Take(R"({"type":"download_answer","download":1,"cancel":true})");
+  app_->Take(R"({"type":"download_control","download":4,"action":"pause"})");
+
+  EXPECT_EQ(sent_, (Lines{R"({"type":"refused","why":"no download is )"
+                          R"(waiting for answer 1"})"
+                          "\n",
+                          R"({"type":"refused","why":"no download is )"
+                          R"(numbered 4"})"
+                          "\n"}));
+}
+
+TEST_F(ElectronAppTest, AnAppThatGoesCancelsTheDownloadsItNeverPlaced) {
+  Hello();
+  app_->Take(kOpenOwn);
+  FakeDownloadControl control;
+  std::optional<ElectronDownloadAnswer> answer;
+  desk_.sessions.at("10")->AskDownload("10", Csv(), control.GetWeakPtr(),
+                                       Into(answer));
+
+  app_.reset();
+
+  EXPECT_EQ(answer, (ElectronDownloadAnswer{.download = 1, .cancel = true}));
+}
+
 TEST_F(ElectronAppTest, ASessionCallGetsTheCookiesItsFilterMatches) {
   Hello();
   desk_.cookies = {{.name = "a", .value = "1", .domain = "a.test"},

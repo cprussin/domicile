@@ -16,6 +16,7 @@
 #include "base/check_op.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/notreached.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -419,6 +420,63 @@ base::expected<ElectronRequest, ElectronRefusal> ParsePermissionAnswer(
     return Refuse("\"granted\" must be true or false");
   }
   return ElectronPermissionAnswer{.ask = *ask, .granted = *granted};
+}
+
+base::expected<ElectronRequest, ElectronRefusal> ParseDownloadAnswer(
+    const base::DictValue& request) {
+  const std::optional<int> download = request.FindInt("download");
+  const base::Value* path = request.Find("path");
+  const base::Value* cancel = request.Find("cancel");
+  if (!download.has_value() || *download < 1) {
+    return Refuse("\"download\" must be a whole number from 1");
+  } else if (path != nullptr &&
+             (!path->is_string() ||
+              !base::FilePath(path->GetString()).IsAbsolute())) {
+    return Refuse("\"path\" must be an absolute path");
+  } else if (cancel != nullptr && !cancel->is_bool()) {
+    return Refuse("\"cancel\" must be true or false");
+  } else if (path != nullptr && cancel != nullptr && cancel->GetBool()) {
+    return Refuse("a download_answer cancels or names a path, not both");
+  }
+  return ElectronDownloadAnswer{
+      .download = *download,
+      .path = path == nullptr
+                  ? std::nullopt
+                  : std::optional(base::FilePath(path->GetString())),
+      .cancel = cancel != nullptr && cancel->GetBool()};
+}
+
+base::expected<ElectronRequest, ElectronRefusal> ParseDownloadControl(
+    const base::DictValue& request) {
+  const std::optional<int> download = request.FindInt("download");
+  const std::string* action = request.FindString("action");
+  if (!download.has_value() || *download < 1) {
+    return Refuse("\"download\" must be a whole number from 1");
+  } else if (action != nullptr && *action == "pause") {
+    return ElectronDownloadControlCall{
+        .download = *download, .action = ElectronDownloadAction::kPause};
+  } else if (action != nullptr && *action == "resume") {
+    return ElectronDownloadControlCall{
+        .download = *download, .action = ElectronDownloadAction::kResume};
+  } else if (action != nullptr && *action == "cancel") {
+    return ElectronDownloadControlCall{
+        .download = *download, .action = ElectronDownloadAction::kCancel};
+  }
+  return Refuse("\"action\" must be \"pause\", \"resume\" or \"cancel\"");
+}
+
+std::string_view DownloadStateName(ElectronDownloadState state) {
+  switch (state) {
+    case ElectronDownloadState::kProgressing:
+      return "progressing";
+    case ElectronDownloadState::kCompleted:
+      return "completed";
+    case ElectronDownloadState::kCanceled:
+      return "canceled";
+    case ElectronDownloadState::kInterrupted:
+      return "interrupted";
+  }
+  NOTREACHED();
 }
 
 base::ListValue HeadersList(const ElectronHeaders& headers) {
@@ -1332,6 +1390,10 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ParsePermissionHandler(*request);
   } else if (*type == "permission_answer") {
     return ParsePermissionAnswer(*request);
+  } else if (*type == "download_answer") {
+    return ParseDownloadAnswer(*request);
+  } else if (*type == "download_control") {
+    return ParseDownloadControl(*request);
   } else if (*type == "window_open_answer") {
     return ParseWindowOpenAnswer(*request);
   } else if (*type == "set_user_agent_fallback") {
@@ -1541,6 +1603,58 @@ std::string ElectronPermissionRequest(
       types.Append(type);
     }
     line.Set("media_types", std::move(types));
+  }
+  return Line(std::move(line));
+}
+
+std::string ElectronWillDownload(int download,
+                                 std::optional<ElectronWindow> window,
+                                 std::string_view session,
+                                 const ElectronDownloadDetails& details) {
+  base::DictValue line;
+  line.Set("type", "will_download");
+  line.Set("download", download);
+  if (window.has_value()) {
+    line.Set("window", *window);
+  }
+  line.Set("session", session);
+  line.Set("url", details.url.possibly_invalid_spec());
+  base::ListValue chain;
+  for (const GURL& url : details.url_chain) {
+    chain.Append(url.possibly_invalid_spec());
+  }
+  line.Set("url_chain", std::move(chain));
+  line.Set("filename", details.filename);
+  line.Set("mime_type", details.mime_type);
+  // A double: a size may not fit an int.
+  line.Set("total_bytes", static_cast<double>(details.total_bytes));
+  line.Set("content_disposition", details.content_disposition);
+  line.Set("has_user_gesture", details.has_user_gesture);
+  line.Set("start_time", details.start_time);
+  line.Set("etag", details.etag);
+  line.Set("last_modified", details.last_modified);
+  line.Set("initiator_origin", details.initiator_origin);
+  return Line(std::move(line));
+}
+
+std::string ElectronDownloadUpdated(int download,
+                                    const ElectronDownloadProgress& progress) {
+  base::DictValue line;
+  line.Set("type", "download_updated");
+  line.Set("download", download);
+  line.Set("state", DownloadStateName(progress.state));
+  line.Set("done", progress.done);
+  line.Set("paused", progress.paused);
+  line.Set("can_resume", progress.can_resume);
+  line.Set("received_bytes", static_cast<double>(progress.received_bytes));
+  line.Set("total_bytes", static_cast<double>(progress.total_bytes));
+  line.Set("bytes_per_second",
+           static_cast<double>(progress.bytes_per_second));
+  line.Set("save_path", progress.save_path.AsUTF8Unsafe());
+  line.Set("filename", progress.filename);
+  line.Set("mime_type", progress.mime_type);
+  if (progress.end_time.has_value()) {
+    line.Set("end_time", *progress.end_time);
   }
   return Line(std::move(line));
 }

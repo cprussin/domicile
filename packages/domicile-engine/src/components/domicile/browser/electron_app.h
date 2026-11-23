@@ -157,6 +157,17 @@ std::optional<ElectronPermissionDetails> ElectronPermissionFor(
     const std::vector<mojom::WebViewPermission>& permissions,
     const GURL& origin);
 
+// What the app does to one of its pages' downloads, which
+// electron_downloads.h implements over the DownloadItem.
+class ElectronDownloadControl {
+ public:
+  virtual ~ElectronDownloadControl() = default;
+
+  virtual void Pause() = 0;
+  virtual void Resume() = 0;
+  virtual void Cancel() = 0;
+};
+
 // Where a waiting request hears the app's answer to one of its webRequest
 // events.
 using ElectronWebRequestAnswered =
@@ -204,6 +215,18 @@ class ElectronSession {
   void AskPermission(const std::string& window,
                      ElectronPermissionDetails details,
                      base::OnceCallback<void(bool granted)> answered);
+
+  // Asks the app's will-download where `details`, a download desk window
+  // `window`'s page started, goes, and gives the app `control` of it.
+  // `decided` runs once, with the app's answer or, when the app goes first,
+  // with a cancel. Returns the number the app knows the download by.
+  int AskDownload(const std::string& window,
+                  const ElectronDownloadDetails& details,
+                  base::WeakPtr<ElectronDownloadControl> control,
+                  base::OnceCallback<void(ElectronDownloadAnswer)> decided);
+  // Tells the app how download `download` goes: from its answer until the
+  // download is done.
+  void DownloadUpdated(int download, const ElectronDownloadProgress& progress);
 
   // The user agent of the session's pages: session.setUserAgent's, else the
   // app's fallback; empty for the engine's.
@@ -481,6 +504,15 @@ class ElectronApp {
                           const ElectronPermissionDetails& details,
                           base::OnceCallback<void(bool granted)> answered);
   void AnswerPermission(const ElectronPermissionAnswer& answer);
+  int StartDownloadAsk(
+      const std::string& session,
+      const std::string& window,
+      const ElectronDownloadDetails& details,
+      base::WeakPtr<ElectronDownloadControl> control,
+      base::OnceCallback<void(ElectronDownloadAnswer)> decided);
+  void AnswerDownload(ElectronDownloadAnswer answer);
+  void DownloadUpdated(int number, const ElectronDownloadProgress& progress);
+  void ControlDownload(const ElectronDownloadControlCall& call);
   // The app's number for desk window `id`, if it is one of the app's.
   std::optional<ElectronWindow> NumberOf(const std::string& id) const;
   // A call on one of the app's sessions, answered with a session_result.
@@ -590,6 +622,17 @@ class ElectronApp {
   // The pages' permission requests waiting on the app's handlers, by ask.
   std::map<int, base::OnceCallback<void(bool granted)>> permission_asks_;
   int next_permission_ask_ = 1;
+  // The pages' downloads, by the numbers the app knows them by.
+  struct Download {
+    // Runs with the app's answer; null once it has.
+    base::OnceCallback<void(ElectronDownloadAnswer)> decided;
+    // Null once the download is gone.
+    base::WeakPtr<ElectronDownloadControl> control;
+    // The app heard it is done.
+    bool done = false;
+  };
+  std::map<int, Download> downloads_;
+  int next_download_ = 1;
   // The pages' new windows waiting on the app's window open handlers, by ask.
   struct WindowOpenAsk {
     // The page that asked: its session is the held window's.

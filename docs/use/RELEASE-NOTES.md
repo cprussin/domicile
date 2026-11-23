@@ -76,6 +76,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 - In a virtual machine (VMware, VirtualBox, QEMU), the pointer's tip is where your clicks land. [#2432](https://github.com/cprussin/domicile/issues/2432)
 - Logging out, restarting or shutting down no longer counts as a browser crash, so the browser saves your profile on the way out.
 - Slack's notifications show their Reply button instead of an empty row.
+- Downloading a file in Slack saves it, instead of leaving a hidden temporary file. Other Electron apps' downloads go where the app says too.
 - Switching workspaces and tabs is smoother on battery: a window you come back to draws what it kept instead of drawing its whole page again.
 - Wi-Fi's Disconnect and a saved network's Forget are red, and a row's folded details sit tighter around their buttons.
 - You can drag text, images and links within and between pages.

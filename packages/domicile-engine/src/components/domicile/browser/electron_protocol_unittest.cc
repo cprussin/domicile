@@ -1298,6 +1298,124 @@ TEST(ElectronProtocolTest, APermissionRequestIsOneLine) {
       "\n");
 }
 
+TEST(ElectronProtocolTest, ADownloadAnswerSavesCancelsOrAsksTheUser) {
+  const auto save = ParseElectronRequest(
+      R"({"type":"download_answer","download":2,"path":"/home/me/a.csv"})");
+  const auto cancel = ParseElectronRequest(
+      R"({"type":"download_answer","download":2,"cancel":true})");
+  const auto ask =
+      ParseElectronRequest(R"({"type":"download_answer","download":2})");
+
+  ASSERT_TRUE(save.has_value()) << save.error().why;
+  ASSERT_TRUE(cancel.has_value()) << cancel.error().why;
+  ASSERT_TRUE(ask.has_value()) << ask.error().why;
+  EXPECT_EQ(std::get<ElectronDownloadAnswer>(*save),
+            (ElectronDownloadAnswer{.download = 2,
+                                    .path = base::FilePath("/home/me/a.csv")}));
+  EXPECT_EQ(std::get<ElectronDownloadAnswer>(*cancel),
+            (ElectronDownloadAnswer{.download = 2, .cancel = true}));
+  EXPECT_EQ(std::get<ElectronDownloadAnswer>(*ask),
+            (ElectronDownloadAnswer{.download = 2}));
+}
+
+TEST(ElectronProtocolTest, ABadDownloadAnswerIsRefused) {
+  EXPECT_EQ(WhyRefused(R"({"type":"download_answer"})"),
+            "\"download\" must be a whole number from 1");
+  // Electron's save path is absolute; a relative one would land wherever
+  // the engine runs.
+  EXPECT_EQ(WhyRefused(R"({"type":"download_answer","download":2,)"
+                       R"("path":"a.csv"})"),
+            "\"path\" must be an absolute path");
+  EXPECT_EQ(WhyRefused(R"({"type":"download_answer","download":2,)"
+                       R"("cancel":"yes"})"),
+            "\"cancel\" must be true or false");
+  EXPECT_EQ(WhyRefused(R"({"type":"download_answer","download":2,)"
+                       R"("path":"/a.csv","cancel":true})"),
+            "a download_answer cancels or names a path, not both");
+}
+
+TEST(ElectronProtocolTest, ADownloadControlPausesResumesOrCancels) {
+  const auto pause = ParseElectronRequest(
+      R"({"type":"download_control","download":3,"action":"pause"})");
+  const auto resume = ParseElectronRequest(
+      R"({"type":"download_control","download":3,"action":"resume"})");
+  const auto cancel = ParseElectronRequest(
+      R"({"type":"download_control","download":3,"action":"cancel"})");
+
+  ASSERT_TRUE(pause.has_value()) << pause.error().why;
+  ASSERT_TRUE(resume.has_value()) << resume.error().why;
+  ASSERT_TRUE(cancel.has_value()) << cancel.error().why;
+  EXPECT_EQ(std::get<ElectronDownloadControlCall>(*pause).action,
+            ElectronDownloadAction::kPause);
+  EXPECT_EQ(std::get<ElectronDownloadControlCall>(*resume).action,
+            ElectronDownloadAction::kResume);
+  EXPECT_EQ(std::get<ElectronDownloadControlCall>(*cancel),
+            (ElectronDownloadControlCall{
+                .download = 3, .action = ElectronDownloadAction::kCancel}));
+  EXPECT_EQ(WhyRefused(R"({"type":"download_control","action":"pause"})"),
+            "\"download\" must be a whole number from 1");
+  EXPECT_EQ(WhyRefused(R"({"type":"download_control","download":3,)"
+                       R"("action":"open"})"),
+            "\"action\" must be \"pause\", \"resume\" or \"cancel\"");
+}
+
+TEST(ElectronProtocolTest, AWillDownloadIsOneLine) {
+  EXPECT_EQ(
+      ElectronWillDownload(
+          2, 1, "",
+          ElectronDownloadDetails{
+              .url = GURL("https://files.test/a.csv"),
+              .url_chain = {GURL("https://a.test/f"),
+                            GURL("https://files.test/a.csv")},
+              .filename = "a.csv",
+              .mime_type = "text/csv",
+              .total_bytes = 34498,
+              .content_disposition = "attachment",
+              .has_user_gesture = true,
+              .start_time = 1.5,
+              .etag = "\"e\"",
+              .last_modified = "Mon, 23 Nov 2026 23:00:00 GMT",
+              .initiator_origin = "https://a.test"}),
+      R"({"content_disposition":"attachment","download":2,"etag":"\"e\"",)"
+      R"("filename":"a.csv","has_user_gesture":true,)"
+      R"("initiator_origin":"https://a.test",)"
+      R"("last_modified":"Mon, 23 Nov 2026 23:00:00 GMT",)"
+      R"("mime_type":"text/csv","session":"","start_time":1.5,)"
+      R"("total_bytes":34498.0,"type":"will_download",)"
+      R"("url":"https://files.test/a.csv","url_chain":["https://a.test/f",)"
+      R"("https://files.test/a.csv"],"window":1})"
+      "\n");
+}
+
+TEST(ElectronProtocolTest, ADownloadUpdateIsOneLine) {
+  EXPECT_EQ(
+      ElectronDownloadUpdated(2,
+                              ElectronDownloadProgress{
+                                  .state = ElectronDownloadState::kProgressing,
+                                  .received_bytes = 100,
+                                  .total_bytes = 34498,
+                                  .bytes_per_second = 50,
+                                  .save_path = base::FilePath("/home/me/a.csv"),
+                                  .filename = "a.csv",
+                                  .mime_type = "text/csv"}),
+      R"({"bytes_per_second":50.0,"can_resume":false,"done":false,)"
+      R"("download":2,"filename":"a.csv",)"
+      R"("mime_type":"text/csv","paused":false,"received_bytes":100.0,)"
+      R"("save_path":"/home/me/a.csv","state":"progressing",)"
+      R"("total_bytes":34498.0,"type":"download_updated"})"
+      "\n");
+  EXPECT_EQ(
+      ElectronDownloadUpdated(
+          2, ElectronDownloadProgress{.state = ElectronDownloadState::kCanceled,
+                                      .done = true,
+                                      .end_time = 2.5}),
+      R"({"bytes_per_second":0.0,"can_resume":false,"done":true,)"
+      R"("download":2,"end_time":2.5,"filename":"","mime_type":"","paused":false,)"
+      R"("received_bytes":0.0,"save_path":"","state":"canceled",)"
+      R"("total_bytes":0.0,"type":"download_updated"})"
+      "\n");
+}
+
 TEST(ElectronProtocolTest, OnlyBeforeRequestSendHeadersAndHeadersReceivedWait) {
   EXPECT_TRUE(IsBlockingElectronWebRequestEvent(
       ElectronWebRequestEvent::kBeforeRequest));

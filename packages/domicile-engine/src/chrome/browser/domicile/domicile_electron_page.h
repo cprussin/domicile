@@ -11,10 +11,12 @@
 
 #include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "components/domicile/browser/electron_app.h"
 #include "components/domicile/mojom/electron_frame.mojom.h"
+#include "content/public/browser/download_manager.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
@@ -47,6 +49,7 @@ namespace domicile {
 // components/domicile/renderer/electron_preload.h.
 class ElectronPage final : public content::WebContentsObserver,
                            public content::WebContentsUserData<ElectronPage>,
+                           public content::DownloadManager::Observer,
                            public mojom::ElectronFrameHost {
  public:
   ElectronPage(const ElectronPage&) = delete;
@@ -194,6 +197,12 @@ class ElectronPage final : public content::WebContentsObserver,
   void PrimaryMainFrameRenderProcessGone(
       base::TerminationStatus status) override;
 
+  // content::DownloadManager::Observer: marks the page's downloads as its
+  // app's, for will-download.
+  void OnDownloadCreated(content::DownloadManager* manager,
+                         download::DownloadItem* item) override;
+  void ManagerGoingDown(content::DownloadManager* manager) override;
+
   // mojom::ElectronFrameHost:
   void Send(const std::string& channel, const std::string& args_json) override;
   void Invoke(const std::string& channel,
@@ -264,6 +273,10 @@ class ElectronPage final : public content::WebContentsObserver,
   base::flat_map<int, ElectronFindResult> finds_;
   // See last_press().
   std::optional<gfx::Point> last_press_;
+
+  base::ScopedObservation<content::DownloadManager,
+                          content::DownloadManager::Observer>
+      download_manager_observation_{this};
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };

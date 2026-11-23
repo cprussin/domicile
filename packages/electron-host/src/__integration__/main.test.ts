@@ -59,6 +59,21 @@ app.whenReady().then(async () => {
 });
 `;
 
+// Slack's way: a hidden window at the file, and will-download says where.
+const DOWNLOAD_JS = `
+const { app, BrowserWindow, session } = require("electron");
+app.whenReady().then(() => {
+  session.defaultSession.on("will-download", (_event, item, webContents) => {
+    item.savePath = "/home/me/a.csv";
+    item.on("done", (_event, state) => {
+      console.log(JSON.stringify({ path: item.getSavePath(), state, window: webContents.id }));
+      app.quit();
+    });
+  });
+  new BrowserWindow({ show: false }).loadURL("https://files.test/a.csv").catch(() => undefined);
+});
+`;
+
 const run = async (
   resources: string,
   home: string,
@@ -254,6 +269,78 @@ describe("electron-host", () => {
       request: 1,
       status: 200,
       type: "protocol_response",
+    });
+  });
+
+  it("asks the app's will-download where its page's download goes", async () => {
+    const home = await mkdtemp(join(tmpdir(), "electron-host-main-"));
+    const resources = join(home, "install/resources");
+    await writeAsar(join(resources, "app.asar"), {
+      "main.js": { content: DOWNLOAD_JS },
+      "package.json": {
+        content: `{"main":"main.js","name":"chat","version":"1.0.0"}`,
+      },
+    });
+    engine = await startFakeEngine((request) => {
+      if (request.type === "hello") {
+        return [READY];
+      } else if (request.type === "open_window") {
+        return [
+          { type: "window_opened", window: 1 },
+          {
+            content_disposition: "attachment",
+            download: 1,
+            etag: "",
+            filename: "a.csv",
+            has_user_gesture: false,
+            initiator_origin: "",
+            last_modified: "",
+            mime_type: "text/csv",
+            session: "",
+            start_time: 1,
+            total_bytes: 3,
+            type: "will_download",
+            url: "https://files.test/a.csv",
+            url_chain: ["https://files.test/a.csv"],
+            window: 1,
+          },
+        ];
+      } else if (request.type === "download_answer") {
+        return [
+          {
+            bytes_per_second: 0,
+            can_resume: false,
+            done: true,
+            download: 1,
+            end_time: 2,
+            filename: "a.csv",
+            mime_type: "text/csv",
+            paused: false,
+            received_bytes: 3,
+            save_path: "/home/me/a.csv",
+            state: "completed",
+            total_bytes: 3,
+            type: "download_updated",
+          },
+        ];
+      } else {
+        return [];
+      }
+    });
+
+    desktopBus = await startFakeDesktopBus({ colorScheme: 2, contrast: 0 });
+    const { code, stderr, stdout } = await run(resources, home, [], engine);
+
+    expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
+    expect(engine.heard).toContainEqual({
+      download: 1,
+      path: "/home/me/a.csv",
+      type: "download_answer",
+    });
+    expect(JSON.parse(stdout)).toEqual({
+      path: "/home/me/a.csv",
+      state: "completed",
+      window: 1,
     });
   });
 
