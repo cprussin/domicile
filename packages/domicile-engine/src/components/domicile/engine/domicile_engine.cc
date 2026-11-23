@@ -437,7 +437,7 @@ class Surface : public mojom::SurfaceObserver,
     if (submit.sync_token.HasData()) {
       resource.set_sync_token(submit.sync_token);
     }
-    LOG(ERROR) << "DIAG submits buffer " << submit.buffer << " "
+    VLOG(3) << "DIAG submits buffer " << submit.buffer << " "
                << resource.mailbox().ToDebugString() << " resource "
                << resource.id.GetUnsafeValue() << " token "
                << resource.sync_token().ToDebugString();
@@ -597,7 +597,7 @@ class Surface : public mojom::SurfaceObserver,
       const uint64_t buffer = iter->second.buffer;
       const gpu::SyncToken read_done = iter->second.shared_image->EndExport(
           std::move(resource.shared_image_export_result));
-      LOG(ERROR) << "DIAG returns buffer " << buffer << " count "
+      VLOG(3) << "DIAG returns buffer " << buffer << " count "
                  << resource.count << " lost " << resource.lost << " after "
                  << read_done.ToDebugString();
       switch (holds_.Returned(buffer, resource.count, read_done)) {

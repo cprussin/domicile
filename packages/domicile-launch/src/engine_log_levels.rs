@@ -82,6 +82,7 @@ const FILES: [(Subsystem, &[&str]); 13] = [
         Subsystem::Rendering,
         &[
             "brokered_frame_sink",
+            "domicile_engine",
             "domicile_frame_sink_broker",
             "frame_sink_broker",
             "external_surface_embedder",
