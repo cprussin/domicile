@@ -234,6 +234,9 @@ uint64_t BrokeredFrameSink::ImportBuffer(
   buffer.shared_image = std::move(shared_image);
 
   const uint64_t buffer_id = next_buffer_id_++;
+  LOG(ERROR) << "DIAG imports buffer " << buffer_id << " as "
+             << buffer.shared_image->mailbox().ToDebugString() << " creation "
+             << buffer.shared_image->creation_sync_token().ToDebugString();
   resource_to_buffer_[buffer.resource.id] = buffer_id;
   buffers_[buffer_id] = std::move(buffer);
   return buffer_id;
@@ -336,6 +339,9 @@ void BrokeredFrameSink::DestroyBuffer(uint64_t buffer_id,
   // The GPU destroys the image once viz's read of it lands, as
   // exo::Buffer::Texture does for a released buffer.
   iter->second.shared_image->UpdateDestructionSyncToken(read_done);
+  LOG(ERROR) << "DIAG destroys buffer " << buffer_id << " "
+             << iter->second.shared_image->mailbox().ToDebugString()
+             << " after " << read_done.ToDebugString();
   resource_to_buffer_.erase(iter->second.resource.id);
   buffers_.erase(iter);
 }
