@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 23 Nov 2026 00:00:00 +0000
+Subject: [PATCH] DIAGNOSTIC: name the mailbox a window's SharedImage
+ registers, unregisters and misses
+
+---
+ .../service/shared_image/shared_image_manager.cc       | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/gpu/command_buffer/service/shared_image/shared_image_manager.cc b/gpu/command_buffer/service/shared_image/shared_image_manager.cc
+index 6402c74..05bdccb 100644
+--- a/gpu/command_buffer/service/shared_image/shared_image_manager.cc
++++ b/gpu/command_buffer/service/shared_image/shared_image_manager.cc
+@@ -169,6 +169,10 @@ SharedImageManager::Register(std::unique_ptr<SharedImageBacking> backing,
+   auto factory_ref = std::make_unique<SharedImageRepresentationFactoryRef>(
+       this, backing.get(), tracker, /*is_primary=*/true);
+   gpu::Mailbox mailbox = backing->mailbox();
++  if (backing->debug_label().find("Domicile") != std::string::npos) {
++    LOG(ERROR) << "DIAG registers " << mailbox.ToDebugString() << " "
++               << backing->debug_label();
++  }
+   images_.emplace(std::move(mailbox), std::move(backing));
+ 
+   return factory_ref;
+@@ -274,7 +278,8 @@ std::unique_ptr<SkiaImageRepresentation> SharedImageManager::ProduceSkia(
+   auto* backing = GetBacking(mailbox);
+   if (!backing) {
+     LOG(ERROR) << "SharedImageManager::ProduceSkia: Trying to Produce a "
+-                  "Skia representation from a non-existent mailbox.";
++                  "Skia representation from a non-existent mailbox "
++               << mailbox.ToDebugString();
+     return nullptr;
+   }
+ 
+@@ -579,6 +584,9 @@ void SharedImageManager::OnRepresentationDestroyed(
+     // to get the iterator again.
+     auto it = images_.find(mailbox);
+     if (it != images_.end() && !it->second->HasAnyRefs()) {
++      if (it->second->debug_label().find("Domicile") != std::string::npos) {
++        LOG(ERROR) << "DIAG unregisters " << mailbox.ToDebugString();
++      }
+       images_.erase(it);
+     }
+   }
+-- 
+2.43.0
+
