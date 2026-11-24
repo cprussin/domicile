@@ -210,6 +210,13 @@ class FakeDesk final : public ElectronDesk {
                     const std::string& user_agent) override {
     calls.push_back("user agent " + id + " " + user_agent);
   }
+  void CallPage(const std::string& id,
+                ElectronPageMethod method,
+                ElectronAnswer done) override {
+    calls.push_back("page call " + id);
+    page_methods.push_back(std::move(method));
+    page_answers.push_back(std::move(done));
+  }
   void GetCookies(
       const WebViewPartition& partition,
       const std::optional<GURL>& url,
@@ -291,6 +298,9 @@ class FakeDesk final : public ElectronDesk {
   std::vector<
       base::OnceCallback<void(base::expected<base::Value, std::string>)>>
       ran;
+  // Each CallPage's method and answer, oldest first.
+  std::vector<ElectronPageMethod> page_methods;
+  std::vector<ElectronAnswer> page_answers;
   // A ClearStorage that has not finished.
   base::OnceClosure waiting;
   // The held pages Adopt made windows of. Last, as each writes to `calls` as
@@ -696,10 +706,13 @@ TEST_F(ElectronAppTest, APagesStateReachesTheAppAndItsHistoryMoves) {
                         .index = 0,
                         .focused = true,
                         .pid = 5});
-  EXPECT_EQ(sent_, Lines{"{\"crashed\":false,\"entries\":[{\"title\":"
-                         "\"A\",\"url\":\"https://a.test/\"}],\"focused\":"
-                         "true,\"index\":0,\"loading\":false,\"pid\":5,"
-                         "\"type\":\"page_state\",\"window\":3}\n"});
+  EXPECT_EQ(sent_,
+            Lines{"{\"crashed\":false,\"entries\":[{\"title\":"
+                  "\"A\",\"url\":\"https://a.test/\"}],\"focused\":"
+                  "true,\"frame_token\":\"\",\"index\":0,"
+                  "\"loading\":false,\"pid\":5,\"process_id\":0,"
+                  "\"routing_id\":0,\"type\":\"page_state\","
+                  "\"waiting\":false,\"window\":3}\n"});
 
   app_->Take(R"({"type":"go_to_index","window":3,"index":0})");
   app_->Take(R"({"type":"clear_history","window":3})");
@@ -1811,4 +1824,70 @@ TEST_F(ElectronAppTest, AnAppThatGoesClosesTheWindowsItWasAskedAbout) {
 }
 
 }  // namespace
+
+TEST_F(ElectronAppTest, APageCallReachesTheDeskAndItsAnswerTheApp) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  sent_.clear();
+  desk_.calls.clear();
+
+  app_->Take(
+      R"({"type":"page_call","window":3,"call":1,"method":"insert_css",)"
+      R"("css":"a{}","user":true})");
+  app_->Take(R"({"type":"page_call","window":3,"call":2,)"
+             R"("method":"reload_ignoring_cache"})");
+  ASSERT_EQ(desk_.calls, (Lines{"page call 10", "page call 10"}));
+  // A method is move-only, so the list is checked one by one.
+  ASSERT_EQ(desk_.page_methods.size(), 2u);
+  EXPECT_EQ(desk_.page_methods[0],
+            ElectronPageMethod(ElectronInsertCss{.css = "a{}", .user = true}));
+  EXPECT_EQ(desk_.page_methods[1],
+            ElectronPageMethod(ElectronReloadIgnoringCache{}));
+  std::move(desk_.page_answers[1]).Run(base::unexpected("no"));
+  std::move(desk_.page_answers[0]).Run(base::Value("key"));
+
+  EXPECT_EQ(sent_,
+            (Lines{"{\"call\":2,\"error\":\"no\",\"type\":\"page_result\","
+                   "\"window\":3}\n",
+                   "{\"call\":1,\"result\":\"key\",\"type\":\"page_result\","
+                   "\"window\":3}\n"}));
+}
+
+TEST_F(ElectronAppTest, APageCallTheEngineCantMakeFailsAsThatCall) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  sent_.clear();
+  desk_.calls.clear();
+
+  app_->Take(R"({"type":"page_call","window":3,"call":1,"method":"fly"})");
+  app_->Take(R"({"type":"page_call","window":4,"call":2,)"
+             R"("method":"reload_ignoring_cache"})");
+
+  EXPECT_TRUE(desk_.calls.empty());
+  EXPECT_EQ(sent_,
+            (Lines{"{\"call\":1,\"error\":\"no page call is named fly\","
+                   "\"type\":\"page_result\",\"window\":3}\n",
+                   "{\"call\":2,\"error\":\"window 4 is not open\","
+                   "\"type\":\"page_result\",\"window\":4}\n"}));
+}
+
+TEST_F(ElectronAppTest, APagesDevToolsEventsReachTheApp) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  sent_.clear();
+
+  page.devtools_event.Run("Page.screencastFrame",
+                          base::DictValue().Set("sessionId", 1));
+  EXPECT_EQ(sent_, Lines{"{\"method\":\"Page.screencastFrame\",\"params\":"
+                         "{\"sessionId\":1},\"type\":\"devtools_event\","
+                         "\"window\":3}\n"});
+  // A window that closed says nothing more.
+  app_->Listed({});
+  sent_.clear();
+  page.devtools_event.Run("Page.screencastFrame", base::DictValue());
+
+  EXPECT_TRUE(sent_.empty());
+}
+
 }  // namespace domicile

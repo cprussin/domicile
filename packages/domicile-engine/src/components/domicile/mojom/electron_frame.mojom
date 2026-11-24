@@ -71,6 +71,29 @@ interface ElectronFrame {
   // what has no JSON; the page's console says which.
   ExecuteJavaScript(string code, bool user_gesture)
       => (mojo_base.mojom.Value? result);
+
+  // webContents.insertCSS: adds `css` to the document, as the user's style
+  // sheet when `user`, and answers with its key for RemoveInsertedCSS.
+  InsertCSS(string css, bool user) => (string key);
+
+  // webContents.removeInsertedCSS: takes the sheet InsertCSS gave `key` out.
+  RemoveInsertedCSS(string key, bool user);
+
+  // webContents.executeJavaScriptInIsolatedWorld: runs `scripts` in
+  // Electron's world `world` (0 the page's own, 999 the preload's, any other
+  // one of the app's own), and answers as ExecuteJavaScript with what the
+  // last gave.
+  ExecuteJavaScriptInWorld(int32 world,
+                           array<ElectronScript> scripts,
+                           bool user_gesture)
+      => (mojo_base.mojom.Value? result);
+};
+
+// One of executeJavaScriptInIsolatedWorld's scripts: its code, and the URL
+// the page's console names it by, empty for none.
+struct ElectronScript {
+  string code;
+  string url;
 };
 
 // The renderer to the browser, for the document that ran the preload.

@@ -147,6 +147,13 @@ class ElectronPage final : public content::WebContentsObserver,
   // its widget's pixels from the top left; nothing before the first press.
   // Menu.popup puts a menu there when the app says nowhere.
   std::optional<gfx::Point> last_press() const { return last_press_; }
+  // The document now up, for the app's calls on it; null before the first
+  // commits.
+  mojom::ElectronFrame* frame() {
+    return frame_.is_bound() ? frame_.get() : nullptr;
+  }
+  // What the page calls the app with.
+  const ElectronPageCalls& calls() const { return calls_; }
 
   // A message on a port, and the main process closing one:
   void DeliverToPort(const std::string& port, const std::string& data_json);

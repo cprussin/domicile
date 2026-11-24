@@ -9,6 +9,7 @@ import { z } from "zod";
 import type { MenuEntry } from "./electron/menu";
 import type { ShowMessageBoxMessage } from "./electron/message-boxes";
 import type { PortRequest } from "./electron/message-port-main";
+import type { PageMethod } from "./electron/page-control";
 import type {
   IncomingPermissionRequest,
   PermissionMessage,
@@ -240,6 +241,12 @@ export type EngineRequest =
       readonly code: string;
       readonly user_gesture?: true;
     }
+  /** A webContents member the engine carries out, answered by `page_result`. */
+  | ({
+      readonly type: "page_call";
+      readonly window: number;
+      readonly call: number;
+    } & PageMethod)
   | ShowMessageBoxMessage
   | PortRequest
   | ProtocolRequest
@@ -290,10 +297,18 @@ const engineEvent = z.discriminatedUnion("type", [
     crashed: z.boolean(),
     entries: z.array(z.object({ title: z.string(), url: z.string() })),
     focused: z.boolean(),
+    /** The main frame's token, as webFrameMain.fromFrameToken takes it. */
+    frame_token: z.string(),
     index: z.number(),
     loading: z.boolean(),
     pid: z.number(),
+    /** Chromium's number for the renderer, as getProcessId gives it. */
+    process_id: z.number(),
+    /** The main frame's number in its renderer. */
+    routing_id: z.number(),
     type: z.literal("page_state"),
+    /** Whether the page waits for its main resource's response. */
+    waiting: z.boolean(),
     window: z.number(),
   }),
   // A find_in_page search's last answer.
@@ -411,6 +426,21 @@ const engineEvent = z.discriminatedUnion("type", [
     error: z.string().optional(),
     result: z.unknown().optional(),
     type: z.literal("javascript_result"),
+    window: z.number(),
+  }),
+  /** What a `page_call` gave, or why it gave nothing. */
+  z.object({
+    call: z.number(),
+    error: z.string().optional(),
+    result: z.unknown().optional(),
+    type: z.literal("page_result"),
+    window: z.number(),
+  }),
+  /** An event of the page's DevTools client, which page calls drive. */
+  z.object({
+    method: z.string(),
+    params: z.record(z.string(), z.unknown()),
+    type: z.literal("devtools_event"),
     window: z.number(),
   }),
   /** The size the shell gives a page, a window's or a view's. */

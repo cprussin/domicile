@@ -183,7 +183,11 @@ ElectronApp::~ElectronApp() {
 void ElectronApp::Take(std::string_view line) {
   base::expected<ElectronRequest, ElectronRefusal> request =
       ParseElectronRequest(line);
-  if (!request.has_value() && request.error().window.has_value()) {
+  if (!request.has_value() && request.error().page_call.has_value()) {
+    send_.Run(ElectronPageResult(*request.error().window,
+                                 *request.error().page_call,
+                                 base::unexpected(request.error().why)));
+  } else if (!request.has_value() && request.error().window.has_value()) {
     send_.Run(
         ElectronWindowRefused(*request.error().window, request.error().why));
   } else if (!request.has_value() && request.error().request.has_value()) {
@@ -330,6 +334,8 @@ void ElectronApp::Take(std::string_view line) {
   } else if (auto* close_popup =
                  std::get_if<ElectronClosePopupMenu>(&*request)) {
     ClosePopupMenu(*close_popup);
+  } else if (auto* page_call = std::get_if<ElectronPageCall>(&*request)) {
+    CallPage(std::move(*page_call));
   } else {
     const auto& destroy = std::get<ElectronDestroyWindow>(*request);
     if (const std::optional<std::string> id = IdOf(destroy.window)) {
@@ -440,7 +446,38 @@ ElectronPageCalls ElectronApp::CallsFor(ElectronWindow number) {
                                           weak_factory_.GetWeakPtr(), number),
       .window_state = base::BindRepeating(&ElectronApp::WindowStateChanged,
                                           weak_factory_.GetWeakPtr(), number),
+      .devtools_event = base::BindRepeating(&ElectronApp::PageDevToolsEvent,
+                                            weak_factory_.GetWeakPtr(), number),
   };
+}
+
+void ElectronApp::CallPage(ElectronPageCall call) {
+  const auto window = windows_.find(call.window);
+  if (window == windows_.end()) {
+    send_.Run(ElectronPageResult(
+        call.window, call.call,
+        base::unexpected(base::StrCat(
+            {"window ", base::NumberToString(call.window), " is not open"}))));
+    return;
+  }
+  desk_->CallPage(
+      window->second.id, std::move(call.method),
+      base::BindOnce(
+          [](base::WeakPtr<ElectronApp> app, ElectronWindow window, int number,
+             base::expected<base::Value, std::string> result) {
+            if (app) {
+              app->send_.Run(ElectronPageResult(window, number, result));
+            }
+          },
+          weak_factory_.GetWeakPtr(), call.window, call.call));
+}
+
+void ElectronApp::PageDevToolsEvent(ElectronWindow number,
+                                    std::string method,
+                                    base::DictValue params) {
+  if (windows_.contains(number)) {
+    send_.Run(ElectronDevToolsEvent(number, method, std::move(params)));
+  }
 }
 
 void ElectronApp::PageWindowOpening(ElectronWindow number,

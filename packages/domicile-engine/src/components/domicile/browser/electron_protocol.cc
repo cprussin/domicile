@@ -943,6 +943,34 @@ constexpr std::string_view kElectronStorages[] = {
 constexpr std::string_view kSameSites[] = {"unspecified", "no_restriction",
                                            "lax", "strict"};
 
+base::expected<ElectronRequest, ElectronRefusal> ParsePageCall(
+    base::DictValue& request) {
+  const base::expected<ElectronWindow, std::string> window = WindowIn(request);
+  if (!window.has_value()) {
+    return Refuse(window.error());
+  }
+  const std::optional<int> call = request.FindInt("call");
+  if (!call.has_value() || *call < 1) {
+    return Refuse("\"call\" must be a whole number from 1", *window);
+  }
+  const std::string* name = request.FindString("method");
+  if (name == nullptr) {
+    return base::unexpected(
+        ElectronRefusal{.why = "\"method\" must be a string",
+                        .window = *window,
+                        .page_call = *call});
+  }
+  base::expected<ElectronPageMethod, std::string> method =
+      ElectronPageMethodIn(*name, request);
+  if (!method.has_value()) {
+    return base::unexpected(ElectronRefusal{.why = std::move(method.error()),
+                                            .window = *window,
+                                            .page_call = *call});
+  }
+  return ElectronPageCall{
+      .window = *window, .call = *call, .method = std::move(*method)};
+}
+
 base::expected<ElectronRequest, ElectronRefusal> RefuseCall(std::string why,
                                                             int call) {
   return base::unexpected(ElectronRefusal{.why = std::move(why), .call = call});
@@ -1298,6 +1326,8 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ParseWebRequestAnswer(*request);
   } else if (*type == "session_call") {
     return ParseSessionCall(*request);
+  } else if (*type == "page_call") {
+    return ParsePageCall(*request);
   } else if (*type == "permission_handler") {
     return ParsePermissionHandler(*request);
   } else if (*type == "permission_answer") {
@@ -1680,6 +1710,10 @@ std::string ElectronPageStateChanged(ElectronWindow window,
   event.Set("focused", state.focused);
   event.Set("pid", state.pid);
   event.Set("crashed", state.crashed);
+  event.Set("process_id", state.process_id);
+  event.Set("routing_id", state.routing_id);
+  event.Set("frame_token", state.frame_token);
+  event.Set("waiting", state.waiting);
   return Line(std::move(event));
 }
 

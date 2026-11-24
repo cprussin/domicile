@@ -30,15 +30,17 @@ const outcome = (
 describe(createIpcMain, () => {
   it("names the page's main frame as the sender's frame, as Slack checks", async () => {
     const { invoke, ipcMain, receive } = createIpcMain();
-    const frame = { routingId: 7 };
+    const frame = { processId: 5, routingId: 7 };
     const sender: IpcSender = {
       id: 3,
       mainFrame: frame,
       send: () => undefined,
     };
     const heard: unknown[] = [];
-    ipcMain.on("state", (event: { frameId: number; senderFrame: unknown }) =>
-      heard.push(event.senderFrame, event.frameId),
+    ipcMain.on(
+      "state",
+      (event: { frameId: number; processId: number; senderFrame: unknown }) =>
+        heard.push(event.senderFrame, event.processId, event.frameId),
     );
     ipcMain.handle(
       "get",
@@ -47,7 +49,7 @@ describe(createIpcMain, () => {
 
     receive(sender, "state", []);
 
-    expect(heard).toEqual([frame, 7]);
+    expect(heard).toEqual([frame, 5, 7]);
     expect(outcome(await invoke(sender, "get", []))).toEqual({ value: true });
   });
 

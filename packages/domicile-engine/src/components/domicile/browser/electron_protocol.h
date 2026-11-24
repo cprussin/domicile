@@ -15,6 +15,7 @@
 #include "base/files/file_path.h"
 #include "base/types/expected.h"
 #include "base/values.h"
+#include "components/domicile/browser/electron_page_call.h"
 #include "components/domicile/browser/web_view_partition.h"
 #include "components/domicile/common/electron_schemes.h"
 #include "url/gurl.h"
@@ -169,13 +170,18 @@ namespace domicile {
 //                                           cookies_watch)
 //   {"type":"page_state","window":1,
 //    "entries":[{"url":"https://a/","title":"A"}],
-//    "index":0,"loading":false,"focused":true,"pid":1234,"crashed":false}
+//    "index":0,"loading":false,"focused":true,"pid":1234,"crashed":false,
+//    "process_id":7,"routing_id":3,"frame_token":"A1B2...",
+//    "waiting":false}
 //                                          (the page's history and which
 //                                           entry it shows, whether it is
 //                                           loading, has the keyboard
 //                                           focus, its renderer's pid and
-//                                           whether that renderer is gone:
-//                                           each time one changes)
+//                                           whether that renderer is gone,
+//                                           Chromium's ids for its renderer
+//                                           and main frame, and whether it
+//                                           waits for a response: each time
+//                                           one changes)
 //   {"type":"found_in_page","window":1,"request":1,"matches":3,
 //    "active_match_ordinal":1,
 //    "selection":{"x":0,"y":0,"width":10,"height":10}}
@@ -580,6 +586,14 @@ struct ElectronPageState {
   int pid = 0;
   // Its renderer is gone, and the page with it, until it loads again.
   bool crashed = false;
+  // Chromium's id for its renderer, and its main frame's routing id and
+  // token in that renderer: webFrameMain's ids. 0 and empty before it has a
+  // renderer.
+  int process_id = 0;
+  int routing_id = 0;
+  std::string frame_token;
+  // Its main frame waits for the response to a navigation it started.
+  bool waiting = false;
 
   friend bool operator==(const ElectronPageState&,
                          const ElectronPageState&) = default;
@@ -1024,7 +1038,8 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronSetTitle,
                                      ElectronSetHidden,
                                      ElectronSetWindowState,
-                                     ElectronSetUserAgentFallback>;
+                                     ElectronSetUserAgentFallback,
+                                     ElectronPageCall>;
 
 // Why a line is not a request, and which window or protocol request it was
 // for when it names one, so the app hears of it as that window's and the
@@ -1035,6 +1050,8 @@ struct ElectronRefusal {
   std::optional<int> request;
   // The session call it was, which the app hears failed.
   std::optional<int> call;
+  // The page call it was, of `window`, which the app hears failed.
+  std::optional<int> page_call;
 
   friend bool operator==(const ElectronRefusal&,
                          const ElectronRefusal&) = default;

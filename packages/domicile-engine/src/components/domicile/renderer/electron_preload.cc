@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
@@ -58,6 +59,32 @@ namespace {
 // content's and extensions count theirs up from there, so this stays far
 // above both and below Blink's kEmbedderWorldIdLimit (1 << 29).
 constexpr int32_t kElectronPreloadWorld = 1 << 20;
+// The app's own worlds, executeJavaScriptInIsolatedWorld's from 1, counted
+// from here: above the preload's, so none is Chrome's or an extension's.
+constexpr int32_t kElectronAppWorlds = 1 << 21;
+// Electron's numbers for the page's own world and the preload's.
+constexpr int32_t kElectronMainWorldNumber = 0;
+constexpr int32_t kElectronPreloadWorldNumber = 999;
+// The most worlds of its own an app numbers, as the browser checks.
+constexpr int32_t kElectronMostWorlds = 1 << 20;
+
+// Blink's world for Electron's world `world`.
+int32_t BlinkWorldOf(int32_t world) {
+  // The browser refuses any other number.
+  CHECK(world >= 0 && world <= kElectronMostWorlds);
+  switch (world) {
+    case kElectronMainWorldNumber:
+      return blink::kMainDOMWorldId;
+    case kElectronPreloadWorldNumber:
+      return kElectronPreloadWorld;
+    default:
+      return kElectronAppWorlds + world;
+  }
+}
+
+blink::WebCssOrigin CssOriginOf(bool user) {
+  return user ? blink::WebCssOrigin::kUser : blink::WebCssOrigin::kAuthor;
+}
 
 // process.arch, in Node's names.
 #if defined(ARCH_CPU_X86_64)
@@ -600,6 +627,48 @@ void ElectronPreload::ExecuteJavaScript(const std::string& code,
       blink::mojom::LoadEventBlockingOption::kDoNotBlock,
       base::BindOnce(
           [](ExecuteJavaScriptCallback callback,
+             std::optional<base::Value> result,
+             base::TimeTicks) { std::move(callback).Run(std::move(result)); },
+          mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+              std::move(callback), std::optional<base::Value>())),
+      blink::BackForwardCacheAware::kAllow,
+      blink::mojom::WantResultOption::kWantResult,
+      blink::mojom::PromiseResultOption::kAwait, blink::WebString());
+}
+
+void ElectronPreload::InsertCSS(const std::string& css,
+                                bool user,
+                                InsertCSSCallback callback) {
+  const blink::WebStyleSheetKey key =
+      render_frame()->GetWebFrame()->GetDocument().InsertStyleSheet(
+          blink::WebString::FromUtf8(css), /*key=*/nullptr, CssOriginOf(user));
+  std::move(callback).Run(key.Utf8());
+}
+
+void ElectronPreload::RemoveInsertedCSS(const std::string& key, bool user) {
+  render_frame()->GetWebFrame()->GetDocument().RemoveInsertedStyleSheet(
+      blink::WebString::FromUtf8(key), CssOriginOf(user));
+}
+
+void ElectronPreload::ExecuteJavaScriptInWorld(
+    int32_t world,
+    std::vector<mojom::ElectronScriptPtr> scripts,
+    bool user_gesture,
+    ExecuteJavaScriptInWorldCallback callback) {
+  std::vector<blink::WebScriptSource> sources;
+  for (const mojom::ElectronScriptPtr& script : scripts) {
+    sources.emplace_back(blink::WebString::FromUtf8(script->code),
+                         GURL(script->url));
+  }
+  // As ExecuteJavaScript, in the world the app numbered.
+  render_frame()->GetWebFrame()->RequestExecuteScript(
+      BlinkWorldOf(world), sources,
+      user_gesture ? blink::mojom::UserActivationOption::kActivate
+                   : blink::mojom::UserActivationOption::kDoNotActivate,
+      blink::mojom::EvaluationTiming::kAsynchronous,
+      blink::mojom::LoadEventBlockingOption::kDoNotBlock,
+      base::BindOnce(
+          [](ExecuteJavaScriptInWorldCallback callback,
              std::optional<base::Value> result,
              base::TimeTicks) { std::move(callback).Run(std::move(result)); },
           mojo::WrapCallbackWithDefaultInvokeIfNotRun(

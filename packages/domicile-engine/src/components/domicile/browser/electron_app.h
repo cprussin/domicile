@@ -81,6 +81,9 @@ struct ElectronPageCalls {
   base::RepeatingCallback<void(ElectronContextMenu menu)> context_menu;
   // The shell made the window `state`; called only when that changes.
   base::RepeatingCallback<void(ElectronWindowState state)> window_state;
+  // An event of the page's DevTools client, which page calls drive.
+  base::RepeatingCallback<void(std::string method, base::DictValue params)>
+      devtools_event;
 };
 
 // A window's menu bar, as the desk lists it: the menu's entries as JSON
@@ -357,6 +360,12 @@ class ElectronDesk {
   // Window `id`'s page loads as `user_agent` from its next navigation on.
   virtual void SetUserAgent(const std::string& id,
                             const std::string& user_agent) = 0;
+  // Carries `method` out on window `id`'s page, and runs `done` once with
+  // what it gave, or why it gave nothing, which a page that goes first is.
+  // See electron_page_call.h.
+  virtual void CallPage(const std::string& id,
+                        ElectronPageMethod method,
+                        ElectronAnswer done) = 0;
 
   // An app session's storage, in `partition`. Each runs `done` once, which
   // may be after the app has gone.
@@ -530,6 +539,10 @@ class ElectronApp {
   void WindowStateChanged(ElectronWindow number, ElectronWindowState state);
   void PageFound(ElectronWindow number, ElectronFindResult result);
   void PageContextMenu(ElectronWindow number, ElectronContextMenu menu);
+  void CallPage(ElectronPageCall call);
+  void PageDevToolsEvent(ElectronWindow number,
+                         std::string method,
+                         base::DictValue params);
   void SetMenuBar(const ElectronSetMenuBar& bar);
   // The desk id of window `number` when it is a window, not a view, or
   // nothing after refusing `what` of a view.

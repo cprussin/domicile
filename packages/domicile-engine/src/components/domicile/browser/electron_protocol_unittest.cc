@@ -811,11 +811,16 @@ TEST(ElectronProtocolTest, EventsAreOneLineEach) {
               .loading = true,
               .focused = true,
               .pid = 77,
-              .crashed = false}),
+              .crashed = false,
+              .process_id = 9,
+              .routing_id = 3,
+              .frame_token = "ABC",
+              .waiting = true}),
       "{\"crashed\":false,\"entries\":[{\"title\":\"A\",\"url\":"
       "\"https://a.test/\"},{\"title\":\"\",\"url\":\"https://b.test/\"}],"
-      "\"focused\":true,\"index\":1,\"loading\":true,\"pid\":77,"
-      "\"type\":\"page_state\",\"window\":2}\n");
+      "\"focused\":true,\"frame_token\":\"ABC\",\"index\":1,"
+      "\"loading\":true,\"pid\":77,\"process_id\":9,\"routing_id\":3,"
+      "\"type\":\"page_state\",\"waiting\":true,\"window\":2}\n");
   EXPECT_EQ(ElectronFoundInPage(2, ElectronFindResult{.request = 4,
                                                       .matches = 3,
                                                       .active_match_ordinal = 1,

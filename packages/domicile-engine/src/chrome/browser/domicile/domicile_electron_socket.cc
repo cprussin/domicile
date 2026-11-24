@@ -32,6 +32,7 @@
 #include "base/values.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_electron_page.h"
+#include "chrome/browser/domicile/domicile_electron_page_control.h"
 #include "chrome/browser/domicile/domicile_electron_storage.h"
 #include "components/domicile/browser/browser_window_listing.h"
 #include "components/domicile/browser/electron_app.h"
@@ -223,6 +224,15 @@ class ChromeElectronDesk final : public ElectronDesk {
   void SetUserAgent(const std::string& id,
                     const std::string& user_agent) override {
     SetBrowserWindowUserAgent(id, user_agent);
+  }
+  void CallPage(const std::string& id,
+                ElectronPageMethod method,
+                ElectronAnswer done) override {
+    if (ElectronPage* page = ElectronPageOf(id)) {
+      CallElectronPage(*page, std::move(method), std::move(done));
+    } else {
+      std::move(done).Run(base::unexpected("the window's page is gone"));
+    }
   }
   void GetCookies(
       const WebViewPartition& partition,

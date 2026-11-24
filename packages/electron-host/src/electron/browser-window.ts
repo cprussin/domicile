@@ -26,8 +26,16 @@ import { IpcMain } from "./ipc-main";
 import type { MenuEntry } from "./menu";
 import type { MessagePortMain } from "./message-port-main";
 import { createPagePorts } from "./message-port-main";
+import type {
+  DevToolsEvents,
+  PageMethod,
+  PrintToPdfOptions,
+} from "./page-control";
+import { createPageControl } from "./page-control";
 import type { createSessions, Session } from "./session";
 import { sessionPartition } from "./session";
+
+type PageControl = ReturnType<typeof createPageControl>;
 
 export type WebPreferences = {
   readonly preload?: string | undefined;
@@ -52,6 +60,10 @@ type PageRequest =
       ? Omit<Request, "window">
       : never
     : never;
+
+/** webContents.setZoomMode's modes. */
+const ZOOM_MODES = ["default", "isolated", "manual", "disabled"] as const;
+type ZoomMode = (typeof ZOOM_MODES)[number];
 
 /** webContents.findInPage's options, as Electron's. */
 export type FindOptions = {
@@ -98,6 +110,10 @@ export type BrowserWindowOptions = {
   readonly width?: number | undefined;
   readonly height?: number | undefined;
   readonly webPreferences?: WebPreferences | undefined;
+  /** The app's window this one belongs to: one of its BrowserWindows. */
+  readonly parent?: unknown;
+  /** With `parent`: the parent takes no input while this one shows. */
+  readonly modal?: boolean | undefined;
 };
 
 /** A window's state, as the app asks it and the shell makes it. */
@@ -349,17 +365,21 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     get visibilityState() {
       return "visible";
     }
+    // As the engine last said; nothing before its first word on the page.
     get routingId() {
-      return this.page.id;
+      return this.page.webContents.pageState()?.routing_id ?? 0;
     }
     get frameTreeNodeId() {
       return this.page.id;
     }
     get processId() {
-      return 0;
+      return this.page.webContents.getProcessId();
     }
     get osProcessId() {
-      return 0;
+      return this.page.webContents.getOSProcessId();
+    }
+    get frameToken() {
+      return this.page.webContents.pageState()?.frame_token ?? "";
     }
     readonly isDestroyed = () => this.page.isDestroyed();
     readonly executeJavaScript = (code: string, userGesture = false) =>
@@ -374,6 +394,11 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     ) => {
       this.page.webContents.postMessage(channel, message, transfer);
     };
+    readonly printToPDF = (options: PrintToPdfOptions) =>
+      this.page.webContents.printToPDF(options);
+    readonly copyVideoFrameAt = (x: number, y: number) => {
+      this.page.webContents.copyVideoFrameAt(x, y);
+    };
     readonly reload = () => {
       // Electron's answers only whether the reload started.
       void this.page.webContents.reload().catch(() => undefined);
@@ -387,9 +412,73 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly ipc = new IpcMain();
     #mainFrame: WebFrameMain | undefined;
 
+    // What the engine carries out on the page with a page call
+    // (page-control.ts), set as it is made.
+    declare readonly reloadIgnoringCache: PageControl["reloadIgnoringCache"];
+    declare readonly insertCSS: PageControl["insertCSS"];
+    declare readonly removeInsertedCSS: PageControl["removeInsertedCSS"];
+    declare readonly executeJavaScriptInIsolatedWorld: PageControl["executeJavaScriptInIsolatedWorld"];
+    declare readonly capturePage: PageControl["capturePage"];
+    declare readonly printToPDF: PageControl["printToPDF"];
+    declare readonly copyImageAt: PageControl["copyImageAt"];
+    declare readonly copyVideoFrameAt: PageControl["copyVideoFrameAt"];
+    declare readonly adjustSelection: PageControl["adjustSelection"];
+    declare readonly setCaretBrowsingEnabled: PageControl["setCaretBrowsingEnabled"];
+    declare readonly isCaretBrowsingEnabled: PageControl["isCaretBrowsingEnabled"];
+    declare readonly setWebRTCIPHandlingPolicy: PageControl["setWebRTCIPHandlingPolicy"];
+    declare readonly getWebRTCIPHandlingPolicy: PageControl["getWebRTCIPHandlingPolicy"];
+    declare readonly enableDeviceEmulation: PageControl["enableDeviceEmulation"];
+    declare readonly disableDeviceEmulation: PageControl["disableDeviceEmulation"];
+    declare readonly beginFrameSubscription: PageControl["beginFrameSubscription"];
+    declare readonly endFrameSubscription: PageControl["endFrameSubscription"];
+
     constructor(readonly owner: Page) {
       super();
+      Object.assign(this, createPageControl(owner));
     }
+
+    get caretBrowsingEnabled() {
+      return this.isCaretBrowsingEnabled();
+    }
+    set caretBrowsingEnabled(enabled: boolean) {
+      this.setCaretBrowsingEnabled(enabled);
+    }
+
+    /**
+     * The frame with the keyboard. The host reaches only the main frame, so
+     * it is that while the page has the keyboard.
+     */
+    get focusedFrame() {
+      return this.isFocused() ? this.mainFrame : null;
+    }
+
+    /**
+     * `webContents.send` to frame `frameId`, alone or with its renderer's id.
+     * The preload, and so `ipcRenderer`, runs only in the main frame, as in
+     * Electron without `nodeIntegrationInSubFrames`: another frame has
+     * nothing to hear it.
+     */
+    readonly sendToFrame = (
+      frameId: number | readonly [number, number],
+      channel: string,
+      ...args: unknown[]
+    ) => {
+      const [processId, routingId] =
+        typeof frameId === "number" ? [this.getProcessId(), frameId] : frameId;
+      // Before the engine tells of the page's frame, it has none to send to.
+      if (
+        this.#state !== undefined &&
+        processId === this.#state.process_id &&
+        routingId === this.#state.routing_id
+      ) {
+        this.send(channel, ...args);
+      } else {
+        warnOnce(
+          "sendToFrame",
+          `${app.getName()} sent to a frame other than a page's main frame, which has no preload to hear it`,
+        );
+      }
+    };
 
     /** Its page's main frame, the one frame the app reaches. */
     get mainFrame() {
@@ -618,15 +707,22 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly goToOffset = this.navigationHistory.goToOffset;
     zoomFactor = 1;
     zoomLevel = 0;
+    zoomMode: ZoomMode = "default";
     readonly isFocused = () => this.#state?.focused ?? false;
     readonly isLoading = () => this.#state?.loading ?? false;
     /** The engine says only whether the page loads, frames and all. */
     readonly isLoadingMainFrame = () => this.isLoading();
-    readonly isWaitingForResponse = () => false;
+    readonly isWaitingForResponse = () => this.#state?.waiting ?? false;
     readonly isCrashed = () => this.#state?.crashed ?? false;
     readonly reload = () => this.owner.loadURL(this.owner.url);
+    // A workspace is DevTools', which the desktop doesn't give apps.
+    readonly addWorkSpace = (_path: string) => undefined;
+    readonly removeWorkSpace = (_path: string) => undefined;
     readonly getOSProcessId = () => this.#state?.pid ?? 0;
-    readonly getProcessId = () => 0;
+    /** Chromium's number for the page's renderer, as Electron's. */
+    readonly getProcessId = () => this.#state?.process_id ?? 0;
+    /** What the engine last said of the page; nothing before it has. */
+    readonly pageState = () => this.#state;
     // The engine's DevTools aren't the app's to open yet.
     readonly openDevTools = (_options?: unknown) => undefined;
     readonly closeDevTools = () => undefined;
@@ -636,8 +732,6 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     // The engine's settings for every page, not each app's.
     readonly setBackgroundThrottling = (_allowed: boolean) => undefined;
     readonly getBackgroundThrottling = () => true;
-    readonly setWebRTCIPHandlingPolicy = (_policy: string) => undefined;
-    readonly getWebRTCIPHandlingPolicy = () => "default";
     readonly setUserAgent = (_userAgent: string) => undefined;
     readonly getUserAgent = () => "";
     readonly setAudioMuted = (_muted: boolean) => undefined;
@@ -663,6 +757,14 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly isCurrentlyAudible = () => false;
     // The shell zooms pages: the app's zoom is kept, not applied.
     readonly getZoomFactor = () => this.zoomFactor;
+    readonly getZoomMode = () => this.zoomMode;
+    readonly setZoomMode = (mode: ZoomMode) => {
+      if (ZOOM_MODES.includes(mode)) {
+        this.zoomMode = mode;
+      } else {
+        throw new TypeError(`Invalid zoom mode: ${mode}`);
+      }
+    };
     readonly getZoomLevel = () => this.zoomLevel;
     readonly setZoomFactor = (factor: number) => {
       this.zoomFactor = factor;
@@ -729,6 +831,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
    */
   abstract class Page extends EventEmitter {
     readonly id = nextId++;
+    /** Its page's DevTools events, which page calls drive. */
+    readonly devtools: DevToolsEvents = new EventEmitter();
+    /** Whether its page shows on the desk. */
+    abstract readonly isShowing: () => boolean;
     readonly webContents = new WebContents(this);
     url = "";
     /** Its page's session. */
@@ -743,7 +849,9 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     #loading = false;
     /** The app's scripts that wait for the page to load. */
     #toRun: (() => void)[] = [];
-    /** The app's scripts the engine runs, by call. */
+    /** The settings the app made before the page opened, to send as it does. */
+    #settings: PageMethod[] = [];
+    /** The app's scripts and page calls the engine runs, by call. */
     #running = new Map<
       number,
       { resolve: (result: unknown) => void; reject: (why: Error) => void }
@@ -807,11 +915,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
      * Electron's executeJavaScript waits for one.
      */
     readonly runJavaScript = async (code: string, userGesture: boolean) => {
-      this.assertAlive();
-      if (!this.opened || this.#loading) {
-        await new Promise<void>((resolve) => this.#toRun.push(resolve));
-      }
-      this.assertAlive();
+      await this.#loaded();
       const call = nextCall++;
       return new Promise<unknown>((resolve, reject) => {
         this.#running.set(call, { reject, resolve });
@@ -823,6 +927,61 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           ...(userGesture ? { user_gesture: true } : {}),
         });
       });
+    };
+
+    /** Waits out any load under way, as Electron's executeJavaScript does. */
+    readonly #loaded = async () => {
+      this.assertAlive();
+      if (!this.opened || this.#loading) {
+        await new Promise<void>((resolve) => this.#toRun.push(resolve));
+      }
+      this.assertAlive();
+    };
+
+    /** Has the engine carry `method` out on the page. */
+    readonly call = (method: PageMethod): Promise<unknown> => {
+      this.assertAlive();
+      if (this.opened) {
+        const call = nextCall++;
+        return new Promise<unknown>((resolve, reject) => {
+          this.#running.set(call, { reject, resolve });
+          toEngine({ ...method, call, type: "page_call", window: this.id });
+        });
+      } else {
+        return Promise.reject(
+          new Error(
+            "the page has opened nothing yet: the app loads a URL into it first",
+          ),
+        );
+      }
+    };
+
+    /** As `call`, after any load under way. */
+    readonly callAfterLoad = async (method: PageMethod) => {
+      await this.#loaded();
+      return this.call(method);
+    };
+
+    /** Sends a setting now, or as the page opens. */
+    readonly set = (method: PageMethod) => {
+      this.assertAlive();
+      if (this.opened) {
+        this.call(method).catch((error: unknown) => {
+          say(
+            Priority.Error,
+            `electron-host: window ${this.id} didn't take ${method.method}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+      } else {
+        this.#settings.push(method);
+      }
+    };
+
+    /** The page opened: the settings made before reach it. */
+    readonly #sendSettings = () => {
+      for (const method of this.#settings.splice(0)) {
+        this.set(method);
+      }
     };
 
     /** Shows `url`. Resolves once the page loads, as Electron's does. */
@@ -838,6 +997,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       } else {
         this.opened = true;
         toEngine({ type: "open_window", url, ...this.#openKeys() });
+        this.#sendSettings();
         this.wasOpened();
       }
       return loaded;
@@ -877,6 +1037,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         type: "window_open_answer",
         ...this.#openKeys(),
       });
+      this.#sendSettings();
       this.wasOpened();
     };
 
@@ -1078,12 +1239,17 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           this.webContents.contextMenu(event);
           break;
         }
+        case "devtools_event": {
+          this.devtools.emit(event.method, event.params);
+          break;
+        }
+        case "page_result":
         case "javascript_result": {
           const running = this.#running.get(event.call);
           this.#running.delete(event.call);
           if (running === undefined) {
             throw new Error(
-              `the engine answered script ${event.call} of window ${this.id}, which nothing waits on`,
+              `the engine answered call ${event.call} of window ${this.id}, which nothing waits on`,
             );
           } else if (event.error === undefined) {
             running.resolve(event.result);
@@ -1225,7 +1391,9 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           run();
         }
         for (const running of this.#running.values()) {
-          running.reject(new Error("the window closed before its script ran"));
+          running.reject(
+            new Error("the window closed before the engine answered"),
+          );
         }
         this.#running.clear();
         this.wasClosed();
@@ -1280,6 +1448,9 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     };
 
     readonly getVisible = () => this.#visible;
+    /** Whether a window that shows holds it, and it isn't hidden there. */
+    readonly isShowing = () =>
+      this.#visible && this.holder?.isShowing() === true;
 
     /** The shell draws views; the app's color and corners are its own look. */
     readonly setBackgroundColor = (_color: string) => undefined;
@@ -1392,6 +1563,9 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       this.#children = this.#children.filter((child) => child !== view);
       this.#children.splice(index ?? this.#children.length, 0, view);
       view.holder = this.window;
+      if (from !== this.window) {
+        this.window.viewHeld(view, true);
+      }
       this.window.placeViews();
       this.window.focusMoved();
     };
@@ -1400,6 +1574,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       if (this.#children.includes(view)) {
         this.#children = this.#children.filter((child) => child !== view);
         view.holder = undefined;
+        this.window.viewHeld(view, false);
         this.window.placeViews();
         this.window.focusMoved();
       }
@@ -1463,8 +1638,18 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     /** What the engine holds the app asked, so it hears each only once. */
     #asked: WindowState = NORMAL;
     #fullScreenable: boolean;
+    #parent: BrowserWindow | undefined;
+    readonly #modal: boolean;
+    /** Whether the app has it take input: setEnabled. */
+    #enabled = true;
+    /** The modals showing over it, which keep its input from it. */
+    readonly #modals = new Set<BrowserWindow>();
+    /** Whether the engine was told its pages take no input. */
+    #ignoring = false;
 
     constructor(options: BrowserWindowOptions = {}) {
+      // Before anything holds the window, so a parent refused leaves nothing.
+      const parent = parentWindow(options.parent);
       super(
         options.webPreferences ?? {},
         options.title ?? app.getName(),
@@ -1481,10 +1666,84 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         this.#wants = { ...NORMAL, fullscreen: true };
       }
       this.#menu?.on("changed", this.#showMenuBar);
+      this.#parent = parent;
+      this.#modal = options.modal === true && this.#parent !== undefined;
       windows.set(this.id, this);
+      this.#holdParent();
       this.created();
       app.emit("browser-window-created", eventObject(), this);
     }
+
+    readonly getParentWindow = () => this.#parent ?? null;
+    readonly getChildWindows = () =>
+      [...windows.values()].filter((window) => window.#parent === this);
+    readonly setParentWindow = (parent: BrowserWindow | null) => {
+      const next = parentWindow(parent);
+      if (next !== undefined && descendsFrom(next, this)) {
+        throw new TypeError(
+          "a window can't be its own parent, or its parent's",
+        );
+      } else {
+        if (this.#parent !== undefined) {
+          this.#parent.#release(this);
+        }
+        this.#parent = next;
+        this.#holdParent();
+      }
+    };
+    readonly isModal = () => this.#modal;
+
+    readonly setEnabled = (enabled: boolean) => {
+      this.#enabled = enabled;
+      this.#tellInput();
+    };
+    /** False while the app disables it or a modal of its shows over it. */
+    readonly isEnabled = () => this.#enabled && this.#modals.size === 0;
+
+    /** A modal showing keeps its parent's input from it; else it lets go. */
+    readonly #holdParent = () => {
+      if (this.#modal && this.#parent !== undefined) {
+        if (this.isShowing()) {
+          this.#parent.#modals.add(this);
+          this.#parent.#tellInput();
+        } else {
+          this.#parent.#release(this);
+        }
+      }
+    };
+    readonly #release = (modal: BrowserWindow) => {
+      if (this.#modals.delete(modal)) {
+        this.#tellInput();
+      }
+    };
+
+    /** Tells its page and its views' whether they take input, if that changed. */
+    readonly #tellInput = () => {
+      const ignore = !this.isEnabled();
+      if (ignore !== this.#ignoring) {
+        this.#ignoring = ignore;
+        for (const page of [this, ...this.contentView.children]) {
+          page.set({ ignore, method: "set_ignore_input" });
+        }
+      }
+    };
+
+    /** A view it now holds, or holds no more, takes input as it does. */
+    readonly viewHeld = (view: WebContentsView, held: boolean) => {
+      // A view that closed takes nothing more.
+      if (this.#ignoring && !view.isDestroyed()) {
+        view.set({ ignore: held, method: "set_ignore_input" });
+      }
+    };
+
+    /** Whether it shows on the desk: not hidden, and not closed. */
+    readonly isShowing = () => !this.#hidden && !this.destroyed;
+
+    /** Its page as the shell last drew it. */
+    readonly capturePage: WebContents["capturePage"] = (rect, options) =>
+      this.webContents.capturePage(rect, options);
+
+    readonly getMediaSourceId = () => "";
 
     /** Shows the window if the app hid it, and focuses it. */
     readonly show = () => {
@@ -1514,6 +1773,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         if (this.opened) {
           toEngine({ hidden, type: "set_hidden", window: this.id });
         }
+        this.#holdParent();
         this.emit(hidden ? "hide" : "show");
       }
     };
@@ -1602,9 +1862,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     // put them.
     readonly isSimpleFullScreen = () => false;
     readonly isKiosk = () => false;
-    readonly isModal = () => false;
     readonly isAlwaysOnTop = () => false;
-    readonly isEnabled = () => true;
     readonly isFocusable = () => true;
     readonly isResizable = () => true;
     readonly isMovable = () => true;
@@ -1620,7 +1878,6 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly setAlwaysOnTop = (_flag: boolean, _level?: string) => undefined;
     readonly moveTop = () => undefined;
     readonly moveAbove = (_mediaSourceId: string) => undefined;
-    readonly setEnabled = (_enabled: boolean) => undefined;
     readonly setFocusable = (_focusable: boolean) => undefined;
     readonly setResizable = (_resizable: boolean) => undefined;
     readonly setMovable = (_movable: boolean) => undefined;
@@ -1658,11 +1915,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly isContentProtected = () => false;
     /** No shell shows an attention request yet. */
     readonly flashFrame = (_flag: boolean) => undefined;
-    readonly getParentWindow = () => null;
-    readonly getChildWindows = () => [];
-    readonly setParentWindow = (_parent: unknown) => undefined;
     readonly getNativeWindowHandle = () => Buffer.alloc(8);
-    readonly getMediaSourceId = () => "";
     /**
      * Whether it is the app's window with the keyboard, as Electron's: its
      * page or one of its views' has it, or the user is choosing from its menu
@@ -2007,6 +2260,12 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
 
     protected override wasClosed() {
       windows.delete(this.id);
+      this.#holdParent();
+      // Its children close with it, as Electron closes them.
+      for (const child of this.getChildWindows()) {
+        child.#parent = undefined;
+        child.destroy();
+      }
       this.#menu?.off("changed", this.#showMenuBar);
       // A popup up over the window closes with it, nothing chosen.
       const popups = [...this.#popups.values()];
@@ -2017,6 +2276,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       // The engine lets go of the window's views; they live on unheld.
       for (const view of this.contentView.children) {
         view.holder = undefined;
+        this.viewHeld(view, false);
       }
       this.emit("closed");
       if (windows.size === 0) {
@@ -2024,6 +2284,30 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       }
     }
   }
+
+  /** Whether `child` is `window`, or a child of it, however far down. */
+  const descendsFrom = (
+    child: BrowserWindow,
+    window: BrowserWindow,
+  ): boolean => {
+    const parent = child.getParentWindow();
+    return (
+      child === window || (parent !== null && descendsFrom(parent, window))
+    );
+  };
+
+  /** The window `parent` names, as `parent` and setParentWindow take it. */
+  const parentWindow = (parent: unknown) => {
+    if (parent === undefined || parent === null) {
+      return undefined;
+    } else if (parent instanceof BrowserWindow && !parent.isDestroyed()) {
+      return parent;
+    } else {
+      throw new TypeError(
+        "a window's parent is one of the app's open BrowserWindows",
+      );
+    }
+  };
 
   /** Electron quits when the last window closes, unless the app listens. */
   const allClosed = () => {
@@ -2040,6 +2324,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
 
   /** Electron's `webContents` module: the app's pages. */
   const webContents = {
+    /** The page of `frame`, which is a page's main frame here. */
     fromFrame: (frame: WebFrameMain) => frame.page.webContents,
     fromId: (id: number) => pages.get(id)?.webContents,
     getAllWebContents: () =>
@@ -2052,6 +2337,25 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         .find((contents) => contents.isFocused()) ?? null,
   };
 
+  /** Electron's `webFrameMain` module: each page's main frame, by its ids. */
+  const webFrameMain = {
+    fromFrameToken: (processId: number, frameToken: string) =>
+      mainFrameWhere(
+        (frame) =>
+          frame.processId === processId && frame.frameToken === frameToken,
+      ),
+    fromId: (processId: number, routingId: number) =>
+      mainFrameWhere(
+        (frame) =>
+          frame.processId === processId && frame.routingId === routingId,
+      ),
+  };
+  const mainFrameWhere = (matches: (frame: WebFrameMain) => boolean) =>
+    [...pages.values()]
+      .filter((page) => page.webContents.pageState() !== undefined)
+      .map((page) => page.webContents.mainFrame)
+      .find(matches);
+
   return {
     BrowserView,
     BrowserWindow,
@@ -2061,6 +2365,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     webContents,
     /** The page the engine numbers `window`, a window's or a view's. */
     webContentsOf: (window: number) => pages.get(window)?.webContents,
+    webFrameMain,
   };
 };
 

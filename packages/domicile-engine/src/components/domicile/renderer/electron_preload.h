@@ -86,6 +86,15 @@ class ElectronPreload final
   void ExecuteJavaScript(const std::string& code,
                          bool user_gesture,
                          ExecuteJavaScriptCallback callback) override;
+  void InsertCSS(const std::string& css,
+                 bool user,
+                 InsertCSSCallback callback) override;
+  void RemoveInsertedCSS(const std::string& key, bool user) override;
+  void ExecuteJavaScriptInWorld(
+      int32_t world,
+      std::vector<mojom::ElectronScriptPtr> scripts,
+      bool user_gesture,
+      ExecuteJavaScriptInWorldCallback callback) override;
 
  private:
   // A preload for a document.

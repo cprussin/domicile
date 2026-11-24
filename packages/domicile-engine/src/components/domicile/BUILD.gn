@@ -971,6 +971,8 @@ source_set("electron_app") {
 # browser, which is where its tests are.
 source_set("electron_protocol") {
   sources = [
+    "browser/electron_page_call.cc",
+    "browser/electron_page_call.h",
     "browser/electron_protocol.cc",
     "browser/electron_protocol.h",
   ]
@@ -1507,6 +1509,7 @@ source_set("unit_tests") {
     "browser/display_list_unittest.cc",
     "browser/download_list_unittest.cc",
     "browser/electron_app_unittest.cc",
+    "browser/electron_page_call_unittest.cc",
     "browser/electron_protocol_unittest.cc",
     "common/electron_schemes_unittest.cc",
     "renderer/context_bridge_unittest.cc",

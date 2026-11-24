@@ -60,6 +60,8 @@ source_set("domicile") {
     "domicile_electron_loader.h",
     "domicile_electron_page.cc",
     "domicile_electron_page.h",
+    "domicile_electron_page_control.cc",
+    "domicile_electron_page_control.h",
     "domicile_electron_storage.cc",
     "domicile_electron_storage.h",
     "domicile_electron_web_request.cc",

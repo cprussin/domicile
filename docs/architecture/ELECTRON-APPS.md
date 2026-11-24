@@ -168,10 +168,12 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
     An app that closes to its tray, as Slack and Element do, prevents it and
     hides the window.
   - **Page state:** the engine sends `page_state {window, entries, index,
-    loading, focused, pid, crashed}` whenever any of it changes
+    loading, focused, pid, crashed, process_id, routing_id, frame_token,
+    waiting}` whenever any of it changes
     (`ElectronPage::ReportState`). The host answers `navigationHistory` (and
     `canGoBack` and the rest), `isLoading`, `isFocused`, `isCrashed`,
-    `getOSProcessId`, `BrowserWindow.getFocusedWindow` and
+    `getOSProcessId`, `getProcessId`, `isWaitingForResponse`, the main
+    frame's ids, `BrowserWindow.getFocusedWindow` and
     `webContents.getFocusedWebContents` from it, and emits
     `did-start-loading`, `did-stop-loading`, `focus`, `blur` and
     `render-process-gone`. `goBack`, `goForward` and `goToIndex` send
@@ -248,6 +250,40 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
     window if allowed (`ElectronDesk::Adopt`), in the opener's session.
     Content has started its first navigation by then, so its preload and
     its session's user agent apply from its next document.
+
+### Page calls
+
+The host carries out the webContents members that act on the page with
+`page_call {window, call, method, ...}`, numbered by the app and answered
+`page_result {window, call, result | error}`
+([`electron_page_call.h`](../../packages/domicile-engine/src/components/domicile/browser/electron_page_call.h),
+[`page-control.ts`](../../packages/electron-host/src/electron/page-control.ts)).
+
+| Electron | `method` |
+|---|---|
+| `reloadIgnoringCache` | `reload_ignoring_cache` |
+| `insertCSS`, `removeInsertedCSS` | `insert_css`, `remove_inserted_css`, in the main frame's document |
+| `executeJavaScriptInIsolatedWorld` | `execute_in_isolated_world`: world 0 is the page's, 999 the preload's |
+| `copyImageAt`, `copyVideoFrameAt`, `adjustSelection` | `copy_image_at`, `copy_video_frame_at`, `adjust_selection` |
+| `caretBrowsingEnabled`, `setWebRTCIPHandlingPolicy` | `set_caret_browsing`, `set_webrtc_ip_policy` (renderer prefs) |
+| `win.setEnabled`, a modal's parent | `set_ignore_input` |
+| `capturePage`, `printToPDF`, `enableDeviceEmulation`, `beginFrameSubscription` | `devtools`: `Page.captureScreenshot` (with `Page.getLayoutMetrics` for a rect), `Page.printToPDF`, `Emulation.setDeviceMetricsOverride`, `Page.startScreencast` |
+
+- **DevTools:** each page has one DevTools client, untrusted and with no
+  local files, attached at its first `devtools` call and kept while the page
+  lives, as an emulation or a screencast lasts only while its client does.
+  It takes only the methods in the table, and its events come as
+  `devtools_event {window, method, params}`.
+- **Settings** (caret browsing, the WebRTC policy, ignoring input) set
+  before the page opens wait for it; the other calls reject. The engine
+  puts caret browsing and the WebRTC policy back before each document, over
+  the renderer prefs Chrome makes from the profile's. A profile pref that
+  changes while a document shows can reset them until the next one.
+- **Captures** of a page that doesn't show (a hidden window, or a view no
+  showing window holds) are empty, as such a page draws no frame.
+- **Not yet:** `print` (Chrome says nothing when its dialog is done),
+  `savePage` (a download), `clone`, and `getMediaSourceId`, which no
+  capture source in the engine answers to.
 
 ### Preload and IPC
 
@@ -678,6 +714,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: a sandboxed preload's `process.versions.electron` and `process.resourcesPath`, from `hello`, and the rest of Electron's renderer `process`, `webFrame.insertText` and `setVisualZoomLevelLimits`, each there or saying it doesn't work yet (`guard-electron-preload.sh`, `preload-coverage.test.ts`)
 - [x] engine: a sandboxed preload's `process` is an EventEmitter that says `loaded`, `document-start` and `document-end`, without which Slack's preload throws and Slack never signs in (`guard-electron-preload.sh`, `preload-coverage.test.ts`)
 - [x] engine: a page's history, loading, focus, renderer pid and crash reach the app (`page_state`), and it walks the history (`go_to_index`, `clear_history`), for `navigationHistory`, `getFocusedWindow` and the rest (`guard-electron-socket.sh`)
+- [x] engine: page calls (`page_call`, `page_result`, `devtools_event`): `insertCSS`, `executeJavaScriptInIsolatedWorld`, `capturePage`, `printToPDF`, device emulation, frame subscription and the rest of "Page calls", and `win.setEnabled` and modal windows (`set_ignore_input`)
 - [x] engine: the Edit menu's commands and `replace` at the page's focus (`edit`, `replace`), and find in page (`find_in_page`, `found_in_page`, `stop_find_in_page`), with the Edit menu's roles (`guard-electron-socket.sh`)
 - [x] engine: a page's context menus reach its app as `context-menu` (`context_menu`), and the shell draws none for it
 - [ ] engine: a message box before any window has a page, which Element shows when there's no keyring and hands itself back on

@@ -504,10 +504,14 @@ void ElectronPage::ReportState() {
   state.index = std::max(controller.GetCurrentEntryIndex(), 0);
   state.loading = contents.IsLoading();
   state.focused = focused_;
-  content::RenderProcessHost* process =
-      contents.GetPrimaryMainFrame()->GetProcess();
+  content::RenderFrameHost* main_frame = contents.GetPrimaryMainFrame();
+  content::RenderProcessHost* process = main_frame->GetProcess();
   state.pid = process->GetProcess().IsValid() ? process->GetProcess().Pid() : 0;
   state.crashed = contents.IsCrashed();
+  state.process_id = process->GetDeprecatedID();
+  state.routing_id = main_frame->GetRoutingID();
+  state.frame_token = main_frame->GetFrameToken().ToString();
+  state.waiting = contents.IsWaitingForResponse();
   if (state != state_) {
     state_ = state;
     calls_.state.Run(std::move(state));

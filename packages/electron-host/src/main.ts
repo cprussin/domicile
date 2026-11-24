@@ -242,6 +242,7 @@ const main = async ([resources, ...args]: string[]) => {
       WebFrameMain,
       webContents,
       webContentsOf,
+      webFrameMain,
     } = createBrowserWindow(
       engine,
       app,
@@ -378,6 +379,7 @@ const main = async ([resources, ...args]: string[]) => {
       utilityProcess: createUtilityProcess(appEvents.childProcessGone),
       WebContentsView,
       webContents,
+      webFrameMain,
     };
     completeElectron(electron, app.getName(), { absent, unsupported, warn });
     completeInstances(

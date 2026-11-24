@@ -106,10 +106,14 @@ describe(createBrowserWindow, () => {
         { title: "C", url: "https://c.test/" },
       ],
       focused: false,
+      frame_token: "TOKEN",
       index: 1,
       loading: false,
       pid: 42,
+      process_id: 5,
+      routing_id: 3,
       type: "page_state",
+      waiting: true,
       window: 1,
     });
 
@@ -122,6 +126,15 @@ describe(createBrowserWindow, () => {
     });
     expect(history.getEntryAtIndex(3)).toBeNull();
     expect(window.webContents.getOSProcessId()).toBe(42);
+    expect(window.webContents.getProcessId()).toBe(5);
+    expect(window.webContents.isWaitingForResponse()).toBe(true);
+    const frame = window.webContents.mainFrame;
+    expect([
+      frame.processId,
+      frame.osProcessId,
+      frame.routingId,
+      frame.frameToken,
+    ]).toEqual([5, 42, 3, "TOKEN"]);
     history.goBack();
     history.goToOffset(1);
     // Indexes the history doesn't have, and the one shown, do nothing.
@@ -157,10 +170,14 @@ describe(createBrowserWindow, () => {
       crashed: false,
       entries: [{ title: "", url: "https://a.test/" }],
       focused: false,
+      frame_token: "T",
       index: 0,
       loading: false,
       pid: 7,
+      process_id: 4,
+      routing_id: 1,
       type: "page_state" as const,
+      waiting: false,
       window: 1,
     };
 
@@ -204,10 +221,14 @@ describe(createBrowserWindow, () => {
       crashed: false,
       entries: [{ title: "", url: "https://a.test/" }],
       focused: true,
+      frame_token: "TOKEN",
       index: 0,
       loading: false,
       pid: 7,
+      process_id: 4,
+      routing_id: 3,
       type: "page_state" as const,
+      waiting: false,
       window: 1,
     };
 

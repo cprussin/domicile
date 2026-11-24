@@ -95,10 +95,14 @@ describe("WebContentsView", () => {
       crashed: false,
       entries: [{ title: "", url: "app://notes/chat" }],
       focused: true,
+      frame_token: "T",
       index: 0,
       loading: false,
       pid: 7,
+      process_id: 4,
+      routing_id: 1,
       type: "page_state" as const,
+      waiting: false,
       window: view.id,
     };
 

@@ -21,7 +21,10 @@ export type IpcSender = {
    * `senderFrame`, which apps check before they answer (Slack drops a message
    * without one).
    */
-  readonly mainFrame?: { readonly routingId: number };
+  readonly mainFrame?: {
+    readonly processId: number;
+    readonly routingId: number;
+  };
   /**
    * The page's `webContents` as an emitter: it says `ipc-message` and
    * `ipc-message-sync` ahead of every other listener, as in Electron.
@@ -151,7 +154,7 @@ export class IpcMain extends EventEmitter {
 
 const invokeEvent = (sender: IpcSender) => ({
   frameId: sender.mainFrame?.routingId ?? 0,
-  processId: 0,
+  processId: sender.mainFrame?.processId ?? 0,
   sender,
   senderFrame: sender.mainFrame ?? null,
 });
