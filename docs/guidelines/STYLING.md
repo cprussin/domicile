@@ -306,6 +306,7 @@ words, and pass the service's message as its `detail`.
 | `durations.wipe` | Domicile preset. The 1.6s theme change wipe. |
 | `easings.default/linear/in/out/in-out` | Used in `transition` shorthands. |
 | `easings.emphasized`, `easings.outBack`, `easings.outQuart` | Domicile preset. `emphasized` is for long movements, such as a workspace switch; `outBack` is a back-out with a ~15% overshoot, for a landing that should bounce; `outQuart` is a settling ease-out for when `easings.out` reads too linear. |
+| `easings.springs.*` + `durations.springs.*` (`snappy`, `smooth`, `bouncy`) | Domicile preset. Spring motion; always use the pair, as in `transform {durations.springs.snappy} {easings.springs.snappy}`. `snappy` for leaving or answering a click, `smooth` for arriving, `bouncy` overshoots ~16% for a landing that should be seen. Fades keep the fixed curves. |
 | `opacity.disabled` (0.6), `opacity.dragging` (0.4), `opacity.pulseMin` (0.3) | Domicile preset. |
 | `zIndex.modalBackdrop` / `zIndex.modal` | Domicile preset. Stacking for portaled overlays. |
 | `fonts.mono` | Domicile preset. |

@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import panda from "@pandacss/preset-panda";
 
 import { domicilePreset } from "./pandacss-preset";
+import { SPRINGS, springEasing } from "./springs";
 
 /**
  * Colors with a separate value per theme.
@@ -48,6 +49,26 @@ describe("the domicile preset", () => {
   it("draws muted text legibly on a tile on a card, in either theme", () => {
     expect(mutedOnTile("_light")).toBeGreaterThanOrEqual(READABLE);
     expect(mutedOnTile("base")).toBeGreaterThanOrEqual(READABLE);
+  });
+
+  it("names an easing and a duration for each spring", () => {
+    const tokens = at(at(domicilePreset, "theme"), "extend");
+    const named = (category: string, spring: string): unknown =>
+      at(
+        at(at(at(at(tokens, "tokens"), category), "springs"), spring),
+        "value",
+      );
+    expect(
+      Object.keys(SPRINGS).map((spring) => [
+        named("easings", spring),
+        named("durations", spring),
+      ]),
+    ).toStrictEqual(
+      Object.values(SPRINGS).map((spring) => {
+        const { duration, easing } = springEasing(spring);
+        return [easing, duration];
+      }),
+    );
   });
 
   it("holds the theme wipe at its start while windows turn", () => {

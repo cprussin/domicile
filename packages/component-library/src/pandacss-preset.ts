@@ -5,6 +5,7 @@ import { iconKeyframes } from "./_icon/icon-keyframes";
 import type { Size } from "./control-sizes";
 import { CONTROL_HEIGHT, CONTROL_PADDING_INLINE } from "./control-sizes";
 import { SPACING_STEP_REM } from "./spacing";
+import { SPRINGS, springEasing } from "./springs";
 
 // The two packages' Preset types differ but are compatible at runtime. The
 // ts-expect-error fails once the types agree, so it can then be removed.
@@ -24,6 +25,19 @@ const quarterStepSpacing = Object.fromEntries(
       return [step.toString(), { value: `${step * SPACING_STEP_REM}rem` }];
     },
   ),
+);
+
+// `springs.*` easings and durations: each spring's curve and settle time, used
+// as a pair, as in `transform {durations.springs.snappy}
+// {easings.springs.snappy}`.
+const springTokens = Object.entries(SPRINGS).map(
+  ([name, spring]) => [name, springEasing(spring)] as const,
+);
+const springDurations = Object.fromEntries(
+  springTokens.map(([name, { duration }]) => [name, { value: duration }]),
+);
+const springEasings = Object.fromEntries(
+  springTokens.map(([name, { easing }]) => [name, { value: easing }]),
 );
 
 // `LevelToast` holds, then fades out over the last fifth.
@@ -559,6 +573,7 @@ export const domicilePreset = definePreset({
           pulse: { value: "1.5s" },
           // One turn of `spin`. A slower spinner looks stuck.
           spin: { value: "1s" },
+          springs: springDurations,
           // The theme change wipe.
           wipe: { value: "1.6s" },
         },
@@ -572,6 +587,7 @@ export const domicilePreset = definePreset({
           // easeOutQuart, for settling animations where `easings.out` feels
           // too linear.
           outQuart: { value: "cubic-bezier(0.25, 1, 0.5, 1)" },
+          springs: springEasings,
         },
         fontSizes: {
           // The desktop's one text size, 13px: bar items, tab and window
