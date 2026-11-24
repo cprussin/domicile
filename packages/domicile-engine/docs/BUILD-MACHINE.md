@@ -115,6 +115,16 @@ rebuild.
   pick and while waiting (`crux-run-finished.sh`). A runner shut down
   mid-build never drops its tree. A lock that names no run, such as a
   person's, is never cleared.
+- **After a pin roll:** the other tree is still at the old pin, and the next
+  run that lands on it rebuilds Chromium (4h50m on 2026-11-23). So once
+  `engine-release.yml` on main has published, it copies its built tree over
+  the least recently used tree at another pin
+  (`engine-tree-pool.sh refresh <chromium/src> <who>`). The copy shares blocks
+  (`cp --reflink=always`, which needs `zfs_bclone_enabled=1`), so it takes
+  minutes and almost no space. Without cloning it copies nothing, since a third
+  full tree does not fit. It skips held trees. `gn gen` rewrites the old
+  tree's absolute paths at the next build, and `engine-release-build.sh`
+  refuses a build whose files still name another tree.
 - **Memory:** 62 GB, no swap. A cold link uses most of it, so
   `.github/scripts/engine-compile-slot.sh` allows one cold build at a time.
   Runs on a tree that already carries the series skip the slot.
