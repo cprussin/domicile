@@ -59,6 +59,25 @@ jobs:
             [ -f "$f" ] || continue
             echo "$f: $(grep -aoE "/build/trees/[^/]+/" "$f" 2>/dev/null | sort | uniq -c | tr '\n' ' ')"
           done
+      - name: Carry siso's saved state over to the copy
+        run: |
+          set -u
+          cd "$DST"
+          siso=third_party/siso/cipd/siso
+          old="$SRC/src"
+          start=$(date +%s)
+          "$siso" fs export -C "$OUT" >/tmp/probe-fs.json
+          echo "export $(( $(date +%s) - start ))s, $(wc -c </tmp/probe-fs.json) bytes"
+          echo "old path: $(grep -o "$old/" /tmp/probe-fs.json | wc -l), relative-looking keys sample:"
+          head -c 1500 /tmp/probe-fs.json; echo
+          grep -oE '"/build/[^"]{0,60}' /tmp/probe-fs.json | cut -c1-50 | sort | uniq -c | sort -rn | head -10
+          sed "s|$old/|$DST/|g; s|\"$old\"|\"$DST\"|g" /tmp/probe-fs.json >/tmp/probe-fs-new.json
+          echo "after rewrite old path: $(grep -o "$old/" /tmp/probe-fs-new.json | wc -l), new: $(grep -o "$DST/" /tmp/probe-fs-new.json | wc -l)"
+          cp -p "$OUT/.siso_fs_state" /tmp/probe-fs-state.orig
+          start=$(date +%s)
+          "$siso" fs import -C "$OUT" </tmp/probe-fs-new.json && echo "import ok $(( $(date +%s) - start ))s"
+          ls -la "$OUT/.siso_fs_state"*
+          rm -f /tmp/probe-fs.json /tmp/probe-fs-new.json /tmp/probe-fs-state.orig
       - name: Build in the copy
         run: |
           set -u
@@ -78,8 +97,9 @@ jobs:
           echo "shell exit $?"
           .github/scripts/engine-compile-slot.sh drop "$OWNER"
           echo "build took $(( $(date +%s) - start ))s"
-          grep -aE 'error|FAILED|still name|build finished|steps|siso|ninja: ' /tmp/probe-copy.log | tail -40
-          tail -40 /tmp/probe-copy.log
+          grep -aE 'still name|build finished|Build Succeeded|noexec:|ninja: ' /tmp/probe-copy.log | tail -20
+          echo "== why steps ran (siso_explain)"; head -40 "$DST/$OUT/siso_explain" 2>/dev/null; wc -l "$DST/$OUT/siso_explain" 2>/dev/null
+          tail -15 /tmp/probe-copy.log
           echo "== absolute tree paths after gn gen"
           grep -rhoE --include='*.ninja' "/build/trees/[^\"' ]+/src/" "$DST/$OUT" 2>/dev/null | sort | uniq -c
       - name: Clean up
