@@ -6,6 +6,7 @@ import type { ProtocolRequest } from "./protocol";
 import { createProtocols } from "./protocol";
 import {
   createSessions,
+  followNetworkEmulation,
   framePreloadsOf,
   learnStoragePath,
   sessionPartition,
@@ -300,6 +301,84 @@ describe(createSessions, () => {
     expect(sent).toEqual([
       { scheme: "file", session: "", type: "handle_protocol" },
     ]);
+  });
+
+  it("tells the session a page's preconnect names", async () => {
+    const { sessions } = setUp();
+    const heard = new Promise((resolve) =>
+      sessions
+        .fromPartition("persist:a")
+        .once("preconnect", (_event, url, allowCredentials) =>
+          resolve({ allowCredentials, url }),
+        ),
+    );
+
+    sessions.heardPreconnect({
+      allow_credentials: false,
+      session: "persist:a",
+      type: "preconnect",
+      url: "https://b.test/",
+    });
+
+    expect(await heard).toEqual({
+      allowCredentials: false,
+      url: "https://b.test/",
+    });
+    expect(() =>
+      sessions.heardPreconnect({
+        allow_credentials: false,
+        session: "never",
+        type: "preconnect",
+        url: "https://b.test/",
+      }),
+    ).toThrow('the engine named session "never", which the app never made');
+  });
+
+  it("tells each session of each dictionary loaded, sessions made later too", async () => {
+    const { sessions } = setUp();
+    const languagesOf = (
+      session: ReturnType<typeof sessions.fromPartition>,
+    ) => {
+      const languages: string[] = [];
+      session.on("spellcheck-dictionary-initialized", (_event, language) =>
+        languages.push(language),
+      );
+      return languages;
+    };
+    const own = languagesOf(sessions.defaultSession);
+
+    sessions.heardDictionary({ language: "en-US" });
+    sessions.heardDictionary({ language: "de-DE" });
+    const later = languagesOf(sessions.fromPartition("later"));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(own).toEqual(["en-US", "de-DE"]);
+    expect(later).toEqual(["en-US", "de-DE"]);
+  });
+
+  it("emulates network conditions in its own pages only", () => {
+    const { sessions } = setUp();
+    const own: unknown[] = [];
+    const other: unknown[] = [];
+    followNetworkEmulation(sessions.fromPartition("slow"), {
+      set: (method) => own.push(method),
+    });
+    followNetworkEmulation(sessions.defaultSession, {
+      set: (method) => other.push(method),
+    });
+
+    sessions.fromPartition("slow").enableNetworkEmulation({ offline: true });
+    sessions.fromPartition("slow").disableNetworkEmulation();
+
+    expect(own).toEqual([
+      expect.objectContaining({
+        params: expect.objectContaining({ offline: true }),
+      }),
+      expect.objectContaining({
+        params: expect.objectContaining({ offline: false }),
+      }),
+    ]);
+    expect(other).toEqual([]);
   });
 
   it("names its partition for the engine", () => {

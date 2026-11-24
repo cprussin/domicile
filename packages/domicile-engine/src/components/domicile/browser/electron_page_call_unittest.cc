@@ -79,6 +79,15 @@ TEST(ElectronPageCallTest, EachMethodTakesWhatItNeeds) {
             ElectronPageMethod(ElectronDevToolsMethod{
                 .method = "Page.captureScreenshot",
                 .params = base::DictValue().Set("format", "png")}));
+  // session.enableNetworkEmulation, in each of the session's pages.
+  EXPECT_EQ(CallOn(R"({"type":"page_call","window":1,"call":1,)"
+                   R"("method":"devtools",)"
+                   R"("devtools_method":"Network.emulateNetworkConditions",)"
+                   R"("params":{"offline":true}})")
+                .method,
+            ElectronPageMethod(ElectronDevToolsMethod{
+                .method = "Network.emulateNetworkConditions",
+                .params = base::DictValue().Set("offline", true)}));
 }
 
 TEST(ElectronPageCallTest, AMethodMissingWhatItNeedsIsRefusedAsThatCall) {

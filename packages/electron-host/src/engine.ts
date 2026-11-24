@@ -756,6 +756,17 @@ const engineEvent = z.discriminatedUnion("type", [
     type: z.literal("cookie_changed"),
   }),
   z.object({
+    allow_credentials: z.boolean(),
+    session: z.string(),
+    type: z.literal("preconnect"),
+    url: z.string(),
+  }),
+  z.object({
+    language: z.string(),
+    type: z.literal("spellcheck_dictionary_initialized"),
+  }),
+  z.object({ type: z.literal("gpu_info_update") }),
+  z.object({
     ask: z.number(),
     media_types: z.array(z.string()).optional(),
     permission: z.string(),
@@ -804,6 +815,9 @@ const engineEvent = z.discriminatedUnion("type", [
 const engineLine = z.union([engineEvent, serviceWorkerEvent]);
 
 export type EngineEvent = z.infer<typeof engineEvent>;
+
+/** A page's preconnect, as the engine reports it. */
+export type IncomingPreconnect = Extract<EngineEvent, { type: "preconnect" }>;
 
 /** What the engine says about one window. */
 export type WindowEvent = Extract<EngineEvent, { window: number }>;
@@ -873,6 +887,12 @@ export type Engine = {
     signIn: [question: IncomingSignIn];
     /** A change to the service workers of a session the app watches. */
     serviceWorker: [event: ServiceWorkerEvent];
+    /** A page's resource hint opened a connection, for its session. */
+    preconnect: [preconnect: IncomingPreconnect];
+    /** The engine loaded a dictionary every session checks spelling with. */
+    dictionaryInitialized: [dictionary: { readonly language: string }];
+    /** The engine learned more of its GPU. */
+    gpuInfoUpdate: [];
   }>;
 };
 
@@ -938,6 +958,12 @@ export const connectEngine = (
         events.emit("cookieChanged", parsed.data);
       } else if (parsed.data.type === "permission_request") {
         events.emit("permissionRequest", parsed.data);
+      } else if (parsed.data.type === "preconnect") {
+        events.emit("preconnect", parsed.data);
+      } else if (parsed.data.type === "spellcheck_dictionary_initialized") {
+        events.emit("dictionaryInitialized", parsed.data);
+      } else if (parsed.data.type === "gpu_info_update") {
+        events.emit("gpuInfoUpdate");
       } else if (parsed.data.type === "will_download") {
         events.emit("willDownload", parsed.data);
       } else if (parsed.data.type === "download_updated") {

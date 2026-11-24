@@ -12,6 +12,7 @@
 #include <variant>
 #include <vector>
 
+#include "base/files/file_path.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "url/gurl.h"
@@ -34,6 +35,7 @@ namespace domicile {
 //     -> {"endpoints":[{"address":"::1","family":"ipv6"}]}
 //   "preconnect_sockets", with "url" and "sockets" (1 to 6)
 //   "storage_path" -> "/abs/dir"
+//   "set_code_cache_path", with "path", absolute
 //   "clear_shared_dictionary_cache", "get_shared_dictionary_usage_info"
 //   "clear_shared_dictionary_cache_for_isolation_key" and
 //     "get_shared_dictionary_info", with "frame_origin" and "top_frame_site"
@@ -98,6 +100,12 @@ struct ElectronStoragePath {
   friend bool operator==(const ElectronStoragePath&,
                          const ElectronStoragePath&) = default;
 };
+struct ElectronSetCodeCachePath {
+  base::FilePath path;
+
+  friend bool operator==(const ElectronSetCodeCachePath&,
+                         const ElectronSetCodeCachePath&) = default;
+};
 // Where a shared dictionary is kept: the frame's origin under its top-level
 // site.
 struct ElectronSharedDictionaryKey {
@@ -132,6 +140,7 @@ using ElectronNetworkCall = std::variant<ElectronClearData,
                                          ElectronResolveHost,
                                          ElectronPreconnect,
                                          ElectronStoragePath,
+                                         ElectronSetCodeCachePath,
                                          ElectronClearSharedDictionaries,
                                          ElectronGetSharedDictionaryInfo,
                                          ElectronGetSharedDictionaryUsage>;

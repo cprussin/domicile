@@ -1871,6 +1871,14 @@ TEST(ElectronProtocolTest, ANetworkSessionCallCarriesElectronsOptions) {
   ASSERT_TRUE(watch.has_value()) << watch.error().why;
   EXPECT_EQ(std::get<ElectronSessionCall>(*watch).method,
             ElectronSessionMethod(ElectronWatchServiceWorkers{}));
+
+  const auto code_cache = ParseElectronRequest(
+      R"({"type":"session_call","call":5,"session":"",)"
+      R"("method":"set_code_cache_path","path":"/home/a/code"})");
+  ASSERT_TRUE(code_cache.has_value()) << code_cache.error().why;
+  EXPECT_EQ(std::get<ElectronSessionCall>(*code_cache).method,
+            ElectronSessionMethod(ElectronNetworkCall(ElectronSetCodeCachePath{
+                .path = base::FilePath("/home/a/code")})));
 }
 
 TEST(ElectronProtocolTest, ABadNetworkSessionCallIsRefusedAsTheCalls) {
@@ -1892,6 +1900,9 @@ TEST(ElectronProtocolTest, ABadNetworkSessionCallIsRefusedAsTheCalls) {
       WhyRefused(R"({"type":"session_call","call":3,"session":"",)"
                  R"("method":"clear_data","data_types":["everything"]})"),
       "\"everything\" is not a type clearData knows");
+  EXPECT_EQ(WhyRefused(R"({"type":"session_call","call":4,"session":"",)"
+                       R"("method":"set_code_cache_path","path":"code"})"),
+            "\"path\" must be an absolute path");
 }
 
 TEST(ElectronProtocolTest, AServiceWorkerChangeIsOneLine) {

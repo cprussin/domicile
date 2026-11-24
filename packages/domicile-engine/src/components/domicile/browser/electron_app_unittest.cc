@@ -1378,6 +1378,40 @@ TEST_F(ElectronAppTest, AWindowOpensInItsSessionsPartition) {
   EXPECT_EQ(desk_.sessions.at("11")->name(), "persist:cowork");
 }
 
+TEST_F(ElectronAppTest, APagesPreconnectIsItsSessions) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+             R"("session":"persist:cowork"})");
+  sent_.clear();
+
+  desk_.sessions.at("10")->TellPreconnect(GURL("https://b.test/"), true);
+
+  EXPECT_EQ(sent_, Lines{"{\"allow_credentials\":true,"
+                         "\"session\":\"persist:cowork\","
+                         "\"type\":\"preconnect\","
+                         "\"url\":\"https://b.test/\"}\n"});
+}
+
+TEST_F(ElectronAppTest, DictionariesAndTheGpuAreToldOnlyAfterHello) {
+  app_->SpellcheckDictionaryInitialized("en-US");
+  app_->GpuInfoUpdated();
+  EXPECT_TRUE(sent_.empty());
+
+  app_->Take(kHello);
+  app_->SpellcheckDictionaryInitialized("en-US");
+  app_->SpellcheckDictionaryInitialized("de-DE");
+  app_->GpuInfoUpdated();
+
+  ASSERT_EQ(sent_.size(), 4u);
+  EXPECT_EQ(sent_[1],
+            "{\"language\":\"en-US\","
+            "\"type\":\"spellcheck_dictionary_initialized\"}\n");
+  EXPECT_EQ(sent_[2],
+            "{\"language\":\"de-DE\","
+            "\"type\":\"spellcheck_dictionary_initialized\"}\n");
+  EXPECT_EQ(sent_[3], "{\"type\":\"gpu_info_update\"}\n");
+}
+
 TEST_F(ElectronAppTest, ASessionThatNamesNoPartitionRefusesItsWindow) {
   Hello();
 

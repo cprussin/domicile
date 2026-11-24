@@ -1028,6 +1028,8 @@ source_set("electron_protocol") {
     "browser/electron_page_reports.h",
     "browser/electron_protocol.cc",
     "browser/electron_protocol.h",
+    "browser/electron_session_events.cc",
+    "browser/electron_session_events.h",
     "browser/electron_sign_ins.cc",
     "browser/electron_sign_ins.h",
   ]
@@ -1584,6 +1586,7 @@ source_set("unit_tests") {
     "browser/electron_input_unittest.cc",
     "browser/electron_page_reports_unittest.cc",
     "browser/electron_protocol_unittest.cc",
+    "browser/electron_session_events_unittest.cc",
     "common/electron_schemes_unittest.cc",
     "renderer/context_bridge_unittest.cc",
     "browser/browser_profiles_unittest.cc",

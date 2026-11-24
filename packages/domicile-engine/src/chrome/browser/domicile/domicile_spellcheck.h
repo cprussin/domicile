@@ -6,6 +6,9 @@
 
 #include <string>
 
+#include "base/callback_list.h"
+#include "base/functional/callback.h"
+
 namespace content {
 class BrowserContext;
 }  // namespace content
@@ -27,6 +30,18 @@ void StartSpellcheck();
 // Adds `word` to `context`'s own dictionary. WebViewGuest's
 // AddToDictionaryCallback.
 void AddToDictionary(content::BrowserContext& context, const std::string& word);
+
+// Runs `initialized` with the language of each dictionary the shell's profile
+// has loaded, now and as each loads, until the subscription goes. Electron
+// apps' sessions are partitions of that profile, so these are theirs: see
+// "Session events" in docs/architecture/ELECTRON-APPS.md.
+base::CallbackListSubscription WatchShellSpellcheckDictionaries(
+    base::RepeatingCallback<void(const std::string& language)> initialized);
+
+// `context`'s dictionary for `language` loaded. Patch 0270 calls it from
+// SpellcheckService.
+void SpellcheckDictionaryInitialized(content::BrowserContext& context,
+                                     const std::string& language);
 
 }  // namespace domicile
 

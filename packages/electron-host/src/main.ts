@@ -33,7 +33,7 @@ import {
 import { nativeImage } from "./electron/native-image";
 import type { Appearance } from "./electron/native-theme";
 import { createNativeTheme } from "./electron/native-theme";
-import { net } from "./electron/net";
+import { createNet } from "./electron/net";
 import { createNotification } from "./electron/notification";
 import { createPermissions } from "./electron/permissions";
 import type { DesktopStatus } from "./electron/power";
@@ -63,6 +63,7 @@ import {
 } from "./electron/utility-process";
 import { ELECTRON_VERSION } from "./electron/version";
 import { createWebRequests } from "./electron/web-request";
+import { createWebSocket } from "./electron/web-socket";
 import { connectEngine, connectEngineWhenUp } from "./engine";
 import type { Environment } from "./environment";
 import { readEnvironment } from "./environment";
@@ -226,6 +227,21 @@ const main = async ([resources, ...args]: string[]) => {
     engine.events.on("willDownload", downloads.hearWillDownload);
     engine.events.on("downloadUpdated", downloads.hearUpdate);
     engine.events.on("serviceWorker", session.heardServiceWorker);
+    engine.events.on("gpuInfoUpdate", appEvents.gpuInfoUpdated);
+    engine.events.on("preconnect", session.heardPreconnect);
+    // From ready, as Electron loads the default session's dictionaries then;
+    // the engine names those it has loaded as the app connects.
+    engine.events.on("dictionaryInitialized", (dictionary) => {
+      app
+        .whenReady()
+        .then(() => session.heardDictionary(dictionary))
+        .catch((error: unknown) => {
+          say(
+            Priority.Error,
+            `electron-host: a session's spelling dictionary went unsaid: ${String(error)}`,
+          );
+        });
+    });
     await Promise.all(storagePathsLearned);
     // Read before the app's main runs, as an app reads its theme as it starts.
     const desktop = await reachDesktop(env);
@@ -309,6 +325,7 @@ const main = async ([resources, ...args]: string[]) => {
           menu as Parameters<typeof Menu.setApplicationMenu>[0],
         ),
     };
+    const WebSocket = createWebSocket(session);
     const electron: Record<string, unknown> = {
       app,
       autoUpdater: createAutoUpdater(),
@@ -352,7 +369,7 @@ const main = async ([resources, ...args]: string[]) => {
       }),
       nativeImage,
       nativeTheme,
-      net,
+      net: createNet(WebSocket),
       netLog: createNetLog(),
       powerMonitor: createPowerMonitor(
         desktopState.statuses,
@@ -409,6 +426,7 @@ const main = async ([resources, ...args]: string[]) => {
       }),
       utilityProcess: createUtilityProcess(appEvents.childProcessGone),
       WebContentsView,
+      WebSocket,
       webContents,
       webFrameMain,
     };

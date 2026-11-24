@@ -4,6 +4,7 @@
 // docs/architecture/ELECTRON-APPS.md.
 
 import { EventEmitter } from "node:events";
+import { isAbsolute } from "node:path";
 import { z } from "zod";
 
 /** The calls the host makes on a session, by their names on the wire. */
@@ -26,6 +27,7 @@ export type SessionCallMessage = {
     | "resolve_host"
     | "preconnect_sockets"
     | "storage_path"
+    | "set_code_cache_path"
     | "clear_shared_dictionary_cache"
     | "clear_shared_dictionary_cache_for_isolation_key"
     | "get_shared_dictionary_info"
@@ -196,6 +198,8 @@ export type SessionCalls = {
   }) => void;
   /** Where the engine keeps the session's data on disk. */
   readonly storagePath: () => Promise<string>;
+  /** Where the session keeps the code V8 compiles for its scripts. */
+  readonly setCodeCachePath: (path: string) => void;
   readonly clearSharedDictionaryCache: () => Promise<void>;
   readonly clearSharedDictionaryCacheForIsolationKey: (
     key: SharedDictionaryIsolationKey,
@@ -431,6 +435,24 @@ export const createSessionCalls = (
             }),
           ),
         ),
+      setCodeCachePath: (path) => {
+        if (!isAbsolute(path)) {
+          // Electron's own words.
+          throw new Error(
+            "Absolute path must be provided to store code cache.",
+          );
+        }
+        // Electron's is synchronous and says nothing back.
+        call(session, "set_code_cache_path", { path }).catch(
+          (error: unknown) => {
+            // biome-ignore lint/suspicious/noConsole: a refusal is the engine's bug
+            console.error(
+              `the engine refused to move the code cache to ${path}`,
+              error,
+            );
+          },
+        );
+      },
       setUserAgent: (agent) => {
         userAgent = agent;
         // Electron's is synchronous; a refusal is the engine's bug, and its

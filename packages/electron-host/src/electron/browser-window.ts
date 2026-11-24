@@ -42,7 +42,11 @@ import type {
 import { createPageControl } from "./page-control";
 import { isPageEvent, PageEvents } from "./page-events";
 import type { createSessions, Session } from "./session";
-import { framePreloadsOf, sessionPartition } from "./session";
+import {
+  followNetworkEmulation,
+  framePreloadsOf,
+  sessionPartition,
+} from "./session";
 
 type PageControl = ReturnType<typeof createPageControl>;
 
@@ -1071,7 +1075,11 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         this.webContents.pageEvents.enablePreferredSizeMode();
       }
       pages.set(this.id, this);
+      this.#stopEmulating = followNetworkEmulation(session, this);
     }
+
+    /** Stops following its session's network emulation. */
+    readonly #stopEmulating: () => void;
 
     /** Electron's web-contents-created, which each subclass's constructor ends with. */
     protected created() {
@@ -1629,6 +1637,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       if (!this.destroyed) {
         this.destroyed = true;
         pages.delete(this.id);
+        this.#stopEmulating();
         ports.gone(this.id);
         for (const load of this.#loads.splice(0)) {
           load.reject(new Error("the window closed before its page loaded"));

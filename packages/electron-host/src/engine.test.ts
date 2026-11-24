@@ -268,6 +268,36 @@ describe(connectEngine, () => {
     expect(await heard).toEqual(event);
   });
 
+  it("passes on a page's preconnect, the engine's dictionaries and its GPU", async () => {
+    fake = await startFakeEngine();
+    const engine = await connected(fake);
+    const preconnect = {
+      allow_credentials: true,
+      session: "persist:a",
+      type: "preconnect",
+      url: "https://a.test/",
+    };
+    const dictionary = {
+      language: "en-US",
+      type: "spellcheck_dictionary_initialized",
+    };
+    const heard = Promise.all([
+      new Promise((resolve) => engine.events.on("preconnect", resolve)),
+      new Promise((resolve) =>
+        engine.events.on("dictionaryInitialized", resolve),
+      ),
+      new Promise<void>((resolve) =>
+        engine.events.on("gpuInfoUpdate", () => resolve()),
+      ),
+    ]);
+
+    fake.say(preconnect);
+    fake.say(dictionary);
+    fake.say({ type: "gpu_info_update" });
+
+    expect(await heard).toEqual([preconnect, dictionary, undefined]);
+  });
+
   it("passes on each session result, with its result or its error", async () => {
     fake = await startFakeEngine();
     const engine = await connected(fake);

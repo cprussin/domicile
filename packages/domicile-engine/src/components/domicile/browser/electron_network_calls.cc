@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/check.h"
+#include "base/files/file_path.h"
 #include "base/json/json_writer.h"
 #include "base/strings/strcat.h"
 #include "base/types/expected.h"
@@ -207,6 +208,12 @@ ParseElectronNetworkCall(std::string_view method,
     return PreconnectIn(request);
   } else if (method == "storage_path") {
     return ElectronStoragePath{};
+  } else if (method == "set_code_cache_path") {
+    const std::string* path = request.FindString("path");
+    if (path == nullptr || !base::FilePath(*path).IsAbsolute()) {
+      return base::unexpected("\"path\" must be an absolute path");
+    }
+    return ElectronSetCodeCachePath{.path = base::FilePath(*path)};
   } else if (method == "clear_shared_dictionary_cache") {
     return ElectronClearSharedDictionaries{};
   } else if (method == "clear_shared_dictionary_cache_for_isolation_key") {

@@ -35,9 +35,10 @@ constexpr std::array<std::pair<std::string_view, ElectronWebRtcIpPolicy>, 4>
 // The DevTools methods the host's members need, and all an app may send: a
 // method past these could take the page where the app can't, or read what
 // it shouldn't.
-constexpr std::array<std::string_view, 8> kAppDevToolsMethods = {
+constexpr std::array<std::string_view, 9> kAppDevToolsMethods = {
     "Emulation.clearDeviceMetricsOverride",
     "Emulation.setDeviceMetricsOverride",
+    "Network.emulateNetworkConditions",
     "Page.captureScreenshot",
     "Page.getLayoutMetrics",
     "Page.printToPDF",

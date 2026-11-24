@@ -36,6 +36,7 @@
 #include "chrome/browser/domicile/domicile_electron_page_control.h"
 #include "chrome/browser/domicile/domicile_electron_page_events.h"
 #include "chrome/browser/domicile/domicile_electron_storage.h"
+#include "chrome/browser/domicile/domicile_spellcheck.h"
 #include "components/domicile/browser/browser_window_listing.h"
 #include "components/domicile/browser/electron_app.h"
 #include "components/domicile/browser/electron_protocol.h"
@@ -46,6 +47,8 @@
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/gpu_data_manager.h"
+#include "content/public/browser/gpu_data_manager_observer.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/socket/stream_socket.h"
@@ -308,8 +311,9 @@ class ChromeElectronDesk final : public ElectronDesk {
   }
 };
 
-// One app on the UI thread: its ElectronApp, told of the desk's windows.
-class AppOnUIThread {
+// One app on the UI thread: its ElectronApp, told of the desk's windows, the
+// engine's dictionaries and its GPU.
+class AppOnUIThread : public content::GpuDataManagerObserver {
  public:
   explicit AppOnUIThread(ElectronApp::Send send)
       : app_(desk_,
@@ -326,11 +330,22 @@ class AppOnUIThread {
                                 base::Unretained(&app_)))),
         dom_readies_(WatchBrowserWindowDomReadies(
             base::BindRepeating(&ElectronApp::DomReady,
+                                base::Unretained(&app_)))),
+        dictionaries_(WatchShellSpellcheckDictionaries(
+            base::BindRepeating(&ElectronApp::SpellcheckDictionaryInitialized,
                                 base::Unretained(&app_)))) {
     CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+    content::GpuDataManager::GetInstance()->AddObserver(this);
+  }
+
+  ~AppOnUIThread() override {
+    content::GpuDataManager::GetInstance()->RemoveObserver(this);
   }
 
   void Take(const std::string& line) { app_.Take(line); }
+
+  // content::GpuDataManagerObserver:
+  void OnGpuInfoUpdate() override { app_.GpuInfoUpdated(); }
 
  private:
   void Listed() { app_.Listed(ListedBrowserWindows()); }
@@ -340,6 +355,7 @@ class AppOnUIThread {
   base::CallbackListSubscription listing_;
   base::CallbackListSubscription loads_;
   base::CallbackListSubscription dom_readies_;
+  base::CallbackListSubscription dictionaries_;
 };
 
 // One connection on the IO thread: reads its lines, writes its events, and
