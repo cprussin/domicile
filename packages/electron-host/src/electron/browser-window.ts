@@ -921,6 +921,8 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly addWorkSpace = (_path: string) => undefined;
     readonly removeWorkSpace = (_path: string) => undefined;
     readonly getOSProcessId = () => this.#state?.pid ?? 0;
+    /** Undocumented, but Slack reads it to close unsandboxed windows. */
+    readonly getLastWebPreferences = () => this.owner.runsWith;
     /** Chromium's number for the page's renderer, as Electron's. */
     readonly getProcessId = () => this.#state?.process_id ?? 0;
     /** What the engine last said of the page; nothing before it has. */
@@ -1102,6 +1104,8 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly #view: boolean;
     /** Its webPreferences, which the windows its page opens start from. */
     readonly preferences: WebPreferences;
+    /** Its webPreferences with the defaults its page runs with filled in. */
+    readonly runsWith: WebPreferences;
     /**
      * Whether its page is one of the app's webContents: not a BaseWindow's
      * or an ImageView's, which the app sees no page of.
@@ -1121,6 +1125,12 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       const sandboxed =
         preferences.sandbox ?? preferences.nodeIntegration !== true;
       const isolated = preferences.contextIsolation !== false;
+      this.runsWith = {
+        ...preferences,
+        contextIsolation: isolated,
+        nodeIntegration: preferences.nodeIntegration === true,
+        sandbox: sandboxed,
+      };
       if (sandboxed && !isolated) {
         refuse(
           "this window's sandboxed preload runs in its page's own world, which Domicile's engine doesn't give a preload",

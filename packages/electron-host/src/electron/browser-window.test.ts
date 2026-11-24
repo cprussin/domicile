@@ -51,6 +51,31 @@ describe(createBrowserWindow, () => {
     ]);
   });
 
+  // Slack closes any window whose page is not sandboxed and isolated, as it
+  // hears of each in app's browser-window-created.
+  it("says which webPreferences its page runs with, defaults and all", () => {
+    const { BrowserWindow } = setUp();
+
+    const sandboxed = new BrowserWindow({
+      webPreferences: { preload: "/app/preload.js" },
+    });
+    const node = new BrowserWindow({
+      webPreferences: { contextIsolation: false, nodeIntegration: true },
+    });
+
+    expect(sandboxed.webContents.getLastWebPreferences()).toEqual({
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: "/app/preload.js",
+      sandbox: true,
+    });
+    expect(node.webContents.getLastWebPreferences()).toEqual({
+      contextIsolation: false,
+      nodeIntegration: true,
+      sandbox: false,
+    });
+  });
+
   it("opens the window with its first page and loads the next in it", () => {
     const { BrowserWindow, sent } = setUp();
     const window = new BrowserWindow();
