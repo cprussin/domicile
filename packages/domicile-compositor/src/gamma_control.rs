@@ -1,7 +1,7 @@
 //! `zwlr_gamma_control_manager_v1`: a client sets one monitor's gamma ramp,
 //! as gammastep and wl-gammarelay-rs do. [`crate::gamma`] decides who owns a
-//! monitor's ramp; this is the protocol around it, and the night light's way
-//! to the engine.
+//! monitor; this is the protocol around it, and the way to the engine for
+//! ramps and the night light's color matrices.
 
 use std::io::{ErrorKind, Read as _};
 use std::os::fd::OwnedFd;
@@ -37,7 +37,10 @@ impl DomicileCompositor {
     pub fn draw_the_night_light(&mut self) {
         let now = Instant::now();
         self.gamma.set_lights(self.night_light.at(now));
-        self.restate_the_gamma();
+        // Only the matrices: the night light is never a ramp.
+        for display in &self.engine_displays {
+            self.restate_the_color_matrix_of(display.id);
+        }
         if self.night_light.fading(now) && !self.night_light_frame_due {
             self.night_light_frame_due = true;
             self.loop_handle
@@ -55,8 +58,8 @@ impl DomicileCompositor {
         }
     }
 
-    /// Sends every engine display its ramp. Run when the displays, a night
-    /// light or a client's hold change.
+    /// Sends every engine display its ramp and color matrix. Run when the
+    /// displays change.
     pub fn restate_the_gamma(&self) {
         for display in &self.engine_displays {
             self.restate_the_gamma_of(display.id);
@@ -64,8 +67,19 @@ impl DomicileCompositor {
     }
 
     /// Sends engine display `display` its ramp, if it has gamma, and its color
-    /// matrix, which carries the night light in HDR or with no gamma.
+    /// matrix, which carries the night light.
     fn restate_the_gamma_of(&self, display: i64) {
+        let Some(session) = self.engine.as_ref() else {
+            return;
+        };
+        if let Some(ramp) = self.gamma.ramp(display) {
+            session.set_gamma(display, &ramp);
+        }
+        self.restate_the_color_matrix_of(display);
+    }
+
+    /// Sends engine display `display` its color matrix.
+    fn restate_the_color_matrix_of(&self, display: i64) {
         let Some(session) = self.engine.as_ref() else {
             return;
         };
@@ -74,9 +88,6 @@ impl DomicileCompositor {
             .outputs()
             .find(|advertised| advertised.display == Some(display))
             .map(|advertised| advertised.name.as_str());
-        if let Some(ramp) = self.gamma.ramp(display, output) {
-            session.set_gamma(display, &ramp);
-        }
         session.set_color_matrix(display, &self.gamma.matrix(display, output));
     }
 

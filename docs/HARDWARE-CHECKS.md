@@ -478,6 +478,16 @@ Unverified. On a tty, leave a monitor showing something that does not move
 Expect the monitor to warm at once, not when the pointer next moves over it or
 something on it next redraws.
 
+## Night light and the pointer
+
+Unverified. On a tty with the night light on, on each monitor (a laptop
+panel, a monitor on a dock's DisplayLink port and one on its DP port):
+
+- the screen warm and the pointer's own colors, such as a white arrow, not
+  tinted;
+- a monitor plugged in, or the laptop woken, while the night light is on warm
+  at once, without waiting for the schedule's next change.
+
 ## An input method in a native window
 
 Unverified. On a tty, start fcitx5 with its Wayland input method frontend and

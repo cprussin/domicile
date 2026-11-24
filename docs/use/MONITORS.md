@@ -57,9 +57,9 @@ More: [DISPLAYS.md](../DISPLAYS.md).
 
 ## Night light
 
-The night light warms the screens' color in the evening. Switch it from the
-brightness item in the [top bar](TOP-BAR.md); it then holds until the next
-change in its schedule.
+The night light warms the screens' color in the evening, but not the pointer's.
+Switch it from the brightness item in the [top bar](TOP-BAR.md); it then holds
+until the next change in its schedule.
 
 <!-- tab: Settings app -->
 

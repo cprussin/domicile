@@ -357,45 +357,46 @@ absent).
 - Each flip names its own frame's damage, on its plane's own device (patch
   `0204`). Upstream sent no clip without ChromeOS's PSR2 flag, so evdi marked
   the whole screen changed on every flip.
-- No gamma table, so the night light is a color matrix
-  ([below](#with-no-gamma-table)), and `wlr-gamma-control` clients are refused.
+- No gamma table, so `wlr-gamma-control` clients are refused. The night light
+  is a color matrix, as on every monitor.
 - Planes take only 8-bit formats, so a dock's monitors scan out in 8 bits.
 
 ## Night light and gamma control
 
-Each monitor draws with its own gamma ramp. Two things set one:
+Two things warm or curve a monitor:
 
 - **The night light.** The shell sets a color temperature for every monitor,
-  or for one by its display `name`. Every monitor's replaces each one's.
+  or for one by its display `name`. Every monitor's replaces each one's. It is
+  a color matrix ([below](#the-night-lights-color-matrix)), so the pointer
+  keeps its colors.
 - **A `wlr-gamma-control` client,** such as gammastep or wl-gammarelay-rs. It
-  sets one monitor's whole ramp, so it can warm, dim or curve each monitor
-  apart.
+  sets one monitor's whole gamma ramp, so it can warm, dim or curve each
+  monitor apart. The CRTC applies a ramp to the cursor plane too, so it tints
+  the pointer.
 
-Who owns a ramp (`domicile-compositor/src/gamma.rs`):
+Who owns a monitor (`domicile-compositor/src/gamma.rs`):
 
-- A client holding a monitor owns its ramp. The night light doesn't apply
-  there, so the two never multiply.
-- Every other monitor draws with its night light.
+- A client's ramp owns its monitor. The night light doesn't apply there, so
+  the two never multiply.
+- Every other monitor on a connector draws with its night light.
 - When the client lets go or exits, its monitor goes back to its night light.
 - One client per monitor; a second gets `failed`.
 
 ```
-set_color_temperature {kelvin, display?}  ─┐
-zwlr_gamma_control_v1.set_gamma            ─┴→  gamma::Ramps  →  domicile_displays_set_gamma
+set_color_temperature {kelvin, display?}  →  gamma::Ramps  →  domicile_displays_set_color_matrix
+  → FrameSinkBroker.SetColorMatrix  →  ui::Compositor::SetDisplayColorMatrix
+zwlr_gamma_control_v1.set_gamma           →  gamma::Ramps  →  domicile_displays_set_gamma
   → FrameSinkBroker.SetGamma  →  OzonePlatform::SetDomicileGamma  →  DrmModeset::SetGamma
   → NativeDisplayDelegate::SetGammaAdjustment
 ```
 
-- `kelvin` is 1000 to 6500. 6500 is neutral: an identity ramp. An empty
-  curve would leave the last ramp on the CRTC.
+- `kelvin` is 1000 to 6500. 6500 is neutral: the identity.
 - A new night light fades in from the one drawn
-  (`domicile-compositor/src/night_light.rs`), on ramps and color matrices
-  alike. The fade takes 2.5 s per whole step of the gain that changes most:
-  about 1.5 s to switch on at 3000 K, a few frames for each 15 s step of a
-  schedule's ease. The compositor sends a ramp or matrix every 16 ms during a
-  fade and nothing between fades. A `wlr-gamma-control` client's ramp is
-  drawn as it sets it.
-- A gamma ramp, not a color matrix, so it works on drivers without a CTM.
+  (`domicile-compositor/src/night_light.rs`). The fade takes 2.5 s per whole
+  step of the gain that changes most: about 1.5 s to switch on at 3000 K, a
+  few frames for each 15 s step of a schedule's ease. The compositor sends a
+  matrix every 16 ms during a fade and nothing between fades. A
+  `wlr-gamma-control` client's ramp is drawn as it sets it.
 - A client is told the CRTC's own ramp size: `GAMMA_LUT_SIZE`, or the legacy
   ramp's. The GPU process reads it into each display's report
   (`DomicileRampedDisplay.gamma_size`).
@@ -409,31 +410,35 @@ zwlr_gamma_control_v1.set_gamma            ─┴→  gamma::Ramps  →  domicil
   (`RedrawDisplay`), and a still screen warms at once rather than when
   something next changes.
 - `DrmModeset` sets each monitor's ramp again after each modeset, so a VT
-  switch or resume keeps it. The compositor sends every ramp again after each
-  display report, which covers a hotplug and an engine restart.
+  switch or resume keeps it. The compositor sends every ramp and matrix again
+  after each display report, which covers a hotplug and an engine restart.
 
-### With no gamma table
+### The night light's color matrix
 
-A monitor on a connector whose CRTC has no gamma (`GAMMA_LUT_SIZE` 0, as
-`evdi` on a DisplayLink dock) draws its night light through the color matrix
-[below](#in-hdr), as in HDR. A display on no connector (nested) is left to the
-host compositor.
+- Viz applies it to the browser window's whole frame in linear light (patch
+  `0217`), before the cursor plane is blended in, so the pointer keeps its
+  colors. A DisplayLink dock (`evdi`) blends its cursor after the frame too.
+- Each gain is the white point's raised to 2.2: a ramp scales encoded values,
+  and light goes about as their 2.2 power.
+- Linear light also keeps it right in HDR, where the output is PQ-encoded.
+- While it isn't the identity, viz composites everything rather than scanning
+  out overlays.
+- The browser keeps each display's matrix and gives it to whichever window
+  shows that display, when the window opens, moves or resizes, or the
+  displays change (`DomicileColorMatrices`). So a monitor plugged in at night
+  warms as its window opens. A window showing no display draws through the
+  identity.
+- A monitor a client's ramp owns, and a display on no connector (nested),
+  draw through the identity matrix. The host compositor warms a nested one.
 
 ### In HDR
 
 A ramp scales the values the CRTC sends, and in HDR those are PQ-encoded, so
-a ramp there would bend the curve the panel decodes rather than warm the
-light. So a monitor driven in HDR:
+a ramp there would bend the curve the panel decodes. So a monitor driven in
+HDR:
 
-- keeps an identity ramp, and draws its night light through a color matrix
-  instead: `domicile_displays_set_color_matrix` → `FrameSinkBroker.SetColorMatrix`
-  → `ui::Compositor::SetDisplayColorMatrix` on the browser window showing it.
-  Viz applies it to the whole frame in linear light (patch `0217`). Each gain
-  is the ramp's raised to 2.2, so the night light looks the same in HDR as
-  in SDR.
+- keeps an identity ramp.
 - refuses `wlr-gamma-control` clients with `failed`, since their ramps assume
   SDR. A client holding a monitor when it goes into HDR is let go the same way.
-- Every other monitor draws through the identity matrix, so leaving HDR
-  undoes the night light's matrix.
 - A nested desktop does nothing: the host compositor owns the screen.
 - Sandboxed apps don't see the global.

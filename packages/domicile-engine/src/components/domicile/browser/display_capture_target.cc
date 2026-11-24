@@ -28,4 +28,24 @@ std::optional<viz::FrameSinkId> CaptureTargetFor(
   return window->frame_sink_id;
 }
 
+std::vector<std::optional<int64_t>> DisplaysShownBy(
+    const std::vector<display::Display>& displays,
+    const std::vector<CaptureRoot>& windows) {
+  std::vector<std::optional<int64_t>> shown;
+  shown.reserve(windows.size());
+  for (const CaptureRoot& window : windows) {
+    if (displays.empty()) {
+      shown.push_back(shown.empty() ? std::optional<int64_t>(0)
+                                    : std::nullopt);
+      continue;
+    }
+    const auto display = std::ranges::find(displays, window.bounds_in_pixels,
+                                           &display::Display::bounds);
+    shown.push_back(display == displays.end()
+                        ? std::nullopt
+                        : std::optional<int64_t>(display->id()));
+  }
+  return shown;
+}
+
 }  // namespace domicile

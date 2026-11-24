@@ -1,23 +1,23 @@
-//! Each monitor's gamma ramp, and who owns it.
+//! Each monitor's gamma ramp and color matrix, and who owns them.
 //!
 //! The night light sets a white point, for every monitor or for one
 //! ([`crate::night_light`], which fades it). A
 //! `wlr-gamma-control` client (gammastep, wl-gammarelay-rs) sets a whole ramp
 //! for one monitor. One rule decides between them:
 //!
-//! - A client holding a monitor owns its ramp outright. The night light does
-//!   not apply there, so the two never multiply.
-//! - Every monitor no client holds draws with its night light.
+//! - A client's ramp owns its monitor outright. The night light does not apply
+//!   there, so the two never multiply.
+//! - Every other monitor on a connector draws its night light.
 //! - When the client lets go, its monitor goes back to its night light.
 //!
-//! One client holds a monitor at a time. A monitor with no gamma (a DisplayLink
-//! dock, a nested or headless desktop) can be held by none.
+//! The night light is always a color matrix viz applies to the frame in linear
+//! light ([`Ramps::matrix`]), never a ramp: the CRTC applies its ramp to the
+//! cursor plane too, which would tint the pointer.
 //!
-//! A monitor driven in HDR keeps an identity ramp, since a ramp would bend the
-//! PQ curve its panel decodes. Its night light is a color matrix viz applies in
-//! linear light instead ([`Ramps::matrix`]), and no client can hold it: their
-//! ramps assume SDR. So is a monitor on a connector with no gamma, as on a
-//! DisplayLink dock.
+//! One client holds a monitor at a time. A monitor with no gamma (a DisplayLink
+//! dock, a nested or headless desktop) can be held by none. Nor can one driven
+//! in HDR, since a client's ramp assumes SDR and would bend the PQ curve its
+//! panel decodes.
 //!
 //! See `docs/DISPLAYS.md#night-light-and-gamma-control`.
 
@@ -41,9 +41,8 @@ pub struct Ramps<H> {
     held: HashMap<i64, Held<H>>,
     /// The engine displays driven in HDR.
     hdr: HashSet<i64>,
-    /// The engine displays on a connector. One not in `sizes` has no gamma, so
-    /// its night light is a color matrix. A display on none (nested) is the
-    /// host compositor's to warm.
+    /// The engine displays on a connector, which the night light warms. A
+    /// display on none (nested) is the host compositor's to warm.
     connected: HashSet<i64>,
 }
 
@@ -175,29 +174,32 @@ impl<H: PartialEq> Ramps<H> {
         self.sizes.get(&display).copied()
     }
 
-    /// The ramp `display`, shown as `output`, draws with: its client's, or its
-    /// night light's, or the identity in HDR. `None` if it has no gamma.
-    pub fn ramp(&self, display: i64, output: Option<&str>) -> Option<Vec<u16>> {
+    /// The ramp `display` draws with: its client's, or the identity. `None` if
+    /// it has no gamma. The night light is never a ramp: the CRTC applies a
+    /// ramp to the cursor plane too, so it would tint the pointer.
+    pub fn ramp(&self, display: i64) -> Option<Vec<u16>> {
         let size = self.size(display)?;
-        if self.hdr.contains(&display) {
-            return Some(ramp_of(white_point(NEUTRAL), size));
-        }
-        if let Some(ramp) = self.held.get(&display).and_then(|held| held.ramp.clone()) {
-            return Some(ramp);
-        }
-        Some(ramp_of(self.lights.white_of(output), size))
+        Some(
+            self.client_ramp(display)
+                .unwrap_or_else(|| ramp_of(white_point(NEUTRAL), size)),
+        )
+    }
+
+    /// The ramp the client holding `display` set, if any.
+    fn client_ramp(&self, display: i64) -> Option<Vec<u16>> {
+        self.held.get(&display).and_then(|held| held.ramp.clone())
     }
 
     /// The 3x3 color matrix, row-major, that `display`, shown as `output`,
-    /// draws with in linear light: its night light in HDR or on a connector
-    /// with no gamma, the identity otherwise, where its ramp warms it or the
-    /// host compositor does.
+    /// draws with in linear light: its night light on a connector, unless a
+    /// client's ramp owns it; the identity otherwise, as on a display on no
+    /// connector, which the host compositor warms.
     ///
-    /// A ramp scales encoded values, and light goes about as their 2.2 power,
-    /// so each gain is raised to it to look the same.
+    /// Viz applies it to the frame and not to the cursor plane, so the pointer
+    /// keeps its colors. A ramp scales encoded values, and light goes about as
+    /// their 2.2 power, so each gain is raised to it to look the same.
     pub fn matrix(&self, display: i64, output: Option<&str>) -> [f32; 9] {
-        let warmed_here = self.hdr.contains(&display)
-            || (self.connected.contains(&display) && !self.sizes.contains_key(&display));
+        let warmed_here = self.connected.contains(&display) && self.client_ramp(display).is_none();
         let white = if warmed_here {
             self.lights.white_of(output)
         } else {
@@ -249,6 +251,13 @@ mod tests {
         ramps
     }
 
+    /// Displays with these ramp sizes, each on a connector.
+    fn connected(sizes: &[(i64, u32)]) -> Ramps<u32> {
+        let mut ramps = with_sizes(sizes);
+        ramps.set_connected(sizes.iter().map(|(display, _)| *display).collect());
+        ramps
+    }
+
     #[test]
     fn a_ramp_runs_from_black_to_the_white_point() {
         assert_eq!(
@@ -274,20 +283,31 @@ mod tests {
     fn a_display_with_no_gamma_has_no_ramp() {
         let ramps = with_sizes(&[(7, 2)]);
 
-        assert_eq!(ramps.ramp(9, Some("DP-1")), None);
+        assert_eq!(ramps.ramp(9), None);
     }
 
     #[test]
     fn one_monitors_night_light_leaves_the_others_alone() {
-        let mut ramps = with_sizes(&[(7, 2), (9, 2)]);
+        let mut ramps = connected(&[(7, 2), (9, 2)]);
 
         ramps.set_lights(lit(Some("eDP-2"), WARM));
 
+        assert_eq!(ramps.matrix(7, Some("eDP-1")), IDENTITY);
+        assert_eq!(ramps.matrix(9, Some("eDP-2")), warm_matrix());
+    }
+
+    #[test]
+    fn the_night_light_leaves_the_ramp_alone_so_the_cursor_keeps_its_colors() {
+        let mut ramps = connected(&[(7, 2)]);
+
+        ramps.set_lights(lit(None, WARM));
+
         assert_eq!(
-            ramps.ramp(7, Some("eDP-1")),
-            Some(ramp_of(white_point(NEUTRAL), 2))
+            ramps.ramp(7),
+            Some(ramp_of(white_point(NEUTRAL), 2)),
+            "the CRTC applies its ramp to the cursor plane too"
         );
-        assert_eq!(ramps.ramp(9, Some("eDP-2")), Some(ramp_of(WARM, 2)));
+        assert_eq!(ramps.matrix(7, None), warm_matrix());
     }
 
     #[test]
@@ -315,23 +335,24 @@ mod tests {
 
     #[test]
     fn a_clients_ramp_replaces_the_night_light_rather_than_warming_it() {
-        let mut ramps = with_sizes(&[(7, 2)]);
+        let mut ramps = connected(&[(7, 2)]);
         ramps.set_lights(lit(None, WARM));
         ramps.hold(Some(7), 1).unwrap();
 
         assert_eq!(ramps.set(&1, vec![1, 2, 3, 4, 5, 6]), Ok(Some(7)));
 
-        assert_eq!(ramps.ramp(7, Some("eDP-1")), Some(vec![1, 2, 3, 4, 5, 6]));
+        assert_eq!(ramps.ramp(7), Some(vec![1, 2, 3, 4, 5, 6]));
+        assert_eq!(ramps.matrix(7, None), IDENTITY);
     }
 
     #[test]
     fn a_held_monitor_keeps_its_night_light_until_the_client_sets_a_ramp() {
-        let mut ramps = with_sizes(&[(7, 2)]);
+        let mut ramps = connected(&[(7, 2)]);
         ramps.set_lights(lit(None, WARM));
 
         ramps.hold(Some(7), 1).unwrap();
 
-        assert_eq!(ramps.ramp(7, None), Some(ramp_of(WARM, 2)));
+        assert_eq!(ramps.matrix(7, None), warm_matrix());
     }
 
     #[test]
@@ -349,19 +370,20 @@ mod tests {
         let _ = ramps.hold(Some(7), 2);
 
         assert_eq!(ramps.set(&2, vec![0; 6]), Ok(None));
-        assert_eq!(ramps.ramp(7, None), Some(ramp_of(white_point(NEUTRAL), 2)));
+        assert_eq!(ramps.ramp(7), Some(ramp_of(white_point(NEUTRAL), 2)));
     }
 
     #[test]
     fn a_released_monitor_goes_back_to_its_night_light() {
-        let mut ramps = with_sizes(&[(7, 2)]);
+        let mut ramps = connected(&[(7, 2)]);
         ramps.set_lights(lit(Some("eDP-1"), WARM));
         ramps.hold(Some(7), 1).unwrap();
         ramps.set(&1, vec![0; 6]).unwrap();
 
         assert_eq!(ramps.release(&1), Some(7));
 
-        assert_eq!(ramps.ramp(7, Some("eDP-1")), Some(ramp_of(WARM, 2)));
+        assert_eq!(ramps.ramp(7), Some(ramp_of(white_point(NEUTRAL), 2)));
+        assert_eq!(ramps.matrix(7, Some("eDP-1")), warm_matrix());
         assert_eq!(ramps.hold(Some(7), 2), Ok(2), "free for the next client");
     }
 
@@ -386,15 +408,11 @@ mod tests {
 
     #[test]
     fn a_monitor_in_hdr_is_warmed_in_linear_light_and_not_by_its_ramp() {
-        let mut ramps = with_sizes(&[(7, 2)]);
+        let mut ramps = connected(&[(7, 2)]);
         ramps.set_lights(lit(None, WARM));
         in_hdr(&mut ramps, &[7]);
 
-        assert_eq!(
-            ramps.ramp(7, None),
-            Some(ramp_of(white_point(NEUTRAL), 2)),
-            "a ramp would bend the PQ curve"
-        );
+        assert_eq!(ramps.ramp(7), Some(ramp_of(white_point(NEUTRAL), 2)));
         let [red, _, _, _, green, _, _, _, blue] = ramps.matrix(7, None);
         assert_eq!(red, 1.0);
         // The ramp scales encoded values; light is about their 2.2 power.
@@ -403,33 +421,13 @@ mod tests {
     }
 
     #[test]
-    fn a_monitor_in_hdr_with_no_gamma_is_still_warmed() {
-        let mut ramps = with_sizes(&[]);
-        ramps.set_lights(lit(Some("DP-1"), WARM));
-        in_hdr(&mut ramps, &[7]);
-
-        assert_eq!(ramps.ramp(7, Some("DP-1")), None);
-        assert_ne!(ramps.matrix(7, Some("DP-1")), IDENTITY);
-    }
-
-    #[test]
-    fn a_monitor_in_sdr_draws_through_the_identity() {
-        let mut ramps = with_sizes(&[(7, 2)]);
-        ramps.set_lights(lit(None, WARM));
-
-        assert_eq!(ramps.matrix(7, None), IDENTITY, "its ramp warms it");
-        assert_eq!(ramps.ramp(7, None), Some(ramp_of(WARM, 2)));
-    }
-
-    #[test]
     fn a_monitor_with_no_gamma_is_warmed_in_linear_light() {
-        let mut ramps = with_sizes(&[(7, 2)]);
-        ramps.set_connected([7, 9].into_iter().collect());
+        let mut ramps = with_sizes(&[]);
+        ramps.set_connected([9].into_iter().collect());
         ramps.set_lights(lit(None, WARM));
 
-        assert_eq!(ramps.ramp(9, None), None);
-        assert_eq!(ramps.matrix(9, None), ramps_in_hdr_matrix(WARM));
-        assert_eq!(ramps.matrix(7, None), IDENTITY, "its ramp warms it");
+        assert_eq!(ramps.ramp(9), None);
+        assert_eq!(ramps.matrix(9, None), warm_matrix());
     }
 
     #[test]
@@ -444,11 +442,19 @@ mod tests {
         );
     }
 
-    fn ramps_in_hdr_matrix(white: WhitePoint) -> [f32; 9] {
-        let mut ramps = with_sizes(&[]);
-        ramps.set_lights(lit(None, white));
-        in_hdr(&mut ramps, &[1]);
-        ramps.matrix(1, None)
+    fn warm_matrix() -> [f32; 9] {
+        let light = |gain: f64| gain.powf(2.2) as f32;
+        [
+            light(WARM.red),
+            0.0,
+            0.0,
+            0.0,
+            light(WARM.green),
+            0.0,
+            0.0,
+            0.0,
+            light(WARM.blue),
+        ]
     }
 
     #[test]

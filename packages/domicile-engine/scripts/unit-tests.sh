@@ -29,7 +29,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # ExtensionSettings 7, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 32,
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
 # SystemCall 6, PortalRequest 3, FileChoice 13, DisplayCapture 9,
-# CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, ForwardedKeys 5,
+# CapturedFourcc 1, DisplayCaptureTarget 7, HeldChords 6, ForwardedKeys 5,
 # SitePermissions 11,
 # ControlChannel 30, DeviceChoices 9, SurfaceFrames 8, SurfaceHolds 4,
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4, SurfaceBacklog 4,
@@ -50,6 +50,8 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # DomicileMonitorTwinActivation 1, CursorDisplay 7, DomicileHiddenPageTiles 4,
 # ChannelDisconnectOrder 2.
 #
+# 942, and it was 939 — the window each display's night light follows is
+# three more DisplayCaptureTarget cases. Before that
 # 939, and it was 933 — an Electron app's page calls are three more
 # ElectronApp cases and the ElectronPageCall suite. Before that
 # 933, and it was 930 — which display changes refit the pointer is three
@@ -341,7 +343,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=939
+FLOOR=942
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

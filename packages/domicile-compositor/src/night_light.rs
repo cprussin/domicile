@@ -1,7 +1,7 @@
 //! The night light the shell sets, and its fade from one to the next.
 //!
 //! A new night light fades in from the one drawn instead of snapping, on every
-//! monitor, whether a ramp or a color matrix warms it ([`crate::gamma`]). The
+//! monitor, through its color matrix ([`crate::gamma`]). The
 //! fade takes [`SECONDS_PER_GAIN`] for each whole step of the channel that
 //! changes most: about a second and a half to switch it on at 3000 K, and a
 //! few frames for each step of a schedule's half-hour ease.

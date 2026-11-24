@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/callback_list.h"
+#include "base/containers/flat_map.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
@@ -18,6 +19,7 @@
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/process/process_handle.h"
+#include "base/scoped_multi_source_observation.h"
 #include "base/task/thread_pool.h"
 #include "components/domicile/browser/browser_window_capture_target.h"
 #include "components/domicile/browser/browser_window_listing.h"
@@ -42,7 +44,9 @@
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "ui/aura/env.h"
+#include "ui/aura/env_observer.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/aura/window_tree_host_observer.h"
 #include "ui/compositor/compositor.h"
 #include "ui/display/display.h"
 #include "ui/display/display_observer.h"
@@ -434,28 +438,106 @@ void RedrawDisplay(int64_t display_id) {
   }
 }
 
-// Has viz draw display `display_id` through `matrix`, 3x3 and row-major, in
-// linear light (patch 0217), and redraws it so a still screen shows it. A
-// display no window shows has nothing to draw.
-void SetColorMatrix(int64_t display_id,
-                    const domicile::FrameSinkBroker::ColorMatrix& m) {
-  const std::optional<viz::FrameSinkId> target =
-      DisplayCaptureTarget(display_id);
-  if (!target) {
-    return;
+// The night light's color matrix for each display, kept on whichever browser
+// window shows it.
+//
+// A ui::Compositor holds the matrix, not the CRTC, so a window that opens,
+// moves or resizes onto a display after the producer set its matrix would
+// otherwise draw without it until the next fade: a docked monitor at night
+// would stay unwarmed for hours. So this re-applies every matrix whenever a
+// window or a display changes. A window that shows no display draws through
+// the identity.
+class DomicileColorMatrices : public aura::EnvObserver,
+                              public aura::WindowTreeHostObserver,
+                              public display::DisplayObserver {
+ public:
+  DomicileColorMatrices() {
+    aura::Env::GetInstance()->AddObserver(this);
+    for (aura::WindowTreeHost* host :
+         aura::Env::GetInstance()->window_tree_hosts()) {
+      hosts_.AddObservation(host);
+    }
+    display::Screen::Get()->AddObserver(this);
   }
-  // SkM44's sixteen-number constructor takes rows.
-  const SkM44 matrix(m[0], m[1], m[2], 0,  //
-                     m[3], m[4], m[5], 0,  //
-                     m[6], m[7], m[8], 0,  //
-                     0, 0, 0, 1);
-  for (aura::WindowTreeHost* host :
-       aura::Env::GetInstance()->window_tree_hosts()) {
-    if (host->compositor()->frame_sink_id() == *target) {
-      host->compositor()->SetDisplayColorMatrix(matrix);
-      host->compositor()->ScheduleFullRedraw();
+
+  DomicileColorMatrices(const DomicileColorMatrices&) = delete;
+  DomicileColorMatrices& operator=(const DomicileColorMatrices&) = delete;
+
+  // Never runs: this is a NoDestructor, so it never stops observing.
+  ~DomicileColorMatrices() override = default;
+
+  // Draws display `display_id` through `matrix` from now on.
+  void Set(int64_t display_id, const SkM44& matrix) {
+    matrices_[display_id] = matrix;
+    Apply();
+  }
+
+  // aura::EnvObserver implementation.
+  void OnHostInitialized(aura::WindowTreeHost* host) override {
+    hosts_.AddObservation(host);
+    Apply();
+  }
+  void OnHostDestroyed(aura::WindowTreeHost* host) override {
+    hosts_.RemoveObservation(host);
+  }
+
+  // aura::WindowTreeHostObserver implementation.
+  void OnHostResized(aura::WindowTreeHost* host) override { Apply(); }
+  void OnHostMovedInPixels(aura::WindowTreeHost* host) override { Apply(); }
+
+  // display::DisplayObserver implementation.
+  void OnDisplayAdded(const display::Display& added) override { Apply(); }
+  void OnDisplaysRemoved(const display::Displays& removed) override {
+    Apply();
+  }
+  void OnDisplayMetricsChanged(const display::Display& changed,
+                               uint32_t changed_metrics) override {
+    Apply();
+  }
+
+ private:
+  // Gives each window the matrix of the display it shows, and redraws the
+  // ones that changed so a still screen shows it.
+  void Apply() {
+    std::vector<aura::WindowTreeHost*> hosts;
+    std::vector<domicile::CaptureRoot> windows;
+    for (aura::WindowTreeHost* host :
+         aura::Env::GetInstance()->window_tree_hosts()) {
+      hosts.push_back(host);
+      windows.push_back({.bounds_in_pixels = host->GetBoundsInPixels(),
+                         .frame_sink_id = host->compositor()->frame_sink_id()});
+    }
+    const std::vector<std::optional<int64_t>> shown = domicile::DisplaysShownBy(
+        display::Screen::Get()->GetAllDisplays(), windows);
+    for (size_t i = 0; i < hosts.size(); ++i) {
+      const auto matrix =
+          shown[i].has_value() ? matrices_.find(*shown[i]) : matrices_.end();
+      const SkM44 wanted = matrix == matrices_.end() ? SkM44() : matrix->second;
+      ui::Compositor* const compositor = hosts[i]->compositor();
+      if (compositor->display_color_matrix() == wanted) {
+        continue;
+      }
+      compositor->SetDisplayColorMatrix(wanted);
+      compositor->ScheduleFullRedraw();
     }
   }
+
+  base::flat_map<int64_t, SkM44> matrices_;
+  base::ScopedMultiSourceObservation<aura::WindowTreeHost,
+                                     aura::WindowTreeHostObserver>
+      hosts_{this};
+};
+
+// Has viz draw display `display_id` through `matrix`, 3x3 and row-major, in
+// linear light (patch 0217), on whichever window shows it now or later.
+void SetColorMatrix(int64_t display_id,
+                    const domicile::FrameSinkBroker::ColorMatrix& m) {
+  static base::NoDestructor<DomicileColorMatrices> matrices;
+  // SkM44's sixteen-number constructor takes rows.
+  matrices->Set(display_id, SkM44(m[0], m[1], m[2], 0,  //
+                                  m[3], m[4], m[5], 0,  //
+                                  m[6], m[7], m[8], 0,  //
+                                  0, 0, 0, 1));
 }
 
 // The browser's frame sink broker and the socket producers reach it over.

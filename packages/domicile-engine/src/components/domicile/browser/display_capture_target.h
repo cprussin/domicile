@@ -36,6 +36,15 @@ std::optional<viz::FrameSinkId> CaptureTargetFor(
     const std::vector<display::Display>& displays,
     const std::vector<CaptureRoot>& windows);
 
+// The display each of `windows` shows, in their order, by CaptureTargetFor's
+// match: a display's id for the window whose rectangle is the display's, and
+// zero for the first window of a browser with no displays. nullopt for a
+// window that shows none, such as one still opening. The night light's color
+// matrix follows a display to whichever window shows it.
+std::vector<std::optional<int64_t>> DisplaysShownBy(
+    const std::vector<display::Display>& displays,
+    const std::vector<CaptureRoot>& windows);
+
 }  // namespace domicile
 
 #endif  // COMPONENTS_DOMICILE_BROWSER_DISPLAY_CAPTURE_TARGET_H_

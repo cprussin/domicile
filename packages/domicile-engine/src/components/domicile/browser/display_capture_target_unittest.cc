@@ -3,6 +3,8 @@
 
 #include "components/domicile/browser/display_capture_target.h"
 
+#include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "components/viz/common/surfaces/frame_sink_id.h"
@@ -58,6 +60,37 @@ TEST(DisplayCaptureTargetTest, ZeroIsTheFirstWindowOfABrowserWithNoDisplays) {
 
   EXPECT_EQ(CaptureTargetFor(0, {}, windows), kLeftRoot);
   EXPECT_FALSE(CaptureTargetFor(0, {}, {}).has_value());
+}
+
+TEST(DisplayCaptureTargetTest, EachWindowShowsTheDisplayItIsScannedOutOn) {
+  const std::vector<CaptureRoot> windows = {
+      {.bounds_in_pixels = gfx::Rect(2560, 0, 1920, 1080),
+       .frame_sink_id = kRightRoot},
+      {.bounds_in_pixels = gfx::Rect(0, 0, 2560, 1440),
+       .frame_sink_id = kLeftRoot}};
+
+  EXPECT_EQ(DisplaysShownBy(Desk(), windows),
+            (std::vector<std::optional<int64_t>>{22, 11}));
+}
+
+TEST(DisplayCaptureTargetTest, AWindowStillOpeningShowsNoDisplay) {
+  const std::vector<CaptureRoot> windows = {
+      {.bounds_in_pixels = gfx::Rect(0, 0, 800, 600),
+       .frame_sink_id = kLeftRoot}};
+
+  EXPECT_EQ(DisplaysShownBy(Desk(), windows),
+            (std::vector<std::optional<int64_t>>{std::nullopt}));
+}
+
+TEST(DisplayCaptureTargetTest, ABrowserWithNoDisplaysShowsZeroInItsFirstWindow) {
+  const std::vector<CaptureRoot> windows = {
+      {.bounds_in_pixels = gfx::Rect(0, 0, 800, 600),
+       .frame_sink_id = kLeftRoot},
+      {.bounds_in_pixels = gfx::Rect(0, 0, 400, 300),
+       .frame_sink_id = kRightRoot}};
+
+  EXPECT_EQ(DisplaysShownBy({}, windows),
+            (std::vector<std::optional<int64_t>>{0, std::nullopt}));
 }
 
 }  // namespace
