@@ -605,6 +605,19 @@ echo built >"$root/trees/tree-0/src/out-marker"
 echo series >"$root/trees/tree-0/.domicile-series-stamp"
 : >"$root/trees/tree-0/.domicile-built"
 echo newpin1 >"$root/trees/tree-0/.domicile-gen-pin"
+# siso's saved state names files by absolute path. This stand-in exports and
+# imports it verbatim, so the test sees the rewrite between the two.
+mkdir -p "$root/trees/tree-0/src/third_party/siso/cipd" "$root/trees/tree-0/src/out/Official"
+cat >"$root/trees/tree-0/src/third_party/siso/cipd/siso" <<'SISO'
+#!/usr/bin/env bash
+[ "$1 $2 $3" = "fs export -C" ] && exec cat "$4/.siso_fs_state"
+[ "$1 $2 $3" = "fs import -C" ] && exec cat >"$4/.siso_fs_state"
+exit 2
+SISO
+chmod +x "$root/trees/tree-0/src/third_party/siso/cipd/siso"
+tree0="$(cd "$root/trees/tree-0/src" && pwd -P)"
+printf '{"name": "%s/a.cc"}\n{"name": "%s"}\n{"name": "%s-other/b.cc"}\n' \
+  "$tree0" "$tree0" "$tree0" >"$root/trees/tree-0/src/out/Official/.siso_fs_state"
 carrying "$root" 1 oldpin1
 used_at "$root" 1 60
 echo stale >"$root/trees/tree-1/src/out-marker"
@@ -626,6 +639,13 @@ expect "and no copy is left half-made" no \
 expect "the copied-into tree is unlocked after" free "$(freed "$root" 2)"
 expect "the run's own tree stays locked for its drop step" held "$(freed "$root" 0)"
 contains "and it says what it did" "copied tree-0 into tree-2" "$out"
+tree2="$(cd "$root/trees/tree-2/src" && pwd -P)"
+expect "siso's saved state in the copy names the copy's files" \
+  "{\"name\": \"$tree2/a.cc\"}|{\"name\": \"$tree2\"}|{\"name\": \"$tree0-other/b.cc\"}" \
+  "$(paste -sd'|' "$root/trees/tree-2/src/out/Official/.siso_fs_state")"
+expect "and the source's state is untouched" "$tree0/a.cc" \
+  "$(head -1 "$root/trees/tree-0/src/out/Official/.siso_fs_state" | sed 's/.*: "\(.*\)"}/\1/')"
+contains "and it says it moved it" "moved siso's state in out/Official" "$out"
 
 out="$(refresh "$root" 'release run')"
 expect "a second refresh copies into the remaining stale tree" built \

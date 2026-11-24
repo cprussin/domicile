@@ -577,6 +577,32 @@ case "$action" in
     done
     printf '%s %s\n' "$src_slot" "$(date -u +%FT%TZ)" >"$target/.domicile-copied-from"
     rm -rf "$target/src.old"
+
+    # siso keys its saved file state (.siso_fs_state) by absolute path. Left
+    # naming the source tree, the copy's first build re-runs every step: 45m
+    # from ccache instead of a few minutes (probe runs 45427696036 and
+    # 45443089920 on 2026-11-24, 58,347 steps against 329). So rewrite each
+    # out directory's state to the copy's path with siso's own export and
+    # import. A failure costs only that rebuild, so it warns.
+    siso="$target/src/third_party/siso/cipd/siso"
+    for state in "$target"/src/out/*/.siso_fs_state; do
+      [ -f "$state" ] || continue
+      dir="$(dirname "$state")"
+      if [ ! -x "$siso" ]; then
+        echo "::warning::refresh: no siso at $siso, so ${dir#"$target"/src/}'s first build in ${target##*/} re-runs every step"
+        break
+      fi
+      to="$(cd "$target/src" && pwd -P)"
+      json="$dir/.domicile-fs-state.json"
+      if "$siso" fs export -C "$dir" >"$json" &&
+           sed -i -e "s|\"$from/|\"$to/|g" -e "s|\"$from\"|\"$to\"|g" "$json" &&
+           "$siso" fs import -C "$dir" <"$json"; then
+        echo "refresh: moved siso's state in ${dir#"$target"/src/} to ${target##*/}"
+      else
+        echo "::warning::refresh: could not move siso's state in ${dir#"$target"/src/} to ${target##*/}, so its first build there re-runs every step"
+      fi
+      rm -f "$json"
+    done
     echo "refresh: copied ${src_slot##*/} into ${target##*/} in $(( $(date +%s) - started ))s; ${target##*/} was at ${was:-no pin} and is now at $pin"
     ;;
 
