@@ -139,7 +139,7 @@ fn a_client_asking_to_maximize_is_reported_and_configured_as_it_was() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
     let mut chrome = compositor.chrome();
     listen(&mut chrome, 7);
-    let mut client = compositor.client_with("app", &["--ask-to", "maximize"]);
+    let client = compositor.client_with("app", &["--ask-to", "maximize"]);
     let app_id = appeared(&mut chrome);
 
     assert_eq!(
@@ -150,15 +150,10 @@ fn a_client_asking_to_maximize_is_reported_and_configured_as_it_was() {
         }
     );
     // xdg-shell requires a configure in answer, even with nothing changed.
-    assert!(
-        configured_after(&mut client, "set_maximized()"),
-        "the client was not configured after asking; it traced:\n{}",
-        client.trace()
-    );
     assert_eq!(
-        last_states(&client),
-        "states()",
-        "the compositor maximized the window itself; it traced:\n{}",
+        client.states_after("set_maximized()").as_deref(),
+        Some("states()"),
+        "the client was not configured as it was after asking; it traced:\n{}",
         client.trace()
     );
 }

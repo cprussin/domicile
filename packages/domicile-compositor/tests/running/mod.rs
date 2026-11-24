@@ -660,6 +660,33 @@ fn a_trace_line_still_being_written_is_skipped() {
     );
 }
 
+/// The states answering a request are read once the client has finished
+/// writing them. The client writes the configure line before the states line,
+/// and writes each line in several pieces.
+#[test]
+fn the_states_answering_a_request_wait_for_their_whole_line() {
+    let asked = "\
+xdg_toplevel@37.configure(0, 0)
+xdg_toplevel@37.states()
+xdg_toplevel@37.set_maximized()
+xdg_toplevel@37.configure(0, 0)
+xdg_toplevel@37.activated(false)
+xdg_toplevel@37.suspended(false)
+";
+    let torn = format!("{asked}xdg_toplevel@37.states(");
+    assert_eq!(
+        states_after(&torn, "set_maximized()"),
+        None,
+        "a half-written states line is not an answer"
+    );
+
+    let whole = format!("{asked}xdg_toplevel@37.states(maximized)\n");
+    assert_eq!(
+        states_after(&whole, "set_maximized()").as_deref(),
+        Some("states(maximized)")
+    );
+}
+
 /// A character split across two reads decodes as one character.
 #[test]
 fn a_character_cut_in_half_by_a_read_is_waited_for() {
@@ -775,6 +802,21 @@ impl Client {
         }
     }
 
+    /// The states the first configure after `request` carried, as
+    /// `states(…)`, waiting for them.
+    ///
+    /// Bounded, so a missing configure fails the test instead of hanging it.
+    pub fn states_after(&self, request: &str) -> Option<String> {
+        let until = Instant::now() + PATIENCE;
+        loop {
+            let states = states_after(&self.trace(), request);
+            if states.is_some() || Instant::now() >= until {
+                return states;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
     /// What the client was told each screen is, one entry per `wl_output`.
     ///
     /// Includes every field a client acts on. Physical size and refresh rate
@@ -823,6 +865,15 @@ impl Client {
             said.clone()
         }
     }
+}
+
+/// The states the first configure after `request` carried, as `states(…)`,
+/// once the client has finished writing that line.
+fn states_after(trace: &str, request: &str) -> Option<String> {
+    let (_, after) = whole_lines(trace).split_once(request)?;
+    let line = after.lines().find(|line| line.contains(".states("))?;
+    let (_, states) = line.split_once('.')?;
+    Some(states.trim().to_string())
 }
 
 /// The lines of `trace` the client has finished writing. A line still being
