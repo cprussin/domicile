@@ -1,0 +1,14 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "test:unit": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/*/tests/*.sh",
+        "$TURBO_ROOT$/packages/domicile-protocol/wire/**",
+        "$TURBO_ROOT$/packages/domicile-engine/src/components/domicile/renderer/electron_preload.cc",
+        "$TURBO_ROOT$/packages/shell-effects-example/src/**"
+      ]
+    }
+  }
+}

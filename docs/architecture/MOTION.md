@@ -167,7 +167,7 @@ app[data-closing] {
   uniforms.
 - **Timing.** An effect's run time can depend on pixel values, which the page
   could time. The shell is the user's chosen desktop, so Domicile accepts it.
-  `SHELL-*` docs say so.
+  [SHELL-SHADER-EFFECTS.md](../SHELL-SHADER-EFFECTS.md#limitations) says so.
 - **A hung effect** trips the GPU watchdog. The GPU process relaunches (patch
   0074) and the engine drops the effect that hung, with an error to the shell.
 
@@ -176,6 +176,8 @@ app[data-closing] {
 From a Hyprland setup on r/unixporn (frames: project files
 `shader-effects/reference-contact-*.png`). Domicile ships none of them as is;
 a shell can build each.
+[`packages/shell-effects-example`](/packages/shell-effects-example) builds
+smoke, cloth, swarm, liquid and cube.
 
 | Effect | What it does | Built with |
 |---|---|---|
@@ -318,9 +320,9 @@ Shader primitive (engine):
       opened it
 - [x] guard on `crux` for CSS 3D transforms on `<app>`
       (`guard-app-3d-transform.sh`)
-- [ ] `examples/`: smoke, cloth, swarm, liquid and cube, as proof each
-      reference effect builds
-- [ ] docs: `SHELL-*` page with the API, costs and the timing note
+- [x] `packages/shell-effects-example`: smoke, cloth, swarm, liquid and
+      cube, as proof each reference effect builds
+- [x] docs: `SHELL-SHADER-EFFECTS.md` with the API, costs and the timing note
 
 Shader effects in manganese:
 

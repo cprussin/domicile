@@ -159,6 +159,8 @@ Web side:
 - `packages/shell-simple`: a desktop with only windows.
 - `packages/shell-splash`: the page shown while `domicile` builds a shell on
   first start.
+- `packages/shell-effects-example`: an example shell that builds the
+  reference shader effects in [MOTION.md](MOTION.md#reference-effects).
 - `packages/system-network`, `packages/system-bluetooth`: NetworkManager, iwd
   or wpa_supplicant, and BlueZ, on the SDK's D-Bus calls.
 - `examples/minimal-shell`: the smallest shell; the worked example in

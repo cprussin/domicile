@@ -29,6 +29,8 @@ More:
   tray and notifications.
 - [SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md): blanking and the lock
   screen.
+- [SHELL-SHADER-EFFECTS.md](SHELL-SHADER-EFFECTS.md): your own SkSL over
+  windows and elements, for close effects, meshes and glass.
 - [SHELL-PACKAGING.md](SHELL-PACKAGING.md): bundling and distributing a shell.
 
 ## What a shell is

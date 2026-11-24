@@ -1122,6 +1122,19 @@
         "@domicile-desktop/check-runner": "workspace:*",
       },
     },
+    "packages/shell-effects-example": {
+      "name": "@domicile-desktop/shell-effects-example",
+      "version": "0.0.0",
+      "dependencies": {
+        "@cprussin/option-result": "catalog:",
+        "@domicile-desktop/sdk": "workspace:*",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/shell-manganese": {
       "name": "@domicile-desktop/manganese",
       "version": "1.3.0",
@@ -1670,6 +1683,8 @@
     "@domicile-desktop/rust-checks": ["@domicile-desktop/rust-checks@workspace:packages/rust-checks"],
 
     "@domicile-desktop/sdk": ["@domicile-desktop/sdk@workspace:packages/chrome-sdk"],
+
+    "@domicile-desktop/shell-effects-example": ["@domicile-desktop/shell-effects-example@workspace:packages/shell-effects-example"],
 
     "@domicile-desktop/shell-simple": ["@domicile-desktop/shell-simple@workspace:packages/shell-simple"],
 

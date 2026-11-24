@@ -132,6 +132,11 @@ const AUTHOR_SECTIONS: readonly DocSection[] = [
         "System access",
       ),
       doc("shells/dialogs", "docs/PORTALS.md", "Dialogs and portals"),
+      doc(
+        "shells/shader-effects",
+        "docs/SHELL-SHADER-EFFECTS.md",
+        "Shader effects",
+      ),
       doc("shells/packaging", "docs/SHELL-PACKAGING.md", "Packaging"),
       doc("shells/logs", "docs/LOGGING.md", "Logs"),
     ],

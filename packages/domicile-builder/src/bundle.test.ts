@@ -178,6 +178,30 @@ describe("bundle", () => {
     expect(built).toContain("margin-inline-start");
   }, 120_000);
 
+  // The shader effects example SHELL-SHADER-EFFECTS.md links, as
+  // `domicile <entry>` builds it.
+  it("builds the shader effects example shell with every effect's SkSL", async () => {
+    const entry = path.join(
+      DOMICILE,
+      "packages",
+      "shell-effects-example",
+      "src",
+      "index.ts",
+    );
+    const out = path.join(
+      mkdtempSync(path.join(tmpdir(), "domicile-builder-")),
+      "out",
+    );
+
+    await bundle(entry, out, DOMICILE);
+
+    const built = readFileSync(path.join(out, "shell.js"), "utf8");
+    expect(built).toMatch(/export\s*\{[^}]*\bas Shell\b/);
+    expect(built).toContain("uniform shader noise;");
+    expect(built).toContain("uniform float4 points[");
+    expect(built).toContain("uniform float dispersion;");
+  }, 120_000);
+
   // The same shell in plain JavaScript, which the quickstart's other tab
   // teaches.
   it("builds the plain JavaScript example shell", async () => {
