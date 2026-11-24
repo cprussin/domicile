@@ -182,7 +182,7 @@ Headless.
 | `guard-webview-count-matches.sh` | a `<webview>`'s `countMatches` counts a selector in its page's document, not the shell's, and throws a `SyntaxError` for a bad selector |
 | `guard-webview-click-match.sh` | a `<webview>`'s `clickMatch` clicks a selector's first match in its page's document, so the page hears the press, answers `false` and clicks nothing for a selector the page has none of, and throws a `SyntaxError` for a bad selector |
 | `guard-webview-upload.sh` | `<input type="file">` asks the shell over `domicile-file-chooser`, and the page reads the chosen file (patch 0053) |
-| `guard-webview-download.sh` | a download asks the shell, lands at the chosen path (patch 0053), and is listed on the desk in progress, then as finished, with its path, until the shell removes it |
+| `guard-webview-download.sh` | a download asks the shell, even while an earlier one's question is unanswered, lands at the chosen path (patch 0053), and is listed on the desk in progress, then as finished, with its path, until the shell removes it |
 | `guard-webview-save-picker.sh` | `showSaveFilePicker()` asks the shell (patch 0086) |
 | `guard-webview-passkey-extension.sh` | WebAuthn requests reach an extension on `chrome.webAuthenticationProxy` (patches 0048, 0069, 0084) |
 

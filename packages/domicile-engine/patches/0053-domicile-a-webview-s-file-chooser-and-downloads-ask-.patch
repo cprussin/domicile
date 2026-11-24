@@ -13,9 +13,12 @@ the shell draws the picker -- see `WebViewGuest::RunFileChooser` and
 
 What this patch carries is the part in files Chromium owns:
 
-- `ChromeDownloadManagerDelegate::ShowFilePickerForDownload` hands a
+- `ChromeDownloadManagerDelegate::ShowFilePickerWithUserTakeover` hands a
   download from a guest to `WebViewGuest::ChooseDownloadPath` instead of
   `DownloadFilePicker`, and `download/BUILD.gn` depends on the target for it.
+  It does so before Chrome's queue, which shows one picker at a time per
+  profile: each window shows its own, so a picker nobody answers (a hidden
+  window's) does not hold every later download.
 - `PostProfileInit` turns on `download.prompt_for_download`, so every download
   asks. A download saved where nobody chose is a file the user never sees
   arrive: this desktop has no download shelf.
@@ -62,7 +65,7 @@ index af8e430..fea3651 100644
      "//components/enterprise/common/proto:connectors_proto_gen",
      "//components/enterprise/connectors/core",
 diff --git a/chrome/browser/download/chrome_download_manager_delegate.cc b/chrome/browser/download/chrome_download_manager_delegate.cc
-index 00eb218..c8fde5f 100644
+index 00eb218..7e918f4 100644
 --- a/chrome/browser/download/chrome_download_manager_delegate.cc
 +++ b/chrome/browser/download/chrome_download_manager_delegate.cc
 @@ -4,6 +4,8 @@
@@ -74,14 +77,15 @@ index 00eb218..c8fde5f 100644
  #include <algorithm>
  #include <memory>
  #include <optional>
-@@ -1882,6 +1884,34 @@ void ChromeDownloadManagerDelegate::ShowFilePickerForDownload(
+@@ -1797,6 +1799,34 @@ void ChromeDownloadManagerDelegate::ShowFilePickerWithUserTakeover(
+     DownloadItem* download,
      const base::FilePath& suggested_path,
      DownloadTargetDeterminerDelegate::ConfirmationCallback callback) {
-   CHECK(download, base::NotFatalUntil::M161);
-+
 +  // Domicile's engine fork: a download from a page in a <webview> asks the
 +  // shell where to go, rather than opening a save dialog the browser draws
-+  // over the desktop.
++  // over the desktop. Asked before Chrome's one-picker-at-a-time queue: each
++  // window shows its own picker, so one nobody answers (a hidden window's)
++  // does not hold every later download in the profile.
 +  content::WebContents* web_contents =
 +      content::DownloadItemUtils::GetWebContents(download);
 +  if (domicile::WebViewGuest* guest =
@@ -96,8 +100,7 @@ index 00eb218..c8fde5f 100644
 +              if (!delegate) {
 +                return;
 +              }
-+              delegate->OnConfirmationCallbackComplete(
-+                  std::move(callback),
++              std::move(callback).Run(
 +                  path ? DownloadConfirmationResult::CONFIRMED
 +                       : DownloadConfirmationResult::CANCELED,
 +                  path ? ui::SelectedFileInfo(*path) : ui::SelectedFileInfo());
@@ -106,9 +109,9 @@ index 00eb218..c8fde5f 100644
 +    return;
 +  }
 +
-   DownloadFilePicker::ShowFilePicker(
-       download, suggested_path,
-       base::BindOnce(
+   auto trigger_user_takeover = base::BindOnce(
+       [](base::WeakPtr<ChromeDownloadManagerDelegate> download_manager_delegate,
+          const std::string& guid, const base::FilePath& suggested_path,
 diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
 index 5282c59..93b63b2 100644
 --- a/third_party/blink/renderer/bindings/generated_in_core.gni
