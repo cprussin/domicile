@@ -3,7 +3,8 @@
 // that writes down each notification, and a tray watcher that writes down
 // each item registered with it, and a file chooser portal that answers what a
 // test tells it to, and, unless a test says there's none, a Secret Service
-// that keeps its items in memory, never locked.
+// that keeps its items in memory, never locked, and logind's manager, whose
+// sleep and shutdown signals a test sends.
 
 import type { MessageBus } from "dbus-next";
 import {
@@ -14,8 +15,15 @@ import {
   Variant,
 } from "dbus-next";
 
-/** The portal's `org.freedesktop.appearance` values. */
-export type PortalAppearance = { colorScheme: number; contrast: number };
+/**
+ * The portal's `org.freedesktop.appearance` values. No `accentColor` is the
+ * spec's out-of-range accent, which means none.
+ */
+export type PortalAppearance = {
+  colorScheme: number;
+  contrast: number;
+  accentColor?: [number, number, number];
+};
 
 /** A notification the server was sent: its summary, body and hints' values. */
 export type SentNotification = {
@@ -39,6 +47,11 @@ class Settings extends dbusInterface.Interface {
       key === "contrast"
     ) {
       return new Variant("u", this.appearance.contrast);
+    } else if (
+      namespace === "org.freedesktop.appearance" &&
+      key === "accent-color"
+    ) {
+      return new Variant("(ddd)", this.appearance.accentColor ?? [-1, -1, -1]);
     } else {
       throw new DBusError(
         "org.freedesktop.portal.Error.NotFound",
@@ -51,6 +64,27 @@ class Settings extends dbusInterface.Interface {
 Settings.configureMembers({
   methods: { ReadOne: { inSignature: "ss", outSignature: "v" } },
   signals: { SettingChanged: { signature: "ssv" } },
+});
+
+class LoginManager extends dbusInterface.Interface {
+  constructor() {
+    super("org.freedesktop.login1.Manager");
+  }
+
+  PrepareForSleep(start: boolean) {
+    return start;
+  }
+
+  PrepareForShutdown(start: boolean) {
+    return start;
+  }
+}
+
+LoginManager.configureMembers({
+  signals: {
+    PrepareForShutdown: { signature: "b" },
+    PrepareForSleep: { signature: "b" },
+  },
 });
 
 class Notifications extends dbusInterface.Interface {
@@ -253,6 +287,7 @@ export const startFakeDesktopBus = async (
   await bus.requestName("org.freedesktop.portal.Desktop", 0);
   await bus.requestName("org.freedesktop.Notifications", 0);
   await bus.requestName("org.kde.StatusNotifierWatcher", 0);
+  await bus.requestName("org.freedesktop.login1", 0);
   const registered: RegisteredItem[] = [];
   // By hand rather than as an interface: the item's connection is the
   // message's sender, which an interface's method isn't told.
@@ -316,6 +351,8 @@ export const startFakeDesktopBus = async (
   const notifications = new Notifications();
   bus.export("/org/freedesktop/portal/desktop", new Settings(appearance));
   bus.export("/org/freedesktop/Notifications", notifications);
+  const logind = new LoginManager();
+  bus.export("/org/freedesktop/login1", logind);
   return {
     address,
     /** The file chooser portal: what it was asked, and what it answers. */
@@ -327,6 +364,8 @@ export const startFakeDesktopBus = async (
     },
     /** Whether the keyring is locked, and what its unlock prompt does. */
     keyring,
+    /** logind's manager, to send its signals. */
+    logind,
     /** Each notification the server was sent, in order. */
     notifications: notifications.sent,
     /** Each item registered with the tray, in order. */

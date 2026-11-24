@@ -21,6 +21,7 @@ const setUp = () => {
     (m) => sent.push(m),
     () => "Notes/1 Electron/45",
   );
+  const created: unknown[] = [];
   const sessions = createSessions(
     createProtocols((r) => sent.push(r)),
     createWebRequests(
@@ -33,13 +34,14 @@ const setUp = () => {
       () => undefined,
       () => undefined,
     ),
+    (session) => created.push(session),
   );
-  return { calls, sent, sessions };
+  return { calls, created, sent, sessions };
 };
 
 describe(createSessions, () => {
-  it("makes each partition's session once, the app's own for ''", () => {
-    const { sessions } = setUp();
+  it("makes each partition's session once, the app's own for '', and says each", () => {
+    const { created, sessions } = setUp();
 
     expect(sessions.fromPartition("persist:a")).toBe(
       sessions.fromPartition("persist:a"),
@@ -48,6 +50,11 @@ describe(createSessions, () => {
     expect(sessions.fromPartition("a")).not.toBe(
       sessions.fromPartition("persist:a"),
     );
+    expect(created).toEqual([
+      sessions.defaultSession,
+      sessions.fromPartition("persist:a"),
+      sessions.fromPartition("a"),
+    ]);
   });
 
   it("has service workers and a net log for Slack to read, which say what the engine doesn't do", async () => {

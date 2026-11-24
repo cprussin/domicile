@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { EventEmitter } from "node:events";
 
 import type { Result } from "@cprussin/option-result";
 
@@ -156,6 +157,67 @@ describe(createIpcMain, () => {
     post(page().sender, "port", "hi", [port1]);
 
     expect(heard).toEqual([3, [port1], "hi"]);
+  });
+});
+
+describe("the page's webContents", () => {
+  /** A page that writes down what it emits, as its `webContents` would. */
+  const emitting = (heard: unknown[]) => {
+    const own = new EventEmitter();
+    for (const name of ["ipc-message", "ipc-message-sync"]) {
+      own.on(name, (event: unknown, channel: string, ...args: unknown[]) =>
+        heard.push([name, channel, ...args], event),
+      );
+    }
+    return {
+      emit: own.emit.bind(own),
+      id: 1,
+      listenerCount: own.listenerCount.bind(own),
+      send: () => undefined,
+    } satisfies IpcSender;
+  };
+
+  it("says each message first, with the event ipcMain gets", () => {
+    const routes = createIpcMain();
+    const heard: unknown[] = [];
+    const sender = emitting(heard);
+    routes.ipcMain.on("hi", (event, word) => heard.push(["main", word], event));
+
+    routes.receive(sender, "hi", ["a"]);
+
+    expect(heard.filter((entry) => Array.isArray(entry))).toEqual([
+      ["ipc-message", "hi", "a"],
+      ["main", "a"],
+    ]);
+    expect(heard[1]).toBe(heard[3]);
+  });
+
+  it("says each sendSync, and is answered by a returnValue set there", async () => {
+    const routes = createIpcMain();
+    const heard: unknown[] = [];
+    const sender = emitting(heard);
+    const own = new EventEmitter();
+    own.on("ipc-message-sync", (event: { returnValue: unknown }) => {
+      event.returnValue = "from the page";
+    });
+
+    const answer = await routes.sendSync(
+      {
+        emit: own.emit.bind(own),
+        id: 2,
+        listenerCount: own.listenerCount.bind(own),
+        send: () => undefined,
+      },
+      "now",
+      [],
+    );
+    routes.ipcMain.on("now", (event: { returnValue: unknown }) => {
+      event.returnValue = "from ipcMain";
+    });
+    await routes.sendSync(sender, "now", [3]);
+
+    expect(outcome(answer)).toEqual({ value: "from the page" });
+    expect(heard[0]).toEqual(["ipc-message-sync", "now", 3]);
   });
 });
 

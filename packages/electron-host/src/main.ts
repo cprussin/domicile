@@ -8,7 +8,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { readAppPackage } from "./app-package";
-import { watchAppearance } from "./appearance";
+import { watchAccentColor, watchAppearance } from "./appearance";
 import { connectDesktop, runCommand, runCommandSync } from "./desktop";
 import { createApp } from "./electron/app";
 import { createAutoUpdater } from "./electron/auto-updater";
@@ -53,13 +53,17 @@ import {
   createUserAgentFallback,
   electronUserAgent,
 } from "./electron/user-agent";
-import { UtilityProcess, utilityProcess } from "./electron/utility-process";
+import {
+  createUtilityProcess,
+  UtilityProcess,
+} from "./electron/utility-process";
 import { ELECTRON_VERSION } from "./electron/version";
 import { createWebRequests } from "./electron/web-request";
 import { connectEngine, connectEngineWhenUp } from "./engine";
 import type { Environment } from "./environment";
 import { readEnvironment } from "./environment";
 import { Priority, say } from "./journal";
+import { connectLoginManager } from "./login-manager";
 import { mirrorResources } from "./mirror";
 import { electronPaths } from "./paths";
 import { quirksOf } from "./quirks";
@@ -108,7 +112,7 @@ const main = async ([resources, ...args]: string[]) => {
     const configHome = env.XDG_CONFIG_HOME ?? join(home, ".config");
     // How this host was started, so `app.relaunch` can start it again.
     const host = [process.execPath, ...process.argv.slice(1, 3)];
-    const { app, hooks, markReady } = createApp({
+    const { app, hooks, markReady, ...appEvents } = createApp({
       appPath,
       env,
       paths: electronPaths({
@@ -193,6 +197,7 @@ const main = async ([resources, ...args]: string[]) => {
       webRequests,
       sessionCalls,
       permissions,
+      appEvents.sessionCreated,
     );
     // Read before the app's main runs, as an app reads its theme as it starts.
     const desktop = await reachDesktop(env);
@@ -203,6 +208,14 @@ const main = async ([resources, ...args]: string[]) => {
       }),
     );
     theme.changed = appearanceChanged;
+    const accent: { changed?: (color: string) => void } = {};
+    const { accentColorChanged, systemPreferences } = createSystemPreferences(
+      () => false,
+      await watchAccentColor(desktop.settings, (color) => {
+        accent.changed?.(color);
+      }),
+    );
+    accent.changed = accentColorChanged;
     const { click, Menu, MenuItem, model } = createMenu<MenuWindow>({
       appName: app.getName,
       focusedWindow: (): MenuWindow | null => BrowserWindow.getFocusedWindow(),
@@ -305,7 +318,11 @@ const main = async ([resources, ...args]: string[]) => {
       nativeTheme,
       net,
       netLog: createNetLog(),
-      powerMonitor: createPowerMonitor(desktopState.statuses, idleSeconds),
+      powerMonitor: createPowerMonitor(
+        desktopState.statuses,
+        idleSeconds,
+        connectLoginManager(pkg.productName),
+      ),
       powerSaveBlocker: createPowerSaveBlocker(() => {
         const inhibitor = Bun.spawn(
           ["domicile", "inhibit-idle", "--", "sleep", "infinity"],
@@ -337,13 +354,13 @@ const main = async ([resources, ...args]: string[]) => {
       screen: createScreen(listDisplays, desktopState.displays),
       session,
       shell: createShell(runCommand),
-      systemPreferences: createSystemPreferences(() => false),
+      systemPreferences,
       Tray: createTray({
         connect: desktop.connect,
         menus: { click, model },
         name: app.getName,
       }),
-      utilityProcess,
+      utilityProcess: createUtilityProcess(appEvents.childProcessGone),
       WebContentsView,
       webContents,
     };

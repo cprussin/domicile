@@ -39,7 +39,7 @@ const SOURCES: Record<keyof typeof ELECTRON_EVENTS, readonly string[]> = {
   Tray: ["electron/tray.ts"],
   UtilityProcess: ["electron/utility-process.ts"],
   View: ["electron/browser-window.ts"],
-  WebContents: ["electron/browser-window.ts"],
+  WebContents: ["electron/browser-window.ts", "electron/ipc-main.ts"],
   WebContentsView: ["electron/browser-window.ts"],
   WebFrameMain: ["electron/browser-window.ts"],
 };

@@ -9,6 +9,7 @@ import { EventEmitter } from "node:events";
 import { constants } from "node:os";
 import type { Readable } from "node:stream";
 
+import type { ChildProcessGoneDetails } from "./app";
 import type { MessagePortMain } from "./message-port-main";
 import { createLinkedPorts } from "./message-port-main";
 
@@ -33,9 +34,12 @@ export type ForkOptions = {
   execArgv?: string[];
   cwd?: string;
   stdio?: Stdio | [Stdio, Stdio, Stdio];
-  /** Electron names the process in its task manager; Domicile has none. */
+  /** The process's name in `app`'s `child-process-gone`. */
   serviceName?: string;
 };
+
+/** Electron's name for a utility process the app names none. */
+const DEFAULT_SERVICE_NAME = "Node Utility Process";
 
 /**
  * A child process, with the events this module hears. Under bun-types,
@@ -62,7 +66,13 @@ export class UtilityProcess extends EventEmitter {
   /** What the app sent before the child listened, in order. */
   #waiting: UtilityMessage[] | undefined = [];
 
-  constructor(modulePath: string, args: string[], options: ForkOptions) {
+  /** `gone` hears how the process went, when it didn't finish cleanly. */
+  constructor(
+    modulePath: string,
+    args: string[],
+    options: ForkOptions,
+    gone: (details: ChildProcessGoneDetails) => void,
+  ) {
     super();
     let next = 1;
     this.#ports = createLinkedPorts(
@@ -117,7 +127,18 @@ export class UtilityProcess extends EventEmitter {
     this.#child.on("exit", (code, signal) => {
       this.#exited = true;
       this.#ports.gone();
-      this.emit("exit", code ?? 128 + (signal ? constants.signals[signal] : 0));
+      const exitCode = code ?? 128 + (signal ? constants.signals[signal] : 0);
+      if (exitCode !== 0) {
+        const name = options.serviceName ?? DEFAULT_SERVICE_NAME;
+        gone({
+          exitCode,
+          name,
+          reason: reasonOf(signal),
+          serviceName: name,
+          type: "Utility",
+        });
+      }
+      this.emit("exit", exitCode);
     });
     this.#child.on("error", (error) => {
       // The runtime itself could not start: nothing the app can answer.
@@ -169,8 +190,35 @@ const stdioOf = (stdio: Stdio | [Stdio, Stdio, Stdio]): StdioOptions =>
     ? ["ignore", stdio, stdio, "ipc"]
     : ["ignore", stdio[1], stdio[2], "ipc"];
 
-/** Electron's `utilityProcess`. */
-export const utilityProcess = {
-  fork: (modulePath: string, args: string[] = [], options: ForkOptions = {}) =>
-    new UtilityProcess(modulePath, args, options),
+/** Chromium's reason for a process that went other than cleanly. */
+const reasonOf = (
+  signal: NodeJS.Signals | null,
+): ChildProcessGoneDetails["reason"] => {
+  switch (signal) {
+    case "SIGINT":
+    case "SIGKILL":
+    case "SIGTERM":
+      return "killed";
+    case "SIGABRT":
+    case "SIGBUS":
+    case "SIGFPE":
+    case "SIGILL":
+    case "SIGSEGV":
+    case "SIGSYS":
+    case "SIGTRAP":
+      return "crashed";
+    default:
+      return "abnormal-exit";
+  }
 };
+
+/**
+ * Electron's `utilityProcess`. `gone` hears each process that went other
+ * than cleanly, for `app`'s `child-process-gone`.
+ */
+export const createUtilityProcess = (
+  gone: (details: ChildProcessGoneDetails) => void,
+) => ({
+  fork: (modulePath: string, args: string[] = [], options: ForkOptions = {}) =>
+    new UtilityProcess(modulePath, args, options, gone),
+});

@@ -1463,6 +1463,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       this.#menu?.on("changed", this.#showMenuBar);
       windows.set(this.id, this);
       this.created();
+      app.emit("browser-window-created", eventObject(), this);
     }
 
     /** Shows the window if the app hid it, and focuses it. */
@@ -1658,7 +1659,13 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         this.contentView.children.some((view) => view.webContents.isFocused());
       if (focused !== this.#focused) {
         this.#focused = focused;
-        this.emit(focused ? "focus" : "blur", eventObject());
+        const event = eventObject();
+        this.emit(focused ? "focus" : "blur", event);
+        app.emit(
+          focused ? "browser-window-focus" : "browser-window-blur",
+          event,
+          this,
+        );
       }
     };
     readonly reload = () => this.webContents.reload();

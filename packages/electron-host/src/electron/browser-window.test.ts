@@ -185,6 +185,45 @@ describe(createBrowserWindow, () => {
     ]);
   });
 
+  it("tells the app of each window it makes, and each that takes or loses focus", () => {
+    const { app, BrowserWindow, say, WebContentsView } = setUp();
+    const heard: unknown[] = [];
+    for (const name of [
+      "browser-window-created",
+      "browser-window-focus",
+      "browser-window-blur",
+    ]) {
+      app.on(name, (_event: unknown, window: unknown) =>
+        heard.push(name, window),
+      );
+    }
+    const window = new BrowserWindow();
+    new WebContentsView();
+    void window.loadURL("https://a.test/");
+    const state = {
+      crashed: false,
+      entries: [{ title: "", url: "https://a.test/" }],
+      focused: true,
+      index: 0,
+      loading: false,
+      pid: 7,
+      type: "page_state" as const,
+      window: 1,
+    };
+
+    say(state);
+    say({ ...state, focused: false });
+
+    expect(heard).toEqual([
+      "browser-window-created",
+      window,
+      "browser-window-focus",
+      window,
+      "browser-window-blur",
+      window,
+    ]);
+  });
+
   it("edits at the page's focus, as the Edit menu does", () => {
     const { BrowserWindow, sent } = setUp();
     const window = new BrowserWindow();

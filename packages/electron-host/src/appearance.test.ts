@@ -2,11 +2,11 @@ import { describe, expect, it } from "bun:test";
 import { EventEmitter } from "node:events";
 
 import type { PortalSettings } from "./appearance";
-import { watchAppearance } from "./appearance";
+import { watchAccentColor, watchAppearance } from "./appearance";
 import type { Appearance } from "./electron/native-theme";
 
 /** A settings portal holding `values`, by "namespace key". */
-const portal = (values: Record<string, number>) => {
+const portal = (values: Record<string, unknown>) => {
   const signals = new EventEmitter();
   const settings: PortalSettings = {
     on: (event, listener) => signals.on(event, listener),
@@ -17,7 +17,7 @@ const portal = (values: Record<string, number>) => {
         : Promise.resolve({ value });
     },
   };
-  const change = (namespace: string, key: string, value: number) => {
+  const change = (namespace: string, key: string, value: unknown) => {
     signals.emit("SettingChanged", namespace, key, { value });
   };
   return { change, settings };
@@ -65,6 +65,35 @@ describe(watchAppearance, () => {
 
     expect(watchAppearance(settings, () => undefined)).rejects.toThrow(
       "the settings portal sent color-scheme 7",
+    );
+  });
+});
+
+describe(watchAccentColor, () => {
+  it("reads the desktop's accent as Electron gives it, and follows each change", async () => {
+    const { change, settings } = portal({
+      "org.freedesktop.appearance accent-color": [1, 0.2, 0],
+    });
+    const seen: string[] = [];
+
+    expect(await watchAccentColor(settings, (next) => seen.push(next))).toBe(
+      "#FF3300FF",
+    );
+    change("org.freedesktop.appearance", "accent-color", [0, 0.5, 1]);
+    change("org.freedesktop.appearance", "color-scheme", 1);
+    // The spec's no accent: a channel outside 0 to 1.
+    change("org.freedesktop.appearance", "accent-color", [-1, -1, -1]);
+
+    expect(seen).toEqual(["#0080FFFF", ""]);
+  });
+
+  it("fails loudly on an accent that isn't three channels", () => {
+    const { settings } = portal({
+      "org.freedesktop.appearance accent-color": "blue",
+    });
+
+    expect(watchAccentColor(settings, () => undefined)).rejects.toThrow(
+      "the settings portal sent accent-color",
     );
   });
 });

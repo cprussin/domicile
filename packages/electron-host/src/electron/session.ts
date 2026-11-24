@@ -269,13 +269,15 @@ export const sessionPartition = (session: Session) => {
 /**
  * Electron's `session` module for an app whose protocols are `protocols`,
  * whose webRequest listeners are `webRequests`, whose session calls go
- * through `calls` and whose permission handlers are `permissions`.
+ * through `calls` and whose permission handlers are `permissions`. `created`
+ * hears each session as it is made, for `app`'s `session-created`.
  */
 export const createSessions = (
   protocols: ReturnType<typeof createProtocols>,
   webRequests: ReturnType<typeof createWebRequests>,
   calls: ReturnType<typeof createSessionCalls>,
   permissions: ReturnType<typeof createPermissions>,
+  created: (session: Session) => void,
 ) => {
   const made = new Map<string, Session>();
   const fromPartition = (partition: string) => {
@@ -289,6 +291,7 @@ export const createSessions = (
         permissions.forSession(partition),
       );
       made.set(partition, session);
+      created(session);
       return session;
     } else {
       return found;

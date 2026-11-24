@@ -6,7 +6,11 @@ import { join } from "node:path";
 import type { MessagePortMain } from "./message-port-main";
 import { MessageChannelMain } from "./message-port-main";
 import type { UtilityProcess } from "./utility-process";
-import { utilityProcess } from "./utility-process";
+import { createUtilityProcess } from "./utility-process";
+
+/** What `app`'s `child-process-gone` would say, in order. */
+const gone: unknown[] = [];
+const utilityProcess = createUtilityProcess((details) => gone.push(details));
 
 const directory = await mkdtemp(join(tmpdir(), "electron-host-utility-"));
 afterAll(() => rm(directory, { force: true, recursive: true }));
@@ -96,6 +100,43 @@ describe("utilityProcess.fork", () => {
 
     expect(await exited).toEqual([7]);
     await closed;
+  });
+
+  it("tells the app of a module that went with an error or was killed, not one that finished", async () => {
+    gone.length = 0;
+    const failed = utilityProcess.fork(
+      await worker("fails.js", `process.exit(7);`),
+      [],
+      { serviceName: "Indexer" },
+    );
+    await next(failed, "exit");
+    const finished = utilityProcess.fork(
+      await worker("ends.js", `process.exit(0);`),
+    );
+    await next(finished, "exit");
+    const killed = utilityProcess.fork(
+      await worker("lingers.js", `setInterval(() => undefined, 1000);`),
+    );
+    await next(killed, "spawn");
+    killed.kill();
+    await next(killed, "exit");
+
+    expect(gone).toEqual([
+      {
+        exitCode: 7,
+        name: "Indexer",
+        reason: "abnormal-exit",
+        serviceName: "Indexer",
+        type: "Utility",
+      },
+      {
+        exitCode: 143,
+        name: "Node Utility Process",
+        reason: "killed",
+        serviceName: "Node Utility Process",
+        type: "Utility",
+      },
+    ]);
   });
 
   it("pipes the module's output when asked", async () => {

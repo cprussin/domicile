@@ -536,7 +536,12 @@ the shell lays windows out, and `globalShortcut` refuses with a warning,
 because shortcuts are the shell's. `screen` and `powerMonitor` follow the
 desk through `domicile subscribe` from their first use, and
 `powerMonitor.getSystemIdleTime` asks `domicile idle-time`, so Slack can mark
-you away. The
+you away. `powerMonitor`'s `suspend`, `resume` and `shutdown` follow logind's
+`PrepareForSleep` and `PrepareForShutdown` once the app listens, holding each
+off with a `systemd-inhibit` delay lock as Electron does
+(`src/login-manager.ts`). `systemPreferences.getAccentColor` is the settings
+portal's `accent-color`, and `net.isOnline` is Chromium's netlink answer read
+from `/sys/class/net`. The
 `electron-apps-start-on-a-tty` VM test starts Element and Slack as packaged
 and fails on a crash or on Element leaving the engine.
 

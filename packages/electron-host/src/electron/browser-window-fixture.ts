@@ -18,7 +18,7 @@ export const setUp = ({ refuse }: { refuse?: (why: string) => never } = {}) => {
   const sent: EngineRequest[] = [];
   const events: Engine["events"] = new EventEmitter();
   const exits: number[] = [];
-  const { app } = createApp({
+  const { app, sessionCreated } = createApp({
     appPath: "/cache/x/resources/app.asar",
     exit: (code) => exits.push(code),
     paths: electronPaths({
@@ -53,6 +53,7 @@ export const setUp = ({ refuse }: { refuse?: (why: string) => never } = {}) => {
       () => undefined,
       () => undefined,
     ),
+    sessionCreated,
   );
   // The default session's file: handler, which every test would start with.
   sent.length = 0;

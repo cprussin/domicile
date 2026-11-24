@@ -22,6 +22,12 @@ export type IpcSender = {
    * without one).
    */
   readonly mainFrame?: { readonly routingId: number };
+  /**
+   * The page's `webContents` as an emitter: it says `ipc-message` and
+   * `ipc-message-sync` ahead of every other listener, as in Electron.
+   */
+  readonly emit?: (event: string, ...args: unknown[]) => boolean;
+  readonly listenerCount?: (event: string) => number;
 };
 
 type Handler = (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown;
@@ -57,14 +63,34 @@ export const createIpcMain = () => {
       ipcMain.emit(channel, { ...messageEvent(sender), ports }, message);
     },
     receive: (sender: IpcSender, channel: string, args: unknown[]) => {
-      sender.ipc?.emit(channel, messageEvent(sender), ...args);
-      ipcMain.emit(channel, messageEvent(sender), ...args);
+      const event = messageEvent(sender);
+      sender.emit?.("ipc-message", event, channel, ...args);
+      sender.ipc?.emit(channel, event, ...args);
+      ipcMain.emit(channel, event, ...args);
     },
-    sendSync: (sender: IpcSender, channel: string, args: unknown[]) =>
-      (sender.ipc !== undefined && sender.ipc.listenerCount(channel) > 0
-        ? sender.ipc
-        : ipcMain
-      ).sentSync(sender, channel, args),
+    /**
+     * A page's `sendSync`, answered with the first `returnValue` a listener
+     * sets, whenever it sets it: the page waits until then, as in Electron.
+     * One nobody listens for fails, as nothing could answer it.
+     */
+    sendSync: (
+      sender: IpcSender,
+      channel: string,
+      args: unknown[],
+    ): Promise<Result<{ readonly result: unknown }, string>> =>
+      (sender.listenerCount?.("ipc-message-sync") ?? 0) +
+        (sender.ipc?.listenerCount(channel) ?? 0) +
+        ipcMain.listenerCount(channel) ===
+      0
+        ? Promise.resolve(
+            Err(`Nothing listens for '${channel}' to set its returnValue`),
+          )
+        : new Promise((resolve) => {
+            const event = syncEvent(sender, resolve);
+            sender.emit?.("ipc-message-sync", event, channel, ...args);
+            sender.ipc?.emit(channel, event, ...args);
+            ipcMain.emit(channel, event, ...args);
+          }),
   };
 };
 
@@ -121,24 +147,6 @@ export class IpcMain extends EventEmitter {
       }
     }
   };
-
-  /**
-   * A page's `sendSync`, answered with the first `returnValue` a listener
-   * sets, whenever it sets it: the page waits until then, as in Electron.
-   * One nobody listens for fails, as nothing could answer it.
-   */
-  readonly sentSync = (
-    sender: IpcSender,
-    channel: string,
-    args: unknown[],
-  ): Promise<Result<{ readonly result: unknown }, string>> =>
-    this.listenerCount(channel) === 0
-      ? Promise.resolve(
-          Err(`Nothing listens for '${channel}' to set its returnValue`),
-        )
-      : new Promise((resolve) => {
-          this.emit(channel, syncEvent(sender, resolve), ...args);
-        });
 }
 
 const invokeEvent = (sender: IpcSender) => ({

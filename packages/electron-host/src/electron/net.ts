@@ -5,6 +5,8 @@ import { lookup } from "node:dns/promises";
 import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 
+import { isOnline } from "./online";
+
 type RequestOptions = {
   readonly method?: string;
   readonly url?: string;
@@ -47,11 +49,25 @@ const urlOf = (options: string | RequestOptions) => {
   if (typeof options === "string") {
     return options;
   } else if (options.url === undefined) {
-    const host = options.hostname ?? options.host ?? "localhost";
-    const port = options.port === undefined ? "" : `:${options.port}`;
-    return `${options.protocol ?? "http:"}//${host}${port}${options.path ?? "/"}`;
+    return `${options.protocol ?? "http:"}//${hostOf(options)}${options.path ?? "/"}`;
   } else {
     return options.url;
+  }
+};
+
+/**
+ * Electron's: `host`, which carries its own port, over `hostname` and
+ * `port`. Electron skips a port of 0 or NaN, as it does any falsy one.
+ */
+const hostOf = (options: RequestOptions) => {
+  if (options.host === undefined) {
+    const port =
+      Number.isFinite(options.port) && options.port !== 0
+        ? `:${options.port}`
+        : "";
+    return `${options.hostname ?? "localhost"}${port}`;
+  } else {
+    return options.host;
   }
 };
 
@@ -70,6 +86,8 @@ export const clientRequest = (options: string | RequestOptions) => {
   const abort = new AbortController();
   let redirect = opts.redirect ?? "follow";
   let ended = false;
+  /** The response, once it starts. */
+  let message: ReturnType<typeof incomingMessage> | undefined;
 
   const send = async () => {
     try {
@@ -94,7 +112,7 @@ export const clientRequest = (options: string | RequestOptions) => {
           {},
         );
       }
-      const message = incomingMessage(response);
+      message = incomingMessage(response);
       request.emit("response", message);
       message.on("end", () => request.emit("close"));
     } catch (error) {
@@ -108,8 +126,24 @@ export const clientRequest = (options: string | RequestOptions) => {
   };
 
   return Object.assign(request, {
+    /**
+     * Stops the request. One aborted before its response fails its fetch,
+     * which says so; one aborted mid-body says so here, as Node's does.
+     */
     abort: () => {
       abort.abort();
+      if (
+        message !== undefined &&
+        !message.readableEnded &&
+        !message.destroyed
+      ) {
+        message.emit("aborted");
+        message.destroy();
+        process.nextTick(() => {
+          request.emit("abort");
+          request.emit("close");
+        });
+      }
     },
     chunkedEncoding: false,
     end: (
@@ -158,10 +192,9 @@ export const clientRequest = (options: string | RequestOptions) => {
 
 export const net = {
   fetch: (input: string | Request, init?: RequestInit) => fetch(input, init),
-  /** Electron asks Chromium whether an interface is up; the desktop always has one. */
-  isOnline: () => true,
+  isOnline: () => isOnline(),
   get online() {
-    return true;
+    return isOnline();
   },
   request: clientRequest,
   resolveHost: async (host: string, _options?: unknown) => {

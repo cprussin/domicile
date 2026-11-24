@@ -1,6 +1,8 @@
-// The desktop's appearance, for `nativeTheme`: the settings portal's
-// `org.freedesktop.appearance` keys, as Electron reads them on Linux. See
-// "Settings" in docs/PORTALS.md.
+// The desktop's appearance, for `nativeTheme` and `systemPreferences`: the
+// settings portal's `org.freedesktop.appearance` keys, as Electron reads them
+// on Linux. See "Settings" in docs/PORTALS.md.
+
+import { z } from "zod";
 
 import type { Appearance } from "./electron/native-theme";
 
@@ -74,4 +76,45 @@ export const watchAppearance = async (
     }
   });
   return appearance;
+};
+
+/** `accent-color`: red, green and blue, each 0 to 1, or out of range for none. */
+const accentSchema = z.tuple([z.number(), z.number(), z.number()]);
+
+/**
+ * `accent-color` as Electron's `getAccentColor` gives it, `#RRGGBBAA`, or ""
+ * for none: the spec reads a channel outside 0 to 1 as no accent.
+ */
+const accentColorOf = (value: unknown) => {
+  const parsed = accentSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(
+      `the settings portal sent accent-color ${JSON.stringify(value)}, which is not three channels`,
+    );
+  } else if (parsed.data.some((channel) => channel < 0 || channel > 1)) {
+    return "";
+  } else {
+    return `#${[...parsed.data.map((channel) => Math.round(channel * 255)), 255]
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("")
+      .toUpperCase()}`;
+  }
+};
+
+/**
+ * Reads the desktop's accent color from `settings`, then hands `changed`
+ * each new one the portal sends.
+ */
+export const watchAccentColor = async (
+  settings: PortalSettings,
+  changed: (color: string) => void,
+): Promise<string> => {
+  const { value } = await settings.ReadOne(NAMESPACE, "accent-color");
+  const color = accentColorOf(value);
+  settings.on("SettingChanged", (namespace, key, changedTo) => {
+    if (namespace === NAMESPACE && key === "accent-color") {
+      changed(accentColorOf(changedTo.value));
+    }
+  });
+  return color;
 };

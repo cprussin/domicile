@@ -100,6 +100,7 @@ Grouped `--help`, `domicile help <command>` for usage and examples, and man page
 - A stuck page flip no longer freezes the desktop. [#2043](https://github.com/cprussin/domicile/pull/2043)
 - Popups close when their `PopupScene` changes, such as when an overview opens, and when their `PopupBoundary` moves.
 - `windows.focus()` on a popup focuses its window, so a click focusing a native menu no longer closes it before the click arrives. [#2465](https://github.com/cprussin/domicile/issues/2465)
+- Electron apps hear the machine suspend, resume and shut down, read the desktop's accent color and whether the machine is online, and get `app`'s window, session and `child-process-gone` events and `webContents`' `ipc-message`. A `net.request` to a `host` with a port reaches that port. [Every API](architecture/ELECTRON-APPS.md#every-api)
 
 Special thanks to: [ploug](https://github.com/ploug) & [mecattaf](https://github.com/mecattaf)
 

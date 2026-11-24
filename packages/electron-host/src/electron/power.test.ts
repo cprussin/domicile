@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { DesktopStatus } from "./power";
+import type { DesktopStatus, LogindSignals, LoginManager } from "./power";
 import { createPowerMonitor, createPowerSaveBlocker, onBattery } from "./power";
 
 const supplies = (entries: Record<string, Record<string, string>>) => {
@@ -17,6 +17,28 @@ const supplies = (entries: Record<string, Record<string, string>>) => {
   return root;
 };
 
+/** A logind that nobody hears from. */
+const quietLogind: LoginManager = {
+  delay: () => ({ stop: () => undefined }),
+  follow: () => undefined,
+};
+
+/** A logind a test speaks for, writing down the delay locks held. */
+const fakeLogind = () => {
+  const held: string[] = [];
+  const said: LogindSignals[] = [];
+  const logind: LoginManager = {
+    delay: (what) => {
+      held.push(what);
+      return { stop: () => held.splice(held.indexOf(what), 1) };
+    },
+    follow: (signals) => {
+      said.push(signals);
+    },
+  };
+  return { held, logind, said };
+};
+
 describe("powerMonitor", () => {
   it("says when the desktop locks and unlocks, not how it started", () => {
     let hear: (status: DesktopStatus) => void = () => undefined;
@@ -25,6 +47,7 @@ describe("powerMonitor", () => {
         hear = heard;
       },
       () => 0,
+      quietLogind,
       () => false,
     );
     const seen: string[] = [];
@@ -46,6 +69,7 @@ describe("powerMonitor", () => {
     const monitor = createPowerMonitor(
       () => undefined,
       () => idle,
+      quietLogind,
       () => false,
     );
 
@@ -62,6 +86,7 @@ describe("powerMonitor", () => {
         hear = heard;
       },
       () => 600,
+      quietLogind,
       () => false,
     );
 
@@ -69,6 +94,67 @@ describe("powerMonitor", () => {
     hear({ locked: true });
 
     expect(monitor.getSystemIdleState(60)).toBe("locked");
+  });
+
+  it("follows logind's sleep once the app listens, holding it off until the app has heard", () => {
+    const { held, logind, said } = fakeLogind();
+    const monitor = createPowerMonitor(
+      () => undefined,
+      () => 0,
+      logind,
+      () => false,
+    );
+    const seen: string[] = [];
+    monitor.on("lock-screen", () => undefined);
+    expect(said).toEqual([]);
+
+    monitor.on("suspend", () => seen.push(`suspend, holding ${held}`));
+    monitor.on("resume", () => seen.push(`resume, holding ${held}`));
+    const signals = said[0];
+    signals?.sleep(true);
+    signals?.sleep(false);
+
+    expect(said.length).toBe(1);
+    expect(seen).toEqual(["suspend, holding sleep", "resume, holding sleep"]);
+    expect(held).toEqual(["sleep"]);
+  });
+
+  it("holds shutdown off while the app listens, and past it when the app prevents it", () => {
+    const { held, logind, said } = fakeLogind();
+    const monitor = createPowerMonitor(
+      () => undefined,
+      () => 0,
+      logind,
+      () => false,
+    );
+    const listener = () => undefined;
+    monitor.on("shutdown", listener);
+    expect(held).toEqual(["sleep", "shutdown"]);
+    monitor.off("shutdown", listener);
+    expect(held).toEqual(["sleep"]);
+
+    monitor.on("shutdown", (event: { preventDefault: () => void }) =>
+      event.preventDefault(),
+    );
+    said[0]?.shutdown(true);
+    expect(held).toEqual(["sleep", "shutdown"]);
+  });
+
+  it("lets shutdown go on once the app has heard and not prevented it", () => {
+    const { held, logind, said } = fakeLogind();
+    const monitor = createPowerMonitor(
+      () => undefined,
+      () => 0,
+      logind,
+      () => false,
+    );
+    const heard: string[] = [];
+    monitor.on("shutdown", () => heard.push(`shutdown, holding ${held}`));
+
+    said[0]?.shutdown(true);
+
+    expect(heard).toEqual(["shutdown, holding sleep,shutdown"]);
+    expect(held).toEqual(["sleep"]);
   });
 
   it("reads the battery from sysfs", () => {

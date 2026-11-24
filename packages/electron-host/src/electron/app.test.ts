@@ -73,6 +73,44 @@ describe(createApp, () => {
       expect(app.isReady()).toBe(true);
     });
 
+    it("says will-finish-launching, then each session made so far, then ready", () => {
+      const { app, markReady, sessionCreated } = make();
+      const heard: unknown[] = [];
+      for (const name of ["will-finish-launching", "ready"]) {
+        app.on(name, () => heard.push(name));
+      }
+      app.on("session-created", (session: unknown) => heard.push(session));
+
+      sessionCreated("default");
+      markReady();
+      sessionCreated("persist:other");
+
+      expect(heard).toEqual([
+        "will-finish-launching",
+        "default",
+        "ready",
+        "persist:other",
+      ]);
+    });
+
+    it("says a child process went, with what Electron says of it", async () => {
+      const { app, childProcessGone } = make();
+      const details = {
+        exitCode: 9,
+        name: "Node Utility Process",
+        reason: "killed",
+        serviceName: "Node Utility Process",
+        type: "Utility",
+      } as const;
+      const heard = new Promise((resolve) =>
+        app.once("child-process-gone", (_event, gone) => resolve(gone)),
+      );
+
+      childProcessGone(details);
+
+      expect(await heard).toBe(details);
+    });
+
     it("quits after before-quit, will-quit and quit", async () => {
       const heard: string[] = [];
       const exited = new Promise<number>((resolve) => {

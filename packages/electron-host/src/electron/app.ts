@@ -42,9 +42,19 @@ export type AppHooks = {
   };
 };
 
+/** What Electron's `child-process-gone` says of a process that went. */
+export type ChildProcessGoneDetails = {
+  readonly type: "Utility";
+  readonly reason: "abnormal-exit" | "crashed" | "killed";
+  readonly exitCode: number;
+  readonly serviceName: string;
+  readonly name: string;
+};
+
 /**
- * The `app` an Electron app sees, and `markReady`, which the host calls once
- * the engine can open windows.
+ * The `app` an Electron app sees, and what the host calls on it: `markReady`
+ * once the engine can open windows, `sessionCreated` with each session it
+ * makes, and `childProcessGone` when one of the app's processes went.
  */
 export const createApp = ({
   appPath,
@@ -68,7 +78,29 @@ export const createApp = ({
     relaunch,
     hooks,
   );
-  return { app, hooks, markReady: () => app.markReady() };
+  /** Sessions made before ready, which Electron can only make from then. */
+  const early: unknown[] = [];
+  return {
+    app,
+    childProcessGone: (details: ChildProcessGoneDetails) => {
+      app.emit("child-process-gone", eventObject(), details);
+    },
+    hooks,
+    markReady: () => {
+      app.emit("will-finish-launching", eventObject());
+      for (const session of early.splice(0)) {
+        app.emit("session-created", session);
+      }
+      app.markReady();
+    },
+    sessionCreated: (session: unknown) => {
+      if (app.isReady()) {
+        app.emit("session-created", session);
+      } else {
+        early.push(session);
+      }
+    },
+  };
 };
 
 /**
