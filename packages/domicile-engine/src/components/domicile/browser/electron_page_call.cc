@@ -17,6 +17,9 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/types/expected.h"
 #include "base/values.h"
+#include "components/domicile/common/domicile_scheme.h"
+#include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace domicile {
 namespace {
@@ -32,20 +35,20 @@ constexpr std::array<std::pair<std::string_view, ElectronWebRtcIpPolicy>, 4>
          ElectronWebRtcIpPolicy::kDisableNonProxiedUdp},
     }};
 
-// The DevTools methods the host's members need, and all an app may send: a
-// method past these could take the page where the app can't, or read what
-// it shouldn't.
-constexpr std::array<std::string_view, 9> kAppDevToolsMethods = {
-    "Emulation.clearDeviceMetricsOverride",
-    "Emulation.setDeviceMetricsOverride",
-    "Network.emulateNetworkConditions",
-    "Page.captureScreenshot",
-    "Page.getLayoutMetrics",
-    "Page.printToPDF",
-    "Page.screencastFrameAck",
-    "Page.startScreencast",
-    "Page.stopScreencast",
-};
+constexpr std::array<std::pair<std::string_view, ElectronImageAnimationPolicy>,
+                     3>
+    kImageAnimationPolicies = {{
+        {"animate", ElectronImageAnimationPolicy::kAnimate},
+        {"animate_once", ElectronImageAnimationPolicy::kAnimateOnce},
+        {"no_animation", ElectronImageAnimationPolicy::kNoAnimation},
+    }};
+
+// The highest UDP port.
+constexpr int kMostPort = 65535;
+
+// Chrome's own pages and DevTools', which no Electron page shows.
+constexpr std::array<std::string_view, 3> kChromeSchemes = {
+    "chrome", "chrome-untrusted", "devtools"};
 
 base::expected<bool, std::string> BoolIn(const base::DictValue& request,
                                          std::string_view key) {
@@ -141,22 +144,61 @@ base::expected<ElectronPageMethod, std::string> WebRtcIpPolicyIn(
   return ElectronSetWebRtcIpPolicy{.policy = found->second};
 }
 
+base::expected<ElectronPageMethod, std::string> ImageAnimationPolicyIn(
+    const base::DictValue& request) {
+  const base::expected<std::string, std::string> policy =
+      StringIn(request, "policy");
+  if (!policy.has_value()) {
+    return base::unexpected(policy.error());
+  }
+  const auto found = std::ranges::find(
+      kImageAnimationPolicies, *policy,
+      &std::pair<std::string_view, ElectronImageAnimationPolicy>::first);
+  if (found == kImageAnimationPolicies.end()) {
+    return base::unexpected(
+        base::StrCat({"no image animation policy is named ", *policy}));
+  }
+  return ElectronSetImageAnimationPolicy{.policy = found->second};
+}
+
+base::expected<ElectronPageMethod, std::string> WebRtcUdpPortRangeIn(
+    const base::DictValue& request) {
+  const base::expected<int, std::string> min = IntIn(request, "min");
+  const base::expected<int, std::string> max = IntIn(request, "max");
+  if (!min.has_value()) {
+    return base::unexpected(min.error());
+  } else if (!max.has_value()) {
+    return base::unexpected(max.error());
+  } else if (*min < 0 || *max > kMostPort || *min > *max ||
+             (*min == 0 && *max != 0)) {
+    return base::unexpected(
+        "\"min\" and \"max\" must be ports from 1 to 65535, the least "
+        "first, or both 0");
+  }
+  return ElectronSetWebRtcUdpPortRange{.min = *min, .max = *max};
+}
+
 base::expected<ElectronPageMethod, std::string> DevToolsMethodIn(
     base::DictValue& request) {
   const base::expected<std::string, std::string> method =
       StringIn(request, "devtools_method");
   base::DictValue* params = request.FindDict("params");
+  const base::Value* debugger = request.Find("debugger");
+  const base::Value* session = request.Find("session_id");
   if (!method.has_value()) {
     return base::unexpected(method.error());
-  } else if (std::ranges::find(kAppDevToolsMethods, *method) ==
-             kAppDevToolsMethods.end()) {
-    return base::unexpected(
-        base::StrCat({"an app has no DevTools method ", *method}));
   } else if (params == nullptr) {
     return base::unexpected("\"params\" must be an object");
+  } else if (debugger != nullptr && !debugger->is_bool()) {
+    return base::unexpected("\"debugger\" must be true or false");
+  } else if (session != nullptr && !session->is_string()) {
+    return base::unexpected("\"session_id\" must be a string");
   }
-  return ElectronDevToolsMethod{.method = *method,
-                                .params = std::move(*params)};
+  return ElectronDevToolsMethod{
+      .method = *method,
+      .params = std::move(*params),
+      .debugger = debugger != nullptr && debugger->GetBool(),
+      .session_id = session ? session->GetString() : std::string()};
 }
 
 std::string Line(base::DictValue event) {
@@ -224,8 +266,27 @@ base::expected<ElectronPageMethod, std::string> ElectronPageMethodIn(
       return base::unexpected(ignore.error());
     }
     return ElectronSetIgnoreInput{.ignore = *ignore};
+  } else if (name == "save_video_frame_at") {
+    const base::expected<std::pair<int, int>, std::string> point =
+        PointIn(request);
+    if (!point.has_value()) {
+      return base::unexpected(point.error());
+    }
+    return ElectronSaveVideoFrameAt{.x = point->first, .y = point->second};
+  } else if (name == "set_image_animation_policy") {
+    return ImageAnimationPolicyIn(request);
+  } else if (name == "set_webrtc_udp_port_range") {
+    return WebRtcUdpPortRangeIn(request);
+  } else if (name == "crash_renderer") {
+    return ElectronCrashRenderer{};
+  } else if (name == "printers") {
+    return ElectronGetPrinters{};
   } else if (name == "devtools") {
     return DevToolsMethodIn(request);
+  } else if (name == "debugger_attach") {
+    return ElectronAttachDebugger{};
+  } else if (name == "debugger_detach") {
+    return ElectronDetachDebugger{};
   }
   return base::unexpected(base::StrCat({"no page call is named ", name}));
 }
@@ -255,15 +316,37 @@ std::string ElectronPageResult(
   return Line(std::move(event));
 }
 
-std::string ElectronDevToolsEvent(int window,
-                                  std::string_view method,
-                                  base::DictValue params) {
+std::string ElectronDevToolsEvent(int window, ElectronDevToolsMessage event) {
+  base::DictValue line;
+  line.Set("type", "devtools_event");
+  line.Set("window", window);
+  line.Set("method", std::move(event.method));
+  line.Set("params", std::move(event.params));
+  if (event.debugger) {
+    line.Set("debugger", true);
+  }
+  if (!event.session_id.empty()) {
+    line.Set("session_id", std::move(event.session_id));
+  }
+  return Line(std::move(line));
+}
+
+std::string ElectronDebuggerDetached(int window, std::string_view reason) {
   base::DictValue event;
-  event.Set("type", "devtools_event");
+  event.Set("type", "debugger_detached");
   event.Set("window", window);
-  event.Set("method", method);
-  event.Set("params", std::move(params));
+  event.Set("reason", reason);
   return Line(std::move(event));
+}
+
+bool ElectronDevToolsMayAttachTo(const GURL& url, bool is_webui) {
+  if (url.SchemeIs(url::kViewSourceScheme)) {
+    return ElectronDevToolsMayAttachTo(GURL(url.GetContent()), is_webui);
+  }
+  return !is_webui && !url.SchemeIs(kDomicileScheme) &&
+         std::ranges::none_of(kChromeSchemes, [&](std::string_view scheme) {
+           return url.SchemeIs(scheme);
+         });
 }
 
 }  // namespace domicile

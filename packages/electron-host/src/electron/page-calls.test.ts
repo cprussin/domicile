@@ -435,3 +435,107 @@ describe("parents and modals", () => {
     ]);
   });
 });
+
+describe("the debugger", () => {
+  it("hears its own client's events, and the host members' don't", () => {
+    const { BrowserWindow, say } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://a.test/");
+    const heard: unknown[] = [];
+    const members: unknown[] = [];
+    window.webContents.debugger.on("message", (_event, method, params) =>
+      heard.push([method, params]),
+    );
+    window.devtools.on("Page.loadEventFired", (params) => members.push(params));
+    window.webContents.debugger.attach();
+
+    say({
+      debugger: true,
+      method: "Page.loadEventFired",
+      params: { timestamp: 1 },
+      type: "devtools_event",
+      window: 1,
+    });
+    say({
+      method: "Page.screencastFrame",
+      params: {},
+      type: "devtools_event",
+      window: 1,
+    });
+
+    expect(heard).toEqual([["Page.loadEventFired", { timestamp: 1 }]]);
+    expect(members).toEqual([]);
+  });
+
+  it("detaches when the engine says so, and when the page closes", () => {
+    const { BrowserWindow, say } = setUp();
+    const first = new BrowserWindow();
+    const second = new BrowserWindow();
+    void first.loadURL("https://a.test/");
+    void second.loadURL("https://b.test/").catch(() => undefined);
+    const heard: string[] = [];
+    for (const window of [first, second]) {
+      window.webContents.debugger.on("detach", (_event, reason) =>
+        heard.push(`${window.id} ${reason}`),
+      );
+      window.webContents.debugger.attach();
+    }
+
+    say({ reason: "target closed", type: "debugger_detached", window: 1 });
+    say({ type: "window_closed", window: 2 });
+
+    expect(heard).toEqual(["1 target closed", "2 target closed"]);
+    expect(first.webContents.debugger.isAttached()).toBe(false);
+  });
+});
+
+describe("what doesn't apply on Domicile", () => {
+  it("hands a window that asks to be drawn offscreen to its refuse", () => {
+    const refused: string[] = [];
+    const { BrowserWindow } = setUp({
+      refuse: (why) => {
+        refused.push(why);
+        throw new Error("refused");
+      },
+    });
+
+    expect(
+      () => new BrowserWindow({ webPreferences: { offscreen: true } }),
+    ).toThrow("refused");
+    expect(refused).toEqual([
+      "this window asks to be drawn offscreen, which Domicile's engine doesn't do",
+    ]);
+  });
+
+  it("answers as Electron does for a page that isn't offscreen and has no DevTools open", () => {
+    const { BrowserWindow } = setUp();
+    const { webContents } = new BrowserWindow();
+
+    expect(webContents.isOffscreen()).toBe(false);
+    expect(webContents.isPainting()).toBe(false);
+    expect(webContents.getFrameRate()).toBe(0);
+    expect(webContents.frameRate).toBe(0);
+    expect(webContents.devToolsWebContents).toBeNull();
+    expect(webContents.hostWebContents).toBeNull();
+    expect(webContents.getDevToolsTitle()).toBe("");
+  });
+});
+
+describe("webFrameMain", () => {
+  it("saves a video frame and collects the running stack on its page", async () => {
+    const { BrowserWindow, say, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://a.test/");
+    sent.length = 0;
+
+    window.webContents.mainFrame.saveVideoFrameAs(1, 2);
+    void window.webContents.mainFrame.collectJavaScriptCallStack();
+    await Bun.sleep(0);
+
+    expect(sent).toEqual([
+      expect.objectContaining({ method: "save_video_frame_at", x: 1, y: 2 }),
+      expect.objectContaining({ devtools_method: "Debugger.enable" }),
+    ]);
+    say({ call: 1, result: null, type: "page_result", window: 1 });
+  });
+});

@@ -121,6 +121,19 @@ void SetElectronHidden(const std::string& id, bool hidden);
 // The state Electron window `id`'s app asks for it, listed for the shell.
 void SetElectronWindowState(const std::string& id, ElectronWindowState state);
 
+// Whether Electron window `id` asks for the user's attention, listed with it
+// (`urgent`) for the shell.
+void SetElectronUrgent(const std::string& id, bool urgent);
+
+// Whether the pointer goes through Electron window `id`, listed with it
+// (`ignoresPointer`) for the shell.
+void SetElectronIgnoresPointer(const std::string& id, bool ignores);
+
+// Where Electron window `id` draws and takes input, listed with it (`shape`)
+// for the shell.
+void SetElectronShape(const std::string& id,
+                      const std::vector<ElectronShapeRect>& rects);
+
 // Electron window `id` holds `views`, bottom first, and no others; each is
 // listed with it as its parent. A view another window held moves here.
 void SetElectronViews(const std::string& id,

@@ -63,7 +63,8 @@ base::expected<GURL, std::string> UrlIn(const base::DictValue& request) {
   GURL url(*text);
   if (!url.is_valid()) {
     return base::unexpected(base::StrCat({*text, " is not a URL"}));
-  } else if (!IsElectronHandleableScheme(url.scheme())) {
+  } else if (!IsElectronHandleableScheme(url.scheme()) &&
+             !IsElectronEnginePage(url)) {
     // Whether the app's session serves the scheme is the app's to say; a
     // scheme no app may handle never opens.
     return base::unexpected(
@@ -539,7 +540,9 @@ bool IsWindowRequest(std::string_view type) {
          type == "popup_menu" || type == "close_popup_menu" ||
          type == "execute_javascript" || type == "set_title" ||
          type == "set_hidden" || type == "set_window_state" ||
-         type == "remove_history_entry" || type == "navigation_listen";
+         type == "remove_history_entry" || type == "navigation_listen" ||
+         type == "flash_frame" || type == "set_ignore_mouse_events" ||
+         type == "set_shape";
 }
 
 // Entry `entry` of a menu, with only the keys the shell reads, or why it is
@@ -856,6 +859,39 @@ base::expected<ElectronRequest, ElectronRefusal> ParseSetViews(
         .hidden = hidden != nullptr && hidden->GetBool()});
   }
   return set;
+}
+
+// The "rects" of a set_shape request, or why they are not a shape.
+base::expected<ElectronRequest, ElectronRefusal> ParseSetShape(
+    const base::DictValue& request,
+    ElectronWindow window) {
+  const base::ListValue* rects = request.FindList("rects");
+  if (rects == nullptr) {
+    return Refuse("\"rects\" must be a list", window);
+  }
+  ElectronSetShape shape{.window = window};
+  for (const base::Value& entry : *rects) {
+    const base::DictValue* rect = entry.GetIfDict();
+    if (rect == nullptr) {
+      return Refuse("each of \"rects\" must be an object", window);
+    }
+    const std::optional<int> x = rect->FindInt("x");
+    const std::optional<int> y = rect->FindInt("y");
+    const std::optional<int> width = rect->FindInt("width");
+    const std::optional<int> height = rect->FindInt("height");
+    if (!x.has_value() || !y.has_value()) {
+      return Refuse("a rect's \"x\" and \"y\" must be whole numbers",
+                    window);
+    } else if (!width.has_value() || *width < 0 || !height.has_value() ||
+               *height < 0) {
+      return Refuse(
+          "a rect's \"width\" and \"height\" must be whole numbers from 0",
+          window);
+    }
+    shape.rects.push_back(ElectronShapeRect{
+        .x = *x, .y = *y, .width = *width, .height = *height});
+  }
+  return shape;
 }
 
 // The "port" a port request names, or why it names none.
@@ -1448,6 +1484,10 @@ base::expected<ElectronRequest, ElectronRefusal> ParseWindowOpenAnswer(
 
 }  // namespace
 
+bool IsElectronEnginePage(const GURL& url) {
+  return url.IsAboutBlank() || url.SchemeIs(url::kDataScheme);
+}
+
 base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     std::string_view line) {
   std::optional<base::DictValue> request =
@@ -1615,6 +1655,20 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
                                   .state = {.maximized = *maximized,
                                             .minimized = *minimized,
                                             .fullscreen = *fullscreen}};
+  } else if (*type == "flash_frame") {
+    const std::optional<bool> flash = request->FindBool("flash");
+    if (!flash.has_value()) {
+      return Refuse("\"flash\" must be true or false", *window);
+    }
+    return ElectronFlashFrame{.window = *window, .flash = *flash};
+  } else if (*type == "set_ignore_mouse_events") {
+    const std::optional<bool> ignore = request->FindBool("ignore");
+    if (!ignore.has_value()) {
+      return Refuse("\"ignore\" must be true or false", *window);
+    }
+    return ElectronSetIgnoreMouseEvents{.window = *window, .ignore = *ignore};
+  } else if (*type == "set_shape") {
+    return ParseSetShape(*request, *window);
   } else if (*type == "ipc_send") {
     return ParseSendToPage(*request, *window);
   } else if (*type == "execute_javascript") {
@@ -2136,6 +2190,20 @@ std::string ElectronWindowResized(ElectronWindow window,
 std::string ElectronMenuClicked(ElectronWindow window, int command) {
   base::DictValue event = Event("menu_clicked", window);
   event.Set("command", command);
+  return Line(std::move(event));
+}
+
+std::string ElectronAppCommanded(ElectronWindow window,
+                                 ElectronAppCommand command) {
+  base::DictValue event = Event("app_command", window);
+  switch (command) {
+    case ElectronAppCommand::kBrowserBackward:
+      event.Set("command", "browser-backward");
+      break;
+    case ElectronAppCommand::kBrowserForward:
+      event.Set("command", "browser-forward");
+      break;
+  }
   return Line(std::move(event));
 }
 

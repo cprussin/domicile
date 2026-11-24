@@ -367,6 +367,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
           guest.DecideWindowsWith(AskTheApp(calls.window_opening));
           // Its context menus are the app's to draw.
           guest.TakeContextMenusWith(TellTheApp(calls.context_menu));
+          // It captures its app's windows by their getMediaSourceId.
+          guest.FindWindowSourcesWith(calls.window_source);
           // Before the first navigation, which runs the preload and loads
           // through the session too.
           if (session && !session->user_agent().empty()) {
@@ -409,6 +411,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
     guest->KeepFullFrameRate();
     guest->DecideWindowsWith(AskTheApp(calls.window_opening));
     guest->TakeContextMenusWith(TellTheApp(calls.context_menu));
+    guest->FindWindowSourcesWith(calls.window_source);
     // Content started its first navigation before the app answered, so the
     // preload runs from the page's next document, and the session's user agent
     // from its next request.
@@ -481,6 +484,66 @@ class DeskWindows final : public base::SupportsUserData::Data,
                          << " was given a window state and is a view";
     if (window->wanted_state != state) {
       window->wanted_state = state;
+      Changed();
+    }
+  }
+
+  // Whether Electron window `id` asks for the user's attention, as SetTitle.
+  void SetUrgent(const std::string& id, bool urgent) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    if (window == windows_.end()) {
+      LOG(WARNING) << "domicile: asked for attention for browser window "
+                   << id << ", which is not open.";
+      return;
+    }
+    CHECK(!window->view) << "browser window " << id << " is a view";
+    if (window->urgent != urgent) {
+      window->urgent = urgent;
+      Changed();
+    }
+  }
+
+  // Whether the pointer goes through Electron window `id`, as SetTitle.
+  void SetIgnoresPointer(const std::string& id, bool ignores) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    if (window == windows_.end()) {
+      LOG(WARNING) << "domicile: asked to let the pointer through browser "
+                      "window "
+                   << id << ", which is not open.";
+      return;
+    }
+    CHECK(!window->view) << "browser window " << id << " is a view";
+    if (window->ignores_pointer != ignores) {
+      window->ignores_pointer = ignores;
+      Changed();
+    }
+  }
+
+  // Where Electron window `id` draws and takes input, as SetTitle.
+  void SetShape(const std::string& id,
+                const std::vector<ElectronShapeRect>& rects) {
+    auto window = std::ranges::find(windows_, id, &Window::id);
+    if (window == windows_.end()) {
+      LOG(WARNING) << "domicile: asked to shape browser window " << id
+                   << ", which is not open.";
+      return;
+    }
+    CHECK(!window->view) << "browser window " << id << " is a view";
+    // Electron's empty shape is the whole window again, which lists none.
+    std::string shape;
+    if (!rects.empty()) {
+      base::ListValue listed;
+      for (const ElectronShapeRect& rect : rects) {
+        listed.Append(base::DictValue()
+                          .Set("x", rect.x)
+                          .Set("y", rect.y)
+                          .Set("width", rect.width)
+                          .Set("height", rect.height));
+      }
+      CHECK(base::JSONWriter::Write(listed, &shape));
+    }
+    if (window->shape != shape) {
+      window->shape = std::move(shape);
       Changed();
     }
   }
@@ -1044,6 +1107,14 @@ class DeskWindows final : public base::SupportsUserData::Data,
     std::optional<ShownPopup> popup_menu;
     // The state its Electron app asks for it.
     ElectronWindowState wanted_state;
+    // Whether its Electron app asks for the user's attention (flashFrame).
+    bool urgent = false;
+    // Whether the pointer goes through it (setIgnoreMouseEvents).
+    bool ignores_pointer = false;
+    // Where it draws and takes input (setShape), as the shell lists it:
+    // [{"x", "y", "width", "height"}, ...], empty for all of it (no shape,
+    // or Electron's empty one).
+    std::string shape;
   };
 
   // `menu` as the shell lists it over `window`: {"menu": its entries, "x",
@@ -1102,7 +1173,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
         window.popup_menu.has_value() ? window.popup_menu->listed
                                       : std::string(),
         window.wanted_state.maximized, window.wanted_state.minimized,
-        window.wanted_state.fullscreen);
+        window.wanted_state.fullscreen, window.urgent, window.ignores_pointer,
+        window.shape);
   }
 
   // Makes a window and gives it its first page with `load`. Returns it, or
@@ -1865,6 +1937,25 @@ void SetElectronHidden(const std::string& id, bool hidden) {
 void SetElectronWindowState(const std::string& id, ElectronWindowState state) {
   if (DeskWindows* windows = ShellDeskWindows()) {
     windows->SetWindowState(id, state);
+  }
+}
+
+void SetElectronUrgent(const std::string& id, bool urgent) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->SetUrgent(id, urgent);
+  }
+}
+
+void SetElectronIgnoresPointer(const std::string& id, bool ignores) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->SetIgnoresPointer(id, ignores);
+  }
+}
+
+void SetElectronShape(const std::string& id,
+                      const std::vector<ElectronShapeRect>& rects) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->SetShape(id, rects);
   }
 }
 

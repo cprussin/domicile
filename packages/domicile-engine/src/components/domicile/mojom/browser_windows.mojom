@@ -136,6 +136,16 @@ struct BrowserWindow {
   bool wants_maximized;
   bool wants_minimized;
   bool wants_fullscreen;
+  // Whether an Electron app asks for the user's attention to this window
+  // (win.flashFrame), until it has the keyboard. False for any other window.
+  bool urgent;
+  // Whether the pointer goes through this Electron window to what is under
+  // it (win.setIgnoreMouseEvents). False for any other window.
+  bool ignores_pointer;
+  // Where this Electron window draws and takes input (win.setShape), as JSON:
+  // [{"x", "y", "width", "height"}, ...] in CSS pixels from its page's top
+  // left. Empty for all of it, and for any other window.
+  string shape;
 };
 
 // What OpenApp does when an app window with its `app_id` is already open.

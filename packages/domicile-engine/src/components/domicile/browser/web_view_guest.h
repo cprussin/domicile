@@ -724,6 +724,15 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Reports to `page`, an Electron window's, as well as to the element.
   void ReportToApp(base::WeakPtr<AppPage> page);
 
+  // Runs with the number of the window a desktop getUserMedia() names by its
+  // source id, "window:<number>:0", and gives the browser window it captures
+  // without the desktop's picker: its id, or nothing to ask the picker. An
+  // Electron window's, whose app names its own windows so
+  // (win.getMediaSourceId).
+  using WindowSourceFinding =
+      base::RepeatingCallback<std::optional<std::string>(int window)>;
+  void FindWindowSourcesWith(WindowSourceFinding finding);
+
   // The page's zoom factor, for chrome.tabs. In manual mode, the factor the
   // page's own code zooms to, with the page itself at the default zoom.
   double GetZoomFactor() const;
@@ -1310,6 +1319,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   // same host changes it (HostZoomMap is per host), or on navigation to a
   // differently zoomed site.
   void ReportZoom();
+  // The browser window a desktop getUserMedia() `request` names for
+  // capture without the picker, if it names one (see FindWindowSourcesWith).
+  std::optional<std::string> NamedWindowSource(
+      const content::MediaStreamRequest& request) const;
 
   // Reports find results to the element if they changed. `0, 0` means no
   // find.
@@ -1498,6 +1511,8 @@ class WebViewGuest : public mojom::WebViewGuest,
   bool dialog_asks_app_ = false;
   // See ReportToApp; null for a browser's page.
   base::WeakPtr<AppPage> app_page_;
+  // See FindWindowSourcesWith.
+  WindowSourceFinding window_source_finding_;
 
   // See AddZoomChangedCallback.
   base::RepeatingCallbackList<void(double, double)> zoom_callbacks_;
