@@ -6,22 +6,26 @@
 
 #include <optional>
 
+#include "base/time/time.h"
 #include "components/domicile/common/forwarded_keys.h"
 #include "components/domicile/common/held_chords.h"
+#include "components/domicile/common/warp_landing.h"
 #include "components/domicile/mojom/browser_windows.mojom-blink.h"
 #include "components/domicile/mojom/cast_sinks.mojom-blink.h"
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
 #include "components/domicile/mojom/downloads.mojom-blink.h"
 #include "components/domicile/mojom/extension_tray.mojom-blink.h"
+#include "components/domicile/mojom/picture_in_picture.mojom-blink.h"
 #include "components/domicile/mojom/shell_fetch.mojom-blink.h"
-#include "third_party/blink/renderer/modules/domicile/domicile_chord.h"
 #include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_picture_in_picture_action.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_action.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/core/html/domicile/html_app_element.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_chord.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_event_names.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -43,14 +47,18 @@ template <typename IDLType>
 class FrozenArray;
 
 class DOMRectReadOnly;
+class DomicileBrowserProfile;
 class DomicileBrowserWindow;
 class DomicileCastSink;
 class DomicileDisplay;
 class DomicileDownload;
+class DomicilePictureInPictureVideo;
 class DomicileClipboardEntry;
 class DomicileTrayItem;
 class DomicileNotification;
 class DomicileExtension;
+class DomicileExtensionSettings;
+class DomicileInstalledExtension;
 class DomicileWindow;
 class DomicileFileSearch;
 class DomicileFetchHeader;
@@ -84,6 +92,7 @@ class MODULES_EXPORT DomicileHost final
       public domicile::mojom::blink::BrowserWindowsClient,
       public domicile::mojom::blink::CastSinksClient,
       public domicile::mojom::blink::DownloadsClient,
+      public domicile::mojom::blink::PictureInPictureVideosClient,
       public AppInputClient {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -110,6 +119,11 @@ class MODULES_EXPORT DomicileHost final
                         const gfx::PointF& point,
                         const gfx::SizeF& size,
                         bool moved) override;
+  void AppPointerRelative(const String& app_id,
+                          const gfx::Vector2dF& movement,
+                          const std::optional<gfx::Vector2dF>& unaccelerated,
+                          const gfx::PointF& on_page,
+                          const gfx::SizeF& size) override;
   void AppPointerButton(const String& app_id,
                         uint32_t button,
                         bool pressed) override;
@@ -150,6 +164,7 @@ class MODULES_EXPORT DomicileHost final
                            const String& answer,
                            ExceptionState&);
   void copyClipboardEntry(ScriptState*, uint32_t entry, ExceptionState&);
+  void removeClipboardEntry(ScriptState*, uint32_t entry, ExceptionState&);
   void activateTrayItem(ScriptState*,
                         const String& id,
                         V8DomicileTrayAction action,
@@ -174,6 +189,14 @@ class MODULES_EXPORT DomicileHost final
                    DOMRectReadOnly* unless_over,
                    ExceptionState&);
   void closeApp(ScriptState*, const String& app_id, ExceptionState&);
+  void pointerConstrained(ScriptState*,
+                          const String& app_id,
+                          bool active,
+                          ExceptionState&);
+  ScriptPromise<IDLBoolean> confinePointer(
+      ScriptState*,
+      const HeapVector<Member<DOMRectReadOnly>>& boxes,
+      ExceptionState&);
   void setAppBounds(ScriptState*,
                     const String& app_id,
                     double x,
@@ -202,8 +225,14 @@ class MODULES_EXPORT DomicileHost final
   // Answered with `windowsthemechanged` once they have.
   void themeCaptured(ScriptState*, V8DomicileTheme theme, ExceptionState&);
   // The chord, `Meta+Shift+l`, resolved here against the keys the compositor
-  // says the keyboard has, and again whenever it says so anew.
-  void grabShortcut(ScriptState*, const String& chord, ExceptionState&);
+  // says the keyboard has, and again whenever it says so anew. A modifier
+  // alone, `Meta`, is a tap of it, matched in the browser process: see
+  // DeskModifierTaps.
+  void grabShortcut(ScriptState*,
+                    const String& chord,
+                    bool while_inhibited,
+                    uint32_t longest_tap,
+                    ExceptionState&);
   // Answers one grabShortcut of that name. The last one gives the chord back,
   // and its key too unless another name grabbed is on it.
   void ungrabShortcut(ScriptState*, const String& chord, ExceptionState&);
@@ -212,6 +241,21 @@ class MODULES_EXPORT DomicileHost final
   void grabGesture(ScriptState*, const String& gesture, ExceptionState&);
   void ungrabGesture(ScriptState*, const String& gesture, ExceptionState&);
   void activateExtension(ScriptState*, const String& id, ExceptionState&);
+  void setExtensionsProfile(ScriptState*,
+                            const String& profile,
+                            ExceptionState&);
+  ScriptPromise<IDLUndefined> setExtensionEnabled(ScriptState*,
+                                                  const String& id,
+                                                  bool enabled,
+                                                  ExceptionState&);
+  ScriptPromise<IDLUndefined> configureExtension(
+      ScriptState*,
+      const String& id,
+      const DomicileExtensionSettings* settings,
+      ExceptionState&);
+  ScriptPromise<IDLUndefined> uninstallExtension(ScriptState*,
+                                                 const String& id,
+                                                 ExceptionState&);
 
   // Blink's DEFINE_ATTRIBUTE_EVENT_LISTENER, keyed on the fork's own names
   // rather than event_type_names: see domicile_event_names.h for why.
@@ -238,11 +282,17 @@ class MODULES_EXPORT DomicileHost final
     return browser_windows_.Get();
   }
 
+  // The desk's browser profiles, or null until the browser has listed them.
+  const FrozenArray<DomicileBrowserProfile>* browserProfiles() const {
+    return browser_profiles_.Get();
+  }
+
   // Opens or closes a browser window. The next `browserwindowschanged`
   // reflects it.
   void openBrowserWindow(ScriptState*,
                          const String& url,
                          const String& partition,
+                         const String& profile,
                          ExceptionState&);
   void openPrivateBrowserWindow(ScriptState*,
                                 const String& url,
@@ -251,12 +301,56 @@ class MODULES_EXPORT DomicileHost final
                      const String& url,
                      const String& app_id,
                      const String& reuse,
+                     const String& profile,
                      ExceptionState&);
   ScriptPromise<IDLLong> countBrowserWindowMatches(ScriptState*,
                                                    const String& id,
                                                    const String& selector,
                                                    ExceptionState&);
+  ScriptPromise<IDLBoolean> clickBrowserWindowMatch(ScriptState*,
+                                                    const String& id,
+                                                    const String& selector,
+                                                    ExceptionState&);
   void closeBrowserWindow(ScriptState*, const String& id, ExceptionState&);
+  void reopenBrowserWindow(ScriptState*,
+                           const String& id,
+                           const String& profile,
+                           ExceptionState&);
+  ScriptPromise<IDLString> browserProfileFor(ScriptState*,
+                                             const String& url,
+                                             ExceptionState&);
+  ScriptPromise<IDLString> browserSiteFor(ScriptState*,
+                                          const String& url,
+                                          ExceptionState&);
+  ScriptPromise<IDLUndefined> pinBrowserSite(ScriptState*,
+                                             const String& site,
+                                             const String& profile,
+                                             ExceptionState&);
+  ScriptPromise<IDLUndefined> setBrowserProfileExtensionEnabled(
+      ScriptState*,
+      const String& profile,
+      const String& id,
+      bool enabled,
+      ExceptionState&);
+  void clickBrowserWindowMenu(ScriptState*,
+                              const String& id,
+                              int32_t command,
+                              ExceptionState&);
+  void answerBrowserWindowPopupMenu(ScriptState*,
+                                    const String& id,
+                                    int32_t command,
+                                    ExceptionState&);
+  void setBrowserWindowState(ScriptState*,
+                             const String& id,
+                             bool maximized,
+                             bool minimized,
+                             bool fullscreen,
+                             ExceptionState&);
+  void answerBrowserWindowMessageBox(ScriptState*,
+                                     const String& id,
+                                     int32_t response,
+                                     bool checkbox_checked,
+                                     ExceptionState&);
 
   // The TVs, or null until the browser has listed them.
   const FrozenArray<DomicileCastSink>* castSinks() const {
@@ -279,6 +373,29 @@ class MODULES_EXPORT DomicileHost final
   void cancelDownload(ScriptState*, const String& id, ExceptionState&);
   void removeDownload(ScriptState*, const String& id, ExceptionState&);
   void clearDownloads(ScriptState*, ExceptionState&);
+
+  // The videos in picture-in-picture, or null until the browser has listed
+  // them.
+  const FrozenArray<DomicilePictureInPictureVideo>* pictureInPictureVideos()
+      const {
+    return picture_in_picture_videos_.Get();
+  }
+
+  // Act on, seek or resize a video in picture-in-picture. The next
+  // `pictureinpicturevideoschanged` reflects what changed.
+  void actOnPictureInPictureVideo(ScriptState*,
+                                  const String& id,
+                                  V8DomicilePictureInPictureAction action,
+                                  ExceptionState&);
+  void seekPictureInPictureVideo(ScriptState*,
+                                 const String& id,
+                                 double seconds,
+                                 ExceptionState&);
+  void resizePictureInPictureVideo(ScriptState*,
+                                   const String& id,
+                                   uint32_t width,
+                                   uint32_t height,
+                                   ExceptionState&);
   // Sends `method` to `url` with the profile's cookies, through the browser's
   // own pipe.
   // The browser refuses what the page may not send; see the IDL.
@@ -289,6 +406,7 @@ class MODULES_EXPORT DomicileHost final
       const HeapVector<Member<DomicileFetchHeader>>& headers,
       const String& body,
       const String& sapisid_hash_origin,
+      const String& profile,
       ExceptionState&);
   // Every client window, in the order they appeared. Not const: reading it
   // binds the channel, which is what has the compositor announce them.
@@ -303,6 +421,7 @@ class MODULES_EXPORT DomicileHost final
   const FrozenArray<DomicileTrayItem>* tray() const;
   const FrozenArray<DomicileNotification>* notifications() const;
   const FrozenArray<DomicileExtension>* extensions() const;
+  const FrozenArray<DomicileInstalledExtension>* installedExtensions() const;
   std::optional<bool> idle() const;
   std::optional<bool> locked() const;
   std::optional<V8DomicileTheme> theme() const;
@@ -324,6 +443,8 @@ class MODULES_EXPORT DomicileHost final
   void AppTitled(const String& app_id, const String& title) override;
   void AppDesktopId(const String& app_id, const String& desktop_id) override;
   void AppInhibitsShortcuts(const String& app_id, bool inhibits) override;
+  void BrowserToplevelIds(
+      const HashMap<String, String>& toplevel_ids) override;
   void AppAppeared(const String& app_id,
                    const String& title,
                    const String& desktop_id,
@@ -332,6 +453,7 @@ class MODULES_EXPORT DomicileHost final
                    bool dialog,
                    bool client_frame,
                    domicile::mojom::blink::WindowOwnerPtr owner,
+                   const String& toplevel_id,
                    uint32_t frame) override;
   void AppResized(const String& app_id, double width, double height) override;
   void AppMinSize(const String& app_id, double width, double height) override;
@@ -346,8 +468,13 @@ class MODULES_EXPORT DomicileHost final
                    Vector<domicile::mojom::blink::AppFramePtr> frames) override;
   void AppClosed(const String& app_id) override;
   void AppCursor(const String& app_id,
-                 domicile::mojom::blink::CursorShape cursor) override;
+                 domicile::mojom::blink::CursorShape cursor,
+                 domicile::mojom::blink::AppCursorImagePtr image) override;
   void AppPresented(const String& app_id) override;
+  void AppPointerConstraint(
+      const String& app_id,
+      std::optional<domicile::mojom::blink::PointerConstraint> constraint,
+      const std::optional<Vector<gfx::RectF>>& region) override;
   void AppSuspended(const String& app_id, bool suspended) override;
   void AppTransientFor(const String& app_id,
                        const String& transient_for) override;
@@ -356,6 +483,8 @@ class MODULES_EXPORT DomicileHost final
   void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void ShortcutReleased(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void GesturePerformed(domicile::mojom::blink::GesturePtr gesture) override;
+  void ModifierTapped(domicile::mojom::blink::TapModifier modifier,
+                      base::TimeDelta held) override;
   void Modifiers(bool alt, bool ctrl, bool shift, bool meta) override;
   void Files(const String& query,
              const Vector<String>& files,
@@ -385,11 +514,20 @@ class MODULES_EXPORT DomicileHost final
   // domicile::mojom::blink::ExtensionTrayClient:
   void ExtensionsChanged(
       Vector<domicile::mojom::blink::TrayExtensionPtr> extensions) override;
-  void PopupRequested(const String& id, const String& popup) override;
+  void InstalledChanged(
+      Vector<domicile::mojom::blink::InstalledExtensionPtr> extensions)
+      override;
+  void PopupRequested(const String& id,
+                      const String& popup,
+                      const String& profile) override;
 
   // domicile::mojom::blink::BrowserWindowsClient:
   void WindowsChanged(
       Vector<domicile::mojom::blink::BrowserWindowPtr> windows) override;
+  void ProfilesChanged(
+      Vector<domicile::mojom::blink::BrowserProfilePtr> profiles,
+      const String& default_profile,
+      const String& default_private_profile) override;
 
   // domicile::mojom::blink::CastSinksClient:
   void SinksChanged(
@@ -398,6 +536,10 @@ class MODULES_EXPORT DomicileHost final
   // domicile::mojom::blink::DownloadsClient:
   void DownloadsChanged(
       Vector<domicile::mojom::blink::DownloadPtr> downloads) override;
+
+  // domicile::mojom::blink::PictureInPictureVideosClient:
+  void VideosChanged(
+      Vector<domicile::mojom::blink::PictureInPictureVideoPtr> videos) override;
 
   void Trace(Visitor*) const override;
 
@@ -435,6 +577,9 @@ class MODULES_EXPORT DomicileHost final
   // Rebuild `client_windows_` from `window_states_` and say so with
   // `windowschanged`.
   void WindowsChanged();
+  // Rebuild `browser_windows_` from `listed_browser_windows_` and
+  // `browser_toplevel_ids_` and say so with `browserwindowschanged`.
+  void ListBrowserWindows();
 
   // A moment rather than a state -- `focusrequested`, `shortcut` --
   // has no attribute to read late, so one that arrives before anything
@@ -472,6 +617,15 @@ class MODULES_EXPORT DomicileHost final
   // Whether the window with the keyboard holds a shortcuts inhibitor, so the
   // desktop's chords are its keys.
   bool KeyboardWindowInhibitsShortcuts() const;
+  // Tells the browser process when `KeyboardWindowInhibitsShortcuts` changes,
+  // so the gestures it grabs go to that window. Called after each change to
+  // the keyboard window or to a window's inhibitor.
+  void TellWhetherTheKeyboardWindowInhibits();
+  // Whether `press` is a chord a grab passed `whileInhibited` for.
+  bool StaysWhileInhibited(const DomicilePress& press) const;
+  // Tells the browser process whether this page takes taps of `modifier`,
+  // and whether under an inhibitor, from every name grabbed on it.
+  void RegrabTap(domicile::mojom::blink::TapModifier modifier);
   // A key went down on the page. One that is a chord grabbed by name is the
   // desktop's: taken from the page and dispatched as `shortcut`, the same as
   // the browser process does for one pressed in a `<webview>`.
@@ -530,6 +684,7 @@ class MODULES_EXPORT DomicileHost final
   // `partition` as openBrowserWindow's.
   void OpenBrowserWindow(const String& url,
                          WindowKind,
+                         const String& profile,
                          const String& partition,
                          ExceptionState&);
   bool ReadyForApp(const String& app_id, ExceptionState&);
@@ -541,6 +696,10 @@ class MODULES_EXPORT DomicileHost final
   // What the compositor has said about each window, in the order they
   // appeared, and the frozen copy `windows` hands out.
   Vector<DomicileWindowState> window_states_;
+  // Where the page last warped the pointer, until the move that lands it
+  // there arrives: that move is the warp, not a hand, so it carries no
+  // relative motion. See `AppPointerRelative`.
+  domicile::WarpLanding warp_landing_;
   Member<FrozenArray<DomicileWindow>> client_windows_;
   String focused_window_;
   // Moments that arrived before anything listened -- see DispatchOrHold.
@@ -559,6 +718,7 @@ class MODULES_EXPORT DomicileHost final
   Member<FrozenArray<DomicileTrayItem>> tray_items_;
   Member<FrozenArray<DomicileNotification>> notifications_;
   Member<FrozenArray<DomicileExtension>> extensions_;
+  Member<FrozenArray<DomicileInstalledExtension>> installed_extensions_;
   std::optional<bool> idle_;
   std::optional<bool> locked_;
   std::optional<V8DomicileTheme> theme_;
@@ -573,12 +733,19 @@ class MODULES_EXPORT DomicileHost final
   String shell_options_;
   std::optional<bool> high_contrast_;
   std::optional<bool> reduced_motion_;
-  // Replaced wholesale, like `displays_`, and for its reason.
+  // Replaced wholesale, like `displays_`, and for its reason. Built from the
+  // browser's list and the compositor's toplevel ids, which come apart.
   Member<FrozenArray<DomicileBrowserWindow>> browser_windows_;
+  Vector<domicile::mojom::blink::BrowserWindowPtr> listed_browser_windows_;
+  HashMap<String, String> browser_toplevel_ids_;
+  // And `browser_profiles_`, for the same reason.
+  Member<FrozenArray<DomicileBrowserProfile>> browser_profiles_;
   // And `cast_sinks_`, for the same reason.
   Member<FrozenArray<DomicileCastSink>> cast_sinks_;
   // And `downloads_`.
   Member<FrozenArray<DomicileDownload>> downloads_;
+  // And `picture_in_picture_videos_`.
+  Member<FrozenArray<DomicilePictureInPictureVideo>> picture_in_picture_videos_;
   HeapMojoRemote<domicile::mojom::blink::ControlChannel> channel_;
   HeapMojoReceiver<domicile::mojom::blink::ControlChannelClient, DomicileHost>
       client_receiver_;
@@ -604,6 +771,13 @@ class MODULES_EXPORT DomicileHost final
   HeapMojoRemote<domicile::mojom::blink::Downloads> downloads_remote_;
   HeapMojoReceiver<domicile::mojom::blink::DownloadsClient, DomicileHost>
       downloads_receiver_;
+  // The picture-in-picture videos' pipe, the browser's own too, bound beside
+  // the downloads.
+  HeapMojoRemote<domicile::mojom::blink::PictureInPictureVideos>
+      picture_in_picture_;
+  HeapMojoReceiver<domicile::mojom::blink::PictureInPictureVideosClient,
+                   DomicileHost>
+      picture_in_picture_receiver_;
   // The fetches with the profile's cookies, the browser's own pipe too. Bound
   // on the first fetch, since nothing arrives on it unasked.
   HeapMojoRemote<domicile::mojom::blink::ShellFetch> shell_fetch_;
@@ -615,8 +789,21 @@ class MODULES_EXPORT DomicileHost final
     DomicileWrittenChord chord;
     std::optional<DomicilePress> press;
     uint32_t holds = 1;
+    // Whether any grab of it passed `whileInhibited`, so it stays the
+    // desktop's while the keyboard window holds a shortcuts inhibitor.
+    bool while_inhibited = false;
   };
   Vector<GrabbedChord> chords_;
+  // A modifier tap grabbed by name, `Meta` or `Super`, counted like a chord.
+  struct GrabbedTap {
+    String written;
+    domicile::mojom::blink::TapModifier modifier;
+    uint32_t holds = 1;
+    bool while_inhibited = false;
+    // The longest any grab of it lets the modifier be held and still tap.
+    base::TimeDelta longest;
+  };
+  Vector<GrabbedTap> taps_;
   // A gesture grabbed by name, and how many grabGesture calls no
   // ungrabGesture has answered yet.
   struct GrabbedGesture {
@@ -638,6 +825,8 @@ class MODULES_EXPORT DomicileHost final
   // one reached for -- a press, a `focusApp()` -- or the one the compositor
   // says has the keyboard, whichever said so last.
   String keyboard_app_;
+  // What `TellWhetherTheKeyboardWindowInhibits` last told the browser.
+  bool told_inhibits_ = false;
   // The window each forwarded press was sent for, until the key comes up. A
   // release is owed for every press wherever the keyboard has moved since: the
   // seat's state outlives every window, and a lock key left down latches. And

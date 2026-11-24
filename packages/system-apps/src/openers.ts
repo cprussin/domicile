@@ -9,12 +9,14 @@ import type { AppsDesktop } from "./apps-desktop";
 import { contentTypeOf } from "./content-type";
 import { dataDirs } from "./data-dirs";
 import type { DesktopEntry } from "./desktop-entry";
+import { inTerminal } from "./desktop-entry";
 import { desktopEnvironment, setVariable } from "./environment";
 import { commandOf } from "./exec";
 import { installedApp, installedApps } from "./installed";
 import { defaultApps } from "./mime-apps";
 import { allOk } from "./results";
 import { supertypesOf } from "./supertypes";
+import { terminalOf } from "./terminal";
 
 /** What can open a file. */
 export type Openers = {
@@ -48,16 +50,17 @@ export const openers = async (
 ): Promise<Result<Openers, SystemError>> =>
   (await desktopEnvironment(domicile)).andThenAsync(async (variables) => {
     const file = path.startsWith("/") ? path : `${homeOf(variables)}/${path}`;
+    const terminal = terminalOf(variables);
     return (await dataDirs(domicile)).andThenAsync(async (dirs) =>
       (await contentTypeOf(domicile, dirs, path)).andThenAsync(
         async (contentType) =>
           (
             await contentType.match({
               None: () => Promise.resolve(Ok<DesktopEntry[], SystemError>([])),
-              Some: (type) => appsFor(domicile, dirs, type),
+              Some: (type) => appsFor(domicile, dirs, type, terminal),
             })
           ).andThenAsync(async (apps) =>
-            (await openedWith(domicile, dirs, file)).map((first) => ({
+            (await openedWith(domicile, dirs, file, terminal)).map((first) => ({
               apps: first.match({
                 None: () => apps,
                 Some: (app) => [app, ...apps.filter(({ id }) => id !== app.id)],
@@ -79,6 +82,7 @@ const openedWith = async (
   domicile: AppsDesktop,
   dirs: readonly string[],
   file: string,
+  terminal: readonly string[] | undefined,
 ): Promise<Result<Option<DesktopEntry>, SystemError>> =>
   (
     await domicile.processes.run(["domicile", "open", "--which", file])
@@ -86,7 +90,7 @@ const openedWith = async (
     const id = stdout.trim();
     return code !== 0 || id === ""
       ? Promise.resolve(Ok(None<DesktopEntry>()))
-      : installedApp(domicile, dirs, id);
+      : installedApp(domicile, dirs, id, terminal);
   });
 
 /** The installed applications for `contentType`, in `Openers.apps`'s order. */
@@ -94,28 +98,30 @@ const appsFor = async (
   domicile: AppsDesktop,
   dirs: readonly string[],
   contentType: string,
+  terminal: readonly string[] | undefined,
 ): Promise<Result<DesktopEntry[], SystemError>> =>
-  (await installedApps(domicile, dirs)).andThenAsync(async (installed) =>
-    (await supertypesOf(domicile, dirs, contentType)).andThenAsync(
-      async (supertypes) => {
-        const types = [contentType, ...supertypes];
-        return allOk(
-          await Promise.all(types.map((type) => defaultApps(domicile, type))),
-        ).map((defaults) => {
-          const byId = new Map(installed.map((app) => [app.id, app]));
-          const first = defaults.flat().flatMap((id) => {
-            const app = byId.get(id);
-            return app === undefined ? [] : [app];
+  (await installedApps(domicile, dirs, terminal)).andThenAsync(
+    async (installed) =>
+      (await supertypesOf(domicile, dirs, contentType)).andThenAsync(
+        async (supertypes) => {
+          const types = [contentType, ...supertypes];
+          return allOk(
+            await Promise.all(types.map((type) => defaultApps(domicile, type))),
+          ).map((defaults) => {
+            const byId = new Map(installed.map((app) => [app.id, app]));
+            const first = defaults.flat().flatMap((id) => {
+              const app = byId.get(id);
+              return app === undefined ? [] : [app];
+            });
+            const rest = types.flatMap((type) =>
+              installed
+                .filter((app) => app.mimeTypes.includes(type))
+                .toSorted((a, b) => a.name.localeCompare(b.name)),
+            );
+            return [...new Set([...first, ...rest])];
           });
-          const rest = types.flatMap((type) =>
-            installed
-              .filter((app) => app.mimeTypes.includes(type))
-              .toSorted((a, b) => a.name.localeCompare(b.name)),
-          );
-          return [...new Set([...first, ...rest])];
-        });
-      },
-    ),
+        },
+      ),
   );
 
 const homeOf = (variables: ReadonlyMap<string, string>): string => {
@@ -133,5 +139,5 @@ const commandFor = (app: DesktopEntry, file: string): string[] =>
     None: () => {
       throw new Error(`${app.id}'s Exec could not be read again`);
     },
-    Some: (command) => command,
+    Some: (command) => inTerminal(app.terminal, command),
   });

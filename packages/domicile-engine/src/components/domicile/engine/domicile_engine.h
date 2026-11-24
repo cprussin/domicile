@@ -123,6 +123,58 @@ typedef struct DomicileShmBuffer {
   uint32_t fourcc;
 } DomicileShmBuffer;
 
+// The primaries a client's pixels are encoded in, as
+// wp_color_manager_v1.primaries names them.
+typedef uint32_t DomicilePrimaries;
+
+#define DOMICILE_PRIMARIES_SRGB 0u
+#define DOMICILE_PRIMARIES_BT2020 1u
+#define DOMICILE_PRIMARIES_DISPLAY_P3 2u
+#define DOMICILE_PRIMARIES_ADOBE_RGB 3u
+
+// The transfer function a client's pixels are encoded with, as
+// wp_color_manager_v1.transfer_function names it.
+typedef uint32_t DomicileTransfer;
+
+// The sRGB piecewise curve (compound_power_2_4).
+#define DOMICILE_TRANSFER_SRGB 0u
+#define DOMICILE_TRANSFER_GAMMA22 1u
+// BT.1886: a pure 2.4 power.
+#define DOMICILE_TRANSFER_BT1886 2u
+// Linear, extended past 1.0, with 1.0 at the reference white.
+#define DOMICILE_TRANSFER_EXT_LINEAR 3u
+#define DOMICILE_TRANSFER_PQ 4u
+#define DOMICILE_TRANSFER_HLG 5u
+// Windows scRGB: linear, extended, with 1.0 at 80 cd/m².
+#define DOMICILE_TRANSFER_SCRGB 6u
+
+// One CIE 1931 xy chromaticity.
+typedef struct DomicileChromaticity {
+  float x;
+  float y;
+} DomicileChromaticity;
+
+// How a client's pixels encode color: its wp_image_description_v1. Luminances
+// are in cd/m²; a zero means the client did not say.
+typedef struct DomicileColor {
+  DomicilePrimaries primaries;
+  DomicileTransfer transfer;
+  // The luminance of the reference white, for HDR content. Zero for the
+  // transfer function's own.
+  float reference_luminance;
+  // The mastering display (SMPTE ST 2086). Unset when `has_mastering` is 0.
+  uint32_t has_mastering;
+  DomicileChromaticity mastering_red;
+  DomicileChromaticity mastering_green;
+  DomicileChromaticity mastering_blue;
+  DomicileChromaticity mastering_white;
+  float mastering_min_luminance;
+  float mastering_max_luminance;
+  // CTA-861.3.
+  float max_cll;
+  float max_fall;
+} DomicileColor;
+
 // A capture id, of a display or a browser window. Zero is never valid and is
 // the failure return of domicile_display_capture_start and
 // domicile_browser_window_capture_start.
@@ -213,6 +265,143 @@ typedef struct DomicileRampedDisplay {
   uint32_t gamma_size;
 } DomicileRampedDisplay;
 
+// A mode a display's connector advertises, for `moded_displays`.
+typedef struct DomicileDisplayMode {
+  // In physical pixels.
+  int32_t width;
+  int32_t height;
+  // In mHz, as wl_output.mode states it.
+  int32_t refresh_mhz;
+} DomicileDisplayMode;
+
+// A display, its connector, its gamma ramp's size and the modes it
+// advertises, for `moded_displays`.
+typedef struct DomicileModedDisplay {
+  DomicileRampedDisplay ramped;
+  // `mode_count` modes, borrowed for the call; null when there are none. A
+  // display on a platform that sets no modes advertises none. The display's
+  // own size and `refresh_mhz` are the mode it scans out.
+  const DomicileDisplayMode* modes;
+  uint32_t mode_count;
+} DomicileModedDisplay;
+
+// Whether a display's connector scans out with a variable refresh rate.
+// The connector, its panel or its driver cannot.
+#define DOMICILE_ADAPTIVE_SYNC_UNSUPPORTED 0
+// It can, and is not: not asked for, or the modeset asking for it was refused.
+#define DOMICILE_ADAPTIVE_SYNC_OFF 1
+// It is.
+#define DOMICILE_ADAPTIVE_SYNC_ON 2
+
+// A display with its modes and whether it scans out with a variable refresh
+// rate, for `adaptive_displays`.
+typedef struct DomicileAdaptiveDisplay {
+  DomicileModedDisplay moded;
+  // One of the `DOMICILE_ADAPTIVE_SYNC_*` values, as the hardware says.
+  int32_t adaptive_sync;
+} DomicileAdaptiveDisplay;
+
+// Whether a display's connector is driven in HDR10 (BT.2020 with PQ).
+// Its panel's EDID takes no PQ, or the connector cannot scan out in 10 bits.
+#define DOMICILE_HDR_UNSUPPORTED 0
+// It can, and is not.
+#define DOMICILE_HDR_OFF 1
+// It is.
+#define DOMICILE_HDR_ON 2
+
+// An adaptive display, whether it is driven in HDR10, and its panel's
+// luminances, for `hdr_displays`.
+typedef struct DomicileHdrDisplay {
+  DomicileAdaptiveDisplay adaptive;
+  // One of the `DOMICILE_HDR_*` values.
+  int32_t hdr;
+  // The panel's luminances from its EDID, in cd/m², zero where unreported.
+  float max_luminance;
+  float max_average_luminance;
+  float min_luminance;
+  // In HDR, the luminance SDR content's white is shown at, in cd/m²; zero
+  // otherwise.
+  float sdr_white_nits;
+} DomicileHdrDisplay;
+
+// A browser window, for `browser_windows`: a page the browser holds, which a
+// capture tool may pick on ext-foreign-toplevel-list-v1 and capture alone
+// with domicile_browser_window_capture_start.
+typedef struct DomicileBrowserWindow {
+  // Its id, as domicile_browser_window_capture_start takes it. Never reused
+  // while the browser runs.
+  const char* id;
+  // The page's title, or empty.
+  const char* title;
+  // The app window's id, or empty for any other window.
+  const char* app_id;
+} DomicileBrowserWindow;
+
+// Like DomicileBrowserWindow, plus its address and whether it is private, for
+// `listed_browser_windows`.
+typedef struct DomicileListedBrowserWindow {
+  const char* id;
+  const char* title;
+  const char* app_id;
+  // The address it shows, or the one it is opening.
+  const char* url;
+  // Nonzero for a private window, in the off-the-record profile.
+  uint8_t off_the_record;
+} DomicileListedBrowserWindow;
+
+// An Electron app's view a listed browser window holds and shows, for
+// `viewed_browser_windows`: its page, which a shot of the window draws over
+// the window's page.
+typedef struct DomicileBrowserWindowView {
+  // As domicile_browser_window_capture_start takes it.
+  const char* id;
+  // The index, in the call's `windows`, of the window holding it.
+  uint32_t window;
+  // Where the app placed it in the window's page, in that page's CSS pixels.
+  int32_t x;
+  int32_t y;
+  int32_t width;
+  int32_t height;
+} DomicileBrowserWindowView;
+
+// What a `DomicileInputDevice` is. A device that is more than one is listed
+// once for each, under one id.
+typedef enum DomicileInputDeviceKind {
+  DOMICILE_INPUT_DEVICE_KEYBOARD = 0,
+  DOMICILE_INPUT_DEVICE_MOUSE = 1,
+  DOMICILE_INPUT_DEVICE_TOUCHPAD = 2,
+  DOMICILE_INPUT_DEVICE_TOUCHSCREEN = 3,
+  DOMICILE_INPUT_DEVICE_POINTING_STICK = 4,
+  DOMICILE_INPUT_DEVICE_GRAPHICS_TABLET = 5,
+  // Read for its keys or switches alone, like a power button or a lid.
+  DOMICILE_INPUT_DEVICE_OTHER = 6,
+} DomicileInputDeviceKind;
+
+// How a `DomicileInputDevice` is attached.
+typedef enum DomicileInputDeviceConnection {
+  DOMICILE_INPUT_CONNECTION_UNKNOWN = 0,
+  DOMICILE_INPUT_CONNECTION_INTERNAL = 1,
+  DOMICILE_INPUT_CONNECTION_USB = 2,
+  DOMICILE_INPUT_CONNECTION_BLUETOOTH = 3,
+} DomicileInputDeviceConnection;
+
+// An input device the browser reads, for `input_devices`.
+typedef struct DomicileInputDevice {
+  // What its driver calls it.
+  const char* name;
+  // Its device under /sys, or empty.
+  const char* sys_path;
+  // The browser's id for it, which holds while it stays plugged in.
+  int32_t id;
+  // Its USB or Bluetooth ids, or 0.
+  uint16_t vendor_id;
+  uint16_t product_id;
+  // A DomicileInputDeviceKind.
+  uint8_t kind;
+  // A DomicileInputDeviceConnection.
+  uint8_t connection;
+} DomicileInputDevice;
+
 // How the compositor wants one display's connector driven.
 //
 // The reverse of DomicileDisplay: the compositor's config decides, but the
@@ -233,12 +422,48 @@ typedef struct DomicileDisplayLayout {
   DomicileDisplayTransform transform;
   double scale;
   // Position on the compositor's logical desktop, used to move the pointer
-  // between monitors. Zero when `enabled` is zero.
+  // between monitors. Zero when `enabled` is zero, except for a sleeping
+  // display, which keeps its place on the desk page.
   int32_t desk_x;
   int32_t desk_y;
   int32_t desk_width;
   int32_t desk_height;
 } DomicileDisplayLayout;
+
+// A display layout and the mode to drive it at, for
+// `domicile_displays_configure_modes`.
+typedef struct DomicileModedLayout {
+  DomicileDisplayLayout layout;
+  // The mode to scan out, in physical pixels, or zeros for the native one. A
+  // size the connector does not advertise gets the native mode.
+  int32_t mode_width;
+  int32_t mode_height;
+  // The refresh rate in mHz: the advertised one nearest it is used. Zero for
+  // the native mode's, or the fastest at a non-native mode.
+  int32_t refresh_mhz;
+} DomicileModedLayout;
+
+// A moded layout and whether to drive it with a variable refresh rate, for
+// `domicile_displays_configure_adaptive`.
+typedef struct DomicileAdaptiveLayout {
+  DomicileModedLayout moded;
+  // Nonzero to scan out with a variable refresh rate where the connector can.
+  // A modeset the driver refuses with it is tried again without it, and the
+  // display then reports `DOMICILE_ADAPTIVE_SYNC_OFF`.
+  int32_t adaptive_sync;
+} DomicileAdaptiveLayout;
+
+// An adaptive layout and whether to drive it in HDR10, for
+// `domicile_displays_configure_hdr`.
+typedef struct DomicileHdrLayout {
+  DomicileAdaptiveLayout adaptive;
+  // Nonzero to drive the connector in HDR10 where its panel takes it. The
+  // display reports `DOMICILE_HDR_UNSUPPORTED` where it does not.
+  int32_t hdr;
+  // In HDR, the luminance to show SDR content's white at, in cd/m². Zero or
+  // less is 203, the BT.2408 reference white.
+  float sdr_white_nits;
+} DomicileHdrLayout;
 
 // A tablet or touchscreen and the display it covers, for
 // `domicile_pointers_configure`.
@@ -438,6 +663,88 @@ typedef struct DomicileEngineCallbacks {
   void (*ramped_displays)(void* user_data,
                           const DomicileRampedDisplay* displays,
                           uint32_t count);
+  // Like `ramped_displays`, plus the modes each display advertises.
+  // `displays` points at `count` records borrowed for the call.
+  //
+  // Called instead of `ramped_displays`, `connected_displays` and `displays`
+  // when set. An older engine ignores it.
+  void (*moded_displays)(void* user_data,
+                         const DomicileModedDisplay* displays,
+                         uint32_t count);
+  // The browser's windows, in the order they opened. `windows` points at
+  // `count` records, their strings borrowed for the call. Called once the
+  // browser is connected, and when a window opens, closes or changes its
+  // title. An older engine never calls it.
+  void (*browser_windows)(void* user_data,
+                          const DomicileBrowserWindow* windows,
+                          uint32_t count);
+  // Like `moded_displays`, plus whether each display scans out with a
+  // variable refresh rate. `displays` points at `count` records borrowed for
+  // the call.
+  //
+  // Called instead of `moded_displays` and the older display callbacks when
+  // set. An older engine ignores it.
+  void (*adaptive_displays)(void* user_data,
+                            const DomicileAdaptiveDisplay* displays,
+                            uint32_t count);
+  // Like `configure_box`, plus the embedding element's CSS `zoom`. Configure
+  // the client at `width` x `height` over `scale` times `zoom`, and have it
+  // draw at that product: its buffer still fills the box, `zoom` times denser.
+  // 1 for an unzoomed element.
+  //
+  // Called instead of `configure_box` when set. An older engine ignores it.
+  void (*configure_zoomed)(void* user_data,
+                           DomicileSurfaceId surface,
+                           uint32_t width,
+                           uint32_t height,
+                           double scale,
+                           double zoom,
+                           uint64_t box);
+  // Like `adaptive_displays`, plus whether each display is driven in HDR10
+  // and its panel's luminances. `displays` points at `count` records borrowed
+  // for the call.
+  //
+  // Called instead of `adaptive_displays` and the older display callbacks
+  // when set. An older engine ignores it.
+  void (*hdr_displays)(void* user_data,
+                       const DomicileHdrDisplay* displays,
+                       uint32_t count);
+  // Like `browser_windows`, plus each window's address and whether it is
+  // private. `windows` points at `count` records, their strings borrowed for
+  // the call.
+  //
+  // Called instead of `browser_windows` when set. An older engine ignores it.
+  void (*listed_browser_windows)(void* user_data,
+                                 const DomicileListedBrowserWindow* windows,
+                                 uint32_t count);
+  // The input devices the browser reads, for `domicile list-inputs`.
+  // `devices` points at `count` records, their strings borrowed for the call.
+  // Sent once the browser connects, and when a device is plugged or
+  // unplugged.
+  //
+  // An older engine ignores it.
+  void (*input_devices)(void* user_data,
+                        const DomicileInputDevice* devices,
+                        uint32_t count);
+  // Like `capture_ended`, for a capture the browser ended because it failed,
+  // such as one viz could not allocate a frame for. `why` names the cause,
+  // borrowed for the call.
+  //
+  // Called instead of `capture_ended` when set. An older engine ignores it.
+  void (*capture_failed)(void* user_data,
+                         DomicileCaptureId capture,
+                         const char* why);
+  // Like `listed_browser_windows`, plus the views each window holds and
+  // shows. `views` points at `view_count` records, each window's bottom
+  // first, their strings borrowed for the call.
+  //
+  // Called instead of `listed_browser_windows` when set. An older engine
+  // ignores it.
+  void (*viewed_browser_windows)(void* user_data,
+                                 const DomicileListedBrowserWindow* windows,
+                                 uint32_t count,
+                                 const DomicileBrowserWindowView* views,
+                                 uint32_t view_count);
 } DomicileEngineCallbacks;
 
 // Returns nonzero. Exists so a compositor can tell an engine that calls
@@ -475,6 +782,16 @@ domicile_surface_create(DomicileEngine* engine, const char* app_id);
 // Drops the surface and the frame sink behind it.
 DOMICILE_ENGINE_EXPORT void domicile_surface_destroy(DomicileEngine* engine,
                                                      DomicileSurfaceId surface);
+
+// Sets how `surface`'s pixels encode color (wp_color_management_surface_v1).
+// Buffers imported after this, by any domicile_surface_import call, are drawn
+// in it; buffers imported before keep the color they were imported with, so
+// import a buffer again to show it in a new color. A null `color` is sRGB, as
+// every surface starts.
+DOMICILE_ENGINE_EXPORT void domicile_surface_set_color(
+    DomicileEngine* engine,
+    DomicileSurfaceId surface,
+    const DomicileColor* color);
 
 // Imports a client's dmabuf (zwp_linux_dmabuf_v1). Returns the buffer id, or
 // zero if the browser refused.
@@ -618,6 +935,37 @@ DOMICILE_ENGINE_EXPORT void domicile_surface_sync(DomicileEngine* engine,
                                                   DomicileSurfaceId surface,
                                                   uint32_t frame);
 
+// One of a surface's subsurfaces (wl_subsurface), in logical pixels from the
+// top left of the surface's crop.
+typedef struct DomicileSubsurface {
+  DomicileSurfaceId surface;
+  double x;
+  double y;
+  double width;
+  double height;
+  // Nonzero when it is drawn over the surface, zero when under it.
+  uint8_t above;
+} DomicileSubsurface;
+
+// Sets `surface`'s subsurfaces, bottom to top, which its frames draw with it:
+// each frame embeds each subsurface's newest frame at its place. Replaces the
+// last set; applies from the surface's next frame.
+//
+// A subsurface takes frames once the engine embeds it, which it reports as
+// `configure` with its size in device pixels. Submit to it at the newest box.
+// A subsurface whose surface is gone is left out.
+DOMICILE_ENGINE_EXPORT void domicile_surface_set_children(
+    DomicileEngine* engine,
+    DomicileSurfaceId surface,
+    const DomicileSubsurface* children,
+    uint32_t count);
+
+// Sends `surface`'s last frame again, to show subsurfaces set since with no
+// new buffer of its own. Does nothing while a newer frame of it is on its
+// way, which shows them. The frame answers no `frame_done` or `presented`.
+DOMICILE_ENGINE_EXPORT void domicile_surface_redraw(DomicileEngine* engine,
+                                                    DomicileSurfaceId surface);
+
 // Tells the browser which connectors to light and where, in answer to the
 // `displays` callback.
 //
@@ -631,6 +979,30 @@ DOMICILE_ENGINE_EXPORT void domicile_surface_sync(DomicileEngine* engine,
 DOMICILE_ENGINE_EXPORT void domicile_displays_configure(
     DomicileEngine* engine,
     const DomicileDisplayLayout* layout,
+    uint32_t count);
+
+// Like `domicile_displays_configure`, with the mode and refresh rate to drive
+// each connector at. A compositor that finds no such symbol has an older
+// engine, which lights each connector at its native mode.
+DOMICILE_ENGINE_EXPORT void domicile_displays_configure_modes(
+    DomicileEngine* engine,
+    const DomicileModedLayout* layout,
+    uint32_t count);
+
+// Like `domicile_displays_configure_modes`, with whether to drive each
+// connector with a variable refresh rate. A compositor that finds no such
+// symbol has an older engine, which drives every connector at a fixed rate.
+DOMICILE_ENGINE_EXPORT void domicile_displays_configure_adaptive(
+    DomicileEngine* engine,
+    const DomicileAdaptiveLayout* layout,
+    uint32_t count);
+
+// Like `domicile_displays_configure_adaptive`, with whether to drive each
+// connector in HDR10 and the SDR white to draw it at. A compositor that finds
+// no such symbol has an older engine, which drives every connector in SDR.
+DOMICILE_ENGINE_EXPORT void domicile_displays_configure_hdr(
+    DomicileEngine* engine,
+    const DomicileHdrLayout* layout,
     uint32_t count);
 
 // Tells the browser which display each tablet or touchscreen covers.
@@ -674,6 +1046,18 @@ DOMICILE_ENGINE_EXPORT void domicile_displays_set_gamma(DomicileEngine* engine,
                                                         int64_t display_id,
                                                         const uint16_t* ramp,
                                                         uint32_t size);
+
+// Sets the 3x3 color matrix, row-major, that display `display_id` is drawn
+// with, in linear light, for a night light on a display driven in HDR: a
+// gamma ramp there would bend the PQ curve the panel decodes. The identity
+// undoes it. `matrix` is nine finite numbers, copied before this returns.
+//
+// Unlike a gamma ramp, it works off a tty too: viz applies it, not the CRTC.
+// Ignored for a display no browser window shows.
+DOMICILE_ENGINE_EXPORT void domicile_displays_set_color_matrix(
+    DomicileEngine* engine,
+    int64_t display_id,
+    const float* matrix);
 
 // Delivers emulated input (EIS) to the desk, as the engine's own pointer and
 // keyboard would: the shell sees it first, and the engine forwards what lands

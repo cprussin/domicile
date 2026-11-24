@@ -1,0 +1,20 @@
+# Copyright 2026 Connor Prussin
+# SPDX-License-Identifier: MIT
+
+# The desk's input method, between the control channel and the DRM platform's
+# input method. A component, so the browser and the Ozone library share one
+# instance in a component build, as //ui/base/cursor/domicile's do. See
+# desk_input_method.h.
+component("desk_input_method") {
+  sources = [
+    "desk_input_method.cc",
+    "desk_input_method.h",
+  ]
+
+  defines = [ "IS_DESK_INPUT_METHOD_IMPL" ]
+
+  public_deps = [
+    "//base",
+    "//ui/gfx/geometry",
+  ]
+}

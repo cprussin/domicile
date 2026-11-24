@@ -29,7 +29,7 @@ job builds it on `crux`.
  4 files changed, 97 insertions(+), 2 deletions(-)
 
 diff --git a/ui/ozone/platform/headless/BUILD.gn b/ui/ozone/platform/headless/BUILD.gn
-index dc07e2b..c2823a7 100644
+index 729b83e..37aa4e0 100644
 --- a/ui/ozone/platform/headless/BUILD.gn
 +++ b/ui/ozone/platform/headless/BUILD.gn
 @@ -10,6 +10,8 @@ source_set("headless") {
@@ -41,7 +41,7 @@ index dc07e2b..c2823a7 100644
      "headless_screen.cc",
      "headless_screen.h",
      "headless_surface_factory.cc",
-@@ -39,6 +41,7 @@ source_set("headless") {
+@@ -41,6 +43,7 @@ source_set("headless") {
      "//ui/events",
      "//ui/events/ozone/layout",
      "//ui/events/platform",
@@ -49,7 +49,7 @@ index dc07e2b..c2823a7 100644
      "//ui/gfx/geometry",
      "//ui/ozone:ozone_base",
      "//ui/ozone/common",
-@@ -62,7 +65,10 @@ source_set("headless") {
+@@ -64,7 +67,10 @@ source_set("headless") {
  
  source_set("headless_unittests") {
    testonly = true
@@ -61,7 +61,7 @@ index dc07e2b..c2823a7 100644
    deps = [
      ":headless",
      "//base",
-@@ -70,6 +76,7 @@ source_set("headless_unittests") {
+@@ -72,6 +78,7 @@ source_set("headless_unittests") {
      "//testing/gtest",
      "//ui/display:test_support",
      "//ui/events:test_support",

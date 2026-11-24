@@ -26,14 +26,18 @@ pub use input_devices::{
     TouchpadConfig,
 };
 pub use pointers::{PointerConfig, PointerTarget};
-pub use profile::{Connected, Desk, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform};
+pub use profile::{
+    Connected, Desk, DisplayOverride, DisplayPlacement, Layout, Placed, Profile, Scanout,
+    Transform, CONFIGURED_PROFILE, DEFAULT_SDR_WHITE,
+};
 pub use startup::StartupConfig;
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// An error loading a config.
 ///
@@ -66,7 +70,7 @@ pub enum ConfigError {
 /// To switch between layouts, list them in `keymaps` instead.
 // `PartialEq` lets a reload detect a change; see the compositor's
 // `Restatement`.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct KeyboardConfig {
     pub xkb_rules: String,
@@ -80,6 +84,27 @@ pub struct KeyboardConfig {
     /// the fields above, which must stay unset. The shell switches with
     /// `keymap next` or `keymap <name>`. See `docs/SHELL-CONFIG.md`.
     pub keymaps: Vec<Keymap>,
+    /// How a held key repeats, in native windows and in pages.
+    pub repeat: KeyRepeat,
+}
+
+/// How a held key repeats.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct KeyRepeat {
+    /// Milliseconds a key is held before it repeats.
+    pub delay_ms: u16,
+    /// Repeats a second. 0 turns repeat off.
+    pub rate: u16,
+}
+
+impl Default for KeyRepeat {
+    fn default() -> Self {
+        KeyRepeat {
+            delay_ms: 500,
+            rate: 25,
+        }
+    }
 }
 
 impl Default for KeyboardConfig {
@@ -99,6 +124,7 @@ impl Default for KeyboardConfig {
             xkb_variant,
             xkb_options,
             keymaps: Vec::new(),
+            repeat: KeyRepeat::default(),
         }
     }
 }
@@ -172,7 +198,7 @@ impl KeyboardConfig {
 /// One keymap the desktop can switch to, in `input.keyboard.keymaps`.
 ///
 /// The `xkb_*` fields are as in `input.keyboard`, with the same defaults.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct Keymap {
     /// What the shell shows and `keymap <name>` selects, such as `dvp`.
@@ -226,7 +252,7 @@ impl Keymap {
 }
 
 /// Input-device settings.
-#[derive(Debug, Clone, Default, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct InputConfig {
     pub keyboard: KeyboardConfig,
@@ -259,7 +285,7 @@ impl InputConfig {
 /// A nested compositor has no monitors to enumerate. Each display becomes a
 /// `wl_output` and a region of the chrome page, which the shell addresses by
 /// `name`. `position` and `size` are logical units.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct DisplayConfig {
     /// The name the chrome and the compositor use for this display.
@@ -276,10 +302,36 @@ pub struct DisplayConfig {
     ///
     /// `output.max_scale` does not apply to described displays.
     #[serde(default = "one")]
+    #[schemars(range(min = 1))]
     pub scale: u32,
     /// Width and height in logical units. The `wl_output` mode is this times
     /// `scale`.
+    #[schemars(schema_with = "nonzero_size_schema")]
     pub size: (u32, u32),
+}
+
+/// A width and height, each refused at zero.
+pub(crate) fn nonzero_size_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({
+        "type": "array",
+        "prefixItems": [nonzero_u32(), nonzero_u32()],
+        "minItems": 2,
+        "maxItems": 2,
+    })
+}
+
+/// A width and height, each refused at zero, or `null` for unset.
+pub(crate) fn optional_nonzero_size_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({
+        "type": ["array", "null"],
+        "prefixItems": [nonzero_u32(), nonzero_u32()],
+        "minItems": 2,
+        "maxItems": 2,
+    })
+}
+
+fn nonzero_u32() -> serde_json::Value {
+    serde_json::json!({ "type": "integer", "format": "uint32", "minimum": 1 })
 }
 
 fn one() -> u32 {
@@ -374,7 +426,7 @@ fn overlap((start, end): (i64, i64), (other_start, other_end): (i64, i64)) -> bo
 }
 
 /// Output settings.
-#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct OutputConfig {
     /// The displays that make up the desktop.
@@ -385,6 +437,7 @@ pub struct OutputConfig {
     ///
     /// Limits cost: a client at scale N renders N² times the pixels. `1` turns
     /// scaling off. Applies only while `displays` is empty.
+    #[schemars(range(min = 1))]
     pub max_scale: u32,
     /// Placements for real monitors, matched against what is connected.
     ///
@@ -430,6 +483,20 @@ impl OutputConfig {
     /// Called on each hotplug.
     pub fn layout(&self, connected: &[Connected]) -> Result<Option<Layout>, ConfigError> {
         profile::layout(&self.profiles, connected)
+    }
+
+    /// This config with `overrides` laid over the profile that matches
+    /// `connected`, for `domicile configure-display`. See
+    /// [`DisplayOverride`].
+    pub fn overridden(
+        &self,
+        connected: &[Connected],
+        overrides: &[DisplayOverride],
+    ) -> Result<OutputConfig, ConfigError> {
+        Ok(OutputConfig {
+            profiles: profile::overridden(&self.profiles, connected, overrides)?,
+            ..self.clone()
+        })
     }
 
     fn validate(&self) -> Result<(), ConfigError> {
@@ -533,23 +600,19 @@ impl std::fmt::Display for Axis {
 /// The unit is in the key name because a generator writes this file.
 // `PartialEq` lets a reload detect a change; see the compositor's
 // `Restatement`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct IdleConfig {
     /// Seconds without input before the screens go dark.
     ///
     /// Absent means never. Zero is refused.
+    #[schemars(range(min = 1))]
     pub blank_after_seconds: Option<u64>,
-    /// Seconds before the screens go dark that the shell is warned, so it can
-    /// dim or count down. Input in that time calls the blanking off.
-    ///
-    /// Absent means no warning. It must be at least 1 and less than
-    /// `blank_after_seconds`.
-    pub warn_before_seconds: Option<u64>,
     /// Seconds without input before the desktop locks.
     ///
     /// Absent means the desktop locks only when its shell asks. Zero is
     /// refused.
+    #[schemars(range(min = 1))]
     pub lock_after_seconds: Option<u64>,
 }
 
@@ -558,12 +621,6 @@ impl IdleConfig {
     /// for never.
     pub fn blank_after(&self) -> Option<Duration> {
         self.blank_after_seconds.map(Duration::from_secs)
-    }
-
-    /// How long before blanking the shell is warned, or `None` for no
-    /// warning.
-    pub fn warn_before(&self) -> Option<Duration> {
-        self.warn_before_seconds.map(Duration::from_secs)
     }
 
     /// How long the desktop goes without input before it locks, or `None`
@@ -587,15 +644,7 @@ impl IdleConfig {
                     .into(),
             ));
         }
-        match (self.warn_before_seconds, self.blank_after_seconds) {
-            (Some(warn), Some(blank)) if warn > 0 && warn < blank => Ok(()),
-            (Some(_), _) => Err(ConfigError::Validation(
-                "idle.warn_before_seconds must be at least 1 second and less than \
-                 idle.blank_after_seconds; leave the key out for no warning"
-                    .into(),
-            )),
-            (None, _) => Ok(()),
-        }
+        Ok(())
     }
 }
 
@@ -605,7 +654,7 @@ impl IdleConfig {
 /// could unlock it, until the file is added. See `docs/LOCK.md#verifiers`.
 // `PartialEq` lets a reload detect a change; see the compositor's
 // `Restatement`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct LockConfig {
     /// The PAM service the desk's user authenticates against.
@@ -643,7 +692,7 @@ impl LockConfig {
 /// There is no "follow the system" option: the chrome is the system, so there
 /// is nothing to follow. Clients follow this value through the settings
 /// portal; see the compositor's `portals::settings`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ThemeMode {
     /// Light text on a dark background, which the chrome is designed for.
@@ -659,7 +708,7 @@ pub enum ThemeMode {
 /// compositor's `portals::settings`.
 // `PartialEq` lets a reload detect a change; see the compositor's
 // `Restatement`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct ThemeConfig {
     pub mode: ThemeMode,
@@ -676,9 +725,11 @@ pub struct ThemeConfig {
     pub cursor_theme: Option<CursorThemeName>,
     /// The cursor size in logical pixels, for clients and the engine's
     /// pointer. Unset leaves clients their own. Zero is refused.
+    #[schemars(range(min = 1))]
     pub cursor_size: Option<u16>,
     /// Hides the engine's pointer after this many milliseconds without
     /// pointer input. Unset never hides it. Zero is refused.
+    #[schemars(range(min = 1))]
     pub cursor_hide_after_ms: Option<u32>,
     /// Hides the engine's pointer on a typing key press, until the pointer is
     /// next used.
@@ -740,7 +791,7 @@ impl ThemeConfig {
 
 /// An XCursor theme's directory name, such as `Adwaita`, for both modes or
 /// for each.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(untagged)]
 pub enum CursorThemeName {
     /// The same theme in both modes.
@@ -750,7 +801,7 @@ pub enum CursorThemeName {
 }
 
 /// A cursor theme's directory name for each mode.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PerModeCursorThemes {
     pub dark: String,
@@ -769,8 +820,8 @@ impl CursorThemeName {
 }
 
 /// An sRGB color, written `"#rrggbb"`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
-#[serde(try_from = "String")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(try_from = "String", into = "String")]
 #[schemars(schema_with = "accent_color_schema")]
 pub struct AccentColor(pub [u8; 3]);
 
@@ -788,6 +839,12 @@ impl TryFrom<String> for AccentColor {
     }
 }
 
+impl From<AccentColor> for String {
+    fn from(AccentColor([red, green, blue]): AccentColor) -> Self {
+        format!("#{red:02x}{green:02x}{blue:02x}")
+    }
+}
+
 /// The written form `AccentColor::try_from` accepts.
 fn accent_color_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
     schemars::json_schema!({
@@ -797,12 +854,196 @@ fn accent_color_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
 }
 
 /// How strongly clients set text and edges apart from their background.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum Contrast {
     #[default]
     Normal,
     High,
+}
+
+/// Browser profiles: sets of sign-ins, site data and extensions, and the
+/// sites each opens. See `docs/architecture/BROWSER-PROFILES.md`.
+// `PartialEq` lets a reload detect a change; see the compositor's
+// `Restatement`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct BrowserConfig {
+    /// The profiles, by id. An id is a directory name: lowercase letters,
+    /// digits and `-`.
+    pub profiles: BTreeMap<String, BrowserProfile>,
+    /// The order the shell lists the profiles in, by id. Profiles it leaves
+    /// out follow, by id.
+    pub order: Vec<String>,
+    /// The profile a site opens in when `sites` names none. Not private.
+    pub default_profile: String,
+    /// The profile a new private window opens in. Private.
+    pub default_private_profile: String,
+    /// The profile each site opens in, by site: a host, `*.host` for it and
+    /// its subdomains, or a host and path such as `github.com/acme` for the
+    /// addresses under it. The most specific match wins. A site is never in
+    /// `default_profile`, which opens every unlisted site.
+    pub sites: BTreeMap<String, String>,
+}
+
+impl Default for BrowserConfig {
+    fn default() -> Self {
+        let profile = |name: &str, color, private| BrowserProfile {
+            name: name.to_string(),
+            color: AccentColor(color),
+            private,
+            extensions: None,
+        };
+        BrowserConfig {
+            profiles: BTreeMap::from([
+                (
+                    "default".to_string(),
+                    profile("Default", [0x0d, 0x94, 0x88], false),
+                ),
+                (
+                    "private".to_string(),
+                    profile("Private", [0xa7, 0x8b, 0xfa], true),
+                ),
+            ]),
+            order: Vec::new(),
+            default_profile: "default".to_string(),
+            default_private_profile: "private".to_string(),
+            sites: BTreeMap::new(),
+        }
+    }
+}
+
+/// One browser profile. See [`BrowserConfig::profiles`].
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserProfile {
+    /// The name the shell shows.
+    pub name: String,
+    /// The color the shell marks the profile's pages with.
+    pub color: AccentColor,
+    /// Keeps no history, sign-ins or site data after its last page closes.
+    #[serde(default)]
+    pub private: bool,
+    /// The ids of the extensions it turns on, from those `extensions`
+    /// installs; the rest are off, and the shell cannot switch them. Unset
+    /// leaves the switches to the user: each starts on, or off in a private
+    /// profile, whose pages stay away from extensions unless allowed.
+    #[serde(default)]
+    pub extensions: Option<Vec<String>>,
+}
+
+/// Whether `id` can name a profile's directory.
+fn is_profile_id(id: &str) -> bool {
+    !id.is_empty()
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// Whether `site` is a [`BrowserConfig::sites`] key: a site as
+/// [`is_site`] has it, or a host and a path with no empty segment.
+fn is_profile_site(site: &str) -> bool {
+    match site.split_once('/') {
+        Some((host, path)) => is_site(host) && path.split('/').all(|part| !part.is_empty()),
+        None => is_site(site),
+    }
+}
+
+impl BrowserConfig {
+    /// The profiles in [`BrowserConfig::order`]: those it lists, then the
+    /// rest by id.
+    pub fn ordered_profiles(&self) -> impl Iterator<Item = (&String, &BrowserProfile)> {
+        let listed = self
+            .order
+            .iter()
+            .filter_map(|id| self.profiles.get_key_value(id));
+        let rest = self
+            .profiles
+            .iter()
+            .filter(|(id, _)| !self.order.contains(id));
+        listed.chain(rest)
+    }
+
+    fn validate(&self) -> Result<(), ConfigError> {
+        let invalid = |message: String| Err(ConfigError::Validation(message));
+        let profile = |id: &str| self.profiles.get(id);
+        if let Some(id) = self.profiles.keys().find(|id| !is_profile_id(id)) {
+            return invalid(format!(
+                "browser.profiles {id:?} is not a profile id, which is lowercase letters, \
+                 digits and `-`"
+            ));
+        }
+        if let Some(id) = self.order.iter().find(|id| profile(id).is_none()) {
+            return invalid(format!("browser.order {id:?} is not in browser.profiles"));
+        }
+        if let Some((_, id)) = self
+            .order
+            .iter()
+            .enumerate()
+            .find(|(at, id)| self.order[..*at].contains(id))
+        {
+            return invalid(format!("browser.order names {id:?} twice"));
+        }
+        let extension = self
+            .profiles
+            .values()
+            .filter_map(|profile| profile.extensions.as_ref())
+            .flatten()
+            .find(|id| !is_extension_id(id));
+        if let Some(id) = extension {
+            return invalid(format!(
+                "browser.profiles' extension {id:?} is not an extension id, which is 32 \
+                 letters from `a` to `p`"
+            ));
+        }
+        match profile(&self.default_profile) {
+            None => {
+                return invalid(format!(
+                    "browser.default_profile {:?} is not in browser.profiles",
+                    self.default_profile
+                ));
+            }
+            Some(default) if default.private => {
+                return invalid(format!(
+                    "browser.default_profile {:?} is private; unlisted sites need a profile \
+                     that keeps their sign-ins",
+                    self.default_profile
+                ));
+            }
+            Some(_) => {}
+        }
+        match profile(&self.default_private_profile) {
+            None => {
+                return invalid(format!(
+                    "browser.default_private_profile {:?} is not in browser.profiles",
+                    self.default_private_profile
+                ));
+            }
+            Some(private) if !private.private => {
+                return invalid(format!(
+                    "browser.default_private_profile {:?} is not private",
+                    self.default_private_profile
+                ));
+            }
+            Some(_) => {}
+        }
+        match self.sites.iter().find(|(site, id)| {
+            !is_profile_site(site) || profile(id).is_none() || **id == self.default_profile
+        }) {
+            Some((site, _)) if !is_profile_site(site) => invalid(format!(
+                "browser.sites {site:?} is not a site such as `github.com`, `*.github.com` \
+                 or `github.com/acme`"
+            )),
+            Some((site, id)) if profile(id).is_none() => invalid(format!(
+                "browser.sites {site:?} opens in {id:?}, which is not in browser.profiles"
+            )),
+            Some((site, _)) => invalid(format!(
+                "browser.sites {site:?} opens in the default profile, which every unlisted \
+                 site opens in; leave it out"
+            )),
+            None => Ok(()),
+        }
+    }
 }
 
 /// Chrome extensions the engine installs into the browser windows' profile.
@@ -812,27 +1053,119 @@ pub enum Contrast {
 /// from the list uninstalls it.
 // `PartialEq` lets a reload detect a change; see the compositor's
 // `Restatement`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct ExtensionsConfig {
     /// Chrome Web Store ids, installed from the Store and updated from it.
     pub web_store: Vec<String>,
     /// Directories holding an unpacked extension, loaded as they are.
     pub unpacked: Vec<PathBuf>,
+    /// Each extension's settings, by id, as chrome://extensions has them. A
+    /// setting left out is the user's to change in the Settings app; one
+    /// removed from here goes back to Chrome's default.
+    pub settings: BTreeMap<String, ExtensionSettings>,
+}
+
+/// One extension's settings. See [`ExtensionsConfig::settings`].
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ExtensionSettings {
+    /// Runs on local files (`file://` pages). Chrome's default is no.
+    pub file_access: Option<bool>,
+    /// May run the user scripts you add to it (`chrome.userScripts`), as
+    /// userscript managers do. Chrome's default is no.
+    pub user_scripts: Option<bool>,
+    /// Which of the sites it asks for it runs on. Chrome's default is all.
+    pub site_access: Option<SiteAccess>,
+}
+
+/// Which sites an extension runs on: `"on_click"`, `"all_sites"`, or a list
+/// of hosts, each also as `*.host` for its subdomains.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(untagged)]
+pub enum SiteAccess {
+    Mode(SiteAccessMode),
+    /// Only these hosts, on http and https.
+    Sites(Vec<String>),
+}
+
+/// [`SiteAccess`] other than a list of hosts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SiteAccessMode {
+    /// Only on a page where you click its button.
+    OnClick,
+    /// On every site it asks for.
+    AllSites,
+}
+
+/// Whether `id` is a Chrome extension id: 32 letters from `a` to `p`.
+fn is_extension_id(id: &str) -> bool {
+    id.len() == 32 && id.bytes().all(|b| (b'a'..=b'p').contains(&b))
+}
+
+/// Whether `site` is a host, or `*.host` for its subdomains, as the engine
+/// grants one: dot-separated labels of letters, digits and inner hyphens, the
+/// last with a letter and not a hex number such as `0x1f`, or a dotted IPv4
+/// address (without `*.`). The engine's
+/// `SitePattern` checks the same rule.
+fn is_site(site: &str) -> bool {
+    match site.strip_prefix("*.") {
+        Some(host) => is_host_name(host),
+        None => is_host_name(site) || site.parse::<std::net::Ipv4Addr>().is_ok(),
+    }
+}
+
+/// Whether `host` is labels, the last with a letter and not a hex number: a
+/// name rather than a number, which Chrome would read as an address.
+fn is_host_name(host: &str) -> bool {
+    let is_label = |label: &str| {
+        (1..=63).contains(&label.len())
+            && !label.starts_with('-')
+            && !label.ends_with('-')
+            && label
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    };
+    host.split('.').all(is_label)
+        && host.rsplit('.').next().is_some_and(|last| {
+            let hex = last
+                .get(..2)
+                .is_some_and(|start| start.eq_ignore_ascii_case("0x"))
+                && last[2..].bytes().all(|b| b.is_ascii_hexdigit());
+            last.bytes().any(|b| b.is_ascii_alphabetic()) && !hex
+        })
 }
 
 impl ExtensionsConfig {
     fn validate(&self) -> Result<(), ConfigError> {
         // Store ids are 32 letters from `a` to `p`. Checking here names the
         // config file; the Store would fail later, in a log.
-        if let Some(id) = self
-            .web_store
-            .iter()
-            .find(|id| id.len() != 32 || !id.bytes().all(|b| (b'a'..=b'p').contains(&b)))
-        {
+        if let Some(id) = self.web_store.iter().find(|id| !is_extension_id(id)) {
             return Err(ConfigError::Validation(format!(
                 "extensions.web_store {id:?} is not a Chrome Web Store id, which is \
                  32 letters from `a` to `p`"
+            )));
+        }
+        if let Some(id) = self.settings.keys().find(|id| !is_extension_id(id)) {
+            return Err(ConfigError::Validation(format!(
+                "extensions.settings {id:?} is not an extension id, which is 32 \
+                 letters from `a` to `p`"
+            )));
+        }
+        let site = self
+            .settings
+            .values()
+            .filter_map(|settings| match &settings.site_access {
+                Some(SiteAccess::Sites(sites)) => Some(sites),
+                _ => None,
+            })
+            .flatten()
+            .find(|site| !is_site(site));
+        if let Some(site) = site {
+            return Err(ConfigError::Validation(format!(
+                "extensions.settings' site {site:?} is not a host such as \
+                 `github.com`, or `*.github.com` for its subdomains"
             )));
         }
         // A relative path would depend on the compositor's working directory.
@@ -879,6 +1212,22 @@ fn under_home(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, ConfigError
     }
 }
 
+/// Agents that drive the desktop, such as Claude Code. See
+/// `docs/AGENTS.md`.
+// `PartialEq` lets a reload detect a change; see the compositor's
+// `Restatement`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct AgentsConfig {
+    /// Whether agents on the web, such as claude.ai, can reach the desktop
+    /// through Domicile's relay: while it is set, the compositor runs
+    /// `domicile mcp --relay`. Each agent still signs in only once the user
+    /// allows it on the desktop, and asks before it uses anything. Off by
+    /// default. See
+    /// `docs/AGENTS.md#agents-on-the-web`.
+    pub web: bool,
+}
+
 /// What applications are told not to do, through the
 /// `org.freedesktop.impl.portal.Lockdown` portal. Every switch defaults to
 /// off.
@@ -887,7 +1236,7 @@ fn under_home(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, ConfigError
 /// See `docs/SHELL-CONFIG.md#lockdown`.
 // `PartialEq` lets a reload detect a change; see the compositor's
 // `Restatement`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct LockdownConfig {
     pub disable_printing: bool,
@@ -899,10 +1248,88 @@ pub struct LockdownConfig {
     pub disable_sound_output: bool,
 }
 
+/// Installed Electron apps that run on the desktop's engine instead of the
+/// Electron they ship. See `docs/architecture/ELECTRON-APPS.md`.
+// `PartialEq` lets a reload detect a change; see the compositor's
+// `Restatement`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ElectronConfig {
+    /// Desktop file ids, as `slack.desktop`. Whatever starts one of these
+    /// entries (the launcher, a link, a notification) runs it with
+    /// `domicile open --electron`. An app the engine can't run yet runs on
+    /// its own Electron, with a notification saying so.
+    pub apps: Vec<String>,
+}
+
+impl ElectronConfig {
+    fn validate(&self) -> Result<(), ConfigError> {
+        match self
+            .apps
+            .iter()
+            .find(|app| app.is_empty() || app.contains('/'))
+        {
+            Some(app) => Err(ConfigError::Validation(format!(
+                "electron.apps holds {app:?}, which is no desktop file id; name the entry \
+                 as `slack.desktop`"
+            ))),
+            None => Ok(()),
+        }
+    }
+}
+
+/// Spell checking in pages: in browser windows, web apps and Electron apps.
+// `PartialEq` lets a reload detect a change; see the compositor's
+// `Restatement`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SpellcheckConfig {
+    /// Underlines misspelled words in text fields and suggests corrections.
+    pub enabled: bool,
+    /// The languages words are checked in, as language tags such as `en-US`.
+    /// A word spelled right in any of them passes.
+    pub languages: Vec<String>,
+}
+
+impl Default for SpellcheckConfig {
+    fn default() -> Self {
+        SpellcheckConfig {
+            enabled: true,
+            languages: vec!["en-US".to_string()],
+        }
+    }
+}
+
+impl SpellcheckConfig {
+    fn validate(&self) -> Result<(), ConfigError> {
+        let not_a_tag = self.languages.iter().find(|language| {
+            language.is_empty()
+                || !language
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-')
+        });
+        match (not_a_tag, self.languages.is_empty()) {
+            (Some(language), _) => Err(ConfigError::Validation(format!(
+                "spellcheck.languages holds {language:?}, which is not a language tag such as \
+                 \"en-US\""
+            ))),
+            (None, true) => Err(ConfigError::Validation(
+                "spellcheck.languages is empty; set spellcheck.enabled to false to stop \
+                 checking spelling"
+                    .into(),
+            )),
+            (None, false) => Ok(()),
+        }
+    }
+}
+
 /// The full compositor configuration.
-#[derive(Debug, Clone, Default, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub agents: AgentsConfig,
+    pub browser: BrowserConfig,
+    pub electron: ElectronConfig,
     pub extensions: ExtensionsConfig,
     pub files: FilesConfig,
     pub idle: IdleConfig,
@@ -910,7 +1337,14 @@ pub struct Config {
     pub lock: LockConfig,
     pub lockdown: LockdownConfig,
     pub output: OutputConfig,
+    pub spellcheck: SpellcheckConfig,
     pub startup: StartupConfig,
+    /// The terminal applications such as htop and vim run in
+    /// (`Terminal=true` in their desktop entries): its argv, which the
+    /// application's own follows, as `["kitty", "--"]` or `["foot"]`. The
+    /// launcher and `domicile open` offer such applications only when it is
+    /// set, and a shell's terminal key opens it. Unset, there is no terminal.
+    pub terminal: Option<Vec<String>>,
     pub theme: ThemeConfig,
     /// The shell `domicile` runs when given none: a path or a package, as
     /// `domicile load-shell` takes. The compositor ignores it.
@@ -966,11 +1400,20 @@ impl Config {
 
     /// Validation the deserializer cannot express.
     fn validate(&self) -> Result<(), ConfigError> {
+        self.browser.validate()?;
+        self.electron.validate()?;
         self.extensions.validate()?;
         self.idle.validate()?;
         self.input.validate()?;
         self.lock.validate()?;
+        self.spellcheck.validate()?;
         self.startup.validate()?;
+        if self.terminal.as_ref().is_some_and(Vec::is_empty) {
+            return Err(ConfigError::Validation(
+                "terminal is empty, which names no program to run; leave it out for no terminal"
+                    .to_string(),
+            ));
+        }
         self.theme.validate()?;
         self.output.validate()
     }

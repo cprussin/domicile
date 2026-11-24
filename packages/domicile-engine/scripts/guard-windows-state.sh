@@ -11,8 +11,8 @@
 # guard's page reads only after the stand-in has said everything -- three
 # windows appearing, one retitled, given a desktop id, resized, limited and
 # given a cursor, each made the other's dialog in turn, one marked urgent, one
-# focused, one closed, a popup placed with its synced frames -- and the
-# attributes
+# focused, one closed, a popup placed with its synced frames, a browser window
+# given its toplevel id -- and the attributes
 # must hold all of it.
 # See packages/chrome-sdk/README.md.
 #
@@ -128,6 +128,7 @@ sleep 1
 # warnings in the same log -- its line about an unknown cursor among them.
 NAMES=$(grep -oE '"GUARD names missing=[^"]*"' "$ENGINE_LOG" | head -1)
 WINDOWS=$(grep -oE '"GUARD windows .*"' "$ENGINE_LOG" | head -1)
+BROWSER=$(grep -oE '"GUARD browser .*"' "$ENGINE_LOG" | head -1)
 FOCUSED=$(grep -oE '"GUARD focused [^"]*"' "$ENGINE_LOG" | head -1)
 APPEARANCE=$(grep -oE '"GUARD appearance [^"]*"' "$ENGINE_LOG" | head -1)
 CHANGED=$(grep -oE '"GUARD changed n=[0-9]+"' "$ENGINE_LOG" | head -1)
@@ -136,7 +137,7 @@ SYSTEM_OUT=$(grep -cE '^said: \{"id":1,"request":\{"call":"stat","path":"/"\},"t
 SYSTEM_LEAKED=$(grep -cE '^said: .*"id":2' "$SOCKET_LOG")
 SYNC_FRAMES=$(grep -cE '^said: \{"type":"sync_frames"\}$' "$SOCKET_LOG")
 
-FAILURE=$(NAMES="$NAMES" WINDOWS="$WINDOWS" FOCUSED="$FOCUSED" CHANGED="$CHANGED" \
+FAILURE=$(NAMES="$NAMES" WINDOWS="$WINDOWS" BROWSER="$BROWSER" FOCUSED="$FOCUSED" CHANGED="$CHANGED" \
   APPEARANCE="$APPEARANCE" SYNC_FRAMES="$SYNC_FRAMES" \
   SYSTEM_IN="$SYSTEM_IN" SYSTEM_OUT="$SYSTEM_OUT" SYSTEM_LEAKED="$SYSTEM_LEAKED" python3 - <<'PY'
 import json, os
@@ -158,7 +159,7 @@ def default(**fields):
               "maxWidth": None, "minHeight": None, "minWidth": None, "parent": None,
               "pid": None, "pidfdInode": None, "sandboxAppId": None, "sandboxed": None,
               "sandboxEngine": None, "sandboxInstanceId": None, "title": "",
-              "transientFor": None, "uid": None, "urgent": False, "width": None,
+              "toplevelId": None, "transientFor": None, "uid": None, "urgent": False, "width": None,
               "x": None, "y": None}
     window.update(fields)
     return window
@@ -167,11 +168,12 @@ wanted = [
     default(appId="first", title="Retitled", desktopId="org.example.First", width=800,
             height=600, minWidth=100, minHeight=50, cursor="zoom-out", pid=4141,
             uid=1000, gid=1000, sandboxed=True, sandboxEngine="org.flatpak",
-            sandboxInstanceId="3", urgent=True),
+            sandboxInstanceId="3", urgent=True, toplevelId="first-listed"),
     default(appId="second", title="Second", desktopId="org.example.Second", width=640,
             height=480, cursor="grab", dialog=True, clientFrame=True, pid=4242,
             uid=4294967294, gid=100, pidfdInode=5021, sandboxed=False,
-            transientFor="first", inhibitsShortcuts=True, frame=5),
+            transientFor="first", inhibitsShortcuts=True, frame=5,
+            toplevelId="second-listed"),
     default(appId="menu", parent="second", x=10, y=20, width=120, height=90, grab=True,
             frame=1),
 ]
@@ -188,6 +190,8 @@ elif [w["appId"] for w in windows] != [w["appId"] for w in wanted]:
 elif windows != wanted:
     wrong = [w["appId"] for w, v in zip(windows, wanted) if w != v]
     print("`windows` has the right windows but not what the compositor said about %s: got %s" % (", ".join(wrong), json.dumps([by_id[i] for i in wrong])))
+elif os.environ["BROWSER"] != '"GUARD browser [{\"id\":\"1\",\"toplevelId\":\"browser-listed\"}]"':
+    print("`browserWindows` is %s where the page opened window 1 and the compositor listed it as browser-listed: ControlChannel or DomicileHost::BrowserToplevelIds lost it" % (os.environ["BROWSER"] or "no GUARD browser line"))
 elif os.environ["FOCUSED"] != '"GUARD focused second"':
     print("`focusedWindow` is %s where the compositor focused second" % os.environ["FOCUSED"])
 elif os.environ["APPEARANCE"] != '"GUARD appearance #3584e4 true false"':
@@ -205,7 +209,7 @@ elif os.environ["SYSTEM_IN"] == "0":
 PY
 )
 
-echo "page: $NAMES $WINDOWS $FOCUSED $APPEARANCE $CHANGED"
+echo "page: $NAMES $WINDOWS $BROWSER $FOCUSED $APPEARANCE $CHANGED"
 echo "system: out=$SYSTEM_OUT leaked=$SYSTEM_LEAKED in=$SYSTEM_IN"
 
 if [ -n "$FAILURE" ]; then

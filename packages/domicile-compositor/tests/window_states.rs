@@ -1,5 +1,5 @@
-//! Window states the shell sets, and the maximize and fullscreen requests
-//! clients make, through the page's system calls.
+//! Window states the shell sets, and the maximize, fullscreen and minimize
+//! requests clients make, through the page's system calls.
 //!
 //! The compositor sets only what the shell asks for. A client's request is
 //! reported to the shell and answered with a configure of the current states.
@@ -9,8 +9,8 @@ mod running;
 use std::time::Duration;
 
 use domicile_protocol::{
-    ChromeMessage, HostMessage, SystemErrorKind, SystemEvent, SystemReply, SystemRequest,
-    WindowRequest, WindowState,
+    ChromeMessage, HostMessage, ResizeEdges, SystemErrorKind, SystemEvent, SystemReply,
+    SystemRequest, WindowRequest, WindowState,
 };
 
 use crate::running::{Client, Compositor};
@@ -211,6 +211,207 @@ fn a_client_asking_to_leave_a_state_is_reported() {
             request: WindowRequest::Unfullscreen,
         }
     );
+}
+
+/// The shell marks a window resizing for the length of its own drag, as sway
+/// does for an interactive resize, beside whatever else it holds.
+#[test]
+fn a_window_the_shell_resizes_is_told_so() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let mut client = compositor.client("app");
+    let app_id = appeared(&mut chrome);
+
+    set(
+        &mut chrome,
+        1,
+        &app_id,
+        vec![WindowState::TiledLeft, WindowState::Resizing],
+    );
+    assert!(
+        client.wait_for_trace(".states(tiled_left resizing)", 1),
+        "the client was never told it is resizing; it traced:\n{}",
+        client.trace()
+    );
+
+    set(&mut chrome, 2, &app_id, vec![WindowState::TiledLeft]);
+    assert!(
+        client.wait_for_trace(".states(tiled_left)", 1),
+        "the resize never ended for the client; it traced:\n{}",
+        client.trace()
+    );
+}
+
+/// xdg-shell has no minimized state, so a minimize is only reported; the
+/// shell decides what minimized means.
+#[test]
+fn a_client_asking_to_minimize_is_reported() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    listen(&mut chrome, 7);
+    let mut client = compositor.client_with("app", &["--ask-to", "minimize"]);
+    let app_id = appeared(&mut chrome);
+
+    assert_eq!(
+        requested(&mut chrome, 7),
+        SystemEvent::WindowRequest {
+            app_id,
+            request: WindowRequest::Minimize,
+        }
+    );
+    assert!(
+        client.wait_for_trace("set_minimized()", 1),
+        "the client never asked; it traced:\n{}",
+        client.trace()
+    );
+}
+
+/// A press on a client's own title bar that asks to move the window is handed
+/// to the shell: the client's press ends with a leave, not a release, and the
+/// shell hears the request so it can drag the window.
+#[test]
+fn a_press_that_asks_to_move_is_handed_to_the_shell() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    listen(&mut chrome, 7);
+    let mut client = compositor.client_with("app", &["--ask-to-drag", "move"]);
+    let app_id = appeared(&mut chrome);
+
+    point_at(&mut chrome, &app_id);
+    button(&mut chrome, &app_id, true);
+
+    assert_eq!(
+        requested(&mut chrome, 7),
+        SystemEvent::WindowRequest {
+            app_id: app_id.clone(),
+            request: WindowRequest::Move,
+        }
+    );
+    assert!(
+        pointer_said(&mut client, ".leave(", 1),
+        "the client's press never ended; it traced:\n{}",
+        client.trace()
+    );
+    // The shell's drag ends with a release the client never pressed for. A
+    // pointer back over the window afterwards shows the release went nowhere.
+    button(&mut chrome, &app_id, false);
+    point_at(&mut chrome, &app_id);
+    assert!(
+        pointer_said(&mut client, ".enter(", 2),
+        "the pointer never came back; it traced:\n{}",
+        client.trace()
+    );
+    assert!(
+        !released_after_leave(&client.trace()),
+        "the release reached the client after its press was handed on; it traced:\n{}",
+        client.trace()
+    );
+}
+
+/// A resize by an edge is handed on the same way, naming the edge.
+#[test]
+fn a_press_that_asks_to_resize_names_the_edge() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    listen(&mut chrome, 7);
+    let _client = compositor.client_with("app", &["--ask-to-drag", "bottom-right"]);
+    let app_id = appeared(&mut chrome);
+
+    point_at(&mut chrome, &app_id);
+    button(&mut chrome, &app_id, true);
+
+    assert_eq!(
+        requested(&mut chrome, 7),
+        SystemEvent::WindowRequest {
+            app_id,
+            request: WindowRequest::Resize {
+                edges: ResizeEdges::BottomRight,
+            },
+        }
+    );
+}
+
+/// A move asked for once the button is up has no press to hand over, so it
+/// is dropped: the shell hears nothing.
+#[test]
+fn a_move_after_the_release_is_dropped() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    listen(&mut chrome, 7);
+    let mut client = compositor.client_with("app", &["--ask-to-drag", "move-after-release"]);
+    let app_id = appeared(&mut chrome);
+
+    point_at(&mut chrome, &app_id);
+    button(&mut chrome, &app_id, true);
+    button(&mut chrome, &app_id, false);
+
+    assert!(
+        client.wait_for_trace("move(", 1),
+        "the client never asked; it traced:\n{}",
+        client.trace()
+    );
+    compositor.wait_for_log("a move or resize with no press of its own held -> dropped");
+    assert!(
+        !compositor
+            .complaint()
+            .contains("a window request -> the shell"),
+        "a move with no press held reached the shell"
+    );
+}
+
+/// The pointer over `app_id`'s corner.
+fn point_at(chrome: &mut domicile_test_chrome::Chrome, app_id: &str) {
+    chrome
+        .say(&ChromeMessage::PointerMotion {
+            app_id: app_id.to_string(),
+            x: 1.0,
+            y: 1.0,
+            moved: true,
+        })
+        .expect("the chrome can move the pointer");
+}
+
+/// The left button pressed or released over `app_id`.
+fn button(chrome: &mut domicile_test_chrome::Chrome, app_id: &str, pressed: bool) {
+    chrome
+        .say(&ChromeMessage::PointerButton {
+            app_id: app_id.to_string(),
+            button: 0x110,
+            pressed,
+        })
+        .expect("the chrome can press");
+}
+
+/// The client's pointer lines, in order.
+fn pointer_lines(trace: &str) -> Vec<&str> {
+    trace
+        .lines()
+        .filter(|line| line.contains("wl_pointer@"))
+        .collect()
+}
+
+/// Whether the client's pointer said `event` `wanted` times, waiting for it.
+fn pointer_said(client: &mut Client, event: &str, wanted: usize) -> bool {
+    let said = |trace: &str| {
+        pointer_lines(trace)
+            .iter()
+            .filter(|line| line.contains(event))
+            .count()
+            >= wanted
+    };
+    let until = std::time::Instant::now() + Duration::from_secs(10);
+    while !said(&client.trace()) && std::time::Instant::now() < until {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    said(&client.trace())
+}
+
+/// Whether the pointer had a button released after it left.
+fn released_after_leave(trace: &str) -> bool {
+    pointer_lines(trace)
+        .iter()
+        .skip_while(|line| !line.contains(".leave("))
+        .any(|line| line.contains(".button(") && line.ends_with(", 0)"))
 }
 
 /// The id of the next window the chrome is told about.

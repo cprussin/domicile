@@ -564,10 +564,7 @@ impl Dispatch<ExtForeignToplevelImageCaptureSourceManagerV1, ()> for DomicileCom
         {
             let window = ForeignToplevelHandle::from_resource(&toplevel_handle)
                 .filter(|handle| !handle.is_closed())
-                .and_then(|handle| {
-                    let Listed(app_id) = handle.user_data().get::<Listed>()?;
-                    Some(CastSource::Window(app_id.clone()))
-                });
+                .and_then(|handle| Some(handle.user_data().get::<Listed>()?.source()));
             data_init.init(source, Source(window));
         }
     }

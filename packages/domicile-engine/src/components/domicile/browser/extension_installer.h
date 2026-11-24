@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "components/domicile/browser/extension_settings.h"
+
 namespace domicile {
 
 // The extensions named in the config, from the compositor's `extensions`
@@ -18,6 +20,8 @@ struct ExtensionList {
   std::vector<std::string> web_store;
   // Absolute directories holding an unpacked extension.
   std::vector<std::string> unpacked;
+  // Settings by id, for these extensions or any other.
+  ExtensionSettingsMap settings;
 };
 
 // The changes that bring a profile in line with an `ExtensionList`.
@@ -28,6 +32,8 @@ struct ExtensionChanges {
   std::vector<std::string> load_unpacked;
   // Ids to uninstall.
   std::vector<std::string> uninstall;
+  // Ids named and installed that `added` lacks, to record as added.
+  std::vector<std::string> claim;
 };
 
 // Decides which extensions to install, load and uninstall.
@@ -41,6 +47,8 @@ struct ExtensionChanges {
 //   Reloading a directory restarts its extension.
 // - Uninstalls only what this installer added. Browser windows share the
 //   profile, so it may hold extensions the user installed.
+// - Claims what it names and finds installed but not added: a crash can lose
+//   the record, and the user may have installed it first.
 ExtensionChanges ReconcileExtensions(
     const ExtensionList& wanted,
     const std::set<std::string>& installed,

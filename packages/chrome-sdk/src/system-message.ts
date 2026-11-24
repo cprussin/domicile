@@ -53,8 +53,21 @@ const systemReplySchema = z.looseObject({
     z.looseObject({ kind: z.literal("saved"), path: z.string() }),
     z.looseObject({ kind: z.literal("copied") }),
     z.looseObject({ frame: z.string(), kind: z.literal("preview") }),
-    z.looseObject({ kind: z.literal("sent") }),
+    z.looseObject({ kind: z.literal("sent"), output: z.string().optional() }),
     z.looseObject({ kind: z.literal("set") }),
+    z.looseObject({
+      connected: z.array(
+        z.looseObject({
+          agent: z.string(),
+          reach: z.unknown(),
+          session: z.number(),
+        }),
+      ),
+      kind: z.literal("agents"),
+      remembered: z.array(
+        z.looseObject({ agent: z.string(), last_used_ms: z.number() }),
+      ),
+    }),
     z.looseObject({ kind: z.literal("virtual_monitor"), output: z.string() }),
     z.looseObject({ error: systemErrorSchema, kind: z.literal("failed") }),
   ]),
@@ -85,11 +98,16 @@ const systemEventSchema = z.looseObject({
     z.looseObject({
       command: z.array(z.string()),
       kind: z.literal("shell_command"),
+      sent: z.number(),
     }),
     z.looseObject({
-      // `null` when the blanking was called off or the screens went dark.
-      blanks_in_ms: z.number().nullable(),
-      kind: z.literal("idle_warning"),
+      app_id: z.string().optional(),
+      kind: z.literal("link"),
+      url: z.string(),
+    }),
+    z.looseObject({
+      idle: z.boolean(),
+      kind: z.literal("idle"),
     }),
     z.looseObject({
       holders: z.array(z.string()),
@@ -102,6 +120,10 @@ const systemEventSchema = z.looseObject({
       retry_in_ms: z.number(),
     }),
     z.looseObject({
+      app_id: z.string().nullable(),
+      kind: z.literal("bell"),
+    }),
+    z.looseObject({
       app_id: z.string(),
       kind: z.literal("window_request"),
       request: z.discriminatedUnion("kind", [
@@ -112,6 +134,21 @@ const systemEventSchema = z.looseObject({
           kind: z.literal("fullscreen"),
         }),
         z.looseObject({ kind: z.literal("unfullscreen") }),
+        z.looseObject({ kind: z.literal("minimize") }),
+        z.looseObject({ kind: z.literal("move") }),
+        z.looseObject({
+          edges: z.enum([
+            "top",
+            "bottom",
+            "left",
+            "right",
+            "top_left",
+            "top_right",
+            "bottom_left",
+            "bottom_right",
+          ]),
+          kind: z.literal("resize"),
+        }),
       ]),
     }),
     z.looseObject({

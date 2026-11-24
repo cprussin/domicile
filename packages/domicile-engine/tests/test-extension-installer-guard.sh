@@ -119,9 +119,11 @@ WIRE="$ROOT/packages/domicile-protocol/wire/host-messages.jsonl"
 expect "the wire has an extensions line" "yes" \
   "$(grep -q '"type":"extensions","web_store":\[' "$WIRE" && echo yes || echo no)"
 expect "and the stand-in sends that type with those fields" "yes" \
-  "$(grep -q '"type": "extensions", "web_store": ' \
-    "$SCRIPTS/guard-extension-installer-compositor.py" 2>/dev/null &&
-    grep -q '"unpacked": ' "$SCRIPTS/guard-extension-installer-compositor.py" &&
+  "$(STAND_IN="$SCRIPTS/guard-extension-installer-compositor.py" &&
+    grep -q '"type": "extensions",' "$STAND_IN" 2>/dev/null &&
+    grep -q '"web_store": ' "$STAND_IN" &&
+    grep -q '"unpacked": ' "$STAND_IN" &&
+    grep -q '"settings": ' "$STAND_IN" &&
     echo yes || echo no)"
 CHANNEL="$ROOT/packages/domicile-engine/src/components/domicile/browser/control_channel.cc"
 expect "and the engine dispatches on that type and reads those fields" "yes" \

@@ -11,15 +11,16 @@ import {
   idleInhibitor,
   keymap,
   launcher,
+  layer,
   micMute,
   nightLight,
   notifications,
   overview,
   removeVirtualMonitor,
-  scratchpad,
   screenshot,
   searchClipboard,
   stepWorkspace,
+  terminal,
   virtualMonitor,
   volume,
 } from "./commands";
@@ -133,13 +134,13 @@ describe("manganese's default keys", () => {
     });
   });
 
-  it("pull the scratchpad down with four fingers and push it back up", () => {
+  it("step between the scratchpad, the desk and the overview with four fingers up and down", () => {
     expect(DEFAULT_KEYBINDINGS).toMatchObject({
-      "swipe:4:down": scratchpad("bring"),
-      "swipe:4:up": scratchpad("hide"),
+      "swipe:4:down": layer("down"),
+      "swipe:4:up": layer("up"),
     });
-    expect(scratchpad("bring")).toEqual({
-      args: ["scratchpad", "bring"],
+    expect(layer("up")).toEqual({
+      args: ["layer", "up"],
       kind: KeyActionKind.SendShell,
     });
   });
@@ -157,8 +158,9 @@ describe("manganese's default keys", () => {
     });
   });
 
-  it("open the overview on Meta+O or a four-finger pinch in", () => {
+  it("open the overview on Meta+O, a tap of Super or a four-finger pinch in", () => {
     expect(DEFAULT_KEYBINDINGS).toMatchObject({
+      Meta: overview(),
       "Meta+o": overview(),
       "pinch:4:inward": overview("show"),
     });
@@ -176,17 +178,21 @@ describe("manganese's default keys", () => {
     });
   });
 
-  // No default terminal binding; users bind their own with `exec`.
-  it("launch nothing on Meta+Return", () => {
-    expect(DEFAULT_KEYBINDINGS["Meta+Return"]).toBeUndefined();
+  // The config's `terminal`; Domicile names no default one.
+  it("open the desk's terminal on Meta+Return", () => {
+    expect(DEFAULT_KEYBINDINGS["Meta+Return"]).toEqual(terminal());
+    expect(terminal()).toEqual({
+      args: ["terminal"],
+      kind: KeyActionKind.SendShell,
+    });
   });
 });
 
 describe("exec", () => {
-  it("is sway's `exec`, with the argv as its words", () => {
+  it("is Domicile's `exec`, which the SDK starts without the shell", () => {
     expect(exec("kitty", "--hold")).toEqual({
-      args: ["exec", "kitty", "--hold"],
-      kind: KeyActionKind.SendShell,
+      argv: ["kitty", "--hold"],
+      kind: KeyActionKind.Exec,
     });
   });
 });

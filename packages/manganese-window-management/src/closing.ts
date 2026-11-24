@@ -58,19 +58,37 @@ export const departed = (
     return windows.some((open) => open.id === window.id) ||
       placement === undefined
       ? []
-      : [
-          {
-            ...leavingFrom(
-              before,
-              window,
-              placement,
-              // A closing tab turns about itself as it collapses along its strip.
-              movesAsTab(placement) ? placement.bar : placement.frame,
-            ),
-            at,
-          },
-        ];
+      : [{ ...closingFrom(before, window, placement), at }];
   });
+
+/**
+ * The windows `before` showed that `shut` names: open, but shown as closed.
+ * They leave as closed windows do.
+ */
+export const shutAway = (
+  before: Shown,
+  shut: ReadonlySet<string>,
+): readonly Leaving[] =>
+  before.placements.flatMap((placement) => {
+    const window = before.windows.find(({ id }) => id === placement.id);
+    return window === undefined || !shut.has(window.id)
+      ? []
+      : [closingFrom(before, window, placement)];
+  });
+
+/** A window leaving `before` as a closed window does. */
+const closingFrom = (
+  before: Shown,
+  window: ShellWindow,
+  placement: Placement,
+): Leaving =>
+  leavingFrom(
+    before,
+    window,
+    placement,
+    // A closing tab turns about itself as it collapses along its strip.
+    movesAsTab(placement) ? placement.bar : placement.frame,
+  );
 
 /**
  * The windows `before` showed that are still open but that no screen in

@@ -19,6 +19,11 @@ export type Shown = {
   placements: readonly Placement[];
   /** The windows hidden in the scratchpad. */
   scratchpad: readonly string[];
+  /**
+   * The open windows shown as closed: a background app's, hidden. Showing one
+   * opens it.
+   */
+  shut: readonly string[];
   tabs: readonly PlacedTab[];
   windows: readonly ShellWindow[];
 };

@@ -12,6 +12,7 @@ import { token } from "../styled-system/tokens";
 import { AppWindow } from "./AppWindow";
 import { CROSSING } from "./placement";
 import { recordedSettles } from "./recorded-settles";
+import { SlidingScreen } from "./sliding-screen";
 
 // Records `focusApp` calls. Pointer mapping is the engine's, checked by
 // `guard-app-routes-input.sh`.
@@ -77,6 +78,7 @@ const windowProps = {
   hasKeyboard: false,
   motion: "resting",
   onMotionEnded: nothingEnded,
+  popups: [],
   rect: ON_SCREEN,
   resizing: false,
   syncedFrame: 0,
@@ -122,6 +124,34 @@ beforeEach(() => {
 });
 
 describe("AppWindow", () => {
+  // A float hanging off its screen would slide into view beside its
+  // workspace.
+  it("clips itself and its popups to its workspace while a switch slides it", () => {
+    const { container } = render(
+      <SlidingScreen value={{ height: 1000, width: 1280, x: 0, y: 0 }}>
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          motion="leaving-to-start"
+          popups={[
+            {
+              appId: "menu",
+              cursor: "default",
+              frame: 0,
+              rect: { height: 240, width: 180, x: 12, y: 30 },
+            },
+          ]}
+        />
+      </SlidingScreen>,
+    );
+    const layer = container.querySelector('[app-id="menu"]')?.parentElement;
+
+    expect(windowBox(container).style.clip).toBe(
+      "rect(-32px, 1280px, 968px, 0px)",
+    );
+    expect(layer?.style.clip).toBe("rect(-32px, 1280px, 968px, 0px)");
+  });
+
   it("shows the synced frame it is given", () => {
     const { container } = render(
       <AppWindow {...windowProps} focused syncedFrame={4} />,
@@ -260,6 +290,64 @@ describe("AppWindow", () => {
     expect(portal(container)).toHaveStyle({ cursor: "text" });
   });
 
+  describe("its popups", () => {
+    const MENU = {
+      appId: "menu",
+      cursor: "default",
+      frame: 0,
+      rect: { height: 240, width: 180, x: 12, y: 30 },
+    };
+
+    /** The `<app>` of the popup `appId`. */
+    const popupElement = (container: HTMLElement, appId: string): Element => {
+      const element = container.querySelector(`[app-id="${appId}"]`);
+      if (element === null) {
+        throw new Error(`test: no popup ${appId}`);
+      } else {
+        return element;
+      }
+    };
+
+    // Firefox draws its whole window into one, so it must slide, open and
+    // close with the window.
+    it("are drawn over it, playing its motion", () => {
+      const { container } = render(
+        <AppWindow
+          {...windowProps}
+          depth={4}
+          focused={false}
+          motion="arriving-from-end"
+          popups={[MENU]}
+        />,
+      );
+      const layer = popupElement(container, "menu").parentElement;
+
+      expect(layer).toHaveAttribute("data-motion", "arriving-from-end");
+      expect(layer).toHaveStyle({
+        insetBlockStart: "32px",
+        insetInlineStart: "0px",
+        zIndex: "5",
+      });
+      expect(popupElement(container, "menu")).toHaveStyle({
+        insetBlockStart: "30px",
+        insetInlineStart: "12px",
+      });
+    });
+
+    it("are not drawn while the window is off screen", () => {
+      const { container } = render(
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          popups={[MENU]}
+          rect={undefined}
+        />,
+      );
+
+      expect(container.querySelector('[app-id="menu"]')).toBeNull();
+    });
+  });
+
   describe("the way it moves", () => {
     it("plays the motion it is given", () => {
       // Animates a transform so the client is not resized each frame. See
@@ -271,6 +359,22 @@ describe("AppWindow", () => {
       expect(
         globalThis.getComputedStyle(windowBox(container)).animation,
       ).toContain("windowOpening");
+    });
+
+    // Its scaled edge alone is too faint to show it over a like tab, such as
+    // a terminal opened over a terminal. The edge fades, so it never comes or
+    // goes in one frame.
+    it.each([
+      ["opening-tab", "windowOpeningTabEdge"],
+      ["closing-tab", "windowClosingTabEdge"],
+    ] as const)("carries a fading edge and shadow while %s", (motion, edge) => {
+      const { container } = render(
+        <AppWindow {...windowProps} focused={false} motion={motion} />,
+      );
+
+      expect(
+        globalThis.getComputedStyle(windowBox(container)).animationName,
+      ).toContain(edge);
     });
 
     // The contents and title bar are separate elements. Each must scale about

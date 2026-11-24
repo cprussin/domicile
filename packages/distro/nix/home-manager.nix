@@ -98,13 +98,46 @@
       };
       mode = lib.mkOption {
         description = ''
-          The mode this entry expects, in physical pixels. Domicile does not set
-          modes: the engine lights each connector at its native mode. If the
-          monitor comes up at a different mode, the running desktop is left as
-          is and the mismatch is reported. Size only; the refresh rate cannot be
-          chosen. `null` accepts any mode.
+          The mode to light this monitor at, in physical pixels. If the monitor
+          offers no mode of this size, the running desktop is left as is and
+          the problem is reported. `null` uses the monitor's native mode.
         '';
         type = lib.types.nullOr (pairOf lib.types.ints.positive);
+        default = null;
+      };
+      refresh = lib.mkOption {
+        description = ''
+          The refresh rate to light this monitor at, in Hz, such as `59.94` or
+          `120`. The nearest rate the monitor offers is used. `null` uses the
+          native mode's rate, or the highest one at a non-native `mode`.
+        '';
+        type = lib.types.nullOr lib.types.numbers.positive;
+        default = null;
+      };
+      adaptive_sync = lib.mkOption {
+        description = ''
+          Whether to scan out with a variable refresh rate (adaptive sync,
+          FreeSync, G-Sync Compatible). Used only where the monitor and its
+          driver support it; the display reports whether it took.
+        '';
+        type = lib.types.bool;
+        default = false;
+      };
+      hdr = lib.mkOption {
+        description = ''
+          Whether to drive this monitor in HDR (HDR10). Used only where the
+          monitor's EDID takes PQ and the connector scans out in 10 bits;
+          elsewhere it stays SDR.
+        '';
+        type = lib.types.bool;
+        default = false;
+      };
+      sdr_white = lib.mkOption {
+        description = ''
+          In HDR, how bright ordinary (SDR) content's white is, in cd/m².
+          `null` is 203, the ITU-R BT.2408 reference white.
+        '';
+        type = lib.types.nullOr (lib.types.ints.between 1 10000);
         default = null;
       };
       position =
@@ -267,6 +300,20 @@
     "lock.passphrase_hash" = ''
       The account password unlocks the desk, through PAM. See docs/LOCK.md.
     '';
+    "idle.warn_before_seconds" = ''
+      The shell chooses when to dim before blanking, with
+      `session.idleBeforeBlanking`. See docs/SHELL-IDLE-AND-LOCK.md.
+    '';
+    "extensions.settings.*.private" = ''
+      A private browser profile's extension switches say what runs in
+      private windows: `browser.profiles.<id>.extensions`. See
+      docs/architecture/BROWSER-PROFILES.md.
+    '';
+    "electron.profiles" = ''
+      An Electron app's own `setWindowOpenHandler` decides on its pages' new
+      windows, and the links it hands to `shell.openExternal` open in the
+      browser. See docs/architecture/ELECTRON-APPS.md.
+    '';
   };
 
   removed = import ./removed-settings.nix {inherit lib;} removedSettings;
@@ -424,6 +471,44 @@ in {
               default = [];
               example = ["~/src/my-extension"];
             };
+            settings = lib.mkOption {
+              description = ''
+                Each extension's chrome://extensions settings, by extension ID.
+                A setting left unset is changed in the Settings app; one
+                removed from here goes back to Chrome's default. An extension
+                that cannot use a setting refuses it.
+              '';
+              type = lib.types.attrsOf (lib.types.submodule {
+                options = lib.recursiveUpdate (removed.optionsUnder "extensions.settings.*") {
+                  file_access = lib.mkOption {
+                    description = "Runs on local files (`file://` pages). Chrome's default is no.";
+                    type = lib.types.nullOr lib.types.bool;
+                    default = null;
+                  };
+                  user_scripts = lib.mkOption {
+                    description = "May run the user scripts you add to it (`chrome.userScripts`). Chrome's default is no.";
+                    type = lib.types.nullOr lib.types.bool;
+                    default = null;
+                  };
+                  site_access = lib.mkOption {
+                    description = ''
+                      Which of the sites it asks for it runs on: `"on_click"`,
+                      `"all_sites"`, or a list of hosts, each also as `*.host`
+                      for its subdomains. Chrome's default is all.
+                    '';
+                    type = lib.types.nullOr (lib.types.either (lib.types.enum ["on_click" "all_sites"]) (lib.types.listOf lib.types.str));
+                    default = null;
+                  };
+                };
+              });
+              default = {};
+              example = {
+                eimadpbcbfnmbkopoojfekhnkhdbieeh = {
+                  file_access = true;
+                  site_access = ["github.com"];
+                };
+              };
+            };
           };
 
           files.omit = lib.mkOption {
@@ -461,18 +546,6 @@ in {
               type = lib.types.nullOr lib.types.ints.positive;
               default = null;
               example = 600;
-            };
-            warn_before_seconds = lib.mkOption {
-              description = ''
-                Seconds before blanking that the shell is warned, so it can dim
-                or count down. Input in that time keeps the screens on. Must be
-                less than `blank_after_seconds`.
-
-                `null`, the default, gives no warning. Applied on reload.
-              '';
-              type = lib.types.nullOr lib.types.ints.positive;
-              default = null;
-              example = 30;
             };
             lock_after_seconds = lib.mkOption {
               description = ''
@@ -514,6 +587,20 @@ in {
             };
           };
 
+          # Agents on the web, such as claude.ai, reach the desk through
+          # Domicile's relay while this is set: the compositor runs
+          # `domicile mcp --relay`. Applied on reload.
+          agents.web = lib.mkOption {
+            description = ''
+              Whether agents on the web, such as claude.ai, can reach the
+              desktop through Domicile's relay. Each still signs in only once
+              you allow it on the desktop, and asks before it uses anything. Settings ›
+              Agents › Connect from the web sets it.
+            '';
+            type = lib.types.bool;
+            default = false;
+          };
+
           # Applications enforce these themselves; the compositor reports them
           # through the Lockdown portal. Applied on reload.
           lockdown = {
@@ -546,6 +633,19 @@ in {
             type = lib.types.listOf (lib.types.nonEmptyListOf lib.types.str);
             default = [];
             example = [["emacsclient" "-e" "t"]];
+          };
+
+          terminal = lib.mkOption {
+            description = ''
+              The terminal applications such as htop and vim run in: an argv
+              that opens a terminal on its own and runs an application's argv
+              put after it. The launcher and `domicile open` offer those
+              applications only when it is set, and Manganese opens it on
+              Meta+Return. Unset, there is no terminal. Applied on reload.
+            '';
+            type = lib.types.nullOr (lib.types.nonEmptyListOf lib.types.str);
+            default = null;
+            example = ["kitty"];
           };
 
           theme.mode = lib.mkOption {
@@ -663,6 +763,26 @@ in {
             example = ["mail.google.com"];
           };
 
+          spellcheck = {
+            enabled = lib.mkOption {
+              description = ''
+                Whether text fields in browser tabs, web apps and Electron apps
+                underline misspelled words and offer fixes in their menu.
+              '';
+              type = lib.types.bool;
+              default = true;
+            };
+            languages = lib.mkOption {
+              description = ''
+                The languages words are checked in, as language tags. The
+                dictionaries ship with the engine; none is downloaded.
+              '';
+              type = lib.types.nonEmptyListOf lib.types.str;
+              default = ["en-US"];
+              example = ["en-US" "de-DE"];
+            };
+          };
+
           input.keyboard = {
             xkb_rules = lib.mkOption {
               description = "Passed to xkb as is. Empty uses the libxkbcommon default.";
@@ -711,6 +831,18 @@ in {
                 }
                 {name = "us";}
               ];
+            };
+            repeat = {
+              delay_ms = lib.mkOption {
+                description = "Milliseconds a key is held before it repeats, in native windows and pages.";
+                type = lib.types.ints.u16;
+                default = 500;
+              };
+              rate = lib.mkOption {
+                description = "Repeats a second while a key is held. 0 turns repeat off.";
+                type = lib.types.ints.u16;
+                default = 25;
+              };
             };
           };
 

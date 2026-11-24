@@ -29,6 +29,11 @@ class MODULES_EXPORT DomicileDisplay final : public ScriptWrappable {
                   uint32_t scale,
                   uint32_t mode_width,
                   uint32_t mode_height,
+                  uint32_t refresh_mhz,
+                  const String& adaptive_sync,
+                  const String& hdr,
+                  uint32_t peak_luminance,
+                  uint32_t sdr_white,
                   const String& transform);
   ~DomicileDisplay() override;
 
@@ -40,6 +45,11 @@ class MODULES_EXPORT DomicileDisplay final : public ScriptWrappable {
   uint32_t scale() const { return scale_; }
   uint32_t modeWidth() const { return mode_width_; }
   uint32_t modeHeight() const { return mode_height_; }
+  uint32_t refreshMhz() const { return refresh_mhz_; }
+  const String& adaptiveSync() const { return adaptive_sync_; }
+  const String& hdr() const { return hdr_; }
+  uint32_t peakLuminance() const { return peak_luminance_; }
+  uint32_t sdrWhite() const { return sdr_white_; }
   const String& transform() const { return transform_; }
 
   void Trace(Visitor*) const override;
@@ -55,6 +65,14 @@ class MODULES_EXPORT DomicileDisplay final : public ScriptWrappable {
   // size.
   uint32_t mode_width_ = 0;
   uint32_t mode_height_ = 0;
+  // Zero means unknown.
+  uint32_t refresh_mhz_ = 0;
+  String adaptive_sync_;
+  String hdr_;
+  // Zero means unreported.
+  uint32_t peak_luminance_ = 0;
+  // Zero unless `hdr_` is `on`.
+  uint32_t sdr_white_ = 0;
   String transform_;
 };
 

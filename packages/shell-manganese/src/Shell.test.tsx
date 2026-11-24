@@ -36,6 +36,7 @@ import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import {
+  WEBVIEW_CONTEXT_MENU_EVENT,
   WEBVIEW_DESCRIPTION_CHANGE_EVENT,
   WEBVIEW_FAVICON_CHANGE_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
@@ -45,6 +46,7 @@ import {
   answerSystemCalls,
   THINKPAD_BACKLIGHT,
 } from "@domicile-desktop/system-backlight/fixture";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
 import {
   act,
@@ -52,6 +54,7 @@ import {
   render,
   screen,
   waitFor,
+  waitForElementToBeRemoved,
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -62,11 +65,16 @@ import { Shell } from "./Shell";
 // Displays in the engine's shape, so every render exercises the mapping in
 // `screens/host-displays.ts`. Two landscape monitors side by side.
 const LEFT: DomicileDisplay = {
+  adaptiveSync: "unsupported",
+  hdr: "unsupported",
   height: 1080,
   modeHeight: 1080,
   modeWidth: 1920,
   name: "left",
+  peakLuminance: 0,
+  refreshMhz: 60_000,
   scale: 1,
+  sdrWhite: 0,
   transform: "normal",
   width: 1920,
   x: 0,
@@ -74,11 +82,16 @@ const LEFT: DomicileDisplay = {
 };
 
 const RIGHT: DomicileDisplay = {
+  adaptiveSync: "unsupported",
+  hdr: "unsupported",
   height: 1024,
   modeHeight: 1024,
   modeWidth: 1280,
   name: "right",
+  peakLuminance: 0,
+  refreshMhz: 60_000,
   scale: 1,
+  sdrWhite: 0,
   transform: "normal",
   width: 1280,
   x: 1920,
@@ -396,7 +409,7 @@ const NO_APPLICATIONS: ApplicationsConfig = { bookmarks: [], omit: [] };
 /** The README's sample config. */
 const MANGANESE_KEYS: ShellKeybindings = {
   keybindings: Object.fromEntries([
-    line("Return", false, "send-shell exec kitty"),
+    ["Meta+Return", KeyAction.Exec(["kitty"])],
     line("q", true, "send-shell kill"),
     line("Return", true, "send-shell lock"),
     line("space", false, "send-shell launcher"),
@@ -508,6 +521,19 @@ const windowsOnScreen = (container: HTMLElement): string[] =>
       element.getAttribute("aria-label") ??
       "",
   );
+
+/**
+ * Whether `at` or an ancestor inside `container` turns `pointer-events` off.
+ * happy-dom does not inherit it.
+ */
+const passesPointer = (
+  at: HTMLElement | null,
+  container: HTMLElement,
+): boolean =>
+  at !== null &&
+  at !== container &&
+  (globalThis.getComputedStyle(at).pointerEvents === "none" ||
+    passesPointer(at.parentElement, container));
 
 /** Every window's title bar, in opening order. */
 const titleBars = (container: HTMLElement): HTMLElement[] => [
@@ -770,6 +796,7 @@ const browserWindow = (container: HTMLElement): HTMLElement => {
 /** The compositor reports the clipboard history, newest first. */
 const copied = (
   entries: readonly {
+    current: boolean;
     id: number;
     image: boolean;
     preview: string;
@@ -800,6 +827,7 @@ const extensionsInstalled = (popped = true): void => {
         id: CLICKED,
         name: "Clicked",
         popup: null,
+        profile: "default",
         title: "Clicked",
       },
       {
@@ -810,6 +838,7 @@ const extensionsInstalled = (popped = true): void => {
         id: POPPED,
         name: "Popped",
         popup: `chrome-extension://${POPPED}/popup.html`,
+        profile: "default",
         title: "Popped",
       },
     ],
@@ -1213,6 +1242,40 @@ describe("Shell", () => {
     });
   });
 
+  describe("picture-in-picture", () => {
+    const VIDEO = {
+      canNextTrack: false,
+      canPlay: true,
+      canPreviousTrack: false,
+      duration: 0,
+      height: 360,
+      id: "1",
+      playbackRate: 1,
+      playing: true,
+      position: 0,
+      source: null,
+      width: 640,
+      window: "",
+    };
+
+    it("floats a page's video over the windows, but not on the lock screen", async () => {
+      const { container } = await renderShell();
+      act(() => {
+        domicile.fake.set({ pictureInPictureVideos: [VIDEO] });
+      });
+
+      expect(
+        container.querySelector('app[picture-in-picture="1"]'),
+      ).not.toBeNull();
+
+      act(() => {
+        domicile.fake.set({ locked: true });
+      });
+
+      expect(container.querySelector("app[picture-in-picture]")).toBeNull();
+    });
+  });
+
   describe("the lock screen", () => {
     it("says why the compositor refused a passphrase, and how long to wait", async () => {
       await renderShell();
@@ -1258,9 +1321,27 @@ describe("Shell", () => {
       // The compositor pushes the history; the panel does not ask for it.
       await renderShell();
       copied([
-        { id: 3, image: false, preview: "the newest", thumbnail: "" },
-        { id: 2, image: false, preview: "the middle", thumbnail: "" },
-        { id: 1, image: false, preview: "the oldest", thumbnail: "" },
+        {
+          current: true,
+          id: 3,
+          image: false,
+          preview: "the newest",
+          thumbnail: "",
+        },
+        {
+          current: false,
+          id: 2,
+          image: false,
+          preview: "the middle",
+          thumbnail: "",
+        },
+        {
+          current: false,
+          id: 1,
+          image: false,
+          preview: "the oldest",
+          thumbnail: "",
+        },
       ]);
 
       press("v", true);
@@ -1268,9 +1349,10 @@ describe("Shell", () => {
       expect(
         screen.getByRole("group", { name: "On your clipboard" }).textContent,
       ).toContain("the newest");
-      expect(
-        screen.getAllByRole("option").map((row) => row.textContent),
-      ).toStrictEqual(["the middle", "the oldest"]);
+      expect(screen.getAllByRole("option")).toStrictEqual([
+        screen.getByRole("option", { name: "the middle" }),
+        screen.getByRole("option", { name: "the oldest" }),
+      ]);
     });
 
     it("opens on the screen the keyboard is on", async () => {
@@ -1288,8 +1370,20 @@ describe("Shell", () => {
       // on the seat's clipboard.
       await renderShell();
       copied([
-        { id: 8, image: false, preview: "the newest", thumbnail: "" },
-        { id: 7, image: false, preview: "ssh-rsa AAAA", thumbnail: "" },
+        {
+          current: true,
+          id: 8,
+          image: false,
+          preview: "the newest",
+          thumbnail: "",
+        },
+        {
+          current: false,
+          id: 7,
+          image: false,
+          preview: "ssh-rsa AAAA",
+          thumbnail: "",
+        },
       ]);
       press("v", true);
 
@@ -1298,6 +1392,31 @@ describe("Shell", () => {
       });
 
       expect(domicile.calls).toContainEqual(["copyClipboardEntry", 7]);
+    });
+
+    it("removes the row Delete was pressed on", async () => {
+      await renderShell();
+      copied([
+        {
+          current: true,
+          id: 8,
+          image: false,
+          preview: "the newest",
+          thumbnail: "",
+        },
+        {
+          current: false,
+          id: 7,
+          image: false,
+          preview: "ssh-rsa AAAA",
+          thumbnail: "",
+        },
+      ]);
+      press("v", true);
+
+      fireEvent.keyDown(screen.getByRole("combobox"), { key: "Delete" });
+
+      expect(domicile.calls).toContainEqual(["removeClipboardEntry", 7]);
     });
   });
 
@@ -1656,6 +1775,7 @@ describe("Shell", () => {
         "https://inbox.example.com/",
         "fake-chat",
         "focus",
+        "",
       ]);
       await waitFor(() => {
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -1802,13 +1922,19 @@ describe("Shell", () => {
         y: 30,
       });
 
+      // Placed on the window's contents, which it moves with.
       const menu = appElement(container, "menu");
       expect(boxOf(menu)).toMatchObject({
         height: "240px",
         width: "180px",
-        x: `${(Number.parseFloat(window.x) + 12).toString()}px`,
-        y: `${(Number.parseFloat(window.y) + 30).toString()}px`,
+        x: "12px",
+        y: "30px",
       });
+      const layer = menu.parentElement;
+      if (layer === null) {
+        throw new Error("test: the menu is drawn in nothing");
+      }
+      expect(boxOf(layer)).toMatchObject({ x: window.x, y: window.y });
       // Over its window, not in its own frame.
       expect(container.querySelectorAll("[data-window]").length).toBe(
         container.querySelectorAll('[data-window="app:term"]').length,
@@ -1817,6 +1943,51 @@ describe("Shell", () => {
       domicile.close("menu");
       expect(() => appElement(container, "menu")).toThrow();
       expect(appElement(container, "term")).toBeDefined();
+    });
+
+    it("draws the drop target and the selection tint over a window's bubble", async () => {
+      // Firefox draws its whole window into a bubble, which ties with them at
+      // the window's raised depth; the later element wins the tie.
+      const { container } = await renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      press("e");
+      const window2 = boxOf(appBox(container, "two"));
+      domicile.appear("bubble", {
+        height: Number.parseFloat(window2.height),
+        parent: "two",
+        width: Number.parseFloat(window2.width),
+        x: 0,
+        y: 0,
+      });
+      const over = (element: HTMLElement | null): boolean => {
+        // Drawn in a layer over its window, which holds its depth.
+        const bubble = appElement(container, "bubble").parentElement;
+        return (
+          element !== null &&
+          bubble !== null &&
+          element.style.zIndex === bubble.style.zIndex &&
+          (bubble.compareDocumentPosition(element) &
+            Node.DOCUMENT_POSITION_FOLLOWING) !==
+            0
+        );
+      };
+
+      press("a");
+      press("a");
+      expect(over(container.querySelector("[data-selection]"))).toBe(true);
+      press("a", true);
+      press("a", true);
+
+      fireEvent.pointerDown(barFor(container, "app:one"), {
+        clientX: GAP + 100,
+        clientY: TOP_BAR + TOP_GAP + TITLE_BAR / 2,
+      });
+      fireEvent.pointerMove(window, {
+        clientX: Number.parseFloat(window2.x) + 200,
+        clientY: Number.parseFloat(window2.y) + 300,
+      });
+      expect(over(container.querySelector("[data-drop]"))).toBe(true);
     });
 
     it("renames the bar when the client renames its window", async () => {
@@ -2412,6 +2583,7 @@ describe("Shell", () => {
         "openBrowserWindow",
         "https://example.com",
         "",
+        "",
       ]);
     });
 
@@ -2932,7 +3104,6 @@ describe("Shell", () => {
       press("e");
       press("v");
       clientAppears("three");
-      press("w");
       // A focused tab lights its whole group too, so only the tint tells
       // the two apart.
       expect(lit(container)).toEqual(["app:two", "app:three"]);
@@ -2954,7 +3125,6 @@ describe("Shell", () => {
       press("e");
       press("v");
       clientAppears("three");
-      press("w");
 
       press("a");
 
@@ -2995,8 +3165,6 @@ describe("Shell", () => {
       press("e");
       press("v");
       clientAppears("three");
-
-      press("w");
 
       // The strip draws the line; the open tab covers it to join its window.
       const covers = css({ marginBlockEnd: "-1px" });
@@ -3369,6 +3537,41 @@ describe("Shell", () => {
       expect(appElement(container, "term").hasAttribute("resizing")).toBe(
         false,
       );
+    });
+
+    describe("while an edge is dragged", () => {
+      // Click-through is a style, so these read the shell's stylesheet.
+      loadEmittedStylesheet(
+        document,
+        new URL("../styled-system/styles.css", import.meta.url),
+      );
+
+      it("keeps windows taking the pointer", async () => {
+        // The edge holds the pointer, so the drag needs no click-through. A
+        // window made click-through takes the pointer back only at the
+        // engine's next frame, so moves and clicks just after the release
+        // would go to the desktop instead of the page under them.
+        const { container } = await renderShell();
+        clientAppears("term");
+        press("Tab", true);
+        pageHolds({});
+
+        fireEvent.pointerDown(rightBorder(container), {
+          clientX: 100,
+          clientY: 100,
+        });
+        fireEvent.pointerMove(window, {
+          buttons: 1,
+          clientX: 140,
+          clientY: 130,
+        });
+
+        expect(passesPointer(appElement(container, "term"), container)).toBe(
+          false,
+        );
+
+        fireEvent.pointerUp(window, { clientX: 140, clientY: 130 });
+      });
     });
 
     it("does not mark a window resizing while it is moved", async () => {
@@ -3763,6 +3966,21 @@ describe("Shell", () => {
       );
       expect(Number(appBox(container, "term").style.zIndex)).toBeGreaterThan(0);
     });
+    it("hides a tab's tooltip as a window it shows slides over the tab", async () => {
+      const { container } = await renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      clientAppears("notes");
+      press("minus", true);
+      motionsPlayOut(container);
+      await userEvent.hover(screen.getByText("one", { selector: "span" }));
+      await screen.findByRole("tooltip");
+
+      press("minus");
+
+      await waitForElementToBeRemoved(() => screen.queryByRole("tooltip"));
+    });
+
     // It hangs from the top edge, so its top corners are square.
     it("hangs a window it shows from the top edge of the screen", async () => {
       const { container } = await renderShell();
@@ -4076,6 +4294,42 @@ describe("the overview", () => {
     );
   });
 
+  it("has the engine show a hidden workspace's windows as they come in, without waiting for them to draw", async () => {
+    // Out of view, a window's surface is let go; coming back, the engine
+    // would hold the desktop's frame for it to draw again.
+    const { container } = await renderShell();
+    clientAppears("one");
+    press("parenright");
+    clientAppears("two");
+    press("parenleft");
+
+    press("o");
+    expect(appElement(container, "two").hasAttribute("resizing")).toBe(true);
+    expect(appElement(container, "one").hasAttribute("resizing")).toBe(false);
+
+    fireEvent.keyDown(overview() ?? document, { key: "Escape" });
+    expect(appElement(container, "two").hasAttribute("resizing")).toBe(false);
+  });
+
+  it("closes a page's menu left open, which would float over it", async () => {
+    const { container } = await renderShell();
+    press("space");
+    await userEvent
+      .setup()
+      .type(screen.getByRole("combobox"), "example.com{Enter}");
+    await launched();
+    const view = container.querySelector("webview");
+    if (view === null) {
+      throw new Error("test: no browser window");
+    }
+    fireEvent(view, pageMenuAsked());
+    await screen.findByRole("menu", { name: "Page" });
+
+    press("o");
+
+    expect(screen.queryByRole("menu", { name: "Page" })).toBeNull();
+  });
+
   it("closes on Escape", async () => {
     await renderShell();
     press("o");
@@ -4083,6 +4337,38 @@ describe("the overview", () => {
     fireEvent.keyDown(overview() ?? document, { key: "Escape" });
 
     expect(overview()).toBeNull();
+  });
+
+  describe("on the lock screen", () => {
+    // Stacking is a style, so this reads the shell's stylesheet.
+    loadEmittedStylesheet(
+      document,
+      new URL("../styled-system/styles.css", import.meta.url),
+    );
+
+    it("stays under it, so it blurs with the rest of the desk", async () => {
+      const { container } = await renderShell();
+      clientAppears("one");
+      press("o");
+      act(() => {
+        domicile.fake.set({ locked: true });
+      });
+      const sheet =
+        container.querySelector("[data-veil]")?.parentElement ?? undefined;
+      if (sheet === undefined) {
+        throw new Error("test: no lock screen");
+      }
+
+      const lock = Number(globalThis.getComputedStyle(sheet).zIndex);
+      const over = [
+        ...container.querySelectorAll<HTMLElement>("[style*='z-index']"),
+      ]
+        .map((part) => Number(part.style.zIndex))
+        .filter((depth) => depth >= lock);
+      expect(overview()).not.toBeNull();
+      expect(Number.isFinite(lock)).toBe(true);
+      expect(over).toEqual([]);
+    });
   });
 });
 
@@ -4377,3 +4663,34 @@ describe("the launcher", () => {
     expect(barFor(container, "app:two").dataset.focus).toBe("focused");
   });
 });
+
+/** The engine's context menu event for a right click on a page's background. */
+const pageMenuAsked = (): Event =>
+  Object.assign(new Event(WEBVIEW_CONTEXT_MENU_EVENT), {
+    canCopy: false,
+    canCut: false,
+    canDelete: false,
+    canPaste: false,
+    canPictureInPicture: false,
+    canRedo: false,
+    canSelectAll: false,
+    canUndo: false,
+    hasImageContents: false,
+    inPictureInPicture: false,
+    isEditable: false,
+    linkText: "",
+    linkUrl: "",
+    mediaType: "none",
+    misspelledWord: "",
+    replaceMisspelling: () => {
+      throw new Error("test: no misspelling to replace");
+    },
+    run: () => {
+      throw new Error("test: no action to run");
+    },
+    selectionText: "",
+    spellingSuggestions: [],
+    srcUrl: "",
+    x: 10,
+    y: 20,
+  });

@@ -223,6 +223,16 @@ export const slidAcross = (
 });
 
 /**
+ * Custom property taking the ring and shadow off a moving tab's contents (see
+ * `movingStyles`) when its window fills its screen, where the shadow would
+ * spill onto the next display. None otherwise, so the keyframes' own applies.
+ */
+export const unedgedOn = (
+  fillsScreen: boolean,
+): Record<`--${string}`, string> =>
+  fillsScreen ? { "--tab-edge": "none" } : {};
+
+/**
  * The wrapper around each part of a window that clips it to its screen; see
  * {@link clippedTo}.
  *
@@ -262,6 +272,39 @@ export const clippedTo = (
 };
 
 /**
+ * The screen a workspace switch slides a window across, or `undefined` when
+ * no switch is sliding it. See {@link clippedAlong}.
+ */
+export const slidingAcross = (
+  screen: Rect,
+  motion: WindowMotion,
+): Rect | undefined => (isSwitching(motion) ? screen : undefined);
+
+/**
+ * Inline style clipping part of a window at `rect` to the `screen` a switch
+ * slides it across (see {@link slidingAcross}), or none.
+ *
+ * In the part's own box, so the clip moves with the slide: a float hanging
+ * off the screen's edge stays off its workspace instead of sliding into view
+ * beside it. {@link clippedTo}'s clip stays put, keeping the slide on its
+ * monitor.
+ */
+export const clippedAlong = (
+  screen: Rect | undefined,
+  rect: Rect,
+): CSSProperties => {
+  if (screen === undefined) {
+    return {};
+  } else {
+    const top = `${(screen.y - rect.y).toString()}px`;
+    const right = `${(screen.x + screen.width - rect.x).toString()}px`;
+    const bottom = `${(screen.y + screen.height - rect.y).toString()}px`;
+    const left = `${(screen.x - rect.x).toString()}px`;
+    return { clip: `rect(${top}, ${right}, ${bottom}, ${left})` };
+  }
+};
+
+/**
  * A window's animation, keyed by `WindowMotion`. Keyframes are in
  * `panda.config.ts`.
  *
@@ -288,11 +331,16 @@ export const movingStyles = cva({
     // they uncover; a new tab's grow out of it over the tab they hide (see
     // `contentsScaledAbout`). A fade alone, over the same box, reads as a tab
     // switch. Slower than a window's, so the move to the strip is seen.
+    //
+    // Their edge scales with them, too thin to show them over a like tab (a
+    // terminal over a terminal), so they also carry a ring and shadow
+    // (`windowOpeningTabEdge`, `windowClosingTabEdge`). A second animation,
+    // since `box-shadow` cannot run on the compositor thread.
     {
       contents: true,
       css: {
         animationDuration: "token(durations.slow)",
-        animationName: "windowClosingIntoTab",
+        animationName: "windowClosingIntoTab, windowClosingTabEdge",
         animationTimingFunction: "token(easings.outQuart)",
       },
       motion: "closing-tab",
@@ -301,7 +349,7 @@ export const movingStyles = cva({
       contents: true,
       css: {
         animationDuration: "token(durations.slow)",
-        animationName: "windowOpeningFromTab",
+        animationName: "windowOpeningFromTab, windowOpeningTabEdge",
         animationTimingFunction: "token(easings.outQuart)",
       },
       motion: "opening-tab",
@@ -445,6 +493,8 @@ export const settlingStyles = cva({
           "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}",
       },
       true: {
+        // main-thread animation: a lowered depth steps once at the end;
+        // nothing eases.
         transition:
           "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}, z-index {durations.fast} step-end",
       },

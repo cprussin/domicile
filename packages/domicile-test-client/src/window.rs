@@ -31,6 +31,9 @@ use wayland_protocols::wp::idle_inhibit::zv1::client::{
 use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::{
     zwp_keyboard_shortcuts_inhibit_manager_v1, zwp_keyboard_shortcuts_inhibitor_v1,
 };
+use wayland_protocols::wp::pointer_constraints::zv1::client::{
+    zwp_confined_pointer_v1, zwp_locked_pointer_v1, zwp_pointer_constraints_v1,
+};
 use wayland_protocols::wp::pointer_gestures::zv1::client::{
     zwp_pointer_gesture_hold_v1, zwp_pointer_gesture_pinch_v1, zwp_pointer_gesture_swipe_v1,
     zwp_pointer_gestures_v1,
@@ -38,6 +41,12 @@ use wayland_protocols::wp::pointer_gestures::zv1::client::{
 use wayland_protocols::wp::primary_selection::zv1::client::{
     zwp_primary_selection_device_manager_v1, zwp_primary_selection_device_v1,
     zwp_primary_selection_offer_v1, zwp_primary_selection_source_v1,
+};
+use wayland_protocols::wp::relative_pointer::zv1::client::{
+    zwp_relative_pointer_manager_v1, zwp_relative_pointer_v1,
+};
+use wayland_protocols::wp::text_input::zv3::client::{
+    zwp_text_input_manager_v3, zwp_text_input_v3,
 };
 use wayland_protocols::wp::viewporter::client::{wp_viewport, wp_viewporter};
 use wayland_protocols::xdg::activation::v1::client::{xdg_activation_token_v1, xdg_activation_v1};
@@ -49,13 +58,17 @@ use wayland_protocols::xdg::foreign::zv2::client::{zxdg_exported_v2, zxdg_export
 use wayland_protocols::xdg::shell::client::{
     xdg_popup, xdg_positioner, xdg_surface, xdg_toplevel, xdg_wm_base,
 };
+use wayland_protocols::xdg::system_bell::v1::client::xdg_system_bell_v1;
 
 use wayland_protocols_misc::server_decoration::client::{
     org_kde_kwin_server_decoration, org_kde_kwin_server_decoration_manager,
 };
 
 use crate::anchor_protocol::{domicile_anchor_manager_v1, domicile_toplevel_anchor_v1};
-use crate::arguments::{Arguments, AskForFocus, AskTo, HoldTheScreensOn, TakeTheShortcuts};
+use crate::arguments::{
+    Arguments, AskForFocus, AskTo, AskToDrag, ConstrainPointer, DeepFormat, HoldTheScreensOn,
+    TakeTheShortcuts,
+};
 
 /// Why the client stopped.
 #[derive(Debug, thiserror::Error)]
@@ -168,6 +181,12 @@ const fn translucent(color: u32) -> u32 {
     (alpha << 24) | (red << 16) | (green << 8) | blue
 }
 
+/// The color a `--format` window draws, as 8-bit `0x00RRGGBB`.
+///
+/// Public because `guard-buffer-formats.sh` reads it back from the page. Its
+/// channels differ, so a swap shows.
+pub const DEEP_COLOR: u32 = 0x00_33_66_cc;
+
 /// The two halves of a `--buffer-transform` window's buffer, left then right
 /// as drawn, before the turn.
 ///
@@ -196,6 +215,63 @@ const fn shm_format(translucent: bool) -> wl_shm::Format {
     } else {
         wl_shm::Format::Xrgb8888
     }
+}
+
+/// The `wl_shm` format `format` names.
+const fn deep_shm_format(format: DeepFormat) -> wl_shm::Format {
+    match format {
+        DeepFormat::Abgr2101010 => wl_shm::Format::Abgr2101010,
+        DeepFormat::Xbgr2101010 => wl_shm::Format::Xbgr2101010,
+        DeepFormat::Abgr16161616f => wl_shm::Format::Abgr16161616f,
+        DeepFormat::Xbgr16161616f => wl_shm::Format::Xbgr16161616f,
+    }
+}
+
+/// One pixel of 8-bit `0x00RRGGBB` `color` in `format`, little-endian.
+///
+/// The padding of a format without alpha is left zero, so a compositor that
+/// reads it as alpha draws the window transparent.
+fn deep_pixel(format: DeepFormat, color: u32) -> Vec<u8> {
+    let channel = |shift: u32| (color >> shift) & 0xff;
+    let (red, green, blue) = (channel(16), channel(8), channel(0));
+    let ten = |value: u32| (value * 1023 + 127) / 255;
+    let half = |value: u32| u64::from(half_float(value as f32 / 255.0));
+    match format {
+        DeepFormat::Abgr2101010 | DeepFormat::Xbgr2101010 => {
+            let alpha = if format == DeepFormat::Abgr2101010 {
+                3
+            } else {
+                0
+            };
+            ((alpha << 30) | (ten(blue) << 20) | (ten(green) << 10) | ten(red))
+                .to_le_bytes()
+                .to_vec()
+        }
+        DeepFormat::Abgr16161616f | DeepFormat::Xbgr16161616f => {
+            let alpha = if format == DeepFormat::Abgr16161616f {
+                u64::from(half_float(1.0))
+            } else {
+                0
+            };
+            ((alpha << 48) | (half(blue) << 32) | (half(green) << 16) | half(red))
+                .to_le_bytes()
+                .to_vec()
+        }
+    }
+}
+
+/// `value`, from 0 to 1, as an IEEE half float, rounded to nearest.
+fn half_float(value: f32) -> u16 {
+    if value == 0.0 {
+        return 0;
+    }
+    let bits = value.to_bits();
+    let exponent = ((bits >> 23) & 0xff) as i32 - 127 + 15;
+    let mantissa = bits & 0x7f_ffff;
+    // The mantissa's top 10 bits, rounded on the 11th; a carry steps the
+    // exponent, as it should.
+    let rounded = (mantissa + 0x1000) >> 13;
+    ((exponent as u32) << 10).wrapping_add(rounded) as u16
 }
 
 /// The buffer for a `size` window drawn with `transform`: on its side for a
@@ -244,6 +320,10 @@ pub fn run(asked: &Arguments) -> Result<std::convert::Infallible, ClientError> {
         .map_err(|err| ClientError::Lost(err.to_string()))?;
 
     client.open(&handle)?;
+    // Kept so the icon is served while the client runs.
+    let _tray = asked
+        .tray
+        .then(|| crate::tray::show().expect("the session bus takes a tray icon"));
     loop {
         queue
             .blocking_dispatch(&mut client)
@@ -266,6 +346,17 @@ struct Client {
     anchor: Option<String>,
     /// See [`crate::arguments::Arguments::sliding_menu`].
     sliding_menu: bool,
+    /// See [`crate::arguments::Arguments::cursor_surface`]. `drawn` keeps
+    /// the cursor surface and its buffers' backing files.
+    cursor_surface: bool,
+    cursor_drawn: Option<(wl_surface::WlSurface, Vec<std::fs::File>)>,
+    /// See [`crate::arguments::Arguments::ask_to_drag`].
+    ask_to_drag: Option<AskToDrag>,
+    /// See [`crate::arguments::Arguments::constrain_pointer`]. Taken once
+    /// asked.
+    constrain_pointer: Option<ConstrainPointer>,
+    /// See [`crate::arguments::Arguments::constrain_region`].
+    constrain_region: Option<(i32, i32, i32, i32)>,
     /// The open popups, each over the one before it or the window.
     popups: Vec<Popup>,
     /// Whether to open a bubble once the window is up. See
@@ -274,6 +365,8 @@ struct Client {
     bubble: Option<Bubble>,
     /// See [`crate::arguments::Arguments::scrolling_bubble`].
     scrolls: bool,
+    /// See [`crate::arguments::Arguments::late_bubble`].
+    late_bubble: bool,
     /// See [`crate::arguments::Arguments::bubble_without_input`].
     bubble_without_input: bool,
     /// Whether to open a dialog once the window is up. See
@@ -288,6 +381,8 @@ struct Client {
     /// See [`crate::arguments::Arguments::translucent`]. Kept because buffers
     /// are remade on every rescale and resize.
     translucent: bool,
+    /// See [`crate::arguments::Arguments::format`]. Kept for the same reason.
+    format: Option<DeepFormat>,
     /// See [`crate::arguments::Arguments::buffer_transform`]. Kept for the
     /// same reason.
     buffer_transform: Option<wl_output::Transform>,
@@ -311,6 +406,11 @@ struct Client {
     wl_seat_v7: bool,
     /// See [`crate::arguments::Arguments::no_touch`].
     no_touch: bool,
+    /// See [`crate::arguments::Arguments::text_input`].
+    text_input: bool,
+    /// Where `--text-input`'s text cursor is across its field, logical. It
+    /// moves right as text is committed.
+    caret_x: i32,
     /// The serial of the keyboard's last `enter`, for
     /// [`AskForFocus::WhenLeft`].
     entered_at: Option<u32>,
@@ -320,6 +420,8 @@ struct Client {
     inhibit_shortcuts: Option<TakeTheShortcuts>,
     /// See [`crate::arguments::Arguments::outlive_its_window`].
     outlive_its_window: bool,
+    /// See [`crate::arguments::Arguments::ring_the_bell`].
+    ring_the_bell: bool,
     /// Whether the toplevel was destroyed under `--outlive-its-window`.
     ///
     /// Stops drawing: the surface remains but has no role to commit frames
@@ -397,6 +499,10 @@ struct Selections {
 /// [`Client::copy_what_was_asked_for`].
 struct CopyRole;
 
+/// User data for the `wl_display.sync` after asking again for client-side
+/// decorations. See the `org_kde_kwin_server_decoration` dispatch.
+struct InsistRole;
+
 /// User data for a popup's objects, so their events reach separate handlers
 /// from the window's.
 struct PopupRole;
@@ -428,6 +534,9 @@ struct Bubble {
     /// Its buffers and backing files, kept until the client exits.
     drawn: Vec<(wl_buffer::WlBuffer, std::fs::File)>,
 }
+
+/// User data for `--cursor-surface`'s objects. See [`PopupRole`].
+struct CursorRole;
 
 /// User data for a dialog's objects. See [`PopupRole`].
 struct DialogRole;
@@ -470,6 +579,30 @@ enum Paint {
     /// [`striped`] at [`scrolled_to`] the frame, drawn anew each frame, for a
     /// `--scrolling-bubble` window. Opaque.
     Scrolled,
+    /// [`DEEP_COLOR`] in a `--format` window's format, every frame.
+    Deep(DeepFormat),
+}
+
+impl Paint {
+    /// The `wl_shm` format the buffers hold.
+    ///
+    /// `Xrgb8888` has no alpha, so an ordinary window is always opaque (see
+    /// the compositor's `xrgb_forces_opaque_alpha`).
+    const fn shm_format(self) -> wl_shm::Format {
+        match self {
+            Paint::Deep(format) => deep_shm_format(format),
+            Paint::Translucent => shm_format(true),
+            Paint::Opaque | Paint::Halves | Paint::Scrolled => shm_format(false),
+        }
+    }
+
+    /// Bytes a pixel.
+    const fn bytes_per_pixel(self) -> u32 {
+        match self {
+            Paint::Deep(DeepFormat::Abgr16161616f | DeepFormat::Xbgr16161616f) => 8,
+            _ => 4,
+        }
+    }
 }
 
 /// Two buffers in one shared file, used alternately.
@@ -497,6 +630,8 @@ struct Pixels {
 #[derive(Default)]
 struct Globals {
     gestures: Option<zwp_pointer_gestures_v1::ZwpPointerGesturesV1>,
+    relative: Option<zwp_relative_pointer_manager_v1::ZwpRelativePointerManagerV1>,
+    constraints: Option<zwp_pointer_constraints_v1::ZwpPointerConstraintsV1>,
     compositor: Option<wl_compositor::WlCompositor>,
     shm: Option<wl_shm::WlShm>,
     /// For `--bubble`.
@@ -504,6 +639,7 @@ struct Globals {
     wm_base: Option<xdg_wm_base::XdgWmBase>,
     cursor: Option<wp_cursor_shape_manager_v1::WpCursorShapeManagerV1>,
     activation: Option<xdg_activation_v1::XdgActivationV1>,
+    bell: Option<xdg_system_bell_v1::XdgSystemBellV1>,
     /// For `--hold-the-screens-on`.
     inhibit: Option<zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1>,
     /// For `--inhibit-shortcuts`.
@@ -511,6 +647,8 @@ struct Globals {
         Option<zwp_keyboard_shortcuts_inhibit_manager_v1::ZwpKeyboardShortcutsInhibitManagerV1>,
     /// Kept because the selection devices are created from the seat.
     seat: Option<wl_seat::WlSeat>,
+    /// For `--text-input`.
+    text_input: Option<zwp_text_input_manager_v3::ZwpTextInputManagerV3>,
     clipboard: Option<wl_data_device_manager::WlDataDeviceManager>,
     /// The primary selection manager, a separate global from the clipboard's.
     primary: Option<zwp_primary_selection_device_manager_v1::ZwpPrimarySelectionDeviceManagerV1>,
@@ -542,10 +680,16 @@ impl Client {
             repositions: asked.repositioned_popup,
             anchor: asked.anchor.clone(),
             sliding_menu: asked.sliding_menu,
+            cursor_surface: asked.cursor_surface,
+            cursor_drawn: None,
+            ask_to_drag: asked.ask_to_drag,
+            constrain_pointer: asked.constrain_pointer,
+            constrain_region: asked.constrain_region,
             popups: Vec::new(),
             wants_bubble: asked.bubble || asked.bubble_without_input || asked.scrolling_bubble,
             bubble: None,
             scrolls: asked.scrolling_bubble,
+            late_bubble: asked.late_bubble,
             bubble_without_input: asked.bubble_without_input,
             wants_dialog: asked.dialog,
             dialog: None,
@@ -553,6 +697,7 @@ impl Client {
             min_size: asked.min_size,
             max_size: asked.max_size,
             translucent: asked.translucent,
+            format: asked.format,
             buffer_transform: asked.buffer_transform,
             follow_configure: asked.follow_configure,
             resize_to: asked.resize_to,
@@ -564,10 +709,13 @@ impl Client {
             xdg_wm_base_v1: asked.xdg_wm_base_v1,
             wl_seat_v7: asked.wl_seat_v7,
             no_touch: asked.no_touch,
+            text_input: asked.text_input,
+            caret_x: CARET.0,
             entered_at: None,
             hold_the_screens_on: asked.hold_the_screens_on,
             inhibit_shortcuts: asked.inhibit_shortcuts,
             outlive_its_window: asked.outlive_its_window,
+            ring_the_bell: asked.ring_the_bell,
             window_is_gone: false,
             copy: asked.copy.clone(),
             copy_primary: asked.copy_primary.clone(),
@@ -616,17 +764,29 @@ impl Client {
                 "wp_cursor_shape_manager_v1" => {
                     self.globals.cursor = Some(registry.bind(name, version.min(1), handle, ()));
                 }
+                "zwp_pointer_constraints_v1" => {
+                    self.globals.constraints = Some(registry.bind(name, 1, handle, ()));
+                }
+                "zwp_relative_pointer_manager_v1" => {
+                    self.globals.relative = Some(registry.bind(name, 1, handle, ()));
+                }
                 "zwp_pointer_gestures_v1" => {
                     self.globals.gestures = Some(registry.bind(name, version.min(3), handle, ()));
                 }
                 "xdg_activation_v1" => {
                     self.globals.activation = Some(registry.bind(name, version.min(1), handle, ()));
                 }
+                "xdg_system_bell_v1" => {
+                    self.globals.bell = Some(registry.bind(name, version.min(1), handle, ()));
+                }
                 "zwp_idle_inhibit_manager_v1" => {
                     self.globals.inhibit = Some(registry.bind(name, version.min(1), handle, ()));
                 }
                 "domicile_anchor_manager_v1" => {
                     self.globals.anchors = Some(registry.bind(name, version.min(1), handle, ()));
+                }
+                "zwp_text_input_manager_v3" => {
+                    self.globals.text_input = Some(registry.bind(name, version.min(1), handle, ()));
                 }
                 "zwp_keyboard_shortcuts_inhibit_manager_v1" => {
                     self.globals.shortcuts_inhibit =
@@ -791,6 +951,9 @@ impl Client {
         if self.inhibit_shortcuts == Some(TakeTheShortcuts::OnItsWindow) {
             self.take_the_shortcuts(&surface, handle)?;
         }
+        if self.text_input {
+            self.edit_text(handle)?;
+        }
         self.window = Some(Window {
             surface,
             xdg,
@@ -816,6 +979,25 @@ impl Client {
         })?;
         let inhibitor = inhibit.create_inhibitor(surface, handle, ());
         crate::say!(inhibitor.id(), "create_inhibitor({})", surface.id());
+        Ok(())
+    }
+    /// Become a text editor for `--text-input`: a `zwp_text_input_v3` on the
+    /// seat, enabled each time the keyboard enters.
+    fn edit_text(&mut self, handle: &QueueHandle<Client>) -> Result<(), ClientError> {
+        let manager = self
+            .globals
+            .text_input
+            .as_ref()
+            .ok_or(ClientError::Missing {
+                global: "zwp_text_input_manager_v3",
+            })?;
+        let seat = self
+            .globals
+            .seat
+            .as_ref()
+            .ok_or(ClientError::Missing { global: "wl_seat" })?;
+        let text_input = manager.get_text_input(seat, handle, ());
+        crate::say!(text_input.id(), "get_text_input()");
         Ok(())
     }
 
@@ -1056,6 +1238,9 @@ impl Client {
 
     /// What the window's buffers hold.
     fn paint(&self) -> Paint {
+        if let Some(format) = self.format {
+            return Paint::Deep(format);
+        }
         match (self.scrolls, self.buffer_transform, self.translucent) {
             (true, _, _) => Paint::Scrolled,
             (false, Some(_), _) => Paint::Halves,
@@ -1097,11 +1282,16 @@ impl Client {
                             .bubble
                             .as_ref()
                             .and_then(|bubble| bubble.subsurface.as_ref());
+                        let at = if self.late_bubble {
+                            scrolled_to(self.frame.saturating_sub(1))
+                        } else {
+                            top
+                        };
                         if let Some(subsurface) = subsurface {
-                            subsurface.set_position(SCROLLING_BUBBLE.0, top);
+                            subsurface.set_position(SCROLLING_BUBBLE.0, at);
                         }
                     }
-                    Paint::Opaque | Paint::Translucent | Paint::Halves => {
+                    Paint::Opaque | Paint::Translucent | Paint::Halves | Paint::Deep(_) => {
                         window.pixels.fill(index, color)?;
                     }
                 }
@@ -1131,8 +1321,8 @@ impl Pixels {
         (width, height): (u32, u32),
         paint: Paint,
     ) -> Result<Pixels, ClientError> {
-        let translucent = paint == Paint::Translucent;
-        let each = (width as usize) * (height as usize) * 4;
+        let bytes_per_pixel = paint.bytes_per_pixel();
+        let each = (width as usize) * (height as usize) * bytes_per_pixel as usize;
         let file = anonymous(each * 2)
             .map_err(|err| ClientError::NoBuffer(format!("no memory to draw in: {err}")))?;
         let pool = shm.create_pool(file.as_fd(), (each * 2) as i32, handle, ());
@@ -1141,8 +1331,8 @@ impl Pixels {
                 (index * each) as i32,
                 width as i32,
                 height as i32,
-                (width * 4) as i32,
-                shm_format(translucent),
+                (width * bytes_per_pixel) as i32,
+                paint.shm_format(),
                 handle,
                 index,
             )
@@ -1164,6 +1354,10 @@ impl Pixels {
             Paint::Opaque => flat(COLORS),
             Paint::Translucent => flat(TRANSLUCENT_COLORS),
             Paint::Halves => [halves(width, height), halves(width, height)],
+            Paint::Deep(format) => {
+                let frame = deep_pixel(format, DEEP_COLOR).repeat(each / bytes_per_pixel as usize);
+                [frame.clone(), frame]
+            }
             // Drawn anew each frame by `write`.
             Paint::Scrolled => [Vec::new(), Vec::new()],
         };
@@ -1233,6 +1427,25 @@ fn ask_for_focus_or_stop(
     }
 }
 
+/// Ring the bell for `--ring-the-bell`, once: with the window, then without.
+fn ring_the_bell(client: &mut Client) {
+    if !client.ring_the_bell {
+        return;
+    }
+    client.ring_the_bell = false;
+    let bell = client
+        .globals
+        .bell
+        .as_ref()
+        .expect("--ring-the-bell needs xdg_system_bell_v1");
+    let window = client
+        .window
+        .as_ref()
+        .expect("the bell rings once the window is mapped");
+    bell.ring(Some(&window.surface));
+    bell.ring(None);
+}
+
 /// Open the `--popup` over the window, once.
 fn open_popup(client: &mut Client, handle: &QueueHandle<Client>) {
     if !client.wants_popup {
@@ -1268,6 +1481,126 @@ fn open_a_sliding_menu(client: &mut Client, handle: &QueueHandle<Client>) {
     open_a_popup(client, handle, &parent, true);
 }
 
+/// Draw `--cursor-surface`'s cursor at `size`, setting it as the pointer's
+/// cursor on `entered`, the pointer and its enter serial.
+fn draw_the_cursor(
+    client: &mut Client,
+    handle: &QueueHandle<Client>,
+    entered: Option<(&wl_pointer::WlPointer, u32)>,
+    size: (i32, i32),
+) {
+    let (Some(compositor), Some(shm)) = (
+        client.globals.compositor.as_ref(),
+        client.globals.shm.as_ref(),
+    ) else {
+        unreachable!("open() refuses a compositor without these");
+    };
+    let (surface, files) = client
+        .cursor_drawn
+        .get_or_insert_with(|| (compositor.create_surface(handle, CursorRole), Vec::new()));
+    if let Some((pointer, serial)) = entered {
+        pointer.set_cursor(serial, Some(surface), 1, 2);
+        crate::say!(
+            pointer.id(),
+            "set_cursor({}, {}, 1, 2)",
+            serial,
+            surface.id()
+        );
+    }
+    let (buffer, file) = solid_or_stop(shm, handle, size, CursorRole);
+    surface.attach(Some(&buffer), 0, 0);
+    surface.damage_buffer(0, 0, size.0, size.1);
+    surface.commit();
+    crate::say!(surface.id(), "cursor_drawn({}, {})", size.0, size.1);
+    files.push(file);
+}
+
+/// Ask, once, for `--constrain-pointer`'s lock or confinement over the window
+/// the pointer entered.
+fn constrain_the_pointer(
+    client: &mut Client,
+    handle: &QueueHandle<Client>,
+    pointer: &wl_pointer::WlPointer,
+    entered: &wl_surface::WlSurface,
+) {
+    let Some(window) = client
+        .window
+        .as_ref()
+        .filter(|window| window.surface == *entered)
+    else {
+        return;
+    };
+    let (Some(constraint), Some(constraints)) = (
+        client.constrain_pointer.take(),
+        client.globals.constraints.as_ref(),
+    ) else {
+        return;
+    };
+    let lifetime = zwp_pointer_constraints_v1::Lifetime::Persistent;
+    let region = client.constrain_region.map(|(x, y, width, height)| {
+        let region = client
+            .globals
+            .compositor
+            .as_ref()
+            .expect("a client with a window has a compositor")
+            .create_region(handle, ());
+        region.add(x, y, width, height);
+        region
+    });
+    match constraint {
+        ConstrainPointer::Lock => {
+            let locked = constraints.lock_pointer(
+                &window.surface,
+                pointer,
+                region.as_ref(),
+                lifetime,
+                handle,
+                (),
+            );
+            crate::say!(locked.id(), "lock_pointer()");
+        }
+        ConstrainPointer::Confine => {
+            let confined = constraints.confine_pointer(
+                &window.surface,
+                pointer,
+                region.as_ref(),
+                lifetime,
+                handle,
+                (),
+            );
+            crate::say!(confined.id(), "confine_pointer()");
+        }
+    }
+    if let Some(region) = region {
+        region.destroy();
+    }
+}
+
+/// Ask the desktop to move or resize the window from the button event
+/// `serial`.
+fn ask_to_drag(client: &Client, drag: AskToDrag, serial: u32) {
+    let toplevel = &client
+        .window
+        .as_ref()
+        .expect("a press reaches only a client with a window")
+        .toplevel;
+    let seat = client
+        .globals
+        .seat
+        .as_ref()
+        .expect("a press comes from the seat");
+    match drag {
+        AskToDrag::Move | AskToDrag::MoveAfterRelease => {
+            toplevel._move(seat, serial);
+            crate::say!(toplevel.id(), "move({})", serial);
+        }
+        AskToDrag::ResizeBottomRight => {
+            toplevel.resize(seat, serial, xdg_toplevel::ResizeEdge::BottomRight);
+            crate::say!(toplevel.id(), "resize({}, bottom_right)", serial);
+        }
+    }
+}
+
 /// Open a [`POPUP`] over `parent`, sliding on both axes if `slides`.
 ///
 /// Anchored by a positioner, with a first commit carrying no buffer.
@@ -1289,6 +1622,10 @@ fn open_a_popup(
     let xdg = wm_base.get_xdg_surface(&surface, handle, PopupRole);
     let popup = xdg.get_popup(Some(parent), &positioner, handle, PopupRole);
     positioner.destroy();
+    // Only traced, under the popup's surface, as the window's is.
+    if let Some(manager) = &client.globals.fractional_scale {
+        manager.get_fractional_scale(&surface, handle, PopupScale(surface.id()));
+    }
     // Grab before the first commit, as xdg-shell requires. The serial
     // should be the press that opened the menu; there is none, and a
     // compositor that validated it would dismiss the popup.
@@ -1698,6 +2035,7 @@ impl Dispatch<xdg_surface::XdgSurface, ()> for Client {
                 draw_or_stop(client, handle);
                 // After mapping, since activation names a surface.
                 ask_for_focus_or_stop(client, handle, AskForFocus::OnceMapped, None);
+                ring_the_bell(client);
                 // A popup needs a mapped parent.
                 open_popup(client, handle);
                 open_bubble(client, handle);
@@ -1860,6 +2198,7 @@ impl Dispatch<xdg_toplevel::XdgToplevel, ()> for Client {
                 (xdg_toplevel::State::TiledBottom, "tiled_bottom"),
                 (xdg_toplevel::State::Maximized, "maximized"),
                 (xdg_toplevel::State::Fullscreen, "fullscreen"),
+                (xdg_toplevel::State::Resizing, "resizing"),
             ]
             .into_iter()
             .filter(|(state, _)| {
@@ -1925,6 +2264,10 @@ fn ask(client: &Client, toplevel: &xdg_toplevel::XdgToplevel, ask_to: AskTo) {
             toplevel.unset_fullscreen();
             crate::say!(toplevel.id(), "unset_fullscreen()");
         }
+        AskTo::Minimize => {
+            toplevel.set_minimized();
+            crate::say!(toplevel.id(), "set_minimized()");
+        }
     }
 }
 
@@ -1976,6 +2319,22 @@ impl Dispatch<wl_callback::WlCallback, CopyRole> for Client {
     ) {
         if let wl_callback::Event::Done { .. } = event {
             crate::trace::say(format_args!("copy handled"));
+        }
+    }
+}
+
+/// The compositor has handled an insisting ask for client-side decorations.
+impl Dispatch<wl_callback::WlCallback, InsistRole> for Client {
+    fn event(
+        _: &mut Client,
+        _: &wl_callback::WlCallback,
+        event: wl_callback::Event,
+        _: &InsistRole,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        if let wl_callback::Event::Done { .. } = event {
+            crate::trace::say(format_args!("insisted on drawing its own frame"));
         }
     }
 }
@@ -2039,6 +2398,9 @@ impl Dispatch<wl_seat::WlSeat, ()> for Client {
                     if manager.version() >= 3 {
                         manager.get_hold_gesture(&pointer, handle, ());
                     }
+                }
+                if let Some(manager) = &client.globals.relative {
+                    manager.get_relative_pointer(&pointer, handle, ());
                 }
                 // Created now, because `set_shape` on pointer enter needs the
                 // device to exist.
@@ -2218,6 +2580,108 @@ fn serve(mime_type: &str, fd: OwnedFd, copy: &str) {
 }
 
 delegate_noop!(Client: ignore xdg_activation_v1::XdgActivationV1);
+delegate_noop!(Client: ignore zwp_text_input_manager_v3::ZwpTextInputManagerV3);
+
+/// Traces what an input method sends the editor of `--text-input`, and
+/// enables it on each enter, as an editor with a focused field does. Its text
+/// cursor starts at [`CARET`] and moves [`CARET_ADVANCE`] right for each
+/// character committed, traced as `cursor_rectangle(x, y, width, height)`.
+impl Dispatch<zwp_text_input_v3::ZwpTextInputV3, ()> for Client {
+    fn event(
+        client: &mut Client,
+        text_input: &zwp_text_input_v3::ZwpTextInputV3,
+        event: zwp_text_input_v3::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        match event {
+            zwp_text_input_v3::Event::Enter { surface } => {
+                crate::say!(text_input.id(), "text_input_enter({})", surface.id());
+                text_input.enable();
+                text_input.set_surrounding_text(
+                    SURROUNDING_TEXT.to_string(),
+                    SURROUNDING_TEXT.len() as i32,
+                    SURROUNDING_TEXT.len() as i32,
+                );
+                client.place_the_caret(text_input);
+                text_input.commit();
+            }
+            zwp_text_input_v3::Event::Leave { surface } => {
+                crate::say!(text_input.id(), "text_input_leave({})", surface.id());
+                text_input.disable();
+                text_input.commit();
+            }
+            zwp_text_input_v3::Event::PreeditString {
+                text,
+                cursor_begin,
+                cursor_end,
+            } => {
+                crate::say!(
+                    text_input.id(),
+                    "preedit({:?}, {}, {})",
+                    text.unwrap_or_default(),
+                    cursor_begin,
+                    cursor_end
+                );
+            }
+            zwp_text_input_v3::Event::CommitString { text } => {
+                let text = text.unwrap_or_default();
+                crate::say!(text_input.id(), "commit_string({:?})", text);
+                let typed = i32::try_from(text.chars().count()).unwrap_or(i32::MAX);
+                client.caret_x = client
+                    .caret_x
+                    .saturating_add(typed.saturating_mul(CARET_ADVANCE));
+                client.place_the_caret(text_input);
+                text_input.commit();
+            }
+            zwp_text_input_v3::Event::DeleteSurroundingText {
+                before_length,
+                after_length,
+            } => {
+                crate::say!(
+                    text_input.id(),
+                    "delete_surrounding({}, {})",
+                    before_length,
+                    after_length
+                );
+            }
+            zwp_text_input_v3::Event::Done { serial } => {
+                crate::say!(text_input.id(), "text_input_done({})", serial);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The text before the cursor of `--text-input`'s field, which an input
+/// method reads as `surrounding_text`.
+pub const SURROUNDING_TEXT: &str = "typed so far";
+
+/// Where `--text-input`'s text cursor starts on its surface, and its size:
+/// `x, y, width, height`, logical.
+pub const CARET: (i32, i32, i32, i32) = (40, 30, 2, 18);
+
+/// How far `--text-input`'s text cursor moves for each character committed.
+pub const CARET_ADVANCE: i32 = 8;
+
+impl Client {
+    /// Tell the compositor where `--text-input`'s text cursor is. Sent with
+    /// the caller's next commit.
+    fn place_the_caret(&self, text_input: &zwp_text_input_v3::ZwpTextInputV3) {
+        let (_, y, width, height) = CARET;
+        text_input.set_cursor_rectangle(self.caret_x, y, width, height);
+        crate::say!(
+            text_input.id(),
+            "cursor_rectangle({}, {}, {}, {})",
+            self.caret_x,
+            y,
+            width,
+            height
+        );
+    }
+}
+delegate_noop!(Client: ignore xdg_system_bell_v1::XdgSystemBellV1);
 delegate_noop!(Client: ignore zxdg_decoration_manager_v1::ZxdgDecorationManagerV1);
 delegate_noop!(Client: ignore org_kde_kwin_server_decoration_manager::OrgKdeKwinServerDecorationManager);
 delegate_noop!(Client: ignore wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1);
@@ -2299,11 +2763,17 @@ impl Dispatch<org_kde_kwin_server_decoration::OrgKdeKwinServerDecoration, ()> fo
         decoration: &org_kde_kwin_server_decoration::OrgKdeKwinServerDecoration,
         event: org_kde_kwin_server_decoration::Event,
         _: &(),
-        _: &Connection,
-        _: &QueueHandle<Client>,
+        connection: &Connection,
+        handle: &QueueHandle<Client>,
     ) {
         if let org_kde_kwin_server_decoration::Event::Mode { mode } = event {
             crate::say!(decoration.id(), "mode({})", named(mode));
+            // Insist on client side, as GTK3 and Firefox do. The sync's
+            // callback arrives after any answer to the ask.
+            if mode == WEnum::Value(org_kde_kwin_server_decoration::Mode::Server) {
+                decoration.request_mode(org_kde_kwin_server_decoration::Mode::Client);
+                connection.display().sync(handle, InsistRole);
+            }
         }
     }
 }
@@ -2343,15 +2813,47 @@ delegate_noop!(Client: ignore xdg_positioner::XdgPositioner);
 
 // Popup surface and buffer events are ignored: it is drawn once, and the
 // window reports outputs.
+/// Traces the displays a popup enters and leaves, under its own surface.
 impl Dispatch<wl_surface::WlSurface, PopupRole> for Client {
     fn event(
         _: &mut Client,
-        _: &wl_surface::WlSurface,
-        _: wl_surface::Event,
+        surface: &wl_surface::WlSurface,
+        event: wl_surface::Event,
         _: &PopupRole,
         _: &Connection,
         _: &QueueHandle<Client>,
     ) {
+        match event {
+            wl_surface::Event::Enter { output } => {
+                crate::say!(surface.id(), "enter({})", output.id());
+            }
+            wl_surface::Event::Leave { output } => {
+                crate::say!(surface.id(), "leave({})", output.id());
+            }
+            _ => {}
+        }
+    }
+}
+
+/// User data for a popup's `wp_fractional_scale_v1`: the popup's surface,
+/// which its preferred scale is traced under.
+struct PopupScale(ObjectId);
+
+/// Traces a popup's preferred scale as
+/// `wl_surface@N.preferred_scale(120)`, so a check can tell it from the
+/// window's.
+impl Dispatch<wp_fractional_scale_v1::WpFractionalScaleV1, PopupScale> for Client {
+    fn event(
+        _: &mut Client,
+        _: &wp_fractional_scale_v1::WpFractionalScaleV1,
+        event: wp_fractional_scale_v1::Event,
+        PopupScale(surface): &PopupScale,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        if let wp_fractional_scale_v1::Event::PreferredScale { scale } = event {
+            crate::say!(surface, "preferred_scale({scale})");
+        }
     }
 }
 
@@ -2368,6 +2870,31 @@ impl Dispatch<wl_buffer::WlBuffer, PopupRole> for Client {
 }
 delegate_noop!(Client: ignore wl_subcompositor::WlSubcompositor);
 delegate_noop!(Client: ignore wl_subsurface::WlSubsurface);
+
+// Cursor surface and buffer events are ignored, as a bubble's are.
+impl Dispatch<wl_surface::WlSurface, CursorRole> for Client {
+    fn event(
+        _: &mut Client,
+        _: &wl_surface::WlSurface,
+        _: wl_surface::Event,
+        _: &CursorRole,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+    }
+}
+
+impl Dispatch<wl_buffer::WlBuffer, CursorRole> for Client {
+    fn event(
+        _: &mut Client,
+        _: &wl_buffer::WlBuffer,
+        _: wl_buffer::Event,
+        _: &CursorRole,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+    }
+}
 
 // Bubble surface and buffer events are ignored, as a popup's are.
 impl Dispatch<wl_surface::WlSurface, BubbleRole> for Client {
@@ -2577,6 +3104,9 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
                     access
                 );
             }
+            wl_keyboard::Event::RepeatInfo { rate, delay } => {
+                crate::say!(keyboard.id(), "repeat_info({}, {})", rate, delay);
+            }
             wl_keyboard::Event::Modifiers {
                 serial,
                 mods_depressed,
@@ -2624,14 +3154,23 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
                     surface_x,
                     surface_y
                 );
+                constrain_the_pointer(client, handle, pointer, &surface);
                 client.pointer_over = Some(surface);
-                // The cursor shape request is how the compositor learns which
-                // cursor to pass to the chrome.
-                client
-                    .cursor
-                    .as_ref()
-                    .expect("the pointer that entered is the one the device names")
-                    .set_shape(serial, wp_cursor_shape_device_v1::Shape::Default);
+                if client.cursor_surface {
+                    draw_the_cursor(client, handle, Some((pointer, serial)), (4, 4));
+                } else {
+                    // The cursor shape request is how the compositor learns
+                    // which cursor to pass to the chrome.
+                    client
+                        .cursor
+                        .as_ref()
+                        .expect("the pointer that entered is the one the device names")
+                        .set_shape(serial, wp_cursor_shape_device_v1::Shape::Default);
+                }
+            }
+            wl_pointer::Event::Leave { serial, surface } => {
+                crate::say!(pointer.id(), "leave({}, {})", serial, surface.id());
+                client.pointer_over = None;
             }
             wl_pointer::Event::Motion {
                 time,
@@ -2672,6 +3211,15 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
                 }
                 if client.sliding_menu && pressed {
                     open_a_sliding_menu(client, handle);
+                }
+                if client.cursor_surface && pressed {
+                    draw_the_cursor(client, handle, None, (6, 6));
+                }
+                if let Some(drag) = client
+                    .ask_to_drag
+                    .filter(|drag| pressed != (*drag == AskToDrag::MoveAfterRelease))
+                {
+                    ask_to_drag(client, drag, serial);
                 }
             }
             wl_pointer::Event::Axis { time, axis, value } => {
@@ -2786,9 +3334,9 @@ mod tests {
     use std::os::fd::AsFd as _;
 
     use super::{
-        access_mode, buffer_size, first_group_name, halves, scrolled_to, shm_format, striped,
-        COLORS, SCROLLING_BUBBLE, SCROLL_STEP, SIZE, STRIPE_COLOR, TRANSLUCENT_ALPHA,
-        TRANSLUCENT_COLORS, TURNED_COLORS,
+        access_mode, buffer_size, deep_pixel, first_group_name, half_float, halves, scrolled_to,
+        shm_format, striped, DeepFormat, COLORS, SCROLLING_BUBBLE, SCROLL_STEP, SIZE, STRIPE_COLOR,
+        TRANSLUCENT_ALPHA, TRANSLUCENT_COLORS, TURNED_COLORS,
     };
 
     #[test]
@@ -2911,6 +3459,61 @@ mod tests {
         // `Argb8888`.
         assert_eq!(shm_format(true), wl_shm::Format::Argb8888);
         assert_eq!(shm_format(false), wl_shm::Format::Xrgb8888);
+    }
+
+    #[test]
+    fn a_10_bit_pixel_is_red_in_its_lowest_bits() {
+        let pixel = u32::from_le_bytes(
+            deep_pixel(DeepFormat::Abgr2101010, 0x00_ff_00_00)
+                .try_into()
+                .unwrap(),
+        );
+
+        assert_eq!(pixel, (3 << 30) | 1023);
+    }
+
+    #[test]
+    fn a_10_bit_pixel_without_alpha_leaves_its_padding_zero() {
+        let pixel = u32::from_le_bytes(
+            deep_pixel(DeepFormat::Xbgr2101010, 0x00_00_00_ff)
+                .try_into()
+                .unwrap(),
+        );
+
+        assert_eq!(pixel, 1023 << 20);
+    }
+
+    #[test]
+    fn each_8_bit_channel_survives_10_bits() {
+        for value in 0..=255u32 {
+            let ten = u32::from_le_bytes(
+                deep_pixel(DeepFormat::Xbgr2101010, value << 16)
+                    .try_into()
+                    .unwrap(),
+            );
+            assert_eq!((ten * 255 + 511) / 1023, value);
+        }
+    }
+
+    #[test]
+    fn a_half_float_pixel_is_red_alpha_last() {
+        let pixel = u64::from_le_bytes(
+            deep_pixel(DeepFormat::Abgr16161616f, 0x00_ff_00_00)
+                .try_into()
+                .unwrap(),
+        );
+
+        // 1.0 is 0x3c00.
+        assert_eq!(pixel, (0x3c00 << 48) | 0x3c00);
+    }
+
+    #[test]
+    fn half_floats_round_to_the_nearest() {
+        assert_eq!(half_float(0.0), 0);
+        assert_eq!(half_float(1.0), 0x3c00);
+        assert_eq!(half_float(0.5), 0x3800);
+        // 0x33 / 255 = 0.2, nearest half 0x3266.
+        assert_eq!(half_float(0x33 as f32 / 255.0), 0x3266);
     }
 }
 
@@ -3042,3 +3645,70 @@ impl Dispatch<zwp_pointer_gesture_hold_v1::ZwpPointerGestureHoldV1, ()> for Clie
 }
 
 delegate_noop!(Client: ignore zwp_pointer_gestures_v1::ZwpPointerGesturesV1);
+delegate_noop!(Client: ignore zwp_relative_pointer_manager_v1::ZwpRelativePointerManagerV1);
+delegate_noop!(Client: ignore zwp_pointer_constraints_v1::ZwpPointerConstraintsV1);
+
+impl Dispatch<zwp_locked_pointer_v1::ZwpLockedPointerV1, ()> for Client {
+    fn event(
+        _: &mut Client,
+        locked: &zwp_locked_pointer_v1::ZwpLockedPointerV1,
+        event: zwp_locked_pointer_v1::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        match event {
+            zwp_locked_pointer_v1::Event::Locked => crate::say!(locked.id(), "locked()"),
+            zwp_locked_pointer_v1::Event::Unlocked => crate::say!(locked.id(), "unlocked()"),
+            _ => {}
+        }
+    }
+}
+
+impl Dispatch<zwp_confined_pointer_v1::ZwpConfinedPointerV1, ()> for Client {
+    fn event(
+        _: &mut Client,
+        confined: &zwp_confined_pointer_v1::ZwpConfinedPointerV1,
+        event: zwp_confined_pointer_v1::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        match event {
+            zwp_confined_pointer_v1::Event::Confined => crate::say!(confined.id(), "confined()"),
+            zwp_confined_pointer_v1::Event::Unconfined => {
+                crate::say!(confined.id(), "unconfined()");
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Dispatch<zwp_relative_pointer_v1::ZwpRelativePointerV1, ()> for Client {
+    fn event(
+        _: &mut Client,
+        relative: &zwp_relative_pointer_v1::ZwpRelativePointerV1,
+        event: zwp_relative_pointer_v1::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        if let zwp_relative_pointer_v1::Event::RelativeMotion {
+            dx,
+            dy,
+            dx_unaccel,
+            dy_unaccel,
+            ..
+        } = event
+        {
+            crate::say!(
+                relative.id(),
+                "relative_motion({}, {}, {}, {})",
+                dx,
+                dy,
+                dx_unaccel,
+                dy_unaccel
+            );
+        }
+    }
+}

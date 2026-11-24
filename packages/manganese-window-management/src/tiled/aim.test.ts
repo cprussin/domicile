@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { Direction } from "../direction";
+import { Beside } from "../tree/drop";
 import { Layout } from "../tree/node";
 import type { Dragged, TabTarget } from "./aim";
 import { Aim, aimAt, cornerOf, tabAimAt } from "./aim";
@@ -299,6 +300,18 @@ describe("aimAt", () => {
     );
   });
 
+  it("aims apart from a group, and along a strip", () => {
+    expect(aimAt(TABS, alone("a"), 900, 200)).toMatchObject({
+      beside: Beside.Apart,
+    });
+    expect(aimAt(TABS, alone("a"), 450, 10)).toMatchObject({
+      beside: Beside.InStrip,
+    });
+    expect(aimAt(TARGETS, alone("x"), 980, 200)).toMatchObject({
+      beside: Beside.InStrip,
+    });
+  });
+
   describe("with a nested group's tab on the strip", () => {
     /** "b"'s tab stands for a group of "b" and "d". */
     const GROUP_TAB: TabTarget = {
@@ -321,8 +334,39 @@ describe("aimAt", () => {
       );
     });
 
-    it("aims a window inside it at nothing over it", () => {
-      expect(aimAt(NESTED, alone("d"), 250, 10)).toBeUndefined();
+    it("aims a window inside it beside it, by its half", () => {
+      expect(aimAt(NESTED, alone("d"), 250, 10)).toEqual(
+        Aim.Tab(groupOf("b"), Direction.Left, lineAt(200), 0),
+      );
+      expect(aimAt(NESTED, alone("d"), 350, 10)).toEqual(
+        Aim.Tab(groupOf("b"), Direction.Right, lineAt(400), 0),
+      );
+    });
+
+    it("aims a window inside it past it from the strip's end", () => {
+      const last = { ...TABS, tabs: [tabAt("a", 0), GROUP_TAB] };
+      expect(aimAt(last, alone("d"), 900, 10)).toEqual(
+        Aim.Tab(groupOf("b"), Direction.Right, lineAt(400), 0),
+      );
+    });
+
+    it("aims a group's only window beside the group, by its half", () => {
+      // The group is the first tab, then the last: past it is the only way
+      // out of the strip on that side.
+      const lone = {
+        ...GROUP_TAB,
+        at: 0,
+        rect: tabAt("a", 0).rect,
+        windows: ["b"],
+      };
+      const first = { ...TABS, tabs: [lone, tabAt("a", 1)] };
+      expect(aimAt(first, alone("b"), 50, 10)).toEqual(
+        Aim.Tab(groupOf("b"), Direction.Left, lineAt(0), 0),
+      );
+      const last = { ...GROUP_TAB, windows: ["b"] };
+      expect(
+        aimAt({ ...TABS, tabs: [tabAt("a", 0), last] }, alone("b"), 350, 10),
+      ).toEqual(Aim.Tab(groupOf("b"), Direction.Right, lineAt(400), 0));
     });
 
     it("aims a tab over its own group beside the group around it", () => {

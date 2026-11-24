@@ -27,7 +27,9 @@ changes.
 
 ## Applications
 
-Manganese lists the machine's desktop entries. Its `applications.omit` option
+Manganese lists the machine's desktop entries. Those that run in a terminal,
+such as htop and vim, are listed only when the config names a `terminal`, and
+run in it ([SHELL-CONFIG.md](SHELL-CONFIG.md#terminal)). Its `applications.omit` option
 hides some, using the same glob rules over desktop file IDs
 (`firefox.desktop`).
 
@@ -64,7 +66,9 @@ X-Domicile-Preview=/path/to/agenda-preview.svg
 Enter opens a file with its type's default application, else its
 supertype's: a `text/plain` default also opens Markdown, source code and
 other text. It is `domicile open`, which a terminal and `xdg-open` in apps
-run too. When no application opens it (`domicile open --which` names none),
+run too. An application that runs in a terminal, such as vim, opens in the
+config's `terminal` ([SHELL-CONFIG.md](SHELL-CONFIG.md#terminal)), and is
+skipped when it names none. When no application opens it (`domicile open --which` names none),
 the launcher stays open and the file's row says so; Shift+Enter still asks
 what to open it with. Set one in
 `~/.config/domicile-mimeapps.list` to apply only in Domicile, or in
@@ -95,6 +99,10 @@ export const Shell = runManganese({
 ```
 
 - Each bookmark has one `http` or `https` URL. Other schemes are rejected.
+- A bookmark's `profile`, such as `"work"`, opens it in that browser profile
+  ([BROWSER-PROFILES.md](architecture/BROWSER-PROFILES.md)). Without one, it
+  opens in the profile its site opens in. Its preview loads in the same
+  profile when it names one, and in the default profile otherwise.
 - Manganese fetches each site's icon with `curl`: the page's
   `<link rel="icon">`, else `/favicon.ico`. The Nix package puts `curl` on the
   compositor's `PATH`.

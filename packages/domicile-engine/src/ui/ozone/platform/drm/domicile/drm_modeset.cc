@@ -27,6 +27,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/ozone/platform/drm/domicile/drm_screen.h"
+#include "ui/ozone/platform/drm/domicile/hdr_output.h"
 
 namespace ui {
 namespace {
@@ -93,8 +94,9 @@ std::unique_ptr<display::DisplaySnapshot> VirtualSnapshot(
 
 std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
-                              VectorExperimental>>& snapshots,
-    const std::vector<DomicileDisplayLayout>& layout) {
+                              DanglingUntriaged>>& snapshots,
+    const std::vector<DomicileDisplayLayout>& layout,
+    const base::flat_set<int64_t>& refused) {
   // Shared with the display list so both agree on each display's origin.
   const std::vector<gfx::Point> origins = OriginsForLayout(snapshots, layout);
   std::vector<display::DisplayConfigurationParams> params;
@@ -120,15 +122,33 @@ std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
       continue;
     }
     // Pass the mode borrowed: the params constructor clones it, so cloning
-    // here too would leak a DisplayMode per display on every hotplug.
-    params.emplace_back(snapshot->display_id(), origins[index], native_mode);
+    // here too would leak a DisplayMode per display on every hotplug. The
+    // profile's mode if the connector advertises it, as the display list
+    // sizes the window; see `ModeForLayout`.
+    const bool adaptive_sync = wanted && wanted->adaptive_sync &&
+                               snapshot->IsVrrCapable() &&
+                               !refused.contains(snapshot->display_id());
+    params.emplace_back(snapshot->display_id(), origins[index],
+                        ModeForLayout(*snapshot, wanted), adaptive_sync);
+    params.back().domicile_hdr = DrivesHdr(*snapshot, wanted);
   }
   return params;
 }
 
+base::flat_set<int64_t> AdaptiveSyncAskedIn(
+    const std::vector<display::DisplayConfigurationParams>& params) {
+  base::flat_set<int64_t> asked;
+  for (const display::DisplayConfigurationParams& param : params) {
+    if (param.enable_vrr) {
+      asked.insert(param.id);
+    }
+  }
+  return asked;
+}
+
 std::string DescribeSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
-                              VectorExperimental>>& snapshots) {
+                              DanglingUntriaged>>& snapshots) {
   std::vector<std::string> described;
   described.reserve(snapshots.size());
   for (const display::DisplaySnapshot* snapshot : snapshots) {
@@ -162,8 +182,7 @@ DrmModeset::~DrmModeset() {
 void DrmModeset::Start() {
   delegate_->AddObserver(this);
   delegate_->Initialize();
-  delegate_->GetDisplays(
-      base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
+  Read();
 }
 
 void DrmModeset::SetLayout(std::vector<DomicileDisplayLayout> layout) {
@@ -171,8 +190,7 @@ void DrmModeset::SetLayout(std::vector<DomicileDisplayLayout> layout) {
           << " connector(s) laid out its way";
   layout_ = std::move(layout);
   // Re-read the displays; see the header.
-  delegate_->GetDisplays(
-      base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
+  Read();
 }
 
 void DrmModeset::SetVirtualDisplays(
@@ -184,14 +202,22 @@ void DrmModeset::SetVirtualDisplays(
     virtual_.push_back(VirtualSnapshot(display));
   }
   // Re-read the displays; see `SetLayout`.
-  delegate_->GetDisplays(
-      base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
+  Read();
 }
 
 void DrmModeset::Relight() {
   // The confirmation from before a resume or VT switch no longer describes
   // the hardware. See the header.
   confirmed_.clear();
+  Read();
+}
+
+void DrmModeset::Read() {
+  if (reading_) {
+    read_again_ = true;
+    return;
+  }
+  reading_ = true;
   delegate_->GetDisplays(
       base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
 }
@@ -203,6 +229,13 @@ void DrmModeset::SetGamma(int64_t display_id, DomicileGammaRamp ramp) {
           << " drawn with a " << ramp.red.size() << "-entry gamma ramp";
   if (std::ranges::find(display_ids_, display_id) != display_ids_.end()) {
     ApplyGammaTo(display_id, ramp);
+  } else {
+    // Applied after the next reading that lists the display. Logged, because
+    // a ramp that never arrives looks like no ramp at all.
+    LOG(WARNING) << "domicile: display " << display_id
+                 << " is not in the last reading of the displays ("
+                 << display_ids_.size()
+                 << " connector(s)); its gamma ramp waits for the next one";
   }
   ramps_.insert_or_assign(display_id, std::move(ramp));
 }
@@ -222,8 +255,7 @@ void DrmModeset::ApplyGammaTo(int64_t id, const DomicileGammaRamp& ramp) {
 
 void DrmModeset::OnConfigurationChanged() {
   // A hotplug. Re-read so the screen and modeset share one reading.
-  delegate_->GetDisplays(
-      base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
+  Read();
 }
 
 void DrmModeset::OnDisplaySnapshotsInvalidated() {
@@ -232,22 +264,47 @@ void DrmModeset::OnDisplaySnapshotsInvalidated() {
   display_ids_.clear();
 }
 
-bool ModesetWouldChangeAnything(
+std::vector<display::DisplayConfigurationParams> ModesetParamsThatChange(
     const std::vector<display::DisplayConfigurationParams>& asked,
-    const std::vector<display::DisplayConfigurationParams>& wanted) {
-  // `operator==` compares every field a modeset request carries.
-  return asked != wanted;
+    const std::vector<display::DisplayConfigurationParams>& wanted,
+    const std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>>&
+        snapshots) {
+  std::vector<display::DisplayConfigurationParams> changed;
+  for (const display::DisplayConfigurationParams& one : wanted) {
+    const auto snapshot = std::ranges::find(
+        snapshots, one.id, &display::DisplaySnapshot::display_id);
+    CHECK(snapshot != snapshots.end())
+        << "a modeset request for display " << one.id
+        << ", which the reading does not have";
+    // `operator==` compares every field a modeset request carries.
+    if (!std::ranges::contains(asked, one) ||
+        (one.mode != nullptr && (*snapshot)->current_mode() == nullptr)) {
+      changed.push_back(one);
+    }
+  }
+  return changed;
 }
 
 void DrmModeset::OnDisplaysReceived(
     const std::vector<raw_ptr<display::DisplaySnapshot,
-                              VectorExperimental>>& connectors) {
+                              DanglingUntriaged>>& connectors) {
+  reading_ = false;
+  TakeReading(connectors);
+  // A request made while this one was in flight: see `Read`.
+  if (std::exchange(read_again_, false)) {
+    Read();
+  }
+}
+
+void DrmModeset::TakeReading(
+    const std::vector<raw_ptr<display::DisplaySnapshot,
+                              DanglingUntriaged>>& connectors) {
   // Log every reading, including its modes. See `DescribeSnapshots`.
   VLOG(1) << "domicile: DRM reports " << DescribeSnapshots(connectors);
 
   // The virtual displays go after the connectors, so they never take the
   // primary from a lit connector when no layout names one.
-  std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> snapshots =
+  std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>> snapshots =
       connectors;
   for (const std::unique_ptr<display::DisplaySnapshot>& snapshot : virtual_) {
     snapshots.push_back(snapshot.get());
@@ -262,41 +319,79 @@ void DrmModeset::OnDisplaysReceived(
   for (const display::DisplaySnapshot* snapshot : connectors) {
     display_ids_.push_back(snapshot->display_id());
   }
+  // A monitor unplugged since its adaptive sync was refused may come back on
+  // another port or driver, so it is asked again.
+  base::EraseIf(adaptive_sync_refused_, [this](int64_t id) {
+    return std::ranges::find(display_ids_, id) == display_ids_.end();
+  });
 
   std::vector<display::DisplayConfigurationParams> params =
-      ModesetParamsFromSnapshots(snapshots, layout_);
+      ModesetParamsFromSnapshots(snapshots, layout_, adaptive_sync_refused_);
   if (params.empty()) {
     // Not an error: a machine with no panel reports this.
     VLOG(1) << "domicile: nothing readable is plugged in; not modesetting";
     return;
   }
 
-  if (!ModesetWouldChangeAnything(confirmed_, params)) {
+  std::vector<display::DisplayConfigurationParams> changed =
+      ModesetParamsThatChange(confirmed_, params, snapshots);
+  if (changed.empty()) {
     // The CRTCs already match. This is usually the udev CHANGE from our own
-    // last modeset.
+    // last modeset, or a display unplugged.
     VLOG(1) << "domicile: the displays read the same as last time; not "
                "modesetting again";
+    confirmed_ = std::move(params);
+    // A ramp sent while the displays were unread is applied here, with no
+    // modeset to apply it after.
+    ApplyGamma();
     return;
   }
 
-  VLOG(1) << "domicile: configuring " << params.size() << " display(s)";
+  VLOG(1) << "domicile: configuring " << changed.size() << " display(s)";
   inside_configure_ = true;
+  // Only a request that differs can have brought adaptive sync into this
+  // modeset. A display asked for again only because it reads dark, as one
+  // another session left dark does, keeps its adaptive sync when refused.
+  std::vector<display::DisplayConfigurationParams> requested;
+  for (const display::DisplayConfigurationParams& one : changed) {
+    if (!std::ranges::contains(confirmed_, one)) {
+      requested.push_back(one);
+    }
+  }
   delegate_->Configure(
-      params,
+      changed,
       base::BindOnce(
           [](base::WeakPtr<DrmModeset> self,
              std::vector<display::DisplayConfigurationParams> asked,
+             std::vector<display::DisplayConfigurationParams> requested,
              const std::vector<display::DisplayConfigurationParams>&,
              bool status) {
+            if (!self) {
+              return;
+            }
+            const base::flat_set<int64_t> adaptive_sync =
+                AdaptiveSyncAskedIn(requested);
+            if (!status && !adaptive_sync.empty() &&
+                !self->inside_configure_) {
+              // Adaptive sync may be what the driver refused, so ask again
+              // without it, as sway does. The reading after reports it off.
+              // Not for an answer from inside `Configure`, which no hardware
+              // gave; see below.
+              LOG(WARNING) << "domicile: the DRM thread refused a modeset "
+                              "with adaptive sync on "
+                           << adaptive_sync.size()
+                           << " display(s); trying again without it";
+              self->adaptive_sync_refused_.insert(adaptive_sync.begin(),
+                                                  adaptive_sync.end());
+              self->Read();
+              return;
+            }
             if (!status) {
               // Not recorded: only a confirmed modeset is compared against.
-              // See `ModesetWouldChangeAnything`.
+              // See `ModesetParamsThatChange`.
               LOG(ERROR) << "domicile: the DRM thread refused the modeset; the "
                             "displays it reported are connected but nothing is "
                             "lit";
-              return;
-            }
-            if (!self) {
               return;
             }
             if (self->inside_configure_) {
@@ -312,10 +407,20 @@ void DrmModeset::OnDisplaysReceived(
               return;
             }
             VLOG(1) << "domicile: the DRM thread confirmed the modeset";
+            const bool adaptive_sync_changed =
+                AdaptiveSyncAskedIn(asked) !=
+                AdaptiveSyncAskedIn(self->confirmed_);
             self->confirmed_ = std::move(asked);
             self->ApplyGamma();
+            if (adaptive_sync_changed) {
+              // A snapshot reads adaptive sync off the CRTC, so the reading
+              // that went with this modeset predates it. Read again so the
+              // display list says whether it took; the modeset it would ask
+              // for is this one, so it asks for none.
+              self->Read();
+            }
           },
-          weak_factory_.GetWeakPtr(), params),
+          weak_factory_.GetWeakPtr(), std::move(params), std::move(requested)),
       {display::ModesetFlag::kCommitModeset});
   inside_configure_ = false;
 }

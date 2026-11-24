@@ -61,24 +61,32 @@ edges, before the modeset.
 - The idle message arrives with the blanking, not before the timeout.
 - A desktop with no timeout sends neither.
 
-### Warning the shell
+### The shell's idle watches
 
-With `idle.warn_before_seconds`, the compositor warns the shell that long
-before blanking.
+A page watches for the desk going idle at a time it chose, so a shell can
+pause media at two minutes and dim before the screens blank.
 
-- **The warning is a system call stream**, `SystemRequest::IdleWarnings`, so
-  it needs no engine change ([SHELL-SYSTEM-ACCESS.md](SHELL-SYSTEM-ACCESS.md#wire)).
-  Each `SystemEvent::IdleWarning` carries `blanks_in_ms`, or `null` when the
-  warning ends.
-- **Input or an inhibitor during the warning calls it off.** The screens stay
-  on. Input restarts the timer; an inhibitor does not, so releasing it inside
-  the warning window warns again and blanks at the original timeout.
-- **The warning ends with the blanking.** The shell hears `null` as the
-  screens go dark.
-- **An inhibitor released after the timeout blanks at once**, with no warning.
-- `crate::idle` decides the warning (`Blanking::Warn`, `Blanking::CallOff`).
-  `domicile_host::idle_warnings` holds it for every connection, so a page that
-  listens during a warning hears it at once.
+- **A watch is a system call stream**, `SystemRequest::IdleAfter { seconds }`
+  or `SystemRequest::IdleBeforeBlanking { seconds }`
+  ([SHELL-SYSTEM-ACCESS.md](SHELL-SYSTEM-ACCESS.md#wire)). Each
+  `SystemEvent::Idle { idle }` is an edge: `true` at the time, `false` on the
+  next input.
+- **Same clock and inhibitors as blanking.** An inhibitor holds every watch;
+  taken while one is idle, it ends the spell, and let go after the time it
+  goes idle at once.
+- **The clock runs without a timeout.** `Idle` always exists, so watches work
+  on a desk that never blanks or locks; `Idle::times_out` says whether the
+  blank and lock timer is armed.
+- **One timer for the next watch due** (`settle_the_idle_watches`). Input
+  only moves watches later, so it re-arms only when it ended an idle spell; a
+  timer armed before the input fires early and arms the rest.
+- **A new watch wakes the clock** (`ClientRequest::IdleWatched`), so a page
+  that starts watching on a desk already still that long hears `true` at once.
+- `domicile_host::idle_watches` holds the watches for every connection and
+  decides the edges. A watch ends with its page or `Unwatch`; the SDK starts it
+  again after a compositor restart.
+- A config reload restarts the clock, as it does for blanking.
+- `IdleBeforeBlanking` on screens that never blank, or blank sooner, is silent.
 
 ### Idle inhibitors
 
@@ -174,3 +182,45 @@ somebody is at this desktop again; its screens come back on
 ```
 
 and, with `--vmodule=drm*=1`, `configuring N display(s)`.
+
+## Sleeping on demand
+
+`domicile sleep-displays`, or a shell's `displays.sleep()`, turns every
+monitor off at once. `SystemRequest::SleepDisplays` carries both.
+
+- **It is the blanking path.** `state_the_connectors` sends
+  `crate::idle::darkened`, so the desk, its windows and its presenters stay
+  in place.
+- **Input lights the monitors**, the same input that resets the idle clock
+  (`crate::idle::somebody_is_here`), as do `domicile wake-displays` and
+  `displays.wake()`. A wake also lights screens idle blanking turned off.
+- **Input in the first second is ignored** (`crate::display_sleep::GRACE`).
+  Letting go of Enter or of the keybinding that asked must not wake them.
+- **It needs no idle timeout**, and holds through idle inhibitors: somebody
+  asked for it.
+- **It does not tell the shell** (`HostMessage::Idle`) and does not lock.
+- **A locked desktop allows both** (`Reach::Powers`).
+- A monitor plugged in while asleep stays off, as while blanked.
+
+### One monitor
+
+`sleep-displays <name>` turns one monitor off and leaves the rest lit.
+
+- **It sleeps through input.** Only a wake that names it, or names none,
+  lights it (`crate::display_sleep::DisplaySleep::sleeping`).
+- **It keeps its place.** `crate::display_sleep::asleep_in` sends it dark
+  with its `desk`. The engine keeps a dark connector with a desk on the desk
+  page (`DeskPlace::lit`), so its windows and workspace stay, and the shell's
+  display list does not change.
+- **Without a profile** the list names every monitor at its place in the
+  engine's row, unscaled, as the empty list would light them. A non-empty
+  list turns off any connector it leaves out.
+- **Nothing is shown on it.** It gets no presenter, and the pointer does not
+  cross onto it.
+- **It does not host the page.** A CRTC that is off sends no BeginFrames, so
+  the fastest lit monitor hosts it. Sleeping the host moves the page's window
+  to that monitor, as unplugging it does, and the shell keeps running.
+
+On hardware, with `RUST_LOG=warn,domicile_compositor=debug`, look for
+`somebody asked to turn this desktop's screens` and, after input,
+`somebody is at this desktop again; its screens wake`.

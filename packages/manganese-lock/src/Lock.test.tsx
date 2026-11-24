@@ -258,6 +258,62 @@ describe("Lock", () => {
       expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
     });
 
+    it("is taken back from anything else on the page", async () => {
+      // The shell draws more than the lock, and any of it could take focus
+      // under the sheet.
+      render(
+        <>
+          <input aria-label="Elsewhere" />
+          <Lock
+            checking={false}
+            locked
+            onUnlock={() => undefined}
+            refusals={0}
+            screen={SCREEN}
+          />
+        </>,
+        { wrapper: OnOneScreen },
+      );
+
+      screen.getByLabelText("Elsewhere").focus();
+      await nextTask();
+
+      expect(document.activeElement).toBe(screen.getByLabelText("Passphrase"));
+    });
+
+    it("is taken back only once the focus change has finished", () => {
+      // Focusing the field from inside the change re-enters it. A <webview>'s
+      // page then takes the focus after the field does, and the field holds
+      // the keys but is not drawn focused.
+      render(
+        <>
+          <input aria-label="Elsewhere" />
+          <Lock
+            checking={false}
+            locked
+            onUnlock={() => undefined}
+            refusals={0}
+            screen={SCREEN}
+          />
+        </>,
+        { wrapper: OnOneScreen },
+      );
+
+      screen.getByLabelText("Elsewhere").focus();
+
+      expect(document.activeElement).toBe(screen.getByLabelText("Elsewhere"));
+    });
+
+    it("types into the field when focus has gone nowhere", async () => {
+      // Focus falls to the page's body when what held it goes away.
+      const { field, user } = lock();
+
+      field().blur();
+      await user.keyboard("hunter2");
+
+      expect(field().value).toBe("hunter2");
+    });
+
     it("comes back to the field after the bar is used", async () => {
       // A slider takes focus on a click, and the next key typed would move it.
       render(
@@ -441,3 +497,9 @@ const OnTwoScreens = ({ children }: PropsWithChildren) => (
     {children}
   </DisplayProvider>
 );
+
+/** Waits for the timers due now, such as a deferred focus, to run. */
+const nextTask = () =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve);
+  });

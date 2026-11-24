@@ -39,20 +39,22 @@ case "$WHOLE_SUITE" in
 esac
 
 SUITES=(
-  DrmScreenTest:37
-  DrmModesetTest:22
+  DrmScreenTest:47
+  DrmModesetTest:41
   DrmVtSwitcherTest:20
   DrmSleepTest:2
   DrmFullscreenTest:4
   DrmInputDevicesTest:27
   DrmInputOpensTest:17
-  DrmInputControllerTest:6
+  DrmInputControllerTest:7
   DrmCursorFactoryTest:5
-  DrmCursorFactoryThemeTest:5
+  DrmCursorFactoryThemeTest:9
+  DrmCursorTintTest:4
   DrmClipboardTest:12
   DrmEdidSerialTest:18
   DrmConnectorNameTest:6
   DrmPointerCrossingTest:20
+  DrmPointerConfinementTest:6
   DrmPointerTargetsTest:6
   DrmDeskInputTest:6
   DrmCanvasTest:7
@@ -64,7 +66,7 @@ SUITES=(
   InputDeviceOpenCancellationTest:3
   ActiveScrollAxesTest:3
   EventDeviceInfoTest:31
-  InputSettingsTest:6
+  InputSettingsTest:7
   TypingGuardTest:15
   EvdevWarpTest:2
   WheelTicksTest:3
@@ -77,6 +79,11 @@ SUITES=(
   HeadlessDeskInputTest:10
   HeadlessDeskCursorsTest:4
   DrmColorCommitTest:3
+  DrmCursorHotspotTest:2
+  DrmPageFlipTimeoutTest:10
+  DrmDamageClipsTest:3
+  DrmInputMethodTest:13
+  DeskInputMethodTest:4
 )
 
 cd "$ENGINE_OUT"

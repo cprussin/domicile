@@ -37,7 +37,7 @@ use domicile_host::app_names::{app, application_dirs};
 use domicile_host::mime_apps::launch_command;
 use domicile_host::notifications::{Application, Hints, Image, Notifications, Notified, Notify};
 use domicile_host::portal_notifications::{
-    Invoked, PortalNotification, PortalNotifications, Priority,
+    Action, Button, Invoked, PortalNotification, PortalNotifications, Priority,
 };
 use domicile_host::tray::TrayIcons;
 use domicile_protocol::Notification;
@@ -226,7 +226,7 @@ impl NotificationServer {
     /// the shell keeps it up until it is read.
     pub fn warn_that_the_desk_does_not_lock(&self) {
         self.add_from_portal(
-            "domicile".into(),
+            OWN_APP.into(),
             "does-not-lock".into(),
             PortalNotification {
                 title: "This screen won't lock".into(),
@@ -236,6 +236,136 @@ impl NotificationServer {
                     .into(),
                 icon: None,
                 priority: Priority::Urgent,
+                default_action: None,
+                buttons: Vec::new(),
+                display_hint: Vec::new(),
+            },
+        );
+    }
+
+    /// Warn that the engine is a checked build, as on `main` between an engine
+    /// change and the next official build. Once per desk: a page that says
+    /// hello again does not bring back a warning the person read.
+    pub fn warn_that_the_engine_is_checked(&self) {
+        if self.store.warned_of_a_checked_engine.set(()).is_ok() {
+            self.add_from_portal(
+                OWN_APP.into(),
+                "checked-engine".into(),
+                PortalNotification {
+                    title: "This is a development build".into(),
+                    body: "It runs slower and uses more memory. For everyday use, switch to \
+                           stable or a release."
+                        .into(),
+                    icon: None,
+                    priority: Priority::Urgent,
+                    default_action: None,
+                    buttons: vec![Button {
+                        label: "How to switch".into(),
+                        action: Action {
+                            name: HOW_TO_SWITCH.into(),
+                            target: None,
+                        },
+                    }],
+                    display_hint: Vec::new(),
+                },
+            );
+        }
+    }
+
+    /// Warn that the engine draws on the CPU although the desktop started on
+    /// the GPU: its GPU process gave up, or never could. That is a bug (in Domicile, Chromium or the graphics driver),
+    /// so it is loud: urgent, with a button to report it. Windows that were
+    /// drawing on the GPU stay blank.
+    pub fn warn_that_graphics_failed(&self) {
+        self.add_from_portal(
+            OWN_APP.into(),
+            "graphics-failed".into(),
+            PortalNotification {
+                title: "Graphics aren't working".into(),
+                body: "Domicile is drawing without the graphics card, so it's slower, and some \
+                       open windows may stay blank until you restart them. This is a bug; \
+                       please report it."
+                    .into(),
+                icon: None,
+                priority: Priority::Urgent,
+                default_action: None,
+                buttons: vec![Button {
+                    label: "Report it".into(),
+                    action: Action {
+                        name: REPORT_A_BUG.into(),
+                        target: None,
+                    },
+                }],
+                display_hint: Vec::new(),
+            },
+        );
+    }
+
+    /// Warn that the compositor has no EGL renderer, so it can show no app's
+    /// window: EGL or the graphics driver failed to load. A bug, so it is loud,
+    /// as for [`Self::warn_that_graphics_failed`].
+    pub fn warn_that_the_renderer_failed(&self) {
+        self.add_from_portal(
+            OWN_APP.into(),
+            "renderer-failed".into(),
+            PortalNotification {
+                title: "Graphics aren't working".into(),
+                body: "Domicile couldn't start its graphics, so app windows can't be shown. \
+                       This is a bug; please report it."
+                    .into(),
+                icon: None,
+                priority: Priority::Urgent,
+                default_action: None,
+                buttons: vec![Button {
+                    label: "Report it".into(),
+                    action: Action {
+                        name: REPORT_A_BUG.into(),
+                        target: None,
+                    },
+                }],
+                display_hint: Vec::new(),
+            },
+        );
+    }
+
+    /// Warn that the engine caught itself in a bug, such as a page it took out
+    /// of fullscreen that stayed in. A bug, so it is loud, as for
+    /// [`Self::warn_that_graphics_failed`]: urgent, with a button to report it.
+    /// `what` says what went wrong. A later fault replaces an earlier one.
+    pub fn warn_of_an_engine_fault(&self, what: &str) {
+        self.add_from_portal(
+            OWN_APP.into(),
+            "engine-fault".into(),
+            PortalNotification {
+                title: "Something went wrong".into(),
+                body: format!("{what} This is a bug; please report it."),
+                icon: None,
+                priority: Priority::Urgent,
+                default_action: None,
+                buttons: vec![Button {
+                    label: "Report it".into(),
+                    action: Action {
+                        name: REPORT_A_BUG.into(),
+                        target: None,
+                    },
+                }],
+                display_hint: Vec::new(),
+            },
+        );
+    }
+
+    /// Tell the person a program a key, the launcher or the config named did
+    /// not start, and `why`. Not a bug in Domicile, so not urgent and with no
+    /// report button. A later failure replaces an earlier one.
+    pub fn warn_that_a_program_did_not_start(&self, why: &str) {
+        self.add_from_portal(
+            OWN_APP.into(),
+            "program-did-not-start".into(),
+            PortalNotification {
+                title: "A program didn't start".into(),
+                body: format!("{why}."),
+                icon: None,
+                priority: Priority::Normal,
                 default_action: None,
                 buttons: Vec::new(),
                 display_hint: Vec::new(),
@@ -289,7 +419,7 @@ pub fn serve(
             in_a_window,
         };
         if let Err(why) = answer(serving, &events, &starting) {
-            warn!(
+            tracing::error!(
                 %why,
                 "this desktop is not the notification server; its applications' \
                  notifications will not be shown"
@@ -309,6 +439,8 @@ struct Store {
     held: Mutex<Held>,
     publish: OnceLock<Box<dyn Fn(Vec<Notification>) + Send + Sync>>,
     portal_actions: OnceLock<PortalAction>,
+    /// Set once the checked engine's warning was posted.
+    warned_of_a_checked_engine: OnceLock<()>,
 }
 
 /// The history, and which of it the portal added.
@@ -327,6 +459,8 @@ enum Pressed {
     },
     /// `ActionInvoked` goes to the portal.
     Portal(Invoked<OwnedValue>),
+    /// One of Domicile's own notifications runs this command.
+    Launches(Vec<String>),
     NotOffered,
 }
 
@@ -340,6 +474,7 @@ impl Store {
             }),
             publish: OnceLock::new(),
             portal_actions: OnceLock::new(),
+            warned_of_a_checked_engine: OnceLock::new(),
         }
     }
 
@@ -398,7 +533,13 @@ impl Store {
             if held.portal.owns(id) {
                 held.portal
                     .invoke(&mut held.notifications, id, action)
-                    .map_or(Pressed::NotOffered, Pressed::Portal)
+                    .map_or(Pressed::NotOffered, |invoked| {
+                        if invoked.app_id == OWN_APP {
+                            Pressed::Launches(own_command(&invoked.action))
+                        } else {
+                            Pressed::Portal(invoked)
+                        }
+                    })
             } else {
                 let application = held.notifications.application(id).cloned();
                 held.notifications
@@ -459,6 +600,7 @@ fn answer(store: Arc<Store>, events: &Receiver<Event>, starting: &Starting) -> z
                     Some(portal) => portal(pressed, token),
                     None => warn!(%id, "a portal notification's action has no portal to go to"),
                 },
+                Pressed::Launches(command) => (starting.launch)(&command, &token),
                 Pressed::NotOffered => {
                     debug!(%id, %action, "an action on a notification that does not offer it")
                 }
@@ -489,13 +631,46 @@ struct Starting {
 impl Starting {
     /// Start the application `desktop_entry` names, handing it `token`.
     fn start(&self, desktop_entry: &str, token: &str) {
-        match launch_command(desktop_entry, &self.applications) {
+        let terminal = domicile_host::desk_terminal::current();
+        match launch_command(desktop_entry, &self.applications, terminal.as_deref()) {
             Some(command) => (self.launch)(&command, token),
             None => warn!(
                 %desktop_entry,
                 "a notification's application quit, and has no desktop entry to start it with"
             ),
         }
+    }
+}
+
+/// The app id Domicile's own notifications go by. Their actions run here,
+/// not through the portal.
+const OWN_APP: &str = "domicile";
+
+/// The checked engine's warning's button.
+const HOW_TO_SWITCH: &str = "how-to-switch";
+
+/// The failed graphics warning's button.
+const REPORT_A_BUG: &str = "report-a-bug";
+
+/// What pressing `action` on one of Domicile's own notifications runs.
+/// Domicile offers only the actions listed here, so any other is a bug.
+fn own_command(action: &str) -> Vec<String> {
+    match action {
+        HOW_TO_SWITCH => [
+            "domicile",
+            "open",
+            "https://domicile-desktop.com/docs/install",
+        ]
+        .map(String::from)
+        .to_vec(),
+        REPORT_A_BUG => [
+            "domicile",
+            "open",
+            "https://github.com/cprussin/domicile/issues",
+        ]
+        .map(String::from)
+        .to_vec(),
+        other => panic!("Domicile's own notifications offer no action {other:?}"),
     }
 }
 
@@ -568,7 +743,7 @@ fn closed(server: &InterfaceRef<Server>, id: u32, reason: Reason) {
         reason as u32,
     ));
     if let Err(why) = said {
-        warn!(%why, %id, "a notification's closing could not be said");
+        tracing::error!(%why, %id, "a notification's closing could not be said");
     }
 }
 
@@ -584,7 +759,7 @@ fn pressed_on_the_bus(
 ) {
     let said = zbus::block_on(Server::activation_token(server.signal_emitter(), id, token));
     if let Err(why) = said {
-        warn!(%why, %id, "a notification's activation token could not be said");
+        tracing::error!(%why, %id, "a notification's activation token could not be said");
     }
     invoked(server, id, action);
     if closes {
@@ -596,7 +771,7 @@ fn pressed_on_the_bus(
 fn invoked(server: &InterfaceRef<Server>, id: u32, action: &str) {
     let said = zbus::block_on(Server::action_invoked(server.signal_emitter(), id, action));
     if let Err(why) = said {
-        warn!(%why, %id, "a notification's action could not be said");
+        tracing::error!(%why, %id, "a notification's action could not be said");
     }
 }
 
@@ -608,7 +783,7 @@ fn replied(server: &InterfaceRef<Server>, id: u32, text: &str) {
         text,
     ));
     if let Err(why) = said {
-        warn!(%why, %id, "a reply to a notification could not be said");
+        tracing::error!(%why, %id, "a reply to a notification could not be said");
     }
 }
 
@@ -737,7 +912,7 @@ impl Server {
             if let Err(why) =
                 Self::notification_closed(&emitter, evicted, Reason::Expired as u32).await
             {
-                warn!(%why, "a notification's closing could not be said");
+                tracing::error!(%why, "a notification's closing could not be said");
             }
         }
         notified.id
@@ -752,7 +927,7 @@ impl Server {
     ) {
         if self.store.change(|held| held.notifications.close(id)) {
             if let Err(why) = Self::notification_closed(&emitter, id, Reason::Closed as u32).await {
-                warn!(%why, "a notification's closing could not be said");
+                tracing::error!(%why, "a notification's closing could not be said");
             }
         }
     }
@@ -981,6 +1156,176 @@ mod tests {
             )],
             "from Domicile, and kept until read"
         );
+    }
+
+    /// A checked engine says it is one, from Domicile, and keeps it up until
+    /// read. A page that says hello again does not bring a read warning back.
+    #[test]
+    fn a_checked_engine_warns_once() {
+        let server = NotificationServer::unserved(Vec::new());
+        let shown = |server: &NotificationServer| {
+            server.store.change(|held| {
+                held.notifications
+                    .items()
+                    .into_iter()
+                    .map(|shown| (shown.app_name, shown.summary, shown.urgency))
+                    .collect::<Vec<_>>()
+            })
+        };
+
+        server.warn_that_the_engine_is_checked();
+        assert_eq!(
+            shown(&server),
+            [(
+                "Domicile".to_string(),
+                "This is a development build".to_string(),
+                Urgency::Critical
+            )],
+            "from Domicile, and kept until read"
+        );
+
+        server.remove_from_portal("domicile", "checked-engine");
+        server.warn_that_the_engine_is_checked();
+        assert_eq!(shown(&server), [], "a read warning stays read");
+    }
+
+    /// "How to switch" opens the install docs in the desk's browser, rather
+    /// than going to a portal no application listens on.
+    #[test]
+    fn how_to_switch_opens_the_install_docs() {
+        let server = NotificationServer::unserved(Vec::new());
+        server.warn_that_the_engine_is_checked();
+        let (id, buttons) = server.store.change(|held| {
+            let shown = held.notifications.items().remove(0);
+            (shown.id, shown.actions)
+        });
+        assert_eq!(
+            buttons
+                .iter()
+                .map(|action| (action.key.as_str(), action.label.as_str()))
+                .collect::<Vec<_>>(),
+            [("0", "How to switch")]
+        );
+
+        match server.store.press(id, "0") {
+            Pressed::Launches(command) => assert_eq!(
+                command,
+                [
+                    "domicile",
+                    "open",
+                    "https://domicile-desktop.com/docs/install"
+                ]
+            ),
+            _ => panic!("Domicile's own button went elsewhere"),
+        }
+    }
+
+    /// No EGL renderer is a bug too, and it says app windows cannot show.
+    #[test]
+    fn a_failed_renderer_warns_and_offers_a_report() {
+        let server = NotificationServer::unserved(Vec::new());
+        server.warn_that_the_renderer_failed();
+        let shown = server
+            .store
+            .change(|held| held.notifications.items().remove(0));
+        assert_eq!(
+            (
+                shown.app_name.as_str(),
+                shown.summary.as_str(),
+                shown.urgency
+            ),
+            ("Domicile", "Graphics aren't working", Urgency::Critical),
+            "from Domicile, and kept until read"
+        );
+        assert!(
+            shown.body.contains("app windows can't be shown"),
+            "the body says what is broken: {}",
+            shown.body
+        );
+        assert_eq!(
+            shown
+                .actions
+                .iter()
+                .map(|action| (action.key.as_str(), action.label.as_str()))
+                .collect::<Vec<_>>(),
+            [("0", "Report it")]
+        );
+    }
+
+    /// Falling back to software is a bug, so it says so, from Domicile, kept
+    /// until read, and "Report it" opens the issue tracker.
+    #[test]
+    fn failed_graphics_warn_and_offer_a_report() {
+        let server = NotificationServer::unserved(Vec::new());
+        server.warn_that_graphics_failed();
+        let shown = server
+            .store
+            .change(|held| held.notifications.items().remove(0));
+        assert_eq!(
+            (
+                shown.app_name.as_str(),
+                shown.summary.as_str(),
+                shown.urgency
+            ),
+            ("Domicile", "Graphics aren't working", Urgency::Critical),
+            "from Domicile, and kept until read"
+        );
+        assert_eq!(
+            shown
+                .actions
+                .iter()
+                .map(|action| (action.key.as_str(), action.label.as_str()))
+                .collect::<Vec<_>>(),
+            [("0", "Report it")]
+        );
+        match server.store.press(shown.id, "0") {
+            Pressed::Launches(command) => assert_eq!(
+                command,
+                [
+                    "domicile",
+                    "open",
+                    "https://github.com/cprussin/domicile/issues"
+                ]
+            ),
+            _ => panic!("Domicile's own button went elsewhere"),
+        }
+    }
+
+    /// An engine fault is a bug, so it says what went wrong, from Domicile,
+    /// kept until read, and "Report it" opens the issue tracker.
+    #[test]
+    fn an_engine_fault_warns_and_offers_a_report() {
+        let server = NotificationServer::unserved(Vec::new());
+        server.warn_of_an_engine_fault("A page stayed in fullscreen.");
+        let shown = server
+            .store
+            .change(|held| held.notifications.items().remove(0));
+        assert_eq!(
+            (
+                shown.app_name.as_str(),
+                shown.summary.as_str(),
+                shown.body.as_str(),
+                shown.urgency
+            ),
+            (
+                "Domicile",
+                "Something went wrong",
+                "A page stayed in fullscreen. This is a bug; please report it.",
+                Urgency::Critical
+            ),
+            "from Domicile, saying what, and kept until read"
+        );
+        match server.store.press(shown.id, "0") {
+            Pressed::Launches(command) => assert_eq!(
+                command,
+                [
+                    "domicile",
+                    "open",
+                    "https://github.com/cprussin/domicile/issues"
+                ]
+            ),
+            _ => panic!("Domicile's own button went elsewhere"),
+        }
     }
 
     #[test]

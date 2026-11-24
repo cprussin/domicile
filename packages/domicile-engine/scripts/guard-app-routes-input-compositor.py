@@ -25,6 +25,7 @@ SEQUENCE = [
         "size": [400, 200],
         "dialog": False,
         "client_frame": False,
+        "toplevel_id": "term-listed",
     },
     {
         "type": "popup_placed",

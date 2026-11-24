@@ -1,5 +1,203 @@
 # @domicile-desktop/manganese-window-management
 
+## 2.0.0
+
+### Major Changes
+
+- a2cab16: `domicile exec <program> [<arg>...]` and the SDK's `KeyAction.Exec` start a program for any shell, found on the desktop's `PATH`, and say why when it does not start; a key's failed start is a notification. Manganese's `exec` command is gone: its `exec()` builds `KeyAction.Exec`. `domicile drag` replaces `pointer press`/`release`, which let go as each command ended, and `domicile type` presses Return for a line break. The MCP server gains an `exec` tool, and its `drag` holds the button.
+
+### Minor Changes
+
+- 394ecc7: Electron apps can pop up menus (`Menu.popup`), as Claude's menu button does: the shell draws the app's menu where the button was pressed, with the same look as the app's menu bar, and the entry chosen runs in the app. Shells read a window's popup menu from `popupMenu` (`appPopupMenu` in `@domicile-desktop/sdk/app-menu`) and answer it with `domicile.browser.answerPopupMenu`.
+- 8f74f44: Manganese shows an Electron app's message box over the window that asked, with the app's buttons in its order. Enter presses the app's default button and Escape its cancel button, and the app's checkbox, such as "Don't ask again", is a switch. `@domicile-desktop/sdk/message-box` reads a window's `messageBox` for any shell.
+- d3978bb: Electron apps' views show in their windows. The SDK lists them in `domicile.browser.views`, apart from `domicile.browser.windows`, so window lists, task switchers and tiling never treat a view as a window. Manganese draws each view over its window's page where its app asks, hides it while the app hides it, treats a click in it as a click in the window, and runs the app's menu keys pressed in it.
+- 2794947: Electron apps can make their windows fullscreen (`setFullScreen`), and they read and hear what the shell makes them (`isMaximized`, `isFullScreen`, `maximize`, `enter-full-screen` and the rest) instead of a window that always reads as normal. Shells read what an app asks from a window's `wantsMaximized`, `wantsMinimized` and `wantsFullscreen`, and report what they made it with `domicile.browser.setWindowState`.
+- 0e71fa1: Games and VM viewers can confine the pointer to their window, or the part of it they name, and read raw mouse motion. On a console the engine holds its cursor inside the boxes the shell passes to the new `DomicileHost.confinePointer` (`pointer.confine` in the SDK), across monitors too; `DomicileWindow.pointerRegion` is the client's region. Relative motion now carries the mouse's unaccelerated deltas from libinput as `dx_unaccel`/`dy_unaccel`, so aiming no longer follows pointer acceleration, and a shell's warp still sends no motion. Manganese confines the pointer for the focused window that asks, and follows it as it moves.
+- 94f365b: `layout tabbed` and `layout stacking` on a group already in that layout act on the split around it, so Meta+W merges groups side by side into one tabbed group.
+- cd75f9a: Picture-in-picture video works: a video's picture-in-picture button, or a site's, floats the video over your windows in the corner of its screen. Drag it to move it, drag an edge to resize it, and point at it for play, pause, track, back-to-tab and close controls. Shells list the videos in `domicile.pictureInPicture` and show one with `<app picture-in-picture="id">`.
+- 09a3ad4: The profile menu switches the page's profile's extensions on and off. Every profile now has every extension the config names, switched on or off in it, so one switched off keeps its data. A profile whose config names its `extensions` has those switches locked to the config; any other starts each extension on (off in a private profile) and leaves it to the user. Shells get `browser.setExtensionEnabled(profile, id, enabled)` and each profile's `extensions`, `enabledExtensions` and `lockedExtensions`.
+- 24b88fb: Dragging the title bar or edge an app draws itself, such as a GNOME app's header bar or Firefox's tab strip, moves or resizes its window. The compositor checks the press is still held, takes it from the app, and reports `WindowRequest.Move` or `WindowRequest.Resize` (with a `ResizeEdge`); Manganese runs the drag as it does a Meta drag.
+- b0fad3c: A four-finger swipe up opens the overview, and down closes it. Down still pulls the scratchpad down, and up puts it away while it is out. The new `layer up` and `layer down` commands do this for any binding.
+- d566f68: A cursor an app draws itself, such as a game's, an image editor's brush or a VM viewer's, now shows in place of the arrow. The compositor sends each image the app commits as a PNG on `app_cursor`, and `DomicileWindow.cursorImage` gives it to the shell as a CSS `cursor` value. Manganese sets it on the window's element.
+- 5c11ddc: `domicile list-bindings` prints the running shell's keys and gestures in each
+  binding mode and what they run. A shell command can now answer, and
+  `domicile send-shell` prints the answer: Manganese's `get-workspaces` and
+  `get-tree` answer with JSON, as `swaymsg -t get_workspaces` and `get_tree` do.
+  
+  Breaking: `onCommand` may return `Ok({ output })`;
+  `shell.commands(help, bindings)` takes the bindings, which `bindKeys`
+  describes for you; and `shell.answer(sent, ran)` takes the command's `Result`.
+- 382819f: Manganese draws an Electron app's menu bar under its window's tab. The app's accelerators run their entries, Alt and a menu's letter open it, and Alt shows or hides a bar the app auto-hides. The SDK reads a window's menu with `@domicile-desktop/sdk/app-menu` (`appMenu`, `acceleratedBy`, `openedByMnemonic`), and the component library has a `MenuBar`.
+- befeb71: Gmail and Messages inboxes, the Gmail bar module and launcher bookmarks take a `profile`, the browser profile they open in, so two Gmail accounts can live in two profiles. A site's app window is now in a browser profile, its site's by default, and `domicile open --app --profile <id>`, `browser.openApp(url, { profile })` and `browser.fetch(url, { profile })` pick one.
+- 4a4f057: Electron apps on the engine behave more like their own Electron:
+  
+  - Closing a window asks the app first, so an app that closes to its tray, as Slack and Element do, keeps running there instead of quitting.
+  - `win.hide()`, `win.show()` and `show: false` hide and show a window, its page still running. The engine lists a hidden window with `isHidden`, and Manganese keeps it off every workspace until its app shows it.
+  - A window's own title (`setTitle`, or `page-title-updated` prevented) is the one the desktop shows, so Claude Desktop reads "Claude", not "index.html".
+  - `ipcRenderer` is an EventEmitter, so `ipcRenderer.emit` reaches the preload's own listeners. Element's preload calls it as it starts, and showed "Unable to load config file" without it.
+  - Manganese draws an app window with its app's icon, in its title bar and in the screenshot and screen cast pickers, instead of its page's.
+  - A window has the properties Electron gives for what its methods set: `autoHideMenuBar`, `menuBarVisible`, `fullScreen`, `resizable` and the rest, and its page `audioMuted`, `backgroundThrottling` and `userAgent`. Element reads `autoHideMenuBar` once its page loads.
+- ebfad4b: A site's "Sign in with" account chooser (Sign in with Google and other account providers) now works, drawn by the shell: over the page after you press the site's button, or in the page's corner when the site offers it on load. Shells get it as the `domicile-identity` event on a browser window's element.
+- bc8db8f: Remove a copy from the clipboard history: `clipboard.remove(id)` in the SDK, and a Remove button and the Delete key in manganese's clipboard panel. Each entry says whether it is `current`; removing the current one empties the clipboard.
+- 9c805c4: Back and Forward list the pages that way on a long press or right click, as in Chrome. `<webview>` gains `history()`, `goToHistoryEntry()` and `goToHistoryEntryInNewWindow()` for shells' own menus.
+- 9bd54ab: The config can name a terminal with `terminal`, such as `["kitty"]`. When it does, applications that run in a terminal, such as htop and vim, show up in the launcher and under "Open with", and `domicile open` runs them in it. Meta+Return opens it in Manganese. Without one, nothing changes: Domicile still has no default terminal.
+- 09be8b7: Text fields in pages, web apps and Electron apps check spelling, in American English unless the config's `spellcheck.languages` says otherwise. The dictionaries ship with the engine and are never downloaded. A context menu event over a misspelled word carries `misspelledWord`, `spellingSuggestions` and `replaceMisspelling()`, and runs `add-to-dictionary`; manganese puts the suggestions at the top of the field's menu.
+- da632d6: A shell can give you a way back from a VM or remote desktop viewer that holds your shortcuts. A chord bound `--inhibited Meta+Escape` stays the shell's while that window has the keyboard, and `keyboard.switchShortcutsInhibitor` turns the window's hold off and on. Manganese has a `shortcuts-inhibitor toggle` command to bind to it.
+- e4f3394: Right-click a video for "Picture in picture", and drag a picture-in-picture video's progress bar to move through it. Shells get the menu's `picture-in-picture` action with `canPictureInPicture` / `inPictureInPicture`, and `pictureInPicture.seek(id, seconds)`.
+- e7b707c: The profile menu pins a site to a browser profile, so it opens there from now on. The engine keeps the pins across restarts, under the config's own `browser.sites`: a site the config names shows locked. Shells get `browser.pin(site, profile)`, `browser.siteFor(url)` and each profile's `pinnedSites` and `configSites`.
+- 756c1bd: `domicile list-shell-commands` (also `send-shell --help`) prints the commands
+  `send-shell` takes, as the running shell describes them. `send-shell` now fails
+  with the shell's reason when the shell refuses a command or never says it ran
+  it, instead of always succeeding.
+  
+  Breaking: `bindKeys` takes `commands`, describing what `onCommand` runs, and
+  `onCommand` returns `Ok("ran")` or `Err(reason)`. `shell.commands(help)`
+  replaces listening without a description, and `shell.answer(sent, refused)`
+  reports how each command ended. Manganese describes all of its commands.
+- 133ce8a: Browser profiles have an order. The config's `browser.order` lists profile ids, and the profiles it leaves out follow by id. The compositor sends the profiles in that order, so the profile menu and Settings list them that way.
+  
+  Settings' Profiles page moves a profile up or down. After its swatches, a color well takes any color, and the swatches now include the theme's cyan.
+  
+  In the profile menu, middle-clicking a profile opens the page in a new window of that profile, using `ListRow`'s new `onMiddlePress`. The profile button writes its name in black on light colors, where white would be hard to read.
+- e458dd7: The address bar starts with the page's browser profile, in its color. Its menu moves the page to another profile in place or opens it in a new window of one. Tabs of pages outside the default profile carry a dot of its color on their icon.
+- 6e41263: An Electron app's window that asks for attention draws its edge in the warning color, one that ignores the mouse lets the pointer through to what is under it, and one with a shape draws its page and takes clicks only within it.
+- 19cc2c5: Tapping Super on its own opens and closes the overview, as it does on GNOME and KDE. Holding Super for a shortcut, a drag or a scroll still works as before. Shells can bind a tap of any modifier alone by writing just its name, such as `Meta` or `Alt`, in their keybindings.
+- a5ade39: Games and VM viewers can lock the pointer (`zwp_pointer_constraints_v1`). The compositor offers the lock to the shell for the window under the pointer as `pointerConstraint`, and tells the client only once the shell holds a pointer lock on the window's `<app>` and reports it with `windows.pointerConstrained()`. The engine grants a shell's pointer lock with no click first and no browser bubble. Manganese locks for the focused window and lets go when the keyboard moves away. Confining the pointer to a window is offered but not taken yet.
+- 5315b06: A video entering picture-in-picture grows out of its place in the page, and "Back to tab" shrinks it back in. Shells read where it was from the video's `source`.
+- 0c5f1ce: Text, a link or an image dragged onto a group's tabs opens in a new tab there, where the blue bar shows.
+
+### Patch Changes
+
+- 0ee4ce8: The cursor changes over links and text in Firefox and Tor Browser. Both shells show the cursor a client asks for over its popups and bubbles.
+- d194a0d: A Ctrl+click opens in a new window wherever a middle click does: Back, Forward, the pages in their menus, and the profiles in the profile menu.
+  
+  - `@domicile-desktop/component-library/new-tab-click`: `newTabClick(onOpen, onOpenInNew)` gives `onClick` and `onAuxClick` handlers that call `onOpenInNew` for a middle click or a Ctrl+click, as a link opens in a new tab.
+  - `ListRow`'s `onMiddlePress` is `onPressInNew`, and takes a Ctrl+click too.
+- 3aaca85: Title bars and tabs fade between their colors with opacity alone, so the compositor eases them without repainting the bar on every frame. They look the same as before.
+- 64bda78: Hiding a background app's window, such as Messages, plays the same closing animation as closing any other window.
+- 0492adf: Switching workspaces keeps a floating window that hangs off the screen on its own workspace, instead of sliding its off-screen part into view.
+- 5ef4689: Typing in a window ends a group selection (Meta+A) around it. `<app>` and `<webview>` fire `domicile-key-delivered`, which names no key, for each key press their window gets.
+- a77b1e0: An Electron app's views ask for files as its window's page does, so uploads and downloads from a page the app put in a view, as Claude's is, open the file picker instead of doing nothing.
+- 3e37020: A client asking to be minimized now reaches the shell as `WindowRequest.Minimize`. The shell can also set `WindowState.Resizing` on a window while it resizes it, and the client sees `resizing` in its configure.
+- 5090cbd: The drop target and the selection tint draw over Firefox and Tor Browser windows.
+- 5a70826: A video entering picture-in-picture grows out of its page again, the close button shrinks it back too, and neither way flashes. `<app picture-in-picture>` fires `PICTURE_IN_PICTURE_SHOWN_EVENT` once it draws the video.
+- 57f6fe2: Floating windows no longer vanish behind tiled windows for a moment as the overview closes.
+- 5b3650f: Popups close when the desk changes under them. `PopupScene` closes every popup inside it when its `scene` key changes, and `PopupBoundary` closes its popups when its box moves. Manganese keys the scene on the overview, launcher, clipboard, each screen's workspace, fullscreen and scratchpad windows.
+- 4b7a878: The overview opens and closes more smoothly: the engine no longer waits for hidden workspaces' windows to draw, and opening or closing no longer restyles every part of every window.
+- 1cbbfb5: `Button` takes `label` on a text button as a longer name, such as "Forget Codex", and still draws it as text. Only an element child makes an icon-only button. Settings' Agents page draws Sign out, Forget and Stop with their padding again.
+- 5a896a8: Print takes a screenshot while the launcher is open. A shell screenshot asked for while the shell's screenshot dialog is up answers as that dialog does, instead of showing a second dialog once it closes.
+- 637cc16: Pages take the mouse right after a window is resized by its edge. A fast resize released over a browser window no longer leaves the resize cursor over its page or sends the next clicks to the desktop.
+- 6a0772b: A tab dragged out of a nested group drops before or after the group's own tab, including past it when the group is the last tab.
+- d1b3ab9: A picture-in-picture video floats in its own shape instead of stretched into a square, and its back-to-tab and close buttons work.
+- eaa92c7: Showing a background app's window, such as Messages, plays the opening animation.
+- 537a8d8: A group selected with Meta+A now gives focus back to its window when you click in that window, or when the pointer leaves for another monitor and comes back.
+- e3d8320: A nested tab group's only window drags out past the group's own tab, so it leaves a group that is the first or last tab of its strip.
+- 876c824: The overview's workspace rings slide with `translate` as workspaces swap, on the compositor with the cards they ring.
+- 18c887f: Number new screens' workspaces in reading order (rows top to bottom, then left to right) instead of the host's display order, so a docked laptop left of its monitors starts on workspace 1.
+- 3600d3b: Loading skeletons in History and the splash's dot grid move with transforms, and shadows that fade in fade on their own layer, so they no longer repaint every frame. A check fails on new animations of properties the compositor cannot run.
+- 0a23f7c: The open tab's outline is unbroken around its close button: the buttons' fill stays inside the tab's edge, with no seam round the buttons at a fractional scale.
+- 9ea68bf: A window dropped on the side of a nested group's window splits beside the group, as the overlay shows, instead of joining the outer strip.
+- 60e5932: The address bar's browser profile button acts like the other buttons. It shows the pointer cursor, darkens on hover and when pressed, and fades between the two.
+- 1209f22: Firefox and Tor Browser windows slide, open, close and ease with the rest of the desktop. A client's popups are drawn with its window and play its motion.
+- bab0ed1: At `domicile set-log-level debug shell`, each window action logs as `[windows]` with the windows, screens and workspaces it names, then what it changed: focus, the shown workspaces, the overview, the launcher, the scratchpad.
+- 52a2a9c: Opening, closing and settling a browser window no longer rasters its page again every frame, which made these animations janky on heavy pages. A fading window also reuses its page's last drawing instead of redrawing it each frame.
+- b5edfcd: A tab opening or closing keeps an edge and shadow while it moves, so it shows over a tab that looks like it.
+- Updated dependencies [6f4cabd]
+- Updated dependencies [02fe478]
+- Updated dependencies [b7d85c0]
+- Updated dependencies [7680c50]
+- Updated dependencies [9478a19]
+- Updated dependencies [87ac040]
+- Updated dependencies [394ecc7]
+- Updated dependencies [8f74f44]
+- Updated dependencies [d3978bb]
+- Updated dependencies [2794947]
+- Updated dependencies [0e71fa1]
+- Updated dependencies [d194a0d]
+- Updated dependencies [ce56535]
+- Updated dependencies [f5fbd04]
+- Updated dependencies [4acd3cd]
+- Updated dependencies [d0fbc5b]
+- Updated dependencies [3977a25]
+- Updated dependencies [03dcccf]
+- Updated dependencies [996cc29]
+- Updated dependencies [5ef4689]
+- Updated dependencies [3e37020]
+- Updated dependencies [2a1913f]
+- Updated dependencies [cd75f9a]
+- Updated dependencies [d2a68f5]
+- Updated dependencies [c454256]
+- Updated dependencies [09a3ad4]
+- Updated dependencies [3bdac3b]
+- Updated dependencies [f268f2d]
+- Updated dependencies [fb07c3f]
+- Updated dependencies [24b88fb]
+- Updated dependencies [81215c5]
+- Updated dependencies [728d513]
+- Updated dependencies [d566f68]
+- Updated dependencies [86c57d9]
+- Updated dependencies [057faa5]
+- Updated dependencies [51a769e]
+- Updated dependencies [52e71af]
+- Updated dependencies [5a70826]
+- Updated dependencies [dba9a81]
+- Updated dependencies [5c11ddc]
+- Updated dependencies [8c477cc]
+- Updated dependencies [382819f]
+- Updated dependencies [befeb71]
+- Updated dependencies [4a4f057]
+- Updated dependencies [5b3650f]
+- Updated dependencies [ebfad4b]
+- Updated dependencies [2bf4b1b]
+- Updated dependencies [1cbbfb5]
+- Updated dependencies [adb0ef5]
+- Updated dependencies [5a896a8]
+- Updated dependencies [28238ca]
+- Updated dependencies [69247ca]
+- Updated dependencies [4799f21]
+- Updated dependencies [94e5909]
+- Updated dependencies [bc8db8f]
+- Updated dependencies [e821d1f]
+- Updated dependencies [46d7737]
+- Updated dependencies [8ff882e]
+- Updated dependencies [14704ae]
+- Updated dependencies [0a4d218]
+- Updated dependencies [3600d3b]
+- Updated dependencies [9c805c4]
+- Updated dependencies [9bd54ab]
+- Updated dependencies [a2cab16]
+- Updated dependencies [d6373e3]
+- Updated dependencies [09be8b7]
+- Updated dependencies [dabcc0c]
+- Updated dependencies [da632d6]
+- Updated dependencies [85ad296]
+- Updated dependencies [539ce11]
+- Updated dependencies [e4f3394]
+- Updated dependencies [e7b707c]
+- Updated dependencies [8a2777f]
+- Updated dependencies [8eb261d]
+- Updated dependencies [756c1bd]
+- Updated dependencies [133ce8a]
+- Updated dependencies [b95da52]
+- Updated dependencies [9478a19]
+- Updated dependencies [a85afe8]
+- Updated dependencies [25522ef]
+- Updated dependencies [19cc2c5]
+- Updated dependencies [a5ade39]
+- Updated dependencies [5315b06]
+- Updated dependencies [f268f2d]
+- Updated dependencies [5fe0d76]
+- Updated dependencies [6e41263]
+- Updated dependencies [dec9fc2]
+- Updated dependencies [6aad1fa]
+  - @domicile-desktop/component-library@2.2.0
+  - @domicile-desktop/manganese-page-requests@1.3.0
+  - @domicile-desktop/sdk@3.0.0
+  - @domicile-desktop/system-apps@1.3.0
+  - @domicile-desktop/manganese-address@1.1.0
+  - @domicile-desktop/manganese-bar@1.1.3
+  - @domicile-desktop/manganese-host@2.0.3
+
 ## 1.3.0
 
 ### Minor Changes

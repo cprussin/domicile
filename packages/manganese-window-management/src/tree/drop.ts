@@ -15,7 +15,6 @@ import {
   NodeKind,
   showsOneChild,
   splitFor,
-  windowsIn,
   withChildAt,
 } from "./node";
 import type { NodeRef, Path } from "./path";
@@ -29,12 +28,20 @@ import {
   withFocusOn,
 } from "./tiling";
 
+/** Where a drop on the edge of a tab goes. */
+export enum Beside {
+  /** Into the tab's strip, before or after it. */
+  InStrip,
+  /** Out of the strip: the tab's place splits with the dropped node. */
+  Apart,
+}
+
 /**
  * The tiling with the node `moving` names dropped on the `edge` of the node
  * `target` names, or its middle when `edge` is `undefined`. Focus goes to the
  * moved node, and commands stay on it only if it was selected (see `landed`).
  *
- * Unchanged when `target`'s window is inside `moving`. Throws if either is not
+ * Unchanged when `target` is `moving` or inside it. Throws if either is not
  * tiled here.
  */
 export const droppedOn = (
@@ -42,15 +49,17 @@ export const droppedOn = (
   moving: NodeRef,
   target: NodeRef,
   edge: Direction | undefined,
+  beside: Beside = Beside.InStrip,
 ): Tiling => {
   const root = tiledRoot(tiling);
   const from = pathToRef(root, moving);
+  const to = pathToRef(root, target);
   const node = nodeAt(root, from);
-  if (windowsIn(node).includes(target.id)) {
+  if (startsWith(to, from)) {
     return tiling;
   } else {
     return landed(
-      { ...tiling, root: movedOnto(root, from, target, edge) },
+      { ...tiling, root: movedOnto(root, from, to, target, edge, beside) },
       node,
       selects(tiling, from),
     );
@@ -71,10 +80,14 @@ export const arrivedOn = (
   selected: boolean,
   target: NodeRef,
   edge: Direction | undefined,
+  beside: Beside = Beside.InStrip,
 ): Tiling => {
   const root = tiledRoot(tiling);
   return landed(
-    { ...tiling, root: placed(root, pathToRef(root, target), node, edge) },
+    {
+      ...tiling,
+      root: placed(root, pathToRef(root, target), node, edge, beside),
+    },
     node,
     selected,
   );
@@ -96,39 +109,51 @@ const landed = (tiling: Tiling, node: LayoutNode, selected: boolean): Tiling =>
  *
  * Removes it first, like a keyed `move`, so the tree collapses as after a
  * close before the target is located. A tab moved beside another tab of its
- * strip only moves along it, so a strip of two keeps a nested group in it.
+ * strip only moves along it, so a strip of two keeps a nested group in it. A
+ * node dropped beside a group that holds only it takes the group's place.
  */
 const movedOnto = (
   root: LayoutNode,
   from: Path,
+  to: Path,
   target: NodeRef,
   edge: Direction | undefined,
+  beside: Beside,
 ): LayoutNode => {
-  const to = pathToRef(root, target);
   const around = from.slice(0, -1);
   const parent = nodeAt(root, around);
   const fromAt = from.at(-1);
   const toAt = to.at(-1);
   if (
     edge !== undefined &&
+    beside === Beside.InStrip &&
     fromAt !== undefined &&
     toAt !== undefined &&
     parent.kind === NodeKind.Container &&
     showsOneChild(parent.layout) &&
     axisOf(parent.layout) === axisOfDirection(edge) &&
     to.length === from.length &&
-    around.every((step, at) => to[at] === step)
+    startsWith(to, around)
   ) {
     return replacedAt(root, around, () =>
       movedAlong(parent, fromAt, toAt, isForward(edge)),
     );
+  } else if (
+    startsWith(from, to) &&
+    withoutAt(nodeAt(root, to), from.slice(to.length)) === undefined
+  ) {
+    // The group it is dropped beside holds only it, and goes with it.
+    return replacedAt(root, to, () => nodeAt(root, from));
   } else {
     const rest = withoutAt(root, from);
     if (rest === undefined) {
       // Unreachable: the target is still in the tree.
       throw new Error(`layout tree: dropping on ${target.id} left nothing`);
     } else {
-      return placed(rest, pathToRef(rest, target), nodeAt(root, from), edge);
+      // A group around the moved node keeps its path, but its ref may name a
+      // window that just left it.
+      const at = startsWith(from, to) ? to : pathToRef(rest, target);
+      return placed(rest, at, nodeAt(root, from), edge, beside);
     }
   }
 };
@@ -167,10 +192,11 @@ const placed = (
   at: Path,
   moving: LayoutNode,
   edge: Direction | undefined,
+  beside: Beside,
 ): LayoutNode =>
   edge === undefined
     ? joined(root, at, moving)
-    : placedBeside(root, at, moving, edge);
+    : placedBeside(root, at, moving, edge, beside);
 
 /**
  * Puts `moving` just after the node at `at` in its tab group. A node alone in
@@ -206,13 +232,14 @@ const joined = (root: LayoutNode, at: Path, moving: LayoutNode): LayoutNode => {
  * Puts `moving` on the `edge` side of the node at `at`: in its parent if the
  * parent runs along that axis, else in a new split with the node (also when
  * there is no parent). A tab group of one becomes that split, unless it is a
- * tab itself.
+ * tab itself. A tab dropped `Apart` from always splits with it.
  */
 const placedBeside = (
   root: LayoutNode,
   at: Path,
   moving: LayoutNode,
   edge: Direction,
+  beside: Beside,
 ): LayoutNode => {
   const target = nodeAt(root, at);
   const [only, ...others] =
@@ -222,17 +249,26 @@ const placedBeside = (
       ? target.children
       : [];
   if (only !== undefined && others.length === 0) {
-    const forward = isForward(edge);
-    return replacedAt(root, at, () =>
-      Node.Container(
-        splitFor(axisOfDirection(edge)),
-        forward ? [only, moving] : [moving, only],
-        forward ? 1 : 0,
-      ),
-    );
+    return replacedAt(root, at, () => splitWith(only, moving, edge));
+  } else if (beside === Beside.Apart && isTab(root, at)) {
+    return replacedAt(root, at, (node) => splitWith(node, moving, edge));
   } else {
     return besideNode(root, at, moving, edge);
   }
+};
+
+/** A split of `node` with `moving` on its `edge` side, focusing `moving`. */
+const splitWith = (
+  node: LayoutNode,
+  moving: LayoutNode,
+  edge: Direction,
+): Container => {
+  const forward = isForward(edge);
+  return Node.Container(
+    splitFor(axisOfDirection(edge)),
+    forward ? [node, moving] : [moving, node],
+    forward ? 1 : 0,
+  );
 };
 
 /** Whether the node at `at` is a tab of a tabbed or stacking container. */
@@ -284,6 +320,10 @@ const besideNode = (
     );
   }
 };
+
+/** Whether `path` runs through `prefix`, or is it. */
+const startsWith = (path: Path, prefix: Path): boolean =>
+  prefix.length <= path.length && prefix.every((step, at) => path[at] === step);
 
 const tiledRoot = ({ root }: Tiling): LayoutNode => {
   if (root === undefined) {

@@ -8,6 +8,7 @@ import {
   movesAsTab,
   placedOn,
   sentAway,
+  shutAway,
   withClosing,
 } from "./closing";
 import { crossed } from "./crossing";
@@ -108,10 +109,13 @@ type ClosingOn = Closing & { screen: string };
  */
 type Slid = { at: number; rewound: number };
 
-/** An open window sent off the screen, how it leaves, and from which screen. */
+/**
+ * An open window sent off the screen or shut, how it leaves, and from which
+ * screen. A shut window leaves as a closed one does.
+ */
 type SendingOn = Leaving &
   Slid & {
-    motion: "sending" | "sending-tab" | "stowing";
+    motion: "closing" | "closing-tab" | "sending" | "sending-tab" | "stowing";
     screen: string;
   };
 
@@ -239,6 +243,7 @@ const moved = (before: Desk, shown: Desk): boolean =>
       was.overview !== now.overview ||
       was.placements !== now.placements ||
       was.scratchpad !== now.scratchpad ||
+      was.shut !== now.shut ||
       was.tabs !== now.tabs ||
       was.windows !== now.windows
     );
@@ -250,6 +255,10 @@ const moved = (before: Desk, shown: Desk): boolean =>
  */
 const windowsOf = (desk: Desk): readonly ShellWindow[] =>
   Object.values(desk)[0]?.windows ?? [];
+
+/** The desk's shut windows. Every screen has the same list. */
+const shutOf = (desk: Desk): ReadonlySet<string> =>
+  new Set(Object.values(desk)[0]?.shut);
 
 /**
  * What is playing after the desk changes from `before` to `shown` at `time`.
@@ -275,7 +284,14 @@ const advanced = (
   const switched = screens.map(({ now, was }) => tabSwitched(was, now));
   // Sets, since every window is checked against them.
   const open = new Set(windows.map(({ id }) => id));
-  const wasOpen = new Set(windowsOf(before).map(({ id }) => id));
+  // A shut window is open but shown as closed, so showing it opens it.
+  const wasShut = shutOf(before);
+  const shut = shutOf(shown);
+  const wasOpen = new Set(
+    windowsOf(before)
+      .map(({ id }) => id)
+      .filter((id) => !wasShut.has(id)),
+  );
   const shownIds = placedIds(shown);
   const fades = [
     ...switched.flatMap(({ concealed }) =>
@@ -336,7 +352,9 @@ const advanced = (
     // opening finished.
     opening: [
       ...playing.opening.filter((id) => shownIds.has(id)),
-      ...windows.filter(({ id }) => !wasOpen.has(id)).map(({ id }) => id),
+      ...windows
+        .filter(({ id }) => !wasOpen.has(id) && !shut.has(id))
+        .map(({ id }) => id),
     ],
     // A window raised again before settling plays only the latest raise.
     restacking: [
@@ -351,10 +369,23 @@ const advanced = (
       ...playing.sending.filter(
         ({ window }) => open.has(window.id) && !shownIds.has(window.id),
       ),
+      ...screens.flatMap(({ name, was }) =>
+        shutAway(was, shut).map((closing) => ({
+          ...closing,
+          at: time,
+          motion: movesAsTab(closing.placement)
+            ? ("closing-tab" as const)
+            : ("closing" as const),
+          rewound: 0,
+          screen: name,
+        })),
+      ),
       ...screens.flatMap(({ name, now, was }) =>
         (overviewing(was, now)
           ? []
-          : sentAway(was, now, Object.values(shown))
+          : sentAway(was, now, Object.values(shown)).filter(
+              ({ window }) => !shut.has(window.id),
+            )
         ).map((sending) => {
           const motion = sendingMotion(shown, sending);
           return {
@@ -581,9 +612,15 @@ const played = (
         ({ placement, window }) =>
           window.id !== id || outlastsBar(placement, motion, part),
       );
-      return closing.length === playing.closing.length
+      // A shut window closes from `sending`; see `SendingOn`.
+      const sending = playing.sending.filter(
+        ({ placement, window }) =>
+          window.id !== id || outlastsBar(placement, motion, part),
+      );
+      return closing.length === playing.closing.length &&
+        sending.length === playing.sending.length
         ? playing
-        : { ...playing, closing };
+        : { ...playing, closing, sending };
     }
     case "sending":
     case "sending-tab":

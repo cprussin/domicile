@@ -22,7 +22,7 @@ import {
 } from "./floating/float";
 import { INNER_GAP, tiledAreaOf } from "./gaps";
 import type { Rect } from "./rect";
-import { arrivedOn, droppedOn } from "./tree/drop";
+import { arrivedOn, Beside, droppedOn } from "./tree/drop";
 import { enteredFrom, focusMoved, leavesBy } from "./tree/focus-direction";
 import { grouped, groupedBelowRoot, groupedRef } from "./tree/grouped";
 import { inserted, insertedNode } from "./tree/insert";
@@ -802,6 +802,7 @@ export const nodeDropped = (
   moving: NodeRef,
   target: NodeRef,
   edge: Direction | undefined,
+  beside: Beside = Beside.InStrip,
 ): Workspace => {
   const from = floatOn(workspace, moving.id);
   const to = floatOn(workspace, target.id);
@@ -809,14 +810,14 @@ export const nodeDropped = (
   if (from === to) {
     return landedIn(
       inLayerOf(workspace, from, (tiling) =>
-        droppedOn(tiling, moving, target, edge),
+        droppedOn(tiling, moving, target, edge, beside),
       ),
       to,
       node,
     );
   } else {
     const { rest, selected } = nodeLifted(workspace, moving);
-    return nodeArrived(rest, node, selected, target, edge);
+    return nodeArrived(rest, node, selected, target, edge, beside);
   }
 };
 
@@ -861,11 +862,12 @@ export const nodeArrived = (
   selected: boolean,
   target: NodeRef,
   edge: Direction | undefined,
+  beside: Beside = Beside.InStrip,
 ): Workspace => {
   const to = floatOn(workspace, target.id);
   return landedIn(
     inLayerOf(workspace, to, (tiling) =>
-      arrivedOn(tiling, node, selected, target, edge),
+      arrivedOn(tiling, node, selected, target, edge, beside),
     ),
     to,
     node,

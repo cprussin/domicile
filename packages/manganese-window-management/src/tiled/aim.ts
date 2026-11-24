@@ -4,6 +4,7 @@
 import { Direction } from "../direction";
 import type { Rect } from "../rect";
 import { sameRect } from "../rect";
+import { Beside } from "../tree/drop";
 import type { TabLayout } from "../tree/frames";
 import { Layout } from "../tree/node";
 import type { NodeRef } from "../tree/path";
@@ -47,6 +48,12 @@ export type Dragged = {
   windows: readonly string[];
 };
 
+/**
+ * A drag carrying no window: a page's text, link or image, which opens a new
+ * tab where it is dropped. See `useTabDrop`.
+ */
+export const NO_WINDOW: Dragged = { node: { id: "", up: 0 }, windows: [] };
+
 /** A float's box, which hides every target behind it. */
 export type FloatCover = {
   depth: number;
@@ -76,8 +83,9 @@ export enum AimKind {
  * drawing.
  */
 export const Aim = {
-  /** Goes on the `edge` of the tab group `node`. */
+  /** Goes on the `edge` of the tab group `node`, out of any strip it is in. */
   Group: (node: NodeRef, edge: Direction, rect: Rect) => ({
+    beside: Beside.Apart as const,
     edge,
     kind: AimKind.Group as const,
     node,
@@ -94,6 +102,7 @@ export const Aim = {
    * `edge` side. Moves at once, with no drop indicator.
    */
   Strip: (node: NodeRef, edge: Direction, rect: Rect) => ({
+    beside: Beside.InStrip as const,
     edge,
     kind: AimKind.Strip as const,
     node,
@@ -104,6 +113,7 @@ export const Aim = {
    * between the two tabs it goes between, and `depth` the depth of the strip.
    */
   Tab: (node: NodeRef, edge: Direction, rect: Rect, depth: number) => ({
+    beside: Beside.InStrip as const,
     depth,
     edge,
     kind: AimKind.Tab as const,
@@ -115,6 +125,7 @@ export const Aim = {
    * is `undefined`.
    */
   Window: (id: string, edge: Direction | undefined, rect: Rect) => ({
+    beside: Beside.InStrip as const,
     edge,
     kind: AimKind.Window as const,
     node: { id, up: 0 },
@@ -148,6 +159,8 @@ const TAB_LINE = 4;
  * tab over its own strip takes the slot nearest the pointer, and over its own
  * window goes beside its group. Strips come before windows, whose frames hold
  * them. A float hides what is behind it, but not from a drag that carries it.
+ * A tab dragged out of a nested group goes beside the group's own tab too,
+ * even when it is the group's only one.
  */
 export const aimAt = (
   { floats, screens, tabs, windows }: DropTargets,
@@ -167,7 +180,8 @@ export const aimAt = (
       ? windows.find(({ frame }) => contains(frame, x, y))
       : undefined;
   if (tab !== undefined) {
-    return holdsAny(tab, dragged.windows)
+    return tab.windows.every((id) => dragged.windows.includes(id)) &&
+      !encloses(tab, dragged)
       ? undefined
       : aimAtTab(tab, tabOf(tabs, dragged), x, y);
   } else if (cover !== undefined) {
@@ -188,6 +202,13 @@ export const aimAt = (
     );
   }
 };
+
+/**
+ * Whether `tab` stands for a group around `dragged`, which it leaves: a group
+ * whose only window it carries.
+ */
+const encloses = ({ node }: TabTarget, dragged: Dragged): boolean =>
+  node.id === dragged.node.id && node.up > dragged.node.up;
 
 /** Whether any of `windows` is in `tab`'s node. */
 const holdsAny = (tab: TabTarget, windows: readonly string[]): boolean =>

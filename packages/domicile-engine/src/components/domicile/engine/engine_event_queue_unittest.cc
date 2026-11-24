@@ -99,7 +99,10 @@ TEST(EngineEventQueueTest, ADisplayListArrivesWholeAcrossTheQueue) {
                                           .physical_height_mm = 336,
                                           .refresh_mhz = 59997,
                                           .connector = "eDP-1",
-                                          .gamma_size = 4096});
+                                          .gamma_size = 4096,
+                                          .modes = {{.width = 2880,
+                                                     .height = 1920,
+                                                     .refresh_mhz = 59997}}});
   pushed.displays.push_back(EngineDisplay{.id = 9,
                                           .x = 2880,
                                           .y = 0,
@@ -115,6 +118,9 @@ TEST(EngineEventQueueTest, ADisplayListArrivesWholeAcrossTheQueue) {
   EXPECT_EQ(drained[0].displays[0].id, 7);
   EXPECT_EQ(drained[0].displays[0].width, 2880);
   EXPECT_EQ(drained[0].displays[0].gamma_size, 4096u);
+  ASSERT_EQ(drained[0].displays[0].modes.size(), 1u);
+  EXPECT_EQ(drained[0].displays[0].modes[0].refresh_mhz, 59997);
+  EXPECT_TRUE(drained[0].displays[1].modes.empty());
   EXPECT_EQ(drained[0].displays[0].physical_width_mm, 597);
   EXPECT_EQ(drained[0].displays[0].physical_height_mm, 336);
   EXPECT_EQ(drained[0].displays[0].refresh_mhz, 59997);
@@ -125,6 +131,67 @@ TEST(EngineEventQueueTest, ADisplayListArrivesWholeAcrossTheQueue) {
   EXPECT_EQ(drained[0].displays[1].connector, "HDMI-A-1");
   EXPECT_EQ(drained[0].displays[1].id, 9);
   EXPECT_EQ(drained[0].displays[1].x, 2880);
+}
+
+TEST(EngineEventQueueTest, TheBrowserWindowsArriveWholeAcrossTheQueue) {
+  EngineEventQueue queue;
+  EngineEvent pushed{.type = EngineEvent::Type::kBrowserWindows};
+  pushed.browser_windows.push_back(
+      EngineBrowserWindow{.id = "3",
+                          .title = "Inbox",
+                          .app_id = "mail",
+                          .url = "https://mail.example/",
+                          .off_the_record = true});
+  pushed.browser_windows.push_back(EngineBrowserWindow{
+      .id = "5",
+      .views = {EngineBrowserView{
+          .id = "6", .x = 0, .y = 40, .width = 800, .height = 560}}});
+  queue.Push(pushed);
+
+  const std::vector<EngineEvent> drained = queue.Drain();
+  ASSERT_EQ(drained.size(), 1u);
+  EXPECT_EQ(drained[0].type, EngineEvent::Type::kBrowserWindows);
+  ASSERT_EQ(drained[0].browser_windows.size(), 2u);
+  // The C ABI points into these strings, so the queue must keep them.
+  EXPECT_EQ(drained[0].browser_windows[0].id, "3");
+  EXPECT_EQ(drained[0].browser_windows[0].title, "Inbox");
+  EXPECT_EQ(drained[0].browser_windows[0].app_id, "mail");
+  EXPECT_EQ(drained[0].browser_windows[0].url, "https://mail.example/");
+  EXPECT_TRUE(drained[0].browser_windows[0].off_the_record);
+  EXPECT_FALSE(drained[0].browser_windows[1].off_the_record);
+  EXPECT_EQ(drained[0].browser_windows[1].id, "5");
+  EXPECT_EQ(drained[0].browser_windows[1].title, "");
+  EXPECT_TRUE(drained[0].browser_windows[0].views.empty());
+  EXPECT_EQ(drained[0].browser_windows[1].views,
+            (std::vector<EngineBrowserView>{EngineBrowserView{
+                .id = "6", .x = 0, .y = 40, .width = 800, .height = 560}}));
+}
+
+TEST(EngineEventQueueTest, TheInputDevicesArriveWholeAcrossTheQueue) {
+  EngineEventQueue queue;
+  EngineEvent pushed{.type = EngineEvent::Type::kInputDevices};
+  pushed.input_devices.push_back(EngineInputDevice{
+      .name = "Logitech MX Master 3",
+      .sys_path = "/sys/devices/input9",
+      .id = 9,
+      .vendor_id = 0x046d,
+      .product_id = 0x4082,
+      // DOMICILE_INPUT_DEVICE_MOUSE and DOMICILE_INPUT_CONNECTION_BLUETOOTH.
+      .kind = 1,
+      .connection = 3});
+  queue.Push(pushed);
+
+  const std::vector<EngineEvent> drained = queue.Drain();
+  ASSERT_EQ(drained.size(), 1u);
+  EXPECT_EQ(drained[0].type, EngineEvent::Type::kInputDevices);
+  ASSERT_EQ(drained[0].input_devices.size(), 1u);
+  // The C ABI points into these strings, so the queue must keep them.
+  EXPECT_EQ(drained[0].input_devices[0].name, "Logitech MX Master 3");
+  EXPECT_EQ(drained[0].input_devices[0].sys_path, "/sys/devices/input9");
+  EXPECT_EQ(drained[0].input_devices[0].id, 9);
+  EXPECT_EQ(drained[0].input_devices[0].vendor_id, 0x046d);
+  EXPECT_EQ(drained[0].input_devices[0].kind, 1);
+  EXPECT_EQ(drained[0].input_devices[0].connection, 3);
 }
 
 // The compositor dispatches once per wakeup, so a drain must return every

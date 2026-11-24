@@ -303,6 +303,30 @@ fn a_wlr_screencopy_client_copies_frame_after_frame() {
     assert_eq!(center(&memory, (640, 480)), PATTERN);
 }
 
+/// The shell is told a window's identifier on the list, so it can name the
+/// window to a capture tool.
+#[test]
+fn the_shell_is_told_the_identifier_a_window_is_listed_under() {
+    let compositor = started();
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client("name-me");
+    let told = match chrome
+        .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
+        .expect("the window appeared")
+    {
+        HostMessage::AppAppeared { toplevel_id, .. } => toplevel_id,
+        _ => unreachable!("waited for an AppAppeared"),
+    };
+    let (mut queue, mut copier) = connected(&compositor, 3);
+    while copier.identifiers.is_empty() {
+        queue
+            .blocking_dispatch(&mut copier)
+            .expect("the window listed");
+    }
+
+    assert_eq!(copier.identifiers, vec![told]);
+}
+
 /// A window is listed as a foreign toplevel, and a session of it captures
 /// the window alone.
 #[test]
@@ -458,6 +482,8 @@ struct Copier {
     window_sources: Option<ExtForeignToplevelImageCaptureSourceManagerV1>,
     /// Each listed window, with its title.
     toplevels: Vec<(ExtForeignToplevelHandleV1, String)>,
+    /// Each listed window's identifier, in the order they arrived.
+    identifiers: Vec<String>,
     cursor_entered: bool,
     cursor_at: Option<(i32, i32)>,
     hotspot: Option<(i32, i32)>,
@@ -712,12 +738,18 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for Copier {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let ext_foreign_toplevel_handle_v1::Event::Title { title } = event {
-            for (listed, named) in &mut copier.toplevels {
-                if listed == toplevel {
-                    *named = title.clone();
+        match event {
+            ext_foreign_toplevel_handle_v1::Event::Title { title } => {
+                for (listed, named) in &mut copier.toplevels {
+                    if listed == toplevel {
+                        *named = title.clone();
+                    }
                 }
             }
+            ext_foreign_toplevel_handle_v1::Event::Identifier { identifier } => {
+                copier.identifiers.push(identifier);
+            }
+            _ => {}
         }
     }
 }

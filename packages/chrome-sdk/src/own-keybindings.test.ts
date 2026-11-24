@@ -1,7 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
 import { KeyAction } from "./key-action";
-import { ownedChords, ownKeybindings } from "./own-keybindings";
+import {
+  inhibitedChords,
+  ownedChords,
+  ownKeybindings,
+} from "./own-keybindings";
 
 describe("ownKeybindings", () => {
   it("files each binding under its chord, spelled the one way", () => {
@@ -37,8 +41,40 @@ describe("ownKeybindings", () => {
     expect(bindings.get("default")).toEqual(new Map());
   });
 
+  it("spells a modifier alone, a tap of it, as its one name", () => {
+    const bindings = ownKeybindings({
+      keybindings: {
+        "--inhibited ctrl": KeyAction.Mode("y"),
+        Super: KeyAction.Mode("x"),
+      },
+    });
+    expect([...(bindings.get("default")?.keys() ?? [])]).toEqual([
+      "Ctrl",
+      "Meta",
+    ]);
+    expect(
+      inhibitedChords({
+        keybindings: { "--inhibited ctrl": KeyAction.Mode("y") },
+      }),
+    ).toEqual(new Set(["Ctrl"]));
+  });
+
+  it("refuses a tap of a modifier written twice, as Meta and Super", () => {
+    expect(() =>
+      ownKeybindings({
+        keybindings: { Meta: KeyAction.Mode("x"), Super: KeyAction.Mode("y") },
+      }),
+    ).toThrow("Super");
+  });
+
   it("refuses a chord with no keysym, an unknown modifier or one held twice", () => {
-    for (const chord of ["Meta+", "Hyper+l", "Meta+Super+l", "Meta+ l"]) {
+    for (const chord of [
+      "Meta+",
+      "Hyper+l",
+      "Meta+Super+l",
+      "Meta+ l",
+      "Shift+Meta",
+    ]) {
       expect(() =>
         ownKeybindings({ keybindings: { [chord]: KeyAction.Mode("x") } }),
       ).toThrow(chord);
@@ -82,6 +118,28 @@ describe("ownKeybindings", () => {
         },
       }),
     ).toThrow("gesture");
+  });
+});
+
+describe("inhibitedChords", () => {
+  it("files an --inhibited chord under its chord, and names it", () => {
+    const own = {
+      keybindings: { "--inhibited super+Escape": KeyAction.Mode("x") },
+      modes: { x: { "Meta+Escape": KeyAction.Mode("default") } },
+    };
+
+    expect(ownKeybindings(own).get("default")?.get("Meta+Escape")).toEqual(
+      KeyAction.Mode("x"),
+    );
+    expect(inhibitedChords(own)).toEqual(new Set(["Meta+Escape"]));
+  });
+
+  it("refuses an --inhibited gesture", () => {
+    expect(() =>
+      ownKeybindings({
+        keybindings: { "--inhibited swipe:3:left": KeyAction.Mode("x") },
+      }),
+    ).toThrow("cannot be --inhibited");
   });
 });
 

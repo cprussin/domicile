@@ -8,10 +8,35 @@ import type { On } from "./subscribe";
 import { hostEvent, on } from "./subscribe";
 import type { System } from "./system-calls";
 
+/**
+ * Whether a screen scans out with a variable refresh rate. `unsupported` when
+ * its panel, connector or driver cannot, or when Domicile runs in a window.
+ * `off` when it can and its display profile does not ask for it, or the
+ * driver refused it.
+ */
+export type AdaptiveSync = "unsupported" | "off" | "on";
+
+/**
+ * Whether a screen is driven in HDR10. `unsupported` when its panel takes no
+ * PQ, its connector cannot scan out in 10 bits, or Domicile runs in a window.
+ * `off` when it can and its display profile does not ask for it. See
+ * docs/COLOR.md.
+ */
+export type Hdr = "unsupported" | "off" | "on";
+
 /** One screen. Sizes are whole CSS pixels; see `DomicileDisplay`. */
-export type Display = Omit<DomicileDisplay, "transform"> & {
+export type Display = Omit<
+  DomicileDisplay,
+  "adaptiveSync" | "hdr" | "transform"
+> & {
+  readonly adaptiveSync: AdaptiveSync;
+  readonly hdr: Hdr;
   readonly transform: DisplayTransform;
 };
+
+// A state this SDK has no name for asks nothing of a shell.
+const asSupport = (state: string): AdaptiveSync & Hdr =>
+  state === "off" || state === "on" ? state : "unsupported";
 
 export type DisplaysListeners = {
   /** A screen arrived or left, or one was resized or rescaled. */
@@ -40,6 +65,18 @@ export type Displays = {
    * holds.
    */
   setColorTemperature: System["setColorTemperature"];
+  /**
+   * Turn every monitor off now, keeping windows and workspaces as they are.
+   * Input more than a second later lights them again, as does
+   * {@link Displays.wake}. With `display` (a {@link Display.name}), turn only
+   * that one off until it is woken. See docs/IDLE.md#sleeping-on-demand.
+   */
+  sleep: System["sleepDisplays"];
+  /**
+   * Light the monitors again, after {@link Displays.sleep} or idle blanking,
+   * or only `display`.
+   */
+  wake: System["wakeDisplays"];
   on: On<DisplaysListeners>;
 };
 
@@ -50,7 +87,13 @@ export type DisplaysHost = Pick<
 
 export const displays = (
   host: DisplaysHost,
-  calls: Pick<System, "addVirtualMonitor" | "setColorTemperature">,
+  calls: Pick<
+    System,
+    | "addVirtualMonitor"
+    | "setColorTemperature"
+    | "sleepDisplays"
+    | "wakeDisplays"
+  >,
 ): Displays => {
   const listOf = memoizeLast((list: readonly DomicileDisplay[] | null) =>
     list?.map(displayOf),
@@ -66,15 +109,22 @@ export const displays = (
     }),
     setColorTemperature: (kelvin, display) =>
       calls.setColorTemperature(kelvin, display),
+    sleep: (display) => calls.sleepDisplays(display),
+    wake: (display) => calls.wakeDisplays(display),
   };
 };
 
 const displayOf = (display: DomicileDisplay): Display => ({
+  adaptiveSync: asSupport(display.adaptiveSync),
+  hdr: asSupport(display.hdr),
   height: display.height,
   modeHeight: display.modeHeight,
   modeWidth: display.modeWidth,
   name: display.name,
+  peakLuminance: display.peakLuminance,
+  refreshMhz: display.refreshMhz,
   scale: display.scale,
+  sdrWhite: display.sdrWhite,
   transform: asDisplayTransform(display.transform),
   width: display.width,
   x: display.x,

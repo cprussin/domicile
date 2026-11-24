@@ -13,6 +13,9 @@
 export type Config = {
   /** Where editors find this file's JSON Schema. Domicile ignores it. */
   $schema?: string | null;
+  agents?: AgentsConfig;
+  browser?: BrowserConfig;
+  electron?: ElectronConfig;
   extensions?: ExtensionsConfig;
   files?: FilesConfig;
   idle?: IdleConfig;
@@ -31,7 +34,16 @@ export type Config = {
    * `docs/WRITING-A-SHELL.md#options`.
    */
   shell_options?: Record<string, unknown>;
+  spellcheck?: SpellcheckConfig;
   startup?: StartupConfig;
+  /**
+   * The terminal applications such as htop and vim run in
+   * (`Terminal=true` in their desktop entries): its argv, which the
+   * application's own follows, as `["kitty", "--"]` or `["foot"]`. The
+   * launcher and `domicile open` offer such applications only when it is
+   * set, and a shell's terminal key opens it. Unset, there is no terminal.
+   */
+  terminal?: string[] | null;
   theme?: ThemeConfig;
 };
 
@@ -40,6 +52,67 @@ export type AccelProfile = "adaptive" | "flat";
 
 /** An sRGB color, written `"#rrggbb"`. */
 export type AccentColor = string;
+
+/**
+ * Agents that drive the desktop, such as Claude Code. See
+ * `docs/AGENTS.md`.
+ */
+export type AgentsConfig = {
+  /**
+   * Whether agents on the web, such as claude.ai, can reach the desktop
+   * through Domicile's relay: while it is set, the compositor runs
+   * `domicile mcp --relay`. Each agent still signs in only once the user
+   * allows it on the desktop, and asks before it uses anything. Off by
+   * default. See
+   * `docs/AGENTS.md#agents-on-the-web`.
+   */
+  web?: boolean;
+};
+
+/**
+ * Browser profiles: sets of sign-ins, site data and extensions, and the
+ * sites each opens. See `docs/architecture/BROWSER-PROFILES.md`.
+ */
+export type BrowserConfig = {
+  /** The profile a new private window opens in. Private. */
+  default_private_profile?: string;
+  /** The profile a site opens in when `sites` names none. Not private. */
+  default_profile?: string;
+  /**
+   * The order the shell lists the profiles in, by id. Profiles it leaves
+   * out follow, by id.
+   */
+  order?: string[];
+  /**
+   * The profiles, by id. An id is a directory name: lowercase letters,
+   * digits and `-`.
+   */
+  profiles?: Record<string, BrowserProfile>;
+  /**
+   * The profile each site opens in, by site: a host, `*.host` for it and
+   * its subdomains, or a host and path such as `github.com/acme` for the
+   * addresses under it. The most specific match wins. A site is never in
+   * `default_profile`, which opens every unlisted site.
+   */
+  sites?: Record<string, string>;
+};
+
+/** One browser profile. See [`BrowserConfig::profiles`]. */
+export type BrowserProfile = {
+  /** The color the shell marks the profile's pages with. */
+  color: AccentColor;
+  /**
+   * The ids of the extensions it turns on, from those `extensions`
+   * installs; the rest are off, and the shell cannot switch them. Unset
+   * leaves the switches to the user: each starts on, or off in a private
+   * profile, whose pages stay away from extensions unless allowed.
+   */
+  extensions?: string[] | null;
+  /** The name the shell shows. */
+  name: string;
+  /** Keeps no history, sign-ins or site data after its last page closes. */
+  private?: boolean;
+};
 
 /** Buttons assigned to one-, two- and three-finger taps. */
 export type ButtonMap = "lrm" | "lmr";
@@ -103,11 +176,21 @@ export type DisplayConfig = {
  */
 export type DisplayPlacement = {
   /**
+   * Whether to scan out with a variable refresh rate (adaptive sync,
+   * FreeSync, G-Sync Compatible), so a frame that runs late is shown as
+   * soon as it is ready instead of at the next fixed refresh.
+   *
+   * Off by default. Asked for only where the monitor, its connector and
+   * its driver report they can; a driver that refuses it gets the same
+   * mode without it. Each display reports whether it took.
+   */
+  adaptive_sync?: boolean;
+  /**
    * The connected display this entry places, matched by exact name.
    *
    * On a tty the output name is `drm-<id>`, or the connector (`HDMI-A-1`)
    * for a monitor with no EDID name. Ozone derives the id from the EDID, so
-   * it survives a replug. A panel name also matches.
+   * it survives a replug. A panel name or connector (`DP-1`) also matches.
    */
   display: string;
   /**
@@ -119,16 +202,22 @@ export type DisplayPlacement = {
    */
   enabled?: boolean;
   /**
-   * The mode, in physical pixels, this entry's placement assumes. Absent
-   * means any mode.
+   * Whether to drive the monitor in HDR (HDR10: BT.2020 primaries with the
+   * PQ curve), so HDR video and images reach its full brightness and
+   * color.
    *
-   * A check, not a request: the engine holds DRM master and sets each
-   * connector's native mode, so the compositor cannot modeset. Positions
-   * often depend on other displays' sizes, so a different mode makes the
-   * profile wrong, and applying it fails.
+   * Off by default. Asked for only where the monitor's EDID says it takes
+   * PQ and the connector scans out in 10 bits; elsewhere it stays SDR.
+   */
+  hdr?: boolean;
+  /**
+   * The mode to scan out, in physical pixels. Absent means the monitor's
+   * native mode.
    *
-   * No refresh rate: it does not affect layout, cannot be chosen, and some
-   * monitors report none.
+   * Applying the profile fails when the monitor offers no mode of this
+   * size. An engine that reports no modes (an older one, or a desktop in a
+   * window) cannot set one, so there it is a check: the profile applies
+   * only while the monitor is at this mode.
    */
   mode?: [number, number] | null;
   /**
@@ -140,6 +229,16 @@ export type DisplayPlacement = {
    */
   position?: [number, number] | null;
   /**
+   * The refresh rate to scan out, in Hz, such as `59.94` or `120`. The
+   * monitor's advertised rate nearest it is used, at `mode` or else the
+   * native size.
+   *
+   * Absent means the native mode's rate when `mode` is absent or the
+   * native size, and otherwise the highest rate the monitor offers at
+   * `mode`, as sway picks.
+   */
+  refresh?: number | null;
+  /**
    * Device pixels per logical pixel.
    *
    * Fractional, because real scales are: 1.5 on a 2880x1920 panel gives a
@@ -148,8 +247,42 @@ export type DisplayPlacement = {
    * logical size.
    */
   scale?: number;
+  /**
+   * In HDR, how bright ordinary (SDR) content's white is, in cd/m² (nits).
+   * Raise it if SDR windows look dim beside the monitor in SDR.
+   *
+   * Absent is 203, the reference white of ITU-R BT.2408. Ignored in SDR.
+   */
+  sdr_white?: number | null;
   /** Which way up the monitor is. */
   transform?: Transform;
+};
+
+/**
+ * Installed Electron apps that run on the desktop's engine instead of the
+ * Electron they ship. See `docs/architecture/ELECTRON-APPS.md`.
+ */
+export type ElectronConfig = {
+  /**
+   * Desktop file ids, as `slack.desktop`. Whatever starts one of these
+   * entries (the launcher, a link, a notification) runs it with
+   * `domicile open --electron`. An app the engine can't run yet runs on
+   * its own Electron, with a notification saying so.
+   */
+  apps?: string[];
+};
+
+/** One extension's settings. See [`ExtensionsConfig::settings`]. */
+export type ExtensionSettings = {
+  /** Runs on local files (`file://` pages). Chrome's default is no. */
+  file_access?: boolean | null;
+  /** Which of the sites it asks for it runs on. Chrome's default is all. */
+  site_access?: SiteAccess | null;
+  /**
+   * May run the user scripts you add to it (`chrome.userScripts`), as
+   * userscript managers do. Chrome's default is no.
+   */
+  user_scripts?: boolean | null;
 };
 
 /**
@@ -160,6 +293,12 @@ export type DisplayPlacement = {
  * from the list uninstalls it.
  */
 export type ExtensionsConfig = {
+  /**
+   * Each extension's settings, by id, as chrome://extensions has them. A
+   * setting left out is the user's to change in the Settings app; one
+   * removed from here goes back to Chrome's default.
+   */
+  settings?: Record<string, ExtensionSettings>;
   /** Directories holding an unpacked extension, loaded as they are. */
   unpacked?: string[];
   /** Chrome Web Store ids, installed from the Store and updated from it. */
@@ -211,14 +350,6 @@ export type IdleConfig = {
    * refused.
    */
   lock_after_seconds?: number | null;
-  /**
-   * Seconds before the screens go dark that the shell is warned, so it can
-   * dim or count down. Input in that time calls the blanking off.
-   *
-   * Absent means no warning. It must be at least 1 and less than
-   * `blank_after_seconds`.
-   */
-  warn_before_seconds?: number | null;
 };
 
 /** Input-device settings. */
@@ -253,6 +384,8 @@ export type KeyboardConfig = {
    * `keymap next` or `keymap <name>`. See `docs/SHELL-CONFIG.md`.
    */
   keymaps?: Keymap[];
+  /** How a held key repeats, in native windows and in pages. */
+  repeat?: KeyRepeat;
   xkb_layout?: string;
   xkb_model?: string;
   xkb_options?: string[];
@@ -277,6 +410,14 @@ export type Keymap = {
   xkb_options?: string[];
   xkb_rules?: string;
   xkb_variant?: string;
+};
+
+/** How a held key repeats. */
+export type KeyRepeat = {
+  /** Milliseconds a key is held before it repeats. */
+  delay_ms?: number;
+  /** Repeats a second. 0 turns repeat off. */
+  rate?: number;
 };
 
 /**
@@ -387,6 +528,26 @@ export type Profile = {
 
 /** How a touchpad generates scrolling. */
 export type ScrollMethod = "default" | "two_finger" | "edge" | "on_button_down";
+
+/**
+ * Which sites an extension runs on: `"on_click"`, `"all_sites"`, or a list
+ * of hosts, each also as `*.host` for its subdomains.
+ */
+export type SiteAccess = SiteAccessMode | string[];
+
+/** [`SiteAccess`] other than a list of hosts. */
+export type SiteAccessMode = "on_click" | "all_sites";
+
+/** Spell checking in pages: in browser windows, web apps and Electron apps. */
+export type SpellcheckConfig = {
+  /** Underlines misspelled words in text fields and suggests corrections. */
+  enabled?: boolean;
+  /**
+   * The languages words are checked in, as language tags such as `en-US`.
+   * A word spelled right in any of them passes.
+   */
+  languages?: string[];
+};
 
 /**
  * The commands a desk starts with.

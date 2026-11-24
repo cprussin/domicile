@@ -20,7 +20,7 @@ use crate::dmabuf_descriptor::DmabufDescriptor;
 use crate::eis::DeskInput;
 use domicile_config::{Desk, Transform};
 use domicile_host::clipboard::{Contents, TEXT_MIMES};
-use domicile_protocol::Scale;
+use domicile_protocol::{InputConnection, InputKind, ListedInput, Scale};
 use libloading::{Library, Symbol};
 use smithay::utils::Transform as BufferTransform;
 use thiserror::Error;
@@ -78,6 +78,20 @@ pub enum EngineError {
     Path(#[from] NulError),
 }
 
+/// `DomicileSubsurface`: one of a surface's subsurfaces, in logical pixels
+/// from the top left of the surface's crop.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Subsurface {
+    pub surface: SurfaceId,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    /// Nonzero when it is drawn over the surface, zero when under it.
+    pub above: u8,
+}
+
 /// One plane of a client's dmabuf, from `zwp_linux_buffer_params_v1.add`.
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -93,11 +107,14 @@ pub const MAX_PLANES: usize = 4;
 /// The DRM fourccs the engine imports, matching `FormatFromFourcc` in
 /// `packages/domicile-engine/src/components/domicile/browser/brokered_frame_sink.cc`.
 /// `packages/domicile-engine/tests/test-the-engines-fourccs-agree.sh` checks the two lists match.
-pub const FOURCCS: [u32; 4] = [
+pub const FOURCCS: [u32; 7] = [
     0x3432_5241, // DRM_FORMAT_ARGB8888
     0x3432_5258, // DRM_FORMAT_XRGB8888
     0x3432_4241, // DRM_FORMAT_ABGR8888
     0x3432_4258, // DRM_FORMAT_XBGR8888
+    0x3033_5241, // DRM_FORMAT_ARGB2101010
+    0x3033_4241, // DRM_FORMAT_ABGR2101010
+    0x4834_4241, // DRM_FORMAT_ABGR16161616F
 ];
 
 /// `DomicileShmBuffer`: a window in shared memory, for an engine that
@@ -111,6 +128,36 @@ pub struct ShmBuffer {
     pub height: u32,
     pub stride: u32,
     pub fourcc: u32,
+}
+
+/// `DomicileChromaticity`: a CIE 1931 xy chromaticity.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Chromaticity {
+    pub x: f32,
+    pub y: f32,
+}
+
+/// `DomicileColor`: how a surface's pixels encode color, from its
+/// `wp_image_description_v1`. Luminances are in cd/m²; zero is unset. Built by
+/// [`crate::color_management::Description::engine_color`].
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Color {
+    /// `DOMICILE_PRIMARIES_*`.
+    pub primaries: u32,
+    /// `DOMICILE_TRANSFER_*`.
+    pub transfer: u32,
+    pub reference_luminance: f32,
+    pub has_mastering: u32,
+    pub mastering_red: Chromaticity,
+    pub mastering_green: Chromaticity,
+    pub mastering_blue: Chromaticity,
+    pub mastering_white: Chromaticity,
+    pub mastering_min_luminance: f32,
+    pub mastering_max_luminance: f32,
+    pub max_cll: f32,
+    pub max_fall: f32,
 }
 
 /// `DomicileDmabuf`: a client's buffer. The fds are borrowed for the call.
@@ -225,11 +272,72 @@ pub struct Display {
     pub connector: String,
     /// Its top-left corner, in the desktop the engine laid out.
     pub position: (i32, i32),
-    /// Its native mode, in physical pixels.
+    /// The mode it is scanning out, in physical pixels: its native mode
+    /// unless the layout asked for another.
     pub size: (u32, u32),
     /// The panel's size in millimeters, or `(0, 0)` if unreported.
     pub physical_mm: (i32, i32),
     /// The CRTC's refresh rate in mHz, or zero if unreported.
+    pub refresh_mhz: i32,
+    /// Every mode the monitor offers, or none from an engine without
+    /// `moded_displays`, which cannot set one.
+    pub modes: Vec<Mode>,
+    /// Whether it scans out with a variable refresh rate, as the hardware
+    /// says. Unsupported from an engine without `adaptive_displays`.
+    pub adaptive_sync: AdaptiveSync,
+    /// Whether it is driven in HDR10, and its panel's luminances.
+    /// Unsupported from an engine without `hdr_displays`.
+    pub hdr: Hdr,
+}
+
+/// Whether a monitor is driven in HDR10 (BT.2020 with PQ), and how bright its
+/// panel gets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Hdr {
+    pub state: HdrState,
+    /// The panel's peak luminance from its EDID, in cd/m², or zero if
+    /// unreported.
+    pub max_luminance: u32,
+    /// The panel's frame-average peak, in cd/m², or zero if unreported.
+    pub max_average_luminance: u32,
+    /// The panel's black, in 0.0001 cd/m² as `wp_color_management_v1`
+    /// states minimums, or zero if unreported.
+    pub min_luminance: u32,
+    /// While [`HdrState::On`], the luminance SDR content's white is shown
+    /// at, in cd/m²; zero otherwise.
+    pub sdr_white: u32,
+}
+
+/// Whether a monitor is driven in HDR10.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HdrState {
+    /// Its EDID takes no PQ, or its connector cannot scan out in 10 bits.
+    #[default]
+    Unsupported,
+    /// It can, and is not.
+    Off,
+    /// It is.
+    On,
+}
+
+/// Whether a monitor scans out with a variable refresh rate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AdaptiveSync {
+    /// The monitor, its connector or its driver cannot.
+    #[default]
+    Unsupported,
+    /// It can, and is not: not asked for, or the driver refused it.
+    Off,
+    /// It is.
+    On,
+}
+
+/// A mode a monitor offers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Mode {
+    /// In physical pixels.
+    pub size: (u32, u32),
+    /// In mHz, or zero if unreported.
     pub refresh_mhz: i32,
 }
 
@@ -289,6 +397,20 @@ pub struct Connector {
     /// The display's place on the logical desktop, or `None` if dark. The
     /// engine moves the pointer between monitors by it.
     pub desk: Option<Desk>,
+    /// The mode to scan out, in physical pixels, or `None` for the native
+    /// one.
+    pub mode: Option<(u32, u32)>,
+    /// The refresh rate to scan out, in mHz: the nearest one the monitor
+    /// offers is used. `None` for the native mode's, or the highest at a
+    /// non-native `mode`.
+    pub refresh_mhz: Option<u32>,
+    /// Whether to scan out with a variable refresh rate where the monitor
+    /// can. The engine tries again without it if the driver refuses.
+    pub adaptive_sync: bool,
+    /// Whether to drive it in HDR10 where the monitor takes it.
+    pub hdr: bool,
+    /// In HDR, the luminance to show SDR content's white at, in cd/m².
+    pub sdr_white: u32,
 }
 
 /// A tablet or touchscreen and the display it covers: the config's
@@ -317,12 +439,17 @@ pub enum Event {
     ///
     /// `number` names the box for [`Engine::submit`]. `None` from an engine
     /// without `configure_box`.
+    ///
+    /// `zoom` is the `<app>`'s CSS `zoom`: the client draws `zoom` times
+    /// denser at a logical size `zoom` times smaller, so the box stays sharp.
+    /// 1 from an engine without `configure_zoomed`.
     Configure {
         surface: SurfaceId,
         width: u32,
         height: u32,
         scale: Option<f64>,
         number: Option<u64>,
+        zoom: f64,
     },
     /// `wl_buffer.release`: viz has stopped reading the dmabuf, so the client
     /// may reuse it.
@@ -359,8 +486,12 @@ pub enum Event {
         captured: Result<CapturedFrame, String>,
     },
 
-    /// The browser ended a display capture. No frame of it follows.
-    CaptureEnded { capture: CaptureId },
+    /// The browser ended a display capture, saying why when it failed. No
+    /// frame of it follows.
+    CaptureEnded {
+        capture: CaptureId,
+        why: Option<String>,
+    },
 
     /// `wl_surface.frame`'s `done`: viz took `frame` and takes the next.
     /// Frames are numbered from 1 per submit, as
@@ -390,6 +521,51 @@ pub enum Event {
     /// software, where it shows no dmabuf. Sent once the browser knows, and
     /// when its GPU process falls back.
     Compositing { in_memory: bool },
+
+    /// The browser's windows, in the order they opened, for capture tools to
+    /// list beside the native ones. Sent once the browser connects, and when a
+    /// window opens, closes or changes its title. An older engine never sends
+    /// it.
+    BrowserWindows(Vec<BrowserWindow>),
+
+    /// The keyboards, pointers and touch devices the engine reads, in the
+    /// order it found them, for `domicile list-inputs`. Sent once the browser
+    /// connects, and when one is plugged or unplugged. An older engine never
+    /// sends it.
+    InputDevices(Vec<ListedInput>),
+}
+
+/// One of the browser's windows: a page it holds, which the shell draws with
+/// `<webview window>`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BrowserWindow {
+    /// Its id, as [`Engine::start_browser_window_capture`] takes it.
+    pub id: String,
+    /// The page's title, or empty.
+    pub title: String,
+    /// The app window's id, or empty for any other window.
+    pub app_id: String,
+    /// The address it shows, or the one it is opening.
+    pub url: String,
+    /// Whether it is a private window.
+    pub private: bool,
+    /// The views it holds and shows, bottom first: an Electron app's
+    /// `WebContentsView`s, which a shot of the window draws over its page.
+    /// An older engine lists none.
+    pub views: Vec<BrowserView>,
+}
+
+/// An Electron app's view a [`BrowserWindow`] holds: a page of its own,
+/// placed by the app in the window's page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BrowserView {
+    /// Its id, as [`Engine::start_browser_window_capture`] takes it.
+    pub id: String,
+    /// Where it is in the window's page, in that page's CSS pixels.
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
 }
 
 /// When and how a frame reached the screen.
@@ -456,6 +632,70 @@ struct Callbacks {
     disconnected: Option<extern "C" fn(*mut c_void)>,
     compositing: Option<extern "C" fn(*mut c_void, c_int)>,
     ramped_displays: Option<extern "C" fn(*mut c_void, *const RawRampedDisplay, u32)>,
+    moded_displays: Option<extern "C" fn(*mut c_void, *const RawModedDisplay, u32)>,
+    browser_windows: Option<extern "C" fn(*mut c_void, *const RawBrowserWindow, u32)>,
+    adaptive_displays: Option<extern "C" fn(*mut c_void, *const RawAdaptiveDisplay, u32)>,
+    configure_zoomed: Option<extern "C" fn(*mut c_void, SurfaceId, u32, u32, f64, f64, u64)>,
+    hdr_displays: Option<extern "C" fn(*mut c_void, *const RawHdrDisplay, u32)>,
+    listed_browser_windows: Option<extern "C" fn(*mut c_void, *const RawListedBrowserWindow, u32)>,
+    input_devices: Option<extern "C" fn(*mut c_void, *const RawInputDevice, u32)>,
+    capture_failed: Option<extern "C" fn(*mut c_void, CaptureId, *const c_char)>,
+    viewed_browser_windows: Option<
+        extern "C" fn(
+            *mut c_void,
+            *const RawListedBrowserWindow,
+            u32,
+            *const RawBrowserWindowView,
+            u32,
+        ),
+    >,
+}
+
+/// `DomicileInputDevice`, laid out as in the C header. Its strings are
+/// borrowed for the call it crosses in, and never null.
+#[repr(C)]
+struct RawInputDevice {
+    name: *const c_char,
+    sys_path: *const c_char,
+    id: i32,
+    vendor_id: u16,
+    product_id: u16,
+    /// A `DomicileInputDeviceKind`.
+    kind: u8,
+    /// A `DomicileInputDeviceConnection`.
+    connection: u8,
+}
+
+/// `DomicileBrowserWindow`, laid out as in the C header. Its strings are
+/// borrowed for the call it crosses in, and never null.
+#[repr(C)]
+struct RawBrowserWindow {
+    id: *const c_char,
+    title: *const c_char,
+    app_id: *const c_char,
+}
+
+/// `DomicileListedBrowserWindow`, laid out as in the C header: a
+/// [`RawBrowserWindow`] plus its address and whether it is private.
+#[repr(C)]
+struct RawListedBrowserWindow {
+    id: *const c_char,
+    title: *const c_char,
+    app_id: *const c_char,
+    url: *const c_char,
+    off_the_record: u8,
+}
+
+/// `DomicileBrowserWindowView`, laid out as in the C header: a view the
+/// window at index `window` of the same call holds.
+#[repr(C)]
+struct RawBrowserWindowView {
+    id: *const c_char,
+    window: u32,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
 }
 
 /// `DomicileClipboardItem`, laid out as in the C header: one type a copy can be
@@ -604,6 +844,86 @@ struct RawConnectedDisplay {
 struct RawRampedDisplay {
     connected: RawConnectedDisplay,
     gamma_size: u32,
+}
+
+/// `DomicileDisplayMode`, laid out as in the C header. 12 bytes, no padding.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(C)]
+struct RawMode {
+    width: i32,
+    height: i32,
+    refresh_mhz: i32,
+}
+
+/// `DomicileModedDisplay`, laid out as in the C header. 80 bytes, including 4
+/// of tail padding.
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+struct RawModedDisplay {
+    ramped: RawRampedDisplay,
+    /// `mode_count` modes, borrowed for the callback. May be null when
+    /// `mode_count` is zero.
+    modes: *const RawMode,
+    mode_count: u32,
+}
+
+/// `DomicileModedLayout`, laid out as in the C header. 64 bytes, including 4
+/// of tail padding.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(C)]
+struct RawModedLayout {
+    layout: RawLayout,
+    /// Zero for the native mode.
+    mode_width: i32,
+    mode_height: i32,
+    /// Zero for the default rate.
+    refresh_mhz: i32,
+}
+
+/// `DomicileAdaptiveDisplay`, laid out as in the C header. 88 bytes,
+/// including 4 of tail padding.
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+struct RawAdaptiveDisplay {
+    moded: RawModedDisplay,
+    /// A `DOMICILE_ADAPTIVE_SYNC_*` value.
+    adaptive_sync: i32,
+}
+
+/// `DomicileHdrDisplay`, laid out as in the C header. 112 bytes, including 4
+/// of tail padding.
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+struct RawHdrDisplay {
+    adaptive: RawAdaptiveDisplay,
+    /// A `DOMICILE_HDR_*` value.
+    hdr: i32,
+    /// In cd/m², zero where unreported.
+    max_luminance: f32,
+    max_average_luminance: f32,
+    min_luminance: f32,
+    sdr_white_nits: f32,
+}
+
+/// `DomicileHdrLayout`, laid out as in the C header. 80 bytes, no padding.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(C)]
+struct RawHdrLayout {
+    adaptive: RawAdaptiveLayout,
+    /// Nonzero to ask for HDR10.
+    hdr: i32,
+    /// In cd/m².
+    sdr_white_nits: f32,
+}
+
+/// `DomicileAdaptiveLayout`, laid out as in the C header. 72 bytes, including
+/// 4 of tail padding.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(C)]
+struct RawAdaptiveLayout {
+    moded: RawModedLayout,
+    /// Nonzero to ask for a variable refresh rate.
+    adaptive_sync: i32,
 }
 
 /// `DomicileDisplayLayout`, laid out as in the C header. 48 bytes, no
@@ -1003,6 +1323,46 @@ impl Engine {
         unsafe { f(self.handle, surface, frame) };
     }
 
+    /// Sets `surface`'s subsurfaces, bottom to top, which its frames draw
+    /// with it from its next frame (`domicile_surface_set_children`). Each
+    /// is placed in logical pixels from the top left of `surface`'s crop.
+    ///
+    /// A subsurface takes frames once the engine embeds it, which it reports
+    /// as [`Event::Configure`]; submit to it at [`NEWEST_BOX`].
+    pub fn set_children(&self, surface: SurfaceId, children: &[Subsurface]) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, SurfaceId, *const Subsurface, u32)> =
+            match self.symbol(
+                b"domicile_surface_set_children\0",
+                "domicile_surface_set_children",
+            ) {
+                Ok(symbol) => symbol,
+                Err(err) => {
+                    tracing::error!(%err, "subsurfaces cannot be drawn in their windows");
+                    return;
+                }
+            };
+        let count = u32::try_from(children.len()).expect("a surface has few subsurfaces");
+        // SAFETY: the handle is live for the life of self; `children` is
+        // borrowed for the call.
+        unsafe { f(self.handle, surface, children.as_ptr(), count) };
+    }
+
+    /// Sends `surface`'s last frame again, to show subsurfaces set since with
+    /// no new buffer of its own (`domicile_surface_redraw`). The frame
+    /// answers no [`Event::FrameDone`] or [`Event::Presented`].
+    pub fn redraw(&self, surface: SurfaceId) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, SurfaceId)> =
+            match self.symbol(b"domicile_surface_redraw\0", "domicile_surface_redraw") {
+                Ok(symbol) => symbol,
+                Err(err) => {
+                    tracing::error!(%err, "subsurfaces cannot be drawn in their windows");
+                    return;
+                }
+            };
+        // SAFETY: the handle is live for the life of self.
+        unsafe { f(self.handle, surface) };
+    }
+
     fn surface_sync(
         &self,
     ) -> Result<Symbol<'_, unsafe extern "C" fn(*mut Handle, SurfaceId, u32)>, EngineError> {
@@ -1146,7 +1506,7 @@ impl Engine {
                 if sampled.transform != BufferTransform::Normal
                     && !self.said_it_cannot_turn.replace(true)
                 {
-                    tracing::warn!(%why, "windows drawn turned are shown turned");
+                    tracing::error!(%why, "windows drawn turned are shown turned");
                 }
                 return self.submit_unturned(surface, buffer, sampled.crop, damage, at_box);
             }
@@ -1210,7 +1570,7 @@ impl Engine {
             // damaged.
             Err(why) => {
                 if !self.said_it_cannot_wait.replace(true) {
-                    tracing::warn!(%why, "resized windows stretch until they redraw");
+                    tracing::error!(%why, "resized windows stretch until they redraw");
                 }
                 return self.submit_at_the_newest_box(surface, buffer, crop, (0, 0, 0, 0));
             }
@@ -1269,7 +1629,7 @@ impl Engine {
             // shadow included.
             Err(why) => {
                 if !self.said_it_cannot_crop.replace(true) {
-                    tracing::warn!(%why, "windows are drawn uncropped, shadows and all");
+                    tracing::error!(%why, "windows are drawn uncropped, shadows and all");
                 }
                 return self.submit_uncropped(surface, buffer, damage);
             }
@@ -1312,7 +1672,43 @@ impl Engine {
     /// An empty list means no profile: the engine lights what the hardware
     /// reports, undoing any earlier profile. The result arrives later as an
     /// [`Event::Displays`].
+    ///
+    /// An engine without `domicile_displays_configure_modes` gets the layout
+    /// without its modes, and lights each connector at its native one.
     pub fn configure_displays(&self, connectors: &[Connector]) {
+        type Hdr = unsafe extern "C" fn(*mut Handle, *const RawHdrLayout, u32);
+        if let Ok(f) = self.symbol::<Hdr>(
+            b"domicile_displays_configure_hdr\0",
+            "domicile_displays_configure_hdr",
+        ) {
+            let raw = hdr_layouts_from(connectors);
+            // SAFETY: as above, and `raw` outlives the call; the engine
+            // copies it.
+            unsafe { f(self.handle, raw.as_ptr(), raw.len() as u32) };
+            return;
+        }
+        type Adaptive = unsafe extern "C" fn(*mut Handle, *const RawAdaptiveLayout, u32);
+        if let Ok(f) = self.symbol::<Adaptive>(
+            b"domicile_displays_configure_adaptive\0",
+            "domicile_displays_configure_adaptive",
+        ) {
+            let raw = adaptive_layouts_from(connectors);
+            // SAFETY: as above, and `raw` outlives the call; the engine
+            // copies it.
+            unsafe { f(self.handle, raw.as_ptr(), raw.len() as u32) };
+            return;
+        }
+        type Moded = unsafe extern "C" fn(*mut Handle, *const RawModedLayout, u32);
+        if let Ok(f) = self.symbol::<Moded>(
+            b"domicile_displays_configure_modes\0",
+            "domicile_displays_configure_modes",
+        ) {
+            let raw = moded_layouts_from(connectors);
+            // SAFETY: as above, and `raw` outlives the call; the engine
+            // copies it.
+            unsafe { f(self.handle, raw.as_ptr(), raw.len() as u32) };
+            return;
+        }
         let f: Symbol<unsafe extern "C" fn(*mut Handle, *const RawLayout, u32)> = match self.symbol(
             b"domicile_displays_configure\0",
             "domicile_displays_configure",
@@ -1371,6 +1767,10 @@ impl Engine {
         let settings = serde_json::json!({
             "touchpad": input.touchpad,
             "mouse": input.mouse,
+            "keyboard": {
+                "repeat_delay_ms": input.keyboard.repeat.delay_ms,
+                "repeat_rate": input.keyboard.repeat.rate,
+            },
         });
         let settings = CString::new(settings.to_string()).expect("JSON escapes NUL bytes");
         // SAFETY: the handle is live and the engine copies the JSON before returning.
@@ -1428,6 +1828,22 @@ impl Engine {
         unsafe { f(self.handle, display, ramp.as_ptr(), (ramp.len() / 3) as u32) };
     }
 
+    /// Sets the 3x3 color matrix, row-major, display `display` draws with in
+    /// linear light: a night light on a display driven in HDR. An engine
+    /// older than `domicile_displays_set_color_matrix` ignores it.
+    pub fn set_color_matrix(&self, display: i64, matrix: &[f32; 9]) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, i64, *const f32)> = match self.symbol(
+            b"domicile_displays_set_color_matrix\0",
+            "domicile_displays_set_color_matrix",
+        ) {
+            Ok(symbol) => symbol,
+            Err(_) => return,
+        };
+        // SAFETY: as above, and `matrix` holds the nine numbers the engine
+        // reads and outlives the call; the engine copies them.
+        unsafe { f(self.handle, display, matrix.as_ptr()) };
+    }
+
     /// Hands one emulated event to the shell's window, on a headless desk.
     /// Returns false for an engine older than `domicile_input_inject`.
     pub fn inject_input(&self, input: DeskInput) -> bool {
@@ -1440,6 +1856,24 @@ impl Engine {
         // SAFETY: as above, and `raw` outlives the call; the engine copies it.
         unsafe { f(self.handle, &raw) };
         true
+    }
+
+    /// Sets how `surface`'s pixels encode color; `None` is sRGB. Buffers
+    /// imported afterward are drawn in it, so import a buffer again to show it
+    /// in the new color. An engine without `domicile_surface_set_color` draws
+    /// every buffer as sRGB.
+    pub fn set_surface_color(&self, surface: SurfaceId, color: Option<&Color>) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, SurfaceId, *const Color)> = match self
+            .symbol(
+                b"domicile_surface_set_color\0",
+                "domicile_surface_set_color",
+            ) {
+            Ok(symbol) => symbol,
+            Err(_) => return,
+        };
+        let color = color.map_or(std::ptr::null(), |color| color as *const Color);
+        // SAFETY: as above, and `color` outlives the call.
+        unsafe { f(self.handle, surface, color) };
     }
 
     /// Releases an imported buffer after the client destroys its `wl_buffer`.
@@ -1673,6 +2107,15 @@ fn join(
         disconnected: Some(on_disconnected),
         compositing: Some(on_compositing),
         ramped_displays: Some(on_ramped_displays),
+        moded_displays: Some(on_moded_displays),
+        browser_windows: Some(on_browser_windows),
+        adaptive_displays: Some(on_adaptive_displays),
+        configure_zoomed: Some(on_configure_zoomed),
+        hdr_displays: Some(on_hdr_displays),
+        listed_browser_windows: Some(on_listed_browser_windows),
+        input_devices: Some(on_input_devices),
+        capture_failed: Some(on_capture_failed),
+        viewed_browser_windows: Some(on_viewed_browser_windows),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -1723,6 +2166,7 @@ extern "C" fn on_configure(user_data: *mut c_void, surface: SurfaceId, width: u3
             height,
             scale: None,
             number: None,
+            zoom: 1.0,
         },
     );
 }
@@ -1742,6 +2186,7 @@ extern "C" fn on_configure_at(
             height,
             scale: Some(scale),
             number: None,
+            zoom: 1.0,
         },
     );
 }
@@ -1762,6 +2207,29 @@ extern "C" fn on_configure_box(
             height,
             scale: Some(scale),
             number: Some(number),
+            zoom: 1.0,
+        },
+    );
+}
+
+extern "C" fn on_configure_zoomed(
+    user_data: *mut c_void,
+    surface: SurfaceId,
+    width: u32,
+    height: u32,
+    scale: f64,
+    zoom: f64,
+    number: u64,
+) {
+    push(
+        user_data,
+        Event::Configure {
+            surface,
+            width,
+            height,
+            scale: Some(scale),
+            number: Some(number),
+            zoom,
         },
     );
 }
@@ -1946,7 +2414,22 @@ extern "C" fn on_captured(
 }
 
 extern "C" fn on_capture_ended(user_data: *mut c_void, capture: CaptureId) {
-    push(user_data, Event::CaptureEnded { capture });
+    push(user_data, Event::CaptureEnded { capture, why: None });
+}
+
+extern "C" fn on_capture_failed(user_data: *mut c_void, capture: CaptureId, why: *const c_char) {
+    // SAFETY: the engine passes a NUL-terminated string, borrowed for the
+    // call.
+    let why = unsafe { std::ffi::CStr::from_ptr(why) }
+        .to_string_lossy()
+        .into_owned();
+    push(
+        user_data,
+        Event::CaptureEnded {
+            capture,
+            why: Some(why),
+        },
+    );
 }
 
 extern "C" fn on_disconnected(user_data: *mut c_void) {
@@ -1960,6 +2443,185 @@ extern "C" fn on_compositing(user_data: *mut c_void, in_memory: c_int) {
             in_memory: in_memory != 0,
         },
     );
+}
+
+extern "C" fn on_browser_windows(
+    user_data: *mut c_void,
+    windows: *const RawBrowserWindow,
+    count: u32,
+) {
+    let records = if count == 0 {
+        &[][..]
+    } else {
+        // SAFETY: the ABI says `windows` points at `count` records, valid for
+        // this call. `browser_windows_from` copies them.
+        unsafe { std::slice::from_raw_parts(windows, count as usize) }
+    };
+    push(
+        user_data,
+        Event::BrowserWindows(browser_windows_from(records)),
+    );
+}
+
+/// As [`on_browser_windows`], with each window's address and whether it is
+/// private. Called instead of it by an engine that reports them.
+extern "C" fn on_listed_browser_windows(
+    user_data: *mut c_void,
+    windows: *const RawListedBrowserWindow,
+    count: u32,
+) {
+    let records = if count == 0 {
+        &[][..]
+    } else {
+        // SAFETY: as for `on_browser_windows`.
+        unsafe { std::slice::from_raw_parts(windows, count as usize) }
+    };
+    push(
+        user_data,
+        Event::BrowserWindows(listed_browser_windows_from(records)),
+    );
+}
+
+/// As [`on_listed_browser_windows`], with the views each window holds.
+/// Called instead of it by an engine that reports them.
+extern "C" fn on_viewed_browser_windows(
+    user_data: *mut c_void,
+    windows: *const RawListedBrowserWindow,
+    count: u32,
+    views: *const RawBrowserWindowView,
+    view_count: u32,
+) {
+    let records = if count == 0 {
+        &[][..]
+    } else {
+        // SAFETY: as for `on_browser_windows`.
+        unsafe { std::slice::from_raw_parts(windows, count as usize) }
+    };
+    let views = if view_count == 0 {
+        &[][..]
+    } else {
+        // SAFETY: as for `windows`.
+        unsafe { std::slice::from_raw_parts(views, view_count as usize) }
+    };
+    let mut listed = listed_browser_windows_from(records);
+    for view in views {
+        let window = listed
+            .get_mut(view.window as usize)
+            .unwrap_or_else(|| panic!("the engine placed a view in window {}", view.window));
+        window.views.push(BrowserView {
+            // SAFETY: the ABI's strings are non-null and valid for the call.
+            id: unsafe { copied(view.id) },
+            x: view.x,
+            y: view.y,
+            width: view.width,
+            height: view.height,
+        });
+    }
+    push(user_data, Event::BrowserWindows(listed));
+}
+
+/// Copies the browser windows out of their records.
+fn browser_windows_from(records: &[RawBrowserWindow]) -> Vec<BrowserWindow> {
+    records
+        .iter()
+        .map(|record| BrowserWindow {
+            // SAFETY: the ABI's strings are non-null and valid for the call.
+            id: unsafe { copied(record.id) },
+            // SAFETY: as for `id`.
+            title: unsafe { copied(record.title) },
+            // SAFETY: as for `id`.
+            app_id: unsafe { copied(record.app_id) },
+            // An older engine says neither.
+            url: String::new(),
+            private: false,
+            views: Vec::new(),
+        })
+        .collect()
+}
+
+fn listed_browser_windows_from(records: &[RawListedBrowserWindow]) -> Vec<BrowserWindow> {
+    records
+        .iter()
+        .map(|record| BrowserWindow {
+            // SAFETY: the ABI's strings are non-null and valid for the call.
+            id: unsafe { copied(record.id) },
+            // SAFETY: as for `id`.
+            title: unsafe { copied(record.title) },
+            // SAFETY: as for `id`.
+            app_id: unsafe { copied(record.app_id) },
+            // SAFETY: as for `id`.
+            url: unsafe { copied(record.url) },
+            private: record.off_the_record != 0,
+            views: Vec::new(),
+        })
+        .collect()
+}
+
+extern "C" fn on_input_devices(user_data: *mut c_void, devices: *const RawInputDevice, count: u32) {
+    let records = if count == 0 {
+        &[][..]
+    } else {
+        // SAFETY: the ABI says `devices` points at `count` records, valid for
+        // this call. `inputs_from` copies them.
+        unsafe { std::slice::from_raw_parts(devices, count as usize) }
+    };
+    push(user_data, Event::InputDevices(inputs_from(records)));
+}
+
+/// Copies the input devices out of their records.
+fn inputs_from(records: &[RawInputDevice]) -> Vec<ListedInput> {
+    records
+        .iter()
+        .map(|record| ListedInput {
+            id: record.id,
+            // SAFETY: the ABI's strings are non-null and valid for the call.
+            name: unsafe { copied(record.name) },
+            kind: input_kind(record.kind),
+            connection: input_connection(record.connection),
+            // SAFETY: as for `name`.
+            sys_path: unsafe { copied(record.sys_path) },
+            vendor: record.vendor_id,
+            product: record.product_id,
+        })
+        .collect()
+}
+
+/// A `DomicileInputDeviceKind`. A kind this compositor does not know is from a
+/// newer engine, and listed as other rather than dropped.
+fn input_kind(kind: u8) -> InputKind {
+    match kind {
+        0 => InputKind::Keyboard,
+        1 => InputKind::Mouse,
+        2 => InputKind::Touchpad,
+        3 => InputKind::Touchscreen,
+        4 => InputKind::PointingStick,
+        5 => InputKind::Tablet,
+        6 => InputKind::Other,
+        unknown => {
+            tracing::error!(
+                kind = unknown,
+                "the engine listed an input device of an unknown kind"
+            );
+            InputKind::Other
+        }
+    }
+}
+
+/// A `DomicileInputDeviceConnection`, as [`input_kind`] reads a kind.
+fn input_connection(connection: u8) -> InputConnection {
+    match connection {
+        0 => InputConnection::Unknown,
+        1 => InputConnection::Internal,
+        2 => InputConnection::Usb,
+        3 => InputConnection::Bluetooth,
+        unknown => {
+            tracing::error!(
+                connection = unknown,
+                "the engine listed an input device on an unknown connection"
+            );
+            InputConnection::Unknown
+        }
+    }
 }
 
 extern "C" fn on_frame_done(user_data: *mut c_void, surface: SurfaceId, frame: u64) {
@@ -2013,6 +2675,9 @@ fn display_from(record: &RawDisplay) -> Display {
         size: (as_extent(record.width), as_extent(record.height)),
         physical_mm: (record.physical_width_mm, record.physical_height_mm),
         refresh_mhz: record.refresh_mhz,
+        modes: Vec::new(),
+        adaptive_sync: AdaptiveSync::Unsupported,
+        hdr: Hdr::default(),
     }
 }
 
@@ -2052,6 +2717,160 @@ extern "C" fn on_ramped_displays(
         user_data,
         Event::Displays(connected_displays_from(&connected)),
     );
+}
+
+/// Queues each display's gamma ramp size, then the display list with each
+/// display's modes. Called instead of [`on_ramped_displays`] by an engine that
+/// reports modes.
+extern "C" fn on_moded_displays(
+    user_data: *mut c_void,
+    displays: *const RawModedDisplay,
+    count: u32,
+) {
+    // SAFETY: the ABI says `displays` points at `count` records, valid for
+    // this call. Both conversions copy them.
+    let records = unsafe { std::slice::from_raw_parts(displays, count as usize) };
+    let ramped: Vec<RawRampedDisplay> = records.iter().map(|record| record.ramped).collect();
+    push(user_data, Event::GammaSizes(gamma_sizes_from(&ramped)));
+    push(user_data, Event::Displays(moded_displays_from(records)));
+}
+
+/// Queues each display's gamma ramp size, then the display list with each
+/// display's modes and adaptive sync. Called instead of [`on_moded_displays`]
+/// by an engine that reports adaptive sync.
+extern "C" fn on_adaptive_displays(
+    user_data: *mut c_void,
+    displays: *const RawAdaptiveDisplay,
+    count: u32,
+) {
+    // SAFETY: the ABI says `displays` points at `count` records, valid for
+    // this call. Both conversions copy them.
+    let records = unsafe { std::slice::from_raw_parts(displays, count as usize) };
+    let ramped: Vec<RawRampedDisplay> = records.iter().map(|record| record.moded.ramped).collect();
+    push(user_data, Event::GammaSizes(gamma_sizes_from(&ramped)));
+    push(user_data, Event::Displays(adaptive_displays_from(records)));
+}
+
+/// Converts the ABI's display records with their modes and adaptive sync.
+fn adaptive_displays_from(records: &[RawAdaptiveDisplay]) -> Vec<Display> {
+    let moded: Vec<RawModedDisplay> = records.iter().map(|record| record.moded).collect();
+    moded_displays_from(&moded)
+        .into_iter()
+        .zip(records)
+        .map(|(display, record)| Display {
+            adaptive_sync: adaptive_sync_from(record.adaptive_sync),
+            ..display
+        })
+        .collect()
+}
+
+/// Queues each display's gamma ramp size, then the display list with each
+/// display's modes, adaptive sync and HDR. Called instead of
+/// [`on_adaptive_displays`] by an engine that reports HDR.
+extern "C" fn on_hdr_displays(user_data: *mut c_void, displays: *const RawHdrDisplay, count: u32) {
+    // SAFETY: the ABI says `displays` points at `count` records, valid for
+    // this call. Both conversions copy them.
+    let records = unsafe { std::slice::from_raw_parts(displays, count as usize) };
+    let ramped: Vec<RawRampedDisplay> = records
+        .iter()
+        .map(|record| record.adaptive.moded.ramped)
+        .collect();
+    push(user_data, Event::GammaSizes(gamma_sizes_from(&ramped)));
+    push(user_data, Event::Displays(hdr_displays_from(records)));
+}
+
+/// Converts the ABI's display records with their modes, adaptive sync and
+/// HDR.
+fn hdr_displays_from(records: &[RawHdrDisplay]) -> Vec<Display> {
+    let adaptive: Vec<RawAdaptiveDisplay> = records.iter().map(|record| record.adaptive).collect();
+    adaptive_displays_from(&adaptive)
+        .into_iter()
+        .zip(records)
+        .map(|(display, record)| Display {
+            hdr: Hdr {
+                state: hdr_state_from(record.hdr),
+                max_luminance: whole(record.max_luminance),
+                max_average_luminance: whole(record.max_average_luminance),
+                min_luminance: whole(record.min_luminance * 10_000.0),
+                sdr_white: whole(record.sdr_white_nits),
+            },
+            ..display
+        })
+        .collect()
+}
+
+/// A `DOMICILE_HDR_*` value. One this compositor has no name for is
+/// unsupported, the state that asks nothing of it.
+fn hdr_state_from(raw: i32) -> HdrState {
+    match raw {
+        1 => HdrState::Off,
+        2 => HdrState::On,
+        _ => HdrState::Unsupported,
+    }
+}
+
+/// A luminance rounded to a whole number. An EDID cannot state a negative or
+/// unbounded one, so either is unreported: zero. `as` saturates the rest.
+fn whole(luminance: f32) -> u32 {
+    if luminance.is_finite() && luminance > 0.0 {
+        luminance.round() as u32
+    } else {
+        0
+    }
+}
+
+/// A `DOMICILE_ADAPTIVE_SYNC_*` value. One this compositor has no name for is
+/// unsupported, the state that asks nothing of it.
+fn adaptive_sync_from(raw: i32) -> AdaptiveSync {
+    match raw {
+        1 => AdaptiveSync::Off,
+        2 => AdaptiveSync::On,
+        _ => AdaptiveSync::Unsupported,
+    }
+}
+
+/// Converts the ABI's display records with their modes.
+fn moded_displays_from(records: &[RawModedDisplay]) -> Vec<Display> {
+    let connected: Vec<RawConnectedDisplay> = records
+        .iter()
+        .map(|record| record.ramped.connected)
+        .collect();
+    connected_displays_from(&connected)
+        .into_iter()
+        .zip(records)
+        .map(|(display, record)| Display {
+            modes: modes_of(record),
+            ..display
+        })
+        .collect()
+}
+
+/// Copies one record's modes, dropping any with no pixels.
+fn modes_of(record: &RawModedDisplay) -> Vec<Mode> {
+    if record.mode_count == 0 {
+        return Vec::new();
+    }
+    assert!(
+        !record.modes.is_null(),
+        "the engine points at the modes it counts"
+    );
+    // SAFETY: non-null per the assertion; the ABI says `modes` points at
+    // `mode_count` records, valid for this callback.
+    let modes = unsafe { std::slice::from_raw_parts(record.modes, record.mode_count as usize) };
+    modes
+        .iter()
+        .filter_map(|mode| {
+            Some(Mode {
+                size: (
+                    u32::try_from(mode.width).ok().filter(|width| *width > 0)?,
+                    u32::try_from(mode.height)
+                        .ok()
+                        .filter(|height| *height > 0)?,
+                ),
+                refresh_mhz: mode.refresh_mhz,
+            })
+        })
+        .collect()
 }
 
 /// Each display's gamma ramp size, leaving out those with none.
@@ -2098,6 +2917,49 @@ fn layouts_from(connectors: &[Connector]) -> Vec<RawLayout> {
             desk_y: connector.desk.map_or(0, |desk| desk.position.1),
             desk_width: connector.desk.map_or(0, |desk| logical(desk.size.0)),
             desk_height: connector.desk.map_or(0, |desk| logical(desk.size.1)),
+        })
+        .collect()
+}
+
+/// The ABI's layout records with each connector's mode and rate.
+fn moded_layouts_from(connectors: &[Connector]) -> Vec<RawModedLayout> {
+    layouts_from(connectors)
+        .into_iter()
+        .zip(connectors)
+        .map(|(layout, connector)| RawModedLayout {
+            layout,
+            mode_width: connector.mode.map_or(0, |mode| logical(mode.0)),
+            mode_height: connector.mode.map_or(0, |mode| logical(mode.1)),
+            refresh_mhz: connector.refresh_mhz.map_or(0, |refresh| {
+                i32::try_from(refresh).expect("the config bounds a refresh rate to an int32_t")
+            }),
+        })
+        .collect()
+}
+
+/// The ABI's layout records with each connector's mode, rate and adaptive
+/// sync.
+fn adaptive_layouts_from(connectors: &[Connector]) -> Vec<RawAdaptiveLayout> {
+    moded_layouts_from(connectors)
+        .into_iter()
+        .zip(connectors)
+        .map(|(moded, connector)| RawAdaptiveLayout {
+            moded,
+            adaptive_sync: i32::from(connector.adaptive_sync),
+        })
+        .collect()
+}
+
+/// The ABI's layout records with each connector's mode, rate, adaptive sync
+/// and HDR.
+fn hdr_layouts_from(connectors: &[Connector]) -> Vec<RawHdrLayout> {
+    adaptive_layouts_from(connectors)
+        .into_iter()
+        .zip(connectors)
+        .map(|(adaptive, connector)| RawHdrLayout {
+            adaptive,
+            hdr: i32::from(connector.hdr),
+            sdr_white_nits: connector.sdr_white as f32,
         })
         .collect()
 }
@@ -2172,10 +3034,28 @@ mod tests {
     }
 
     #[test]
-    fn the_callbacks_are_the_user_data_and_sixteen_pointers_the_c_header_declares() {
-        // `released` follows `configure`, and `ramped_displays` is last, as
-        // in the header.
-        assert_eq!(std::mem::size_of::<Callbacks>(), 17 * 8);
+    fn a_subsurface_is_laid_out_as_the_engine_reads_it() {
+        // `DomicileSubsurface`: a u32, padding, four doubles, a u8, padding.
+        assert_eq!(std::mem::size_of::<Subsurface>(), 48);
+        assert_eq!(std::mem::offset_of!(Subsurface, x), 8);
+        assert_eq!(std::mem::offset_of!(Subsurface, above), 40);
+    }
+
+    #[test]
+    fn a_color_is_the_record_the_c_header_declares() {
+        // 2 enums + reference + has_mastering (16), four chromaticities (32),
+        // then four floats (16).
+        assert_eq!(std::mem::size_of::<Color>(), 64);
+        assert_eq!(std::mem::offset_of!(Color, mastering_red), 16);
+        assert_eq!(std::mem::offset_of!(Color, mastering_min_luminance), 48);
+        assert_eq!(std::mem::offset_of!(Color, max_fall), 60);
+    }
+
+    #[test]
+    fn the_callbacks_are_the_user_data_and_twenty_five_pointers_the_c_header_declares() {
+        // `released` follows `configure`, and `viewed_browser_windows` is
+        // last, as in the header.
+        assert_eq!(std::mem::size_of::<Callbacks>(), 26 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, copied_items), 9 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, frame_done), 10 * 8);
@@ -2185,6 +3065,342 @@ mod tests {
         assert_eq!(std::mem::offset_of!(Callbacks, disconnected), 14 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, compositing), 15 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, ramped_displays), 16 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, moded_displays), 17 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, browser_windows), 18 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, adaptive_displays), 19 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, configure_zoomed), 20 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, hdr_displays), 21 * 8);
+        assert_eq!(
+            std::mem::offset_of!(Callbacks, listed_browser_windows),
+            22 * 8
+        );
+        assert_eq!(std::mem::offset_of!(Callbacks, input_devices), 23 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, capture_failed), 24 * 8);
+        assert_eq!(
+            std::mem::offset_of!(Callbacks, viewed_browser_windows),
+            25 * 8
+        );
+    }
+
+    #[test]
+    fn an_input_device_is_two_strings_and_its_numbers_as_in_the_c_header() {
+        // 2 strings (16), id (4), vendor and product (4), kind and connection
+        // (2), then tail padding to 8.
+        assert_eq!(std::mem::size_of::<RawInputDevice>(), 32);
+        assert_eq!(std::mem::offset_of!(RawInputDevice, sys_path), 8);
+        assert_eq!(std::mem::offset_of!(RawInputDevice, id), 16);
+        assert_eq!(std::mem::offset_of!(RawInputDevice, vendor_id), 20);
+        assert_eq!(std::mem::offset_of!(RawInputDevice, product_id), 22);
+        assert_eq!(std::mem::offset_of!(RawInputDevice, kind), 24);
+        assert_eq!(std::mem::offset_of!(RawInputDevice, connection), 25);
+    }
+
+    #[test]
+    fn a_failed_capture_carries_the_engines_cause() {
+        let events = RefCell::new(Vec::new());
+        let queue = (&events as *const RefCell<Vec<Event>>) as *mut c_void;
+
+        on_capture_failed(queue, 3, c"viz ran out".as_ptr());
+
+        assert_eq!(
+            events.into_inner(),
+            vec![Event::CaptureEnded {
+                capture: 3,
+                why: Some("viz ran out".into())
+            }]
+        );
+    }
+
+    #[test]
+    fn the_input_devices_are_copied_out_of_their_records() {
+        let events = RefCell::new(Vec::new());
+        let queue = (&events as *const RefCell<Vec<Event>>) as *mut c_void;
+        let records = [
+            RawInputDevice {
+                name: c"Logitech MX Master 3".as_ptr(),
+                sys_path: c"/sys/devices/usb1/input/input9".as_ptr(),
+                id: 9,
+                vendor_id: 0x046d,
+                product_id: 0x4082,
+                kind: 1,
+                connection: 3,
+            },
+            RawInputDevice {
+                name: c"Power Button".as_ptr(),
+                sys_path: c"".as_ptr(),
+                id: 2,
+                vendor_id: 0,
+                product_id: 0,
+                kind: 200,
+                connection: 200,
+            },
+        ];
+        on_input_devices(queue, records.as_ptr(), 2);
+        on_input_devices(queue, std::ptr::null(), 0);
+
+        assert_eq!(
+            events.into_inner(),
+            vec![
+                Event::InputDevices(vec![
+                    ListedInput {
+                        id: 9,
+                        name: "Logitech MX Master 3".into(),
+                        kind: InputKind::Mouse,
+                        connection: InputConnection::Bluetooth,
+                        sys_path: "/sys/devices/usb1/input/input9".into(),
+                        vendor: 0x046d,
+                        product: 0x4082,
+                    },
+                    ListedInput {
+                        id: 2,
+                        name: "Power Button".into(),
+                        kind: InputKind::Other,
+                        connection: InputConnection::Unknown,
+                        sys_path: String::new(),
+                        vendor: 0,
+                        product: 0,
+                    },
+                ]),
+                Event::InputDevices(Vec::new()),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_hdr_display_is_an_adaptive_display_and_its_luminances() {
+        // 88 (`DomicileAdaptiveDisplay`) + 4 + 4 * 4 + 4 tail padding.
+        assert_eq!(std::mem::size_of::<RawHdrDisplay>(), 112);
+        assert_eq!(std::mem::offset_of!(RawHdrDisplay, hdr), 88);
+        assert_eq!(std::mem::offset_of!(RawHdrDisplay, sdr_white_nits), 104);
+    }
+
+    #[test]
+    fn an_hdr_layout_is_an_adaptive_layout_a_flag_and_a_white() {
+        // 72 (`DomicileAdaptiveLayout`) + 4 + 4.
+        assert_eq!(std::mem::size_of::<RawHdrLayout>(), 80);
+        assert_eq!(std::mem::offset_of!(RawHdrLayout, hdr), 72);
+        assert_eq!(std::mem::offset_of!(RawHdrLayout, sdr_white_nits), 76);
+    }
+
+    #[test]
+    fn a_display_says_whether_it_is_in_hdr_and_how_bright_it_gets() {
+        let (panel, _name) = named(
+            RawDisplay {
+                id: 7,
+                width: 3840,
+                height: 2160,
+                ..RawDisplay::default()
+            },
+            "",
+        );
+        let connector = std::ffi::CString::new("DP-1").expect("no nul in it");
+        let record = |hdr, sdr_white_nits| RawHdrDisplay {
+            adaptive: RawAdaptiveDisplay {
+                moded: RawModedDisplay {
+                    ramped: RawRampedDisplay {
+                        connected: RawConnectedDisplay {
+                            display: panel,
+                            connector: connector.as_ptr(),
+                        },
+                        gamma_size: 0,
+                    },
+                    modes: std::ptr::null(),
+                    mode_count: 0,
+                },
+                adaptive_sync: 0,
+            },
+            hdr,
+            max_luminance: 599.6,
+            max_average_luminance: 350.0,
+            min_luminance: 0.05,
+            sdr_white_nits,
+        };
+        let displays = hdr_displays_from(&[record(2, 240.0), record(1, 0.0), record(7, 0.0)]);
+        assert_eq!(
+            displays[0].hdr,
+            Hdr {
+                state: HdrState::On,
+                max_luminance: 600,
+                max_average_luminance: 350,
+                min_luminance: 500,
+                sdr_white: 240,
+            }
+        );
+        assert_eq!(displays[1].hdr.state, HdrState::Off);
+        assert_eq!(
+            displays[2].hdr.state,
+            HdrState::Unsupported,
+            "a state from a newer engine asks nothing of this compositor"
+        );
+    }
+
+    #[test]
+    fn a_connector_asks_for_hdr_and_its_white_in_its_layout() {
+        let asking = Connector {
+            hdr: true,
+            sdr_white: 240,
+            ..LIT
+        };
+        let raw = hdr_layouts_from(&[asking, LIT]);
+        assert_eq!((raw[0].hdr, raw[0].sdr_white_nits), (1, 240.0));
+        assert_eq!(raw[1].hdr, 0);
+        assert_eq!(raw[0].adaptive, adaptive_layouts_from(&[asking])[0]);
+    }
+
+    #[test]
+    fn an_adaptive_display_is_a_moded_display_and_its_state() {
+        // 80 (`DomicileModedDisplay`) + 4 + 4 tail padding.
+        assert_eq!(std::mem::size_of::<RawAdaptiveDisplay>(), 88);
+        assert_eq!(std::mem::offset_of!(RawAdaptiveDisplay, adaptive_sync), 80);
+    }
+
+    #[test]
+    fn an_adaptive_layout_is_a_moded_layout_and_a_flag() {
+        // 64 (`DomicileModedLayout`) + 4 + 4 tail padding.
+        assert_eq!(std::mem::size_of::<RawAdaptiveLayout>(), 72);
+        assert_eq!(std::mem::offset_of!(RawAdaptiveLayout, adaptive_sync), 64);
+    }
+
+    #[test]
+    fn a_display_says_whether_it_scans_out_with_adaptive_sync() {
+        let (panel, _name) = named(
+            RawDisplay {
+                id: 7,
+                width: 2560,
+                height: 1440,
+                ..RawDisplay::default()
+            },
+            "",
+        );
+        let connector = std::ffi::CString::new("DP-1").expect("no nul in it");
+        let record = |adaptive_sync| RawAdaptiveDisplay {
+            moded: RawModedDisplay {
+                ramped: RawRampedDisplay {
+                    connected: RawConnectedDisplay {
+                        display: panel,
+                        connector: connector.as_ptr(),
+                    },
+                    gamma_size: 0,
+                },
+                modes: std::ptr::null(),
+                mode_count: 0,
+            },
+            adaptive_sync,
+        };
+        let states: Vec<AdaptiveSync> = adaptive_displays_from(&[
+            record(0),
+            record(1),
+            record(2),
+            // A state from a newer engine asks nothing of this compositor.
+            record(7),
+        ])
+        .iter()
+        .map(|display| display.adaptive_sync)
+        .collect();
+        assert_eq!(
+            states,
+            vec![
+                AdaptiveSync::Unsupported,
+                AdaptiveSync::Off,
+                AdaptiveSync::On,
+                AdaptiveSync::Unsupported,
+            ]
+        );
+    }
+
+    #[test]
+    fn a_connector_asks_for_adaptive_sync_in_its_layout() {
+        let asking = Connector {
+            adaptive_sync: true,
+            ..LIT
+        };
+        let raw = adaptive_layouts_from(&[asking, LIT]);
+        assert_eq!(raw[0].adaptive_sync, 1);
+        assert_eq!(raw[1].adaptive_sync, 0);
+        assert_eq!(raw[0].moded, moded_layouts_from(&[asking])[0]);
+    }
+
+    #[test]
+    fn a_moded_display_is_a_ramped_display_and_its_modes() {
+        // 64 (`DomicileRampedDisplay`) + 8 (pointer) + 4 (`mode_count`) + 4
+        // tail padding. A mode is three `int32_t`.
+        assert_eq!(std::mem::size_of::<RawMode>(), 12);
+        assert_eq!(std::mem::size_of::<RawModedDisplay>(), 80);
+        assert_eq!(std::mem::offset_of!(RawModedDisplay, modes), 64);
+        assert_eq!(std::mem::offset_of!(RawModedDisplay, mode_count), 72);
+    }
+
+    #[test]
+    fn a_moded_layout_is_a_layout_a_mode_and_a_rate() {
+        // 48 (`DomicileDisplayLayout`) + 12 (three `int32_t`) + 4 tail
+        // padding.
+        assert_eq!(std::mem::size_of::<RawModedLayout>(), 64);
+        assert_eq!(std::mem::offset_of!(RawModedLayout, mode_width), 48);
+        assert_eq!(std::mem::offset_of!(RawModedLayout, refresh_mhz), 56);
+    }
+
+    #[test]
+    fn a_display_carries_the_modes_its_monitor_offers() {
+        let (panel, _name) = named(
+            RawDisplay {
+                id: 7,
+                width: 1920,
+                height: 1080,
+                ..RawDisplay::default()
+            },
+            "",
+        );
+        let connector = std::ffi::CString::new("eDP-1").expect("no nul in it");
+        let modes = [
+            RawMode {
+                width: 2880,
+                height: 1920,
+                refresh_mhz: 60_000,
+            },
+            RawMode {
+                width: 1920,
+                height: 1080,
+                refresh_mhz: 120_000,
+            },
+            // A mode with no pixels is dropped rather than offered.
+            RawMode::default(),
+        ];
+        let record = RawModedDisplay {
+            ramped: RawRampedDisplay {
+                connected: RawConnectedDisplay {
+                    display: panel,
+                    connector: connector.as_ptr(),
+                },
+                gamma_size: 0,
+            },
+            modes: modes.as_ptr(),
+            mode_count: modes.len() as u32,
+        };
+        let displays = moded_displays_from(&[record]);
+        assert_eq!(
+            displays[0].size,
+            (1920, 1080),
+            "the size is the mode it is at"
+        );
+        assert_eq!(
+            displays[0].modes,
+            vec![
+                Mode {
+                    size: (2880, 1920),
+                    refresh_mhz: 60_000
+                },
+                Mode {
+                    size: (1920, 1080),
+                    refresh_mhz: 120_000
+                },
+            ]
+        );
+        let none = RawModedDisplay {
+            modes: std::ptr::null(),
+            mode_count: 0,
+            ..record
+        };
+        assert!(moded_displays_from(&[none])[0].modes.is_empty());
     }
 
     #[test]
@@ -2230,6 +3446,171 @@ mod tests {
                     surface: 2,
                     request: 6,
                     buffer: None,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_browser_window_is_three_strings_as_in_the_c_header() {
+        assert_eq!(std::mem::size_of::<RawBrowserWindow>(), 3 * 8);
+        assert_eq!(std::mem::offset_of!(RawBrowserWindow, title), 8);
+        assert_eq!(std::mem::offset_of!(RawBrowserWindow, app_id), 16);
+    }
+
+    #[test]
+    fn a_listed_browser_window_is_four_strings_and_a_flag_as_in_the_c_header() {
+        assert_eq!(std::mem::size_of::<RawListedBrowserWindow>(), 5 * 8);
+        assert_eq!(std::mem::offset_of!(RawListedBrowserWindow, title), 8);
+        assert_eq!(std::mem::offset_of!(RawListedBrowserWindow, app_id), 16);
+        assert_eq!(std::mem::offset_of!(RawListedBrowserWindow, url), 24);
+        assert_eq!(
+            std::mem::offset_of!(RawListedBrowserWindow, off_the_record),
+            32
+        );
+    }
+
+    #[test]
+    fn the_listed_browser_windows_are_copied_out_of_their_records() {
+        let events = RefCell::new(Vec::new());
+        let queue = (&events as *const RefCell<Vec<Event>>) as *mut c_void;
+        let records = [
+            RawListedBrowserWindow {
+                id: c"3".as_ptr(),
+                title: c"Inbox".as_ptr(),
+                app_id: c"mail".as_ptr(),
+                url: c"https://mail.example/".as_ptr(),
+                off_the_record: 1,
+            },
+            RawListedBrowserWindow {
+                id: c"5".as_ptr(),
+                title: c"".as_ptr(),
+                app_id: c"".as_ptr(),
+                url: c"about:blank".as_ptr(),
+                off_the_record: 0,
+            },
+        ];
+        on_listed_browser_windows(queue, records.as_ptr(), 2);
+        on_listed_browser_windows(queue, std::ptr::null(), 0);
+
+        assert_eq!(
+            events.into_inner(),
+            vec![
+                Event::BrowserWindows(vec![
+                    BrowserWindow {
+                        id: "3".into(),
+                        title: "Inbox".into(),
+                        app_id: "mail".into(),
+                        url: "https://mail.example/".into(),
+                        private: true,
+                        views: Vec::new(),
+                    },
+                    BrowserWindow {
+                        id: "5".into(),
+                        title: String::new(),
+                        app_id: String::new(),
+                        url: "about:blank".into(),
+                        private: false,
+                        views: Vec::new(),
+                    },
+                ]),
+                Event::BrowserWindows(Vec::new()),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_older_engines_browser_windows_have_no_address_and_are_not_private() {
+        let events = RefCell::new(Vec::new());
+        let queue = (&events as *const RefCell<Vec<Event>>) as *mut c_void;
+        let records = [RawBrowserWindow {
+            id: c"3".as_ptr(),
+            title: c"Inbox".as_ptr(),
+            app_id: c"mail".as_ptr(),
+        }];
+        on_browser_windows(queue, records.as_ptr(), 1);
+
+        assert_eq!(
+            events.into_inner(),
+            vec![Event::BrowserWindows(vec![BrowserWindow {
+                id: "3".into(),
+                title: "Inbox".into(),
+                app_id: "mail".into(),
+                url: String::new(),
+                private: false,
+                views: Vec::new(),
+            }])]
+        );
+    }
+
+    #[test]
+    fn a_browser_window_view_is_a_string_an_index_and_four_numbers_as_in_the_c_header() {
+        assert_eq!(std::mem::size_of::<RawBrowserWindowView>(), 4 * 8);
+        assert_eq!(std::mem::offset_of!(RawBrowserWindowView, window), 8);
+        assert_eq!(std::mem::offset_of!(RawBrowserWindowView, x), 12);
+        assert_eq!(std::mem::offset_of!(RawBrowserWindowView, height), 24);
+    }
+
+    #[test]
+    fn each_view_is_copied_into_the_window_that_holds_it_bottom_first() {
+        let events = RefCell::new(Vec::new());
+        let queue = (&events as *const RefCell<Vec<Event>>) as *mut c_void;
+        let windows = [
+            RawListedBrowserWindow {
+                id: c"3".as_ptr(),
+                title: c"Inbox".as_ptr(),
+                app_id: c"".as_ptr(),
+                url: c"https://mail.example/".as_ptr(),
+                off_the_record: 0,
+            },
+            RawListedBrowserWindow {
+                id: c"5".as_ptr(),
+                title: c"Claude".as_ptr(),
+                app_id: c"claude-desktop".as_ptr(),
+                url: c"app://claude/".as_ptr(),
+                off_the_record: 0,
+            },
+        ];
+        let views = [
+            RawBrowserWindowView {
+                id: c"7".as_ptr(),
+                window: 1,
+                x: 0,
+                y: 0,
+                width: 200,
+                height: 600,
+            },
+            RawBrowserWindowView {
+                id: c"6".as_ptr(),
+                window: 1,
+                x: 0,
+                y: 40,
+                width: 800,
+                height: 560,
+            },
+        ];
+        on_viewed_browser_windows(queue, windows.as_ptr(), 2, views.as_ptr(), 2);
+
+        let Event::BrowserWindows(listed) = &events.borrow()[0] else {
+            panic!("no browser windows were listed");
+        };
+        assert_eq!(listed[0].views, []);
+        assert_eq!(
+            listed[1].views,
+            [
+                BrowserView {
+                    id: "7".into(),
+                    x: 0,
+                    y: 0,
+                    width: 200,
+                    height: 600,
+                },
+                BrowserView {
+                    id: "6".into(),
+                    x: 0,
+                    y: 40,
+                    width: 800,
+                    height: 560,
                 },
             ]
         );
@@ -2553,6 +3934,9 @@ mod tests {
             size: (1920, 1080),
             physical_mm: (0, 0),
             refresh_mhz: 0,
+            modes: Vec::new(),
+            adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         };
         assert!(display(VirtualDisplay::id_of(1)).is_virtual());
         // EDID-derived ids are positive.
@@ -2605,6 +3989,7 @@ mod tests {
         // Only the engine knows the scale a box was laid out at.
         let events = RefCell::new(Vec::new());
         let queue = (&events as *const RefCell<Vec<Event>>) as *mut c_void;
+        on_configure_zoomed(queue, 1, 640, 480, 2.0, 1.5, 8);
         on_configure_box(queue, 2, 640, 480, 2.0, 9);
         on_configure_at(queue, 3, 1200, 900, 1.5);
         on_configure(queue, 4, 800, 600);
@@ -2613,11 +3998,21 @@ mod tests {
             events.into_inner(),
             vec![
                 Event::Configure {
+                    surface: 1,
+                    width: 640,
+                    height: 480,
+                    scale: Some(2.0),
+                    number: Some(8),
+                    zoom: 1.5,
+                },
+                // An engine without `configure_zoomed` zooms nothing.
+                Event::Configure {
                     surface: 2,
                     width: 640,
                     height: 480,
                     scale: Some(2.0),
                     number: Some(9),
+                    zoom: 1.0,
                 },
                 // An engine without `configure_box` numbers no box.
                 Event::Configure {
@@ -2626,6 +4021,7 @@ mod tests {
                     height: 900,
                     scale: Some(1.5),
                     number: None,
+                    zoom: 1.0,
                 },
                 // An engine without `configure_at` sends no scale.
                 Event::Configure {
@@ -2634,6 +4030,7 @@ mod tests {
                     height: 600,
                     scale: None,
                     number: None,
+                    zoom: 1.0,
                 },
             ]
         );
@@ -2650,6 +4047,11 @@ mod tests {
             position: (1800, 0),
             size: (1800, 3200),
         }),
+        mode: None,
+        refresh_mhz: None,
+        adaptive_sync: false,
+        hdr: false,
+        sdr_white: domicile_config::DEFAULT_SDR_WHITE,
     };
 
     #[test]
@@ -2684,6 +4086,11 @@ mod tests {
             transform: Transform::Normal,
             scale: 1.0,
             desk: None,
+            mode: None,
+            refresh_mhz: None,
+            adaptive_sync: false,
+            hdr: false,
+            sdr_white: domicile_config::DEFAULT_SDR_WHITE,
         }]);
 
         assert_eq!(
@@ -2776,6 +4183,9 @@ mod tests {
                 size: (1920, 1080),
                 physical_mm: (0, 0),
                 refresh_mhz: 0,
+                modes: Vec::new(),
+                adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             }]
         );
     }
@@ -2834,6 +4244,9 @@ mod tests {
                     size: (2880, 1920),
                     physical_mm: (597, 336),
                     refresh_mhz: 59_997,
+                    modes: Vec::new(),
+                    adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
                 Display {
                     id: 9,
@@ -2843,6 +4256,9 @@ mod tests {
                     size: (1920, 1080),
                     physical_mm: (0, 0),
                     refresh_mhz: 0,
+                    modes: Vec::new(),
+                    adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
             ]
         );

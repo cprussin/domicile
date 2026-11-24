@@ -22,7 +22,8 @@ export type Session = {
    * it opened. Clear a lock screen on that event, never on its own check.
    */
   unlock: (passphrase: string) => void;
-  idleWarnings: System["idleWarnings"];
+  idleAfter: System["idleAfter"];
+  idleBeforeBlanking: System["idleBeforeBlanking"];
   idleHolds: System["idleHolds"];
   unlockRefusals: System["unlockRefusals"];
   on: On<SessionListeners>;
@@ -40,13 +41,17 @@ export type SessionHost = Pick<
 
 export const session = (
   host: SessionHost,
-  calls: Pick<System, "idleHolds" | "idleWarnings" | "unlockRefusals">,
+  calls: Pick<
+    System,
+    "idleAfter" | "idleBeforeBlanking" | "idleHolds" | "unlockRefusals"
+  >,
 ): Session => ({
   get idle() {
     return host.idle ?? undefined;
   },
+  idleAfter: (seconds) => calls.idleAfter(seconds),
+  idleBeforeBlanking: (seconds) => calls.idleBeforeBlanking(seconds),
   idleHolds: () => calls.idleHolds(),
-  idleWarnings: () => calls.idleWarnings(),
   lock: () => {
     host.lock();
   },

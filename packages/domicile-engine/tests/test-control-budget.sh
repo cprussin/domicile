@@ -183,6 +183,7 @@ for guard in guard-client-window guard-shell guard-webview-framing \
   guard-app-survives-load-shell guard-app-survives-compositor-restart \
   guard-shell-local-network \
   guard-webview-content-script guard-extension-installer \
+  guard-extension-in-private \
   guard-extension-tray guard-webview-tabs guard-webview-active-tab \
   guard-webview-popup-window \
   guard-webview-passkey-extension; do

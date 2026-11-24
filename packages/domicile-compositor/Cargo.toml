@@ -46,6 +46,9 @@ domicile-test-client = { path = "../domicile-test-client" }
 # For the ScreenCast check's binary above, which answers its source picker as
 # the shell. Adds no crates.
 domicile-test-chrome = { path = "../domicile-test-chrome" }
+# A client's own cursor goes to the chrome as a PNG (see
+# `src/cursor_surface.rs`); tests also read back the portal's screenshots.
+png.workspace = true
 # Raw syscalls, such as reading a peer's credentials (see
 # `src/peer_process.rs`).
 libc = "0.2"
@@ -67,11 +70,19 @@ tracing = "0.1"
 # crates: zbus already runs on it.
 async-io = "2.6"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Tracing as journal entries with priorities, when stdout is the journal (see
+# `start_logging` in `src/main.rs`).
+tracing-journald = "0.3"
 # Serves EIS, the emulated input the RemoteDesktop and InputCapture portals
 # hand out (see `src/eis.rs`). Its calloop sources run on the Wayland loop.
 reis = { version = "0.7", features = ["calloop"] }
 # D-Bus: the portals (see `src/portals/`), the tray and notifications.
 zbus.workspace = true
+# The browser's stand-in editor (see `src/chrome_editor.rs`), a client of
+# the compositor's own display. Adds no crates: the test client already pulls
+# these in.
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "unstable"] }
 # Generates `domicile_anchor_v1` from `protocols/` (see `src/anchors.rs`).
 # Adds no crates: `wayland-protocols` already pulls it in.
 wayland-scanner = "0.31"
@@ -98,10 +109,11 @@ zbus = { workspace = true, features = ["p2p"] }
 # display.
 serde_json.workspace = true
 tempfile.workspace = true
-# Reads back the screenshots the portal saves.
-png.workspace = true
 # The capture client in `tests/screencopy.rs`. Adds no crates: Smithay and
 # the test client already pull these in.
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client", "staging"] }
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+# The input method and virtual keyboard in `tests/text_input.rs`. Adds no
+# crates: the test client already pulls it in.
+wayland-protocols-misc = { version = "0.3", features = ["client"] }

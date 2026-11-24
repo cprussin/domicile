@@ -16,12 +16,16 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/timer/timer.h"
+#include "components/domicile/browser/browser_profiles.h"
 #include "components/domicile/browser/desk_activity.h"
+#include "components/domicile/browser/desk_faults.h"
 #include "components/domicile/browser/desk_gestures.h"
+#include "components/domicile/browser/desk_modifier_taps.h"
 #include "components/domicile/browser/desk_pointer.h"
 #include "components/domicile/browser/extension_installer.h"
 #include "components/domicile/browser/line_framer.h"
 #include "components/domicile/browser/shortcut_registry.h"
+#include "components/domicile/browser/spellcheck_settings.h"
 #include "components/domicile/browser/system_call.h"
 #include "components/domicile/mojom/control_channel.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -30,6 +34,7 @@
 #include "net/socket/unix_domain_client_socket_posix.h"
 #include "ui/base/cursor/domicile/desk_cursor_image.h"
 #include "ui/base/cursor/domicile/desk_cursor_theme.h"
+#include "ui/base/ime/domicile/desk_input_method.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace domicile {
@@ -61,6 +66,14 @@ using KeymapSink = base::RepeatingCallback<void(const std::string&)>;
 using PointerWarpSink = base::RepeatingCallback<
     void(double x, double y, const std::optional<gfx::RectF>& unless_over)>;
 
+// How a `confine_pointer` reaches the cursor it is about, for
+// PointerWarpSink's reasons: boxes in the page's CSS pixels, none to let go.
+// `confined` is answered on this channel's sequence with whether the platform
+// can hold the pointer.
+using PointerConfineSink = base::RepeatingCallback<void(
+    const std::vector<gfx::RectF>& boxes,
+    base::OnceCallback<void(bool confined)> confined)>;
+
 // How the desktop's theme reaches the color scheme every page in this process
 // is drawn in. A callback for KeymapSink's reason: NativeTheme belongs to the
 // UI thread. See components/domicile/browser/color_scheme.h.
@@ -85,6 +98,25 @@ using CursorThemeSink =
 using ForceDarkSink =
     base::RepeatingCallback<void(std::vector<std::string>)>;
 
+// How the desk's browser profiles reach the profile the shell is in, with the
+// shell frame whose channel heard them. Process-wide rather than a constructor
+// argument, as WebViewGuest::SetInspect: //chrome sets it once with
+// SetBrowserProfilesSink, before any channel; a test sets one and gives it back
+// with a null sink. A callback for KeymapSink's
+// reason: a Profile belongs to the UI thread. See
+// chrome/browser/domicile/domicile_browser_profiles.h.
+using BrowserProfilesSink =
+    base::RepeatingCallback<void(const Page&, const BrowserProfiles&)>;
+void SetBrowserProfilesSink(BrowserProfilesSink sink);
+
+// How the desk's spell checking reaches the browser's profiles. Process-wide
+// as BrowserProfilesSink: //chrome sets it once with SetSpellcheckSink, before
+// any channel; a test sets one and gives it back with a null sink. See
+// chrome/browser/domicile/domicile_spellcheck.h.
+using SpellcheckSink =
+    base::RepeatingCallback<void(const SpellcheckSettings&)>;
+void SetSpellcheckSink(SpellcheckSink sink);
+
 // The shell's control channel, in the browser process.
 //
 // Speaks newline-delimited JSON over the compositor's unix control socket --
@@ -108,6 +140,7 @@ class ControlChannel : public mojom::ControlChannel {
                  mojo::PendingReceiver<mojom::ControlChannel> receiver,
                  KeymapSink keymap_sink,
                  PointerWarpSink warp_sink,
+                 PointerConfineSink confine_sink,
                  ThemeSink theme_sink,
                  ExtensionsSink extensions_sink,
                  CursorThemeSink cursor_theme_sink,
@@ -127,6 +160,7 @@ class ControlChannel : public mojom::ControlChannel {
   void CallSystem(uint32_t id, const std::string& request) override;
   void AnswerPortalRequest(uint32_t id, const std::string& answer) override;
   void CopyClipboardEntry(uint32_t entry) override;
+  void RemoveClipboardEntry(uint32_t entry) override;
   void ActivateTrayItem(const std::string& id,
                         mojom::TrayAction action) override;
   void DismissNotifications(const std::vector<uint32_t>& ids) override;
@@ -139,6 +173,8 @@ class ControlChannel : public mojom::ControlChannel {
   void WarpPointer(double x,
                    double y,
                    const std::optional<gfx::RectF>& unless_over) override;
+  void ConfinePointer(const std::vector<gfx::RectF>& boxes,
+                      ConfinePointerCallback confined) override;
   void CloseApp(const std::string& app_id) override;
   void SetAppBounds(const std::string& app_id,
                     double x,
@@ -157,11 +193,22 @@ class ControlChannel : public mojom::ControlChannel {
   void UngrabShortcut(mojom::ShortcutPtr shortcut) override;
   void GrabGesture(mojom::GestureGrabPtr grab) override;
   void UngrabGesture(mojom::GestureGrabPtr grab) override;
+  void GrabModifierTap(mojom::TapModifier modifier,
+                       bool while_inhibited,
+                       base::TimeDelta longest) override;
+  void UngrabModifierTap(mojom::TapModifier modifier) override;
+  void KeyboardWindowInhibitsShortcuts(bool inhibits) override;
   void Key(const std::string& app_id, uint32_t keycode, bool pressed) override;
   void PointerMotion(const std::string& app_id,
                      double x,
                      double y,
                      bool moved) override;
+  void PointerRelative(const std::string& app_id,
+                       double dx,
+                       double dy,
+                       double dx_unaccel,
+                       double dy_unaccel) override;
+  void PointerConstrained(const std::string& app_id, bool active) override;
   void PointerLeave(const std::string& app_id) override;
   void PointerButton(const std::string& app_id,
                      uint32_t button,
@@ -226,9 +273,15 @@ class ControlChannel : public mojom::ControlChannel {
   // give the native window under the pointer. Dropped while no compositor is
   // connected: its gesture would begin on a window it never heard of.
   void ForwardGesture(const ui::NativeGesture& gesture);
+  // A tap of a modifier alone this page grabbed; see DeskModifierTaps.
+  // Posted here for DeliverShortcut's reason.
+  void DeliverModifierTap(TapModifier modifier, base::TimeDelta held);
   // Somebody used the desk; see DeskActivity. Dropped while no compositor is
   // connected: the next one starts its idle clock fresh.
   void SomebodyIsHere(const std::string& input);
+  // The engine caught itself in a bug; see DeskFaults. Held while no
+  // compositor is connected, so the person still hears of it.
+  void FaultFound(const std::string& what);
   // The pointer moved on the desk; see DeskPointer. Dropped while no
   // compositor is connected, like SomebodyIsHere.
   void DeskPointerMoved(const DeskPointerAt& at);
@@ -236,6 +289,11 @@ class ControlChannel : public mojom::ControlChannel {
   // while no compositor is connected: the next one is sent the pointer as it
   // is then, after `hello`.
   void DeskCursorChanged(const ui::DeskCursorImage& image);
+  // The focused field changed, or a key goes to the input method first; see
+  // ui::DeskInputMethod. Sent by the one channel it picked. Dropped while no
+  // compositor is connected: with none there is no input method either.
+  void SendTextField(const ui::DeskTextField& field);
+  void SendKeyForInputMethod(uint32_t evdev_code, bool pressed);
 
   void ReadLoop();
   void OnRead(int result);
@@ -251,10 +309,13 @@ class ControlChannel : public mojom::ControlChannel {
   const std::string socket_path_;
   const KeymapSink keymap_sink_;
   const PointerWarpSink warp_sink_;
+  const PointerConfineSink confine_sink_;
   const ThemeSink theme_sink_;
   const ExtensionsSink extensions_sink_;
   const CursorThemeSink cursor_theme_sink_;
   const ForceDarkSink force_dark_sink_;
+  // The frame the channel was bound for, which BrowserProfilesSink is told.
+  const Page page_;
   mojo::Receiver<mojom::ControlChannel> receiver_;
   mojo::Remote<mojom::ControlChannelClient> client_;
 
@@ -266,13 +327,19 @@ class ControlChannel : public mojom::ControlChannel {
   // This channel's registration with the process's DeskActivity, given back in
   // the destructor.
   DeskActivity::ListenerId activity_;
+  // And with the process's DeskFaults.
+  DeskFaults::ListenerId faults_;
   // And with the process's DeskPointer.
   DeskPointer::ListenerId pointer_;
   // And with the process's DeskGestures, which forgets this page's grabs with
   // it: a reloaded shell grabs its gestures again.
   DeskGestures::ChannelId gestures_;
+  // And with the process's DeskModifierTaps, likewise.
+  DeskModifierTaps::ChannelId taps_;
   // And with the process's ui::DeskCursorImageSource.
   ui::DeskCursorImageSource::ListenerId cursor_;
+  // And with the process's ui::DeskInputMethod.
+  ui::DeskInputMethod::ChannelId input_method_;
 
   std::unique_ptr<net::UnixDomainClientSocket> socket_;
   bool connected_ = false;
@@ -318,6 +385,7 @@ class ControlChannel : public mojom::ControlChannel {
 void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
                         KeymapSink keymap_sink,
                         PointerWarpSink warp_sink,
+                        PointerConfineSink confine_sink,
                         ThemeSink theme_sink,
                         ExtensionsSink extensions_sink,
                         CursorThemeSink cursor_theme_sink,

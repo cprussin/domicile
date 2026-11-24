@@ -15,10 +15,12 @@
 use domicile_config::{
     ConfigError, Connected, Desk, Desktop, InputConfig, Layout, OutputConfig, Transform,
 };
-use domicile_protocol::{DisplayInfo, DisplayTransform, Scale};
+use domicile_protocol::{
+    AdaptiveSync as WireAdaptiveSync, DisplayHdr, DisplayInfo, DisplayTransform, MonitorInfo, Scale,
+};
 use domicile_scene::{Bounds, Point};
 
-use crate::engine::{Connector, Display, Pointer, VirtualDisplay};
+use crate::engine::{AdaptiveSync, Connector, Display, Hdr, HdrState, Pointer, VirtualDisplay};
 use crate::pnp_ids::Vendors;
 
 /// The `wl_output` physical size for an output with no known size.
@@ -69,6 +71,13 @@ pub struct Advertised {
     /// Sent as `wl_output.description`. Profiles match either maker spelling.
     /// Only the engine's displays have one. See "Monitor names" in `docs/DISPLAYS.md`.
     pub description: String,
+    /// The panel's `"<MAKE> <MODEL> <SERIAL>"` as its EDID spells it, with the
+    /// maker as a three-letter code, or empty. Profiles match it as well as
+    /// [`description`](Advertised::description).
+    pub edid: String,
+    /// The connector it is plugged into, as the kernel names it (`eDP-1`), or
+    /// empty. Profiles match it too.
+    pub connector: String,
     /// The engine display it shows, by [`Display::id`]. `None` on a described
     /// or nested desktop.
     pub display: Option<i64>,
@@ -78,6 +87,12 @@ pub struct Advertised {
     /// The refresh rate in mHz, or [`UNKNOWN_REFRESH_MHZ`]. Only the engine's
     /// displays report one.
     pub refresh_mhz: i32,
+    /// Whether it scans out with a variable refresh rate. Only the engine's
+    /// displays can.
+    pub adaptive_sync: AdaptiveSync,
+    /// Whether it is driven in HDR10, and how bright its panel gets. Only the
+    /// engine's displays can be.
+    pub hdr: Hdr,
 }
 
 impl Advertised {
@@ -123,6 +138,21 @@ impl Advertised {
         }
     }
 
+    /// This output under the names a display profile can call it by, for
+    /// Settings.
+    pub fn monitor(&self) -> MonitorInfo {
+        let mut names = vec![self.name.clone()];
+        for name in [&self.connector, &self.edid, &self.description] {
+            if !name.is_empty() && !names.contains(name) {
+                names.push(name.clone());
+            }
+        }
+        MonitorInfo {
+            names,
+            hdr: as_wire_hdr(self.hdr.state),
+        }
+    }
+
     /// This output as sent to the chrome.
     ///
     /// Panics on a negative size or scale instead of folding it to a plausible
@@ -134,8 +164,32 @@ impl Advertised {
             scale: as_measure(self.wl_output_scale()),
             size: [as_measure(self.logical.0), as_measure(self.logical.1)],
             mode: [as_measure(self.mode.0), as_measure(self.mode.1)],
+            // Unknown is zero on both sides of the wire.
+            refresh_mhz: u32::try_from(self.refresh_mhz).unwrap_or(0),
+            adaptive_sync: as_wire_adaptive_sync(self.adaptive_sync),
+            hdr: as_wire_hdr(self.hdr.state),
+            peak_luminance: self.hdr.max_luminance,
+            sdr_white: self.hdr.sdr_white,
             transform: as_wire_transform(self.transform),
         }
+    }
+}
+
+/// Adaptive sync as the protocol spells it.
+fn as_wire_adaptive_sync(adaptive_sync: AdaptiveSync) -> WireAdaptiveSync {
+    match adaptive_sync {
+        AdaptiveSync::Unsupported => WireAdaptiveSync::Unsupported,
+        AdaptiveSync::Off => WireAdaptiveSync::Off,
+        AdaptiveSync::On => WireAdaptiveSync::On,
+    }
+}
+
+/// HDR as the protocol spells it.
+fn as_wire_hdr(state: HdrState) -> DisplayHdr {
+    match state {
+        HdrState::Unsupported => DisplayHdr::Unsupported,
+        HdrState::Off => DisplayHdr::Off,
+        HdrState::On => DisplayHdr::On,
     }
 }
 
@@ -212,9 +266,13 @@ impl Screens {
                         // is no rotation to apply.
                         transform: Transform::Normal,
                         description: String::new(),
+                        edid: String::new(),
+                        connector: String::new(),
                         display: None,
                         physical_mm: UNKNOWN_PHYSICAL_MM,
                         refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                        adaptive_sync: AdaptiveSync::Unsupported,
+                        hdr: Default::default(),
                     }
                 })
                 .collect(),
@@ -277,6 +335,11 @@ impl Screens {
                             position: display.position,
                             size: display.size,
                         }),
+                        mode: None,
+                        refresh_mhz: None,
+                        adaptive_sync: false,
+                        hdr: false,
+                        sdr_white: domicile_config::DEFAULT_SDR_WHITE,
                     })
                     .collect(),
                 ..Screens::as_the_engine_placed(&monitors, vendors)
@@ -300,9 +363,13 @@ impl Screens {
                     scale: 1.0,
                     transform: Transform::Normal,
                     description: advertised_description(display, vendors),
+                    edid: display.description.clone(),
+                    connector: display.connector.clone(),
                     display: Some(display.id),
                     physical_mm: display.physical_mm,
                     refresh_mhz: display.refresh_mhz,
+                    adaptive_sync: display.adaptive_sync,
+                    hdr: display.hdr,
                 }
             })
             .collect();
@@ -352,9 +419,13 @@ impl Screens {
                 scale: f64::from(scale),
                 transform: Transform::Normal,
                 description: String::new(),
+                edid: String::new(),
+                connector: String::new(),
                 display: None,
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             }],
             size: logical,
         }
@@ -385,6 +456,11 @@ impl Screens {
                     transform: display.transform,
                     scale: display.scale,
                     desk: display.desk,
+                    mode: display.mode,
+                    refresh_mhz: display.refresh_mhz,
+                    adaptive_sync: display.adaptive_sync,
+                    hdr: display.hdr,
+                    sdr_white: display.sdr_white,
                 })
                 .collect(),
             outputs: layout
@@ -406,9 +482,13 @@ impl Screens {
                         scale: placed.scale,
                         transform: placed.transform,
                         description: advertised_description(display, vendors),
+                        edid: display.description.clone(),
+                        connector: display.connector.clone(),
                         display: Some(display.id),
                         physical_mm: display.physical_mm,
                         refresh_mhz: display.refresh_mhz,
+                        adaptive_sync: display.adaptive_sync,
+                        hdr: display.hdr,
                     }
                 })
                 .collect(),
@@ -512,6 +592,11 @@ impl Screens {
                     position,
                     size: logical,
                 }),
+                mode: None,
+                refresh_mhz: None,
+                adaptive_sync: false,
+                hdr: false,
+                sdr_white: domicile_config::DEFAULT_SDR_WHITE,
             });
             let logical = (as_coordinate(logical.0), as_coordinate(logical.1));
             self.outputs.push(Advertised {
@@ -522,9 +607,13 @@ impl Screens {
                 scale,
                 transform: Transform::Normal,
                 description: display.description.clone(),
+                edid: display.description.clone(),
+                connector: display.connector.clone(),
                 display: Some(display.id),
                 physical_mm: display.physical_mm,
                 refresh_mhz: display.refresh_mhz,
+                adaptive_sync: display.adaptive_sync,
+                hdr: display.hdr,
             });
             row_end += mode.0;
             next_left += logical.0;
@@ -794,6 +883,23 @@ impl Screens {
         self.holding_most_of(bounds).map(Advertised::bounds)
     }
 
+    /// Whether the display holding the most of a window in `bounds` is
+    /// driven in HDR. A window on no display is in SDR.
+    pub fn hdr_for(&self, bounds: Option<Bounds>) -> Hdr {
+        bounds
+            .and_then(|bounds| self.holding_most_of(bounds))
+            .map_or_else(Hdr::default, |output| output.hdr)
+    }
+
+    /// Whether the display named `name` is driven in HDR. One there is no
+    /// longer is in SDR.
+    pub fn hdr_of(&self, name: &str) -> Hdr {
+        self.outputs
+            .iter()
+            .find(|output| output.name == name)
+            .map_or_else(Hdr::default, |output| output.hdr)
+    }
+
     /// The display holding the most of `bounds`, as sway picks it.
     fn holding_most_of(&self, bounds: Bounds) -> Option<&Advertised> {
         self.outputs
@@ -841,7 +947,7 @@ fn overlap_area(a: &Bounds, b: &Bounds) -> f64 {
 /// none is named after its connector, as sway names it. `drm-<id>` again from
 /// an engine that reports no connector. A virtual display is named after its
 /// connector, `virtual-<n>`, since its description is a TV's name.
-fn name_of(display: &Display) -> String {
+pub fn name_of(display: &Display) -> String {
     if display.is_virtual() || (display.description.is_empty() && !display.connector.is_empty()) {
         display.connector.clone()
     } else {
@@ -851,7 +957,7 @@ fn name_of(display: &Display) -> String {
 
 /// The engine's displays under the names a config matches. A virtual display
 /// is none of them: it lives only as long as its cast.
-fn connected(displays: &[Display], vendors: &Vendors) -> Vec<Connected> {
+pub(crate) fn connected(displays: &[Display], vendors: &Vendors) -> Vec<Connected> {
     displays
         .iter()
         .filter(|display| !display.is_virtual())
@@ -861,7 +967,16 @@ fn connected(displays: &[Display], vendors: &Vendors) -> Vec<Connected> {
             spelled_out: vendors
                 .spelled_out(&display.description)
                 .unwrap_or_default(),
+            connector: display.connector.clone(),
             mode: display.size,
+            modes: display.modes.iter().fold(Vec::new(), |mut sizes, mode| {
+                // One entry per size: a profile picks the size, and the
+                // engine the rate.
+                if !sizes.contains(&mode.size) {
+                    sizes.push(mode.size);
+                }
+                sizes
+            }),
         })
         .collect()
 }
@@ -963,6 +1078,7 @@ fn engine_pixel_on(connector: &Connector, (x, y): (f64, f64)) -> Option<(f64, f6
 mod tests {
     use super::*;
 
+    use crate::engine::Mode;
     use domicile_config::{Config, Desk};
 
     fn desktop(text: &str) -> Desktop {
@@ -1003,11 +1119,15 @@ mod tests {
                     scale: 1.0,
                     transform: Transform::Normal,
                     description: String::new(),
+                    edid: String::new(),
+                    connector: String::new(),
                     display: None,
                     // A described display is not a panel, so neither value is
                     // known.
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                    adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
                 Advertised {
                     logical: (2560, 1440),
@@ -1017,9 +1137,13 @@ mod tests {
                     scale: 2.0,
                     transform: Transform::Normal,
                     description: String::new(),
+                    edid: String::new(),
+                    connector: String::new(),
                     display: None,
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                    adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
             ]
         );
@@ -1092,6 +1216,11 @@ mod tests {
                 // The advertised mode: 2560x1440 at density 2 is 5120x2880,
                 // though no panel scans it out.
                 mode: [5120, 2880],
+                refresh_mhz: 0,
+                adaptive_sync: WireAdaptiveSync::Unsupported,
+                hdr: DisplayHdr::Unsupported,
+                peak_luminance: 0,
+                sdr_white: 0,
                 transform: DisplayTransform::Normal,
             }
         );
@@ -1109,9 +1238,13 @@ mod tests {
             scale: 1.0,
             transform: Transform::Normal,
             description: String::new(),
+            edid: String::new(),
+            connector: String::new(),
             display: None,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
+            adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         };
         let panicked = std::panic::catch_unwind({
             let bogus = bogus.clone();
@@ -1138,9 +1271,13 @@ mod tests {
             scale: 1.0,
             transform: Transform::Normal,
             description: String::new(),
+            edid: String::new(),
+            connector: String::new(),
             display: None,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
+            adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         };
         let panicked = std::panic::catch_unwind(move || squashed.described())
             .expect_err("a negative height must not be described to the chrome");
@@ -1161,9 +1298,13 @@ mod tests {
             scale: -2.0,
             transform: Transform::Normal,
             description: String::new(),
+            edid: String::new(),
+            connector: String::new(),
             display: None,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
+            adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         };
         let panicked = std::panic::catch_unwind(move || inverted.described())
             .expect_err("a negative density must not be described to the chrome");
@@ -1339,9 +1480,13 @@ mod tests {
             scale: 1.0,
             transform: Transform::Normal,
             description: String::new(),
+            edid: String::new(),
+            connector: String::new(),
             display: None,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
+            adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         };
 
         let panicked = std::panic::catch_unwind(move || past_the_end.bounds())
@@ -1450,6 +1595,9 @@ mod tests {
                     size: (2880, 1920),
                     physical_mm: (597, 336),
                     refresh_mhz: 59_997,
+                    modes: Vec::new(),
+                    adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
                 Display {
                     id: 2,
@@ -1459,6 +1607,9 @@ mod tests {
                     size: (1920, 1080),
                     physical_mm: (0, 0),
                     refresh_mhz: 0,
+                    modes: Vec::new(),
+                    adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
             ],
             &unspelled(),
@@ -1476,11 +1627,15 @@ mod tests {
                     transform: Transform::Normal,
                     // A laptop panel has an EDID name; a projector has none.
                     description: "BOE NE135A1M-NY1".into(),
+                    edid: "BOE NE135A1M-NY1".into(),
+                    connector: String::new(),
                     display: Some(1),
                     // The panel's values pass through, and so do the second
                     // display's zeros.
                     physical_mm: (597, 336),
                     refresh_mhz: 59_997,
+                    adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
                 Advertised {
                     logical: (1920, 1080),
@@ -1490,9 +1645,13 @@ mod tests {
                     scale: 1.0,
                     transform: Transform::Normal,
                     description: String::new(),
+                    edid: String::new(),
+                    connector: String::new(),
                     display: Some(2),
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                    adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
             ]
         );
@@ -1513,6 +1672,9 @@ mod tests {
             size: (2880, 1920),
             physical_mm: (597, 336),
             refresh_mhz: 59_997,
+            modes: Vec::new(),
+            adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         }]
     }
 
@@ -1562,7 +1724,7 @@ mod tests {
         "name": "presenting",
         "displays": [
           {{ "display": "{PROJECTOR_CONNECTOR}", "position": [0, 0] }},
-          {{ "display": "{LAPTOP_PANEL}", "enabled": false }}
+          {{ "display": "eDP-1", "enabled": false }}
         ]
       }}
     ]
@@ -1608,6 +1770,9 @@ mod tests {
                 size: (1920, 1080),
                 physical_mm: (0, 0),
                 refresh_mhz: 0,
+                modes: Vec::new(),
+                adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             },
         ]
     }
@@ -1762,9 +1927,13 @@ mod tests {
                     // From the engine's reading; a profile does not rename a
                     // display.
                     description: DESK_MONITOR.into(),
+                    edid: DESK_MONITOR.into(),
+                    connector: String::new(),
                     display: Some(2),
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                    adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
                 Advertised {
                     logical: (1920, 1280),
@@ -1774,9 +1943,13 @@ mod tests {
                     scale: 1.5,
                     transform: Transform::Normal,
                     description: LAPTOP_PANEL.into(),
+                    edid: LAPTOP_PANEL.into(),
+                    connector: String::new(),
                     display: Some(1),
                     physical_mm: (597, 336),
                     refresh_mhz: 59_997,
+                    adaptive_sync: AdaptiveSync::Unsupported,
+                    hdr: Default::default(),
                 },
             ]
         );
@@ -1809,6 +1982,11 @@ mod tests {
                         position: (0, 0),
                         size: (900, 1600),
                     }),
+                    mode: None,
+                    refresh_mhz: None,
+                    adaptive_sync: false,
+                    hdr: false,
+                    sdr_white: domicile_config::DEFAULT_SDR_WHITE,
                 },
                 Connector {
                     id: 1,
@@ -1822,8 +2000,191 @@ mod tests {
                         position: (0, 1920),
                         size: (1920, 1280),
                     }),
+                    mode: None,
+                    refresh_mhz: None,
+                    adaptive_sync: false,
+                    hdr: false,
+                    sdr_white: domicile_config::DEFAULT_SDR_WHITE,
                 },
             ]
+        );
+    }
+
+    /// The laptop, offering a smaller mode at a faster rate than its native
+    /// one.
+    fn offering_two_modes() -> Vec<Display> {
+        plugged_in()
+            .into_iter()
+            .map(|display| Display {
+                modes: vec![
+                    Mode {
+                        size: (2880, 1920),
+                        refresh_mhz: 59_997,
+                    },
+                    Mode {
+                        size: (1920, 1280),
+                        refresh_mhz: 120_000,
+                    },
+                ],
+                ..display
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_profile_asks_the_engine_for_a_mode_and_advertises_what_it_lit() {
+        let fast = output(
+            r#"{ "output": { "profiles": [{ "name": "fast",
+                  "displays": [{ "display": "drm-1", "mode": [1920, 1280], "refresh": 120 }] }] } }"#,
+        );
+        let asked = Screens::nested()
+            .replugged_into(&offering_two_modes(), &fast, &unspelled(), &[])
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        assert_eq!(
+            asked
+                .scanout()
+                .iter()
+                .map(|connector| (connector.mode, connector.refresh_mhz))
+                .collect::<Vec<_>>(),
+            vec![(Some((1920, 1280)), Some(120_000))],
+            "the engine is asked for the mode and the rate"
+        );
+        assert_eq!(
+            asked
+                .outputs()
+                .map(|output| output.mode)
+                .collect::<Vec<_>>(),
+            vec![(1920, 1280)],
+            "the desktop is laid out at the mode asked for"
+        );
+
+        // The engine reports the same monitor at the new mode and rate.
+        let lit: Vec<Display> = offering_two_modes()
+            .into_iter()
+            .map(|display| Display {
+                size: (1920, 1280),
+                refresh_mhz: 120_000,
+                ..display
+            })
+            .collect();
+        let after = asked
+            .replugged_into(&lit, &fast, &unspelled(), &[])
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        assert_eq!(
+            after
+                .outputs()
+                .map(|output| (output.mode, output.refresh_mhz, output.logical))
+                .collect::<Vec<_>>(),
+            vec![((1920, 1280), 120_000, (1920, 1280))],
+            "wl_output and xdg_output state the mode and rate the engine lit"
+        );
+        assert_eq!(
+            Screens::nested()
+                .replugged_into(&plugged_in(), &output("{}"), &unspelled(), &[])
+                .expect("no profile cannot fail to apply")
+                .expect("the engine defines an undescribed desktop")
+                .rearranged_into(&after)
+                .slots,
+            vec![Slot::Kept(0)],
+            "a monitor that changed mode keeps its wl_output"
+        );
+    }
+
+    #[test]
+    fn a_profile_asks_for_adaptive_sync_and_the_desktop_says_whether_it_took() {
+        let smooth = output(
+            r#"{ "output": { "profiles": [{ "name": "smooth",
+                  "displays": [{ "display": "drm-1", "adaptive_sync": true }] }] } }"#,
+        );
+        let asked = Screens::nested()
+            .replugged_into(&plugged_in(), &smooth, &unspelled(), &[])
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        assert!(
+            asked.scanout()[0].adaptive_sync,
+            "the engine is asked for it"
+        );
+
+        // The engine reports whether the hardware took it.
+        let lit: Vec<Display> = plugged_in()
+            .into_iter()
+            .map(|display| Display {
+                adaptive_sync: AdaptiveSync::On,
+                ..display
+            })
+            .collect();
+        let after = asked
+            .replugged_into(&lit, &smooth, &unspelled(), &[])
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        let output = after.outputs().next().expect("the laptop's output");
+        assert_eq!(output.adaptive_sync, AdaptiveSync::On);
+        assert_eq!(output.described().adaptive_sync, WireAdaptiveSync::On);
+        assert_ne!(
+            asked.outputs().next().map(|output| output.adaptive_sync),
+            Some(AdaptiveSync::On),
+            "the desktop changed, so the chrome is told"
+        );
+    }
+
+    #[test]
+    fn a_profile_asks_for_hdr_and_the_desktop_says_whether_it_took() {
+        let bright = output(
+            r#"{ "output": { "profiles": [{ "name": "bright",
+                  "displays": [{ "display": "drm-1", "hdr": true, "sdr_white": 240 }] }] } }"#,
+        );
+        let asked = Screens::nested()
+            .replugged_into(&plugged_in(), &bright, &unspelled(), &[])
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        assert!(asked.scanout()[0].hdr, "the engine is asked for it");
+        assert_eq!(asked.scanout()[0].sdr_white, 240);
+
+        // The engine reports whether the panel took it.
+        let on = Hdr {
+            state: HdrState::On,
+            max_luminance: 600,
+            max_average_luminance: 350,
+            min_luminance: 500,
+            sdr_white: 240,
+        };
+        let lit: Vec<Display> = plugged_in()
+            .into_iter()
+            .map(|display| Display { hdr: on, ..display })
+            .collect();
+        let after = asked
+            .replugged_into(&lit, &bright, &unspelled(), &[])
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        assert_eq!(after.outputs().next().map(|output| output.hdr), Some(on));
+        let lit_output = after.outputs().next().expect("one display");
+        assert_eq!(after.hdr_of(&lit_output.name), on);
+        assert_eq!(
+            after.hdr_for(Some(lit_output.bounds())),
+            on,
+            "a window on it is in HDR"
+        );
+        assert_eq!(
+            after.hdr_for(None),
+            Hdr::default(),
+            "a window on no display yet is in SDR"
+        );
+        let told = after
+            .outputs()
+            .next()
+            .expect("the laptop's output")
+            .described();
+        assert_eq!(
+            (told.hdr, told.peak_luminance, told.sdr_white),
+            (DisplayHdr::On, 600, 240),
+            "the shell sees it too"
+        );
+        assert_ne!(
+            asked.outputs().next().map(|output| output.hdr),
+            Some(on),
+            "the desktop changed, so clients are told"
         );
     }
 
@@ -1936,9 +2297,54 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_monitor_answers_to_its_connector() {
+        let screens = Screens::from_the_engine(&panel_and_projector(), &unspelled(), &[]);
+
+        assert_eq!(
+            screens
+                .outputs()
+                .map(|output| output.monitor().names)
+                .collect::<Vec<_>>(),
+            vec![
+                vec![
+                    "drm-1".to_string(),
+                    "eDP-1".to_string(),
+                    LAPTOP_PANEL.to_string()
+                ],
+                vec![PROJECTOR_CONNECTOR.to_string()],
+            ]
+        );
+    }
+
     /// A table that names the desk monitor's maker but not the laptop panel's.
     fn desk_vendors() -> Vendors {
         Vendors::listed_in("DEL\tDell Inc.\n")
+    }
+
+    #[test]
+    fn settings_hears_every_name_a_profile_can_call_a_monitor_by() {
+        // Settings matches a profile's `display` against these, so either
+        // spelling of the maker finds the monitor.
+        let screens = Screens::from_the_engine(&two_plugged_in(), &desk_vendors(), &[]);
+        let monitors: Vec<MonitorInfo> = screens.outputs().map(Advertised::monitor).collect();
+        assert_eq!(
+            monitors
+                .iter()
+                .map(|monitor| monitor.names.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                vec!["drm-1".to_string(), LAPTOP_PANEL.to_string(),],
+                vec![
+                    "drm-2".to_string(),
+                    DESK_MONITOR.to_string(),
+                    format!("Dell Inc.{}", &DESK_MONITOR[3..]),
+                ],
+            ]
+        );
+        assert!(monitors
+            .iter()
+            .all(|monitor| monitor.hdr == DisplayHdr::Unsupported));
     }
 
     /// No `pnp.ids` table, as in every test except the two above.
@@ -2002,6 +2408,9 @@ mod tests {
                 size: (2880, 1920),
                 physical_mm: (597, 336),
                 refresh_mhz: 59_997,
+                modes: Vec::new(),
+                adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             },
             Display {
                 id: 2,
@@ -2011,6 +2420,9 @@ mod tests {
                 size: (1920, 1080),
                 physical_mm: (0, 0),
                 refresh_mhz: 0,
+                modes: Vec::new(),
+                adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             },
         ]
     }
@@ -2055,6 +2467,9 @@ mod tests {
             size: (1920, 1080),
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: 60_000,
+            modes: Vec::new(),
+            adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         }
     }
 
@@ -2093,9 +2508,13 @@ mod tests {
                 scale: 1.0,
                 transform: Transform::Normal,
                 description: "Living Room TV".into(),
+                edid: "Living Room TV".into(),
+                connector: "virtual-1".into(),
                 display: Some(VirtualDisplay::id_of(1)),
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: 60_000,
+                adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             })
         );
         assert_eq!(
@@ -2117,6 +2536,11 @@ mod tests {
                     position: (0, 0),
                     size: (1920, 1080),
                 }),
+                mode: None,
+                refresh_mhz: None,
+                adaptive_sync: false,
+                hdr: false,
+                sdr_white: domicile_config::DEFAULT_SDR_WHITE,
             })
         );
     }
@@ -2152,6 +2576,11 @@ mod tests {
                         position: (0, 1080),
                         size: (2880, 1920),
                     }),
+                    mode: None,
+                    refresh_mhz: None,
+                    adaptive_sync: false,
+                    hdr: false,
+                    sdr_white: domicile_config::DEFAULT_SDR_WHITE,
                 },
                 Connector {
                     id: VirtualDisplay::id_of(1),
@@ -2164,6 +2593,11 @@ mod tests {
                         position: (480, 0),
                         size: (1920, 1080),
                     }),
+                    mode: None,
+                    refresh_mhz: None,
+                    adaptive_sync: false,
+                    hdr: false,
+                    sdr_white: domicile_config::DEFAULT_SDR_WHITE,
                 },
             ]
         );
@@ -2198,6 +2632,9 @@ mod tests {
             size,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: 60_000,
+            modes: Vec::new(),
+            adaptive_sync: AdaptiveSync::Unsupported,
+            hdr: Default::default(),
         }
     }
 
@@ -2235,9 +2672,13 @@ mod tests {
                 scale: 1.5,
                 transform: Transform::Normal,
                 description: "Pane".into(),
+                edid: "Pane".into(),
+                connector: "virtual-2".into(),
                 display: Some(VirtualDisplay::id_of(2)),
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: 60_000,
+                adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             })
         );
         assert_eq!(screens.size(), (2920, 1080));
@@ -2254,6 +2695,11 @@ mod tests {
                         position: (0, 0),
                         size: (1920, 1080),
                     }),
+                    mode: None,
+                    refresh_mhz: None,
+                    adaptive_sync: false,
+                    hdr: false,
+                    sdr_white: domicile_config::DEFAULT_SDR_WHITE,
                 },
                 Connector {
                     id: VirtualDisplay::id_of(2),
@@ -2265,6 +2711,11 @@ mod tests {
                         position: (1920, 0),
                         size: (1000, 600),
                     }),
+                    mode: None,
+                    refresh_mhz: None,
+                    adaptive_sync: false,
+                    hdr: false,
+                    sdr_white: domicile_config::DEFAULT_SDR_WHITE,
                 },
             ]
         );
@@ -2301,6 +2752,11 @@ mod tests {
                 position: (500, 0),
                 size: (960, 540),
             }),
+            mode: None,
+            refresh_mhz: None,
+            adaptive_sync: false,
+            hdr: false,
+            sdr_white: domicile_config::DEFAULT_SDR_WHITE,
         };
         let near_the_top_left = (500.0 + 10.0, 20.0);
         assert_eq!(
@@ -2365,6 +2821,11 @@ mod tests {
                     position: (monitor.position.0, monitor.position.1 + 600),
                     size: monitor.size,
                 }),
+                mode: None,
+                refresh_mhz: None,
+                adaptive_sync: false,
+                hdr: false,
+                sdr_white: domicile_config::DEFAULT_SDR_WHITE,
             })
         );
         assert_eq!(
@@ -2452,10 +2913,14 @@ mod tests {
                 scale: 2.0,
                 transform: Transform::Normal,
                 description: String::new(),
+                edid: String::new(),
+                connector: String::new(),
                 display: None,
                 // A window has no physical size or refresh rate.
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: UNKNOWN_REFRESH_MHZ,
+                adaptive_sync: AdaptiveSync::Unsupported,
+                hdr: Default::default(),
             }]
         );
         assert_eq!(screens.size(), (1280, 800));

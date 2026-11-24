@@ -23,7 +23,7 @@ domicile_unittests.
  2 files changed, 27 insertions(+), 8 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
-index 8d229f6..48a4326 100644
+index ade0c05..a26dce1 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.cc
 +++ b/ui/ozone/platform/drm/host/drm_cursor.cc
 @@ -101,14 +101,6 @@ void DrmCursor::SetCursor(gfx::AcceleratedWidget window,
@@ -41,7 +41,7 @@ index 8d229f6..48a4326 100644
  }
  
  void DrmCursor::OnWindowAdded(gfx::AcceleratedWidget window,
-@@ -400,6 +392,8 @@ void DrmCursor::CrossLocked(const PointerCrossing& crossing)
+@@ -401,6 +393,8 @@ void DrmCursor::CrossLocked(const PointerCrossing& crossing)
  }
  
  void DrmCursor::SendCursorShowLocked() EXCLUSIVE_LOCKS_REQUIRED(lock_) {
@@ -50,7 +50,7 @@ index 8d229f6..48a4326 100644
    if (!cursor_ || cursor_->type() == CursorType::kNone) {
      SendCursorHideLocked();
      return;
-@@ -409,6 +403,30 @@ void DrmCursor::SendCursorShowLocked() EXCLUSIVE_LOCKS_REQUIRED(lock_) {
+@@ -410,6 +404,30 @@ void DrmCursor::SendCursorShowLocked() EXCLUSIVE_LOCKS_REQUIRED(lock_) {
                        cursor_->frame_delay());
  }
  

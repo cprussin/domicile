@@ -322,6 +322,67 @@ out="$(DOMICILE_TREE_WAIT=2 DOMICILE_TREE_POLL=1 DOMICILE_TREE_RECHECK=0 \
 contains "a check that cannot answer leaves the wait alone" "held after waiting 2s" "$out"
 
 echo
+echo "== a run waits for the tree at its pin rather than rebuilding another =="
+
+# A tree at another pin rebuilds from scratch, about four hours, while the run
+# holding this pin's tree is usually done within the hour. The nightly official
+# build of 2026-11-23 took the other tree a minute before this pin's came free.
+root="$(build_root 2)"
+carrying "$root" 0 aaaaaaa
+carrying "$root" 1 bbbbbbb
+DOMICILE_BUILD_ROOT="$root" "$LOCK_SH" take "$root/trees/tree-0/src" 'holder' >/dev/null 2>&1
+waiting_pick "$root" aaaaaaa 'pin waiter'
+waiter=$!
+# Until it waits: the pool takes seconds to start on a busy machine, and a
+# drop before then would let it take the tree without waiting.
+for _ in $(seq 60); do
+  [ -d "$root/.domicile-tree-waiter" ] && break
+  sleep 0.5
+done
+expect "it leaves the free tree at another pin alone while it waits" absent \
+  "$([ -d "$(lock_of "$root" tree-1)" ] && echo present || echo absent)"
+DOMICILE_BUILD_ROOT="$root" "$LOCK_SH" drop "$root/trees/tree-0/src" 'holder' >/dev/null
+wait "$waiter"
+expect "and takes the tree at its pin once it is dropped" "$root/trees/tree-0/src" \
+  "$(grep "^/" "$WORK/pin waiter" | tail -1)"
+contains "saying why it waited" "rather than rebuilding another" "$(cat "$WORK/pin waiter")"
+
+# The wait is bounded: past it, rebuilding beats waiting longer.
+root="$(build_root 2)"
+carrying "$root" 0 aaaaaaa
+carrying "$root" 1 bbbbbbb
+DOMICILE_BUILD_ROOT="$root" "$LOCK_SH" take "$root/trees/tree-0/src" 'holder' >/dev/null 2>&1
+out="$(DOMICILE_TREE_WAIT=2 DOMICILE_TREE_POLL=1 pick "$root" aaaaaaa 'impatient run')"
+expect "a run that waited its limit takes the tree at another pin" "$root/trees/tree-1/src" \
+  "$(printf '%s\n' "$out" | grep "^/" | tail -1)"
+contains "and warns that it rebuilds it" "took a tree at another pin" "$out"
+expect "and gives up the waiting place" absent \
+  "$([ -e "$root/.domicile-tree-waiter" ] && echo present || echo absent)"
+
+# Only one run waits (see above). A second run on the same pin rebuilds the
+# other tree rather than wait.
+root="$(build_root 2)"
+carrying "$root" 0 aaaaaaa
+carrying "$root" 1 bbbbbbb
+DOMICILE_BUILD_ROOT="$root" "$LOCK_SH" take "$root/trees/tree-0/src" 'holder' >/dev/null 2>&1
+mkdir "$root/.domicile-tree-waiter"
+echo 'first waiter' >"$root/.domicile-tree-waiter/owner"
+touch "$root/.domicile-tree-waiter/alive"
+out="$(DOMICILE_TREE_WAIT=20 DOMICILE_TREE_POLL=1 pick "$root" aaaaaaa 'second run')"
+expect "with a run already waiting, it takes the tree at another pin at once" \
+  "$root/trees/tree-1/src" "$(printf '%s\n' "$out" | grep "^/" | tail -1)"
+contains "naming the run that waits" "first waiter" "$out"
+
+# With no tree at the pin there is nothing to wait for.
+root="$(build_root 2)"
+carrying "$root" 0 bbbbbbb
+carrying "$root" 1 ccccccc
+DOMICILE_BUILD_ROOT="$root" "$LOCK_SH" take "$root/trees/tree-0/src" 'holder' >/dev/null 2>&1
+out="$(DOMICILE_TREE_WAIT=20 DOMICILE_TREE_POLL=1 pick "$root" aaaaaaa 'new pin')"
+expect "a run on a pin no tree carries takes a free tree at once" \
+  "$root/trees/tree-1/src" "$out"
+
+echo
 echo "== a tree held by a run that is over is cleared =="
 
 # A runner shut down mid-build never runs its drop step, and the tree stays
@@ -515,6 +576,124 @@ out="$(pick "$root" aaaaaaa 'new run')"
 expect "a run holding the old single lock blocks every pick" refused \
   "$(case "$out" in (*::error::*) echo refused ;; (*) echo "$out" ;; esac)"
 contains "and the refusal names it" "old run" "$out"
+
+echo
+echo "== after a pin roll, a built tree is copied over a stale one =="
+
+# After a roll every tree but one is at the old pin, and the next run that
+# lands on one rebuilds Chromium from scratch (4h50m on 2026-11-23). Copying
+# the built tree over it costs minutes with block cloning.
+refresh() { # root, owner, [copy command]
+  local out
+  if out="$(DOMICILE_BUILD_ROOT="$1" DOMICILE_TREE_COPY="${3:-cp -a}" \
+      "$POOL_SH" refresh "$1/trees/tree-0/src" "$2" 2>&1)"; then
+    printf 'ok\n%s\n' "$out"
+  else
+    printf 'refused\n%s\n' "$out"
+  fi
+}
+held() { # root, slot, owner
+  DOMICILE_BUILD_ROOT="$1" "$LOCK_SH" take "$1/trees/tree-$2/src" "$3" >/dev/null 2>&1
+}
+freed() { # root, slot
+  if [ -d "$1/.domicile-tree-lock-tree-$2" ]; then echo held; else echo free; fi
+}
+
+root="$(build_root 3)"
+carrying "$root" 0 newpin1
+echo built >"$root/trees/tree-0/src/out-marker"
+echo series >"$root/trees/tree-0/.domicile-series-stamp"
+: >"$root/trees/tree-0/.domicile-built"
+echo newpin1 >"$root/trees/tree-0/.domicile-gen-pin"
+# siso's saved state names files by absolute path. This stand-in exports and
+# imports it verbatim, so the test sees the rewrite between the two.
+mkdir -p "$root/trees/tree-0/src/third_party/siso/cipd" "$root/trees/tree-0/src/out/Official"
+cat >"$root/trees/tree-0/src/third_party/siso/cipd/siso" <<'SISO'
+#!/usr/bin/env bash
+[ "$1 $2 $3" = "fs export -C" ] && exec cat "$4/.siso_fs_state"
+[ "$1 $2 $3" = "fs import -C" ] && exec cat >"$4/.siso_fs_state"
+exit 2
+SISO
+chmod +x "$root/trees/tree-0/src/third_party/siso/cipd/siso"
+tree0="$(cd "$root/trees/tree-0/src" && pwd -P)"
+printf '{"name": "%s/a.cc"}\n{"name": "%s"}\n{"name": "%s-other/b.cc"}\n' \
+  "$tree0" "$tree0" "$tree0" >"$root/trees/tree-0/src/out/Official/.siso_fs_state"
+carrying "$root" 1 oldpin1
+used_at "$root" 1 60
+echo stale >"$root/trees/tree-1/src/out-marker"
+carrying "$root" 2 oldpin1
+used_at "$root" 2 99999
+echo stale >"$root/trees/tree-2/src/out-marker"
+held "$root" 0 'release run'
+out="$(refresh "$root" 'release run')"
+expect "a refresh succeeds" ok "$(status "$out")"
+expect "it copies into the least recently used stale tree" built \
+  "$(cat "$root/trees/tree-2/src/out-marker")"
+expect "and leaves the newer stale tree alone" stale \
+  "$(cat "$root/trees/tree-1/src/out-marker")"
+expect "the copy carries the pin" newpin1 "$(cat "$root/trees/tree-2/.domicile-synced-pin")"
+expect "and the series stamp" series "$(cat "$root/trees/tree-2/.domicile-series-stamp")"
+expect "and the built stamp" yes "$([ -e "$root/trees/tree-2/.domicile-built" ] && echo yes)"
+expect "and no copy is left half-made" no \
+  "$([ -e "$root/trees/tree-2/src.copying" ] || [ -e "$root/trees/tree-2/src.old" ] && echo yes || echo no)"
+expect "the copied-into tree is unlocked after" free "$(freed "$root" 2)"
+expect "the run's own tree stays locked for its drop step" held "$(freed "$root" 0)"
+contains "and it says what it did" "copied tree-0 into tree-2" "$out"
+tree2="$(cd "$root/trees/tree-2/src" && pwd -P)"
+expect "siso's saved state in the copy names the copy's files" \
+  "{\"name\": \"$tree2/a.cc\"}|{\"name\": \"$tree2\"}|{\"name\": \"$tree0-other/b.cc\"}" \
+  "$(paste -sd'|' "$root/trees/tree-2/src/out/Official/.siso_fs_state")"
+expect "and the source's state is untouched" "$tree0/a.cc" \
+  "$(head -1 "$root/trees/tree-0/src/out/Official/.siso_fs_state" | sed 's/.*: "\(.*\)"}/\1/')"
+contains "and it says it moved it" "moved siso's state in out/Official" "$out"
+
+out="$(refresh "$root" 'release run')"
+expect "a second refresh copies into the remaining stale tree" built \
+  "$(cat "$root/trees/tree-1/src/out-marker")"
+out="$(refresh "$root" 'release run')"
+expect "with every tree at the pin, there is nothing to copy" ok "$(status "$out")"
+contains "and it says so" "nothing to copy into" "$out"
+
+# A tree another run holds may be mid-build: copying over it would change its
+# files under the compiler.
+root="$(build_root 2)"
+carrying "$root" 0 newpin1
+carrying "$root" 1 oldpin1
+echo stale >"$root/trees/tree-1/src/out-marker"
+held "$root" 0 'release run'
+held "$root" 1 'pr run'
+out="$(refresh "$root" 'release run')"
+expect "a held stale tree is not copied over" stale "$(cat "$root/trees/tree-1/src/out-marker")"
+expect "and its lock stays its holder's" "pr run" "$(cat "$root/.domicile-tree-lock-tree-1/owner")"
+
+# The source must stay still while it is read.
+root="$(build_root 2)"
+carrying "$root" 0 newpin1
+carrying "$root" 1 oldpin1
+out="$(refresh "$root" 'release run')"
+expect "a run that does not hold its own tree is refused" refused "$(status "$out")"
+
+# Without block cloning a copy is another 137G, which /build does not have.
+root="$(build_root 2)"
+carrying "$root" 0 newpin1
+carrying "$root" 1 oldpin1
+echo stale >"$root/trees/tree-1/src/out-marker"
+held "$root" 0 'release run'
+out="$(refresh "$root" 'release run' false)"
+expect "a filesystem that cannot clone is a warning, not a failure" ok "$(status "$out")"
+contains "and the warning says the tree stays" "stays at oldpin1" "$out"
+expect "and the stale tree is untouched" stale "$(cat "$root/trees/tree-1/src/out-marker")"
+expect "and unlocked" free "$(freed "$root" 1)"
+
+# A run from a workflow older than per-tree locks may be in any tree.
+root="$(build_root 2)"
+carrying "$root" 0 newpin1
+carrying "$root" 1 oldpin1
+echo stale >"$root/trees/tree-1/src/out-marker"
+held "$root" 0 'release run'
+mkdir "$root/.domicile-tree-lock"
+out="$(refresh "$root" 'release run')"
+expect "the old single lock stops a copy" stale "$(cat "$root/trees/tree-1/src/out-marker")"
 
 echo
 if [ "$FAILED" -eq 0 ]; then

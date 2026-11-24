@@ -1,6 +1,7 @@
 //! xdg-shell and xdg-activation: the windows and popups clients create, and what
 //! they ask of them.
 
+use smithay::input::pointer::MotionEvent;
 use smithay::output::Output;
 use smithay::reexports::{
     wayland_protocols::xdg::shell::server::xdg_toplevel,
@@ -23,7 +24,7 @@ use smithay::wayland::{
 use smithay::{delegate_xdg_activation, delegate_xdg_shell};
 use tracing::debug;
 
-use domicile_protocol::WindowRequest;
+use domicile_protocol::{ResizeEdges, WindowRequest};
 
 use crate::activation;
 use crate::chrome_hub::broadcast_focus_request;
@@ -60,7 +61,8 @@ impl XdgShellHandler for DomicileCompositor {
         let wl_surface = surface.wl_surface().clone();
         {
             let mut host = self.hub.host.lock().unwrap();
-            let app_id = host.app_created(owner_of(surface.wl_surface()));
+            let listing = self.foreign_toplevels.listing();
+            let app_id = host.app_created(owner_of(surface.wl_surface()), listing.identifier());
             debug!(%app_id, "toplevel created -> Host::app_created");
             // Enter every output for now; the chrome has not placed the window.
             // Some toolkits (GLFW, kitty) wait for this before drawing.
@@ -73,7 +75,7 @@ impl XdgShellHandler for DomicileCompositor {
                 (app_id.clone(), Role::Toplevel(surface.clone())),
             );
             self.unannounced.insert(app_id.clone());
-            self.foreign_toplevels.opened(&app_id);
+            self.foreign_toplevels.opened(&app_id, listing);
             self.toplevels.push((app_id, surface));
         }
         self.the_running_apps_changed();
@@ -102,6 +104,8 @@ impl XdgShellHandler for DomicileCompositor {
                 .title
                 .clone()
         });
+        // The title itself is left out: it can say what someone is reading.
+        debug!(%app_id, "a window renamed itself");
         // Separate `let` so the host guard drops at the `;`, before the
         // broadcast. Inside the `if let` it would be held for the whole body.
         let titled = self
@@ -134,6 +138,7 @@ impl XdgShellHandler for DomicileCompositor {
                     .clone()
             })
             .expect("Smithay calls this only after the client set an app id");
+            debug!(%app_id, %desktop_id, "a window named its app");
             self.foreign_toplevels.named(&app_id, &desktop_id);
             // Separate `let` so the host guard drops before the broadcast, as
             // in `title_changed`.
@@ -157,6 +162,7 @@ impl XdgShellHandler for DomicileCompositor {
             return;
         };
         let parent = surface.parent().and_then(|parent| self.app_id_of(&parent));
+        debug!(%app_id, ?parent, "a window became a dialog for another, or stopped being one");
         // Separate `let` so the host guard drops before the broadcast, as in
         // `title_changed`.
         let parented = self
@@ -189,6 +195,7 @@ impl XdgShellHandler for DomicileCompositor {
             .position(|(_, t)| t.wl_surface() == surface.wl_surface())
         {
             let (app_id, _) = self.toplevels.remove(pos);
+            debug!(%app_id, surface = ?surface.wl_surface().id(), "toplevel destroyed");
             self.foreign_toplevels.closed(&app_id);
             self.by_surface.remove(surface.wl_surface());
             self.forget(&app_id);
@@ -220,6 +227,11 @@ impl XdgShellHandler for DomicileCompositor {
         if let Some(at) = self.grabbing.iter().position(|popup| *popup == surface) {
             let root = self.window_under(&surface);
             self.grabbing.remove(at);
+            debug!(
+                ?root,
+                menus = self.grabbing.len(),
+                "a grabbing menu went; the keyboard goes to the menu or window under it"
+            );
             let next = self
                 .grabbing
                 .last()
@@ -235,17 +247,23 @@ impl XdgShellHandler for DomicileCompositor {
         // Configure immediately: a popup cannot attach a buffer until
         // configured, and an unconfigured menu hangs the client silently.
         let geometry = self.kept_on_screen(&surface, positioner);
+        debug!(
+            surface = ?surface.wl_surface().id(),
+            window = ?self.window_under(&surface),
+            asked = ?positioner.get_geometry(),
+            placed = ?geometry,
+            "a new popup"
+        );
         surface.with_pending_state(|state| {
             state.geometry = geometry;
             state.positioner = positioner;
         });
         if let Err(err) = surface.send_configure() {
-            tracing::warn!(%err, "could not configure a popup");
+            tracing::error!(%err, "could not configure a popup");
         }
-        // Enter displays by the rule
-        // [`enter_the_displays_each_window_is_on`](Self::enter_the_displays_each_window_is_on)
-        // applies to popups. Nothing else moved.
-        self.place_window(surface.wl_surface(), None);
+        // On the displays its window is on, at that window's scale. Nothing
+        // else moved.
+        self.place_window(surface.wl_surface(), self.popup_bounds(&surface));
     }
 
     fn reposition_request(
@@ -255,14 +273,26 @@ impl XdgShellHandler for DomicileCompositor {
         token: u32,
     ) {
         let geometry = self.kept_on_screen(&surface, positioner);
+        debug!(
+            surface = ?surface.wl_surface().id(),
+            window = ?self.window_under(&surface),
+            placed = ?geometry,
+            token,
+            "a popup asked to move"
+        );
         surface.with_pending_state(|state| {
             state.geometry = geometry;
             state.positioner = positioner;
         });
         surface.send_repositioned(token);
+        // It, and any menu opened from it, may be on another display now.
+        self.place_the_popups_over(&self.window_under_menus(surface.wl_surface()));
     }
 
-    fn move_request(&mut self, _surface: ToplevelSurface, _seat: wl_seat::WlSeat, _serial: Serial) {
+    fn move_request(&mut self, surface: ToplevelSurface, _seat: wl_seat::WlSeat, serial: Serial) {
+        if self.hand_the_press_to_the_shell(&surface, serial) {
+            self.pass_on_a_window_request(&surface, WindowRequest::Move);
+        }
     }
 
     fn maximize_request(&mut self, surface: ToplevelSurface) {
@@ -289,13 +319,25 @@ impl XdgShellHandler for DomicileCompositor {
         self.pass_on_a_window_request(&surface, WindowRequest::Unfullscreen);
     }
 
+    fn minimize_request(&mut self, surface: ToplevelSurface) {
+        self.pass_on_a_window_request(&surface, WindowRequest::Minimize);
+    }
+
     fn resize_request(
         &mut self,
-        _surface: ToplevelSurface,
+        surface: ToplevelSurface,
         _seat: wl_seat::WlSeat,
-        _serial: Serial,
-        _edges: xdg_toplevel::ResizeEdge,
+        serial: Serial,
+        edges: xdg_toplevel::ResizeEdge,
     ) {
+        // `None` pulls no edge, so there is nothing to resize.
+        let Some(edges) = resize_edges_of(edges) else {
+            debug!(?edges, "a resize request pulling no edge -> dropped");
+            return;
+        };
+        if self.hand_the_press_to_the_shell(&surface, serial) {
+            self.pass_on_a_window_request(&surface, WindowRequest::Resize { edges });
+        }
     }
 
     /// A menu grabbing the keyboard and pointer until dismissed.
@@ -306,6 +348,12 @@ impl XdgShellHandler for DomicileCompositor {
         if !self.grabbing.contains(&surface) {
             self.grabbing.push(surface.clone());
         }
+        debug!(
+            surface = ?surface.wl_surface().id(),
+            window = ?self.window_under(&surface),
+            menus = self.grabbing.len(),
+            "a menu grabbed the keyboard"
+        );
         let keyboard = self.seat.get_keyboard().unwrap();
         let serial = SERIAL_COUNTER.next_serial();
         keyboard.set_focus(self, Some(surface.wl_surface().clone()), serial);
@@ -392,6 +440,50 @@ impl DomicileCompositor {
     /// The shell decides and sets states with `set_window_states`. xdg-shell
     /// requires the configure even when nothing changed. Before the first
     /// configure, that configure is the answer.
+    /// Whether `serial` is the press `surface`'s client still holds, as
+    /// `xdg_toplevel.move` and `resize` must name. If it is, the client loses
+    /// the pointer: it is told the pointer left and gets no release, as sway
+    /// hands its seat to the move, and the shell runs the drag. See
+    /// `docs/WRITING-A-SHELL.md#window-requests`.
+    ///
+    /// The shell takes the drag by capturing the pointer, so the window's
+    /// element stops forwarding motion. A shell that ignores the request leaves
+    /// the element forwarding it, and the client gets the pointer back with no
+    /// button down. Either way the release is dropped; see
+    /// `ClientRequest::PointerButton`.
+    fn hand_the_press_to_the_shell(&mut self, surface: &ToplevelSurface, serial: Serial) -> bool {
+        let pointer = self.seat.get_pointer().unwrap();
+        let held_by_this_client = pointer
+            .grab_start_data()
+            .and_then(|grab| grab.focus)
+            .is_some_and(|(focus, _)| focus.id().same_client_as(&surface.wl_surface().id()));
+        if !pointer.has_grab(serial) || !held_by_this_client || self.held_buttons.is_empty() {
+            debug!(
+                ?serial,
+                "a move or resize with no press of its own held -> dropped"
+            );
+            return false;
+        }
+        self.held_buttons.clear();
+        self.pointer_app = None;
+        self.pointer_surface = None;
+        self.offer_pointer_constraint();
+        let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
+        pointer.unset_grab(self, serial, time);
+        let location = pointer.current_location();
+        pointer.motion(
+            self,
+            None,
+            &MotionEvent {
+                location,
+                serial: SERIAL_COUNTER.next_serial(),
+                time,
+            },
+        );
+        pointer.frame(self);
+        true
+    }
+
     fn pass_on_a_window_request(&self, surface: &ToplevelSurface, request: WindowRequest) {
         // `None` for the chrome's own window, which is never announced.
         if let Some(app_id) = self.app_id_of(surface.wl_surface()) {
@@ -401,5 +493,21 @@ impl DomicileCompositor {
         if surface.is_initial_configure_sent() {
             surface.send_configure();
         }
+    }
+}
+
+/// `edges` as the protocol names them, or `None` for an edge that pulls
+/// nothing.
+fn resize_edges_of(edges: xdg_toplevel::ResizeEdge) -> Option<ResizeEdges> {
+    match edges {
+        xdg_toplevel::ResizeEdge::Top => Some(ResizeEdges::Top),
+        xdg_toplevel::ResizeEdge::Bottom => Some(ResizeEdges::Bottom),
+        xdg_toplevel::ResizeEdge::Left => Some(ResizeEdges::Left),
+        xdg_toplevel::ResizeEdge::Right => Some(ResizeEdges::Right),
+        xdg_toplevel::ResizeEdge::TopLeft => Some(ResizeEdges::TopLeft),
+        xdg_toplevel::ResizeEdge::TopRight => Some(ResizeEdges::TopRight),
+        xdg_toplevel::ResizeEdge::BottomLeft => Some(ResizeEdges::BottomLeft),
+        xdg_toplevel::ResizeEdge::BottomRight => Some(ResizeEdges::BottomRight),
+        _ => None,
     }
 }

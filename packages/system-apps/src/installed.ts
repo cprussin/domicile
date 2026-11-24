@@ -14,7 +14,9 @@ import { allOk, orAbsent } from "./results";
 type EntryFile = { id: string; path: string };
 
 /**
- * Every application in `applications/` under `dataDirs`, unordered.
+ * Every application in `applications/` under `dataDirs`, unordered. A
+ * `Terminal` entry runs in `terminal`, the desk's (see `./terminal`), and is
+ * left out without one.
  *
  * `dataDirs` is highest priority first (see `./data-dirs`). An ID in an
  * earlier directory hides the same ID in later ones, even when the earlier
@@ -24,6 +26,7 @@ type EntryFile = { id: string; path: string };
 export const installedApps = async (
   domicile: AppsDesktop,
   dataDirs: readonly string[],
+  terminal?: readonly string[],
 ): Promise<Result<DesktopEntry[], SystemError>> => {
   const listed = allOk(
     await Promise.all(
@@ -34,7 +37,9 @@ export const installedApps = async (
     await listed.andThenAsync(async (dirs) =>
       allOk(
         await Promise.all(
-          firstOfEach(dirs.flat()).map((file) => read(domicile, file)),
+          firstOfEach(dirs.flat()).map((file) =>
+            read(domicile, file, true, terminal),
+          ),
         ),
       ),
     )
@@ -48,12 +53,13 @@ export const installedApps = async (
 /**
  * The application whose ID is `id`, `NoDisplay` or not, or nothing if none
  * is usable. As `installedApps`, an ID in an earlier directory hides later
- * ones.
+ * ones, and a `Terminal` entry needs `terminal`.
  */
 export const installedApp = async (
   domicile: AppsDesktop,
   dataDirs: readonly string[],
   id: string,
+  terminal?: readonly string[],
 ): Promise<Result<Option<DesktopEntry>, SystemError>> =>
   await allOk(
     await Promise.all(
@@ -63,7 +69,7 @@ export const installedApp = async (
     const file = firstOfEach(dirs.flat()).find((each) => each.id === id);
     return file === undefined
       ? Promise.resolve(Ok(None<DesktopEntry>()))
-      : read(domicile, file, false);
+      : read(domicile, file, false, terminal);
   });
 
 /** Each ID's first file, in priority order. */
@@ -80,11 +86,12 @@ const firstOfEach = (files: readonly EntryFile[]): EntryFile[] => {
 const read = async (
   domicile: AppsDesktop,
   { id, path }: EntryFile,
-  shown = true,
+  shown: boolean,
+  terminal: readonly string[] | undefined,
 ) =>
   orAbsent(
     (await domicile.files.readText(path)).map((text) =>
-      parseDesktopEntry(id, text, shown),
+      parseDesktopEntry(id, text, shown, terminal),
     ),
     None<DesktopEntry>(),
   );

@@ -2,9 +2,11 @@ import type { Display } from "@domicile-desktop/component-library/display-source
 import { typedAddress } from "@domicile-desktop/manganese-address/typed-address";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { ClientWindow } from "@domicile-desktop/sdk/desktop/windows";
+import { logger } from "@domicile-desktop/sdk/logger";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import type { WindowRequest } from "@domicile-desktop/sdk/window-state";
 import { WindowRequestKind } from "@domicile-desktop/sdk/window-state";
+import { deskTerminal } from "@domicile-desktop/system-apps/terminal";
 import {
   useCallback,
   useEffect,
@@ -12,12 +14,16 @@ import {
   useMemo,
   useReducer,
   useRef,
+  useState,
 } from "react";
 import type { FloatingRules } from "./floating/floating-rules";
+import type { HandedDrag } from "./handed-drag";
+import { followPresses } from "./handed-drag";
 import { openCommand } from "./open-command";
 import type { PlacedScreen } from "./screens/screen-toward";
 import { appIdOf, appWindowId, browserIdOf } from "./window";
 import { windowChanges } from "./window-changes";
+import { describedAction, describedChange } from "./window-log";
 import { hearWindowRequests } from "./window-requests";
 import type { WindowAction, WindowState } from "./window-state";
 import {
@@ -43,7 +49,14 @@ export type Windows = WindowState & {
   act: (action: WindowAction) => void;
   /** The active window, floating or tiled. */
   activeId: string | undefined;
+  /**
+   * A client's move or resize of its window, from the press still held on
+   * it, for the window's grab to run. Cleared when that press ends.
+   */
+  handed: HandedDrag | undefined;
 };
+
+const log = logger("windows");
 
 /** No app runs in the background. One array, so the default never changes. */
 const NO_BACKGROUND_APPS: readonly string[] = [];
@@ -70,11 +83,21 @@ export const useWindows = (
   backgroundApps: readonly string[] = NO_BACKGROUND_APPS,
   openFile: typeof openCommand = openCommand,
 ): Windows => {
-  const [state, dispatch] = useReducer(reduceWindows, NO_WINDOWS);
+  const [state, dispatchUnlogged] = useReducer(reduceWindows, NO_WINDOWS);
+  // Every action, so `domicile set-log-level debug shell` says what the desk
+  // was asked to do and what it did. See `window-log.ts`.
+  const dispatch = useCallback((action: WindowAction) => {
+    log.debug(describedAction(action));
+    dispatchUnlogged(action);
+  }, []);
   // The state as last drawn, for `act` to read without depending on it. A new
   // `act` would re-add every listener that runs commands.
   const drawn = useRef(state);
   useLayoutEffect(() => {
+    const changed = describedChange(drawn.current, state);
+    if (changed !== undefined) {
+      log.debug(changed);
+    }
     drawn.current = state;
   }, [state]);
 
@@ -86,14 +109,14 @@ export const useWindows = (
   const act = useCallback(
     (action: WindowAction) => {
       dispatch(action);
-      if (action.kind === WindowActionKind.CommandExecuted) {
-        domicile.processes.launch(action.argv);
-      }
       if (action.kind === WindowActionKind.DeskLocked) {
         domicile.session.lock();
       }
       if (action.kind === WindowActionKind.ScreenshotTaken) {
         takeScreenshot(domicile);
+      }
+      if (action.kind === WindowActionKind.TerminalOpened) {
+        openTerminal(domicile);
       }
       if (action.kind === WindowActionKind.FileOpened) {
         domicile.processes.launch(openFile(action.path));
@@ -112,8 +135,13 @@ export const useWindows = (
           }
         }
       }
+      if (action.kind === WindowActionKind.TabDropped) {
+        domicile.browser.open(action.url);
+      }
       if (action.kind === WindowActionKind.BrowserOpened) {
-        if (action.isPrivate) {
+        if (action.profile !== undefined) {
+          domicile.browser.open(action.src, { profile: action.profile });
+        } else if (action.isPrivate) {
           domicile.browser.openPrivate(action.src);
         } else {
           domicile.browser.open(action.src);
@@ -143,7 +171,7 @@ export const useWindows = (
         );
       }
     },
-    [domicile, openFile],
+    [domicile, openFile, dispatch],
   );
 
   // The host's last window list, diffed against the next. A ref, not
@@ -193,39 +221,57 @@ export const useWindows = (
         stop();
       }
     };
-  }, [backgroundApps, domicile, floating]);
+  }, [backgroundApps, domicile, floating, dispatch]);
 
+  const [handed, setHanded] = useState<HandedDrag | undefined>(undefined);
   // Clients' requests, which the compositor reports without granting.
   useEffect(() => {
+    const presses = followPresses(() => {
+      setHanded(undefined);
+    });
     const hearing = hearWindowRequests(domicile, (request) => {
       const action = actionFor(request);
       if (action !== undefined) {
         dispatch(action);
       }
+      const press = presses.held();
+      // A move asked for after the press ended has nothing left to drag.
+      if (isADrag(request) && press !== undefined) {
+        setHanded({
+          press,
+          resizes: request.kind === WindowRequestKind.Resize,
+          window: appWindowId(request.appId),
+        });
+      }
     });
-    return hearing.stop;
-  }, [domicile]);
+    return () => {
+      hearing.stop();
+      presses.stop();
+    };
+  }, [domicile, dispatch]);
 
   // The desk the host described, which bounds where windows can go.
   useEffect(() => {
     if (displays !== undefined) {
       dispatch(Action.ScreensDescribed(placedOf(displays)));
     }
-  }, [displays]);
+  }, [displays, dispatch]);
 
   return useMemo(
     () => ({
       ...state,
       act,
       activeId: activeIdOf(state),
+      handed,
     }),
-    [act, state],
+    [act, handed, state],
   );
 };
 
 /**
  * What a client's request does. Fullscreen uses the requested display when
- * named. Windows tile, so maximizing changes nothing.
+ * named. Windows tile, so maximizing changes nothing, and nothing is ever
+ * minimized. A move or resize is the window's grab's to run; see `handed`.
  */
 const actionFor = (request: WindowRequest): WindowAction | undefined => {
   switch (request.kind) {
@@ -239,9 +285,17 @@ const actionFor = (request: WindowRequest): WindowAction | undefined => {
       return Action.PageFullscreened(appWindowId(request.appId), false);
     case WindowRequestKind.Maximize:
     case WindowRequestKind.Unmaximize:
+    case WindowRequestKind.Minimize:
+    case WindowRequestKind.Move:
+    case WindowRequestKind.Resize:
       return undefined;
   }
 };
+
+/** Whether a client asked the shell to drag its window from its press. */
+const isADrag = (request: WindowRequest): boolean =>
+  request.kind === WindowRequestKind.Move ||
+  request.kind === WindowRequestKind.Resize;
 
 /** The desk's displays as the screens the desktop is told of. */
 const placedOf = (displays: readonly Display[]): readonly PlacedScreen[] =>
@@ -249,6 +303,37 @@ const placedOf = (displays: readonly Display[]): readonly PlacedScreen[] =>
     box: { height: size[1], width: size[0], x: position[0], y: position[1] },
     name,
   }));
+
+/**
+ * Launches the terminal the desk's config names. A desk that names none has
+ * no terminal to open: Domicile has no default.
+ */
+const openTerminal = (domicile: Domicile) => {
+  deskTerminal(domicile)
+    .then((found) => {
+      found.match({
+        Err: (error) => {
+          // biome-ignore lint/suspicious/noConsole: surfacing a failed launch
+          console.error("The terminal could not be found", error);
+        },
+        Ok: (terminal) => {
+          terminal.match({
+            None: () => {
+              // biome-ignore lint/suspicious/noConsole: a binding with nothing to do
+              console.warn(
+                "No terminal to open: set `terminal` in the desk's config",
+              );
+            },
+            Some: (argv) => domicile.processes.launch(argv),
+          });
+        },
+      });
+    })
+    .catch((error: unknown) => {
+      // biome-ignore lint/suspicious/noConsole: surfacing a failed launch
+      console.error("The terminal could not be found", error);
+    });
+};
 
 /** Takes a screenshot, logging any failure but a dismissed dialog. */
 const takeScreenshot = (domicile: Pick<Domicile, "capture">) => {
@@ -274,16 +359,16 @@ const takeScreenshot = (domicile: Pick<Domicile, "capture">) => {
 };
 
 /**
- * The newest copy as a site or a search URL, or `undefined` when the clipboard
- * holds no text.
+ * The copy on the clipboard as a site or a search URL, or `undefined` when the
+ * clipboard holds no text.
  *
  * Reads the row's preview, so a long copy is cut short.
  */
 const clipboardUrl = (
   domicile: Pick<Domicile, "clipboard">,
 ): string | undefined => {
-  const newest = domicile.clipboard.entries?.[0];
-  return newest === undefined ? undefined : typedAddress(newest.preview)?.url;
+  const current = domicile.clipboard.entries?.find((entry) => entry.current);
+  return current === undefined ? undefined : typedAddress(current.preview)?.url;
 };
 
 /** Asks the compositor or the engine to close each window in `ids`. */

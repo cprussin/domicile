@@ -37,6 +37,12 @@ class Desk {
   // The desk's window in `context`, or null where it has none.
   virtual WindowController* WindowFor(content::BrowserContext* context) = 0;
 
+  // The window current to an extension function called from `context`: of
+  // `context`'s desk, or its private profile's too when `include_private`,
+  // the one whose tab last took focus. Null where there is no desk.
+  virtual WindowController* CurrentWindowFor(content::BrowserContext* context,
+                                             bool include_private) = 0;
+
   // The desk tab `tab_id` in `context`, with its window and index.
   virtual bool FindTab(int tab_id,
                        content::BrowserContext* context,
@@ -58,6 +64,8 @@ void Install(Desk& desk);
 
 // Each hook does nothing until Install.
 WindowController* WindowFor(content::BrowserContext* context);
+WindowController* CurrentWindowFor(content::BrowserContext* context,
+                                   bool include_private);
 bool FindTab(int tab_id,
              content::BrowserContext* context,
              WindowController** window,

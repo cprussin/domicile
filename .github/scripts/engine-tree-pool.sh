@@ -5,6 +5,7 @@
 #   .github/scripts/engine-tree-pool.sh compiles <pin>
 #   .github/scripts/engine-tree-pool.sh use  <pin>
 #   .github/scripts/engine-tree-pool.sh list
+#   .github/scripts/engine-tree-pool.sh refresh <chromium/src> <owner>
 #
 # Moving `CHROMIUM_PIN` forces a rebuild of about four hours, in both
 # directions. With several trees, pull requests on different pins each keep a
@@ -25,6 +26,7 @@ set -u
 
 usage() {
   echo "usage: $(basename "$0") <pick|compiles|use|list> [pin] [owner]" >&2
+  echo "       $(basename "$0") refresh <chromium/src> <owner>" >&2
   exit 2
 }
 
@@ -227,9 +229,13 @@ case "$action" in
     fi
 
     series="$("$STAMP_SH" identity)" || exit 1
-    take_best() {
+    # `pin` takes only a tree at this pin; `any` takes the best free tree.
+    take_best() { # pin|any
       local slot
       for slot in $(candidates "$pin" "$series"); do
+        if [ "$1" = pin ] && [ "$(slot_pin "$slot")" != "$pin" ]; then
+          continue
+        fi
         if take_slot "$slot" "$owner"; then
           touch "$(used_file "$slot")"
           printf '%s\n' "$slot/src"
@@ -238,10 +244,27 @@ case "$action" in
       done
       return 1
     }
+    some_tree_at_pin() {
+      local slot
+      for slot in $(usable); do
+        [ "$(slot_pin "$slot")" = "$pin" ] && return 0
+      done
+      return 1
+    }
     clear_finished
-    take_best && exit 0
+    # A tree at another pin rebuilds from scratch, about four hours. A run on
+    # this pin's tree is usually done within the hour, so wait for it. The
+    # nightly official build of 2026-11-23 took the other tree a minute before
+    # this pin's tree came free, and compiled for 4h50m.
+    want=any
+    if some_tree_at_pin; then
+      want=pin
+    fi
+    take_best "$want" && exit 0
 
-    # Every tree is held. Wait for one instead of failing.
+    # No tree that is worth having is free. Wait for one instead of failing.
+    # Waiting for this pin's tree falls back to any free tree when waiting is
+    # not possible or takes too long.
     #
     # Only one run waits. A waiting build holds one of crux's two runners, and
     # a tree is dropped only by its run's engine job, which needs a runner too.
@@ -266,7 +289,14 @@ case "$action" in
       echo
       echo "  rm -rf $("$LOCK_SH" path "$(usable | head -1)/src")"
     }
+    fall_back() {
+      [ "$want" = pin ] || return 1
+      take_best any || return 1
+      echo "::warning::$1, so this run took a tree at another pin and rebuilds it" >&2
+      return 0
+    }
     if [ "$WAIT" -le 0 ]; then
+      fall_back "every tree at $pin is held and this run cannot wait" && exit 0
       {
         echo "::error::every Chromium tree under $TREES is held, so this run has nowhere to build"
         holders
@@ -275,6 +305,7 @@ case "$action" in
     fi
     if ! mkdir "$WAITER" 2>/dev/null; then
       if [ -n "$(find "$WAITER" -newermt "-$WAITER_STALE seconds" 2>/dev/null)" ]; then
+        fall_back "every tree at $pin is held and '$(cat "$WAITER/owner" 2>/dev/null)' is already waiting" && exit 0
         {
           echo "::error::every Chromium tree under $TREES is held, and '$(cat "$WAITER/owner" 2>/dev/null)' is already waiting for one"
           echo "A second waiter would hold the runner a holder needs to drop its tree."
@@ -289,7 +320,11 @@ case "$action" in
     trap 'rm -rf "$WAITER"' EXIT
     printf '%s\n' "$owner" >"$WAITER/owner"
     touch "$WAITER/alive"
-    echo "every Chromium tree under $TREES is held; waiting up to ${WAIT}s for one" >&2
+    if [ "$want" = pin ]; then
+      echo "every Chromium tree at $pin is held; waiting up to ${WAIT}s for one rather than rebuilding another" >&2
+    else
+      echo "every Chromium tree under $TREES is held; waiting up to ${WAIT}s for one" >&2
+    fi
     waited=0
     asked=0
     cleared_at=0
@@ -318,11 +353,12 @@ case "$action" in
         cleared_at="$waited"
         clear_finished
       fi
-      if take_best; then
+      if take_best "$want"; then
         echo "took a tree after ${waited}s" >&2
         exit 0
       fi
     done
+    fall_back "every tree at $pin was still held after waiting ${waited}s" && exit 0
     {
       echo "::error::every Chromium tree under $TREES was still held after waiting ${waited}s, so this run has nowhere to build"
       holders
@@ -450,6 +486,124 @@ case "$action" in
         "${slot##*/}" \
         "$(slot_pin "$slot" || true)"
     done
+    ;;
+
+  refresh)
+    # Copies the tree this run holds over a free tree at another pin, so the
+    # next run on this pin finds it built instead of rebuilding Chromium in it
+    # from scratch (4h50m on 2026-11-23, after a pin roll).
+    #
+    # - Only engine-release.yml calls it, from main and after its build passed:
+    #   a pull request's tree may be at a pin main never takes.
+    # - The copy shares blocks (`cp --reflink=always`, ZFS block cloning), so it
+    #   takes minutes and almost no space. /build has room for two trees, not
+    #   three, so without cloning it copies nothing.
+    # - Paths: compiles are relative, and `gn gen` rewrites the rest at the next
+    #   build. engine-release-build.sh refuses a build whose files still name
+    #   another tree.
+    # - It takes the other tree's lock like any run, so it never touches a tree
+    #   in use, and it holds this run's tree locked while it reads it.
+    #
+    # A failure to copy is a warning: the tree it would have replaced is still
+    # whole, and the next run rebuilds it as before.
+    from="${2:-}"
+    owner="${3:-}"
+    [ -n "$from" ] && [ -n "$owner" ] || usage
+    from="$(cd "$from" 2>/dev/null && pwd -P)" || {
+      echo "::error::refresh: no tree at ${2}" >&2; exit 1; }
+    src_slot="$(dirname "$from")"
+    pin="$(slot_pin "$src_slot")"
+    [ -n "$pin" ] || { echo "refresh: ${src_slot##*/} carries no pin, so there is nothing to copy"; exit 0; }
+    "$LOCK_SH" holds "$from" "$owner" >/dev/null 2>&1 || {
+      echo "::error::refresh: '$owner' does not hold ${src_slot##*/}, so its tree could change under the copy" >&2
+      exit 1
+    }
+    COPY="${DOMICILE_TREE_COPY:-cp -a --reflink=always}"
+
+    if [ -d "$ROOT/.domicile-tree-lock" ]; then
+      echo "refresh: a run holds the old single lock and may be in any tree, so nothing is copied"
+      exit 0
+    fi
+    # The cheapest tree to lose first, as for a pick: one with no pin, then the
+    # least recently used.
+    target=""
+    for slot in $(candidates "$pin" ""); do
+      [ "$(cd "$slot" && pwd -P)" = "$src_slot" ] && continue
+      [ "$(slot_pin "$slot")" = "$pin" ] && continue
+      if take_slot "$slot" "$owner (copying ${src_slot##*/} into it)"; then
+        target="$slot"
+        break
+      fi
+    done
+    if [ -z "$target" ]; then
+      echo "refresh: every other tree is at $pin or in use, so there is nothing to copy into"
+      exit 0
+    fi
+    copier="$owner (copying ${src_slot##*/} into it)"
+    release() { "$LOCK_SH" drop "$target/src" "$copier" >/dev/null 2>&1 || true; }
+    trap release EXIT
+
+    # Cloning or nothing: a plain copy of a 137G tree does not fit beside two.
+    probe="$src_slot/.domicile-clone-probe"
+    rm -f "$probe" "$target/.domicile-clone-probe"
+    : >"$probe"
+    if ! $COPY "$probe" "$target/.domicile-clone-probe" 2>/dev/null; then
+      rm -f "$probe" "$target/.domicile-clone-probe"
+      echo "::warning::refresh: '$COPY' cannot share blocks between ${src_slot##*/} and ${target##*/}, so ${target##*/} stays at $(slot_pin "$target") and the next run on $pin there rebuilds it"
+      exit 0
+    fi
+    rm -f "$probe" "$target/.domicile-clone-probe"
+
+    was="$(slot_pin "$target")"
+    started="$(date +%s)"
+    rm -rf "$target/src.copying"
+    if ! $COPY "$from" "$target/src.copying"; then
+      rm -rf "$target/src.copying"
+      echo "::warning::refresh: copying ${src_slot##*/} into ${target##*/} failed, so ${target##*/} stays as it was"
+      exit 0
+    fi
+    # The stamps go first, so a run that dies past here sees no pin and ranks
+    # the tree as free rather than trusting a half-swapped one.
+    rm -f "$target/.domicile-synced-pin" "$target/.domicile-series-stamp" "$target/.domicile-built"
+    mv -T "$target/src" "$target/src.old"
+    mv -T "$target/src.copying" "$target/src"
+    for stamp in .domicile-gen-pin .domicile-series-files .domicile-kept-mtimes \
+                 .domicile-series-stamp .domicile-built .domicile-synced-pin; do
+      if [ -e "$src_slot/$stamp" ]; then
+        cp -p "$src_slot/$stamp" "$target/$stamp"
+      else
+        rm -f "$target/$stamp"
+      fi
+    done
+    printf '%s %s\n' "$src_slot" "$(date -u +%FT%TZ)" >"$target/.domicile-copied-from"
+    rm -rf "$target/src.old"
+
+    # siso keys its saved file state (.siso_fs_state) by absolute path. Left
+    # naming the source tree, the copy's first build re-runs every step: 45m
+    # from ccache instead of a few minutes (probe runs 45427696036 and
+    # 45443089920 on 2026-11-24, 58,347 steps against 329). So rewrite each
+    # out directory's state to the copy's path with siso's own export and
+    # import. A failure costs only that rebuild, so it warns.
+    siso="$target/src/third_party/siso/cipd/siso"
+    for state in "$target"/src/out/*/.siso_fs_state; do
+      [ -f "$state" ] || continue
+      dir="$(dirname "$state")"
+      if [ ! -x "$siso" ]; then
+        echo "::warning::refresh: no siso at $siso, so ${dir#"$target"/src/}'s first build in ${target##*/} re-runs every step"
+        break
+      fi
+      to="$(cd "$target/src" && pwd -P)"
+      json="$dir/.domicile-fs-state.json"
+      if "$siso" fs export -C "$dir" >"$json" &&
+           sed -i -e "s|\"$from/|\"$to/|g" -e "s|\"$from\"|\"$to\"|g" "$json" &&
+           "$siso" fs import -C "$dir" <"$json"; then
+        echo "refresh: moved siso's state in ${dir#"$target"/src/} to ${target##*/}"
+      else
+        echo "::warning::refresh: could not move siso's state in ${dir#"$target"/src/} to ${target##*/}, so its first build there re-runs every step"
+      fi
+      rm -f "$json"
+    done
+    echo "refresh: copied ${src_slot##*/} into ${target##*/} in $(( $(date +%s) - started ))s; ${target##*/} was at ${was:-no pin} and is now at $pin"
     ;;
 
   *) usage ;;

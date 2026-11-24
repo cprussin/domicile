@@ -14,8 +14,7 @@ namespace domicile {
 bool ApplyKeymap(ui::KeyboardLayoutEngine* engine, std::string_view keymap) {
   // Pass the full length. Unlike WaylandKeyboard::OnKeymap, which strips a
   // trailing NUL, this keymap comes from a JSON string with no NUL.
-  const bool applied =
-      engine->SetCurrentLayoutFromBuffer(keymap.data(), keymap.size());
+  const bool applied = engine->SetCurrentLayoutFromBuffer(keymap);
   if (!applied) {
     // No fallback: the engine keeps its previous state, which is usually the
     // null state that decodes printable keys to nothing.

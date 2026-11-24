@@ -28,7 +28,7 @@ job builds it on `crux`. The `two-monitors-on-a-tty` VM test checks it.
  1 file changed, 8 insertions(+), 4 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
-index d0eed1e..639003a 100644
+index 4496ea4..5a5dc22 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.cc
 +++ b/ui/ozone/platform/drm/host/drm_window_host.cc
 @@ -391,7 +391,10 @@ bool DrmWindowHost::CanDispatchEvent(const PlatformEvent& event) {
@@ -66,6 +66,3 @@ index d0eed1e..639003a 100644
              ? cursor_->ToWindow(widget_, located_event->location_f())
              : located_event->location_f() -
                    gfx::Vector2dF(bounds_.OffsetFromOrigin());
--- 
-2.43.0
-

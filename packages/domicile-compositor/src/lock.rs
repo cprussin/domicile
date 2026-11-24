@@ -353,13 +353,17 @@ pub enum Asked<'a> {
 ///   states (`Reach::Arranges`), like `SetAppBounds`, switching the keymap
 ///   (`Reach::Retypes`), so the passphrase is typed on the right one, and the
 ///   monitors' color temperature (`Reach::Tints`), so a night light follows
-///   the clock. Sending a command is refused.
+///   the clock, and turning the monitors off and on (`Reach::Powers`), since a
+///   locked desk is often left with its screens off. Sending a command is
+///   refused.
 ///   Processes and watches started before the lock keep running.
 pub fn refused(asked: Asked) -> Option<Refusal> {
     match asked {
         Asked::OnTheWaylandThread(
             ClientRequest::Key { .. }
             | ClientRequest::PointerMotion { .. }
+            | ClientRequest::PointerRelative { .. }
+            | ClientRequest::PointerConstrained { .. }
             | ClientRequest::PointerLeave
             | ClientRequest::PointerPinch { .. }
             | ClientRequest::PointerSwipe { .. }
@@ -372,7 +376,9 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             ClientRequest::CloseApp { .. }
             | ClientRequest::Spawn { .. }
             | ClientRequest::CopyClipboardEntry { .. }
+            | ClientRequest::RemoveClipboardEntry { .. }
             | ClientRequest::ActivateTrayItem { .. }
+            | ClientRequest::TrayMenuClicked { .. }
             | ClientRequest::DismissNotifications { .. }
             | ClientRequest::InvokeNotificationAction { .. }
             | ClientRequest::ReplyToNotification { .. }
@@ -391,11 +397,20 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::SetWindowStates { .. }
             // Changes what the passphrase is typed on, not what is on screen.
             | ClientRequest::SelectKeymap { .. }
+            // The host refuses it to a locked desktop.
+            | ClientRequest::SwitchShortcutsInhibitor { .. }
             | ClientRequest::SetWhitePoint { .. }
             | ClientRequest::ChromeHello { .. }
+            // While locked the browser's keys come straight back and the
+            // input method's text is dropped (`chrome_editor`, `text_input`),
+            // so the lock page's field can still be typed in.
+            | ClientRequest::TextInput { .. }
+            | ClientRequest::KeyForInputMethod { .. }
             | ClientRequest::ClipboardCopied { .. }
             | ClientRequest::Unlock { .. }
             | ClientRequest::Lock
+            // A lock screen may dim too.
+            | ClientRequest::IdleWatched
             // Part of a theme change; allowed like `SetTheme`.
             | ClientRequest::TurnTheWindows { .. }
             | ClientRequest::ThemeCaptured { .. }
@@ -411,10 +426,25 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             // judged, or by its end.
             | ClientRequest::AddVirtualMonitor { .. }
             | ClientRequest::RemoveVirtualMonitor { .. }
-        | ClientRequest::ResizeVirtualMonitor { .. },
+            | ClientRequest::ResizeVirtualMonitor { .. }
+            // Queued by a `SystemRequest::SleepDisplays` or `WakeDisplays`
+            // the lock already judged.
+            | ClientRequest::PowerDisplays { .. }
+            // Like `sleep-displays`: arranging the monitors shows nothing the
+            // lock hides, and docking a locked laptop may need it.
+            | ClientRequest::ConfigureDisplay { .. },
         )
         | Asked::OnTheConnection(
-            ConnectionRequest::SetTheme { .. } | ConnectionRequest::WhichTheme,
+            ConnectionRequest::SetTheme { .. }
+            | ConnectionRequest::WhichTheme
+            | ConnectionRequest::WhichMonitors
+            | ConnectionRequest::WhichDisplays
+            | ConnectionRequest::WhichWindows
+            | ConnectionRequest::WhichStatus
+            | ConnectionRequest::WhichShellCommands
+            | ConnectionRequest::WhichShellBindings
+            | ConnectionRequest::WhichInputs
+            | ConnectionRequest::WhichIdleTime,
         )
         | Asked::System(
             Reach::ReadsTheKernel
@@ -423,7 +453,8 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | Reach::Listens
             | Reach::Arranges
             | Reach::Retypes
-            | Reach::Tints,
+            | Reach::Tints
+            | Reach::Powers,
         ) => None,
     }
 }
@@ -821,6 +852,23 @@ mod tests {
                     moved: true,
                 },
             ),
+            (
+                "the pointer moving a game's camera",
+                ClientRequest::PointerRelative {
+                    app_id: "app-1".into(),
+                    dx: 2.0,
+                    dy: 1.0,
+                    dx_unaccel: 1.0,
+                    dy_unaccel: 0.5,
+                },
+            ),
+            (
+                "the page taking the pointer for a game",
+                ClientRequest::PointerConstrained {
+                    app_id: "app-1".into(),
+                    active: true,
+                },
+            ),
             ("the pointer leaving a window", ClientRequest::PointerLeave),
             (
                 "a click",
@@ -863,6 +911,7 @@ mod tests {
                 "a program being started",
                 ClientRequest::Spawn {
                     command: vec!["foot".into()],
+                    answer: None,
                 },
             ),
             (
@@ -870,11 +919,19 @@ mod tests {
                 ClientRequest::CopyClipboardEntry { entry: 1 },
             ),
             (
+                "a row of the clipboard removed",
+                ClientRequest::RemoveClipboardEntry { entry: 1 },
+            ),
+            (
                 "a tray icon clicked",
                 ClientRequest::ActivateTrayItem {
                     id: ":1.9/StatusNotifierItem".into(),
                     action: TrayAction::Primary,
                 },
+            ),
+            (
+                "a tray menu entry clicked",
+                ClientRequest::TrayMenuClicked { bus: ":1.9".into() },
             ),
             (
                 "notifications cleared",
@@ -958,6 +1015,12 @@ mod tests {
             "a night light turns on at sunset whether or not anybody is at the desk"
         );
         assert_eq!(
+            refused(Asked::System(Reach::Powers)),
+            None,
+            "turning the screens off is how a locked desk is left, and lighting \
+             them shows only the lock screen"
+        );
+        assert_eq!(
             refused(Asked::System(Reach::Acts)),
             Some(Refusal::Command),
             "a file read, a write or a process is the desktop acting for \
@@ -1015,6 +1078,13 @@ mod tests {
                 ClientRequest::SetWhitePoint {
                     output: None,
                     white_point: domicile_host::white_point::white_point(3400),
+                },
+            ),
+            (
+                "the screens being put to sleep, which the lock already judged",
+                ClientRequest::PowerDisplays {
+                    power: domicile_host::system::DisplayPower::Asleep,
+                    display: None,
                 },
             ),
             (
@@ -1079,6 +1149,14 @@ mod tests {
         for request in [
             ConnectionRequest::SetTheme { theme: Theme::Dark },
             ConnectionRequest::WhichTheme,
+            ConnectionRequest::WhichMonitors,
+            ConnectionRequest::WhichDisplays,
+            ConnectionRequest::WhichWindows,
+            ConnectionRequest::WhichStatus,
+            ConnectionRequest::WhichShellCommands,
+            ConnectionRequest::WhichShellBindings,
+            ConnectionRequest::WhichInputs,
+            ConnectionRequest::WhichIdleTime,
         ] {
             assert_eq!(refused(Asked::OnTheConnection(&request)), None);
         }

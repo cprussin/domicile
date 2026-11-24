@@ -24,8 +24,8 @@ const QUESTIONS: readonly {
   },
   {
     answer:
-      "No. An Electron app bundles its own Chromium and runs as an ordinary Wayland app, as it would on any desktop.",
-    link: { href: "/docs/manganese/compatibility", label: "What it runs on" },
+      "They can. List an app in the config and it runs on the desktop's engine, with its menus and dialogs drawn by your shell. Apps you don't list bring their own Chromium, as on any desktop.",
+    link: { href: "/docs/manganese/electron-apps", label: "Electron apps" },
     question: "Do Electron apps share the desktop's Chromium?",
   },
   {
@@ -75,8 +75,8 @@ const QUESTIONS: readonly {
   },
   {
     answer:
-      "Wayland apps do, and Electron, SDL and Qt apps start in Wayland mode. There is no Xwayland, so X11-only apps don't run.",
-    link: { href: repoFile("docs/KNOWN-GAPS.md"), label: "Known gaps" },
+      "Wayland apps do, and Electron, SDL and Qt apps start in Wayland mode. X11-only apps run when you start xwayland-satellite.",
+    link: { href: "/docs/manganese/compatibility#x11-apps", label: "X11 apps" },
     question: "Will my apps work?",
   },
 ];

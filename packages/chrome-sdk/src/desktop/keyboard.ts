@@ -16,6 +16,21 @@ export type Shortcut = {
   metaKey: boolean;
 };
 
+/** How {@link Keyboard.grab} takes a chord. */
+export type GrabOptions = {
+  /**
+   * Whether the chord stays the shell's while the window with the keyboard
+   * holds a shortcuts inhibitor, as sway's `bindsym --inhibited`: the way back
+   * to the desktop from a VM. Otherwise that window gets it as a key.
+   */
+  readonly whileInhibited?: boolean;
+  /**
+   * For a modifier alone, a tap of it: the longest it may be held, in
+   * milliseconds, and still be a tap. The engine's default, 300, unless set.
+   */
+  readonly longestTap?: number;
+};
+
 /**
  * The seat's modifiers, which count only keys forwarded to a client. See
  * "Reading held modifiers" in packages/chrome-sdk/docs/ELEMENTS.md.
@@ -43,7 +58,7 @@ export type Keyboard = {
    * rather than to the focused client. Throws a SyntaxError for a chord
    * written wrong.
    */
-  grab: (chord: string) => void;
+  grab: (chord: string, options?: GrabOptions) => void;
   /** Answer one {@link Keyboard.grab}; the last gives the key back. */
   ungrab: (chord: string) => void;
   /**
@@ -56,6 +71,13 @@ export type Keyboard = {
    * desktop restarts. Allowed while the desktop is locked.
    */
   selectKeymap: System["selectKeymap"];
+  /**
+   * Activate, deactivate or toggle the shortcuts inhibitor of the window with
+   * the keyboard, as sway's `seat shortcuts_inhibitor`. Its
+   * `DomicileWindow.inhibitsShortcuts` follows. A window holding none changes
+   * nothing. Bind it to a chord grabbed `whileInhibited`.
+   */
+  switchShortcutsInhibitor: System["switchShortcutsInhibitor"];
   on: On<KeyboardListeners>;
 };
 
@@ -73,10 +95,17 @@ export type KeyboardHost = Pick<
 
 export const keyboard = (
   host: KeyboardHost,
-  calls: Pick<System, "keymaps" | "selectKeymap">,
+  calls: Pick<System, "keymaps" | "selectKeymap" | "switchShortcutsInhibitor">,
 ): Keyboard => ({
-  grab: (chord) => {
-    host.grabShortcut(chord);
+  grab: (chord, { whileInhibited = false, longestTap } = {}) => {
+    // Left off unless set, as a grab by an older shell is.
+    if (longestTap !== undefined) {
+      host.grabShortcut(chord, whileInhibited, longestTap);
+    } else if (whileInhibited) {
+      host.grabShortcut(chord, true);
+    } else {
+      host.grabShortcut(chord);
+    }
   },
   keymaps: () => calls.keymaps(),
   get modifiers() {
@@ -93,6 +122,7 @@ export const keyboard = (
       ),
   }),
   selectKeymap: (choice) => calls.selectKeymap(choice),
+  switchShortcutsInhibitor: (action) => calls.switchShortcutsInhibitor(action),
   ungrab: (chord) => {
     host.ungrabShortcut(chord);
   },

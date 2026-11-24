@@ -45,7 +45,7 @@ except socket.timeout:
 if early:
     print("spoke before hello: %s" % early.decode("utf-8", "replace").split("\n")[0])
     sys.exit()
-connection.sendall(b'{"protocol_version":1,"type":"hello"}\n')
+connection.sendall(b'{"checked":false,"protocol_version":1,"type":"hello"}\n')
 connection.settimeout(5)
 first = connection.makefile("rb").readline()
 print(json.loads(first)["type"] if first else "no answer to hello")

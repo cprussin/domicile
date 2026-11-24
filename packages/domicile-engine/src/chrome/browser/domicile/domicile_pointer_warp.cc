@@ -44,8 +44,10 @@ void DrawForWhereItLanded(aura::Window* root, const gfx::Point& at) {
   // during hotplug.
   std::vector<DeskPlace> lit;
   for (const content::DomicileDeskDisplay& place : *laid_out) {
-    if (std::ranges::find(displays, place.id, &display::Display::id) !=
-        displays.end()) {
+    // The pointer never enters a sleeping display.
+    if (place.lit &&
+        std::ranges::find(displays, place.id, &display::Display::id) !=
+            displays.end()) {
       lit.push_back(
           DeskPlace{.id = place.id, .desk = place.desk, .scale = place.scale});
     }

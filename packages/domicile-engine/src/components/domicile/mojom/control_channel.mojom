@@ -3,6 +3,7 @@
 
 module domicile.mojom;
 
+import "mojo/public/mojom/base/time.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 
 enum PointerAxisSource { kWheel, kFinger, kContinuous, kWheelTilt };
@@ -85,6 +86,10 @@ enum GestureKind { kSwipe, kPinch, kHold, kEdge };
 enum GestureEdge { kLeft, kRight, kTop, kBottom };
 
 enum GesturePhase { kBegin, kUpdate, kEnd };
+
+// A modifier the shell can bind a tap of: pressed and let go with nothing
+// else. Either side's key taps it. See DeskModifierTaps.
+enum TapModifier { kAlt, kCtrl, kShift, kMeta };
 
 // A gesture the shell grabs: its kind, and its finger count or 0 for any. An
 // edge swipe's names its edge, or none for any. See DomicileHost::grabGesture.
@@ -210,7 +215,32 @@ struct DisplayInfo {
   uint32 scale;
   uint32 mode_width;
   uint32 mode_height;
+  // The `wl_output` refresh rate in mHz, or zero when unknown.
+  uint32 refresh_mhz;
+  // Whether the monitor scans out with a variable refresh rate:
+  // `unsupported`, `off` or `on`, as the wire spells it. The browser maps any
+  // other value to `unsupported`.
+  string adaptive_sync;
+  // Whether the monitor is driven in HDR10: `unsupported`, `off` or `on`, as
+  // the wire spells it. The browser maps any other value to `unsupported`.
+  string hdr;
+  // The panel's peak luminance from its EDID in cd/m², or zero when it
+  // reports none.
+  uint32 peak_luminance;
+  // While `hdr` is `on`, the luminance SDR white is shown at in cd/m²; zero
+  // otherwise.
+  uint32 sdr_white;
   DisplayTransform transform;
+};
+
+// A cursor a client drew on its own surface: a PNG of its buffer, in padded
+// base64, with the point that clicks in logical pixels from the top left and
+// the buffer pixels per logical pixel.
+struct AppCursorImage {
+  string png;
+  int32 hotspot_x;
+  int32 hotspot_y;
+  int32 scale;
 };
 
 // The process that connected a window's client, as the kernel recorded it at
@@ -260,6 +290,9 @@ struct ClipboardEntry {
   // A small picture of an image with no text, as a PNG `data:` URL. Empty for
   // text, and for an image the compositor could not read.
   string thumbnail;
+  // What the clipboard holds. Only the newest row can be, and none is once
+  // RemoveClipboardEntry removes it.
+  bool current;
 };
 
 // One icon in the system tray: an application's StatusNotifierItem, as the
@@ -372,6 +405,10 @@ interface ControlChannel {
   // which the page never sees.
   CopyClipboardEntry(uint32 entry);
 
+  // Drop a row of the clipboard's history and the copy it holds. Removing the
+  // current row also empties the clipboard.
+  RemoveClipboardEntry(uint32 entry);
+
   // Click an icon in the system tray. `id` is one a Tray message carried. What
   // the click does is the application's.
   ActivateTrayItem(string id, TrayAction action);
@@ -479,6 +516,23 @@ interface ControlChannel {
   // This page no longer wants `grab`. See DeskGestures::Ungrab.
   UngrabGesture(GestureGrab grab);
 
+  // A tap of `modifier` alone, held no longer than `longest`, to hand the
+  // page, as `Meta` for a tap of Super. Under a shortcuts inhibitor it is the
+  // window's unless `while_inhibited`. It stops in the browser process, in
+  // DeskModifierTaps, which hears every key aura does. A second grab sets
+  // both anew: the page counts its own grabs and sends what they add up to.
+  GrabModifierTap(TapModifier modifier, bool while_inhibited,
+                  mojo_base.mojom.TimeDelta longest);
+
+  // This page no longer wants taps of `modifier`.
+  UngrabModifierTap(TapModifier modifier);
+
+  // Whether the window with this page's keyboard holds a shortcuts
+  // inhibitor. Its grabbed gestures and modifier taps then go to the window,
+  // as its grabbed chords go to it as keys. Sent when it changes. See
+  // DeskGestures::SetInhibited and DeskModifierTaps::SetInhibited.
+  KeyboardWindowInhibitsShortcuts(bool inhibits);
+
   // Put the cursor where the page says, in the page's own coordinates.
   //
   // THE ONE MESSAGE ABOUT INPUT THAT GOES THE OTHER WAY, and it stops in the
@@ -493,6 +547,15 @@ interface ControlChannel {
   // is over it. The page cannot see the pointer over a browser window's page;
   // this process can. See `PointerAlreadyOver`.
   WarpPointer(double x, double y, gfx.mojom.RectF? unless_over);
+
+  // Keep a hand's pointer inside `boxes`, in the page's coordinates, for a
+  // game that confined it to its window; none lets it go. Stops in the
+  // browser process for WarpPointer's reason: the pointer is this process's.
+  // A box may reach onto any monitor the page spans. `confined` is false
+  // where the platform cannot hold the pointer: a nested desktop, whose
+  // pointer is the host session's, or a headless one, whose pointer the
+  // compositor moves. The browser lets go when the page goes away.
+  ConfinePointer(array<gfx.mojom.RectF> boxes) => (bool confined);
 
   // The shell's module ran: its `Shell` returned. Or it did not, and `why` is
   // what the page's error screen says. `serial` is the ShellSource serial the
@@ -511,12 +574,31 @@ interface ControlChannel {
   // after a window changes, which the compositor does not count as somebody
   // at the desk.
   PointerMotion(string app_id, double x, double y, bool moved);
+  // How far a hand moved the pointer over `app_id`, in its surface-local
+  // units, after the PointerMotion that took it there: `dx`/`dy` after pointer
+  // acceleration, `dx_unaccel`/`dy_unaccel` before it. A device that reports
+  // no unaccelerated motion gives the accelerated deltas for both. Not sent
+  // for a still pointer or a shell's warp. For zwp_relative_pointer_v1.
+  PointerRelative(string app_id, double dx, double dy, double dx_unaccel,
+                  double dy_unaccel);
+  // The page took (`active`) or let go of the pointer for `app_id`'s ask to
+  // lock or confine it (AppPointerConstraint). Only then is the client told.
+  PointerConstrained(string app_id, bool active);
   PointerLeave(string app_id);
   PointerButton(string app_id, uint32 button, bool pressed);
   PointerPinch(string app_id, Pinch pinch);
   Touch(string app_id, Touch touch);
   PointerAxis(string app_id, double dx, double dy, int32 v120_x, int32 v120_y,
               PointerAxisSource source, bool stop_x, bool stop_y);
+};
+
+// What a client asked the pointer to do over its window
+// (zwp_pointer_constraints_v1).
+enum PointerConstraint {
+  // Keep it where it is; the client reads relative motion.
+  kLock,
+  // Keep it inside the window.
+  kConfine,
 };
 
 // Compositor -> browser -> page. One method, not a callback on Spawn: these
@@ -532,11 +614,13 @@ interface ControlChannelClient {
   // A window drew its first frame, at `width` x `height`. `desktop_id` is
   // empty when the client set none. `dialog`: the client gave it a parent or
   // a fixed size. `client_frame`: the client asked to draw its own frame.
-  // `owner` is null when the compositor named none. `frame` is the window's
-  // synced frame, above 0 only for a window that appeared before this page.
+  // `owner` is null when the compositor named none. `toplevel_id` is the
+  // window's identifier on ext-foreign-toplevel-list-v1, which capture tools
+  // name it by. `frame` is the window's synced frame, above 0 only for a
+  // window that appeared before this page.
   AppAppeared(string app_id, string title, string desktop_id, double width,
               double height, bool dialog, bool client_frame,
-              WindowOwner? owner, uint32 frame);
+              WindowOwner? owner, string toplevel_id, uint32 frame);
 
   AppResized(string app_id, double width, double height);
 
@@ -554,12 +638,21 @@ interface ControlChannelClient {
               array<AppFrame> frames);
   AppClosed(string app_id);
 
-  // The cursor a client asked for over its own surface.
-  AppCursor(string app_id, CursorShape cursor);
+  // The cursor a client asked for over its own surface. `image` is one it
+  // drew itself, shown instead of `cursor`.
+  AppCursor(string app_id, CursorShape cursor, AppCursorImage? image);
 
   // A window or popup reached the screen: its first frame, or the first frame
   // its client drew after a configure changed its size.
   AppPresented(string app_id);
+
+  // The window under the pointer asked to lock or confine it, or null once
+  // that ask ended: the client withdrew it or the pointer left the window.
+  // The page answers with PointerConstrained. `region` is the part of the
+  // window the ask holds to, as boxes in the window's own coordinates; null
+  // for all of it, and always null with no constraint.
+  AppPointerConstraint(string app_id, PointerConstraint? constraint,
+                       array<gfx.mojom.RectF>? region);
 
   // The compositor marked a window `suspended`, or cleared it.
   AppSuspended(string app_id, bool suspended);
@@ -580,6 +673,11 @@ interface ControlChannelClient {
   // while it has the keyboard, the desktop's shortcuts are its keys.
   AppInhibitsShortcuts(string app_id, bool inhibits);
 
+  // Each browser window's identifier on ext-foreign-toplevel-list-v1, by its
+  // id, as AppAppeared carries a native window's. The whole map, on every
+  // change.
+  BrowserToplevelIds(map<string, string> toplevel_ids);
+
   // A grabbed shortcut fired. Named for the event rather than the struct,
   // which would shadow the type inside the generated class.
   //
@@ -596,6 +694,10 @@ interface ControlChannelClient {
   // in the browser process (DeskGestures) and never on the compositor's
   // socket.
   GesturePerformed(Gesture gesture);
+
+  // `modifier` was tapped alone, held `held`, and this page grabbed it.
+  // Matched in the browser process (DeskModifierTaps), like a gesture.
+  ModifierTapped(TapModifier modifier, mojo_base.mojom.TimeDelta held);
 
   // The seat's modifier state. One seat, outliving every window, which is why
   // a dropped key release latches modifiers into clients that never saw it.

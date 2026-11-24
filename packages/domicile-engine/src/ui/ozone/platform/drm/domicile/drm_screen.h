@@ -32,14 +32,30 @@ class DrmWindowHostManager;
 // for one and aura dereferences it. A tty with nothing plugged in is normal.
 inline constexpr gfx::Size kDisplaylessBounds{1024, 768};
 
-// Converts a snapshot to a `display::Display`.
+// Returns the mode `wanted` asks the snapshot to scan out, or its native mode,
+// or null when it advertises none.
 //
-// This replaces ChromeOS's `DisplayChangeObserver`. The size is the native
-// mode, which is what the modeset driver configures, so the two agree.
-// `origin` is passed in because a matched profile can place the monitor
-// somewhere other than the snapshot's own origin.
+// Both the modeset and the display list use it, so a window is bound to the
+// CRTC at the size it scans out. sway's choice: the advertised modes of the
+// size asked for (the native size when `wanted` names a rate alone), the
+// rate nearest `wanted->refresh_mhz`, or with no rate the native mode at the
+// native size and the fastest mode at any other. A size the connector does
+// not advertise gets the native mode; the compositor sees the size it
+// reports and refuses the profile.
+const display::DisplayMode* ModeForLayout(
+    const display::DisplaySnapshot& snapshot,
+    const DomicileDisplayLayout* wanted);
+
+// Converts a snapshot to a `display::Display` scanning out `mode`, which
+// `ModeForLayout` chose and may be null.
+//
+// This replaces ChromeOS's `DisplayChangeObserver`. The size is the mode the
+// modeset driver configures, so the two agree. `origin` is passed in because
+// a matched profile can place the monitor somewhere other than the
+// snapshot's own origin.
 display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
-                                     const gfx::Point& origin);
+                                     const gfx::Point& origin,
+                                     const display::DisplayMode* mode);
 
 // Returns "<MAKE> <MODEL> <SERIAL>", the name kanshi and sway match output
 // profiles on.
@@ -74,7 +90,7 @@ gfx::Size DisplayPhysicalSizeMm(const display::DisplaySnapshot& snapshot);
 // `layout` applies here as well as to the modeset because the browser must
 // still place dark connectors. Origins come from `OriginsForLayout`.
 std::vector<display::Display> DisplaysFromSnapshots(
-    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+    const std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>>&
         snapshots,
     const std::vector<DomicileDisplayLayout>& layout);
 
@@ -88,7 +104,7 @@ std::vector<display::Display> DisplaysFromSnapshots(
 // is never used: ozone reports (0, 0) for a connector it has not read before,
 // and displays sharing a rectangle share a window, leaving a CRTC black.
 std::vector<gfx::Point> OriginsForLayout(
-    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+    const std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>>&
         snapshots,
     const std::vector<DomicileDisplayLayout>& layout);
 
@@ -99,7 +115,7 @@ std::vector<gfx::Point> OriginsForLayout(
 // initial position. A dark primary, such as a closed laptop panel, would draw
 // the desktop onto a screen nobody sees.
 size_t PrimaryIndexForLayout(
-    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+    const std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>>&
         snapshots,
     const std::vector<DomicileDisplayLayout>& layout);
 
@@ -119,7 +135,7 @@ class DrmScreen : public PlatformScreen {
   // Replaces the display list, primary first. Called at startup and on every
   // hotplug. `DisplayList` notifies observers itself.
   void OnDisplaysChanged(
-      const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+      const std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>>&
         snapshots,
       const std::vector<DomicileDisplayLayout>& layout);
 
@@ -134,6 +150,14 @@ class DrmScreen : public PlatformScreen {
   // with no gamma. Current when `connectors()` is.
   const base::flat_map<int64_t, uint32_t>& gamma_sizes() const {
     return gamma_sizes_;
+  }
+
+  // Each display's advertised modes, the rate it scans out at and its
+  // millimeters, by display id. Current when `connectors()` is.
+  // `display::DisplayList` drops a listed display's new rate and density, so
+  // the browser reads them here.
+  const base::flat_map<int64_t, DomicilePanel>& panels() const {
+    return panels_;
   }
 
   // PlatformScreen:
@@ -159,7 +183,21 @@ class DrmScreen : public PlatformScreen {
   display::DisplayList display_list_;
   base::flat_map<int64_t, std::string> connectors_;
   base::flat_map<int64_t, uint32_t> gamma_sizes_;
+  base::flat_map<int64_t, DomicilePanel> panels_;
 };
+
+// Returns what `snapshot` advertises and scans out under `layout`, for
+// `DrmScreen::panels`.
+DomicilePanel PanelFromSnapshot(const display::DisplaySnapshot& snapshot,
+                                const std::vector<DomicileDisplayLayout>& layout);
+
+// Whether `after` differs from `before` in what `display::DisplayList` does
+// not compare, so `DrmScreen` must tell the observers itself.
+bool PanelChangedUnseen(const DomicilePanel& before, const DomicilePanel& after);
+
+// Whether `snapshot`'s connector scans out with a variable refresh rate, as
+// the hardware said when it was read.
+DomicileAdaptiveSync AdaptiveSyncOf(const display::DisplaySnapshot& snapshot);
 
 }  // namespace ui
 

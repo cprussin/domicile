@@ -10,20 +10,25 @@
 //!
 //! | field | on a reload |
 //! |---|---|
+//! | `input.keyboard.repeat` | sent to every client's keyboard and to the engine (`repeat_keys_at`) |
 //! | `input.keyboard.*` | every keymap recompiled; the active one, or the first if the config dropped it, sent to the seat and chrome (`take_up_the_keymaps`) |
 //! | `input.touchpad`, `input.mouse` | sent to the engine (`configure_input`) |
 //! | `input.pointers` | sent to the engine, resolved against the monitors it last reported (`bind_the_pointers`) |
 //! | `output.max_scale` | applied to the running desktop (`cap_the_scale_at`) |
 //! | `output.displays` | applied (`Screens::reloaded_into`, `adopt_the_desktop`) |
 //! | `output.profiles` | re-matched against the connected monitors, same path |
-//! | `idle.blank_after_seconds`, `idle.warn_before_seconds` | idle clock restarted and timer re-armed (`reset_the_idle_clock`) |
+//! | `idle.blank_after_seconds`, `idle.lock_after_seconds` | idle clock restarted and timer re-armed (`reset_the_idle_clock`) |
 //! | `theme.mode` | sent to every chrome and the desk's clients, with the mode's own `cursor_theme` if it has one (`take_up_the_theme`) |
 //! | `theme.accent_color`, `contrast`, `reduced_motion`, `icon_theme`, `cursor_theme`, `cursor_size`, `font_name`, `monospace_font_name` | sent to the desk's clients (`Portals::restyle`); `icon_theme` also redraws tray and notification icons; `cursor_theme` and `cursor_size` also go to every chrome's browser, which draws the pointer (`Host::set_appearance`) |
 //! | `theme.cursor_hide_after_ms`, `cursor_hide_when_typing` | sent to every chrome's browser, which hides the pointer (`Host::set_appearance`) |
 //! | `theme.force_dark` | sent to every chrome, whose browser draws those sites dark from their next load (`Host::set_force_dark`) |
+//! | `spellcheck.*` | sent to every chrome, whose browser checks spelling in those languages (`Host::set_spellcheck`) |
 //! | `files.omit` | sent to the index, which rewalks the home (`omit_from_the_index`) |
+//! | `electron.apps` | the entries that run them on the engine written again (`write_the_electron_entries`) |
 //! | `extensions.*` | sent to every chrome, whose browser installs them (`hand_over_the_extensions`) |
+//! | `browser.*` | sent to every chrome, whose browser takes up the profiles (`hand_over_the_browser_profiles`) |
 //! | `lock.*` | the verifier replaced; the desktop stays as locked as it was (`rekey_the_lock`, `Lock::rekeyed`) |
+//! | `agents.web` | runs or stops `domicile mcp --relay` (`WebAgents::set`) |
 //! | `lockdown.*` | sent to the Lockdown portal, which signals the change (`Portals::lock_down`) |
 //! | `keybindings` | resolved on the keyboard and sent to every chrome (`rebind_the_keys`) |
 //! | `modes` | the same, with `keybindings` |
@@ -48,15 +53,18 @@
 //! restated and an unchanged one is not.
 
 use domicile_config::{
-    Config, ExtensionsConfig, IdleConfig, KeyboardConfig, LockConfig, LockdownConfig, Omit,
-    ThemeConfig, ThemeMode,
+    AgentsConfig, BrowserConfig, Config, ExtensionsConfig, IdleConfig, KeyRepeat, KeyboardConfig,
+    LockConfig, LockdownConfig, Omit, SpellcheckConfig, ThemeConfig, ThemeMode,
 };
 
 /// What a reloaded config asks the compositor to restate.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Restatement {
-    /// The keyboard to compile a keymap from, or `None` if unchanged.
+    /// The keyboard to compile a keymap from, or `None` if its keymap is
+    /// unchanged.
     pub keyboard: Option<KeyboardConfig>,
+    /// How held keys repeat, or `None` if unchanged.
+    pub key_repeat: Option<KeyRepeat>,
     /// The new cap on the scale advertised to clients, or `None` if
     /// unchanged.
     pub max_scale: Option<u32>,
@@ -75,10 +83,19 @@ pub struct Restatement {
     pub appearance: Option<ThemeConfig>,
     /// The sites the browser draws dark, or `None` if unchanged.
     pub force_dark: Option<Vec<String>>,
+    /// Whether and in which languages the browser checks spelling, or `None`
+    /// if unchanged.
+    pub spellcheck: Option<SpellcheckConfig>,
     /// What the file index leaves out, or `None` if unchanged.
     pub omit: Option<Omit>,
+    /// The Electron apps that run on the engine, or `None` if unchanged.
+    pub electron_apps: Option<Vec<String>>,
     /// The extensions the browser process installs, or `None` if unchanged.
     pub extensions: Option<ExtensionsConfig>,
+    /// The browser profiles, or `None` if unchanged.
+    pub browser: Option<BrowserConfig>,
+    /// Agents that drive the desktop, or `None` if unchanged.
+    pub agents: Option<AgentsConfig>,
     /// What applications are asked not to do, or `None` if unchanged.
     pub lockdown: Option<LockdownConfig>,
     /// What opens the lock, or `None` if unchanged.
@@ -95,9 +112,15 @@ pub struct Restatement {
 impl Restatement {
     /// What changed between the config that was live and the one replacing it.
     pub fn between(was: &Config, now: &Config) -> Restatement {
+        // Repeat goes to the seat and the engine without recompiling a keymap.
+        let keymap_moved = KeyboardConfig {
+            repeat: now.input.keyboard.repeat,
+            ..was.input.keyboard.clone()
+        } != now.input.keyboard;
+        let repeat_moved = was.input.keyboard.repeat != now.input.keyboard.repeat;
         Restatement {
-            keyboard: (was.input.keyboard != now.input.keyboard)
-                .then(|| now.input.keyboard.clone()),
+            keyboard: keymap_moved.then(|| now.input.keyboard.clone()),
+            key_repeat: repeat_moved.then_some(now.input.keyboard.repeat),
             max_scale: (was.output.max_scale != now.output.max_scale)
                 .then_some(now.output.max_scale),
             idle: (was.idle != now.idle).then(|| now.idle.clone()),
@@ -110,15 +133,19 @@ impl Restatement {
                 .then(|| now.theme.clone()),
             force_dark: (was.theme.force_dark != now.theme.force_dark)
                 .then(|| now.theme.force_dark.clone()),
+            spellcheck: (was.spellcheck != now.spellcheck).then(|| now.spellcheck.clone()),
             omit: (was.files.omit != now.files.omit).then(|| now.files.omit.clone()),
+            electron_apps: (was.electron != now.electron).then(|| now.electron.apps.clone()),
             extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
+            browser: (was.browser != now.browser).then(|| now.browser.clone()),
+            agents: (was.agents != now.agents).then(|| now.agents.clone()),
             lockdown: (was.lockdown != now.lockdown).then(|| now.lockdown.clone()),
             lock: (was.lock != now.lock).then(|| now.lock.clone()),
-            shell_config: was.input.keyboard != now.input.keyboard
-                || was.shell_options != now.shell_options,
+            shell_config: keymap_moved || was.shell_options != now.shell_options,
             pointers: was.input.pointers != now.input.pointers,
             input_devices: was.input.touchpad != now.input.touchpad
-                || was.input.mouse != now.input.mouse,
+                || was.input.mouse != now.input.mouse
+                || repeat_moved,
         }
     }
 }
@@ -149,6 +176,23 @@ mod tests {
             "",
             "the keyboard handed back is the new one, not the one being replaced"
         );
+    }
+
+    #[test]
+    fn a_key_repeat_that_moved_is_restated_without_the_keymap() {
+        let was = parsed(A_DVORAK_DESK);
+        let restated = Restatement::between(&was, &parsed(A_DVORAK_DESK_REPEATING_FAST));
+
+        assert_eq!(
+            restated.key_repeat,
+            Some(KeyRepeat {
+                delay_ms: 200,
+                rate: 40
+            })
+        );
+        assert!(restated.input_devices, "pages repeat through the engine");
+        assert_eq!(restated.keyboard, None, "the keymap is not recompiled");
+        assert!(!restated.shell_config, "no chord moved");
     }
 
     #[test]
@@ -219,6 +263,18 @@ mod tests {
     }
 
     #[test]
+    fn the_electron_apps_are_restated_when_they_change() {
+        let was = parsed("{}");
+        let now = parsed(r#"{ "electron": { "apps": ["slack.desktop"] } }"#);
+
+        assert_eq!(
+            Restatement::between(&was, &now).electron_apps,
+            Some(vec!["slack.desktop".to_string()])
+        );
+        assert_eq!(Restatement::between(&now, &now).electron_apps, None);
+    }
+
+    #[test]
     fn what_the_index_omits_is_restated_when_it_moved() {
         let was = parsed(A_DVORAK_DESK);
         let now = parsed(A_DESK_OFFERING_ITS_DOTFILES);
@@ -242,6 +298,44 @@ mod tests {
 
         assert_eq!(restated.force_dark, Some(vec!["mail.google.com".into()]));
         assert_eq!(restated.appearance, None);
+    }
+
+    #[test]
+    fn spell_checking_that_moved_is_restated() {
+        let was = parsed("{}");
+        let now = parsed(r#"{ "spellcheck": { "languages": ["de-DE"] } }"#);
+
+        assert_eq!(
+            Restatement::between(&was, &now).spellcheck,
+            Some(SpellcheckConfig {
+                enabled: true,
+                languages: vec!["de-DE".into()],
+            })
+        );
+        assert_eq!(Restatement::between(&now, &now), Restatement::default());
+    }
+
+    #[test]
+    fn browser_profiles_that_moved_are_restated() {
+        let was = parsed(A_DVORAK_DESK);
+        let now = parsed(A_DESK_WITH_AN_EXTENSION);
+        assert_eq!(Restatement::between(&was, &was).browser, None);
+
+        let now = Config {
+            browser: domicile_config::BrowserConfig {
+                default_profile: "private".into(),
+                ..now.browser
+            },
+            ..now
+        };
+        assert_eq!(
+            Restatement::between(&was, &now)
+                .browser
+                .expect("the profiles moved")
+                .default_profile,
+            "private",
+            "the profiles handed back are the new ones"
+        );
     }
 
     #[test]
@@ -271,6 +365,20 @@ mod tests {
                 .disable_camera,
             "the switches handed back are the new ones, not the ones being replaced"
         );
+    }
+
+    #[test]
+    fn agents_on_the_web_turned_on_are_restated() {
+        let was = parsed(A_DVORAK_DESK);
+        let now = parsed(r#"{ "agents": { "web": true } }"#);
+
+        assert!(
+            Restatement::between(&was, &now)
+                .agents
+                .expect("agents moved")
+                .web
+        );
+        assert_eq!(Restatement::between(&now, &now).agents, None);
     }
 
     #[test]
@@ -416,6 +524,20 @@ mod tests {
   },
   "output": { "displays": [{ "name": "one", "size": [1024, 768] }] },
   "shell_options": { "clock": { "format": "12h" } }
+}
+"#;
+
+    /// [`A_DVORAK_DESK`] with keys repeating sooner and faster.
+    const A_DVORAK_DESK_REPEATING_FAST: &str = r#"
+{
+  "input": {
+    "keyboard": {
+      "xkb_variant": "dvp",
+      "xkb_options": ["caps:swapescape"],
+      "repeat": { "delay_ms": 200, "rate": 40 }
+    }
+  },
+  "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
 }
 "#;
 

@@ -2,9 +2,9 @@ import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { ReactNode } from "react";
 import { Fragment, memo, useCallback, useMemo, useState } from "react";
 
-import { AppPopup } from "./AppPopup";
 import { AppWindow } from "./AppWindow";
 import { BrowserWindow } from "./BrowserWindow";
+import { useProfileMark } from "./browser/useBrowserProfile";
 import type { Direction } from "./direction";
 import { FocusGlow } from "./FocusGlow";
 import { FloatBorder } from "./floating/FloatBorder";
@@ -18,6 +18,7 @@ import { ScratchpadBackdrop } from "./floating/ScratchpadBackdrop";
 import { GrabbingSheet } from "./GrabbingSheet";
 import { GroupTitleBar } from "./GroupTitleBar";
 import { GroupWell } from "./GroupWell";
+import type { HandedDrag } from "./handed-drag";
 import type { Modifiers } from "./keyboard/useModifiers";
 import { seenAt, seenClip, seenStyles } from "./overview/seen-styles";
 import type { OverviewSight, Seen } from "./overview/sight";
@@ -30,14 +31,15 @@ import type {
 } from "./placement";
 import { contentsOf, raised, TILED, wellDepthOf } from "./placement";
 import type { Spot } from "./pointer-warp";
-import type { Popup } from "./popup";
-import { popupsOver } from "./popup";
+import type { Popup, WindowPopup } from "./popup";
+import { popupsOf } from "./popup";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
 import { SelectionTint } from "./SelectionTint";
 import { SettleHandoffs } from "./SettleHandoffs";
 import type { StageScreen } from "./screens/stage-screens";
 import { useShared } from "./screens/useShared";
+import { SlidingScreen } from "./sliding-screen";
 import { TabStrip } from "./TabStrip";
 import type { Aim, DropTargets, TabTarget, Target } from "./tiled/aim";
 import { bordersOf } from "./tiled/borders";
@@ -53,6 +55,7 @@ import type { NodeRef } from "./tree/path";
 import { focusedWindowIn } from "./tree/tiling";
 import { useCaptured } from "./useCaptured";
 import { keyOf, useFocusGlows } from "./useFocusGlows";
+import { useTabDrop } from "./useTabDrop";
 import type { DrawnWindow, WindowMotions } from "./useWindowMotion";
 import { useWindowMotion } from "./useWindowMotion";
 import { WindowFrame } from "./WindowFrame";
@@ -61,7 +64,12 @@ import type { ShellWindow } from "./window";
 import { browserIdOf, WindowKind } from "./window";
 import type { WindowMotion } from "./window-motion";
 import { barMotion } from "./window-motion";
-import { clippedTo, screenClipStyles, slidAcross } from "./window-styles";
+import {
+  clippedTo,
+  screenClipStyles,
+  slidAcross,
+  slidingAcross,
+} from "./window-styles";
 
 type Props = {
   /** The window the user is working in. */
@@ -74,6 +82,8 @@ type Props = {
   domicile: Domicile;
   /** The floating window being dragged, if any. */
   draggingId: string | undefined;
+  /** A client's move or resize, for its window's grab to run. */
+  handed?: HandedDrag | undefined;
   /**
    * The window with compositor keyboard focus, or `undefined` when the shell
    * has it. Can differ from `activeId`: see `AppWindow`.
@@ -125,6 +135,8 @@ type Props = {
   onNewTab: (id: string) => void;
   /** Browser window `id`'s page entered or left fullscreen. */
   onPageFullscreen: (id: string, fullscreen: boolean) => void;
+  /** A page's text, link or image dropped on a tab strip. See `useTabDrop`. */
+  onTabDrop: (target: NodeRef, edge: Direction, url: string) => void;
   /** A float resized to `box`, in the page's pixels, on the screen `on`. */
   onResize: (id: string, box: Rect, on: Geometry) => void;
   /** The user clicked a window or its chrome. */
@@ -145,6 +157,8 @@ type Props = {
   screens: readonly StageScreen[];
   /** The windows hidden in the scratchpad. */
   scratchpad: readonly string[];
+  /** The open windows shown as closed. See `Shown.shut`. */
+  shut: readonly string[];
   windows: readonly ShellWindow[];
 };
 
@@ -167,6 +181,7 @@ export const Stage = memo(
     domicile,
     draggingId,
     focusedId,
+    handed,
     modifiers: { meta, shift },
     onBarPress,
     onClose,
@@ -189,12 +204,14 @@ export const Stage = memo(
     onNewTab,
     onPageFullscreen,
     onResize,
+    onTabDrop,
     onSelect,
     onStretch,
     overview,
     popups,
     scratchpad,
     screens,
+    shut,
     windows,
   }: Props) => {
     const motions = useWindowMotion(
@@ -208,6 +225,7 @@ export const Stage = memo(
               overview: overview !== undefined,
               placements,
               scratchpad,
+              shut,
               tabs,
               windows,
             },
@@ -224,6 +242,18 @@ export const Stage = memo(
       () => new Map(windows.map((window) => [window.id, window])),
       [windows],
     );
+    // Each client window's popups, looked up once per change.
+    const popupsByApp = useMemo(
+      () =>
+        new Map(
+          windows.flatMap((window) =>
+            window.kind === WindowKind.App
+              ? [[window.appId, popupsOf(popups, window.appId)] as const]
+              : [],
+          ),
+        ),
+      [popups, windows],
+    );
     // Every window, with a hidden workspace's laid out in its overview tile.
     const drawn = useMemo(
       () => motions.drawn.map((window) => seenIn(window, overview)),
@@ -238,6 +268,7 @@ export const Stage = memo(
       active === undefined ? "resting" : barMotion(active.motion);
     // Drawn over every window, not by the dragged one: see `DropIndicator`.
     const [aim, setAim] = useState<Aim | undefined>(undefined);
+    const tabDrop = useTabDrop({ onAim: setAim, onTabDrop, targets });
     // A border drag or a tiled resize grab resizes in place, so unlike a move
     // it does not fade the window. See `stageStyles`.
     const [stretching, setStretching] = useState(false);
@@ -251,12 +282,22 @@ export const Stage = memo(
     const pull = useCallback(() => {
       setPulled(true);
     }, []);
+    // The handed drag its grab already started, so a grab remounted mid-drag,
+    // such as on another screen, does not start it over.
+    const [taken, setTaken] = useState<HandedDrag | undefined>(undefined);
+    const handing =
+      handed !== taken &&
+      handed !== undefined &&
+      !desk.fullscreen.has(handed.window)
+        ? handed
+        : undefined;
     const grabbed = useCallback(
       (id: string) => {
         setPulled(false);
+        setTaken(handing);
         onGrab(id);
       },
-      [onGrab],
+      [handing, onGrab],
     );
     const groupGrabbed = useCallback(
       (group: NodeRef) => {
@@ -274,7 +315,7 @@ export const Stage = memo(
     const { onPlayedOut } = motions;
     const tabsShown = motions.tabs.map(({ tab }) => tab);
     return (
-      <main>
+      <main {...tabDrop}>
         <SettleHandoffs>
           {/*
           Before every window, so each float covers its own shadow by document
@@ -398,9 +439,12 @@ export const Stage = memo(
                 // grabbable window so it can catch a drag. During a drag it takes
                 // it over every window: one that kept the pointer would swallow
                 // the moves and the release, leaving the dragged window stuck.
+                // An edge drag leaves windows taking the pointer: the edge holds
+                // it, and a window takes it back only at the engine's next
+                // frame, so the moves and clicks just after the release would
+                // reach the desktop instead of the page under them.
                 clickThrough={
                   draggingId !== undefined ||
-                  stretching ||
                   (meta &&
                     (desk.floats.has(window.id) ||
                       desk.targeted.has(window.id)))
@@ -408,6 +452,7 @@ export const Stage = memo(
                 crossing={crossing}
                 domicile={domicile}
                 dragging={stretching || held.has(window.id)}
+                fillsScreen={desk.fullscreen.has(window.id)}
                 floating={desk.floats.has(window.id)}
                 focused={focused}
                 fullscreen={desk.fullscreen.get(window.id) === false}
@@ -422,6 +467,11 @@ export const Stage = memo(
                 onPlayedOut={onPlayedOut}
                 onSelect={onSelect}
                 placement={placement}
+                popups={
+                  window.kind === WindowKind.App
+                    ? (popupsByApp.get(window.appId) ?? NO_POPUPS)
+                    : NO_POPUPS
+                }
                 // Every window, since a tiled edge resizes the windows on
                 // both sides of it. A window whose box stays put is unaffected.
                 resizing={stretching}
@@ -538,6 +588,7 @@ export const Stage = memo(
                 <WindowBar
                   crossing={crossing}
                   description={descriptionOf(window)}
+                  domicile={domicile}
                   dragging={stretching || held.has(window.id)}
                   float={desk.floats.get(window.id)}
                   focused={focused}
@@ -665,6 +716,9 @@ export const Stage = memo(
             const onGrabThis = () => {
               grabbed(window.id);
             };
+            const handedHere =
+              handing?.window === window.id ? handing : undefined;
+            const resizes = handedHere?.resizes ?? shift;
             const onHoverThis = (at: Spot) => {
               onHover(window.id, at);
             };
@@ -675,9 +729,12 @@ export const Stage = memo(
                 <Fragment key={window.id}>
                   {floating === undefined &&
                     desk.targeted.has(window.id) &&
-                    (meta || window.id === draggingId) && (
+                    (meta ||
+                      window.id === draggingId ||
+                      handedHere !== undefined) && (
                       <TileGrab
                         frame={placement.frame}
+                        handed={handedHere?.press}
                         id={window.id}
                         onAim={setAim}
                         onDrop={() => {
@@ -696,7 +753,7 @@ export const Stage = memo(
                         onStretch={(edge, by) => {
                           onStretch(window.id, edge, by, on.geometry);
                         }}
-                        resizes={shift}
+                        resizes={resizes}
                         targets={targets}
                       />
                     )}
@@ -705,10 +762,13 @@ export const Stage = memo(
                 */}
                   {floating !== undefined &&
                     focusedWindowIn(floating.root) === window.id &&
-                    (meta || window.id === draggingId) && (
+                    (meta ||
+                      window.id === draggingId ||
+                      handedHere !== undefined) && (
                       <FloatGrab
                         depth={placement.depth}
                         float={floating}
+                        handed={handedHere?.press}
                         onDrop={() => {
                           setStretching(false);
                           onDrop();
@@ -725,7 +785,7 @@ export const Stage = memo(
                         onResize={(box) => {
                           onResize(window.id, box, on.geometry);
                         }}
-                        resizes={shift}
+                        resizes={resizes}
                         window={window.id}
                       />
                     )}
@@ -798,16 +858,6 @@ export const Stage = memo(
           )}
           {working && aim !== undefined && <DropIndicator aim={aim} />}
           {movingId !== undefined && pulled && <GrabbingSheet />}
-          {/*
-          Last, so a popup wins the `z-index` tie at its window's depth but
-          stays under windows stacked above.
-        */}
-          {popupsOver(
-            working ? popups : [],
-            screens.flatMap(({ screenful }) => screenful.placements),
-          ).map((popup) => (
-            <AppPopup key={popup.appId} popup={popup} />
-          ))}
         </SettleHandoffs>
       </main>
     );
@@ -865,6 +915,9 @@ const deskOf = (screens: readonly StageScreen[]): Desk => {
   };
 };
 
+/** No popups, shared so a window without any keeps its memoized render. */
+const NO_POPUPS: readonly WindowPopup[] = [];
+
 type WindowContentsProps = {
   behindPanel: boolean;
   clickThrough: boolean;
@@ -874,6 +927,8 @@ type WindowContentsProps = {
   dragging: boolean;
   floating: boolean;
   focused: boolean;
+  /** Whether it fills its screen, alone or in its group. */
+  fillsScreen: boolean;
   fullscreen: boolean;
   hasKeyboard: boolean;
   motion: WindowMotion;
@@ -885,6 +940,8 @@ type WindowContentsProps = {
   onPlayedOut: WindowMotions["onPlayedOut"];
   onSelect: (id: string) => void;
   placement: Placement | undefined;
+  /** Its client's popups. See `AppWindow`. */
+  popups: readonly WindowPopup[];
   /** See `AppWindow`. */
   resizing: boolean;
   restack: Restack | undefined;
@@ -909,6 +966,7 @@ const WindowContents = memo(
     crossing,
     domicile,
     dragging,
+    fillsScreen,
     floating,
     focused,
     fullscreen,
@@ -922,6 +980,7 @@ const WindowContents = memo(
     onPlayedOut,
     onSelect,
     placement,
+    popups,
     resizing,
     restack,
     rewound,
@@ -951,6 +1010,10 @@ const WindowContents = memo(
     const ended = useCallback(() => {
       onPlayedOut(id, motion, screen, "contents");
     }, [id, motion, onPlayedOut, screen]);
+    // A hidden workspace's window coming into the overview draws again, and
+    // the engine would hold the desk for it as a workspace switch's would.
+    // See `isSlidingIn`.
+    const unheld = resizing || seen?.arriving !== undefined;
     const pageFilled = useCallback(
       (fullscreen: boolean) => {
         onPageFullscreen(id, fullscreen);
@@ -960,6 +1023,7 @@ const WindowContents = memo(
     return (
       <WindowFrame
         depth={contents?.depth ?? 0}
+        fillsScreen={fillsScreen}
         frame={placement?.frame}
         motion={motion}
         onHover={hovered}
@@ -974,7 +1038,7 @@ const WindowContents = memo(
             behindPanel={behindPanel}
             clickThrough={clickThrough}
             crossing={crossing}
-            cursor={window.cursor}
+            cursor={window.cursorImage ?? window.cursor}
             depth={contents?.depth ?? 0}
             domicile={domicile}
             dragging={dragging}
@@ -985,8 +1049,9 @@ const WindowContents = memo(
             hasKeyboard={hasKeyboard}
             motion={motion}
             onMotionEnded={ended}
+            popups={popups}
             rect={contents?.rect}
-            resizing={resizing}
+            resizing={unheld}
             restack={restack}
             syncedFrame={window.syncedFrame}
             tab={placement?.bar}
@@ -1014,7 +1079,7 @@ const WindowContents = memo(
             onReach={reached}
             popupWindow={window.popupWindow}
             rect={contents?.rect}
-            resizing={resizing}
+            resizing={unheld}
             restack={restack}
             tab={placement?.bar}
             url={window.url}
@@ -1029,6 +1094,8 @@ const WindowContents = memo(
 type WindowBarProps = {
   /** See `DrawnWindow.crossing`. */
   crossing: boolean;
+  /** Where a browser window's page's profile comes from, for its mark. */
+  domicile: Pick<Domicile, "browser">;
   description: string | undefined;
   dragging: boolean;
   float: Float | undefined;
@@ -1066,6 +1133,7 @@ const WindowBar = memo(
   ({
     crossing,
     description,
+    domicile,
     dragging,
     float,
     focused,
@@ -1094,6 +1162,10 @@ const WindowBar = memo(
     window,
   }: WindowBarProps) => {
     const { id } = window;
+    const mark = useProfileMark(
+      domicile,
+      window.kind === WindowKind.Browser ? engineWindowOf(id) : undefined,
+    );
     const hovered = useCallback(
       (at: Spot) => {
         onHover(id, at);
@@ -1133,6 +1205,7 @@ const WindowBar = memo(
     return (
       <WindowFrame
         depth={placement.depth}
+        fillsScreen={fullscreen}
         frame={placement.frame}
         motion={motion}
         onHover={hovered}
@@ -1159,6 +1232,7 @@ const WindowBar = memo(
           frame={placement.frame}
           fullscreen={fullscreen}
           icon={icon}
+          mark={mark}
           motion={barMotion(motion)}
           onAim={onAim}
           onClose={closed}
@@ -1324,7 +1398,8 @@ const ContainerTab = memo(
 
 /**
  * Gives its children the distances that slide `frame` off screen `on`, and
- * clips them to it during a workspace switch. See `screenClipStyles`. In the
+ * clips them to it during a workspace switch, outside and inside the slide
+ * (see `clippedAlong`). See `screenClipStyles`. In the
  * overview, shows them through their tile; see `seenAt`.
  */
 const Sliding = ({
@@ -1360,11 +1435,20 @@ const Sliding = ({
     <div
       className={seenStyles({
         arriving: seen?.arriving !== undefined,
-        fading: seen?.fading ?? false,
+        seen: seen !== undefined,
+        shut: seen?.shut ?? false,
       })}
       style={seenAt(seen, on?.geometry.screen)}
     >
-      {children}
+      <SlidingScreen
+        value={
+          on === undefined
+            ? undefined
+            : slidingAcross(on.geometry.screen, motion)
+        }
+      >
+        {children}
+      </SlidingScreen>
     </div>
   </div>
 );
@@ -1629,8 +1713,9 @@ const windowNamed = (
 };
 
 /**
- * A window's icon URL: a client's from its desktop entry, a browser window's
- * page icon.
+ * A window's icon URL: a client's from its desktop entry, an app window's
+ * from its app's (an Electron app's, whose page icon isn't its own), else a
+ * browser window's page icon.
  */
 const iconOf = (
   window: ShellWindow,
@@ -1638,7 +1723,8 @@ const iconOf = (
 ): string | undefined =>
   window.kind === WindowKind.App
     ? clientIcons.get(window.desktopId)
-    : window.icon;
+    : ((window.appId === "" ? undefined : clientIcons.get(window.appId)) ??
+      window.icon);
 
 /** A browser window's page description; a client's window has none. */
 const descriptionOf = (window: ShellWindow): string | undefined =>

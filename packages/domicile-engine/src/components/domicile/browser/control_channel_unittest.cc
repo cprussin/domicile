@@ -3,12 +3,15 @@
 
 #include "components/domicile/browser/control_channel.h"
 
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "base/containers/flat_map.h"
+#include "base/dcheck_is_on.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
@@ -19,9 +22,11 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "base/time/time.h"
+#include "components/domicile/browser/desk_faults.h"
 #include "components/domicile/browser/desk_pointer_hiding.h"
 #include "components/domicile/browser/line_framer.h"
 #include "components/domicile/browser/shell_swap.h"
@@ -41,6 +46,13 @@
 
 namespace domicile {
 namespace {
+
+// The handshake. `checked` says whether this engine is a checked build, which
+// the compositor warns about.
+constexpr const char* kHello =
+    DCHECK_IS_ON()
+        ? R"({"checked":true,"protocol_version":1,"type":"hello"})"
+        : R"({"checked":false,"protocol_version":1,"type":"hello"})";
 
 // The page's end, recording the two members the test sends and nothing else.
 class FakeClient : public mojom::ControlChannelClient {
@@ -67,10 +79,12 @@ class FakeClient : public mojom::ControlChannelClient {
                    bool dialog,
                    bool client_frame,
                    mojom::WindowOwnerPtr owner,
+                   const std::string& toplevel_id,
                    uint32_t frame) override {
     heard_.push_back(base::StringPrintf(
-        "appeared %s %s %s %gx%g%s%s%s%s", app_id.c_str(), title.c_str(),
-        desktop_id.c_str(), width, height, dialog ? " dialog" : "",
+        "appeared %s as %s %s %s %gx%g%s%s%s%s", app_id.c_str(),
+        toplevel_id.c_str(), title.c_str(), desktop_id.c_str(), width, height,
+        dialog ? " dialog" : "",
         client_frame ? " client_frame" : "", Owned(owner).c_str(),
         frame ? base::StringPrintf(" frame %u", frame).c_str() : ""));
   }
@@ -115,9 +129,36 @@ class FakeClient : public mojom::ControlChannelClient {
   void AppClosed(const std::string& app_id) override {
     heard_.push_back("closed " + app_id);
   }
-  void AppCursor(const std::string&, mojom::CursorShape) override {}
+  void AppCursor(const std::string& app_id,
+                 mojom::CursorShape,
+                 mojom::AppCursorImagePtr image) override {
+    heard_.push_back(
+        image ? base::StringPrintf("cursor %s image %s at %d,%d x%d",
+                                   app_id.c_str(), image->png.c_str(),
+                                   image->hotspot_x, image->hotspot_y,
+                                   image->scale)
+              : "cursor " + app_id);
+  }
   void AppPresented(const std::string& app_id) override {
     heard_.push_back("presented " + app_id);
+  }
+  void AppPointerConstraint(
+      const std::string& app_id,
+      std::optional<mojom::PointerConstraint> constraint,
+      const std::optional<std::vector<gfx::RectF>>& region) override {
+    const char* name = "none";
+    if (constraint) {
+      name =
+          *constraint == mojom::PointerConstraint::kLock ? "lock" : "confine";
+    }
+    std::string heard = "constraint " + app_id + " " + name;
+    if (region) {
+      heard += " in";
+      for (const gfx::RectF& box : *region) {
+        heard += " " + box.ToString();
+      }
+    }
+    heard_.push_back(heard);
   }
   void AppSuspended(const std::string& app_id, bool suspended) override {
     heard_.push_back((suspended ? "suspended " : "resumed ") + app_id);
@@ -140,16 +181,37 @@ class FakeClient : public mojom::ControlChannelClient {
     heard_.push_back(base::StringPrintf("inhibits %s %s", app_id.c_str(),
                                         inhibits ? "true" : "false"));
   }
+  void BrowserToplevelIds(
+      const base::flat_map<std::string, std::string>& toplevel_ids) override {
+    std::string heard = "browser toplevels";
+    for (const auto& [window, toplevel_id] : toplevel_ids) {
+      heard += " " + window + "=" + toplevel_id;
+    }
+    heard_.push_back(heard);
+  }
   void ShortcutPressed(mojom::ShortcutPtr) override {}
   void ShortcutReleased(mojom::ShortcutPtr) override {}
   void GesturePerformed(mojom::GesturePtr) override {}
+  void ModifierTapped(mojom::TapModifier, base::TimeDelta) override {}
   void Modifiers(bool, bool, bool, bool) override {}
-  void Displays(std::vector<mojom::DisplayInfoPtr>) override {}
+  void Displays(std::vector<mojom::DisplayInfoPtr> displays) override {
+    for (const auto& display : displays) {
+      heard_.push_back(base::StringPrintf(
+          "display %s hdr %s peak %u white %u", display->name.c_str(),
+          display->hdr.c_str(), display->peak_luminance, display->sdr_white));
+    }
+  }
   void Files(const std::string&,
              const std::vector<std::string>&,
              uint32_t,
              bool) override {}
-  void Clipboard(std::vector<mojom::ClipboardEntryPtr>) override {}
+  void Clipboard(std::vector<mojom::ClipboardEntryPtr> entries) override {
+    for (const auto& entry : entries) {
+      heard_.push_back(base::StringPrintf("clipboard %u '%s'%s", entry->id,
+                                          entry->preview.c_str(),
+                                          entry->current ? " current" : ""));
+    }
+  }
   void Tray(std::vector<mojom::TrayItemPtr>) override {}
   void Notifications(std::vector<mojom::NotificationPtr> items) override {
     for (const auto& item : items) {
@@ -198,7 +260,14 @@ class ControlChannelTest : public testing::Test {
     // Self-owned, like every channel: dropping `control_` deletes it.
     new ControlChannel(path, control_.BindNewPipeAndPassReceiver(),
                        keymap_.GetRepeatingCallback<const std::string&>(),
-                       base::DoNothing(), base::DoNothing(), base::DoNothing(),
+                       base::DoNothing(),
+                       base::BindLambdaForTesting(
+                           [this](const std::vector<gfx::RectF>& boxes,
+                                  base::OnceCallback<void(bool)> confined) {
+                             confined_to_ = boxes;
+                             std::move(confined).Run(true);
+                           }),
+                       base::DoNothing(), base::DoNothing(),
                        cursor_theme_.GetRepeatingCallback(),
                        force_dark_.GetRepeatingCallback(), Page{});
 
@@ -267,6 +336,7 @@ class ControlChannelTest : public testing::Test {
   base::test::TestFuture<std::string> keymap_;
   base::test::TestFuture<std::optional<ui::DeskCursorTheme>> cursor_theme_;
   base::test::TestFuture<std::vector<std::string>> force_dark_;
+  std::vector<gfx::RectF> confined_to_;
   FakeClient client_;
   LineFramer framer_;
   std::vector<std::string> lines_;
@@ -295,7 +365,8 @@ TEST_F(ControlChannelTest, ALineBeforeThePageBindsReachesItAfterInOrder) {
 TEST_F(ControlChannelTest, AWindowReachesThePageWithItsSizeAndHints) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"title\":"
+  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"toplevel_id\":"
+      "\"t1\",\"title\":"
       "\"pinentry\",\"desktop_id\":null,\"size\":[400.0,300.0],"
       "\"dialog\":true,\"client_frame\":true}\n"
       "{\"type\":\"locked\",\"locked\":false}\n");
@@ -303,8 +374,39 @@ TEST_F(ControlChannelTest, AWindowReachesThePageWithItsSizeAndHints) {
 
   EXPECT_EQ(client_.heard_,
             (std::vector<std::string>{
-                "appeared app-1 pinentry  400x300 dialog client_frame",
+                "appeared app-1 as t1 pinentry  400x300 dialog client_frame",
                 "locked false"}));
+}
+
+// A window names its toplevel id, which a shell hands capture tools: a line
+// without one is dropped.
+TEST_F(ControlChannelTest, AWindowWithoutItsToplevelIdIsDropped) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"title\":"
+      "\"a\",\"desktop_id\":null,\"size\":[400.0,300.0],"
+      "\"dialog\":false,\"client_frame\":false}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_, (std::vector<std::string>{"locked false"}));
+}
+
+// Each browser window's toplevel id reaches the page, by window id. A map
+// with a value that is not a string is dropped whole.
+TEST_F(ControlChannelTest, EachBrowserWindowsToplevelIdReachesThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"browser_toplevel_ids\",\"toplevel_ids\":"
+      "{\"3\":\"Xy7p\",\"7\":\"aU2i\"}}\n"
+      "{\"type\":\"browser_toplevel_ids\",\"toplevel_ids\":{\"3\":4}}\n"
+      "{\"type\":\"browser_toplevel_ids\",\"toplevel_ids\":{}}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{"browser toplevels 3=Xy7p 7=aU2i",
+                                      "browser toplevels", "locked false"}));
 }
 
 // The page hears when a window reaches the screen and when the compositor
@@ -329,11 +431,13 @@ TEST_F(ControlChannelTest, AWindowReachesThePageWithItsOwner) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
   // A uid past 2^31 does not fit base::Value's int.
-  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"title\":"
+  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"toplevel_id\":"
+      "\"t1\",\"title\":"
       "\"a\",\"desktop_id\":null,\"size\":[400.0,300.0],"
       "\"dialog\":false,\"client_frame\":false,\"owner\":{\"pid\":4242,"
       "\"uid\":4294967294,\"gid\":100,\"pidfd_inode\":5021}}\n"
-      "{\"type\":\"app_appeared\",\"app_id\":\"app-2\",\"title\":"
+      "{\"type\":\"app_appeared\",\"app_id\":\"app-2\",\"toplevel_id\":"
+      "\"t2\",\"title\":"
       "\"b\",\"desktop_id\":null,\"size\":[400.0,300.0],"
       "\"dialog\":false,\"client_frame\":false,\"owner\":{\"pid\":7,"
       "\"uid\":1000,\"gid\":1000,\"pidfd_inode\":null,\"sandbox\":"
@@ -343,8 +447,8 @@ TEST_F(ControlChannelTest, AWindowReachesThePageWithItsOwner) {
 
   EXPECT_EQ(client_.heard_,
             (std::vector<std::string>{
-                "appeared app-1 a  400x300 owner 4242/4294967294/100/5021",
-                "appeared app-2 b  400x300 owner 7/1000/1000/none sandbox "
+                "appeared app-1 as t1 a  400x300 owner 4242/4294967294/100/5021",
+                "appeared app-2 as t2 b  400x300 owner 7/1000/1000/none sandbox "
                 "org.flatpak/-/3",
                 "locked false"}));
 }
@@ -355,7 +459,8 @@ TEST_F(ControlChannelTest, AWindowReachesThePageWithItsOwner) {
 TEST_F(ControlChannelTest, TheFramesAMoveShowsWithReachThePage) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-2\",\"title\":"
+  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-2\",\"toplevel_id\":"
+      "\"t2\",\"title\":"
       "\"a\",\"desktop_id\":null,\"size\":[400.0,300.0],"
       "\"dialog\":false,\"client_frame\":false,\"frame\":3}\n"
       "{\"type\":\"popup_placed\",\"app_id\":\"app-3\",\"parent\":"
@@ -371,7 +476,7 @@ TEST_F(ControlChannelTest, TheFramesAMoveShowsWithReachThePage) {
 
   EXPECT_EQ(client_.heard_,
             (std::vector<std::string>{
-                "appeared app-2 a  400x300 frame 3",
+                "appeared app-2 as t2 a  400x300 frame 3",
                 "placed app-3 over app-2 app-2@4 app-3@1",
                 "placed app-3 over app-2", "locked false"}));
 }
@@ -432,6 +537,27 @@ TEST_F(ControlChannelTest, AWindowsAnchorReachesThePage) {
                                       "anchored app-4 at ", "locked false"}));
 }
 
+// A cursor a client drew reaches the page with its PNG, hotspot and scale. A
+// named one, or an image missing a part, reaches it as the shape alone.
+TEST_F(ControlChannelTest, ACursorAClientDrewReachesThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"app_cursor\",\"app_id\":\"app-1\","
+      "\"cursor\":\"default\",\"image\":{\"png\":\"iVBO\","
+      "\"hotspot\":[3,4],\"scale\":2}}\n"
+      "{\"type\":\"app_cursor\",\"app_id\":\"app-1\","
+      "\"cursor\":\"pointer\"}\n"
+      "{\"type\":\"app_cursor\",\"app_id\":\"app-1\","
+      "\"cursor\":\"default\",\"image\":{\"png\":\"iVBO\"}}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{"cursor app-1 image iVBO at 3,4 x2",
+                                      "cursor app-1", "cursor app-1",
+                                      "locked false"}));
+}
+
 // A window taking and giving back a shortcuts inhibitor reaches the page,
 // which lets the desktop's chords through to it meanwhile.
 TEST_F(ControlChannelTest, AWindowInhibitingShortcutsReachesThePage) {
@@ -447,6 +573,34 @@ TEST_F(ControlChannelTest, AWindowInhibitingShortcutsReachesThePage) {
   EXPECT_EQ(client_.heard_,
             (std::vector<std::string>{"inhibits app-1 true",
                                       "inhibits app-1 false", "locked false"}));
+}
+
+// Each display says whether it is driven in HDR, so a shell can offer HDR
+// only where a panel takes it. A state this browser has no name for, or a
+// host that predates the fields, is `unsupported`.
+TEST_F(ControlChannelTest, EachDisplaysHdrReachesThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"displays\",\"displays\":["
+      "{\"name\":\"lit\",\"position\":[0,0],\"size\":[1920,1080],"
+      "\"scale\":1,\"hdr\":\"on\",\"peak_luminance\":1000,"
+      "\"sdr_white\":203},"
+      "{\"name\":\"able\",\"position\":[1920,0],\"size\":[1920,1080],"
+      "\"scale\":1,\"hdr\":\"off\",\"peak_luminance\":600,"
+      "\"sdr_white\":0},"
+      "{\"name\":\"odd\",\"position\":[3840,0],\"size\":[1920,1080],"
+      "\"scale\":1,\"hdr\":\"dolby\"},"
+      "{\"name\":\"old\",\"position\":[5760,0],\"size\":[1920,1080],"
+      "\"scale\":1}]}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{
+                "display lit hdr on peak 1000 white 203",
+                "display able hdr off peak 600 white 0",
+                "display odd hdr unsupported peak 0 white 0",
+                "display old hdr unsupported peak 0 white 0", "locked false"}));
 }
 
 // The browser process draws the pointer on a tty, so the theme stops there.
@@ -514,6 +668,54 @@ TEST_F(ControlChannelTest, TheSitesToForceDarkReachTheBrowser) {
             (std::vector<std::string>{"mail.google.com"}));
 }
 
+// How to check spelling is this process's too. One whose languages are not
+// strings is dropped.
+TEST_F(ControlChannelTest, SpellCheckingReachesTheBrowser) {
+  base::test::TestFuture<SpellcheckSettings> heard;
+  SetSpellcheckSink(heard.GetRepeatingCallback<const SpellcheckSettings&>());
+
+  Say("{\"type\":\"spellcheck\",\"enabled\":true,\"languages\":[1]}\n"
+      "{\"type\":\"spellcheck\",\"enabled\":false,"
+      "\"languages\":[\"de-DE\"]}\n");
+
+  EXPECT_EQ(heard.Take(),
+            (SpellcheckSettings{.enabled = false, .languages = {"de-DE"}}));
+  SetSpellcheckSink(SpellcheckSink());
+}
+
+// The desk's browser profiles are this process's too, and reach it with the
+// page whose channel heard them. Ones that name a profile they do not list are
+// dropped.
+TEST_F(ControlChannelTest, TheBrowserProfilesReachTheBrowserWithThePage) {
+  base::test::TestFuture<Page, BrowserProfiles> heard;
+  SetBrowserProfilesSink(
+      heard.GetRepeatingCallback<const Page&, const BrowserProfiles&>());
+
+  Say("{\"type\":\"browser_profiles\",\"profiles\":[{\"id\":\"default\","
+      "\"name\":\"Personal\",\"color\":\"#0d9488\",\"private\":false}],"
+      "\"default_profile\":\"work\",\"default_private_profile\":\"work\","
+      "\"sites\":{}}\n"
+      "{\"type\":\"browser_profiles\",\"profiles\":[{\"id\":\"default\","
+      "\"name\":\"Personal\",\"color\":\"#0d9488\",\"private\":false},"
+      "{\"id\":\"private\",\"name\":\"Private\",\"color\":\"#a78bfa\","
+      "\"private\":true},{\"id\":\"work\",\"name\":\"Work\","
+      "\"color\":\"#2563eb\",\"private\":false,"
+      "\"extensions\":[\"aeblfdkhhhdcdjpifhhbdiojplfjncoa\"]}],"
+      "\"default_profile\":\"default\",\"default_private_profile\":"
+      "\"private\",\"sites\":{\"github.com/acme\":\"work\"}}\n");
+
+  const auto [page, profiles] = heard.Take();
+  EXPECT_EQ(page, Page{});
+  EXPECT_EQ(profiles.default_profile, "default");
+  EXPECT_EQ(profiles.default_private_profile, "private");
+  ASSERT_NE(profiles.Find("work"), nullptr);
+  EXPECT_EQ(profiles.Find("work")->extensions,
+            (std::vector<std::string>{"aeblfdkhhhdcdjpifhhbdiojplfjncoa"}));
+  EXPECT_EQ(profiles.sites,
+            (std::map<std::string, std::string>{{"github.com/acme", "work"}}));
+  SetBrowserProfilesSink(BrowserProfilesSink());
+}
+
 // A compositor that exits takes its windows and the page's system calls with
 // it. The page hears each window close and each call end, then dials the next
 // compositor and hears that it changed. See "A compositor restart" in
@@ -526,10 +728,12 @@ TEST_F(ControlChannelTest, ACompositorThatHangsUpEndsWhatItHadAndIsReplaced) {
   // Driving call 3 is not a new call.
   control_->CallSystem(3, R"({"call":"unwatch"})");
   control_.FlushForTesting();
-  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"title\":"
+  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"toplevel_id\":"
+      "\"t1\",\"title\":"
       "\"a\",\"desktop_id\":null,\"size\":[400.0,300.0],"
       "\"dialog\":false,\"client_frame\":false}\n"
-      "{\"type\":\"app_appeared\",\"app_id\":\"app-2\",\"title\":"
+      "{\"type\":\"app_appeared\",\"app_id\":\"app-2\",\"toplevel_id\":"
+      "\"t2\",\"title\":"
       "\"b\",\"desktop_id\":null,\"size\":[400.0,300.0],"
       "\"dialog\":false,\"client_frame\":false}\n"
       "{\"type\":\"app_closed\",\"app_id\":\"app-2\"}\n"
@@ -544,7 +748,7 @@ TEST_F(ControlChannelTest, ACompositorThatHangsUpEndsWhatItHadAndIsReplaced) {
   compositor_.reset();
   AcceptTheNextCompositor();
 
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
   EXPECT_TRUE(client_.replaced_.Wait());
   EXPECT_EQ(
       client_.heard_,
@@ -563,14 +767,14 @@ TEST_F(ControlChannelTest, ACompositorThatHangsUpEndsWhatItHadAndIsReplaced) {
 TEST_F(ControlChannelTest, APageLineWithNoCompositorUpReachesTheNextOne) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
 
   compositor_.reset();
   control_->FocusChrome();
   control_.FlushForTesting();
   AcceptTheNextCompositor();
 
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
   EXPECT_EQ(Heard(), R"({"type":"focus_chrome"})");
 }
 
@@ -591,7 +795,7 @@ TEST_F(ControlChannelTest, WhetherTheShellRanReachesTheBrowserOnly) {
   heard->clear();
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
 
   control_->ShellFailed("7", "the shell's Shell threw: TypeError");
   control_->ShellRan("7");
@@ -609,7 +813,7 @@ TEST_F(ControlChannelTest, WhetherTheShellRanReachesTheBrowserOnly) {
 TEST_F(ControlChannelTest, ThePointerOnScreenReachesTheCompositor) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
 
   ui::DeskCursorImage hand;
   hand.size = gfx::Size(1, 1);
@@ -626,7 +830,7 @@ TEST_F(ControlChannelTest, ThePointerOnScreenReachesTheCompositor) {
 
   compositor_.reset();
   AcceptTheNextCompositor();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
   EXPECT_EQ(Heard(), R"({"type":"desk_cursor"})");
 
   ui::DeskCursorImageSource::Get().ResetForTesting();
@@ -635,7 +839,7 @@ TEST_F(ControlChannelTest, ThePointerOnScreenReachesTheCompositor) {
 TEST_F(ControlChannelTest, ScrollSourcesAndAxisStopsReachTheCompositor) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
   for (const auto& [source, name] :
        {std::pair(mojom::PointerAxisSource::kWheel, "wheel"),
         std::pair(mojom::PointerAxisSource::kFinger, "finger"),
@@ -655,10 +859,119 @@ TEST_F(ControlChannelTest, ScrollSourcesAndAxisStopsReachTheCompositor) {
   }
 }
 
+// A hand's relative motion reaches the compositor as its deltas, accelerated
+// and not.
+TEST_F(ControlChannelTest, RelativeMotionReachesTheCompositor) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), kHello);
+  control_->PointerRelative("app", 3.5, -2, 1.25, -0.5);
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), R"({"app_id":"app","dx":3.5,"dx_unaccel":1.25,"dy":-2.0,)"
+                     R"("dy_unaccel":-0.5,"type":"pointer_relative"})");
+}
+
+// A page confining the pointer stops in the browser, which draws the pointer,
+// and hears whether the platform holds it.
+TEST_F(ControlChannelTest, ConfiningThePointerStopsInTheBrowser) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), kHello);
+  base::test::TestFuture<bool> confined;
+  control_->ConfinePointer({gfx::RectF(10, 20, 300, 200)},
+                           confined.GetCallback());
+  EXPECT_TRUE(confined.Get());
+  ASSERT_EQ(confined_to_.size(), 1u);
+  EXPECT_EQ(confined_to_[0].x(), 10);
+  EXPECT_EQ(confined_to_[0].y(), 20);
+  EXPECT_EQ(confined_to_[0].width(), 300);
+  EXPECT_EQ(confined_to_[0].height(), 200);
+}
+
+// A window's ask to lock or confine the pointer reaches the page, `null`
+// withdraws it, and a kind this engine does not know is dropped.
+TEST_F(ControlChannelTest, APointerConstraintReachesThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"app_pointer_constraint\",\"app_id\":\"game\","
+      "\"constraint\":\"lock\"}\n"
+      "{\"type\":\"app_pointer_constraint\",\"app_id\":\"game\","
+      "\"constraint\":\"wiggle\"}\n"
+      "{\"type\":\"app_pointer_constraint\",\"app_id\":\"game\","
+      "\"constraint\":\"confine\"}\n"
+      "{\"type\":\"app_pointer_constraint\",\"app_id\":\"game\","
+      "\"constraint\":null}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{"constraint game lock",
+                                      "constraint game confine",
+                                      "constraint game none", "locked false"}));
+}
+
+// A confinement's region reaches the page as boxes, and a box that is not one
+// drops the message.
+TEST_F(ControlChannelTest, APointerRegionReachesThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"app_pointer_constraint\",\"app_id\":\"game\","
+      "\"constraint\":\"confine\",\"region\":[{\"x\":10,\"y\":20,"
+      "\"width\":300,\"height\":200},{\"x\":0,\"y\":220,\"width\":40,"
+      "\"height\":10}]}\n"
+      "{\"type\":\"app_pointer_constraint\",\"app_id\":\"game\","
+      "\"constraint\":\"confine\",\"region\":[{\"x\":10}]}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{
+                "constraint game confine in 10,20 300x200 0,220 40x10",
+                "locked false"}));
+}
+
+// Which clipboard row is current reaches the page, and a row that does not
+// say is dropped.
+TEST_F(ControlChannelTest, TheCurrentClipboardRowReachesThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"clipboard\",\"entries\":["
+      "{\"id\":3,\"image\":false,\"preview\":\"now\",\"current\":true},"
+      "{\"id\":2,\"image\":false,\"preview\":\"before\",\"current\":false},"
+      "{\"id\":1,\"image\":false,\"preview\":\"unsaid\"}]}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{"clipboard 3 'now' current",
+                                      "clipboard 2 'before'", "locked false"}));
+}
+
+// Removing a clipboard row reaches the compositor as its id.
+TEST_F(ControlChannelTest, RemovingAClipboardRowReachesTheCompositor) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), kHello);
+  control_->RemoveClipboardEntry(7);
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), R"({"entry":7,"type":"remove_clipboard_entry"})");
+}
+
+// The page taking and letting go of the pointer reaches the compositor.
+TEST_F(ControlChannelTest, ThePageTakingThePointerReachesTheCompositor) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), kHello);
+  control_->PointerConstrained("game", true);
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(),
+            R"({"active":true,"app_id":"game","type":"pointer_constrained"})");
+}
+
 TEST_F(ControlChannelTest, TouchesKeepTheirPointsAndUnsignedTimes) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
   for (const auto& [phase, name] :
        {std::pair(mojom::TouchPhase::kDown, "down"),
         std::pair(mojom::TouchPhase::kMotion, "motion"),
@@ -689,7 +1002,7 @@ TEST_F(ControlChannelTest, TouchesKeepTheirPointsAndUnsignedTimes) {
 TEST_F(ControlChannelTest, PinchPhasesKeepUnsignedTimesAndAbsoluteScale) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
   for (const auto phase :
        {mojom::PinchPhase::kBegin, mojom::PinchPhase::kUpdate,
         mojom::PinchPhase::kEnd}) {
@@ -727,7 +1040,7 @@ TEST_F(ControlChannelTest, PinchPhasesKeepUnsignedTimesAndAbsoluteScale) {
 TEST_F(ControlChannelTest, UnboundSwipesAndHoldsReachTheCompositor) {
   control_->SetClient(client_.BindRemote());
   control_.FlushForTesting();
-  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), kHello);
 
   DeskGestures& gestures = DeskGestures::Get();
   const auto swipe = [](ui::NativeGesturePhase phase) {
@@ -758,6 +1071,19 @@ TEST_F(ControlChannelTest, UnboundSwipesAndHoldsReachTheCompositor) {
   EXPECT_EQ(Heard(), R"({"fingers":3,"phase":"begin","type":"pointer_hold"})");
   EXPECT_EQ(Heard(),
             R"({"canceled":true,"phase":"end","type":"pointer_hold"})");
+}
+
+// A bug the engine caught in itself reaches the compositor, which tells the
+// person.
+TEST_F(ControlChannelTest, AnEngineFaultReachesTheCompositor) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), kHello);
+
+  DeskFaults::Get().Report("A page stayed in fullscreen.");
+
+  EXPECT_EQ(Heard(),
+            R"({"type":"engine_fault","what":"A page stayed in fullscreen."})");
 }
 
 }  // namespace

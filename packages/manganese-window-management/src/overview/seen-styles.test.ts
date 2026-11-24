@@ -6,6 +6,7 @@ const SCREEN = { height: 1080, width: 1920, x: 1920, y: 0 };
 const SEEN = {
   arriving: undefined,
   fading: false,
+  shut: false,
   view: { scale: 0.25, x: 100, y: 50 },
 };
 
@@ -19,6 +20,13 @@ describe("seenAt", () => {
       "matrix(0.25, 0, 0, 0.25, 100, 50)",
     );
     expect(seenStyles.raw({}).transform).toBe("var(--overview-to, none)");
+  });
+
+  it("keeps its move from its window's parts, so setting it restyles the box alone", () => {
+    expect(seenStyles.raw({})["& > *"]).toStrictEqual({
+      "--overview-from": "initial",
+      "--overview-to": "initial",
+    });
   });
 
   it("clips it to its screen as it moves, so a float hanging off the edge stays in its tile", () => {
@@ -42,8 +50,15 @@ describe("seenAt", () => {
   });
 
   it("eases between its states, so closing partway through opening turns back", () => {
-    expect(seenStyles.raw({}).transition).toContain("transform");
+    expect(seenStyles.raw({ seen: true }).transition).toContain("transform");
     expect(seenStyles.raw({ arriving: true })).not.toHaveProperty("animation");
+  });
+
+  it("drops its move at once as the overview finishes closing, so its window keeps its place in the stack", () => {
+    // A box still easing to no transform is a stacking context of its own,
+    // and with the wrapper's depth gone, a float under it sinks below the
+    // tiled windows until the ease ends.
+    expect(seenStyles.raw({ seen: false })).not.toHaveProperty("transition");
   });
 
   it("is out of view while its window is, so it comes into view with it", () => {
@@ -51,13 +66,13 @@ describe("seenAt", () => {
     expect(seenStyles.raw({ placed: true })).not.toHaveProperty("display");
   });
 
-  it("lets presses through a window fading out, even its tab strip's buttons", () => {
+  it("lets presses through a hidden workspace's window, even its tab strip's buttons", () => {
     // Once the overview's picker is gone, a press on a hidden workspace's
     // window as it fades must not go to that workspace. The strips set their
     // own `pointer-events`, so the rule reaches every part, not only the
     // wrapper.
-    expect(seenStyles.raw({ fading: false })).not.toHaveProperty("& *");
-    expect(seenStyles.raw({ fading: true })).toMatchObject({
+    expect(seenStyles.raw({ shut: false })).not.toHaveProperty("& *");
+    expect(seenStyles.raw({ shut: true })).toMatchObject({
       "& *": { pointerEvents: "none!" },
       pointerEvents: "none",
     });

@@ -38,26 +38,20 @@ void Attach(content::WebContents& guest, bool records_history) {
     return;
   }
 
-  // A private page is not a tab extensions see, as an incognito tab is hidden
-  // from extensions Chrome has not allowed there. The view type keeps
-  // runtime.getContexts off its NOTREACHED; see below.
-  if (guest.GetBrowserContext()->IsOffTheRecord()) {
-    extensions::SetViewType(&guest, extensions::mojom::ViewType::kTabContents);
-    WatchForDevTools(guest);
-    return;
-  }
-
   // Use Chrome's factory because it also makes ExtensionWebContentsObserver
   // track the tab's window id. The SessionService it attaches records nothing
-  // for guests (SessionServiceBase::ShouldTrackChangesToWindow).
+  // for guests (SessionServiceBase::ShouldTrackChangesToWindow), nor for a
+  // private page's off-the-record profile, which has none.
   CreateSessionServiceTabHelper(&guest);
 
   // Visits and their favicons go into the profile's history, which the
-  // History app reads, except an app window's. See docs/HISTORY.md.
-  if (records_history) {
-    HistoryTabHelper::GetOrCreateForWebContents(&guest)->set_desk_tab();
+  // History app reads, except an app window's. A private page keeps none.
+  if (!guest.GetBrowserContext()->IsOffTheRecord()) {
+    if (records_history) {
+      HistoryTabHelper::GetOrCreateForWebContents(&guest)->set_desk_tab();
+    }
+    favicon::CreateContentFaviconDriverForWebContents(&guest);
   }
-  favicon::CreateContentFaviconDriverForWebContents(&guest);
 
   // Set the view type before extensions::TabHelper, as Chrome's
   // tab_helpers.cc does. A kInvalid view type crashes runtime.getContexts

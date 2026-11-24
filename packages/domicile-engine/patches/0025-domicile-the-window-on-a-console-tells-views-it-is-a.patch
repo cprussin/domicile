@@ -61,7 +61,7 @@ the two log lines above are there to say so on the next run.
  2 files changed, 88 insertions(+), 2 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
-index e7ca5f8..f0f0412 100644
+index 5d3fc6d..eca8811 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.cc
 +++ b/ui/ozone/platform/drm/host/drm_window_host.cc
 @@ -4,7 +4,10 @@
@@ -153,7 +153,7 @@ index e7ca5f8..f0f0412 100644
  void DrmWindowHost::SetUseNativeFrame(bool use_native_frame) {}
 @@ -352,6 +406,23 @@ bool DrmWindowHost::CanDispatchEvent(const PlatformEvent& event) {
  uint32_t DrmWindowHost::DispatchEvent(const PlatformEvent& event) {
-   DCHECK(event);
+   CHECK(event, base::NotFatalUntil::M163);
  
 +  // SAID ONCE PER KIND, AND THAT IS THE POINT. Whether a desktop that answers
 +  // nothing is reading its devices at all is the first question about it, and

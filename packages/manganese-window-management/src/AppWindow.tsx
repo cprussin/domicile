@@ -5,18 +5,21 @@ import {
   APP_FOCUS_RELEASE_REQUESTED_EVENT,
   APP_FOCUS_REQUESTED_EVENT,
 } from "@domicile-desktop/sdk/app-element";
-import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { WindowState } from "@domicile-desktop/sdk/window-state";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 
 import { css, cx } from "../styled-system/css";
+import { AppPopup } from "./AppPopup";
 import { endsOwnAnimation } from "./own-animation";
-import { CROSSING } from "./placement";
+import { CROSSING, raised } from "./placement";
+import type { WindowPopup } from "./popup";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
+import { SlidingScreen } from "./sliding-screen";
 import { useLowered } from "./useLowered";
+import { usePointerConfinement } from "./usePointerConfinement";
 import type { Settler } from "./useSettling";
 import { UPRIGHT, useSettling } from "./useSettling";
 import { appWindowId } from "./window";
@@ -25,6 +28,7 @@ import { isLeaving, isMoving, isSlidingIn } from "./window-motion";
 import {
   bottomCornerStyles,
   clickThroughStyles,
+  clippedAlong,
   contentsScaledAbout,
   edgeStyles,
   heldStyles,
@@ -74,9 +78,10 @@ type Props = {
   /** The host's id for this window's client. */
   appId: string;
   /**
-   * The cursor the client requested. `undefined` uses the page's cursor.
+   * The CSS cursor the client requested: a shape's keyword, or an image it
+   * drew. `undefined` uses the page's cursor.
    */
-  cursor: CursorShape | undefined;
+  cursor: string | undefined;
   /**
    * Whether it just moved to another tab group, so it eases there over the
    * strips it passes. See `crossing.ts`.
@@ -119,6 +124,8 @@ type Props = {
    * removed. Uses the animation event so the duration lives only in CSS.
    */
   onMotionEnded: () => void;
+  /** Its client's popups, drawn over it. See `AppPopup`. */
+  popups: readonly WindowPopup[];
   /**
    * The contents' box, or `undefined` when off screen (another workspace, or
    * behind a tab).
@@ -168,6 +175,7 @@ export const AppWindow = ({
   hasKeyboard,
   motion,
   onMotionEnded,
+  popups,
   rect,
   resizing,
   restack,
@@ -183,11 +191,12 @@ export const AppWindow = ({
   // its layout effect reads it.
   const box = useRef<HTMLDivElement>(null);
   const lowered = useLowered(depth);
+  const sliding = useContext(SlidingScreen);
   // The box the window eases from, while it settles.
   const [settlingFrom, setSettlingFrom] = useState<Rect | undefined>(undefined);
-  useSettling({
-    element: box,
-    onSettling: setSettlingFrom,
+  // Its popups, which ease along with it.
+  const layer = useRef<HTMLDivElement>(null);
+  const settling = {
     origin:
       rect === undefined || frame === undefined
         ? undefined
@@ -196,7 +205,9 @@ export const AppWindow = ({
     rect,
     settler,
     still: dragging || isMoving(motion),
-  });
+  };
+  useSettling({ ...settling, element: box, onSettling: setSettlingFrom });
+  useSettling({ ...settling, element: layer });
 
   // Keeps the compositor's keyboard focus in line with the shell's.
   //
@@ -229,6 +240,15 @@ export const AppWindow = ({
   useEffect(() => {
     domicile.windows.setBounds(appId, { height, width, x, y });
   }, [appId, domicile, height, width, x, y]);
+
+  // Holds the pointer in the window for a game or VM viewer that asked, while
+  // it has the keyboard.
+  usePointerConfinement(
+    domicile,
+    appId,
+    rect,
+    hasKeyboard && !behindPanel && !leaving,
+  );
 
   // Tells the client how it is laid out, so a tiled window draws no shadow,
   // rounded corners or resize border of its own. Floats get none, as in sway.
@@ -299,72 +319,109 @@ export const AppWindow = ({
     }
   }, [appId, element]);
 
+  // The box's motion and shuffle, which its popups play too.
+  const moved =
+    rect === undefined || frame === undefined
+      ? undefined
+      : {
+          ...contentsScaledAbout(motion, frame, tab, rect),
+          ...shuffledBy(restack),
+        };
   return (
-    // The box places the window, plays its motions and eases it into a new
-    // box, clipping the `<app>` to where it is drawn. The `<app>` keeps its
-    // own size, so a client drawn at its new size is cropped rather than
-    // stretched while the box gets there.
-    <div
-      className={cx(
-        windowStyles,
-        boxStyles,
-        // Neither a line nor rounded corners around the screen's own edge.
-        !fullscreen && edgeStyles,
-        !fullscreen && bottomCornerStyles,
-        movingStyles({ contents: true, motion }),
-        (clickThrough || leaving) && clickThroughStyles,
-        // The client's box takes its new size at once; `useSettling` eases
-        // it. Colors still ease; see `settlingStyles`.
-        settlingStyles({ lowered }),
-        dragging && heldStyles,
-      )}
-      // Exposes the motion on the element for tests and debugging.
-      data-motion={motion}
-      hidden={rect === undefined}
-      // A leaving window is unreachable by keyboard.
-      inert={leaving}
-      // Ignores animations bubbling up from descendants, and the end of a
-      // motion this one replaced.
-      onAnimationEnd={(event) => {
-        if (endsOwnAnimation(event)) {
-          onMotionEnded();
-        }
-      }}
-      ref={box}
-      // Inline because the box is a runtime value that Panda cannot extract
-      // at build time.
-      style={
-        rect === undefined || frame === undefined
-          ? undefined
-          : {
-              ...placedAt(rect, depth),
-              ...contentsScaledAbout(motion, frame, tab, rect),
-              ...shuffledBy(restack),
-            }
-      }
-    >
-      <app
-        app-id={appId}
-        className={appStyles}
-        frame={String(syncedFrame)}
-        ref={setElement}
-        // Also while the box settles, so the engine neither holds the page
-        // for the client nor stretches its old frame, and while it slides in,
-        // so the slide does not wait for the client to draw again.
-        resizing={
-          resizing || settlingFrom !== undefined || isSlidingIn(motion)
-            ? ""
-            : undefined
-        }
-        // Inline because the cursor and size are runtime values that Panda
-        // cannot extract at build time.
-        style={{
-          cursor,
-          ...(rect === undefined ? {} : keptAt(settlingFrom, rect)),
+    <>
+      {/*
+        The box places the window, plays its motions and eases it into a new
+        box, clipping the `<app>` to where it is drawn. The `<app>` keeps its
+        own size, so a client drawn at its new size is cropped rather than
+        stretched while the box gets there.
+      */}
+      <div
+        className={cx(
+          windowStyles,
+          boxStyles,
+          // Neither a line nor rounded corners around the screen's own edge.
+          !fullscreen && edgeStyles,
+          !fullscreen && bottomCornerStyles,
+          movingStyles({ contents: true, motion }),
+          (clickThrough || leaving) && clickThroughStyles,
+          // The client's box takes its new size at once; `useSettling` eases
+          // it. Colors still ease; see `settlingStyles`.
+          settlingStyles({ lowered }),
+          dragging && heldStyles,
+        )}
+        // Exposes the motion on the element for tests and debugging.
+        data-motion={motion}
+        hidden={rect === undefined}
+        // A leaving window is unreachable by keyboard.
+        inert={leaving}
+        // Ignores animations bubbling up from descendants, and the end of a
+        // motion this one replaced.
+        onAnimationEnd={(event) => {
+          if (endsOwnAnimation(event)) {
+            onMotionEnded();
+          }
         }}
-        {...{ [UPRIGHT]: "" }}
-      />
-    </div>
+        ref={box}
+        // Inline because the box is a runtime value that Panda cannot extract
+        // at build time.
+        style={
+          rect === undefined || frame === undefined
+            ? undefined
+            : {
+                ...placedAt(rect, depth),
+                ...clippedAlong(sliding, rect),
+                ...moved,
+              }
+        }
+      >
+        <app
+          app-id={appId}
+          className={appStyles}
+          frame={String(syncedFrame)}
+          ref={setElement}
+          // Also while the box settles, so the engine neither holds the page
+          // for the client nor stretches its old frame, and while it slides in,
+          // so the slide does not wait for the client to draw again.
+          resizing={
+            resizing || settlingFrom !== undefined || isSlidingIn(motion)
+              ? ""
+              : undefined
+          }
+          // Inline because the cursor and size are runtime values that Panda
+          // cannot extract at build time.
+          style={{
+            cursor,
+            ...(rect === undefined ? {} : keptAt(settlingFrom, rect)),
+          }}
+          {...{ [UPRIGHT]: "" }}
+        />
+      </div>
+      {/*
+        Its popups, placed, moved and eased as the box is, just over it. Not in
+        the box, which would clip a menu reaching past the window.
+      */}
+      {rect !== undefined && popups.length > 0 && (
+        <div
+          className={cx(
+            movingStyles({ contents: true, motion }),
+            (clickThrough || leaving) && clickThroughStyles,
+            dragging && heldStyles,
+          )}
+          data-motion={motion}
+          inert={leaving}
+          ref={layer}
+          style={{
+            ...placedAt(rect, raised(depth)),
+            ...clippedAlong(sliding, rect),
+            ...moved,
+          }}
+        >
+          {popups.map((popup) => (
+            <AppPopup key={popup.appId} popup={popup} />
+          ))}
+        </div>
+      )}
+    </>
   );
 };
 

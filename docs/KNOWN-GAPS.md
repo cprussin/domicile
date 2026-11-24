@@ -5,25 +5,31 @@ the detail, when there is one. Remove a gap when it's fixed.
 
 ## Windows and clients
 
-- **No Xwayland, so X11-only apps don't run.** Electron, SDL and Qt apps are
-  started in Wayland mode (`client_command` in `spawning.rs`).
-- **Clients only get 8-bit formats** (`FOURCCS` in `engine.rs`).
+- **No built-in Xwayland.** X11-only apps run through xwayland-satellite,
+  which you start yourself: [X11 apps](/docs/use/COMPATIBILITY.md#x11-apps).
+  Electron, SDL and Qt apps are started in Wayland mode (`client_command` in
+  `spawning.rs`).
+- **A display in SDR tells clients it is sRGB with gamma 2.2,** whatever its
+  panel's gamut, because that is how the engine draws it.
+  [COLOR.md](/docs/architecture/COLOR.md).
+- **Nested or headless, a confinement does not hold the pointer.** The
+  client is told it is confined, but only the console's cursor is held in the
+  window (`DomicileHost.confinePointer`); a host compositor or the headless
+  desk moves its own. Unaccelerated relative motion there is the accelerated
+  motion, since only libinput on a console reports both.
 - **A chrome repaint damages the whole output.**
 - **Windows under a fullscreen window keep drawing,** so manganese can animate
   the fullscreen window back to its box.
-- **Browser window context menus have only Chrome's core items.** No spelling
-  suggestions, page or extension items.
-- **Client-drawn cursor surfaces show a plain arrow.**
-- **A GL client that started before the engine fell back to software stays
-  blank.** Its dmabufs are not copied into memory.
+- **Browser window context menus have only Chrome's core items.** No page or
+  extension items.
+- **An input method's candidate list does not show over pages or the
+  shell:** they compose from it, but only native windows show its list.
+  [TEXT-INPUT.md](/docs/architecture/TEXT-INPUT.md#plan).
+- **A `wl_shm` window in 10-bit or half-float stays blank after the engine
+  falls back to software:** the engine shows only 8-bit frames from memory.
   [A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md#software-output).
 - **Unknown: whether viz hit testing must agree with Domicile's.**
   [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#open-questions).
-
-- **A window's shortcuts inhibitor does not get the shell's gestures.** A VM
-  that holds one gets grabbed chords as keys, but a three-finger swipe the
-  shell binds still goes to the shell, which ignores it.
-  [GESTURES.md](/docs/architecture/GESTURES.md).
 
 ## Displays
 
@@ -32,14 +38,8 @@ the detail, when there is one. Remove a gap when it's fixed.
   (including that viz declines it under `backdrop-filter`), damage and
   presentation latency are unmeasured. Revisit if real hardware shows a
   performance problem. [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#plan).
-- **A monitor profile can require a mode but not set it.** Same for refresh
-  rate. [A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md).
 - **The desk rasters what no monitor shows.**
   [DISPLAY-TILINGS.md](/docs/architecture/DISPLAY-TILINGS.md#cost).
-- **The night light can't warm a DisplayLink monitor.** Its driver (`evdi`)
-  has no gamma table.
-- **A night light change waits for the monitor's next frame.** On a screen
-  that isn't redrawing, it shows when something next changes.
 
 ## Browser windows
 
@@ -54,12 +54,21 @@ the detail, when there is one. Remove a gap when it's fixed.
   [EXTENSIONS.md](/docs/architecture/EXTENSIONS.md).
 - **A browser window attached while hidden is visible for a moment,** so the
   page sees `visibilitychange` twice (`WebViewGuest::AttachWindowTo`).
-- **No picture-in-picture video, payments, or "Sign in with" account
-  sheets.** Chrome draws these itself, so they are turned off until the shell
-  has its own.
+- **No payments.** Chrome draws the payment sheet itself, so it is turned off
+  until the shell has its own.
   [ENGINE-BROWSER-BEHAVIOR.md](/docs/architecture/ENGINE-BROWSER-BEHAVIOR.md#chromes-dialogs-sheets-and-floating-windows).
+- **A page's app link can't open a `Terminal=true` app,** such as a
+  terminal mail client for `mailto:`: the engine has no `DOMICILE_TERMINAL`,
+  so its `domicile open` skips them (`let_the_engine_open_links`).
 - **Resize cost is unmeasured.**
   [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#embed-deadlines).
+
+## Drag and drop
+
+- **Drags don't cross between pages and native windows,** in either
+  direction: the desk runs its own drags, and the compositor's
+  `wl_data_device` drags stay among native windows.
+  [A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md#drag-and-drop).
 
 ## Clipboard
 
@@ -70,8 +79,6 @@ the detail, when there is one. Remove a gap when it's fixed.
 - **The session portal setup is only checked at evaluation.** Nothing here
   runs a user manager, an unclean exit leaves stale environment variables,
   and a nested desktop doesn't register.
-- **Wayland capture lists no browser windows.** The toplevel list names
-  Wayland windows only. [PORTALS.md](/docs/PORTALS.md#wayland-capture).
 
 ## Shell reload
 

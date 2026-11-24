@@ -22,7 +22,8 @@ than launching.
 
 The site (2) and the search (6) each have a row beside them that opens them in
 a private browser. `!p` anywhere in the line offers only the web rows (1, 2
-and 6), all private. Opened over a private browser window, the box starts
+and 6), all private. `!g` offers only its Google search (1), so Enter
+searches without the matches. Opened over a private browser window, the box starts
 with `!p `. A private browser's address bar is tinted the `private`
 color and says "Private"; its new windows are private too. See
 [private browsing](../../../docs/SHELL-BROWSER-WINDOWS.md#private-browsing).
@@ -57,8 +58,9 @@ Browser address bars use the same rule.
   own before its supertypes' (`mime/subclasses`, and `text/plain` for every
   `text/*`); then installed entries whose `MimeType` lists one. The type
   comes from shared-mime-info's `mime/globs2`, by name; a directory is
-  `inode/directory`. `NoDisplay` and `Terminal` entries are not offered
-  otherwise.
+  `inode/directory`. `NoDisplay` entries are not offered otherwise.
+  `Terminal` entries are offered, and run in the config's `terminal`, only
+  when it names one ([SHELL-CONFIG.md](/docs/SHELL-CONFIG.md#terminal)).
 - URLs and searches open as a page.
 
 ## Preview

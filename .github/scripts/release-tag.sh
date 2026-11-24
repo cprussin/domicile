@@ -14,7 +14,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
-git fetch -q --tags origin
+# `--force`: moving tags (`packages-latest`, `engine-nightly`) can move while
+# the release runs, and a plain fetch refuses to clobber them, quietly.
+git fetch -q --tags --force origin
 before="$(git tag | sort)"
 node_modules/.bin/changeset tag >/dev/null
 stamp="release-$(date -u +%Y%m%d-%H%M%S)"

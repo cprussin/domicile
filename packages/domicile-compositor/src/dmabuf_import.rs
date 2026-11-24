@@ -12,7 +12,7 @@ use smithay::backend::allocator::Format;
 use smithay::backend::egl::native::{EGLNativeDisplay, EGLPlatform, EGLSurfacelessDisplay};
 use smithay::backend::egl::{ffi, EGLContext, EGLDevice, EGLDisplay};
 use smithay::backend::renderer::gles::GlesRenderer;
-use smithay::backend::renderer::ImportDma as _;
+use smithay::backend::renderer::{ImportDma as _, Renderer as _};
 
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
@@ -51,8 +51,8 @@ pub enum ImportError {
 /// Creates an offscreen GLES renderer on the best EGL device, for a
 /// compositor that is not presenting.
 ///
-/// Fails without a working EGL; the compositor then advertises no dmabuf
-/// global and `wl_shm` clients keep working.
+/// Fails without a working EGL; the compositor then reports it and advertises
+/// no dmabuf global.
 pub fn headless_renderer() -> Result<(GlesRenderer, DmabufImporter), ImportError> {
     // Smithay panics if EGL is missing, so try loading it first.
     // SAFETY: this opens the same library Smithay opens next, running the
@@ -100,7 +100,7 @@ fn gbm_or_surfaceless_display(
             Ok((display, Some(node), main_device))
         }
         Err(err) => {
-            tracing::debug!(%err, "no render node has GBM; using surfaceless EGL");
+            tracing::error!(%err, "no render node has GBM; using surfaceless EGL");
             // SAFETY: a surfaceless display wraps no native handle.
             let display = unsafe { EGLDisplay::new(EGLSurfacelessDisplay) }?;
             Ok((display, None, None))
@@ -115,7 +115,7 @@ fn gbm_display(dir: &Path) -> Result<(EGLDisplay, PathBuf), ImportError> {
         let gbm = match Gbm::open(crate::gbm::LIBRARY, &node) {
             Ok(gbm) => gbm,
             Err(err) => {
-                tracing::debug!(?node, %err, "no GBM device on this render node");
+                tracing::warn!(?node, %err, "no GBM device on this render node");
                 continue;
             }
         };
@@ -123,7 +123,7 @@ fn gbm_display(dir: &Path) -> Result<(EGLDisplay, PathBuf), ImportError> {
         // whole life.
         match unsafe { EGLDisplay::new(GbmDisplay(gbm)) } {
             Ok(display) => return Ok((display, node)),
-            Err(err) => tracing::debug!(?node, %err, "EGL refuses this GBM device"),
+            Err(err) => tracing::warn!(?node, ?err, "EGL refuses this GBM device"),
         }
     }
     Err(ImportError::NoDevice)
@@ -194,8 +194,15 @@ impl DmabufImporter {
 
     /// Whether a client's buffer imports. Answers the protocol's import
     /// notifier before the client can commit the buffer.
+    ///
+    /// First drops the renderer's imports of buffers clients have destroyed.
+    /// Each import keeps its buffer's memory, and the renderer only drops them
+    /// when it draws, which it never does without a `wl_shm` client or a cast.
     pub fn accepts(renderer: &mut GlesRenderer, dmabuf: &Dmabuf) -> bool {
-        renderer.import_dmabuf(dmabuf, None).is_ok()
+        renderer
+            .cleanup_texture_cache()
+            .and_then(|()| renderer.import_dmabuf(dmabuf, None))
+            .is_ok()
     }
 }
 
@@ -248,9 +255,16 @@ fn preferred_device<D>(
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::CStr;
+    use std::fs::File;
+    use std::os::fd::{FromRawFd as _, OwnedFd};
+
+    use smithay::backend::allocator::dmabuf::{Dmabuf, DmabufFlags};
     use smithay::backend::allocator::{Format, Fourcc, Modifier};
 
-    use super::{advertisable, gbm_or_surfaceless_display, render_nodes};
+    use super::{
+        advertisable, gbm_or_surfaceless_display, headless_renderer, render_nodes, DmabufImporter,
+    };
 
     fn format(code: Fourcc) -> Format {
         Format {
@@ -260,7 +274,7 @@ mod tests {
     }
 
     // A format the renderer imports but the engine refuses must not be
-    // advertised: imv picked XR30 and none of its frames were drawn.
+    // advertised: the client would pick it and none of its frames would draw.
     #[test]
     fn only_what_the_engine_imports_is_advertised() {
         let renderer_imports = [
@@ -268,7 +282,9 @@ mod tests {
             format(Fourcc::Xrgb8888),
             format(Fourcc::Abgr8888),
             format(Fourcc::Xbgr8888),
+            format(Fourcc::Argb2101010),
             format(Fourcc::Xrgb2101010),
+            format(Fourcc::Rgb565),
             format(Fourcc::Nv12),
         ];
 
@@ -283,6 +299,7 @@ mod tests {
             Fourcc::Xrgb8888,
             Fourcc::Abgr8888,
             Fourcc::Xbgr8888,
+            Fourcc::Argb2101010,
         ];
         expected.sort_by_key(|code| *code as u32);
         assert_eq!(advertised, expected);
@@ -315,5 +332,62 @@ mod tests {
     #[test]
     fn a_missing_dri_directory_is_an_error() {
         assert!(render_nodes(std::path::Path::new("/nonexistent/dri")).is_err());
+    }
+
+    /// A 2×2 `Argb8888` dmabuf over a new memfd named `name`, which llvmpipe
+    /// imports by mapping it.
+    fn dmabuf(name: &CStr) -> Dmabuf {
+        // SAFETY: a valid name, and flags the kernel defines.
+        let raw = unsafe { libc::memfd_create(name.as_ptr(), libc::MFD_CLOEXEC) };
+        assert!(
+            raw >= 0,
+            "memfd_create: {}",
+            std::io::Error::last_os_error()
+        );
+        // SAFETY: a new fd that nothing else owns.
+        let fd = unsafe { OwnedFd::from_raw_fd(raw) };
+        File::from(fd.try_clone().expect("a memfd clones"))
+            .set_len(4096)
+            .expect("a memfd grows");
+        let mut builder = Dmabuf::builder(
+            (2, 2),
+            Fourcc::Argb8888,
+            Modifier::Linear,
+            DmabufFlags::empty(),
+        );
+        builder.add_plane(fd, 0, 0, 8);
+        builder.build().expect("one plane builds")
+    }
+
+    /// The fds and mappings in this process of the memfd named `name`.
+    fn holds_on(name: &str) -> usize {
+        let fds = std::fs::read_dir("/proc/self/fd")
+            .expect("lists fds")
+            .filter_map(|entry| std::fs::read_link(entry.expect("an fd").path()).ok())
+            .filter(|target| target.to_string_lossy().contains(name))
+            .count();
+        let maps = std::fs::read_to_string("/proc/self/maps")
+            .expect("reads maps")
+            .lines()
+            .filter(|line| line.contains(name))
+            .count();
+        fds + maps
+    }
+
+    // Without a draw to clear the renderer's cache, the validation import
+    // would keep every buffer a client ever made.
+    #[test]
+    fn a_destroyed_buffer_is_let_go_by_the_next_import() {
+        let (mut renderer, _) = headless_renderer().expect("EGL: llvmpipe will do");
+        let destroyed = dmabuf(c"domicile-destroyed-buffer");
+        assert!(DmabufImporter::accepts(&mut renderer, &destroyed));
+        drop(destroyed);
+
+        assert!(DmabufImporter::accepts(
+            &mut renderer,
+            &dmabuf(c"domicile-next-buffer")
+        ));
+
+        assert_eq!(holds_on("domicile-destroyed-buffer"), 0);
     }
 }

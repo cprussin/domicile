@@ -7,7 +7,7 @@
 //! the shell grabs them as it grabs its own keys and answers
 //! [`PortalAnswer::Pressed`] when one fires and [`PortalAnswer::Released`]
 //! when it is let go. A locked desk refuses both answers, so nothing fires
-//! while locked. The session state is `domicile_host::global_shortcuts`. See
+//! while locked; locking ends every chord still held. The session state is `domicile_host::global_shortcuts`. See
 //! `docs/PORTALS.md`.
 
 use std::collections::HashMap;
@@ -149,7 +149,7 @@ impl GlobalShortcuts {
                         )
                         .await
                         {
-                            warn!(%why, "an application was not told its global shortcuts changed");
+                            tracing::error!(%why, "an application was not told its global shortcuts changed");
                         }
                     }
                 },
@@ -206,7 +206,7 @@ impl Shortcuts {
     pub fn new(file: Option<PathBuf>) -> Self {
         let saved = match &file {
             Some(file) => Saved::load(file).unwrap_or_else(|why| {
-                warn!(%why, file = %file.display(), "saved global shortcuts are unreadable; applications will ask again");
+                tracing::error!(%why, file = %file.display(), "saved global shortcuts are unreadable; applications will ask again");
                 Saved::default()
             }),
             None => Saved::default(),
@@ -246,6 +246,15 @@ impl Shortcuts {
     pub fn released(&self, id: u32) {
         let fired = self.held.lock().unwrap().released(id);
         self.signal(id, fired, Signal::Deactivated);
+    }
+
+    /// End every chord still held: `Deactivated` for each, once. Its key-up
+    /// later ends nothing.
+    pub fn let_go_of_everything(&self) {
+        let held = self.held.lock().unwrap().let_go_of_everything();
+        for (id, fired) in held {
+            self.signal(id, Some(fired), Signal::Deactivated);
+        }
     }
 
     /// Send `signal` for `fired`, the session and shortcut id. A chord no
@@ -288,7 +297,7 @@ impl Shortcuts {
             }
         });
         if let Err(why) = sent {
-            warn!(%why, %shortcut, "an application did not hear its global shortcut");
+            tracing::error!(%why, %shortcut, "an application did not hear its global shortcut");
         }
     }
 
@@ -331,6 +340,8 @@ impl Shortcuts {
             | PortalAnswer::ScreenshotWindow { .. }
             | PortalAnswer::ScreenshotBrowserWindow { .. }
             | PortalAnswer::PickColor { .. }
+            | PortalAnswer::Agent { .. }
+            | PortalAnswer::Change
             | PortalAnswer::Stop
             | PortalAnswer::Pause
             | PortalAnswer::Resume
@@ -353,7 +364,7 @@ impl Shortcuts {
         let changed = change(&mut held);
         if let Some(file) = self.file.as_ref().filter(|_| *held.saved() != saved) {
             if let Err(why) = held.saved().store(file) {
-                warn!(%why, file = %file.display(), "global shortcut choices were not saved; applications will ask again next session");
+                tracing::error!(%why, file = %file.display(), "global shortcut choices were not saved; applications will ask again next session");
             }
         }
         if let Some(publish) = self.publish.get().filter(|_| held.bound() != bound) {
@@ -496,8 +507,20 @@ mod tests {
             client,
             queue: Arc::clone(&backends.queue),
             portals: Portals {
+                links: domicile_host::links::Links::default(),
+                agents: crate::portals::agent::Door::new(
+                    Arc::clone(&backends.queue),
+                    None,
+                    Arc::new(|| 0),
+                    crate::portals::agent::PATIENCE,
+                    crate::portals::agent::Accessibility {
+                        enabled: Box::new(|| true),
+                        enable: Box::new(|_| {}),
+                    },
+                ),
                 backends,
                 shots: crate::portals::Shots::none(),
+                shell_dialog: crate::portals::screenshot::ShellDialog::default(),
                 recordings: None,
             },
             dialogs,
@@ -682,6 +705,25 @@ mod tests {
             released_at >= pressed_at + 50,
             "deactivated at {released_at} ms, held from {pressed_at} ms"
         );
+    }
+
+    #[test]
+    fn letting_go_of_held_chords_deactivates_each_once() {
+        let served = served(None);
+        let mut heard = MessageIterator::from(served.client.clone());
+        create_session(&served.client);
+        let bound = bind_through_the_dialog(&served);
+        served.portals.answer(bound.id, PortalAnswer::Pressed);
+        fired(&mut heard);
+
+        served.portals.let_go_of_held_shortcuts();
+        let (member, id, _) = fired(&mut heard);
+        assert_eq!((member.as_str(), id.as_str()), ("Deactivated", "talk"));
+
+        served.portals.answer(bound.id, PortalAnswer::Released);
+        served.portals.answer(bound.id, PortalAnswer::Pressed);
+        let (member, _, _) = fired(&mut heard);
+        assert_eq!(member, "Activated", "the late release ended nothing");
     }
 
     #[test]

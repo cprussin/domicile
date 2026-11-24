@@ -13,7 +13,7 @@ import { WindowAction } from "./window-state";
  *
  * The host lists every window after any change; the reducer takes individual
  * events. A popup is placed rather than announced, since it is drawn over its
- * window, not laid out. A window `rules` or its client marks opens floating.
+ * window, not laid out; a cursor its client asks for over it places it again. A window `rules` or its client marks opens floating.
  */
 export const windowChanges = (
   rules: FloatingRules,
@@ -63,9 +63,16 @@ const toplevelChanges = (
     ...(sameLimit(limitOf(before.maxWidth, before.maxHeight), maxSize)
       ? []
       : [WindowAction.AppMaxSize(appId, maxSize)]),
-    ...(before.cursor === window.cursor
+    ...(before.cursor === window.cursor &&
+    before.cursorImage === window.cursorImage
       ? []
-      : [WindowAction.AppCursorChanged(appId, window.cursor)]),
+      : [
+          WindowAction.AppCursorChanged(
+            appId,
+            window.cursor,
+            window.cursorImage,
+          ),
+        ]),
     ...(before.desktopId === window.desktopId
       ? []
       : [WindowAction.AppDesktopIdChanged(appId, window.desktopId)]),
@@ -82,6 +89,8 @@ const popupChanges = (
 ): readonly Action[] =>
   was !== undefined &&
   was.parent === parent &&
+  was.cursor === window.cursor &&
+  was.cursorImage === window.cursorImage &&
   was.x === window.x &&
   was.y === window.y &&
   was.width === window.width &&
@@ -131,6 +140,7 @@ const popupOf = (window: ClientWindow, parent: string): Popup => {
   } else {
     return {
       appId: window.appId,
+      cursor: window.cursorImage ?? window.cursor,
       frame: window.frame,
       parent,
       position: [x, y],

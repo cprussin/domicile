@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
+import { Err, Ok } from "@cprussin/option-result";
+
 import type { KeyDesktop } from "./bind-keys";
 import { bindKeys } from "./bind-keys";
 import type { Gesture } from "./desktop/gestures";
 import { gestures } from "./desktop/gestures";
 import { keyboard } from "./desktop/keyboard";
+import { processes } from "./desktop/processes";
 import { shell } from "./desktop/shell";
 import { system } from "./desktop/system-calls";
 import type { DomicileHost } from "./domicile-host";
@@ -32,13 +35,22 @@ const DESK: ShellKeybindings = {
  */
 class FakeHost extends EventTarget {
   readonly grabbed: string[] = [];
+  readonly grabbedWhileInhibited: string[] = [];
   readonly ungrabbed: string[] = [];
   readonly grabbedGestures: string[] = [];
   readonly ungrabbedGestures: string[] = [];
   readonly calls: [id: number, request: unknown][] = [];
+  readonly spawned: (readonly string[])[] = [];
 
-  grabShortcut(chord: string): void {
+  spawn(command: readonly string[]): void {
+    this.spawned.push(command);
+  }
+
+  grabShortcut(chord: string, whileInhibited = false): void {
     this.grabbed.push(chord);
+    if (whileInhibited) {
+      this.grabbedWhileInhibited.push(chord);
+    }
   }
 
   ungrabShortcut(chord: string): void {
@@ -90,6 +102,10 @@ class FakeHost extends EventTarget {
     this.dispatchEvent(Object.assign(new Event("shortcut"), { chord }));
   }
 
+  released(chord: string): void {
+    this.dispatchEvent(Object.assign(new Event("shortcutrelease"), { chord }));
+  }
+
   /** Send a compositor line for system call 1, the one `bindKeys` makes. */
   answer(line: object): void {
     this.dispatchEvent(
@@ -112,6 +128,7 @@ const keysOf = (fake: FakeHost): KeyDesktop => {
   return {
     gestures: gestures(host),
     keyboard: keyboard(host, calls),
+    processes: processes(host, calls),
     shell: shell(host, calls),
   };
 };
@@ -120,7 +137,23 @@ const keysOf = (fake: FakeHost): KeyDesktop => {
 type Heard =
   | readonly ["command", readonly string[]]
   | readonly ["mode", string]
-  | readonly ["report", unknown];
+  | readonly ["report", unknown]
+  | readonly ["refused", string];
+
+/** DESK's bindings, as `domicile list-bindings` prints them. */
+const DESK_BOUND = [
+  { action: "send-shell terminal", chord: "Meta+Return", mode: "default" },
+  { action: "mode resize", chord: "Meta+r", mode: "default" },
+  { action: "mode default", chord: "Meta+Escape", mode: "resize" },
+  {
+    action: "send-shell resize grow right",
+    chord: "Meta+Return",
+    mode: "resize",
+  },
+];
+
+/** The commands the shell in these tests describes. */
+const HELP = [{ description: "Open a terminal.", usage: "terminal" }];
 
 let unbind: () => void = () => undefined;
 
@@ -132,14 +165,29 @@ const bound = (own: ShellKeybindings = DESK) => {
   const host = new FakeHost();
   const heard: Heard[] = [];
   const binding = bindKeys(keysOf(host), own, {
+    commands: HELP,
     onCommand: (args) => {
       heard.push(["command", args]);
+      switch (args[0]) {
+        case "nonsense": {
+          return Err("no command `nonsense`");
+        }
+        case "get-tree": {
+          return Ok({ output: "[]" });
+        }
+        default: {
+          return Ok("ran");
+        }
+      }
     },
     onModeChanged: (mode) => {
       heard.push(["mode", mode]);
     },
     report: (error) => {
       heard.push(["report", error]);
+    },
+    reportRefusal: (why) => {
+      heard.push(["refused", why]);
     },
   });
   unbind = binding.unbind;
@@ -156,6 +204,21 @@ describe("bindKeys", () => {
     expect(host.grabbed).toStrictEqual(["Meta+Return"]);
   });
 
+  it("grabs an --inhibited chord to stay the shell's under an inhibitor", () => {
+    const { heard, host } = bound({
+      keybindings: {
+        "--inhibited Meta+Escape": KeyAction.SendShell(["inhibitor"]),
+        "Meta+Return": KeyAction.SendShell(["terminal"]),
+      },
+    });
+
+    host.pressed("Meta+Escape");
+
+    expect(host.grabbed).toStrictEqual(["Meta+Escape", "Meta+Return"]);
+    expect(host.grabbedWhileInhibited).toStrictEqual(["Meta+Escape"]);
+    expect(heard).toStrictEqual([["command", ["inhibitor"]]]);
+  });
+
   it("refuses a chord written wrong before grabbing anything", () => {
     const host = new FakeHost();
     expect(() =>
@@ -163,7 +226,8 @@ describe("bindKeys", () => {
         keysOf(host),
         { keybindings: { "Hyper+l": KeyAction.Mode("x") } },
         {
-          onCommand: () => undefined,
+          commands: HELP,
+          onCommand: () => Ok("ran"),
           onModeChanged: () => undefined,
           report: () => undefined,
         },
@@ -178,6 +242,34 @@ describe("bindKeys", () => {
     host.pressed("Meta+Return");
 
     expect(heard).toStrictEqual([["command", ["terminal"]]]);
+  });
+
+  it("starts the program an exec binding names, without the shell", () => {
+    const { heard, host } = bound({
+      keybindings: {
+        "Meta+Return": KeyAction.Exec(["foot", "--hold"]),
+        "swipe:3:up": KeyAction.Exec(["btop"]),
+      },
+    });
+
+    host.pressed("Meta+Return");
+    host.gestured("swipe", 3, { dy: -200 });
+
+    expect(host.spawned).toStrictEqual([["foot", "--hold"], ["btop"]]);
+    expect(heard).toStrictEqual([]);
+  });
+
+  it("reports a pressed binding whose command the shell does not run", () => {
+    const { heard, host } = bound({
+      keybindings: { "Meta+x": KeyAction.SendShell(["nonsense"]) },
+    });
+
+    host.pressed("Meta+x");
+
+    expect(heard).toStrictEqual([
+      ["command", ["nonsense"]],
+      ["refused", "no command `nonsense`"],
+    ]);
   });
 
   it("leaves a press grabbed as a keycode, or by somebody else, alone", () => {
@@ -213,19 +305,62 @@ describe("bindKeys", () => {
   });
 
   describe("commands from a terminal", () => {
-    it("runs a command `domicile send-shell` sent, as its binding would", async () => {
+    it("runs a command `domicile send-shell` sent, as its binding would, and says so", async () => {
       const { heard, host } = bound();
       host.answer({ reply: { kind: "started" }, type: "system_reply" });
       await host.settled();
 
       host.answer({
-        event: { command: ["focus", "right"], kind: "shell_command" },
+        event: { command: ["focus", "right"], kind: "shell_command", sent: 4 },
         type: "system_event",
       });
       await host.settled();
 
-      expect(host.calls).toStrictEqual([[1, { call: "shell_commands" }]]);
+      expect(host.calls).toStrictEqual([
+        [1, { bindings: DESK_BOUND, call: "shell_commands", commands: HELP }],
+        [2, { call: "answer_shell_command", sent: 4 }],
+      ]);
       expect(heard).toStrictEqual([["command", ["focus", "right"]]]);
+    });
+
+    it("answers with what a command printed, such as a query's JSON", async () => {
+      const { host } = bound();
+      host.answer({ reply: { kind: "started" }, type: "system_reply" });
+      await host.settled();
+
+      host.answer({
+        event: { command: ["get-tree"], kind: "shell_command", sent: 6 },
+        type: "system_event",
+      });
+      await host.settled();
+
+      expect(host.calls.at(-1)).toStrictEqual([
+        2,
+        { call: "answer_shell_command", output: "[]", sent: 6 },
+      ]);
+    });
+
+    it("says why it did not run a command it does not know", async () => {
+      // `domicile send-shell` fails with the reason, rather than a command
+      // dropped silently.
+      const { host } = bound();
+      host.answer({ reply: { kind: "started" }, type: "system_reply" });
+      await host.settled();
+
+      host.answer({
+        event: { command: ["nonsense"], kind: "shell_command", sent: 5 },
+        type: "system_event",
+      });
+      await host.settled();
+
+      expect(host.calls.at(-1)).toStrictEqual([
+        2,
+        {
+          call: "answer_shell_command",
+          refused: "no command `nonsense`",
+          sent: 5,
+        },
+      ]);
     });
 
     it("stops hearing them once unbound", async () => {
@@ -325,6 +460,99 @@ describe("bindKeys", () => {
       expect(heard.slice(1)).toStrictEqual([
         ["mode", "default"],
         ["command", ["terminal"]],
+      ]);
+    });
+  });
+
+  describe("held actions", () => {
+    const PEEK: ShellKeybindings = {
+      keybindings: {
+        "Meta+r": KeyAction.Mode("resize"),
+        "Meta+s": KeyAction.Hold(
+          KeyAction.Mode("resize"),
+          KeyAction.Mode("default"),
+        ),
+        "Meta+Tab": KeyAction.Hold(
+          KeyAction.SendShell(["peek"]),
+          KeyAction.SendShell(["unpeek"]),
+        ),
+      },
+      modes: { resize: { "Meta+Escape": KeyAction.Mode("default") } },
+    };
+
+    it("runs the press action on press and the release action on release, once each", () => {
+      const { heard, host } = bound(PEEK);
+
+      host.pressed("Meta+Tab");
+      host.pressed("Meta+Tab");
+      host.released("Meta+Tab");
+      host.released("Meta+Tab");
+
+      expect(heard).toStrictEqual([
+        ["command", ["peek"]],
+        ["command", ["unpeek"]],
+      ]);
+    });
+
+    it("runs the release its press armed, whatever mode the keys are in", () => {
+      const { heard, host } = bound(PEEK);
+
+      host.pressed("Meta+Tab");
+      host.pressed("Meta+r");
+      host.released("Meta+Tab");
+
+      expect(heard).toStrictEqual([
+        ["command", ["peek"]],
+        ["mode", "resize"],
+        ["command", ["unpeek"]],
+      ]);
+    });
+
+    it("runs no release for a press its mode did not bind", () => {
+      const { heard, host } = bound(PEEK);
+
+      host.pressed("Meta+r");
+      host.pressed("Meta+Tab");
+      host.released("Meta+Tab");
+
+      expect(heard).toStrictEqual([["mode", "resize"]]);
+    });
+
+    it("holds a mode while the chord is down", () => {
+      const { heard, host } = bound(PEEK);
+
+      host.pressed("Meta+s");
+      host.released("Meta+s");
+
+      expect(heard).toStrictEqual([
+        ["mode", "resize"],
+        ["mode", "default"],
+      ]);
+    });
+
+    it("refuses a held action on a gesture, which has no press of its own", () => {
+      expect(() =>
+        bound({
+          keybindings: {
+            "swipe:3:left": KeyAction.Hold(
+              KeyAction.SendShell(["peek"]),
+              KeyAction.SendShell(["unpeek"]),
+            ),
+          },
+        }),
+      ).toThrow("swipe:3:left");
+    });
+
+    it("runs each armed release once unbound", () => {
+      const { heard, host } = bound(PEEK);
+      host.pressed("Meta+Tab");
+
+      unbind();
+      host.released("Meta+Tab");
+
+      expect(heard).toStrictEqual([
+        ["command", ["peek"]],
+        ["command", ["unpeek"]],
       ]);
     });
   });

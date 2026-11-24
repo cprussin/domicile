@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use domicile_config::{
-    AccentColor, Config, ConfigError, ConfigStore, Contrast, DisplayConfig, LockdownConfig,
-    ThemeMode,
+    AccentColor, Config, ConfigError, ConfigStore, Contrast, DisplayConfig, ExtensionSettings,
+    KeyRepeat, LockdownConfig, SiteAccess, SiteAccessMode, ThemeMode,
 };
 
 // ---- parsing & defaults ---------------------------------------------------
@@ -47,6 +47,35 @@ fn a_desk_that_states_a_keyboard_gets_that_one() {
     assert_eq!(keyboard.xkb_layout, "us");
     assert_eq!(keyboard.xkb_variant, "dvp");
     assert_eq!(keyboard.xkb_options, vec!["caps:escape".to_string()]);
+}
+
+#[test]
+fn keys_repeat_after_half_a_second_at_25_a_second_unless_configured() {
+    let keyboard = Config::parse("{}").unwrap().input.keyboard;
+    assert_eq!(
+        keyboard.repeat,
+        KeyRepeat {
+            delay_ms: 500,
+            rate: 25
+        }
+    );
+
+    let text = r#"{ "input": { "keyboard": { "repeat": { "delay_ms": 250, "rate": 0 } } } }"#;
+    let keyboard = Config::parse(text).unwrap().input.keyboard;
+    assert_eq!(
+        keyboard.repeat,
+        KeyRepeat {
+            delay_ms: 250,
+            rate: 0
+        },
+        "a rate of 0 turns repeat off"
+    );
+}
+
+#[test]
+fn a_negative_repeat_is_refused() {
+    let text = r#"{ "input": { "keyboard": { "repeat": { "rate": -1 } } } }"#;
+    assert!(Config::parse(text).is_err());
 }
 
 // ---- keyboard / keymap ------------------------------------------------------
@@ -349,50 +378,6 @@ fn rejects_a_lock_timeout_of_no_time_at_all() {
         message.contains("idle.lock_after_seconds"),
         "the message should name the key: {message}"
     );
-}
-
-#[test]
-fn a_desk_that_states_a_warning_gets_it_before_the_timeout() {
-    let idle = Config::parse(
-        r#"
-{ "idle": { "blank_after_seconds": 600, "warn_before_seconds": 30 } }
-"#,
-    )
-    .unwrap()
-    .idle;
-    assert_eq!(idle.warn_before(), Some(Duration::from_secs(30)));
-}
-
-#[test]
-fn a_desk_that_states_no_warning_gets_none() {
-    let idle = Config::parse(
-        r#"
-{ "idle": { "blank_after_seconds": 600 } }
-"#,
-    )
-    .unwrap()
-    .idle;
-    assert_eq!(idle.warn_before(), None);
-}
-
-#[test]
-fn rejects_a_warning_that_cannot_come_before_its_timeout() {
-    // A warning of no time, one as long as the timeout, and one with no
-    // timeout to warn of have no reading.
-    for idle in [
-        r#"{ "blank_after_seconds": 600, "warn_before_seconds": 0 }"#,
-        r#"{ "blank_after_seconds": 600, "warn_before_seconds": 600 }"#,
-        r#"{ "warn_before_seconds": 30 }"#,
-    ] {
-        let err = Config::parse(&format!(r#"{{ "idle": {idle} }}"#)).unwrap_err();
-        let ConfigError::Validation(message) = &err else {
-            panic!("{idle} is refused rather than taken: {err:?}");
-        };
-        assert!(
-            message.contains("idle.warn_before_seconds"),
-            "the message should name the key: {message}"
-        );
-    }
 }
 
 // ---- lock -----------------------------------------------------------------
@@ -749,6 +734,171 @@ fn an_empty_startup_command_is_refused() {
     assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
 }
 
+// ---- browser profiles -----------------------------------------------------
+
+#[test]
+fn a_desk_that_says_nothing_about_profiles_has_a_default_and_a_private_one() {
+    let browser = Config::parse("{}").unwrap().browser;
+    assert_eq!(browser.default_profile, "default");
+    assert_eq!(browser.default_private_profile, "private");
+    assert!(!browser.profiles["default"].private);
+    assert!(browser.profiles["private"].private);
+    assert!(browser.sites.is_empty());
+}
+
+const PROFILES: &str = r##""profiles": {
+    "personal": { "name": "Personal", "color": "#0d9488" },
+    "work": { "name": "Work", "color": "#d97706", "extensions": ["aeblfdkhhhdcdjpifhhbdiojplfjncoa"] },
+    "incognito": { "name": "Private", "color": "#a78bfa", "private": true }
+  },
+  "default_profile": "personal",
+  "default_private_profile": "incognito""##;
+
+fn browser_config(rest: &str) -> String {
+    format!(r#"{{ "browser": {{ {PROFILES}{rest} }} }}"#)
+}
+
+#[test]
+fn profiles_map_sites_to_profiles() {
+    let browser = Config::parse(&browser_config(
+        r#", "sites": { "*.acme.com": "work", "github.com/acme": "work", "chase.com": "incognito" }"#,
+    ))
+    .unwrap()
+    .browser;
+    assert_eq!(browser.sites["github.com/acme"], "work");
+    assert_eq!(browser.sites["chase.com"], "incognito");
+    assert_eq!(
+        browser.profiles["work"].extensions,
+        Some(vec!["aeblfdkhhhdcdjpifhhbdiojplfjncoa".to_string()])
+    );
+    assert_eq!(browser.profiles["personal"].extensions, None);
+}
+
+#[test]
+fn profiles_list_in_their_order_then_by_id() {
+    let browser = Config::parse(&browser_config(r#", "order": ["work"]"#))
+        .unwrap()
+        .browser;
+    let ids: Vec<&str> = browser
+        .ordered_profiles()
+        .map(|(id, _)| id.as_str())
+        .collect();
+    assert_eq!(ids, ["work", "incognito", "personal"]);
+}
+
+#[test]
+fn a_profile_config_that_contradicts_itself_is_refused() {
+    let refused = [
+        // A site in a profile that doesn't exist.
+        browser_config(r#", "sites": { "acme.com": "office" }"#),
+        // A site in the default profile, which every unlisted site opens in.
+        browser_config(r#", "sites": { "acme.com": "personal" }"#),
+        // A site that is no host.
+        browser_config(r#", "sites": { "https://acme.com": "work" }"#),
+        browser_config(r#", "sites": { "acme.com/": "work" }"#),
+        // An order naming a profile that doesn't exist, or one twice.
+        browser_config(r#", "order": ["office"]"#),
+        browser_config(r#", "order": ["work", "work"]"#),
+    ];
+    for text in refused {
+        let err = Config::parse(&text).unwrap_err();
+        assert!(
+            matches!(err, ConfigError::Validation(_)),
+            "{text}: got {err:?}"
+        );
+    }
+}
+
+#[test]
+fn default_profiles_must_exist_and_be_the_right_kind() {
+    let refused = [
+        // The default profile is missing.
+        r##"{ "browser": { "profiles": { "work": { "name": "Work", "color": "#d97706" } } } }"##,
+        // The default profile is private.
+        r##"{ "browser": { "default_profile": "private" } }"##,
+        // The default private profile is not private.
+        r##"{ "browser": { "default_private_profile": "default" } }"##,
+    ];
+    for text in refused {
+        let err = Config::parse(text).unwrap_err();
+        assert!(
+            matches!(err, ConfigError::Validation(_)),
+            "{text}: got {err:?}"
+        );
+    }
+}
+
+#[test]
+fn a_profile_id_is_a_directory_name() {
+    let err = Config::parse(
+        r##"{ "browser": { "profiles": {
+            "default": { "name": "Default", "color": "#0d9488" },
+            "private": { "name": "Private", "color": "#a78bfa", "private": true },
+            "../work": { "name": "Work", "color": "#d97706" }
+        } } }"##,
+    )
+    .unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
+}
+
+#[test]
+fn a_profile_names_extensions_by_id() {
+    let err = Config::parse(
+        r##"{ "browser": { "profiles": {
+            "default": { "name": "Default", "color": "#0d9488", "extensions": ["bitwarden"] },
+            "private": { "name": "Private", "color": "#a78bfa", "private": true }
+        } } }"##,
+    )
+    .unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
+}
+
+// ---- electron -------------------------------------------------------------
+
+#[test]
+fn a_desk_that_says_nothing_about_electron_runs_no_app_on_the_engine() {
+    assert!(Config::parse("{}").unwrap().electron.apps.is_empty());
+}
+
+#[test]
+fn electron_apps_are_desktop_file_ids() {
+    let apps = Config::parse(r#"{ "electron": { "apps": ["slack.desktop", "element-desktop"] } }"#)
+        .unwrap()
+        .electron
+        .apps;
+    assert_eq!(apps, ["slack.desktop", "element-desktop"]);
+}
+
+#[test]
+fn an_electron_app_given_as_a_path_is_refused() {
+    let err =
+        Config::parse(r#"{ "electron": { "apps": ["/usr/share/applications/slack.desktop"] } }"#)
+            .unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
+}
+
+// ---- terminal -------------------------------------------------------------
+
+#[test]
+fn a_desk_that_names_no_terminal_has_none() {
+    // No default: #877 decided against one.
+    assert_eq!(Config::parse("{}").unwrap().terminal, None);
+}
+
+#[test]
+fn a_terminal_is_an_argv() {
+    let terminal = Config::parse(r#"{ "terminal": ["kitty", "--"] }"#)
+        .unwrap()
+        .terminal;
+    assert_eq!(terminal, Some(vec!["kitty".to_string(), "--".to_string()]));
+}
+
+#[test]
+fn an_empty_terminal_is_refused() {
+    let err = Config::parse(r#"{ "terminal": [] }"#).unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
+}
+
 // ---- files ----------------------------------------------------------------
 
 #[test]
@@ -857,6 +1007,100 @@ fn rejects_a_web_store_id_that_is_not_one() {
         };
         assert!(message.contains(id), "{id}: {message}");
     }
+}
+
+#[test]
+fn a_desk_sets_its_extensions_settings() {
+    let extensions = Config::parse(
+        r#"
+{
+  "extensions": {
+    "settings": {
+      "ddkjiahejlhfcafbddmgiahcphecmpfh": {
+        "file_access": false,
+        "site_access": ["github.com", "*.example.com"]
+      },
+      "eimadpbcbfnmbkopoojfekhnkhdbieeh": { "user_scripts": true, "site_access": "on_click" }
+    }
+  }
+}
+"#,
+    )
+    .unwrap()
+    .extensions;
+    assert_eq!(
+        extensions.settings["ddkjiahejlhfcafbddmgiahcphecmpfh"],
+        ExtensionSettings {
+            file_access: Some(false),
+            user_scripts: None,
+            site_access: Some(SiteAccess::Sites(vec![
+                "github.com".into(),
+                "*.example.com".into()
+            ])),
+        }
+    );
+    assert_eq!(
+        extensions.settings["eimadpbcbfnmbkopoojfekhnkhdbieeh"],
+        ExtensionSettings {
+            user_scripts: Some(true),
+            site_access: Some(SiteAccess::Mode(SiteAccessMode::OnClick)),
+            ..ExtensionSettings::default()
+        }
+    );
+}
+
+#[test]
+fn rejects_settings_for_an_id_that_is_not_one() {
+    let message =
+        refusal(r#"{ "extensions": { "settings": { "ublock": { "file_access": true } } } }"#);
+    assert!(message.contains("ublock"), "{message}");
+}
+
+#[test]
+fn rejects_a_site_that_is_not_a_host() {
+    // Chrome grants a host on http and https, so a scheme or a path has no
+    // meaning here.
+    // Nor does one Chrome cannot parse as a host, which the engine would
+    // refuse: empty labels, an edge hyphen, a number that is not an address.
+    for site in [
+        "https://github.com",
+        "github.com/login",
+        "",
+        ".",
+        "*..",
+        "github.com.",
+        "-github.com",
+        "foo.123",
+        "1.2.3.999",
+        "*.10.0.0.1",
+        "010.0.0.1",
+        "foo.0x1f",
+        "0x7f",
+    ] {
+        let message = refusal(&format!(
+            r#"{{ "extensions": {{ "settings": {{ "ddkjiahejlhfcafbddmgiahcphecmpfh": {{ "site_access": [{site:?}] }} }} }} }}"#
+        ));
+        assert!(message.contains(&format!("{site:?}")), "{site}: {message}");
+    }
+}
+
+#[test]
+fn a_site_may_be_a_dotted_address_or_a_single_name() {
+    for site in ["10.0.0.1", "localhost", "*.github.io"] {
+        Config::parse(&format!(
+            r#"{{ "extensions": {{ "settings": {{ "ddkjiahejlhfcafbddmgiahcphecmpfh": {{ "site_access": [{site:?}] }} }} }} }}"#
+        ))
+        .unwrap_or_else(|err| panic!("{site}: {err:?}"));
+    }
+}
+
+#[test]
+fn rejects_an_extension_setting_it_does_not_know() {
+    let err = Config::parse(
+        r#"{ "extensions": { "settings": { "ddkjiahejlhfcafbddmgiahcphecmpfh": { "pinned": true } } } }"#,
+    )
+    .unwrap_err();
+    assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
 }
 
 #[test]
@@ -1827,4 +2071,49 @@ fn a_config_may_name_its_json_schema() {
     )
     .unwrap();
     assert_eq!(config.input.keyboard.xkb_layout, "us");
+}
+
+#[test]
+fn an_extension_s_private_setting_is_refused_as_private_profiles_switch_it() {
+    // A private browser profile's `extensions` says what runs in private
+    // windows (docs/architecture/BROWSER-PROFILES.md).
+    let text = r#"{ "extensions": { "settings": { "ddkjiahejlhfcafbddmgiahcphecmpfh": { "private": true } } } }"#;
+    assert!(Config::parse(text).is_err());
+}
+
+#[test]
+fn spelling_is_checked_in_american_english_unless_configured() {
+    let unset = Config::parse("{}").unwrap().spellcheck;
+    assert_eq!(
+        (unset.enabled, unset.languages),
+        (true, vec!["en-US".to_string()])
+    );
+    let configured =
+        Config::parse(r#"{ "spellcheck": { "enabled": false, "languages": ["en-GB", "de-DE"] } }"#)
+            .unwrap()
+            .spellcheck;
+    assert_eq!(
+        (configured.enabled, configured.languages),
+        (false, vec!["en-GB".to_string(), "de-DE".to_string()])
+    );
+}
+
+#[test]
+fn rejects_checking_spelling_in_no_language() {
+    let err = Config::parse(r#"{ "spellcheck": { "languages": [] } }"#).unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
+}
+
+#[test]
+fn rejects_a_spelling_language_that_is_not_a_language_tag() {
+    for language in ["", "en US", "../en-US", "en_US"] {
+        let err = Config::parse(&format!(
+            r#"{{ "spellcheck": {{ "languages": ["{language}"] }} }}"#
+        ))
+        .unwrap_err();
+        assert!(
+            matches!(err, ConfigError::Validation(_)),
+            "{language:?}: got {err:?}"
+        );
+    }
 }

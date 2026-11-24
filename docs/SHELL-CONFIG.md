@@ -22,7 +22,7 @@ For what a shell does with these settings, see
 - `domicile` prints which config it used before starting:
 
 ```
-config: /home/you/.config/domicile/domicile.json, found where a config lives
+config: /home/you/.config/domicile/domicile.json
 config: ./desk.json, because --config names it
 config: none -- no domicile.{ts,tsx,js,mjs,json} in /home/you/.config/domicile -- so the compositor's defaults
 ```
@@ -130,12 +130,13 @@ An edit applies to the running desktop, and windows stay open:
 
 | Section | Effect of an edit |
 |---|---|
+| `input.keyboard.repeat` | Native windows and pages repeat held keys at the new delay and rate |
 | `input.keyboard` | New layout; moves the keys a shell bound ([Keybindings](WRITING-A-SHELL.md#keybindings)). The desktop stays on the active keymap if `keymaps` still names it, else goes to the first |
 | `input.touchpad`, `input.mouse` | Settings applied to attached devices and retained for later attachments |
 | `input.pointers` | Tablets, touchscreens and absolute mice rebound |
 | `output.max_scale` | Re-advertised to clients |
 | `output.displays`, `output.profiles` | Displays rearranged |
-| `idle.blank_after_seconds`, `idle.warn_before_seconds` | Idle timer restarts. Dark screens relight |
+| `idle.blank_after_seconds`, `idle.lock_after_seconds` | Idle timer restarts. Dark screens relight |
 | `theme.mode` | Shell and windows repaint |
 | `theme.accent_color`, `contrast`, `reduced_motion` | Shell and windows that read the settings portal follow |
 | `theme.cursor_theme`, `cursor_size` | The pointer on a tty is redrawn; windows that read the settings portal follow |
@@ -143,9 +144,12 @@ An edit applies to the running desktop, and windows stay open:
 | `theme.font_name`, `monospace_font_name` | Windows that read the settings portal follow |
 | `theme.force_dark` | Those sites are drawn dark from their next load |
 | `theme.icon_theme` | Shell and windows that read the settings portal follow; tray icons redrawn and later notifications drawn in it; manganese on the next menu or launcher opening, and title bars when a new app id appears |
+| `spellcheck` | Text fields check spelling in the new languages, or stop |
 | `files.omit` | Launcher file index rebuilt |
+| `electron.apps` | Starting a newly listed app runs it on the engine; apps already running stay as they are |
 | `extensions` | Extensions installed or removed ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)) |
 | `lockdown` | Applications told through the Lockdown portal |
+| `terminal` | Processes started from then on get the new terminal: the launcher's next opening, the next `domicile open` from a new window, and Meta+Return |
 | `lock` | The next passphrase is checked through the new PAM service. The desktop never unlocks from a reload ([LOCK.md](LOCK.md#reloading)) |
 
 - A config module is watched with its directory, except `node_modules` and
@@ -172,9 +176,45 @@ An edit applies to the running desktop, and windows stay open:
   argv: `[["emacs", "--daemon"], ["sh", "-c", "…"]]`.
 - `files`: what the launcher's file index leaves out. See
   [LAUNCHER.md](LAUNCHER.md).
+- `electron.apps`: desktop file ids of installed Electron apps that run on
+  the desktop's engine instead of the Electron they ship:
+  `{ "electron": { "apps": ["slack.desktop"] } }`. Whatever starts the
+  entry (the launcher, a link, a notification) runs it with
+  `domicile open --electron`. An entry in `~/.local/share/applications`
+  can't be overridden, and is logged. See
+  [ELECTRON-APPS.md](architecture/ELECTRON-APPS.md).
+- `browser`: browser profiles and the profile each site opens in. Each
+  profile has its own sign-ins, site data and extensions, and a private one
+  keeps nothing past its last page. A page the user takes to a listed site
+  moves to its profile; see
+  [BROWSER-PROFILES.md](architecture/BROWSER-PROFILES.md).
+- `terminal`: see [Terminal](#terminal).
 - `output.max_scale`: the highest scale advertised for the output that
   follows Domicile's window. Applies only when `output.displays` is empty.
   Default `2`; `1` turns scaling off.
+
+## Terminal
+
+Applications such as htop and vim run in a terminal (`Terminal=true` in their
+desktop entries). Domicile has no default terminal, so they are offered only
+when the config names one:
+
+```json
+{ "terminal": ["kitty"] }
+```
+
+- It is an argv. Run alone, it opens a terminal; with an application's argv
+  after it, it runs that application in one. `["kitty"]` and `["foot"]` work
+  as written; `["alacritty", "-e"]` needs its `-e`, so Meta+Return opens
+  nothing with it. Prefer one that opens a shell when given nothing to run.
+- With it set, the launcher lists those applications and offers them under
+  "Open with", and `domicile open` runs them for the types they open. Vim
+  opening `a.txt` runs `kitty vim a.txt`.
+- Manganese opens it on Meta+Return.
+- Unset, those applications are left out, as before, and Meta+Return does
+  nothing.
+- The compositor passes it to every process it starts as `DOMICILE_TERMINAL`,
+  a JSON array. That is how the launcher and `domicile open` see it.
 
 ## Keyboard
 
@@ -210,6 +250,16 @@ To switch between layouts, list them in `keymaps` instead:
   switches with
   `keyboard.selectKeymap()` ([SHELL-SYSTEM-ACCESS.md](SHELL-SYSTEM-ACCESS.md)). Both
   work while locked.
+
+`repeat` sets how a held key repeats, in native windows and in pages:
+
+```json
+{ "input": { "keyboard": { "repeat": { "delay_ms": 300, "rate": 30 } } } }
+```
+
+- `delay_ms` is how long a key is held before it repeats. The default is 500.
+- `rate` is repeats a second. The default is 25; 0 turns repeat off.
+- Pages follow it on a tty. Nested, the host desktop repeats keys for pages.
 
 ## Touchpads and mice
 
@@ -308,6 +358,19 @@ display the pointer is on.
   an EDID description.
 - Details: [DISPLAYS.md](DISPLAYS.md#tablets-and-touchscreens).
 
+## Agents
+
+```json
+{ "agents": { "web": true } }
+```
+
+`agents.web` lets agents on the web, such as claude.ai, reach the desktop
+through Domicile's relay. While it is `true`, the compositor runs `domicile
+mcp --relay`, and runs it again if it exits; setting it back to `false`
+stops it. Each agent still signs in only once you allow it on the desktop,
+and asks before it uses anything. Defaults to `false`. Settings › Agents › Connect
+from the web sets it ([AGENTS.md](AGENTS.md#agents-on-the-web)).
+
 ## Idle
 
 `idle.blank_after_seconds` is how long the desktop goes without input before
@@ -315,10 +378,8 @@ the screens turn off. Any key, click, scroll or pointer motion turns them back
 on. `idle.lock_after_seconds` is how long before it locks.
 
 - Unset means the screens never blank. `0` is an error.
-- `idle.warn_before_seconds` warns the shell that long before blanking, so it
-  can dim or count down ([SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#warning-before-blanking)).
-  Unset means no warning. It must be at least `1` and less than
-  `blank_after_seconds`.
+- A shell that dims or counts down before blanking chooses when itself
+  ([SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#acting-before-blanking)).
 - `idle.lock_after_seconds` runs on its own clock from the same input, so it
   may be shorter or longer than `blank_after_seconds`. Unset means no lock on
   idle; the desktop still locks when the shell asks and before the machine
@@ -414,9 +475,14 @@ The engine draws every pointer on a tty, including a window's, from
   `~/.icons`, `icons` under each of `XDG_DATA_DIRS`, and
   `/usr/share/pixmaps`, in that order. Inherited themes are followed.
 - A cursor the theme lacks is Chromium's own.
-- The engine logs `the desk's pointer theme is "<theme>" at <size> px`, then
-  `loaded <n> cursors from "<theme>"`, or `no cursor theme "<theme>" on
-  the XCursor path`.
+- The theme loads once per size in pixels. Until a monitor's size loads, the
+  nearest loaded size stands in; before any has loaded, the pointer is
+  Chromium's.
+- The engine logs these at `ERROR`, which reaches the journal:
+  `has no cursor for type <n>`, `no cursor theme "<theme>" on the XCursor
+  path`, and `the desk names no pointer theme`. Chromium's pointer while the
+  first size loads is a debug line, `the pointer is Chromium's until
+  "<theme>" at <size> px loads`.
 - A cursor larger than the GPU's cursor plane, often 64 or 256 pixels, is
   cut off.
 
@@ -465,7 +531,24 @@ For sites with no dark theme of their own, such as Gmail:
   rejected.
 - Default: `[]`.
 
-## Displays
+## Spelling
+
+```json
+{ "spellcheck": { "enabled": true, "languages": ["en-US", "de-DE"] } }
+```
+
+Text fields in pages, web apps and Electron apps underline misspelled words.
+
+- `enabled`: default `true`.
+- `languages`: language tags, default `["en-US"]`. A tag the engine has no
+  dictionary for is logged and left out. An empty list is rejected; set
+  `enabled` to `false` instead.
+- Dictionaries ship with the engine. None is downloaded, and words are never
+  sent to Google's spelling service.
+- A right click on a misspelled word gives a shell the word and its
+  suggestions on the context menu event. See
+  [SHELL-BROWSER-WINDOWS.md](SHELL-BROWSER-WINDOWS.md#the-keyboard).
+
 
 `output` has two ways to describe displays:
 
@@ -500,8 +583,9 @@ For sites with no dark theme of their own, such as Gmail:
 ```
 
 Each profile entry sets `enabled`, `position`, a fractional `scale`, a
-`transform`, and optionally `mode`. An entry without `position` goes right of
-the positioned ones, in profile order.
+`transform`, and optionally `mode`, `refresh`, `adaptive_sync`, `hdr` and
+`sdr_white`. An entry
+without `position` goes right of the positioned ones, in profile order.
 
 ### Naming a display
 
@@ -509,6 +593,7 @@ Any of these match:
 
 - the `wl_output` name: on a tty, `drm-<id>`, or the connector (`HDMI-A-1`)
   for a monitor with no EDID make, model or serial
+- the connector, e.g. `DP-1` or `eDP-1`
 - the EDID description `"<MAKE> <MODEL> <SERIAL>"`, e.g.
   `DEL DELL U3219Q 2ZLS413`
 - the description with the maker's full name from hwdata's `pnp.ids`, e.g.
@@ -518,11 +603,66 @@ A monitor with no EDID make, model or serial has an empty description.
 
 ### `mode`
 
-`mode` is a check. Domicile does not modeset: the engine lights every
-connector at its native mode. A profile's `mode` (a size, no refresh rate)
-states the mode its positions assume. If the monitor comes up at a different
-mode, the profile does not apply, the current layout stays, and the log names
-both modes. Omit `mode` to skip the check.
+`mode` is the size to light the monitor at, in physical pixels, and `refresh`
+the rate, in Hz:
+
+```json
+{
+  "output": {
+    "profiles": [
+      {
+        "name": "laptop-fast",
+        "displays": [{ "display": "drm-1", "mode": [1920, 1080], "refresh": 120 }]
+      }
+    ]
+  }
+}
+```
+
+- Without `mode`, the monitor lights at its native mode.
+- `refresh` picks the rate the monitor offers nearest it, at `mode` or the
+  native size. Without it, a native-size monitor keeps its native rate and any
+  other size gets its fastest, as in sway.
+- A `mode` the monitor does not offer refuses the profile: the current layout
+  stays, and the log lists the sizes it does offer.
+- Positions are laid out at the requested mode, so the profile's other
+  displays land where it says.
+
+### `adaptive_sync`
+
+`"adaptive_sync": true` turns on a variable refresh rate (adaptive sync,
+FreeSync, G-Sync Compatible) for that monitor, so a frame that runs late shows
+as soon as it is ready instead of waiting for the next refresh. It is off by
+default.
+
+- It is used only where the monitor, its cable and its driver support it.
+- If the driver refuses it, the monitor lights the same way without it.
+- The shell's `displays.list` says whether it took: `adaptiveSync` is `on`,
+  `off` or `unsupported`.
+
+### `hdr`
+
+`"hdr": true` drives that monitor in HDR (HDR10), so HDR video and images
+reach its full brightness and color. It is off by default.
+
+- It is used only where the monitor says it takes HDR10 and its connector
+  carries 10 bits a channel. Elsewhere the monitor stays SDR.
+- `sdr_white` is how bright ordinary content's white is in HDR, in cd/m²
+  (nits), from 1 to 10000. Without it, 203. Raise it if windows look dim next
+  to the same monitor in SDR.
+
+```json
+{
+  "output": {
+    "profiles": [
+      {
+        "name": "movies",
+        "displays": [{ "display": "drm-1", "hdr": true, "sdr_white": 250 }]
+      }
+    ]
+  }
+}
+```
 
 ### `transform`
 

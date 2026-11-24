@@ -9,7 +9,8 @@ use std::time::Instant;
 use tracing::{debug, error, warn};
 
 use domicile_config::{
-    ExtensionsConfig, IdleConfig, KeyboardConfig, Keymap, LockConfig, Omit, ThemeMode,
+    BrowserConfig, ExtensionsConfig, IdleConfig, KeyRepeat, KeyboardConfig, Keymap, LockConfig,
+    Omit, ThemeMode,
 };
 use domicile_host::keymaps::Listed;
 use domicile_host::Host;
@@ -47,7 +48,50 @@ pub fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) 
             .iter()
             .map(|path| path.display().to_string())
             .collect(),
+        extensions
+            .settings
+            .iter()
+            .map(|(id, settings)| (id.clone(), settings_on_the_wire(settings)))
+            .collect(),
     );
+}
+
+/// Give the host the config's `browser`, for chromes that connect later.
+pub fn hand_over_the_browser_profiles(host: &mut Host, browser: &BrowserConfig) {
+    host.set_browser_profiles(
+        browser
+            .ordered_profiles()
+            .map(|(id, profile)| domicile_protocol::BrowserProfile {
+                id: id.clone(),
+                name: profile.name.clone(),
+                color: String::from(profile.color),
+                private: profile.private,
+                extensions: profile.extensions.clone(),
+            })
+            .collect(),
+        browser.default_profile.clone(),
+        browser.default_private_profile.clone(),
+        browser.sites.clone(),
+    );
+}
+
+/// One extension's config settings, as [`HostMessage::Extensions`] carries
+/// them.
+fn settings_on_the_wire(
+    settings: &domicile_config::ExtensionSettings,
+) -> domicile_protocol::ExtensionSettings {
+    use domicile_config::{SiteAccess, SiteAccessMode};
+    use domicile_protocol::SiteAccess as WireAccess;
+    use domicile_protocol::SiteAccessMode as WireMode;
+    domicile_protocol::ExtensionSettings {
+        file_access: settings.file_access,
+        user_scripts: settings.user_scripts,
+        site_access: settings.site_access.as_ref().map(|access| match access {
+            SiteAccess::Mode(SiteAccessMode::OnClick) => WireAccess::Mode(WireMode::OnClick),
+            SiteAccess::Mode(SiteAccessMode::AllSites) => WireAccess::Mode(WireMode::AllSites),
+            SiteAccess::Sites(sites) => WireAccess::Sites(sites.clone()),
+        }),
+    }
 }
 
 /// Give the host the resolved shell keybindings and the shell's options, for
@@ -67,6 +111,9 @@ impl DomicileCompositor {
         if let Some(keyboard) = &restated.keyboard {
             self.take_up_the_keymaps(keyboard);
         }
+        if let Some(repeat) = restated.key_repeat {
+            self.repeat_keys_at(repeat);
+        }
         // After the keyboard, whose layout chords are resolved on.
         if restated.shell_config {
             self.rebind_the_keys();
@@ -85,6 +132,12 @@ impl DomicileCompositor {
         if let Some(idle) = &restated.idle {
             self.reset_the_idle_clock(idle);
         }
+        if let Some(apps) = &restated.electron_apps {
+            match &self.electron_entries {
+                Some(out) => crate::electron_apps::write_the_electron_entries(out, apps),
+                None => debug!("no --electron-entries, so `electron.apps` changes nothing"),
+            }
+        }
         if let Some(omit) = &restated.omit {
             self.omit_from_the_index(omit);
         }
@@ -100,6 +153,17 @@ impl DomicileCompositor {
                 told.expect("a host that has just been given extensions has them to state"),
             );
         }
+        if let Some(browser) = &restated.browser {
+            // Store then broadcast, like the extensions.
+            let told = {
+                let mut host = self.hub.host.lock().unwrap();
+                hand_over_the_browser_profiles(&mut host, browser);
+                host.describe_browser_profiles()
+            };
+            self.hub.broadcast(
+                told.expect("a host that has just been given profiles has them to state"),
+            );
+        }
         if let Some(sites) = &restated.force_dark {
             // Store then broadcast, like the extensions.
             let told = {
@@ -108,6 +172,20 @@ impl DomicileCompositor {
                 host.describe_force_dark()
             };
             self.hub.broadcast(told);
+        }
+        if let Some(spellcheck) = &restated.spellcheck {
+            // Store then broadcast, like the extensions.
+            let told = {
+                let mut host = self.hub.host.lock().unwrap();
+                host.set_spellcheck(spellcheck.enabled, spellcheck.languages.clone());
+                host.describe_spellcheck()
+            };
+            self.hub.broadcast(
+                told.expect("a host that has just been told how to check spelling has it to state"),
+            );
+        }
+        if let Some(agents) = &restated.agents {
+            self.web_agents.set(agents.web);
         }
         if let Some(lockdown) = &restated.lockdown {
             self.hub.portals.lock_down(lockdown.clone());
@@ -151,7 +229,7 @@ impl DomicileCompositor {
     pub fn take_up_the_keymaps(&mut self, keyboard: &KeyboardConfig) {
         let keymaps = keyboard.keymaps();
         let compiled: Result<Vec<String>, _> = keymaps.iter().map(compiled_keymap).collect();
-        let Ok(compiled) = compiled.map_err(|why| warn!(%why, "{}", grepped::KEYMAP_REFUSED))
+        let Ok(compiled) = compiled.map_err(|why| error!(%why, "{}", grepped::KEYMAP_REFUSED))
         else {
             return;
         };
@@ -165,6 +243,15 @@ impl DomicileCompositor {
             active: keymaps[at].name.clone(),
         });
         self.retype_the_desktop(&keymaps[at], compiled[at].clone());
+    }
+
+    /// Tell every client's keyboard how held keys repeat. The engine hears it
+    /// with the input settings.
+    pub fn repeat_keys_at(&mut self, repeat: KeyRepeat) {
+        self.seat
+            .get_keyboard()
+            .expect("the seat has a keyboard from startup")
+            .change_repeat_info(repeat.rate.into(), repeat.delay_ms.into());
     }
 
     /// Switch every keyboard to the keymap `choice` picks, until the desktop
@@ -188,7 +275,7 @@ impl DomicileCompositor {
         }
         let keymap = self.keymap_named(&name);
         match compiled_keymap(&keymap) {
-            Err(why) => warn!(%why, "{}", grepped::KEYMAP_REFUSED),
+            Err(why) => error!(%why, "{}", grepped::KEYMAP_REFUSED),
             Ok(compiled) => {
                 self.hub.keymaps.list(Listed {
                     keymaps: listed.keymaps,
@@ -266,7 +353,7 @@ impl DomicileCompositor {
     /// [`take_up_the_keymaps`]: DomicileCompositor::take_up_the_keymaps
     pub fn rebind_the_keys(&mut self) {
         match shell_config::keys(&self.keymap_named(&self.active_keymap_name())) {
-            Err(why) => warn!(%why, "{}", grepped::KEYS_REFUSED),
+            Err(why) => error!(%why, "{}", grepped::KEYS_REFUSED),
             Ok(resolved) => {
                 // Store then broadcast, as in `retype_the_desktop`.
                 let told = {
@@ -301,7 +388,8 @@ impl DomicileCompositor {
 
     /// Apply new `idle` timeouts.
     ///
-    /// The clock restarts from now, for blanking and locking alike.
+    /// The clock restarts from now, for blanking, locking and the shell's idle
+    /// watches alike.
     ///
     /// A dark desktop is woken. The new clock starts awake ([`Idle::after`]),
     /// so it can never report [`Blanking::ComeBack`] for screens the old clock
@@ -310,10 +398,7 @@ impl DomicileCompositor {
     pub fn reset_the_idle_clock(&mut self, idle: &IdleConfig) {
         let was_dark = self.the_screens_are_dark();
         // Keep client inhibitors; see [`Idle::takes_over_from`].
-        self.idle = match (Idle::after(idle, Instant::now()), self.idle.as_mut()) {
-            (Some(clock), Some(previous)) => Some(clock.takes_over_from(previous)),
-            (clock, _) => clock,
-        };
+        self.idle = Idle::after(idle, Instant::now()).takes_over_from(&mut self.idle);
         debug!("the idle clock starts over from the reloaded timeouts");
         // Not fatal on reload, unlike at startup: the desktop just stops
         // blanking and locking on its own. Logged so it is not silent.
@@ -324,9 +409,8 @@ impl DomicileCompositor {
                  blank or lock on its own until it is restarted"
             );
         }
-        // The new clock starts lit, so a warning running is over.
-        self.tell_the_shells_how_soon_the_screens_blank();
-        // Without a clock nothing holds; with a new one, the same as before.
+        // The new clock starts from now, and may blank at another time.
+        self.settle_the_idle_watches();
         self.tell_the_shells_what_holds_the_desktop_awake();
         if was_dark {
             debug!("the idle timeout changed while the screens were off; they come back on");
@@ -376,9 +460,13 @@ impl DomicileCompositor {
 
 #[cfg(test)]
 mod tests {
-    use domicile_protocol::HostMessage;
+    use domicile_config::{SiteAccess, SiteAccessMode};
+    use domicile_protocol::{ExtensionSettings, HostMessage};
 
     use super::hand_over_the_extensions;
+
+    const DARK_READER: &str = "eimadpbcbfnmbkopoojfekhnkhdbieeh";
+    const TAMPERMONKEY: &str = "dhdgffkkebhmkfjojejmpbldmpobfkfo";
 
     #[test]
     fn the_configs_extensions_go_to_the_host() {
@@ -386,15 +474,57 @@ mod tests {
         hand_over_the_extensions(
             &mut host,
             &domicile_config::ExtensionsConfig {
-                web_store: vec!["ddkjiahejlhfcafbddmgiahcphecmpfh".to_string()],
+                web_store: vec![DARK_READER.to_string(), TAMPERMONKEY.to_string()],
                 unpacked: vec![std::path::PathBuf::from("/home/u/my-extension")],
+                settings: [
+                    (
+                        DARK_READER.to_string(),
+                        domicile_config::ExtensionSettings {
+                            file_access: Some(true),
+                            site_access: Some(SiteAccess::Sites(vec!["github.com".into()])),
+                            ..Default::default()
+                        },
+                    ),
+                    (
+                        TAMPERMONKEY.to_string(),
+                        domicile_config::ExtensionSettings {
+                            file_access: Some(false),
+                            user_scripts: Some(true),
+                            site_access: Some(SiteAccess::Mode(SiteAccessMode::OnClick)),
+                        },
+                    ),
+                ]
+                .into(),
             },
         );
         assert_eq!(
             host.describe_extensions(),
             Some(HostMessage::Extensions {
-                web_store: vec!["ddkjiahejlhfcafbddmgiahcphecmpfh".to_string()],
+                web_store: vec![DARK_READER.to_string(), TAMPERMONKEY.to_string()],
                 unpacked: vec!["/home/u/my-extension".to_string()],
+                settings: [
+                    (
+                        DARK_READER.to_string(),
+                        ExtensionSettings {
+                            file_access: Some(true),
+                            site_access: Some(domicile_protocol::SiteAccess::Sites(vec![
+                                "github.com".into()
+                            ])),
+                            ..Default::default()
+                        },
+                    ),
+                    (
+                        TAMPERMONKEY.to_string(),
+                        ExtensionSettings {
+                            file_access: Some(false),
+                            user_scripts: Some(true),
+                            site_access: Some(domicile_protocol::SiteAccess::Mode(
+                                domicile_protocol::SiteAccessMode::OnClick
+                            )),
+                        },
+                    ),
+                ]
+                .into(),
             })
         );
     }

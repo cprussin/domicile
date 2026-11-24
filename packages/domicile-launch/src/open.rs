@@ -28,6 +28,9 @@ pub struct Places {
     /// The `mimeapps.list` files, highest priority first; see
     /// `domicile_host::mime_apps::lists`.
     pub lists: Vec<PathBuf>,
+    /// The desk's terminal, which `Terminal=true` applications run in, or
+    /// none to skip them. See `domicile_host::desk_terminal`.
+    pub terminal: Option<Vec<String>>,
 }
 
 /// What opening a target does.
@@ -35,7 +38,7 @@ pub struct Places {
 pub enum Opening {
     /// Open this web address in a browser window of the desktop.
     Browse(String),
-    /// Run this argv in the caller's place.
+    /// Run this argv: `domicile open` has the desktop's compositor start it.
     Run(Vec<String>),
 }
 
@@ -124,6 +127,25 @@ pub fn opener(target: &str, here: &Path, places: &Places) -> Result<Option<Strin
     })
 }
 
+/// Whether a shell page may claim `target`, an address whose scheme is
+/// neither a web address's nor `file`. `domicile open` hands such a link to
+/// the page that claims its scheme, if one does, before picking an
+/// application. See `domicile_protocol::SystemRequest::ClaimLinks`.
+pub fn claimable(target: &str) -> bool {
+    !matches!(
+        scheme_of(target).as_deref(),
+        None | Some("http" | "https" | "file")
+    )
+}
+
+/// `target`'s scheme, lowercase, or `None` when it is no address.
+fn scheme_of(target: &str) -> Option<String> {
+    has_scheme(target)
+        .then(|| target.split_once(':'))
+        .flatten()
+        .map(|(scheme, _)| scheme.to_ascii_lowercase())
+}
+
 /// [`opening`], with the application that runs.
 enum Resolved {
     Browse(String),
@@ -131,11 +153,7 @@ enum Resolved {
 }
 
 fn resolved(target: &str, here: &Path, places: &Places) -> Result<Resolved, OpenError> {
-    let scheme = has_scheme(target)
-        .then(|| target.split_once(':'))
-        .flatten()
-        .map(|(scheme, _)| scheme.to_ascii_lowercase());
-    match scheme.as_deref() {
+    match scheme_of(target).as_deref() {
         Some("http" | "https") => Ok(Resolved::Browse(target.to_string())),
         Some("file") => file_opening(target, &here.join(file_path(target)), places),
         Some(scheme) => {
@@ -191,11 +209,17 @@ fn run(
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let again = matches!(program.as_str(), "xdg-open" | "domicile-xdg-open")
-        // `open --app` opens an app window, not the type's default.
+    let again = matches!(
+        program.as_str(),
+        "xdg-open" | "domicile-xdg-open" | "xdg-email" | "domicile-xdg-email"
+    )
+        // `open --app` opens an app window, and `open --electron` runs an
+        // Electron app, not the type's default.
         || (program == "domicile"
             && argv.get(1).is_some_and(|verb| verb == "open")
-            && argv.get(2).is_none_or(|flag| flag != "--app"));
+            && argv
+                .get(2)
+                .is_none_or(|flag| flag != "--app" && flag != "--electron"));
     match again {
         true => Err(OpenError::Loop {
             id: handler.id.clone(),
@@ -220,7 +244,13 @@ fn handler(
         .iter()
         .map(|dir| dir.join("applications"))
         .collect();
-    default_handler(mimes, &places.lists, &applications).ok_or_else(|| OpenError::NoApplication {
+    default_handler(
+        mimes,
+        &places.lists,
+        &applications,
+        places.terminal.as_deref(),
+    )
+    .ok_or_else(|| OpenError::NoApplication {
         target: target.to_string(),
         mime: mimes[0].to_string(),
     })

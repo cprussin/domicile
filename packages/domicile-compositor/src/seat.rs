@@ -38,20 +38,26 @@ impl SeatHandler for DomicileCompositor {
     }
 
     // The web engine draws the pointer, so forward a client's cursor request to
-    // the chrome as a CSS cursor for the element under the pointer.
+    // the chrome as a CSS cursor for the element under the pointer, or the
+    // image the client drew on its own surface (`crate::cursor_surface`).
     fn cursor_image(&mut self, _seat: &Seat<Self>, image: CursorImageStatus) {
-        if let Some(app_id) = self.pointer_app.clone() {
-            let cursor = match image {
-                CursorImageStatus::Hidden => CursorShape::None,
-                CursorImageStatus::Named(icon) => cursor_shape(icon),
-                // A client-drawn cursor surface needs native compositing (see
-                // `docs/architecture/WINDOW-COMPOSITING.md`). Use the default
-                // arrow until then.
-                CursorImageStatus::Surface(_) => CursorShape::Default,
-            };
-            self.hub
-                .broadcast(HostMessage::AppCursor { app_id, cursor });
-        }
+        let Some(app_id) = self.pointer_app.clone() else {
+            return;
+        };
+        let cursor = match image {
+            CursorImageStatus::Hidden => CursorShape::None,
+            CursorImageStatus::Named(icon) => cursor_shape(icon),
+            CursorImageStatus::Surface(surface) => {
+                self.show_a_cursor_surface(app_id, &surface);
+                return;
+            }
+        };
+        self.cursor_surface = None;
+        self.hub.broadcast(HostMessage::AppCursor {
+            app_id,
+            cursor,
+            image: None,
+        });
     }
 
     /// Both clipboards follow keyboard focus.
@@ -340,6 +346,21 @@ impl DomicileCompositor {
         // Update `Host` too, or `keyboard_target` would name a window that no
         // longer has the keyboard. Clicks on the desktop go through
         // `focus_pointed_at`, not here.
+        broadcast_focus_decision(&self.hub, ChromeMessage::FocusChrome);
+    }
+
+    /// Take the keyboard from any window for the lock screen.
+    ///
+    /// The chrome's toplevel, or nothing when there is none. Every chrome is
+    /// told, so the engine stops sending keys to the window that had it.
+    pub fn hand_the_keyboard_to_the_lock_screen(&mut self) {
+        let chrome = self
+            .chrome_toplevel
+            .as_ref()
+            .map(|toplevel| toplevel.wl_surface().clone());
+        let keyboard = self.seat.get_keyboard().unwrap();
+        let serial = SERIAL_COUNTER.next_serial();
+        keyboard.set_focus(self, chrome, serial);
         broadcast_focus_decision(&self.hub, ChromeMessage::FocusChrome);
     }
 

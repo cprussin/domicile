@@ -1,5 +1,107 @@
 # @domicile-desktop/manganese-bar-module-sharing
 
+## 1.2.0
+
+### Minor Changes
+
+- 86c57d9: An agent let reach the entire desktop can be remembered, and comes in without asking from then on. A running agent's reach can be changed from the bar, and Settings › Agents lists every agent connected or remembered, to stop or forget. `domicile list-agents`, `stop-agent` and `forget-agent` do the same. The SDK adds `PortalAnswer.Agent(reach, remember)`, `PortalAnswer.Change()`, the dialog's `current` and `remembered`, `portals.changeAgent`, `portals.agents` and `portals.forgetAgent`; `AgentDialog` draws the Remember switch and the change dialog, and the capturing indicator and Manganese's bar a Change button.
+- 7921005: Agents in control are their own bar item, `Agents` from `@domicile-desktop/manganese-bar-module-sharing/agents`, apart from the sharing indicator. The default bar puts it right after sharing.
+- 0c6e2df: The bar shows one agents pill for every session, with a count and a panel that lists each session and a **Stop all** button.
+- b95da52: An agent asks before it drives the desktop. `domicile mcp`'s first tool call runs `domicile agent`, which puts an `agent` dialog to the shell: the entire desktop, or only the windows the user checks. Every tool call after is checked against the answer, and the agent is listed as an `agent` capturing session, with what it did last, until it disconnects or the user stops it. The SDK parses them as `PortalKind.Agent`, `PortalAnswer.Agent` and `CapturingKind.Agent`; `<PortalDialogs />` draws the dialog and takes `omitAgents`; Manganese's bar shows each agent as a violet pill with a Stop button.
+
+### Patch Changes
+
+- Updated dependencies [6f4cabd]
+- Updated dependencies [02fe478]
+- Updated dependencies [b7d85c0]
+- Updated dependencies [7680c50]
+- Updated dependencies [9478a19]
+- Updated dependencies [87ac040]
+- Updated dependencies [394ecc7]
+- Updated dependencies [8f74f44]
+- Updated dependencies [d3978bb]
+- Updated dependencies [2794947]
+- Updated dependencies [0e71fa1]
+- Updated dependencies [d194a0d]
+- Updated dependencies [ce56535]
+- Updated dependencies [f5fbd04]
+- Updated dependencies [4acd3cd]
+- Updated dependencies [d0fbc5b]
+- Updated dependencies [3977a25]
+- Updated dependencies [03dcccf]
+- Updated dependencies [996cc29]
+- Updated dependencies [5ef4689]
+- Updated dependencies [3e37020]
+- Updated dependencies [2a1913f]
+- Updated dependencies [cd75f9a]
+- Updated dependencies [d2a68f5]
+- Updated dependencies [c454256]
+- Updated dependencies [09a3ad4]
+- Updated dependencies [3bdac3b]
+- Updated dependencies [f268f2d]
+- Updated dependencies [fb07c3f]
+- Updated dependencies [24b88fb]
+- Updated dependencies [81215c5]
+- Updated dependencies [728d513]
+- Updated dependencies [d566f68]
+- Updated dependencies [86c57d9]
+- Updated dependencies [057faa5]
+- Updated dependencies [51a769e]
+- Updated dependencies [52e71af]
+- Updated dependencies [5a70826]
+- Updated dependencies [dba9a81]
+- Updated dependencies [5c11ddc]
+- Updated dependencies [8c477cc]
+- Updated dependencies [382819f]
+- Updated dependencies [befeb71]
+- Updated dependencies [4a4f057]
+- Updated dependencies [5b3650f]
+- Updated dependencies [ebfad4b]
+- Updated dependencies [2bf4b1b]
+- Updated dependencies [1cbbfb5]
+- Updated dependencies [adb0ef5]
+- Updated dependencies [5a896a8]
+- Updated dependencies [28238ca]
+- Updated dependencies [69247ca]
+- Updated dependencies [4799f21]
+- Updated dependencies [94e5909]
+- Updated dependencies [bc8db8f]
+- Updated dependencies [e821d1f]
+- Updated dependencies [46d7737]
+- Updated dependencies [8ff882e]
+- Updated dependencies [14704ae]
+- Updated dependencies [0a4d218]
+- Updated dependencies [3600d3b]
+- Updated dependencies [9c805c4]
+- Updated dependencies [9bd54ab]
+- Updated dependencies [a2cab16]
+- Updated dependencies [d6373e3]
+- Updated dependencies [09be8b7]
+- Updated dependencies [dabcc0c]
+- Updated dependencies [da632d6]
+- Updated dependencies [85ad296]
+- Updated dependencies [539ce11]
+- Updated dependencies [e4f3394]
+- Updated dependencies [e7b707c]
+- Updated dependencies [8a2777f]
+- Updated dependencies [756c1bd]
+- Updated dependencies [133ce8a]
+- Updated dependencies [b95da52]
+- Updated dependencies [9478a19]
+- Updated dependencies [a85afe8]
+- Updated dependencies [25522ef]
+- Updated dependencies [19cc2c5]
+- Updated dependencies [a5ade39]
+- Updated dependencies [5315b06]
+- Updated dependencies [5fe0d76]
+- Updated dependencies [6e41263]
+- Updated dependencies [dec9fc2]
+- Updated dependencies [6aad1fa]
+  - @domicile-desktop/component-library@2.2.0
+  - @domicile-desktop/sdk@3.0.0
+  - @domicile-desktop/react@0.2.0
+  - @domicile-desktop/manganese-host@2.0.3
+
 ## 1.1.2
 
 ### Patch Changes

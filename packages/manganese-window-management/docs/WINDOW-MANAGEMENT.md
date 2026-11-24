@@ -32,7 +32,8 @@ Manganese uses sway's layout model. For the key bindings, see
 - `layout toggle split` (Meta+E) on a group splits its tabs into groups of
   their own. On a window alone in its group, it turns the split around the
   group between a row and a column. `layout tabbed` or `layout stacking` on a split merges its groups'
-  windows into one group.
+  windows into one group. On a group already in that layout, it acts on the
+  split around the group.
 - `move <direction>` moves a window alone in its group as the group would: into
   the next group that way, as a tab. A tab moves along its strip, then out of
   the group past its end. A selected group moves the same way, nesting as a
@@ -93,8 +94,9 @@ Workspaces belong to the desktop, and screens show them, as in sway:
   without that tab. A fullscreen group keeps its glow and tint while
   selected. The focused window's bar gets the accent color; tabs keep
   their usual states. Meta+Shift+A, focusing a floating window, clicking
-  another window, or pressing a title bar or tab inside the group ends the
-  selection, leaving that window selected.
+  or typing in any window, pressing a title bar or tab inside the group, or
+  the pointer coming back from another screen ends the selection, leaving
+  that window selected.
 - **`xdg-activation` requests are granted.** The compositor forwards them as
   `focus_requested`. Manganese switches to that window's workspace, shows its
   tab, focuses it and warps the pointer to it. A browser window whose page or
@@ -254,7 +256,8 @@ such as a Slack huddle.
   to a line would stretch its border and rounding into a blob.
 - The overlay is drawn over the open tabs of the windows it aims at.
 - **Dropping on the edge of a window in a tab group** puts the window beside
-  the group, as in sway, in a group of its own.
+  the group, as in sway, in a group of its own. A nested group splits its
+  place in the outer strip with it, as the overlay shows (`Beside.Apart`).
 - **Dragging a tab over its own group** breaks it out of the group: it goes
   beside the group, on the half under the pointer.
 - **Dragging the empty end of a tab strip**, past its last tab, picks up the
@@ -265,7 +268,8 @@ such as a Slack huddle.
   the pointer, with no overlay.
 - **A nested group's tab** drags and drops like a window's tab, carrying the
   whole group (`GroupTitleBar.tsx`). Other tabs move past it and drop beside
-  it; a group of one stays a group.
+  it; a group of one stays a group. Its own tabs drop beside it too, which
+  takes them out of it, including past it from the strip's empty end.
 - The pointer shows `grabbing` anywhere on the desktop while a window moves
   (`GrabbingSheet.tsx`).
 - A move aims only once the pointer is 8px from the press, so clicking a tab
@@ -280,6 +284,9 @@ such as a Slack huddle.
   never hears also ends it, at the first move with no button held or when the
   edge loses the pointer, so the edge never keeps the pointer
   (`follow-press.ts`).
+- During an edge drag, windows keep taking the pointer: the edge holds it. A webview made click-through takes the pointer back only at the
+  engine's next frame, so the moves and clicks just after the release would
+  reach the desktop instead of the page.
 - Fullscreen windows cannot be dragged, nor can a fullscreen group by its
   strip.
 
@@ -345,7 +352,14 @@ with windows, and the shown one.
   does not, keeping windows coming in from beside off the next monitor. The
   wrapper takes its part's depth as its `z-index`, since the transformed box
   is its own stacking context.
-- Hidden workspaces' windows get their placements as if shown.
+- Hidden workspaces' windows get their placements as if shown. Coming in,
+  their `<app>` or `<webview>` is `resizing`, so the engine shows the desk
+  without waiting for them to draw again, as on a workspace switch. They
+  never take the pointer (`shut`), from the start rather than as the
+  overview closes, since that would restyle every part of every window.
+- The box takes the move through `--overview-to`, which its window's parts
+  reset, so setting it restyles the box alone. Not `@property`: registering
+  any custom property slows every restyle.
 - One camera per screen moves every tile, name and window together
   (`cameraOf`): opening, it pulls back from the shown workspace, whose tile
   starts filling the screen, so the others come in from the side they sit
@@ -413,6 +427,10 @@ with windows, and the shown one.
 - Closing a tab: it closes up toward its start as the tabs after it slide
   back. Its contents shrink into the tab and fade out over the tab it
   uncovers, as slowly as a new tab's grow out.
+- An opening or closing tab's contents carry a ring and shadow while they
+  move, so they show over a tab that looks like them. Both fade, so neither
+  comes or goes in one frame. None in a group filling its screen, where the
+  shadow would spill onto the next display.
 - Sending away a tab: it shrinks and fades with its contents, as a sent
   window does, while the tabs after it slide back.
 - Sending to the scratchpad: slide up off the top of the screen. Showing it
@@ -421,7 +439,8 @@ with windows, and the shown one.
   (`DrawnWindow.rewound`). The backdrop fades with the slides.
 - Workspace switch: the new workspace slides in; the old one slides out.
   Each window is clipped to its screen meanwhile, so it never shows on the
-  next one.
+  next one, and to its workspace, so a float hanging off the screen never
+  slides into view.
 - Tab switch: crossfade. On a workspace sliding in, the tab switched to
   slides with it instead. Parts first drawn partway through (a hidden tab's
   contents, the strip it opens) start where the slide has got to
@@ -431,6 +450,10 @@ Rules:
 
 - Open and close use transforms. Resizing the element would reconfigure the
   client every frame.
+- A browser window's page keeps its raster scale while a transform animation
+  runs on it or a box around it, and takes the resting scale when it ends
+  (engine patch 0233). Otherwise a heavy page rasters again every frame of an
+  open, close or settle.
 - Rearranging gives a window's contents their new box at once, so the client
   is configured once. The box then eases from the old one with `translate`
   and `scale` (`useSettling`). Eased boxes would hold every frame: the engine
@@ -511,6 +534,9 @@ Rules:
   compositor applies to client surfaces too. Parts are `position: absolute`
   so the wrapper's clip reaches them; the wrapper has no `z-index`, so each
   part still stacks by its own.
+- Each part also clips itself to its workspace (`clippedAlong`), with `clip`
+  in its own box so the clip moves with the slide. The wrapper hands it the
+  screen through `SlidingScreen` while a switch slides it.
 - Durations live in the Panda tokens only. The shell waits for each CSS
   animation's end event.
 

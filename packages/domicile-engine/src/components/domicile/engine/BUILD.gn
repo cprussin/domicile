@@ -9,6 +9,8 @@
 #
 #   autoninja -C out/Domicile domicile_engine
 
+import("//build/config/sanitizers/alloc_token.gni")
+
 # The library's event queue to the compositor, split out so it can be tested
 # without a browser.
 source_set("event_queue") {
@@ -18,6 +20,31 @@ source_set("event_queue") {
   ]
 
   public_deps = [ "//base" ]
+}
+
+# Connects to the browser's broker socket, close-on-exec.
+source_set("broker_socket") {
+  sources = [
+    "broker_socket.cc",
+    "broker_socket.h",
+  ]
+
+  deps = [ "//base" ]
+
+  public_deps = [ "//mojo/public/cpp/platform" ]
+}
+
+source_set("broker_socket_unit_tests") {
+  testonly = true
+
+  sources = [ "broker_socket_unittest.cc" ]
+
+  deps = [
+    ":broker_socket",
+    "//base",
+    "//mojo/public/cpp/platform",
+    "//testing/gtest",
+  ]
 }
 
 # Converts a client's window geometry to texture coordinates.
@@ -93,6 +120,32 @@ source_set("surface_alpha_unit_tests") {
   ]
 }
 
+# Turns a client's image description into the color space and HDR metadata viz
+# draws its buffers with.
+source_set("buffer_color") {
+  sources = [
+    "buffer_color.cc",
+    "buffer_color.h",
+  ]
+
+  public_deps = [ "//ui/gfx:color_space" ]
+
+  deps = [ "//skia" ]
+}
+
+source_set("buffer_color_unit_tests") {
+  testonly = true
+
+  sources = [ "buffer_color_unittest.cc" ]
+
+  deps = [
+    ":buffer_color",
+    "//skia",
+    "//testing/gtest",
+    "//ui/gfx:color_space",
+  ]
+}
+
 # Numbers a window's frames and matches viz's acks and presentation feedback to
 # them.
 source_set("surface_frames") {
@@ -126,7 +179,10 @@ source_set("surface_holds") {
     "surface_holds.h",
   ]
 
-  public_deps = [ "//base" ]
+  public_deps = [
+    "//base",
+    "//gpu/command_buffer/common",
+  ]
 }
 
 source_set("surface_holds_unit_tests") {
@@ -136,6 +192,7 @@ source_set("surface_holds_unit_tests") {
 
   deps = [
     ":surface_holds",
+    "//gpu/command_buffer/common",
     "//testing/gtest",
   ]
 }
@@ -203,8 +260,46 @@ source_set("event_queue_unit_tests") {
   ]
 }
 
+# Sends the library's allocations to the process's allocator. See
+# process_allocator.c.
+source_set("process_allocator") {
+  if (use_alloc_token) {
+    sources = [ "process_allocator.c" ]
+  }
+
+  # Otherwise each wrapper's own call would be rewritten back into itself.
+  configs -= [ "//build/config/sanitizers:alloc_token" ]
+}
+
+_alloc_token_functions = [
+  "__alloc_token_aligned_alloc",
+  "__alloc_token_calloc",
+  "__alloc_token_malloc",
+  "__alloc_token_memalign",
+  "__alloc_token_posix_memalign",
+  "__alloc_token_pvalloc",
+  "__alloc_token_realloc",
+  "__alloc_token_reallocarray",
+  "__alloc_token_valloc",
+  "__alloc_token__Znam",
+  "__alloc_token__ZnamRKSt9nothrow_t",
+  "__alloc_token__ZnamSt11align_val_t",
+  "__alloc_token__ZnamSt11align_val_tRKSt9nothrow_t",
+  "__alloc_token__Znwm",
+  "__alloc_token__ZnwmRKSt9nothrow_t",
+  "__alloc_token__ZnwmSt11align_val_t",
+  "__alloc_token__ZnwmSt11align_val_tRKSt9nothrow_t",
+]
+
 shared_library("domicile_engine") {
   output_name = "domicile_engine"
+
+  if (use_alloc_token) {
+    ldflags = []
+    foreach(f, _alloc_token_functions) {
+      ldflags += [ "-Wl,--wrap=$f" ]
+    }
+  }
 
   sources = [
     "domicile_engine.cc",
@@ -213,8 +308,11 @@ shared_library("domicile_engine") {
   ]
 
   deps = [
+    ":broker_socket",
+    ":buffer_color",
     ":event_queue",
     ":probe_wait",
+    ":process_allocator",
     ":surface_alpha",
     ":surface_crop",
     ":surface_frames",

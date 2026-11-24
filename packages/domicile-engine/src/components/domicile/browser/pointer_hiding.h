@@ -4,8 +4,6 @@
 #ifndef COMPONENTS_DOMICILE_BROWSER_POINTER_HIDING_H_
 #define COMPONENTS_DOMICILE_BROWSER_POINTER_HIDING_H_
 
-#include <set>
-
 #include "base/memory/raw_ref.h"
 #include "base/timer/timer.h"
 #include "components/domicile/browser/desk_pointer_hiding.h"
@@ -35,7 +33,7 @@ class PointerHiding {
   };
 
   // The event types `Heard` reads.
-  static std::set<ui::EventType> Types();
+  static ui::EventTypeSet Types();
 
   explicit PointerHiding(Pointer& pointer);
   PointerHiding(const PointerHiding&) = delete;

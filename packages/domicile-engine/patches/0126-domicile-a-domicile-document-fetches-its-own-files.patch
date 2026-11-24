@@ -23,19 +23,19 @@ job builds it on `crux`.
  2 files changed, 10 insertions(+)
 
 diff --git a/chrome/renderer/BUILD.gn b/chrome/renderer/BUILD.gn
-index 301abe5..e6502db 100644
+index 36ed32c..cb340c1 100644
 --- a/chrome/renderer/BUILD.gn
 +++ b/chrome/renderer/BUILD.gn
-@@ -154,6 +154,7 @@ static_library("renderer") {
+@@ -153,6 +153,7 @@ static_library("renderer") {
+     "//components/continuous_search/renderer",
      "//components/country_codes",
      "//components/crx_file",
-     "//components/dom_distiller/content/renderer",
 +    "//components/domicile:common",
      "//components/facilitated_payments/content/renderer",
      "//components/facilitated_payments/core/features",
      "//components/feed:feature_list",
 diff --git a/chrome/renderer/chrome_content_renderer_client.cc b/chrome/renderer/chrome_content_renderer_client.cc
-index 8c4f87c..1499c45 100644
+index 8af875c..931aaf9 100644
 --- a/chrome/renderer/chrome_content_renderer_client.cc
 +++ b/chrome/renderer/chrome_content_renderer_client.cc
 @@ -4,6 +4,8 @@
@@ -47,7 +47,7 @@ index 8c4f87c..1499c45 100644
  #include <functional>
  #include <memory>
  #include <optional>
-@@ -621,6 +623,13 @@ void ChromeContentRendererClient::RenderThreadStarted() {
+@@ -645,6 +647,13 @@ void ChromeContentRendererClient::RenderThreadStarted() {
    WebSecurityPolicy::RegisterURLSchemeAsSupportingFetchAPI(
        WebString::FromAscii(chrome::kChromeExperimentalSiteTokenProviderScheme));
  

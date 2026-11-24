@@ -1,14 +1,21 @@
 import { css, cx } from "../../styled-system/css";
 import { grabCursorStyles } from "../grab-cursor-styles";
+import type { Press } from "../handed-drag";
 import type { Spot } from "../pointer-warp";
 import type { Rect } from "../rect";
 import { useGrabCursor } from "../useGrabCursor";
+import { useHandedPress } from "../useHandedPress";
 import { placedAt } from "../window-styles";
 import type { Float } from "./float";
 import { rectOf } from "./float";
 import { useFloatDrag } from "./useFloatDrag";
 
 type Props = {
+  /**
+   * A press a client handed over, to start the drag from as though it had
+   * landed here. See `HandedDrag`.
+   */
+  handed?: Press | undefined;
   /** The stacking depth of the window it covers. */
   depth: number;
   float: Float;
@@ -40,6 +47,7 @@ type Props = {
 export const FloatGrab = ({
   depth,
   float,
+  handed,
   onHover,
   resizes,
   window,
@@ -55,6 +63,7 @@ export const FloatGrab = ({
     frame: rectOf(float),
     resizes,
   });
+  const sheet = useHandedPress(handed, handlers.onPointerDown);
   return (
     // Hidden from assistive tech: everything here is also available from the
     // keyboard.
@@ -70,6 +79,7 @@ export const FloatGrab = ({
       onPointerOver={(event) => {
         onHover([event.clientX, event.clientY]);
       }}
+      ref={sheet}
       style={placedAt(rectOf(float), depth)}
       {...handlers}
     />

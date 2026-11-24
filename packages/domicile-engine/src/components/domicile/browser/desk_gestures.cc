@@ -8,6 +8,7 @@
 
 #include "base/check.h"
 #include "base/no_destructor.h"
+#include "components/domicile/browser/desk_modifier_taps.h"
 
 namespace domicile {
 
@@ -60,6 +61,13 @@ void DeskGestures::Ungrab(ChannelId channel, GestureGrab grab) {
   std::erase(found->grabs, grab);
 }
 
+void DeskGestures::SetInhibited(ChannelId channel, bool inhibited) {
+  base::AutoLock held(lock_);
+  auto found = std::ranges::find(channels_, channel, &Channel::id);
+  CHECK(found != channels_.end());
+  found->inhibited = inhibited;
+}
+
 void DeskGestures::ListenForTouchpad(base::RepeatingClosure touched) {
   base::AutoLock held(lock_);
   CHECK(touched_.is_null());
@@ -98,6 +106,11 @@ void DeskGestures::Take(const ui::NativeGesture& gesture) {
       }
     }
   }
+  if (gesture.phase == ui::NativeGesturePhase::kBegin) {
+    // Super held through a swipe the shell took is no tap of Super. No aura
+    // event shows the swipe, so DeskModifierTaps is told here.
+    DeskModifierTaps::Get().Interrupt();
+  }
   if (!touched.is_null()) {
     touched.Run();
   }
@@ -109,7 +122,8 @@ void DeskGestures::Take(const ui::NativeGesture& gesture) {
 const DeskGestures::Channel* DeskGestures::Grabbing(
     const ui::NativeGesture& begin) const {
   auto found = std::ranges::find_if(channels_, [&](const Channel& channel) {
-    return std::ranges::any_of(channel.grabs, [&](const GestureGrab& grab) {
+    return !channel.inhibited &&
+           std::ranges::any_of(channel.grabs, [&](const GestureGrab& grab) {
       return grab.kind == begin.kind &&
              (grab.fingers == 0 || grab.fingers == begin.fingers) &&
              (!grab.edge || grab.edge == begin.edge);

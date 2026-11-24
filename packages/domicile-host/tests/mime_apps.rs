@@ -35,6 +35,7 @@ fn opened(config: &Path, lists: &[&str], applications: &Path) -> Option<Vec<Stri
         &["x-scheme-handler/mailto"],
         &lists,
         &[applications.to_path_buf()],
+        None,
     )
     .map(|handler| {
         handler
@@ -170,6 +171,7 @@ mod supertypes {
             types,
             &[config.path().join("mimeapps.list")],
             &[applications.path().to_path_buf()],
+            None,
         )
         .map(|handler| handler.id)
     }
@@ -264,13 +266,14 @@ mod supertypes {
                 config.path().join("low.list"),
             ],
             &[applications.path().to_path_buf()],
+            None,
         );
 
         assert_eq!(chosen.map(|handler| handler.id), Some("foo.desktop".into()));
     }
 
     #[test]
-    fn a_terminal_entry_opens_nothing() {
+    fn a_terminal_entry_opens_nothing_without_a_terminal() {
         let terminal = format!("{}Terminal=true\n", handler("vim %F", "x-other"));
         assert_eq!(
             chosen(
@@ -286,6 +289,84 @@ mod supertypes {
     }
 }
 
+mod terminals {
+    use super::*;
+
+    fn kitty() -> Vec<String> {
+        vec!["kitty".into(), "--".into()]
+    }
+
+    /// Vim's entry, as it ships: it runs in a terminal.
+    const VIM: &str = "[Desktop Entry]\nType=Application\nName=Vim\nExec=vim %F\n\
+                       Terminal=true\nMimeType=text/plain;\n";
+
+    #[test]
+    fn a_terminal_entry_opens_a_file_in_the_desks_terminal() {
+        let applications = written(&[("vim.desktop", VIM)]);
+        let config = written(&[(
+            "mimeapps.list",
+            "[Default Applications]\ntext/plain=vim.desktop\n",
+        )]);
+        let chosen = default_handler(
+            &["text/plain"],
+            &[config.path().join("mimeapps.list")],
+            &[applications.path().to_path_buf()],
+            Some(&kitty()),
+        )
+        .expect("vim, in the terminal");
+
+        assert_eq!(chosen.id, "vim.desktop");
+        assert_eq!(
+            chosen.file_command("/home/u/a.txt"),
+            Some(vec![
+                "kitty".into(),
+                "--".into(),
+                "vim".into(),
+                "/home/u/a.txt".into()
+            ])
+        );
+    }
+
+    #[test]
+    fn without_a_terminal_vim_opens_nothing() {
+        let applications = written(&[("vim.desktop", VIM)]);
+        assert_eq!(
+            default_handler(
+                &["text/plain"],
+                &[],
+                &[applications.path().to_path_buf()],
+                None
+            )
+            .map(|handler| handler.id),
+            None
+        );
+    }
+
+    #[test]
+    fn an_application_of_its_own_window_does_not_run_in_the_terminal() {
+        let applications = written(&[("edit.desktop", &handler("edit %F", "x-other"))]);
+        assert_eq!(
+            default_handler(
+                &["text/plain"],
+                &[],
+                &[applications.path().to_path_buf()],
+                Some(&kitty())
+            )
+            .and_then(|handler| handler.file_command("/a")),
+            Some(vec!["edit".into(), "/a".into()])
+        );
+    }
+
+    #[test]
+    fn a_notifications_terminal_application_starts_in_the_terminal() {
+        let applications = written(&[("vim.desktop", VIM)]);
+        assert_eq!(
+            launch_command("vim", &[applications.path().to_path_buf()], Some(&kitty())),
+            Some(vec!["kitty".into(), "--".into(), "vim".into()])
+        );
+    }
+}
+
 mod commands {
     use super::*;
 
@@ -297,6 +378,7 @@ mod commands {
             &["x-scheme-handler/mailto"],
             &[],
             &[applications.path().to_path_buf()],
+            None,
         )
         .expect("a handler")
         .command("mailto:a@example.com")
@@ -363,9 +445,14 @@ mod commands {
     fn a_file_takes_the_place_of_a_file_or_url_code() {
         let command = |exec: &str| {
             let applications = written(&[("edit.desktop", &handler(exec, "text/x-other"))]);
-            default_handler(&["text/x-other"], &[], &[applications.path().to_path_buf()])
-                .expect("a handler")
-                .file_command("/home/u/a b.txt")
+            default_handler(
+                &["text/x-other"],
+                &[],
+                &[applications.path().to_path_buf()],
+                None,
+            )
+            .expect("a handler")
+            .file_command("/home/u/a b.txt")
         };
 
         assert_eq!(
@@ -399,7 +486,11 @@ mod launching {
             &handler("chat --new-window %U", "x-scheme-handler/chat"),
         )]);
         assert_eq!(
-            launch_command("org-example.Chat", &[applications.path().to_path_buf()]),
+            launch_command(
+                "org-example.Chat",
+                &[applications.path().to_path_buf()],
+                None
+            ),
             Some(vec!["chat".into(), "--new-window".into()])
         );
     }
@@ -408,7 +499,7 @@ mod launching {
     fn an_application_not_installed_starts_nothing() {
         let applications = written(&[("mail.desktop", &handler("mail", "text/x-mail"))]);
         assert_eq!(
-            launch_command("chat", &[applications.path().to_path_buf()]),
+            launch_command("chat", &[applications.path().to_path_buf()], None),
             None
         );
     }

@@ -36,6 +36,11 @@ export type ClientWindow = {
   /** The cursor the client asked for, or `undefined` if none. */
   cursor: CursorShape | undefined;
   /**
+   * The CSS cursor for an image the client drew itself, shown in place of
+   * `cursor`, or `undefined` while it uses a named one.
+   */
+  cursorImage: string | undefined;
+  /**
    * The client's Wayland app id, which names its desktop entry and so its
    * icon. `""` until the client sets one.
    */
@@ -71,6 +76,7 @@ export const ShellWindow = {
   App: (appId: string, title: string): ClientWindow => ({
     appId,
     cursor: undefined,
+    cursorImage: undefined,
     desktopId: "",
     id: appWindowId(appId),
     kind: WindowKind.App,
@@ -92,6 +98,10 @@ export const ShellWindow = {
    * - `isPrivate`: whether the page is private. Its address bar says so.
    * - `isApp`: whether this is an app window (`domicile open --app`). Drawn
    *   without an address bar.
+   * - `appId`: the app window's id, its app's desktop id; `""` for none. An
+   *   app window draws its app's icon over its page's.
+   * - `isHidden`: whether its Electron app hid it. It stays open, its page
+   *   running, on no workspace until the app shows it again.
    */
   Browser: (
     windowId: string,
@@ -100,7 +110,10 @@ export const ShellWindow = {
     popupWindow: number | undefined,
     isPrivate: boolean,
     isApp: boolean,
+    appId = "",
+    isHidden = false,
   ) => ({
+    appId,
     /**
      * The page's description, or `undefined` for none. The view reports it,
      * as it does the icon.
@@ -113,6 +126,7 @@ export const ShellWindow = {
     icon: undefined as string | undefined,
     id: browserWindowId(windowId),
     isApp,
+    isHidden,
     isPrivate,
     kind: WindowKind.Browser as const,
     popupWindow,

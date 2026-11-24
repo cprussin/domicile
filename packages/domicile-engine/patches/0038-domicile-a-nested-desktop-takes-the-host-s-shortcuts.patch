@@ -78,18 +78,18 @@ each post-image is the pin's file with these lines in it.
  2 files changed, 95 insertions(+)
 
 diff --git a/ui/ozone/platform/wayland/host/wayland_toplevel_window.cc b/ui/ozone/platform/wayland/host/wayland_toplevel_window.cc
-index 85020fa..4659f84 100644
+index 8c6f2f6..dfdab5f 100644
 --- a/ui/ozone/platform/wayland/host/wayland_toplevel_window.cc
 +++ b/ui/ozone/platform/wayland/host/wayland_toplevel_window.cc
-@@ -6,6 +6,7 @@
- 
+@@ -9,6 +9,7 @@
  #include <string>
+ #include <vector>
  
 +#include "base/command_line.h"
  #include "base/logging.h"
  #include "base/nix/xdg_util.h"
  #include "base/numerics/safe_conversions.h"
-@@ -28,9 +29,11 @@
+@@ -31,9 +32,11 @@
  #include "ui/ozone/platform/wayland/host/wayland_data_drag_controller.h"
  #include "ui/ozone/platform/wayland/host/wayland_event_source.h"
  #include "ui/ozone/platform/wayland/host/wayland_frame_manager.h"
@@ -101,7 +101,7 @@ index 85020fa..4659f84 100644
  #include "ui/ozone/platform/wayland/host/wayland_window.h"
  #include "ui/ozone/platform/wayland/host/wayland_window_drag_controller.h"
  #include "ui/ozone/platform/wayland/host/wayland_zwp_pointer_constraints.h"
-@@ -46,6 +49,18 @@ namespace ui {
+@@ -49,6 +52,18 @@ namespace ui {
  
  namespace {
  
@@ -120,8 +120,8 @@ index 85020fa..4659f84 100644
  bool ShouldSetBounds(PlatformWindowState state) {
    return state == PlatformWindowState::kNormal;
  }
-@@ -202,6 +217,9 @@ void WaylandToplevelWindow::Hide() {
-   minimize_sync_callback_.reset();
+@@ -240,6 +255,9 @@ void WaylandToplevelWindow::HideNow() {
+   ClearPendingBoundsSync();
    toplevel_session_.reset();
    appmenu_.reset();
 +  // Domicile: an unmapped window holds nobody's keyboard, and the next Show()
@@ -130,9 +130,9 @@ index 85020fa..4659f84 100644
  
    WaylandWindow::Hide();
    ClearInFlightRequestsSerial();
-@@ -1104,6 +1122,70 @@ void WaylandToplevelWindow::SetUpShellIntegration() {
+@@ -1405,6 +1423,70 @@ void WaylandToplevelWindow::SetUpShellIntegration() {
    // This method should be called after the XDG surface is initialized.
-   DCHECK(xdg_toplevel_);
+   CHECK(xdg_toplevel_, base::NotFatalUntil::M163);
    TryAnnounceAppmenu();
 +  InhibitHostKeyboardShortcuts();
 +}
@@ -202,10 +202,10 @@ index 85020fa..4659f84 100644
  
  void WaylandToplevelWindow::OnDecorationModeChanged() {
 diff --git a/ui/ozone/platform/wayland/host/wayland_toplevel_window.h b/ui/ozone/platform/wayland/host/wayland_toplevel_window.h
-index 5055c63..4602a2d 100644
+index a6c3738..c1c7705 100644
 --- a/ui/ozone/platform/wayland/host/wayland_toplevel_window.h
 +++ b/ui/ozone/platform/wayland/host/wayland_toplevel_window.h
-@@ -221,6 +221,11 @@ class WaylandToplevelWindow : public WaylandWindow,
+@@ -262,6 +262,11 @@ class WaylandToplevelWindow : public WaylandWindow,
    // available.
    void SetUpShellIntegration();
  
@@ -217,7 +217,7 @@ index 5055c63..4602a2d 100644
    // Sets decoration mode for a window.
    void OnDecorationModeChanged();
  
-@@ -299,6 +304,14 @@ class WaylandToplevelWindow : public WaylandWindow,
+@@ -367,6 +372,14 @@ class WaylandToplevelWindow : public WaylandWindow,
    std::string appmenu_service_name_;
    std::string appmenu_object_path_;
  

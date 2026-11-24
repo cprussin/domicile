@@ -84,6 +84,12 @@ Every engine workflow runs three scripts, under the tree lock:
   `gclient`.
 - `engine-reset.sh` deletes the stamp when it finds `DEPS` out of step with the
   pin.
+- devtools-frontend's generated sources are not rebuilt when the pin moves,
+  and its `generated_checked` step fails on another pin's. The first run at a
+  pin deletes `out/*/gen/third_party/devtools-frontend`, and records the pin in
+  `.domicile-gen-pin` beside the checkout. It does this even when the DEPS are
+  already synced, because a tree synced back to a pin can still hold the other
+  pin's outputs.
 
 ## Tree pool
 
@@ -109,6 +115,21 @@ rebuild.
   pick and while waiting (`crux-run-finished.sh`). A runner shut down
   mid-build never drops its tree. A lock that names no run, such as a
   person's, is never cleared.
+- **After a pin roll:** the other tree is still at the old pin, and the next
+  run that lands on it rebuilds Chromium (4h50m on 2026-11-23). So once
+  `engine-release.yml` on main has published, it copies its built tree over
+  the least recently used tree at another pin
+  (`engine-tree-pool.sh refresh <chromium/src> <who>`). The copy shares blocks
+  (`cp --reflink=always`, which needs `zfs_bclone_enabled=1`), so it takes
+  minutes and almost no space. Without cloning it copies nothing, since a third
+  full tree does not fit. It skips held trees. `gn gen` rewrites the old
+  tree's absolute paths at the next build, and `engine-release-build.sh`
+  refuses a build whose files still name another tree. siso's saved file
+  state (`.siso_fs_state`) is keyed by absolute path too, so the copy rewrites
+  it with `siso fs export`/`import`. Without that, the copy's first build
+  re-runs every step from ccache (45m); with it, about 7m.
+- **Quota:** the dataset quota charges a cloned copy at full size, so it is
+  500G, above the pool's size (cprussin/dotfiles#322).
 - **Memory:** 62 GB, no swap. A cold link uses most of it, so
   `.github/scripts/engine-compile-slot.sh` allows one cold build at a time.
   Runs on a tree that already carries the series skip the slot.

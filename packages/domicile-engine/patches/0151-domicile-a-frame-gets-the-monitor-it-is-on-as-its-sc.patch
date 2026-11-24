@@ -24,10 +24,10 @@ job builds it on crux.
  1 file changed, 7 insertions(+), 1 deletion(-)
 
 diff --git a/content/browser/renderer_host/render_widget_host_view_child_frame.cc b/content/browser/renderer_host/render_widget_host_view_child_frame.cc
-index 1adc151..49dd25c 100644
+index e300140..2349597 100644
 --- a/content/browser/renderer_host/render_widget_host_view_child_frame.cc
 +++ b/content/browser/renderer_host/render_widget_host_view_child_frame.cc
-@@ -22,6 +22,7 @@
+@@ -23,6 +23,7 @@
  #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
  #include "components/viz/host/host_frame_sink_manager.h"
  #include "content/browser/compositor/surface_utils.h"

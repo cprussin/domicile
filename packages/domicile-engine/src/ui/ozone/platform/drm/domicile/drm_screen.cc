@@ -8,19 +8,27 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <memory>
 #include <optional>
 #include <vector>
 
 #include "base/check.h"
+#include "base/logging.h"
+#include "base/notreached.h"
 #include "base/containers/flat_set.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "ui/display/display_finder.h"
+#include "ui/display/display_observer.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/util/edid_parser.h"
 #include "ui/gfx/display_color_spaces.h"
 #include "ui/ozone/platform/drm/domicile/drm_pointer_crossing.h"
 #include "ui/ozone/platform/drm/domicile/edid_name.h"
+#include "ui/ozone/platform/drm/domicile/hdr_output.h"
+#include "ui/ozone/platform/drm/domicile/ten_bit_scanout.h"
 #include "ui/ozone/platform/drm/host/drm_cursor.h"
 #include "ui/ozone/platform/drm/host/drm_window_host.h"
 #include "ui/ozone/platform/drm/host/drm_window_host_manager.h"
@@ -90,21 +98,154 @@ void DrawInAFormatThePlanesTake(display::Display& screen,
   screen.SetColorSpaces(color_spaces);
 }
 
-// Returns the snapshot's native mode size, or the displayless bounds if it
-// has no mode.
-gfx::Size SizeOf(const display::DisplaySnapshot& snapshot) {
-  const display::DisplayMode* native_mode = snapshot.native_mode();
-  return native_mode ? native_mode->size() : kDisplaylessBounds;
+// Draws `screen`'s frames in 10 bits a channel where its panel and planes
+// take them; see `TenBitScanoutFourcc`. Viz names channels in memory order, so
+// XBGR2101010 is RGBA_1010102.
+void DrawInTenBitsWhereThePanelTakesThem(
+    display::Display& screen,
+    const display::DisplaySnapshot& snapshot) {
+  const std::optional<uint32_t> fourcc = TenBitScanoutFourcc(snapshot);
+  if (!fourcc) {
+    return;
+  }
+  const viz::SharedImageFormat format =
+      *fourcc == DRM_FORMAT_XBGR2101010
+          ? viz::SinglePlaneFormat::kRGBA_1010102
+          : viz::SinglePlaneFormat::kBGRA_1010102;
+  gfx::DisplayColorSpaces color_spaces = screen.GetColorSpaces();
+  color_spaces.SetOutputFormats(format, format);
+  screen.SetColorSpaces(color_spaces);
+}
+
+// Draws `screen`'s frames in HDR10, in the 10-bit format
+// `DrawInTenBitsWhereThePanelTakesThem` picked.
+void DrawInHdr(display::Display& screen,
+               const display::DisplaySnapshot& snapshot,
+               float sdr_white_nits) {
+  const gfx::DisplayColorSpaces drawn = screen.GetColorSpaces();
+  screen.SetColorSpaces(HdrColorSpaces(
+      snapshot, sdr_white_nits,
+      drawn.GetOutputFormat(gfx::ContentColorUsage::kHDR, false)));
+}
+
+// Returns `mode`'s size, or the displayless bounds if there is none.
+gfx::Size SizeOf(const display::DisplayMode* mode) {
+  return mode ? mode->size() : kDisplaylessBounds;
+}
+
+// Returns the size of the mode the layout picks for the snapshot.
+gfx::Size SizeOf(const display::DisplaySnapshot& snapshot,
+                 const std::vector<DomicileDisplayLayout>& layout) {
+  return SizeOf(
+      ModeForLayout(snapshot, WantedFor(layout, snapshot.display_id())));
+}
+
+// A mode's refresh rate in mHz, as wl_output states it.
+int32_t MillihertzOf(const display::DisplayMode& mode) {
+  return static_cast<int32_t>(std::lround(mode.refresh_rate() * 1000.f));
+}
+
+// Whether `mode` beats `chosen`, both of one size, for a profile asking for
+// `refresh_mhz` (zero for none).
+//
+// A progressive mode beats an interlaced one, which halves the vertical
+// resolution each frame. Then the rate nearest the one asked for, or with
+// none the fastest, as sway picks.
+bool Better(const display::DisplayMode& mode,
+            const display::DisplayMode& chosen,
+            int32_t refresh_mhz) {
+  if (mode.is_interlaced() != chosen.is_interlaced()) {
+    return chosen.is_interlaced();
+  }
+  if (refresh_mhz > 0) {
+    return std::abs(MillihertzOf(mode) - refresh_mhz) <
+           std::abs(MillihertzOf(chosen) - refresh_mhz);
+  }
+  return mode.refresh_rate() > chosen.refresh_rate();
 }
 
 }  // namespace
 
-display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
-                                     const gfx::Point& origin) {
-  // A connector with no native mode gets the displayless bounds, since no
-  // window can be placed on empty bounds.
+const display::DisplayMode* ModeForLayout(
+    const display::DisplaySnapshot& snapshot,
+    const DomicileDisplayLayout* wanted) {
   const display::DisplayMode* native_mode = snapshot.native_mode();
-  const gfx::Size size = SizeOf(snapshot);
+  if (!native_mode || !wanted) {
+    return native_mode;
+  }
+  const gfx::Size size = wanted->mode.value_or(native_mode->size());
+  if (size == native_mode->size() && wanted->refresh_mhz <= 0) {
+    return native_mode;
+  }
+  const display::DisplayMode* chosen = nullptr;
+  for (const std::unique_ptr<const display::DisplayMode>& mode :
+       snapshot.modes()) {
+    if (mode->size() != size) {
+      continue;
+    }
+    if (!chosen || Better(*mode, *chosen, wanted->refresh_mhz)) {
+      chosen = mode.get();
+    }
+  }
+  return chosen ? chosen : native_mode;
+}
+
+DomicilePanel PanelFromSnapshot(
+    const display::DisplaySnapshot& snapshot,
+    const std::vector<DomicileDisplayLayout>& layout) {
+  DomicilePanel panel;
+  panel.modes.reserve(snapshot.modes().size());
+  for (const std::unique_ptr<const display::DisplayMode>& mode :
+       snapshot.modes()) {
+    panel.modes.push_back(
+        {.size = mode->size(), .refresh_mhz = MillihertzOf(*mode)});
+  }
+  const display::DisplayMode* lit =
+      ModeForLayout(snapshot, WantedFor(layout, snapshot.display_id()));
+  panel.refresh_mhz = lit ? MillihertzOf(*lit) : 0;
+  panel.physical_size_mm = DisplayPhysicalSizeMm(snapshot);
+  panel.adaptive_sync = AdaptiveSyncOf(snapshot);
+  const DomicileDisplayLayout* wanted = WantedFor(layout, snapshot.display_id());
+  panel.hdr = HdrOf(snapshot, wanted);
+  if (const std::optional<gfx::HDRStaticMetadata>& metadata =
+          snapshot.hdr_static_metadata()) {
+    panel.max_luminance = static_cast<float>(metadata->max);
+    panel.max_average_luminance = static_cast<float>(metadata->max_avg);
+    panel.min_luminance = static_cast<float>(metadata->min);
+  }
+  if (panel.hdr == DomicileHdr::kOn) {
+    panel.sdr_white_nits = wanted->sdr_white_nits;
+  }
+  return panel;
+}
+
+bool PanelChangedUnseen(const DomicilePanel& before,
+                        const DomicilePanel& after) {
+  return before.refresh_mhz != after.refresh_mhz ||
+         before.adaptive_sync != after.adaptive_sync ||
+         before.hdr != after.hdr || before.sdr_white_nits != after.sdr_white_nits;
+}
+
+DomicileAdaptiveSync AdaptiveSyncOf(const display::DisplaySnapshot& snapshot) {
+  // Read off the connector and CRTC when the snapshot was taken, so it says
+  // what the hardware does, not what was asked for.
+  switch (snapshot.variable_refresh_rate_state()) {
+    case display::VariableRefreshRateState::kVrrNotCapable:
+      return DomicileAdaptiveSync::kUnsupported;
+    case display::VariableRefreshRateState::kVrrDisabled:
+      return DomicileAdaptiveSync::kOff;
+    case display::VariableRefreshRateState::kVrrEnabled:
+      return DomicileAdaptiveSync::kOn;
+  }
+  NOTREACHED();
+}
+
+display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
+                                     const gfx::Point& origin,
+                                     const display::DisplayMode* mode) {
+  // A connector with no mode gets the displayless bounds, since no window can
+  // be placed on empty bounds.
+  const gfx::Size size = SizeOf(mode);
   // Not named `display`: that would shadow the `display::` namespace used
   // below.
   display::Display screen(snapshot.display_id(), gfx::Rect(origin, size));
@@ -116,18 +257,19 @@ display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
   // components/domicile/browser/display_list.cc converts it back. See
   // docs/DISPLAYS.md#physical-size-and-refresh.
   //
-  // DisplayList::UpdateDisplay copies neither field. That is safe because the
-  // id comes from the EDID, so the same id is the same panel.
-  if (native_mode) {
-    screen.set_display_frequency(native_mode->refresh_rate());
+  // DisplayList::UpdateDisplay copies neither field, and a profile can change
+  // a listed display's mode, so `DrmScreen::panels` carries both to the
+  // browser too.
+  if (mode) {
+    screen.set_display_frequency(mode->refresh_rate());
   }
   // Zero millimeters means no physical size (a projector, a virtual output).
   // Leave the density unset rather than divide by zero.
   const gfx::Size millimeters = DisplayPhysicalSizeMm(snapshot);
-  if (native_mode && !millimeters.IsEmpty()) {
+  if (mode && !millimeters.IsEmpty()) {
     screen.set_pixels_per_inch(
-        display::kInchInMm * native_mode->size().width() / millimeters.width(),
-        display::kInchInMm * native_mode->size().height() /
+        display::kInchInMm * mode->size().width() / millimeters.width(),
+        display::kInchInMm * mode->size().height() /
             millimeters.height());
   }
 
@@ -137,6 +279,7 @@ display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
     screen.set_label(name);
   }
   DrawInAFormatThePlanesTake(screen, snapshot);
+  DrawInTenBitsWhereThePanelTakesThem(screen, snapshot);
   return screen;
 }
 
@@ -160,7 +303,7 @@ gfx::Size DisplayPhysicalSizeMm(const display::DisplaySnapshot& snapshot) {
 }
 
 std::vector<display::Display> DisplaysFromSnapshots(
-    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+    const std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>>&
         snapshots,
     const std::vector<DomicileDisplayLayout>& layout) {
   if (snapshots.empty()) {
@@ -173,11 +316,15 @@ std::vector<display::Display> DisplaysFromSnapshots(
   displays.reserve(snapshots.size());
   for (size_t index = 0; index < snapshots.size(); ++index) {
     const display::DisplaySnapshot* snapshot = snapshots[index];
-    display::Display screen = DisplayFromSnapshot(*snapshot, origins[index]);
     const DomicileDisplayLayout* wanted =
         WantedFor(layout, snapshot->display_id());
+    display::Display screen = DisplayFromSnapshot(
+        *snapshot, origins[index], ModeForLayout(*snapshot, wanted));
     if (wanted) {
       TurnAndScale(screen, *wanted);
+    }
+    if (DrivesHdr(*snapshot, wanted)) {
+      DrawInHdr(screen, *snapshot, wanted->sdr_white_nits);
     }
     displays.push_back(screen);
   }
@@ -185,7 +332,7 @@ std::vector<display::Display> DisplaysFromSnapshots(
 }
 
 std::vector<gfx::Point> OriginsForLayout(
-    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+    const std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>>&
         snapshots,
     const std::vector<DomicileDisplayLayout>& layout) {
   // Unplaced connectors start at the right edge of everything the layout
@@ -195,7 +342,8 @@ std::vector<gfx::Point> OriginsForLayout(
     const DomicileDisplayLayout* wanted =
         WantedFor(layout, snapshot->display_id());
     if (wanted) {
-      next_x = std::max(next_x, wanted->origin.x() + SizeOf(*snapshot).width());
+      next_x = std::max(next_x,
+                        wanted->origin.x() + SizeOf(*snapshot, layout).width());
     }
   }
 
@@ -208,14 +356,14 @@ std::vector<gfx::Point> OriginsForLayout(
       origins.push_back(wanted->origin);
     } else {
       origins.emplace_back(next_x, 0);
-      next_x += SizeOf(*snapshot).width();
+      next_x += SizeOf(*snapshot, layout).width();
     }
   }
   return origins;
 }
 
 size_t PrimaryIndexForLayout(
-    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+    const std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>>&
         snapshots,
     const std::vector<DomicileDisplayLayout>& layout) {
   if (layout.empty()) {
@@ -241,7 +389,7 @@ DrmScreen::DrmScreen(DrmWindowHostManager* window_manager, DrmCursor* cursor)
 DrmScreen::~DrmScreen() = default;
 
 void DrmScreen::OnDisplaysChanged(
-    const std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>>&
+    const std::vector<raw_ptr<display::DisplaySnapshot, DanglingUntriaged>>&
         snapshots,
     const std::vector<DomicileDisplayLayout>& layout) {
   // A hotplug sends the whole list, so a display missing from it was
@@ -252,13 +400,25 @@ void DrmScreen::OnDisplaysChanged(
   // Before the list changes, so its observers read the new connectors.
   connectors_.clear();
   gamma_sizes_.clear();
+  const base::flat_map<int64_t, DomicilePanel> before = std::move(panels_);
+  panels_.clear();
   for (const display::DisplaySnapshot* snapshot : snapshots) {
     connectors_[snapshot->display_id()] = snapshot->domicile_connector();
     gamma_sizes_[snapshot->display_id()] = snapshot->domicile_gamma_size();
+    panels_[snapshot->display_id()] = PanelFromSnapshot(*snapshot, layout);
   }
 
   // Not always the first snapshot: a profile may turn the laptop panel off.
   const size_t primary = PrimaryIndexForLayout(snapshots, layout);
+  VLOG(1) << "domicile: " << snapshots.size() << " monitors, "
+          << layout.size() << " laid out by the compositor, primary "
+          << displays[primary].id();
+  for (const display::Display& display : displays) {
+    const auto connector = connectors_.find(display.id());
+    VLOG(1) << "domicile: monitor " << display.id() << " ("
+            << (connector != connectors_.end() ? connector->second : "")
+            << "): " << display.ToString();
+  }
 
   // Add the primary first: DisplayList::AddDisplay DCHECKs it, and this
   // build has `dcheck_always_on`. The display event's mojom also promises
@@ -285,7 +445,25 @@ void DrmScreen::OnDisplaysChanged(
     }
   }
   for (const int64_t id : unplugged) {
+    VLOG(1) << "domicile: monitor " << id << " unplugged";
     display_list_.RemoveDisplay(id);
+  }
+
+  // DisplayList compares neither the refresh rate nor adaptive sync, so a
+  // modeset that changed only those would reach no observer, and the
+  // compositor would keep advertising the old ones.
+  for (const display::Display& display : display_list_.displays()) {
+    const auto was = before.find(display.id());
+    const auto is = panels_.find(display.id());
+    if (was != before.end() && is != panels_.end() &&
+        PanelChangedUnseen(was->second, is->second)) {
+      VLOG(1) << "domicile: monitor " << display.id()
+              << " changed only its refresh rate or adaptive sync";
+      for (display::DisplayObserver& observer :
+           *display_list_.observers()) {
+        observer.OnDisplayMetricsChanged(display, /*changed_metrics=*/0);
+      }
+    }
   }
 
   // A profile reload can rotate a display without moving its window, so

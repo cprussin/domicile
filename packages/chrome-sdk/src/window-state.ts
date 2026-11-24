@@ -15,6 +15,8 @@ export enum WindowState {
   TiledBottom,
   Maximized,
   Fullscreen,
+  /** The shell is resizing the window, so the client may skip reflowing. */
+  Resizing,
 }
 
 export enum WindowRequestKind {
@@ -22,6 +24,23 @@ export enum WindowRequestKind {
   Unmaximize,
   Fullscreen,
   Unfullscreen,
+  Minimize,
+  /** The client's title bar was pressed; the drag is the shell's to run. */
+  Move,
+  /** The client's resize border was pressed; the drag is the shell's to run. */
+  Resize,
+}
+
+/** The edges a client's resize drag pulls. */
+export enum ResizeEdge {
+  Top,
+  Bottom,
+  Left,
+  Right,
+  TopLeft,
+  TopRight,
+  BottomLeft,
+  BottomRight,
 }
 
 /**
@@ -38,6 +57,25 @@ export const WindowRequest = {
   Maximize: (appId: string) => ({
     appId,
     kind: WindowRequestKind.Maximize as const,
+  }),
+  /** xdg-shell has no minimized state; what minimized means is the shell's. */
+  Minimize: (appId: string) => ({
+    appId,
+    kind: WindowRequestKind.Minimize as const,
+  }),
+  /**
+   * The button is still down and the client no longer sees the pointer, so
+   * the shell drags the window until it comes up, or the press is lost.
+   */
+  Move: (appId: string) => ({
+    appId,
+    kind: WindowRequestKind.Move as const,
+  }),
+  /** As `Move`, resizing from `edges`. */
+  Resize: (appId: string, edges: ResizeEdge) => ({
+    appId,
+    edges,
+    kind: WindowRequestKind.Resize as const,
   }),
   Unfullscreen: (appId: string) => ({
     appId,
@@ -68,5 +106,10 @@ export const wireWindowState = (state: WindowState): string => {
       return "maximized";
     case WindowState.Fullscreen:
       return "fullscreen";
+    case WindowState.Resizing:
+      return "resizing";
   }
 };
+
+/** A client rang the bell, from window `appId`, or from none. */
+export type Bell = { readonly appId: string | undefined };

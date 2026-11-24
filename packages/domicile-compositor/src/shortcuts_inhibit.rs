@@ -7,6 +7,7 @@
 //! ([`HostMessage::AppInhibitsShortcuts`](domicile_protocol::HostMessage::AppInhibitsShortcuts)),
 //! and the engine lets grabbed chords through to the window with the keyboard.
 
+use domicile_protocol::InhibitorAction;
 use smithay::delegate_keyboard_shortcuts_inhibit;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::wayland::keyboard_shortcuts_inhibit::{
@@ -48,6 +49,34 @@ impl DomicileCompositor {
         {
             self.tell_whether_it_inhibits(surface, true);
         }
+    }
+
+    /// Activate, deactivate or toggle the inhibitor of the window with the
+    /// keyboard, and tell the chromes. A window holding none, or the chrome
+    /// holding the keyboard, changes nothing.
+    pub fn switch_the_shortcuts_inhibitor(&mut self, action: InhibitorAction) {
+        let Some(focused) = self.seat.get_keyboard().unwrap().current_focus() else {
+            debug!(?action, "shortcuts inhibitor: nothing has the keyboard");
+            return;
+        };
+        let Some(inhibitor) = self.seat.keyboard_shortcuts_inhibitor_for_surface(&focused) else {
+            debug!(
+                ?action,
+                "shortcuts inhibitor: the keyboard window holds none"
+            );
+            return;
+        };
+        let active = match action {
+            InhibitorAction::Activate => true,
+            InhibitorAction::Deactivate => false,
+            InhibitorAction::Toggle => !inhibitor.is_active(),
+        };
+        if active {
+            inhibitor.activate();
+        } else {
+            inhibitor.inactivate();
+        }
+        self.tell_whether_it_inhibits(&focused, active);
     }
 
     /// Tell the chromes whether the window that `surface` is holds an inhibitor.

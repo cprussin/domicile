@@ -28,20 +28,26 @@ describe("session", () => {
     expect(fake.calls).toStrictEqual([["lock"], ["unlock", "hunter2"]]);
   });
 
-  it("listens for warnings, holds and refusals through the compositor", () => {
+  it("watches for idle, holds and refusals through the compositor", () => {
     const fake = new FakeDomicileHost();
     const { session } = desktop(fake.host);
     const never = () => {
       /* never answered */
     };
-    session.idleWarnings().catch(never);
+    session.idleAfter(120).catch(never);
+    session.idleBeforeBlanking(30).catch(never);
     session.idleHolds().catch(never);
     session.unlockRefusals().catch(never);
 
     expect(fake.calls).toStrictEqual([
-      ["callSystem", 1, JSON.stringify({ call: "idle_warnings" })],
-      ["callSystem", 2, JSON.stringify({ call: "idle_holds" })],
-      ["callSystem", 3, JSON.stringify({ call: "unlock_refusals" })],
+      ["callSystem", 1, JSON.stringify({ call: "idle_after", seconds: 120 })],
+      [
+        "callSystem",
+        2,
+        JSON.stringify({ call: "idle_before_blanking", seconds: 30 }),
+      ],
+      ["callSystem", 3, JSON.stringify({ call: "idle_holds" })],
+      ["callSystem", 4, JSON.stringify({ call: "unlock_refusals" })],
     ]);
   });
 

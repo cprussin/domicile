@@ -8,8 +8,8 @@
 # that into a home-manager assertion that says where the setting went.
 #
 # Fields are named by dotted path from `Config`, with `[]` for a list's
-# elements: `output.profiles[].displays[].mode`, as `removedSettings` names
-# them. A field's lone `#[serde(rename = "...")]` names its path. In a struct
+# elements and `*` for a map's values: `output.profiles[].displays[].mode`,
+# `extensions.settings.*.private`, as `removedSettings` names them. A field's lone `#[serde(rename = "...")]` names its path. In a struct
 # reached from `Config`, anything it cannot read fails rather than hiding the
 # fields below it: any other `#[serde(...)]` that renames, flattens or skips, a field that is not `pub`, a type over several lines, a type it cannot
 # name (`Box<T>`, `crate::T`).
@@ -126,6 +126,7 @@ paths() { # records file, struct, prefix, structs above
       case "$inner" in
         Option\<*\>) inner="${inner#Option<}"; inner="${inner%>}" ;;
         Vec\<*\>) inner="${inner#Vec<}"; inner="${inner%>}"; path="$path[]" ;;
+        BTreeMap\<String,\ *\>) inner="${inner#BTreeMap<String, }"; inner="${inner%>}"; path="$path.*" ;;
         *) break ;;
       esac
     done
@@ -175,7 +176,7 @@ awk '
   /^  removedSettings = \{$/ { inside = 1; next }
   inside && /^  \};$/ { exit }
   note { if (/'"''"';$/) { note = 0 }; next }
-  inside && match($0, /^    ("[a-z0-9_.\[\]]+"|[a-z0-9_]+) =/) {
+  inside && match($0, /^    ("[a-z0-9_.*\[\]]+"|[a-z0-9_]+) =/) {
     path = substr($0, RSTART + 4, RLENGTH - 6)
     gsub(/"/, "", path)
     print path
@@ -222,13 +223,16 @@ if [ -n "$unlisted" ]; then
   FAILED=1
 fi
 
-# A path in a list's elements needs its submodule to declare it, with
-# `removed.optionsUnder "<the path up to its last []>"`.
+# A path in a list's elements or a map's values needs its submodule to declare
+# it, with `removed.optionsUnder "<the path up to its last [] or *>"`.
 unwired=""
 while read -r path; do
   case "$path" in
-    *"[]"*)
-      prefix="${path%"[]"*}[]"
+    *"[]"* | *".*."*)
+      case "$path" in
+        *".*."*) prefix="${path%".*."*}.*" ;;
+        *) prefix="${path%"[]"*}[]" ;;
+      esac
       awk -v want="options = lib.recursiveUpdate (removed.optionsUnder \"$prefix\")" \
         '{ sub(/^ +/, "") } index($0, want) == 1 { found = 1 } END { exit !found }' "$MODULE" \
         || unwired="$unwired$prefix "

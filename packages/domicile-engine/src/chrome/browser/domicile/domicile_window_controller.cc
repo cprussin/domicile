@@ -8,11 +8,13 @@
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/functional/bind.h"
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
 #include "base/values.h"
+#include "chrome/browser/extensions/api/tabs/tabs_api.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/window_controller_list.h"
@@ -55,14 +57,28 @@ std::vector<DomicileWindowController*>& Live() {
   return *live;
 }
 
+// How many times a desk's window has taken focus: a desk's `focused_at_` is
+// this count when it last did.
+uint64_t& FocusCount() {
+  static uint64_t count = 0;
+  return count;
+}
+
 // Looks up tab `tab_id` at dispatch time rather than send time: a lazy
 // listener may wake after the tab is gone, and then the event is dropped.
+//
+// In every desk `context` may see: an extension allowed in private windows
+// hears of a private tab with its own profile's context, unless it runs
+// split. The EventRouter already kept the event from one not allowed.
 content::WebContents* TabAtDispatch(content::BrowserContext* context,
                                     int tab_id) {
-  DomicileWindowController* desk = DomicileWindowController::Find(context);
-  DomicileWindowController* window =
-      desk == nullptr ? nullptr : desk->WindowWithTab(tab_id);
-  return window == nullptr ? nullptr : window->TabWithId(tab_id);
+  for (DomicileWindowController* desk :
+       DomicileWindowController::Visible(context, /*include_private=*/true)) {
+    if (DomicileWindowController* window = desk->WindowWithTab(tab_id)) {
+      return window->TabWithId(tab_id);
+    }
+  }
+  return nullptr;
 }
 
 // Sets the windows.onCreated/onRemoved filter as WindowsEventRouter's
@@ -207,7 +223,7 @@ class DomicileWindowController::Tab : public content::WebContentsObserver {
   void OnFocused() { window_->Focused(tab_id_, *web_contents()); }
 
   void OnZoomed(double old_factor, double new_factor) {
-    window_->Zoomed(tab_id_, old_factor, new_factor);
+    window_->Zoomed(tab_id_, *web_contents(), old_factor, new_factor);
   }
 
   // Returns `property`, plus `url` if the URL changed since last reported.
@@ -228,10 +244,12 @@ class DomicileWindowController::Tab : public content::WebContentsObserver {
   base::CallbackListSubscription zoomed_;
 };
 
-extensions::api::tabs::ZoomSettings DeskZoomSettings() {
+extensions::api::tabs::ZoomSettings DeskZoomSettings(
+    content::WebContents& tab) {
+  WebViewGuest* guest = WebViewGuest::FromWebContents(&tab);
+  CHECK(guest);
   extensions::api::tabs::ZoomSettings settings;
-  settings.mode = extensions::api::tabs::ZoomSettingsMode::kAutomatic;
-  settings.scope = extensions::api::tabs::ZoomSettingsScope::kPerOrigin;
+  extensions::ZoomModeToZoomSettings(guest->GetZoomMode(), &settings);
   return settings;
 }
 
@@ -242,8 +260,17 @@ DomicileWindowController& DomicileWindowController::For(Profile* profile) {
   }
   auto made = std::make_unique<DomicileWindowController>(profile);
   DomicileWindowController& desk = *made;
+  if (profile->IsOffTheRecord()) {
+    desk.private_profile_.Observe(profile);
+  }
   profile->SetUserData(kDeskUserDataKey, std::move(made));
   return desk;
+}
+
+void DomicileWindowController::OnProfileWillBeDestroyed(Profile* profile) {
+  private_profile_.Reset();
+  // Deletes this.
+  profile->RemoveUserData(kDeskUserDataKey);
 }
 
 // static
@@ -257,6 +284,41 @@ DomicileWindowController* DomicileWindowController::Find(
 // static
 std::vector<DomicileWindowController*> DomicileWindowController::All() {
   return Live();
+}
+
+// static
+std::vector<DomicileWindowController*> DomicileWindowController::Visible(
+    content::BrowserContext* context,
+    bool include_private) {
+  std::vector<DomicileWindowController*> desks;
+  if (DomicileWindowController* own = Find(context)) {
+    desks.push_back(own);
+  }
+  Profile* profile =
+      context == nullptr ? nullptr : Profile::FromBrowserContext(context);
+  if (include_private && profile != nullptr && !profile->IsOffTheRecord()) {
+    if (DomicileWindowController* in_private =
+            Find(profile->GetPrimaryOTRProfile(/*create_if_needed=*/false))) {
+      desks.push_back(in_private);
+    }
+  }
+  return desks;
+}
+
+// static
+DomicileWindowController* DomicileWindowController::LastFocusedDesk(
+    content::BrowserContext* context,
+    bool include_private) {
+  // A private desk whose tabs all closed is gone, as a closed incognito
+  // window is.
+  DomicileWindowController* last = nullptr;
+  for (DomicileWindowController* desk : Visible(context, include_private)) {
+    const bool open = desk == Find(context) || desk->GetTabCount() > 0;
+    if (open && (last == nullptr || desk->focused_at_ > last->focused_at_)) {
+      last = desk;
+    }
+  }
+  return last;
 }
 
 DomicileWindowController::DomicileWindowController(Profile* profile)
@@ -290,6 +352,8 @@ void DomicileWindowController::Add(content::WebContents& guest) {
   sessions::SessionTabHelper::FromWebContents(&guest)->SetWindowID(session_id_);
 
   const std::optional<int> before = tabs_.Active();
+  VLOG(1) << "domicile: tab " << tab_id << " joins extension window "
+          << GetWindowId() << (IsPopup() ? " (a popup)" : "");
   tabs_.Add(tab_id);
   by_id_.emplace(tab_id, std::make_unique<Tab>(*this, guest, tab_id));
 
@@ -320,6 +384,8 @@ DomicileWindowController& DomicileWindowController::OpenPopup() {
   std::unique_ptr<DomicileWindowController> made =
       base::WrapUnique(new DomicileWindowController(profile(), *this));
   DomicileWindowController& popup = *made;
+  VLOG(1) << "domicile: extension popup window " << popup.GetWindowId()
+          << " opens over window " << GetWindowId();
   popups_.emplace(popup.GetWindowId(), std::move(made));
   BroadcastWindowEvent(popup, /*created=*/true);
   return popup;
@@ -341,6 +407,7 @@ void DomicileWindowController::ClosePopup(int window_id) {
   CHECK_EQ(found->second->GetTabCount(), 0);
   std::unique_ptr<DomicileWindowController> popup = std::move(found->second);
   popups_.erase(found);
+  VLOG(1) << "domicile: extension popup window " << window_id << " closes";
   if (last_focused_ == window_id) {
     last_focused_ = GetWindowId();
   }
@@ -404,6 +471,35 @@ DomicileWindowController& DomicileWindowController::LastFocused() const {
 void DomicileWindowController::PopupFocused(int window_id) {
   CHECK(!IsPopup());
   last_focused_ = window_id;
+  TookFocus();
+}
+
+void DomicileWindowController::TookFocus() {
+  CHECK(!IsPopup());
+  const bool was_last = focused_at_ == FocusCount();
+  focused_at_ = ++FocusCount();
+  VLOG(1) << "domicile: extension window " << GetWindowId()
+          << " took focus, last focused " << last_focused_;
+  // From another desk: a profile's desk and its private profile's take turns
+  // as the active tab's.
+  if (!was_last) {
+    NotifyActiveTabChanged();
+  }
+}
+
+void DomicileWindowController::NotifyActiveTabChanged() {
+  for (DeskObserver& observer : observers_) {
+    observer.OnActiveTabChanged();
+  }
+  // The shell's tray observes the profile's desk, not its private profile's.
+  if (profile()->IsOffTheRecord()) {
+    if (DomicileWindowController* original =
+            Find(profile()->GetOriginalProfile())) {
+      for (DeskObserver& observer : original->observers_) {
+        observer.OnActiveTabChanged();
+      }
+    }
+  }
 }
 
 // Called last in the popup's Removed, because it deletes the popup.
@@ -506,8 +602,12 @@ base::DictValue DomicileWindowController::CreateWindowValueForExtension(
   base::DictValue window;
   window.Set(extension_misc::kId, GetWindowId());
   window.Set("type", GetWindowTypeText());
+  // Focused if its desk's window last took focus, and that desk did of the
+  // profile's and its private profile's.
   const DomicileWindowController& desk = IsPopup() ? *desk_ : *this;
-  window.Set("focused", desk.last_focused_ == GetWindowId());
+  window.Set("focused", desk.last_focused_ == GetWindowId() &&
+                            LastFocusedDesk(profile()->GetOriginalProfile(),
+                                            /*include_private=*/true) == &desk);
   // Report the desk's origin. Extensions such as Bitwarden position popups
   // from `left` and `top` and pass NaN to windows.create without them. On
   // Linux, 0,0 also signals that window positions are unreliable.
@@ -567,6 +667,7 @@ void DomicileWindowController::Focused(int tab_id, content::WebContents& tab) {
     const std::optional<int> before = tabs_.Active();
     tabs_.Focus(tab_id);
     last_focused_ = GetWindowId();
+    TookFocus();
     ActiveMaybeChanged(before);
   }
 }
@@ -584,13 +685,14 @@ void DomicileWindowController::Updated(int tab_id,
 // Fires tabs.onZoomChange as TabsEventRouter::OnZoomChanged does, without a
 // default factor in the settings.
 void DomicileWindowController::Zoomed(int tab_id,
+                                      content::WebContents& tab,
                                       double old_factor,
                                       double new_factor) {
   extensions::api::tabs::OnZoomChange::ZoomChangeInfo info;
   info.tab_id = tab_id;
   info.old_zoom_factor = old_factor;
   info.new_zoom_factor = new_factor;
-  info.zoom_settings = DeskZoomSettings();
+  info.zoom_settings = DeskZoomSettings(tab);
   Broadcast(profile(),
             std::make_unique<extensions::Event>(
                 extensions::events::TABS_ON_ZOOM_CHANGE,
@@ -642,9 +744,7 @@ void DomicileWindowController::ActiveMaybeChanged(std::optional<int> before) {
                              extensions::api::tabs::OnActivated::kEventName,
                              std::move(args), profile()));
   }
-  for (DeskObserver& observer : observers_) {
-    observer.OnActiveTabChanged();
-  }
+  NotifyActiveTabChanged();
 }
 
 bool DeskWindow::IsActive() const {

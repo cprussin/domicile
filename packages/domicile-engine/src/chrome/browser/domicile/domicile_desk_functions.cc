@@ -20,6 +20,7 @@
 #include "chrome/browser/domicile/domicile_extension_tray.h"
 #include "chrome/browser/domicile/domicile_window_controller.h"
 #include "chrome/browser/extensions/api/side_panel/side_panel_service.h"
+#include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/common/extensions/api/side_panel.h"
 #include "chrome/common/extensions/api/tabs.h"
@@ -27,6 +28,7 @@
 #include "components/domicile/browser/desk_tabs.h"
 #include "components/domicile/browser/web_view_guest.h"
 #include "components/sessions/content/session_tab_helper.h"
+#include "components/zoom/zoom_controller.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -35,6 +37,7 @@
 #include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_function_registry.h"
+#include "extensions/common/constants.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/permissions/permissions_data.h"
@@ -75,11 +78,38 @@ DomicileWindowController* DeskOf(ExtensionFunction& function) {
   return DomicileWindowController::Find(function.browser_context());
 }
 
-// chrome.windows' "current" window: the caller's tab's window, or the desk's
-// window for a caller with no tab (such as a service worker). Null with no
-// desk.
+// The desks `function` sees: its profile's, and its private profile's too for
+// an extension allowed in private windows. See
+// DomicileWindowController::Visible.
+std::vector<DomicileWindowController*> DesksOf(ExtensionFunction& function) {
+  return DomicileWindowController::Visible(
+      function.browser_context(), function.include_incognito_information());
+}
+
+// Of DesksOf, the desk whose tab last took focus, or null with no desk.
+DomicileWindowController* LastFocusedDeskOf(ExtensionFunction& function) {
+  return DomicileWindowController::LastFocusedDesk(
+      function.browser_context(), function.include_incognito_information());
+}
+
+// The desk holding the caller's tab, or for a caller with no tab (such as a
+// service worker) the last focused desk. Null with no desk.
+DomicileWindowController* CurrentDeskOf(ExtensionFunction& function) {
+  content::WebContents* sender = function.GetSenderWebContents();
+  if (sender != nullptr) {
+    for (DomicileWindowController* desk : DesksOf(function)) {
+      if (desk->WindowOf(*sender) != nullptr) {
+        return desk;
+      }
+    }
+  }
+  return LastFocusedDeskOf(function);
+}
+
+// chrome.windows' "current" window: the caller's tab's window, or for a
+// caller with no tab the last focused desk's own window. Null with no desk.
 DomicileWindowController* CurrentWindowOf(ExtensionFunction& function) {
-  DomicileWindowController* desk = DeskOf(function);
+  DomicileWindowController* desk = CurrentDeskOf(function);
   if (desk == nullptr) {
     return nullptr;
   }
@@ -92,12 +122,15 @@ DomicileWindowController* CurrentWindowOf(ExtensionFunction& function) {
 // The window `window_id` names, including kCurrentWindowId, or null.
 DomicileWindowController* WindowNamed(ExtensionFunction& function,
                                       int window_id) {
-  DomicileWindowController* desk = DeskOf(function);
-  if (desk == nullptr) {
-    return nullptr;
+  if (window_id == kCurrentWindowId) {
+    return CurrentWindowOf(function);
   }
-  return window_id == kCurrentWindowId ? CurrentWindowOf(function)
-                                       : desk->WindowWithId(window_id);
+  for (DomicileWindowController* desk : DesksOf(function)) {
+    if (DomicileWindowController* window = desk->WindowWithId(window_id)) {
+      return window;
+    }
+  }
+  return nullptr;
 }
 
 std::string WindowNotFound(int window_id) {
@@ -109,15 +142,16 @@ std::string WindowNotFound(int window_id) {
 // when `tab_id` is unset (Chrome's default). Null if neither exists.
 content::WebContents* TabOrActive(ExtensionFunction& function,
                                   std::optional<int> tab_id) {
-  DomicileWindowController* desk = DeskOf(function);
-  if (desk == nullptr) {
-    return nullptr;
-  }
   if (!tab_id.has_value()) {
-    return CurrentWindowOf(function)->GetActiveTab();
+    DomicileWindowController* current = CurrentWindowOf(function);
+    return current == nullptr ? nullptr : current->GetActiveTab();
   }
-  DomicileWindowController* window = desk->WindowWithTab(*tab_id);
-  return window == nullptr ? nullptr : window->TabWithId(*tab_id);
+  for (DomicileWindowController* desk : DesksOf(function)) {
+    if (DomicileWindowController* window = desk->WindowWithTab(*tab_id)) {
+      return window->TabWithId(*tab_id);
+    }
+  }
+  return nullptr;
 }
 
 std::string TabNotFound(std::optional<int> tab_id) {
@@ -135,6 +169,23 @@ WebViewGuest& GuestOf(content::WebContents& tab) {
 double DefaultZoomFactor(content::WebContents& tab) {
   return blink::ZoomLevelToZoomFactor(
       content::HostZoomMap::GetForWebContents(&tab)->GetDefaultZoomLevel());
+}
+
+// The ZoomController mode tabs.setZoomSettings asks for, as Chrome's maps it.
+// DeskTakesZoomSettings has already refused a per-origin mode that is not
+// automatic.
+zoom::ZoomController::ZoomMode ZoomModeFor(const tabs::ZoomSettings& settings) {
+  switch (settings.mode) {
+    case tabs::ZoomSettingsMode::kNone:
+    case tabs::ZoomSettingsMode::kAutomatic:
+      return settings.scope == tabs::ZoomSettingsScope::kPerTab
+                 ? zoom::ZoomController::ZOOM_MODE_ISOLATED
+                 : zoom::ZoomController::ZOOM_MODE_DEFAULT;
+    case tabs::ZoomSettingsMode::kManual:
+      return zoom::ZoomController::ZOOM_MODE_MANUAL;
+    case tabs::ZoomSettingsMode::kDisabled:
+      return zoom::ZoomController::ZOOM_MODE_DISABLED;
+  }
 }
 
 base::Value TabValue(ExtensionFunction& function, content::WebContents& tab) {
@@ -173,10 +224,11 @@ DeskTabQuery AsDeskTabQuery(const tabs::Query::Params::QueryInfo& info) {
   return query;
 }
 
-// The facts a query compares about `tab`, relative to `current`.
-DeskTabFacts FactsOf(DomicileWindowController& desk,
-                     DomicileWindowController& window,
+// The facts a query compares about `tab`, relative to `current` and the
+// last focused window.
+DeskTabFacts FactsOf(DomicileWindowController& window,
                      DomicileWindowController& current,
+                     DomicileWindowController& last_focused,
                      content::WebContents& tab) {
   return DeskTabFacts{
       .active = window.IsActive(tab),
@@ -188,7 +240,7 @@ DeskTabFacts FactsOf(DomicileWindowController& desk,
           std::string(tabs::ToString(ExtensionTabUtil::GetLoadingStatus(&tab))),
       .window_type = window.GetWindowTypeText(),
       .in_current_window = &window == &current,
-      .in_last_focused_window = &window == &desk.LastFocused()};
+      .in_last_focused_window = &window == &last_focused};
 }
 
 // Matches the privileged `title` and `url` filters. A tab the extension may
@@ -254,17 +306,21 @@ class DeskTabsQueryFunction : public ExtensionFunction {
 
     const DeskTabQuery query = AsDeskTabQuery(info);
     base::ListValue result;
-    DomicileWindowController* desk = DeskOf(*this);
-    if (desk == nullptr) {
+    DomicileWindowController* focused = LastFocusedDeskOf(*this);
+    if (focused == nullptr) {
       return RespondNow(WithArguments(std::move(result)));
     }
     DomicileWindowController& current = *CurrentWindowOf(*this);
-    for (DomicileWindowController* window : desk->Windows()) {
-      for (int i = 0; i < window->GetTabCount(); ++i) {
-        content::WebContents& tab = *window->GetWebContentsAt(i);
-        if (DeskTabMatches(query, FactsOf(*desk, *window, current, tab)) &&
-            MatchesPrivileged(*this, info, url_patterns, tab)) {
-          result.Append(TabValue(*this, tab));
+    DomicileWindowController& last_focused = focused->LastFocused();
+    for (DomicileWindowController* desk : DesksOf(*this)) {
+      for (DomicileWindowController* window : desk->Windows()) {
+        for (int i = 0; i < window->GetTabCount(); ++i) {
+          content::WebContents& tab = *window->GetWebContentsAt(i);
+          if (DeskTabMatches(query,
+                             FactsOf(*window, current, last_focused, tab)) &&
+              MatchesPrivileged(*this, info, url_patterns, tab)) {
+            result.Append(TabValue(*this, tab));
+          }
         }
       }
     }
@@ -337,11 +393,17 @@ class DeskTabsCreateFunction : public ExtensionFunction {
     const auto& create = params->create_properties;
 
     // Placement, pinning, splitting and openers belong to the shell, and a
-    // tab needs a URL to open as a browser window.
-    DomicileWindowController* desk = DeskOf(*this);
-    const bool on_desk =
-        !create.window_id || *create.window_id == kCurrentWindowId ||
-        (desk != nullptr && *create.window_id == desk->GetWindowId());
+    // tab needs a URL to open as a browser window. It opens on the current
+    // desk, or the one `windowId` names: private, from a private page.
+    const bool current =
+        !create.window_id || *create.window_id == kCurrentWindowId;
+    DomicileWindowController* desk = current ? CurrentDeskOf(*this) : nullptr;
+    for (DomicileWindowController* visible : DesksOf(*this)) {
+      if (!current && *create.window_id == visible->GetWindowId()) {
+        desk = visible;
+      }
+    }
+    const bool on_desk = current || desk != nullptr;
     if (!on_desk || create.index || create.pinned.value_or(false) ||
         create.opener_tab_id || create.split_with_tab_id || !create.url) {
       return RespondNow(Error(kNotOnADesk));
@@ -352,6 +414,13 @@ class DeskTabsCreateFunction : public ExtensionFunction {
                                                   browser_context());
     if (!url.has_value()) {
       return RespondNow(Error(std::move(url.error())));
+    }
+
+    // An extension's own page opens on the profile's desk, as Chrome opens a
+    // spanning extension's pages in a normal window.
+    if (url->SchemeIs(extensions::kExtensionScheme) && desk != nullptr &&
+        desk != DeskOf(*this)) {
+      desk = DeskOf(*this);
     }
 
     content::WebContents* asker =
@@ -442,8 +511,10 @@ class DeskTabsSetZoomFunction : public ExtensionFunction {
       return RespondNow(Error(extensions::ErrorUtils::FormatErrorMessage(
           kZoomOutOfRangeError, base::NumberToString(params->zoom_factor))));
     }
-    GuestOf(*tab).ZoomTo(*factor);
-    return RespondNow(NoArguments());
+    return RespondNow(GuestOf(*tab).ZoomTo(*factor)
+                          ? NoArguments()
+                          : Error(extensions::tabs_constants::
+                                      kCannotZoomDisabledTabError));
   }
 };
 
@@ -467,7 +538,7 @@ class DeskTabsGetZoomFunction : public ExtensionFunction {
   }
 };
 
-// Accepts only the mode desk tabs already use, as a no-op; refuses others.
+// Sets the guest's zoom mode, as Chrome's sets a tab's.
 class DeskTabsSetZoomSettingsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("tabs.setZoomSettings", TABS_SETZOOMSETTINGS)
@@ -489,10 +560,13 @@ class DeskTabsSetZoomSettingsFunction : public ExtensionFunction {
       return RespondNow(Error(std::move(error)));
     }
     const tabs::ZoomSettings& settings = params->zoom_settings;
-    return RespondNow(DeskTakesZoomSettings(tabs::ToString(settings.mode),
-                                            tabs::ToString(settings.scope))
-                          ? NoArguments()
-                          : Error(kNotOnADesk));
+    if (!DeskTakesZoomSettings(tabs::ToString(settings.mode),
+                               tabs::ToString(settings.scope))) {
+      return RespondNow(Error(
+          extensions::tabs_constants::kPerOriginOnlyInAutomaticError));
+    }
+    GuestOf(*tab).SetZoomMode(ZoomModeFor(settings));
+    return RespondNow(NoArguments());
   }
 };
 
@@ -511,7 +585,7 @@ class DeskTabsGetZoomSettingsFunction : public ExtensionFunction {
     if (tab == nullptr) {
       return RespondNow(Error(TabNotFound(params->tab_id)));
     }
-    tabs::ZoomSettings settings = DeskZoomSettings();
+    tabs::ZoomSettings settings = DeskZoomSettings(*tab);
     settings.default_zoom_factor = DefaultZoomFactor(*tab);
     return RespondNow(
         ArgumentList(tabs::GetZoomSettings::Results::Create(settings)));
@@ -590,7 +664,7 @@ class DeskWindowsGetLastFocusedFunction : public DeskWindowReadFunction {
     std::optional<windows::GetLastFocused::Params> params =
         windows::GetLastFocused::Params::Create(args());
     EXTENSION_FUNCTION_VALIDATE(params);
-    DomicileWindowController* desk = DeskOf(*this);
+    DomicileWindowController* desk = LastFocusedDeskOf(*this);
     return RespondWithWindow(desk == nullptr ? nullptr : &desk->LastFocused(),
                              params->query_options);
   }
@@ -613,7 +687,7 @@ class DeskWindowsGetAllFunction : public DeskWindowReadFunction {
         params->query_options ? params->query_options->window_types
                               : std::nullopt;
     base::ListValue all;
-    if (DomicileWindowController* desk = DeskOf(*this)) {
+    for (DomicileWindowController* desk : DesksOf(*this)) {
       for (DomicileWindowController* window : desk->Windows()) {
         if (!types.has_value() ||
             window->MatchesFilter(
@@ -805,7 +879,8 @@ class DeskActionOpenPopupFunction : public ExtensionFunction {
     }
 
     // The current window is the desk's, as Chrome's is the active browser
-    // window rather than the caller's.
+    // window rather than the caller's. A named one may be a private desk, for
+    // an extension allowed there.
     DomicileWindowController* desk = DeskOf(*this);
     if (desk == nullptr) {
       return RespondNow(Error(kNoActiveWindowFound));
@@ -813,7 +888,7 @@ class DeskActionOpenPopupFunction : public ExtensionFunction {
     DomicileWindowController* window =
         !window_id.has_value() || *window_id == kCurrentWindowId
             ? desk
-            : desk->WindowWithId(*window_id);
+            : WindowNamed(*this, *window_id);
     if (window == nullptr) {
       return RespondNow(Error(WindowNotFound(*window_id)));
     }
@@ -826,7 +901,7 @@ class DeskActionOpenPopupFunction : public ExtensionFunction {
             ->GetExtensionAction(*extension());
     // The bindings expose `action` only to an extension that has one.
     CHECK(action);
-    content::WebContents* tab = desk->GetActiveTab();
+    content::WebContents* tab = window->GetActiveTab();
     const int tab_id = tab == nullptr
                            ? extensions::ExtensionAction::kDefaultTabId
                            : sessions::SessionTabHelper::IdForTab(tab).id();

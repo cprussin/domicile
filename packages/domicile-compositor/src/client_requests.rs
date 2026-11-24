@@ -11,12 +11,13 @@ use smithay::wayland::compositor::with_states;
 use smithay::wayland::shell::xdg::ToplevelSurface;
 use tracing::{debug, warn};
 
-use domicile_host::clipboard::Contents;
+use domicile_host::clipboard::{Contents, Removed};
+use domicile_host::system::DisplayPower;
 use domicile_host::theme_turnover::{Turnover, CAPTURE_WITHIN};
 use domicile_host::white_point::WhitePoint;
 use domicile_protocol::{
-    KeymapChoice, Passphrase, PointerAxisSource, PortalAnswer, Scale, Theme, TrayAction,
-    WindowState,
+    InhibitorAction, KeymapChoice, Passphrase, PointerAxisSource, PortalAnswer, Scale, Theme,
+    TrayAction, WindowState,
 };
 
 use crate::activation;
@@ -54,6 +55,19 @@ pub enum ClientRequest {
         /// Whether the pointer moved on the screen. See
         /// [`ChromeMessage::PointerMotion`](domicile_protocol::ChromeMessage::PointerMotion).
         moved: bool,
+    },
+    /// See [`ChromeMessage::PointerRelative`](domicile_protocol::ChromeMessage::PointerRelative).
+    PointerRelative {
+        app_id: String,
+        dx: f64,
+        dy: f64,
+        dx_unaccel: f64,
+        dy_unaccel: f64,
+    },
+    /// See [`ChromeMessage::PointerConstrained`](domicile_protocol::ChromeMessage::PointerConstrained).
+    PointerConstrained {
+        app_id: String,
+        active: bool,
     },
     PointerLeave,
     PointerPinch {
@@ -115,6 +129,15 @@ pub enum ClientRequest {
         keycode: u32,
         pressed: bool,
     },
+    /// The browser's focused text field. See [`crate::chrome_editor`].
+    TextInput {
+        field: domicile_protocol::TextField,
+    },
+    /// A browser key for the input method. See [`crate::chrome_editor`].
+    KeyForInputMethod {
+        keycode: u32,
+        pressed: bool,
+    },
     KeyboardFocus {
         app_id: Option<String>,
     },
@@ -163,22 +186,43 @@ pub enum ClientRequest {
     SelectKeymap {
         keymap: KeymapChoice,
     },
+    /// The page switched the keyboard window's shortcuts inhibitor. See
+    /// [`DomicileCompositor::switch_the_shortcuts_inhibitor`].
+    SwitchShortcutsInhibitor {
+        action: InhibitorAction,
+    },
     /// The page set the white point of `output`, or of every monitor. See
     /// [`crate::gamma`].
     SetWhitePoint {
         output: Option<String>,
         white_point: WhitePoint,
     },
+    /// Somebody asked to turn the monitors off or on. See
+    /// [`DomicileCompositor::power_the_displays`].
+    PowerDisplays {
+        power: DisplayPower,
+        /// One monitor's `wl_output` name, or `None` for every one.
+        display: Option<String>,
+    },
+    /// `domicile configure-display` asked to change a monitor's setup. See
+    /// [`DomicileCompositor::configure_display`].
+    ConfigureDisplay {
+        display: String,
+        change: domicile_protocol::DisplayChange,
+        answer: crate::configured_displays::Answer,
+    },
     /// The chrome asked the client of `app_id` to close its window.
     CloseApp {
         app_id: String,
     },
-    /// The chrome asked to start a program.
+    /// The chrome, or `domicile exec`, asked to start a program.
     ///
     /// Handled here because the lock state lives here, and a locked desktop
-    /// refuses spawns. See [`crate::lock::refused`].
+    /// refuses spawns. See [`crate::lock::refused`]. With an `answer` the
+    /// asker hears why it did not start; without one the person is told.
     Spawn {
         command: Vec<String>,
+        answer: Option<crate::configured_displays::Answer>,
     },
     /// A chrome's page said `hello`. It holds no pixels yet.
     ///
@@ -205,11 +249,23 @@ pub enum ClientRequest {
     CopyClipboardEntry {
         entry: u32,
     },
+    /// The shell removed a clipboard history entry. Removing the current one
+    /// empties the seat's clipboard.
+    RemoveClipboardEntry {
+        entry: u32,
+    },
     /// The shell clicked a tray icon. Routed through this thread so a locked
     /// desktop can refuse it. See [`crate::lock::refused`].
     ActivateTrayItem {
         id: String,
         action: TrayAction,
+    },
+    /// The shell's system call clicked an entry of the tray menu on `bus`,
+    /// such as "Show Slack". Gets the item a token, as an icon click does.
+    /// Sent before the call runs, so the token is minted before the app can
+    /// ask with it. Routed here so a locked desktop can refuse it.
+    TrayMenuClicked {
+        bus: String,
     },
     /// The shell dismissed notifications. Routed here so a locked desktop can
     /// refuse it.
@@ -243,6 +299,9 @@ pub enum ClientRequest {
     },
     /// The shell asked to lock now. See [`DomicileCompositor::shut_the_desk`].
     Lock,
+    /// A page started an idle watch. See
+    /// [`DomicileCompositor::settle_the_idle_watches`].
+    IdleWatched,
     /// The applications holding idle inhibitors through the portal, one name
     /// per inhibitor. From the portal thread; see [`crate::portals`].
     HeldAwakeByThePortal {
@@ -259,6 +318,7 @@ pub enum ClientRequest {
 impl DomicileCompositor {
     /// Handle a request from a chrome on the Wayland thread.
     pub fn handle_client_request(&mut self, event: ClientRequest) {
+        crate::input_trace::trace(&event);
         // First, for every request: this is how the compositor knows someone is
         // present.
         self.keep_the_desktop_awake(&event);
@@ -319,7 +379,14 @@ impl DomicileCompositor {
                 );
                 let (surface, (x, y)) = self.input_target(surface, (x, y));
                 self.pointer_app = Some(app_id);
+                self.cursor_surface = None;
                 self.pointer_surface = Some(surface.clone());
+                self.offer_pointer_constraint();
+                if self.pointer_locked_over(&surface) {
+                    // The page holds the pointer still for a lock; only
+                    // relative motion reaches the client.
+                    return;
+                }
                 let pointer = self.seat.get_pointer().unwrap();
                 let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
                 // The chrome sends surface-local coords, so anchor the focus at
@@ -335,12 +402,26 @@ impl DomicileCompositor {
                 );
                 pointer.frame(self);
             }
+            ClientRequest::PointerRelative {
+                app_id,
+                dx,
+                dy,
+                dx_unaccel,
+                dy_unaccel,
+            } => {
+                self.move_relatively(&app_id, (dx, dy), (dx_unaccel, dy_unaccel));
+            }
+            ClientRequest::PointerConstrained { app_id, active } => {
+                self.page_constrained(&app_id, active);
+            }
             ClientRequest::PointerLeave => {
                 self.cancel_pinch();
                 self.cancel_swipe();
                 self.cast_pointer(None);
                 self.pointer_app = None;
+                self.cursor_surface = None;
                 self.pointer_surface = None;
+                self.offer_pointer_constraint();
                 let pointer = self.seat.get_pointer().unwrap();
                 let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
                 pointer.motion(
@@ -360,9 +441,14 @@ impl DomicileCompositor {
                     self.let_go_of_lost_presses();
                     self.held_buttons.push(button);
                     ButtonState::Pressed
-                } else {
+                } else if self.held_buttons.contains(&button) {
                     self.held_buttons.retain(|held| *held != button);
                     ButtonState::Released
+                } else {
+                    // Its press was let go of already, or handed to the shell
+                    // by a move or resize request; the client was told.
+                    tracing::debug!(button, "a release of a button no client holds -> dropped");
+                    return;
                 };
                 self.pointer_button(button, state);
             }
@@ -416,6 +502,11 @@ impl DomicileCompositor {
                 self.inject_key(keycode, pressed);
                 self.tell_the_chromes_the_modifiers();
             }
+            ClientRequest::TextInput { field } => self.take_the_browsers_field(field),
+            ClientRequest::KeyForInputMethod { keycode, pressed } => {
+                self.key_for_the_input_method(keycode, pressed);
+                self.tell_the_chromes_the_modifiers();
+            }
             ClientRequest::KeyboardFocus { app_id } => {
                 // A menu over the target window keeps the keyboard. Focus
                 // anywhere else dismisses it, like a click elsewhere.
@@ -459,10 +550,18 @@ impl DomicileCompositor {
                 self.took_a_copy(clipboard, contents);
                 self.tell_the_engine_a_clipboard(clipboard);
             }
-            // Forward to the tray worker, which talks to the session bus.
+            // Forward to the tray worker, which talks to the session bus,
+            // with a token so the application can raise its window.
             ClientRequest::ActivateTrayItem { id, action } => {
                 if let Some(tray) = self.hub.tray.get() {
-                    tray.activate(id, action);
+                    let token = activation::mint(&mut self.xdg_activation_state, tray.pid(&id));
+                    tray.activate(id, action, token);
+                }
+            }
+            ClientRequest::TrayMenuClicked { bus } => {
+                if let Some(tray) = self.hub.tray.get() {
+                    let token = activation::mint(&mut self.xdg_activation_state, tray.pid_on(&bus));
+                    tray.provide(bus, token);
                 }
             }
             // Forward to the notification server's worker.
@@ -502,6 +601,17 @@ impl DomicileCompositor {
                     "the shell asked for a clipboard entry this desktop no longer holds"
                 ),
             },
+            ClientRequest::RemoveClipboardEntry { entry } => match self.clipboard.remove(entry) {
+                Some(Removed::Earlier) => self.tell_the_chromes_the_clipboard(),
+                Some(Removed::Current) => {
+                    self.tell_the_chromes_the_clipboard();
+                    self.empty_the_clipboard();
+                }
+                None => warn!(
+                    entry,
+                    "the shell removed a clipboard entry this desktop no longer holds"
+                ),
+            },
             ClientRequest::Unlock { passphrase } => self.offered_the_passphrase(&passphrase),
             ClientRequest::HeldAwakeByThePortal { by } => self.held_awake_by_the_portal(by),
             ClientRequest::HeldAwakeByTheScreenSaver { by, change } => {
@@ -514,6 +624,7 @@ impl DomicileCompositor {
             ClientRequest::Lock => {
                 self.shut_the_desk("the shell asked for this desktop to be locked")
             }
+            ClientRequest::IdleWatched => self.settle_the_idle_watches(),
             ClientRequest::TurnTheWindows { theme, chromes } => {
                 // Replace any turnover in progress; its windows are about to
                 // get a newer theme.
@@ -544,6 +655,7 @@ impl DomicileCompositor {
                 // desktop one page starting releases keys held through another.
                 // `held` is cleared on the same terms.
                 self.release_pressed_keys();
+                self.tell_the_browser_if_composing();
                 // The new page has reported no boxes, so it has hidden
                 // nothing. One that never reports them would otherwise leave
                 // windows suspended for good.
@@ -577,11 +689,10 @@ impl DomicileCompositor {
                 // its displays and scale for when it is shown.
                 Some(toplevel) if bounds.is_empty() => self.hide(&app_id, &toplevel),
                 Some(toplevel) => {
-                    // Only this window moved. Its popups are on every display
-                    // whatever its bounds; see
-                    // `enter_the_displays_each_window_is_on`.
+                    // Only this window and its menus moved.
                     self.place_window(toplevel.wl_surface(), Some(bounds));
                     self.app_bounds.insert(app_id.clone(), bounds);
+                    self.place_the_popups_over(toplevel.wl_surface());
                     self.show(&app_id, &toplevel);
                 }
                 // Usually the window closed while the message was in flight.
@@ -623,23 +734,49 @@ impl DomicileCompositor {
                 Resized::Gone => debug!(id, "resize: a virtual monitor that is gone"),
             },
             ClientRequest::SelectKeymap { keymap } => self.switch_the_keymap(&keymap),
+            ClientRequest::SwitchShortcutsInhibitor { action } => {
+                self.switch_the_shortcuts_inhibitor(action);
+            }
             ClientRequest::SetWhitePoint {
                 output,
                 white_point,
             } => {
-                self.gamma.set_white_point(output.as_deref(), white_point);
-                self.restate_the_gamma();
+                self.night_light
+                    .set(output.as_deref(), white_point, Instant::now());
+                self.draw_the_night_light();
             }
+            ClientRequest::PowerDisplays { power, display } => {
+                self.power_the_displays(power, display.as_deref());
+            }
+            ClientRequest::ConfigureDisplay {
+                display,
+                change,
+                answer,
+            } => answer.give(self.configure_display(&display, &change)),
             // A launch from a key or the launcher, so it may raise the
             // window of an app already running.
-            ClientRequest::Spawn { command } => spawn_client(
-                &command,
-                &self.hub.wayland_display,
-                self.scope_clients,
-                self.hub.child_nice,
-                Some(&activation::mint(&mut self.xdg_activation_state, None)),
-                self.launched.as_ref(),
-            ),
+            ClientRequest::Spawn { command, answer } => {
+                let started = spawn_client(
+                    &command,
+                    &self.hub.wayland_display,
+                    self.scope_clients,
+                    self.hub.child_nice,
+                    Some(&activation::mint(&mut self.xdg_activation_state, None)),
+                    self.launched.as_ref(),
+                );
+                match (started, answer) {
+                    (started, Some(answer)) => answer.give(started),
+                    (Ok(()), None) => {}
+                    (Err(why), None) => {
+                        tracing::error!(why, ?command, "failed to spawn client");
+                        self.hub
+                            .notifications
+                            .get()
+                            .expect("the notification server is handed to the hub before chromes connect")
+                            .warn_that_a_program_did_not_start(&why);
+                    }
+                }
+            }
             ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
                 Some(toplevel) => {
                     debug!(%app_id, "close -> client");
@@ -690,13 +827,14 @@ fn set_window_states(toplevel: &ToplevelSurface, states: &[WindowState]) {
 }
 
 /// Every `xdg_toplevel` state a shell sets.
-const SHELL_STATES: [xdg_toplevel::State; 6] = [
+const SHELL_STATES: [xdg_toplevel::State; 7] = [
     xdg_toplevel::State::TiledLeft,
     xdg_toplevel::State::TiledRight,
     xdg_toplevel::State::TiledTop,
     xdg_toplevel::State::TiledBottom,
     xdg_toplevel::State::Maximized,
     xdg_toplevel::State::Fullscreen,
+    xdg_toplevel::State::Resizing,
 ];
 
 /// The `xdg_wm_base` version that added the tiled states.
@@ -720,5 +858,6 @@ fn xdg_state(state: WindowState) -> xdg_toplevel::State {
         WindowState::TiledBottom => xdg_toplevel::State::TiledBottom,
         WindowState::Maximized => xdg_toplevel::State::Maximized,
         WindowState::Fullscreen => xdg_toplevel::State::Fullscreen,
+        WindowState::Resizing => xdg_toplevel::State::Resizing,
     }
 }

@@ -13,7 +13,7 @@ On a tty, `domicile` runs the engine with `--ozone-platform=drm`. The engine:
 
 The work has two parts:
 
-- **A build patch** (`0012`, `0014`) lets `gn gen` accept
+- **A build patch** (`0012`) lets `gn gen` accept
   `ozone_platform_drm = true` off ChromeOS.
 - **An embedder** in `ui/ozone/platform/drm/domicile/` does what ash does on
   ChromeOS: a `PlatformScreen`, a modeset driver, DRM master handling, input
@@ -59,7 +59,6 @@ Details live in separate docs:
 
 - Patch `0012` relaxes the `BUILD.gn` assert to `is_linux || is_chromeos` and
   gates the ChromeOS-only deps.
-- Patch `0014` fixes a static initializer.
 - Both build scripts set `ozone_platform_drm = true`;
   `packages/domicile-engine/tests/test-the-builds-agree-on-ozone.sh` checks they agree.
 - Some gaps show up only at link time. `host/drm_cursor.cc` includes
@@ -93,15 +92,19 @@ ozone/drm has two gaps that ash fills on ChromeOS:
 
 `DrmModeset` gets a delegate from `OzonePlatform::CreateNativeDisplayDelegate()`
 and runs `GetDisplays` → `ModesetParamsFromSnapshots` → `Configure`. Each
-connector gets its `native_mode()` unless a layout says otherwise
-([DISPLAYS.md](../DISPLAYS.md#which-connectors-light)).
+connector gets its `native_mode()` unless a layout turns it off or asks for
+another mode ([DISPLAYS.md](../DISPLAYS.md#which-connectors-light),
+[DISPLAYS.md](../DISPLAYS.md#profiles)).
 
 Two guards:
 
-- **No repeat modesets.** Each `Configure` makes the kernel emit a udev CHANGE,
-  which triggers another read and another modeset. `ModesetWouldChangeAnything`
-  skips the modeset when the hardware reports what it last confirmed. A real
-  hotplug changes the report.
+- **Only what changed.** `ModesetParamsThatChange` asks for the displays whose
+  request differs from the last confirmed modeset, or that read dark. A
+  display asked for again gets a new modeset buffer, which is black on a driver
+  that tiles its framebuffers (i915), so sleeping one monitor must not ask for
+  the others. It also stops a loop: each `Configure` makes the kernel emit a
+  udev CHANGE, which triggers another read. A reading that matches asks for
+  nothing. A real hotplug changes the report.
 - **Ignore answers from inside the browser.** `DrmModeset::Start()` runs before
   the GPU process exists, so `DrmDisplayHostManager` answers from its dummy
   snapshots, synchronously. An answer that arrives before `Configure` returns
@@ -179,6 +182,23 @@ with, stay in the browser.
 The primary selection works too (`zwp_primary_selection_device_manager_v1`).
 A nested run still uses the host's clipboard; [KNOWN-GAPS.md](/docs/KNOWN-GAPS.md#clipboard) tracks it.
 
+## Drag and drop
+
+The desk runs its own drags, as ash does. Ozone DRM has no `WmDragHandler`,
+and upstream answers a drag without one with `kNone` before it starts.
+
+- `DeskDragHandler` (patch `0247`,
+  `ui/views/widget/desktop_aura/domicile/desk_drag_handler.h`) is the handler
+  of any desk window whose platform has none: DRM and headless.
+- While a drag runs, an `aura::Env` pre-target handler takes every pointer,
+  touch and key event. Moves and the release go to the window's drop handler
+  (`DesktopDragDropClientOzone`) through `DeskDrag`.
+- Escape or a touch cancel cancels.
+- The drag image is a layer at the top of the root window.
+- A drop on another monitor finds the desk page with `aura::DeskWindowAt`.
+
+Drags between pages and native windows are a [known gap](/docs/KNOWN-GAPS.md#drag-and-drop).
+
 ## The window has to be the size of the CRTC
 
 - `ScreenManager` binds a window to a CRTC only on an exact rectangle match
@@ -239,9 +259,12 @@ vkms) gives the GPU process no GL. The desktop is composited on the CPU instead.
   took for 3D) composites in software too. The browser says so
   (`compositing` in the C ABI, from `GpuDataManagerObserver`). The compositor
   then hands windows over in memory and withdraws `zwp_linux_dmabuf_v1`, so
-  clients that connect later draw in memory. A client already drawing in
-  dmabufs stays blank. The VM check `tty-with-an-engine-that-fell-back-to-the-cpu`
-  covers it.
+  clients that connect later draw in memory. Falling back is a bug, so it is
+  loud: the compositor logs an error and posts an urgent "Graphics aren't
+  working" notification with a "Report it" button. A client already drawing
+  in dmabufs stays blank until it restarts; its dmabufs are not copied into
+  memory (#1972, won't fix). The VM check
+  `tty-with-an-engine-that-fell-back-to-the-cpu` covers it.
 - **Mesa in the GPU sandbox:** every card reaches the GPU process after its
   sandbox is up, so `gbm_create_device` runs inside it. Desktop Linux's broker
   allows only `/dev/dri/card*` and refuses the rest with `EACCES` (`no GBM for

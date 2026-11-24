@@ -35,12 +35,19 @@ export type Windows = {
   focusShell: () => void;
   /** Ask a client to close. The client may refuse. */
   close: (appId: string) => void;
+  /**
+   * Say the page took the pointer for `appId`'s
+   * {@link ClientWindow.pointerConstraint} (`active`), or let it go. Only once
+   * taken is the client told its pointer is locked or confined.
+   */
+  pointerConstrained: (appId: string, active: boolean) => void;
   /** Where the shell put `appId`'s `<app>`; the client draws at that monitor's scale. */
   setBounds: (appId: string, box: Box) => void;
   /** Say the page renders each window's `frame` as its `<app frame>`. */
   syncFrames: () => void;
   setStates: System["setWindowStates"];
   requests: System["windowRequests"];
+  bells: System["bells"];
   on: On<WindowsListeners>;
 };
 
@@ -51,6 +58,7 @@ export type WindowsHost = Pick<
   | "focusApp"
   | "focusChrome"
   | "focusedWindow"
+  | "pointerConstrained"
   | "removeEventListener"
   | "setAppBounds"
   | "syncFrames"
@@ -59,12 +67,13 @@ export type WindowsHost = Pick<
 
 export const windows = (
   host: WindowsHost,
-  calls: Pick<System, "setWindowStates" | "windowRequests">,
+  calls: Pick<System, "bells" | "setWindowStates" | "windowRequests">,
 ): Windows => {
   const listOf = memoizeLast((list: readonly DomicileWindow[]) =>
     list.map(defined),
   );
   return {
+    bells: () => calls.bells(),
     close: (appId) => {
       host.closeApp(appId);
     },
@@ -87,6 +96,9 @@ export const windows = (
       focusrequest: (listener) =>
         hostEvent(host, "focusrequested", ({ appId }) => listener(appId)),
     }),
+    pointerConstrained: (appId, active) => {
+      host.pointerConstrained(appId, active);
+    },
     requests: () => calls.windowRequests(),
     setBounds: (appId, { x, y, width, height }) => {
       host.setAppBounds(appId, x, y, width, height);

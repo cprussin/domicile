@@ -23,7 +23,7 @@ switch.
  5 files changed, 59 insertions(+), 29 deletions(-)
 
 diff --git a/ui/events/ozone/evdev/input_device_factory_evdev.cc b/ui/events/ozone/evdev/input_device_factory_evdev.cc
-index 29699ed..03680ab 100644
+index baef478..29c70a1 100644
 --- a/ui/events/ozone/evdev/input_device_factory_evdev.cc
 +++ b/ui/events/ozone/evdev/input_device_factory_evdev.cc
 @@ -16,6 +16,7 @@
@@ -58,7 +58,7 @@ index 29699ed..03680ab 100644
  
  void InputDeviceFactoryEvdev::RemoveInputDevice(const base::FilePath& path) {
 diff --git a/ui/events/ozone/evdev/input_device_factory_evdev_unittest.cc b/ui/events/ozone/evdev/input_device_factory_evdev_unittest.cc
-index 4cf6b5c..f6ae0c5 100644
+index 66b2c87..988027d 100644
 --- a/ui/events/ozone/evdev/input_device_factory_evdev_unittest.cc
 +++ b/ui/events/ozone/evdev/input_device_factory_evdev_unittest.cc
 @@ -193,12 +193,12 @@ class FakeInputDeviceOpenerEvdev : public InputDeviceOpener {
@@ -108,10 +108,10 @@ index 7d6ca2a..ce0052b 100644
    // Handed over by the factory that owns this opener, once that factory
    // exists -- an opener is constructed in order to be given to the factory, so
 diff --git a/ui/events/ozone/evdev/input_device_opener_evdev.cc b/ui/events/ozone/evdev/input_device_opener_evdev.cc
-index a2f5076..1102a9e 100644
+index df0e6b3..a10fd97 100644
 --- a/ui/events/ozone/evdev/input_device_opener_evdev.cc
 +++ b/ui/events/ozone/evdev/input_device_opener_evdev.cc
-@@ -118,16 +118,12 @@ std::unique_ptr<EventConverterEvdev> CreateConverter(
+@@ -119,16 +119,12 @@ std::unique_ptr<EventConverterEvdev> CreateConverter(
        params.dispatcher);
  }
  
@@ -133,7 +133,7 @@ index a2f5076..1102a9e 100644
      return nullptr;
    }
  
-@@ -147,10 +143,29 @@ std::unique_ptr<EventConverterEvdev> InputDeviceOpenerEvdev::OpenInputDevice(
+@@ -148,10 +144,29 @@ std::unique_ptr<EventConverterEvdev> InputDeviceOpenerEvdev::OpenInputDevice(
    return CreateConverter(params, std::move(fd), devinfo);
  }
  

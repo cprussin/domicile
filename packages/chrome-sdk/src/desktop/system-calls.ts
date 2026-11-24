@@ -11,10 +11,20 @@ import { Err, Ok } from "@cprussin/option-result";
 import { z } from "zod";
 
 import type { DomicileHost } from "../domicile-host";
+import type { InhibitorAction } from "../inhibitor-action";
+import { wireInhibitorAction } from "../inhibitor-action";
 import type { KeymapChoice, Keymaps } from "../keymap-choice";
 import { wireKeymapChoice } from "../keymap-choice";
+import type { KnownAgents } from "../portal";
 import type { PreviewedWindow } from "../previewed-window";
 import { PreviewedWindowKind } from "../previewed-window";
+import type {
+  CommandRan,
+  Link,
+  ShellBinding,
+  ShellCommand,
+  ShellCommandHelp,
+} from "../shell-command";
 import type {
   ByteRange,
   DbusBody,
@@ -49,8 +59,9 @@ import type {
   SystemReplyMessage,
 } from "../system-message";
 import { parseSystemMessage } from "../system-message";
-import type { WindowState } from "../window-state";
-import { WindowRequest, wireWindowState } from "../window-state";
+import type { Bell, WindowState } from "../window-state";
+import { ResizeEdge, WindowRequest, wireWindowState } from "../window-state";
+import { readAgentReach } from "./portal-wire";
 
 /**
  * The calls. A relative path starts at the home. The compositor runs each in
@@ -94,7 +105,9 @@ export type System = {
    * if the shell were the application: the desk freezes, `<PortalDialogs />`
    * draws the screenshot dialog, and the area picked is saved under
    * `$XDG_PICTURES_DIR/Screenshots/`, or copied to the clipboard instead when
-   * the user presses Ctrl+C. Resolves with where it went.
+   * the user presses Ctrl+C. Resolves with where it went. A call while the
+   * shell's screenshot dialog is up resolves as that dialog does, and shows
+   * no second one.
    */
   screenshot: () => Promise<Result<ScreenshotKept, SystemError>>;
   /**
@@ -113,22 +126,49 @@ export type System = {
     window: PreviewedWindow,
   ) => Promise<Result<string, SystemError>>;
   /**
-   * Hear each command `domicile send-shell` sends, as its words. Every page
-   * listening hears every command. Allowed while the desktop is locked.
+   * Hear each command `domicile send-shell` sends. Every page listening hears
+   * every command, and answers each with `answerShellCommand`; `send-shell`
+   * fails when no page ran it. `commands` describes what this page runs, for
+   * `domicile list-shell-commands`, and `bindings` the keys that run them, for
+   * `domicile list-bindings`. Allowed while the desktop is locked.
    */
-  shellCommands: () => Promise<
-    Result<Listening<readonly string[]>, SystemError>
-  >;
+  shellCommands: (
+    commands: readonly ShellCommandHelp[],
+    bindings: readonly ShellBinding[],
+  ) => Promise<Result<Listening<ShellCommand>, SystemError>>;
   /**
-   * Hear the milliseconds left before the screens blank when
-   * `idle.warn_before_seconds` passes, and `undefined` when input or an idle
-   * inhibitor calls it off or the screens go dark. A page that listens during
-   * a warning hears it at once. Allowed while the desktop is locked. See
-   * docs/SHELL-IDLE-AND-LOCK.md.
+   * Open links of `schemes`, such as `mailto`, for the desktop: hear each one
+   * `domicile open` (and so `xdg-open` and applications' links) and the
+   * Email portal hand over, instead of the application that opens the
+   * scheme. The page that claimed a scheme last gets its links.
    */
-  idleWarnings: () => Promise<
-    Result<Listening<number | undefined>, SystemError>
-  >;
+  claimLinks: (
+    schemes: readonly string[],
+  ) => Promise<Result<Listening<Link>, SystemError>>;
+  /**
+   * Say that this page ran the command numbered `sent`, with what
+   * `domicile send-shell` prints if anything, or with `Err`, why it did not.
+   */
+  answerShellCommand: (
+    sent: number,
+    ran: Result<CommandRan, string>,
+  ) => Promise<Result<"set", SystemError>>;
+  /**
+   * Hear `true` once nobody has been at the desk for `seconds`, and `false`
+   * on the next input. Idle inhibitors hold it off as they hold off
+   * blanking. `seconds` must be at least 1. Allowed while the desktop is
+   * locked. See docs/SHELL-IDLE-AND-LOCK.md.
+   */
+  idleAfter: (
+    seconds: number,
+  ) => Promise<Result<Listening<boolean>, SystemError>>;
+  /**
+   * As `idleAfter`, `seconds` before the screens blank, to dim or count
+   * down. Silent when the screens never blank, or blank sooner.
+   */
+  idleBeforeBlanking: (
+    seconds: number,
+  ) => Promise<Result<Listening<boolean>, SystemError>>;
   /**
    * Hear what holds the desktop awake: the app ids of the windows and
    * applications whose idle inhibitors keep the screens from blanking, to name
@@ -153,10 +193,12 @@ export type System = {
     states: readonly WindowState[],
   ) => Promise<Result<"set", SystemError>>;
   /**
-   * Draw `display` (a display's `name`), or every monitor when it is left
+   * Draw `display` (a display's `name`, connector or panel name, as a
+   * profile matches it), or every monitor when it is left
    * out, as if its white were a light of `kelvin`, 1000 to 6500, as a
-   * night light does; 6500 draws colors as they are. Every monitor's replaces
-   * each one's. Lasts until the shell sets another, across reloads. Changes
+   * night light does; 6500 draws colors as they are. Fades from the color
+   * drawn: about 1.5 s to switch a night light on, a few frames for a small
+   * step. Every monitor's replaces each one's. Lasts until the shell sets another, across reloads. Changes
    * nothing on a nested desktop, nor on a monitor a night-light app such as
    * gammastep holds. Allowed while the desktop is locked.
    */
@@ -165,11 +207,39 @@ export type System = {
     display?: string,
   ) => Promise<Result<"set", SystemError>>;
   /**
+   * Turn every monitor off now, keeping windows and workspaces as they are.
+   * Input more than a second later lights them again, as does
+   * {@link System.wakeDisplays}. With `display` (a display's `name`, connector
+   * or panel name, as a profile matches it), turn
+   * only that one off: it keeps its place and windows, and sleeps through
+   * input until woken. Fails {@link SystemErrorKind.NotFound} for a display
+   * the desktop does not have. Allowed while the desktop is locked. See
+   * docs/IDLE.md#sleeping-on-demand.
+   */
+  sleepDisplays: (display?: string) => Promise<Result<"set", SystemError>>;
+  /** The agents let in now, and those let in without asking. */
+  agents: () => Promise<Result<KnownAgents, SystemError>>;
+  /**
+   * Make remembered agent `agent` ask again next time. Succeeds whether or
+   * not it was remembered.
+   */
+  forgetAgent: (agent: string) => Promise<Result<"set", SystemError>>;
+  /**
+   * Light the monitors again, after {@link System.sleepDisplays} or idle
+   * blanking, or only `display`. Allowed while the desktop is locked.
+   */
+  wakeDisplays: (display?: string) => Promise<Result<"set", SystemError>>;
+  /**
    * Hear each maximize and fullscreen request a client makes. The compositor
    * grants none; grant one with {@link System.setWindowStates}. Allowed while
    * the desktop is locked.
    */
   windowRequests: () => Promise<Result<Listening<WindowRequest>, SystemError>>;
+  /**
+   * Hear each time a client rings the bell, such as a terminal's `\a`. The
+   * compositor makes no sound. Allowed while the desktop is locked.
+   */
+  bells: () => Promise<Result<Listening<Bell>, SystemError>>;
   /**
    * Add a monitor with no connector, which the desk extends onto and only a
    * capture shows: casting to a TV. A later `displays` lists it. It lasts
@@ -192,6 +262,14 @@ export type System = {
    * config does not have. Allowed while the desktop is locked.
    */
   selectKeymap: (choice: KeymapChoice) => Promise<Result<"set", SystemError>>;
+  /**
+   * Activate, deactivate or toggle the shortcuts inhibitor of the window with
+   * the keyboard: the way back to the desktop from a VM. A window holding
+   * none changes nothing.
+   */
+  switchShortcutsInhibitor: (
+    action: InhibitorAction,
+  ) => Promise<Result<"set", SystemError>>;
 };
 
 /** What {@link system} needs of the desktop `Shell` is handed. */
@@ -207,6 +285,49 @@ export const system = (host: SystemHost): System => {
   const calls = callsOn(host);
   return {
     addVirtualMonitor: (mode) => addVirtualMonitor(calls, mode),
+    agents: () =>
+      oneShot(calls, { call: "agents" }, (reply) =>
+        reply.kind === "agents"
+          ? {
+              connected: reply.connected.map(({ agent, reach, session }) => ({
+                agent,
+                reach: readAgentReach(reach),
+                session,
+              })),
+              remembered: reply.remembered.map(({ agent, last_used_ms }) => ({
+                agent,
+                lastUsedMs: last_used_ms,
+              })),
+            }
+          : unexpected(reply),
+      ),
+    answerShellCommand: (sent, ran) =>
+      oneShot(
+        calls,
+        {
+          call: "answer_shell_command",
+          // `refused` is left out when the page ran it, and `output` when it
+          // printed nothing.
+          ...ran.match<{ refused?: string; output?: string }>({
+            Err: (refused) => ({ refused }),
+            Ok: (done) => (done === "ran" ? {} : { output: done.output }),
+          }),
+          sent,
+        },
+        (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
+      ),
+    bells: () =>
+      listening(calls, { call: "bells" }, (event) =>
+        event.kind === "bell"
+          ? { appId: event.app_id ?? undefined }
+          : unexpected(event),
+      ),
+    claimLinks: (schemes) =>
+      listening(calls, { call: "claim_links", schemes }, (event) =>
+        event.kind === "link"
+          ? { appId: event.app_id, url: event.url }
+          : unexpected(event),
+      ),
     createDir: (path) =>
       oneShot(calls, { call: "create_dir", path }, (reply) =>
         reply.kind === "created" ? "created" : unexpected(reply),
@@ -253,15 +374,28 @@ export const system = (host: SystemHost): System => {
             : unexpected(event),
         Listened.Missed(),
       ),
+    forgetAgent: (agent) =>
+      oneShot(calls, { agent, call: "forget_agent" }, (reply) =>
+        reply.kind === "set" ? "set" : unexpected(reply),
+      ),
+    idleAfter: (seconds) =>
+      listening(
+        calls,
+        { call: "idle_after", seconds },
+        idleOf,
+        // The next compositor's clock starts from its start.
+        false,
+      ),
+    idleBeforeBlanking: (seconds) =>
+      listening(
+        calls,
+        { call: "idle_before_blanking", seconds },
+        idleOf,
+        false,
+      ),
     idleHolds: () =>
       listening(calls, { call: "idle_holds" }, (event) =>
         event.kind === "idle_holds" ? event.holders : unexpected(event),
-      ),
-    idleWarnings: () =>
-      listening(calls, { call: "idle_warnings" }, (event) =>
-        event.kind === "idle_warning"
-          ? (event.blanks_in_ms ?? undefined)
-          : unexpected(event),
       ),
     keymaps: () =>
       listening(calls, { call: "keymaps" }, (event) =>
@@ -338,9 +472,24 @@ export const system = (host: SystemHost): System => {
         },
         (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
       ),
-    shellCommands: () =>
-      listening(calls, { call: "shell_commands" }, (event) =>
-        event.kind === "shell_command" ? event.command : unexpected(event),
+    shellCommands: (commands, bindings) =>
+      listening(
+        calls,
+        { bindings, call: "shell_commands", commands },
+        (event) =>
+          event.kind === "shell_command"
+            ? { sent: event.sent, words: event.command }
+            : unexpected(event),
+      ),
+    sleepDisplays: (display) =>
+      oneShot(
+        calls,
+        {
+          call: "sleep_displays",
+          // Left out for every monitor.
+          ...(display === undefined ? {} : { display }),
+        },
+        (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
       ),
     spawn: (argv, options) => spawn(calls, argv, options),
     stat: (path) =>
@@ -354,6 +503,12 @@ export const system = (host: SystemHost): System => {
             }
           : unexpected(reply),
       ),
+    switchShortcutsInhibitor: (action) =>
+      oneShot(
+        calls,
+        { action: wireInhibitorAction(action), call: "shortcuts_inhibitor" },
+        (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
+      ),
     unlockRefusals: () =>
       listening(calls, { call: "unlock_refusals" }, (event) =>
         event.kind === "unlock_refused"
@@ -363,6 +518,16 @@ export const system = (host: SystemHost): System => {
               retryInMs: event.retry_in_ms,
             }
           : unexpected(event),
+      ),
+    wakeDisplays: (display) =>
+      oneShot(
+        calls,
+        {
+          call: "wake_displays",
+          // Left out for every monitor.
+          ...(display === undefined ? {} : { display }),
+        },
+        (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
       ),
     watch: (path) =>
       listening<Listened<string>>(
@@ -821,8 +986,41 @@ const windowRequest = (
       return WindowRequest.Fullscreen(appId, request.display ?? undefined);
     case "unfullscreen":
       return WindowRequest.Unfullscreen(appId);
+    case "minimize":
+      return WindowRequest.Minimize(appId);
+    case "move":
+      return WindowRequest.Move(appId);
+    case "resize":
+      return WindowRequest.Resize(appId, resizeEdgeOf(request.edges));
   }
 };
+
+const resizeEdgeOf = (
+  edges: Extract<WireWindowRequest, { kind: "resize" }>["edges"],
+): ResizeEdge => {
+  switch (edges) {
+    case "top":
+      return ResizeEdge.Top;
+    case "bottom":
+      return ResizeEdge.Bottom;
+    case "left":
+      return ResizeEdge.Left;
+    case "right":
+      return ResizeEdge.Right;
+    case "top_left":
+      return ResizeEdge.TopLeft;
+    case "top_right":
+      return ResizeEdge.TopRight;
+    case "bottom_left":
+      return ResizeEdge.BottomLeft;
+    case "bottom_right":
+      return ResizeEdge.BottomRight;
+  }
+};
+
+/** Whether an idle watch's event says nobody is at the desk. */
+const idleOf = (event: Event): boolean =>
+  event.kind === "idle" ? event.idle : unexpected(event);
 
 const unexpected = (answer: unknown): never => {
   throw new Error(`an unexpected system answer: ${JSON.stringify(answer)}`);

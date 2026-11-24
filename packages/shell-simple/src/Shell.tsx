@@ -3,6 +3,8 @@
 // A minimal shell: one `<app>` per client the host announces, moved and resized
 // with Alt, and a terminal on Alt+Enter.
 
+import type { Result } from "@cprussin/option-result";
+import { Err, Ok } from "@cprussin/option-result";
 import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
 import { useDomicile } from "@domicile-desktop/react/domicile-provider";
 import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
@@ -11,6 +13,7 @@ import type { ClientWindow } from "@domicile-desktop/sdk/desktop/windows";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
+import type { ShellCommandHelp } from "@domicile-desktop/sdk/shell-command";
 import type { CSSProperties, PointerEvent } from "react";
 import {
   Fragment,
@@ -52,6 +55,11 @@ const KEYBINDINGS = [
   ["Alt + Enter", "open a terminal"],
 ] as const;
 
+/** The commands this shell runs, for `domicile list-shell-commands`. */
+const COMMANDS: readonly ShellCommandHelp[] = [
+  { description: "Open a terminal.", usage: "terminal" },
+];
+
 /** Default reporter for unknown commands. */
 const logToConsole = (error: string): void => {
   // biome-ignore lint/suspicious/noConsole: the bindings are the user's, and the console is where a shell reports an unknown command in them
@@ -76,6 +84,7 @@ type ShellWindow = {
  */
 type Popup = {
   appId: string;
+  cursor: string;
   parent: string;
   position: readonly [x: number, y: number];
   size: readonly [width: number, height: number];
@@ -115,12 +124,19 @@ export const Shell = ({
 
   // Handles the shell's one command. An effect event, so it reads current props
   // without rebinding the keys.
-  const onCommand = useEffectEvent((args: readonly string[]) => {
-    if (args.join(" ") === "terminal") {
-      domicile.processes.launch(TERMINAL_COMMAND);
-    } else {
-      report(`${SHELL}: no command \`${args.join(" ")}\``);
-    }
+  const onCommand = useEffectEvent(
+    (args: readonly string[]): Result<"ran", string> => {
+      if (args.join(" ") === "terminal") {
+        domicile.processes.launch(TERMINAL_COMMAND);
+        return Ok("ran");
+      } else {
+        return Err(`${SHELL}: no command \`${args.join(" ")}\``);
+      }
+    },
+  );
+
+  const reportRefusal = useEffectEvent((why: string) => {
+    report(why);
   });
 
   useEffect(() => {
@@ -160,9 +176,13 @@ export const Shell = ({
     // The engine finds the chord's key and sends its press whether it reaches
     // the page or a `<webview>`.
     const keys = bindKeys(domicile, keybindings, {
+      commands: COMMANDS,
       onCommand,
       // This shell has no modes to show.
       onModeChanged: () => undefined,
+      reportRefusal: (why) => {
+        reportRefusal(why);
+      },
     });
     return () => {
       unlisten();
@@ -281,6 +301,7 @@ const popupOf = (window: ClientWindow): readonly Popup[] =>
     : [
         {
           appId: window.appId,
+          cursor: window.cursor,
           parent: window.parent,
           position: [window.x ?? 0, window.y ?? 0],
           size: [window.width ?? 0, window.height ?? 0],
@@ -389,6 +410,7 @@ const popupStyleOf = (
   return over === undefined
     ? undefined
     : {
+        cursor: popup.cursor,
         height: popup.size[1],
         left: over.left + popup.position[0],
         top: over.top + popup.position[1],

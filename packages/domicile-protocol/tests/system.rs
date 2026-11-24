@@ -6,9 +6,10 @@
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    Bus, ChromeMessage, DirEntry, FileType, HostMessage, KeymapChoice, ListedKeymap,
-    PreviewedWindow, Scale, Signal, Stream, SystemEnd, SystemError, SystemErrorKind, SystemEvent,
-    SystemReply, SystemRequest, UnlockRefusal, WindowRequest, WindowState,
+    Bus, ChromeMessage, DirEntry, FileType, HostMessage, InhibitorAction, KeymapChoice,
+    ListedKeymap, PreviewedWindow, ResizeEdges, Scale, ShellBinding, ShellCommandHelp, Signal,
+    Stream, SystemEnd, SystemError, SystemErrorKind, SystemEvent, SystemReply, SystemRequest,
+    UnlockRefusal, WindowRequest, WindowState,
 };
 
 fn chrome(json: &str) -> ChromeMessage {
@@ -472,7 +473,38 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
         chrome(r#"{"type":"system_request","id":12,"request":{"call":"shell_commands"}}"#),
         ChromeMessage::SystemRequest {
             id: 12,
-            request: SystemRequest::ShellCommands,
+            request: SystemRequest::ShellCommands {
+                commands: Vec::new(),
+                bindings: Vec::new(),
+            },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":12,"request":{"call":"shell_commands","commands":[{"usage":"lock","description":"Lock the desktop."}]}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 12,
+            request: SystemRequest::ShellCommands {
+                commands: vec![ShellCommandHelp {
+                    usage: "lock".into(),
+                    description: "Lock the desktop.".into(),
+                }],
+                bindings: Vec::new(),
+            },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":13,"request":{"call":"answer_shell_command","sent":4,"refused":"no command `x`"}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 13,
+            request: SystemRequest::AnswerShellCommand {
+                sent: 4,
+                refused: Some("no command `x`".into()),
+                output: None,
+            },
         }
     );
     assert_eq!(
@@ -489,47 +521,75 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
     assert_eq!(
         host(&HostMessage::SystemReply {
             id: 1,
-            reply: SystemReply::Sent,
+            reply: SystemReply::Sent { output: None },
         }),
         r#"{"type":"system_reply","id":1,"reply":{"kind":"sent"}}"#
+    );
+    assert_eq!(
+        host(&HostMessage::SystemReply {
+            id: 1,
+            reply: SystemReply::Sent {
+                output: Some("[]".into())
+            },
+        }),
+        r#"{"type":"system_reply","id":1,"reply":{"kind":"sent","output":"[]"}}"#
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":12,"request":{"call":"shell_commands","bindings":[{"mode":"default","chord":"Meta+l","action":"send-shell lock"}]}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 12,
+            request: SystemRequest::ShellCommands {
+                commands: Vec::new(),
+                bindings: vec![ShellBinding {
+                    mode: "default".into(),
+                    chord: "Meta+l".into(),
+                    action: "send-shell lock".into(),
+                }],
+            },
+        }
     );
     assert_eq!(
         host(&HostMessage::SystemEvent {
             id: 12,
             event: SystemEvent::ShellCommand {
                 command: vec!["focus".into(), "right".into()],
+                sent: 4,
             },
         }),
-        r#"{"type":"system_event","id":12,"event":{"kind":"shell_command","command":["focus","right"]}}"#
+        r#"{"type":"system_event","id":12,"event":{"kind":"shell_command","command":["focus","right"],"sent":4}}"#
     );
 }
 
-/// A page hears when the screens are about to blank, and when that is called
-/// off. See `docs/IDLE.md`.
+/// A page hears when nobody has been at the desktop for a time it chose, and
+/// when somebody is again. See `docs/IDLE.md`.
 #[test]
-fn a_page_hears_how_soon_the_screens_blank_and_when_they_no_longer_will() {
+fn a_page_hears_the_desktop_go_idle_after_a_time_it_chose() {
     assert_eq!(
-        chrome(r#"{"type":"system_request","id":13,"request":{"call":"idle_warnings"}}"#),
+        chrome(
+            r#"{"type":"system_request","id":13,"request":{"call":"idle_after","seconds":120}}"#
+        ),
         ChromeMessage::SystemRequest {
             id: 13,
-            request: SystemRequest::IdleWarnings,
+            request: SystemRequest::IdleAfter { seconds: 120 },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":14,"request":{"call":"idle_before_blanking","seconds":30}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 14,
+            request: SystemRequest::IdleBeforeBlanking { seconds: 30 },
         }
     );
     assert_eq!(
         host(&HostMessage::SystemEvent {
             id: 13,
-            event: SystemEvent::IdleWarning {
-                blanks_in_ms: Some(30_000),
-            },
+            event: SystemEvent::Idle { idle: true },
         }),
-        r#"{"type":"system_event","id":13,"event":{"kind":"idle_warning","blanks_in_ms":30000}}"#
-    );
-    assert_eq!(
-        host(&HostMessage::SystemEvent {
-            id: 13,
-            event: SystemEvent::IdleWarning { blanks_in_ms: None },
-        }),
-        r#"{"type":"system_event","id":13,"event":{"kind":"idle_warning","blanks_in_ms":null}}"#
+        r#"{"type":"system_event","id":13,"event":{"kind":"idle","idle":true}}"#
     );
 }
 
@@ -566,10 +626,47 @@ fn a_refused_unlock_goes_to_each_page_that_listens_for_one() {
 /// The shell sets a window's `xdg_toplevel` states and hears what its client
 /// asks for.
 #[test]
+fn a_link_goes_to_the_page_that_claims_its_scheme() {
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":3,"request":{"call":"claim_links","schemes":["mailto"]}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 3,
+            request: SystemRequest::ClaimLinks {
+                schemes: vec!["mailto".into()],
+            },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":4,"request":{"call":"open_link","url":"mailto:a@example.com"}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 4,
+            request: SystemRequest::OpenLink {
+                url: "mailto:a@example.com".into(),
+                app_id: None,
+            },
+        }
+    );
+    assert_eq!(
+        host(&HostMessage::SystemEvent {
+            id: 3,
+            event: SystemEvent::Link {
+                url: "mailto:a@example.com".into(),
+                app_id: Some("org.gnome.Evince".into()),
+            },
+        }),
+        r#"{"type":"system_event","id":3,"event":{"kind":"link","url":"mailto:a@example.com","app_id":"org.gnome.Evince"}}"#
+    );
+}
+
+#[test]
 fn the_shell_sets_window_states_and_hears_what_clients_ask_for() {
     assert_eq!(
         chrome(
-            r#"{"type":"system_request","id":3,"request":{"call":"set_window_states","app_id":"app-1","states":["tiled_left","tiled_right","tiled_top","tiled_bottom","maximized","fullscreen"]}}"#
+            r#"{"type":"system_request","id":3,"request":{"call":"set_window_states","app_id":"app-1","states":["tiled_left","tiled_right","tiled_top","tiled_bottom","maximized","fullscreen","resizing"]}}"#
         ),
         ChromeMessage::SystemRequest {
             id: 3,
@@ -582,6 +679,7 @@ fn the_shell_sets_window_states_and_hears_what_clients_ask_for() {
                     WindowState::TiledBottom,
                     WindowState::Maximized,
                     WindowState::Fullscreen,
+                    WindowState::Resizing,
                 ],
             },
         }
@@ -614,6 +712,14 @@ fn the_shell_sets_window_states_and_hears_what_clients_ask_for() {
             r#"{"kind":"fullscreen","display":"left"}"#,
         ),
         (WindowRequest::Unfullscreen, r#"{"kind":"unfullscreen"}"#),
+        (WindowRequest::Minimize, r#"{"kind":"minimize"}"#),
+        (WindowRequest::Move, r#"{"kind":"move"}"#),
+        (
+            WindowRequest::Resize {
+                edges: ResizeEdges::BottomRight,
+            },
+            r#"{"kind":"resize","edges":"bottom_right"}"#,
+        ),
     ] {
         assert_eq!(
             host(&HostMessage::SystemEvent {
@@ -800,6 +906,27 @@ fn the_shell_hears_the_keymaps_and_switches_between_them() {
     }
 }
 
+/// The shell switches the keyboard window's shortcuts inhibitor, as sway's
+/// `seat shortcuts_inhibitor` does.
+#[test]
+fn the_shell_switches_the_shortcuts_inhibitor() {
+    for (wire, action) in [
+        ("activate", InhibitorAction::Activate),
+        ("deactivate", InhibitorAction::Deactivate),
+        ("toggle", InhibitorAction::Toggle),
+    ] {
+        assert_eq!(
+            chrome(&format!(
+                r#"{{"type":"system_request","id":6,"request":{{"call":"shortcuts_inhibitor","action":"{wire}"}}}}"#
+            )),
+            ChromeMessage::SystemRequest {
+                id: 6,
+                request: SystemRequest::ShortcutsInhibitor { action },
+            }
+        );
+    }
+}
+
 /// `domicile screen-record` asks for a recording. The shell's picker chooses
 /// what to record, and the reply names the file once the user stops it.
 #[test]
@@ -809,6 +936,56 @@ fn a_screen_recording_is_answered_with_where_it_was_saved() {
         ChromeMessage::SystemRequest {
             id: 12,
             request: SystemRequest::ScreenRecord,
+        }
+    );
+}
+
+/// `domicile sleep-displays` turns every monitor off, and `wake-displays`
+/// lights them again.
+#[test]
+fn the_displays_sleep_and_wake_on_demand() {
+    for (call, request) in [
+        (
+            "sleep_displays",
+            SystemRequest::SleepDisplays { display: None },
+        ),
+        (
+            "wake_displays",
+            SystemRequest::WakeDisplays { display: None },
+        ),
+    ] {
+        assert_eq!(
+            chrome(&format!(
+                r#"{{"type":"system_request","id":5,"request":{{"call":"{call}"}}}}"#
+            )),
+            ChromeMessage::SystemRequest { id: 5, request }
+        );
+    }
+}
+
+/// `domicile sleep-displays DP-1` turns one monitor off, leaving the others.
+#[test]
+fn one_display_sleeps_and_wakes_by_name() {
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":5,"request":{"call":"sleep_displays","display":"DP-1"}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 5,
+            request: SystemRequest::SleepDisplays {
+                display: Some("DP-1".into())
+            },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":5,"request":{"call":"wake_displays","display":"DP-1"}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 5,
+            request: SystemRequest::WakeDisplays {
+                display: Some("DP-1".into())
+            },
         }
     );
 }

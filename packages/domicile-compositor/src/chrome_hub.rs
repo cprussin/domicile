@@ -6,26 +6,30 @@ use std::io::Write;
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::AtomicU32;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Instant;
 
+use domicile_host::bells::Bells;
 use domicile_host::idle_holds::IdleHolds;
-use domicile_host::idle_warnings::IdleWarnings;
+use domicile_host::idle_watches::IdleWatches;
 use domicile_host::ipc::{apply_chrome_message, to_line};
 use domicile_host::keymaps::Keymaps;
 use domicile_host::shell_commands::ShellCommands;
 use domicile_host::unlock_refusals::UnlockRefusals;
 use domicile_host::window_requests::WindowRequests;
 use domicile_host::Host;
-use domicile_protocol::{ChromeMessage, HostMessage, Theme};
+use domicile_protocol::{ChromeMessage, HostMessage, Theme, WatchTopic};
 use smithay::reexports::calloop::channel::Sender;
 
 use crate::client_requests::ClientRequest;
 use crate::file_indexing::Offered;
 use crate::frame_report::{report, FrameTimings, FrameWindow, REPORT_EVERY};
 use crate::lock::Seen;
+use crate::log_levels::LogFilter;
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::portals::Portals;
 use crate::theme_turnover::chrome_key;
 use crate::virtual_monitors::VirtualMonitors;
+use crate::watchers::Watchers;
 use crate::{eis, notifications, tray};
 
 /// One connected chrome: where to write to it.
@@ -66,6 +70,8 @@ pub struct ChromeHub {
     pub offered: Mutex<Option<Arc<Offered>>>,
     /// The lock state, for [`answer_on_the_connection`]. Set once at startup.
     pub lock: OnceLock<Seen>,
+    /// The log filter `domicile set-log-level` reloads. Set once at startup.
+    pub log_filter: OnceLock<LogFilter>,
     /// The desktop portal: tells clients the theme, and takes the shell's
     /// answers to their dialogs.
     ///
@@ -87,9 +93,9 @@ pub struct ChromeHub {
     /// The pages listening for `domicile send-shell`, shared by every
     /// connection's `System`.
     pub shell_commands: ShellCommands,
-    /// When the screens blank, while a warning runs, shared by every
-    /// connection's `System`. Set by the compositor's idle clock.
-    pub idle_warnings: IdleWarnings,
+    /// The pages watching for the desk to go idle, shared by every
+    /// connection's `System`. Settled by the compositor's idle clock.
+    pub idle_watches: IdleWatches,
     /// What holds the desktop awake, shared by every connection's `System`.
     /// Set by the compositor's idle clock.
     pub idle_holds: IdleHolds,
@@ -100,12 +106,22 @@ pub struct ChromeHub {
     /// connection's `System`. The writer thread sends to them; see
     /// [`Outbound::WindowRequest`].
     pub window_requests: WindowRequests,
+    /// The pages listening for bells, shared by every connection's `System`.
+    /// The writer thread sends to them; see [`Outbound::Bell`].
+    pub bells: Bells,
     /// The virtual monitors pages add. See [`crate::virtual_monitors`].
     pub virtual_monitors: VirtualMonitors,
     /// The keymaps and the one the desktop types on, shared by every
     /// connection's `System`. The Wayland thread lists them; see
     /// [`crate::DomicileCompositor::switch_the_keymap`].
     pub keymaps: Keymaps,
+    /// The connections `domicile subscribe` holds. The writer thread tells
+    /// them; see [`serve_outbound`].
+    pub watchers: Watchers,
+    /// The last input, or when the hub was made if there has been none. The
+    /// Wayland thread sets it with [`ChromeHub::stirred`]; see
+    /// [`ChromeHub::idle_time`].
+    stirred_at: Mutex<Instant>,
 }
 
 impl ChromeHub {
@@ -117,6 +133,12 @@ impl ChromeHub {
         portals: Portals,
     ) -> (Arc<Self>, OutboundReceiver) {
         let (outbound, outbound_rx) = outbound();
+        let idle_watches = IdleWatches::new({
+            let request_tx = Mutex::new(request_tx.clone());
+            move || {
+                let _ = request_tx.lock().unwrap().send(ClientRequest::IdleWatched);
+            }
+        });
         let hub = Arc::new(ChromeHub {
             host: Mutex::new(Host::new()),
             chromes: Mutex::new(Vec::new()),
@@ -128,17 +150,21 @@ impl ChromeHub {
             child_nice,
             offered: Mutex::new(None),
             lock: OnceLock::new(),
+            log_filter: OnceLock::new(),
             portals,
             tray: OnceLock::new(),
             notifications: OnceLock::new(),
             eis: OnceLock::new(),
             shell_commands: ShellCommands::default(),
-            idle_warnings: IdleWarnings::default(),
+            idle_watches,
             idle_holds: IdleHolds::default(),
             unlock_refusals: UnlockRefusals::default(),
             window_requests: WindowRequests::default(),
+            bells: Bells::default(),
             virtual_monitors: VirtualMonitors::default(),
             keymaps: Keymaps::default(),
+            watchers: Watchers::default(),
+            stirred_at: Mutex::new(Instant::now()),
         });
         (hub, outbound_rx)
     }
@@ -201,6 +227,40 @@ impl ChromeHub {
             if Arc::ptr_eq(&chrome.writer, writer) {
                 chrome.syncs_frames = syncs;
             }
+        }
+    }
+
+    /// How the desktop is, answering `which_status`.
+    pub fn status(&self) -> HostMessage {
+        self.host.lock().unwrap().status(
+            self.the_desk_is_locked(),
+            self.keymaps.listed().map(|listed| listed.active),
+            self.idle_holds.holders(),
+        )
+    }
+
+    /// Records input at `now`, for [`ChromeHub::idle_time`].
+    pub fn stirred(&self, now: Instant) {
+        *self.stirred_at.lock().unwrap() = now;
+    }
+
+    /// How long nobody has used the desktop as of `now`, answering
+    /// `which_idle_time`.
+    pub fn idle_time(&self, now: Instant) -> HostMessage {
+        HostMessage::IdleTime {
+            seconds: now
+                .duration_since(*self.stirred_at.lock().unwrap())
+                .as_secs(),
+        }
+    }
+
+    /// The answer to a [`WatchTopic`], as its `which_*` gets it.
+    pub fn watched(&self, topic: WatchTopic) -> HostMessage {
+        match topic {
+            WatchTopic::Windows => self.host.lock().unwrap().list_windows(),
+            WatchTopic::Displays => self.host.lock().unwrap().list_displays(),
+            WatchTopic::Inputs => self.host.lock().unwrap().list_inputs(),
+            WatchTopic::Status => self.status(),
         }
     }
 
@@ -280,8 +340,12 @@ pub fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
     // Wake on a timeout too: compositing sends nothing outbound, so the report
     // would otherwise never run.
     while let Some(next) = outbound.recv_until(REPORT_EVERY) {
+        // Asked after everything the writer handles, since nothing says when
+        // a watched list changed, and on the timeout too, for what changes
+        // with no message at all, like what holds the screens on.
         let Some(item) = next else {
             report(&mut window, &hub);
+            hub.watchers.tell(|topic| hub.watched(topic));
             continue;
         };
         let message = match item {
@@ -290,7 +354,16 @@ pub fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
                 hub.window_requests.send(&(app_id, request));
                 continue;
             }
+            Outbound::Bell(app_id) => {
+                hub.bells.send(&app_id);
+                continue;
+            }
+            Outbound::Watched => {
+                hub.watchers.tell(|topic| hub.watched(topic));
+                continue;
+            }
         };
+        crate::protocol_trace::trace("every shell", &message);
         // Encoded once; every chrome gets the same line.
         let line = to_line(&message);
         let mut chromes = hub.chromes.lock().unwrap();
@@ -302,6 +375,7 @@ pub fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
                 .is_ok()
         });
         drop(chromes);
+        hub.watchers.tell(|topic| hub.watched(topic));
 
         report(&mut window, &hub);
     }
@@ -353,13 +427,16 @@ pub mod fixture {
 
     /// A window that has drawn its first frame, announced to the chromes.
     pub fn drawn(host: &mut domicile_host::Host) -> String {
-        let app_id = host.app_created(domicile_protocol::Owner {
-            pid: 1,
-            uid: 1000,
-            gid: 1000,
-            pidfd_inode: None,
-            sandbox: None,
-        });
+        let app_id = host.app_created(
+            domicile_protocol::Owner {
+                pid: 1,
+                uid: 1000,
+                gid: 1000,
+                pidfd_inode: None,
+                sandbox: None,
+            },
+            "Vb1vFz0gXrYJ8Kq2sLmN4tPw6dHc9eRa".to_string(),
+        );
         host.app_mapped(
             &app_id,
             domicile_host::Mapped {
@@ -579,5 +656,19 @@ mod tests {
                 HostMessage::FocusChanged { app_id: None },
             ]
         );
+    }
+
+    #[test]
+    fn the_idle_time_counts_whole_seconds_since_the_last_input() {
+        let (hub, _outbound, _) = hub_with_an_app();
+        let input = std::time::Instant::now();
+
+        hub.stirred(input);
+
+        assert_eq!(
+            hub.idle_time(input + Duration::from_millis(90_700)),
+            HostMessage::IdleTime { seconds: 90 }
+        );
+        assert_eq!(hub.idle_time(input), HostMessage::IdleTime { seconds: 0 });
     }
 }

@@ -12,6 +12,7 @@
 
 #include "base/callback_list.h"
 #include "base/functional/callback_forward.h"
+#include "base/functional/callback_helpers.h"
 #include "content/common/content_export.h"
 #include "ui/display/screen_infos.h"
 #include "ui/gfx/geometry/rect.h"
@@ -21,11 +22,15 @@ namespace ui {
 class Layer;
 }  // namespace ui
 
+namespace viz {
+class FrameSinkId;
+}  // namespace viz
+
 namespace content {
 
 class WebContents;
 
-// A lit display and its place on the desk, from the compositor's profile.
+// A display and its place on the desk, from the compositor's layout.
 //
 // With --domicile-one-page, //chrome/browser/domicile lays out the single desk
 // page from these. See docs/architecture/ONE-PAGE-FOR-THE-DESK.md.
@@ -34,13 +39,16 @@ struct DomicileDeskDisplay {
   // In the desk's logical pixels.
   gfx::Rect desk;
   float scale = 1.0f;
+  // False for a display that sleeps: dark, but keeping its place.
+  bool lit = true;
 
   friend bool operator==(const DomicileDeskDisplay&,
                          const DomicileDeskDisplay&) = default;
 };
 
-// Returns the lit displays from the compositor's last layout. Empty before
-// the first layout and on a blank. `std::nullopt` after an empty layout, which
+// Returns the displays on the desk from the compositor's last layout: the lit
+// ones, and the sleeping ones that keep their place. Empty before the first
+// layout and on a blank. `std::nullopt` after an empty layout, which
 // leaves every display where the hardware puts it (see docs/DISPLAYS.md).
 // Nested runs send an empty layout too.
 CONTENT_EXPORT std::optional<std::vector<DomicileDeskDisplay>>
@@ -84,6 +92,15 @@ class CONTENT_EXPORT DomicileDeskMirror {
 // Mirrors `page`, or returns `nullptr` if it has no view yet.
 CONTENT_EXPORT std::unique_ptr<DomicileDeskMirror> MirrorDomicileDeskPage(
     WebContents* page);
+
+// Makes `child`, a page's video in picture-in-picture, a child of `parent`,
+// the shell's frame sink that shows it, as Chrome's picture-in-picture window
+// makes it a child of its own compositor. The video's player then draws at
+// the desk's BeginFrames wherever its own page is. Returns what undoes it, or
+// nothing when `parent` is not registered (its renderer is gone).
+CONTENT_EXPORT base::ScopedClosureRunner AddDomicileFrameSinkChild(
+    const viz::FrameSinkId& parent,
+    const viz::FrameSinkId& child);
 
 }  // namespace content
 

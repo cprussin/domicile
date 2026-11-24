@@ -66,7 +66,7 @@ for _ in range(100):
 else:
     print("never listened")
     sys.exit()
-connection.sendall(b'{"protocol_version":1,"type":"hello"}\n')
+connection.sendall(b'{"checked":false,"protocol_version":1,"type":"hello"}\n')
 connection.settimeout(2)
 types = []
 try:
@@ -101,6 +101,7 @@ const host = {
   addEventListener: (name, fn) => {
     listeners[name] = [...(listeners[name] ?? []), fn];
   },
+  browserWindows: [],
   callSystem: () => undefined,
   dispatchEvent: (event) => {
     for (const fn of listeners[event.type] ?? []) {
@@ -109,6 +110,7 @@ const host = {
   },
   focusedWindow: null,
   highContrast: false,
+  openBrowserWindow: () => undefined,
   reducedMotion: false,
   removeEventListener: () => undefined,
   syncFrames: () => undefined,

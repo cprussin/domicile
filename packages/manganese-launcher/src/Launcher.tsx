@@ -76,8 +76,11 @@ import { useSettled } from "./useSettled";
 import { VideoPreview } from "./VideoPreview";
 import { WikipediaLogoIcon } from "./WikipediaLogoIcon";
 
-/** The box's placeholder and accessible name. */
+/** The box's accessible name. */
 const PROMPT = "Open an app, a file, a URL, or search";
+
+/** The box's placeholder: the prompt, naming a few tags so people find them. */
+const PLACEHOLDER = `${PROMPT}. Try !yt, !wiki or !gh.`;
 
 /**
  * How long the highlight must rest on a row before it is previewed. Long
@@ -344,7 +347,7 @@ const Query = ({
               }
             }
           }}
-          placeholder={PROMPT}
+          placeholder={PLACEHOLDER}
           prefixIcon={<MagnifyingGlassIcon size={ICON_SIZE} />}
           ref={box}
           role="combobox"
@@ -804,7 +807,13 @@ const ChoicePreview = ({
       // Keyed on the URL, so each bookmark gets its own guest and icons don't
       // leak between them.
       return (
-        <BookmarkPreview key={choice.url} onLearn={onLearn} url={choice.url} />
+        <BookmarkPreview
+          // Keyed on the profile too: a view reads it once.
+          key={`${choice.profile ?? ""} ${choice.url}`}
+          onLearn={onLearn}
+          profile={choice.profile}
+          url={choice.url}
+        />
       );
     }
     case ChoiceKind.Tag: {
@@ -837,7 +846,16 @@ const ChoicePreview = ({
  * A bookmark's page. Loads with the user's sign-in, so it can learn icons the
  * compositor's anonymous lookup can't see.
  */
-const BookmarkPreview = ({ onLearn, url }: { onLearn: Learn; url: string }) => {
+const BookmarkPreview = ({
+  onLearn,
+  profile,
+  url,
+}: {
+  onLearn: Learn;
+  /** The browser profile the bookmark opens in, so the preview is signed in as it will be. */
+  profile: string | undefined;
+  url: string;
+}) => {
   // `null` because React passes it to a callback ref on unmount.
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
 
@@ -859,7 +877,17 @@ const BookmarkPreview = ({ onLearn, url }: { onLearn: Learn; url: string }) => {
     }
   }, [onLearn, url, view]);
 
-  return <webview className={viewStyles} ref={setView} src={url} title={url} />;
+  // `profile` is read as the view enters the document, so it is on the first
+  // render, before `src`.
+  return (
+    <webview
+      className={viewStyles}
+      profile={profile}
+      ref={setView}
+      src={url}
+      title={url}
+    />
+  );
 };
 
 /** Whether `a` and `b` are valid URLs with the same origin. */
@@ -1072,6 +1100,7 @@ const logoOf = (engine: Engine): typeof FileIcon => {
     case Engine.GitHub: {
       return GithubLogoIcon;
     }
+    case Engine.Google:
     case Engine.GoogleImages:
     case Engine.GoogleMaps: {
       return GoogleLogoIcon;
@@ -1089,6 +1118,9 @@ const nameOf = (engine: Engine): string => {
   switch (engine) {
     case Engine.GitHub: {
       return "GitHub";
+    }
+    case Engine.Google: {
+      return "Google";
     }
     case Engine.GoogleImages: {
       return "Google Images";
@@ -1116,10 +1148,15 @@ const tagDoesOf = (engine: Engine | undefined): string =>
     : `Search ${nameOf(engine)}`;
 
 /** What adding a tag does, for its preview. */
-const tagUseOf = (engine: Engine | undefined): string =>
-  engine === undefined
-    ? "open sites and searches in a private browser"
-    : `search ${nameOf(engine)} instead of Google`;
+const tagUseOf = (engine: Engine | undefined): string => {
+  if (engine === undefined) {
+    return "open sites and searches in a private browser";
+  } else {
+    return engine === Engine.Google
+      ? "search Google and skip the other matches"
+      : `search ${nameOf(engine)} instead of Google`;
+  }
+};
 
 // The search box is the panel's header, set off by a line under it.
 const searchStyles = css({

@@ -24,7 +24,7 @@ host zwp_pointer_gestures ┴▶ engine ──▶ shell page ──▶ <app> ─
 |---|---|---|
 | Acquisition | engine `libinput_event_converter.cc`, `wayland_zwp_pointer_gestures.cc` (patch `0184`) | Turns libinput or host pinch into a `ui::GestureEvent` carrying `NativePinch`: phase, device, time, fingers, absolute scale, rotation, cancellation |
 | Page | engine `touchpad_pinch_event_queue.cc`, `mouse_wheel_event_manager.cc` | Keeps native pinches out of coalescing and page zoom. A canceled `wheel` claims the gesture for the shell |
-| Page zoom | engine `cross_process_frame_connector.cc`, `render_widget_host_view_aura.cc` (patch `0197`) | A pinch a `<webview>`'s page leaves alone magnifies that page. The desk never takes a plain pinch |
+| Page zoom | engine `cross_process_frame_connector.cc`, `render_widget_host_view_aura.cc` (patch `0197`) | A pinch a `<webview>`'s page leaves alone magnifies that page, unless the page is a PDF: its viewer zooms by re-rendering, and a page scale would pixelate it. The desk never takes a plain pinch |
 | Desk zoom | engine `render_widget_host_input_event_router.cc`, `event_factory_evdev.cc`, `wayland_event_source.cc` (patch `0197`) | A pinch begun with Meta held, or Meta+scroll, goes straight to the desk's page scale: no hit test and no synthetic ctrl+wheel, so no page or `<app>` sees it |
 | `<app>` | `html_app_element.cc` | Forwards the pinch to its client as `pointer_pinch` |
 | Wire | `domicile_protocol::pinch::Pinch` | `begin`, `update`, `end` |
@@ -113,9 +113,10 @@ Manganese binds `swipe:3:<way>` to `focus <way>`, pointing where focus goes,
 as Meta+H/J/K/L do. Four fingers move things: `swipe:4:left` and
 `swipe:4:right` are `workspace next_on_output` and `prev_on_output`, the
 workspace following the fingers, as do `edge:right` and `edge:left`, and
-`swipe:4:down` and `swipe:4:up` are `scratchpad bring` and `scratchpad hide`:
-the scratchpad hangs from the top of the screen, so it is pulled down and
-pushed back up. `pinch:4:inward` opens the overview and `pinch:4:outward`
+`swipe:4:down` and `swipe:4:up` are `layer down` and `layer up`: the
+scratchpad hangs above the desk and the overview sits under it, so up puts the
+scratchpad away or else opens the overview, and down closes the overview or
+else pulls the scratchpad down. `pinch:4:inward` opens the overview and `pinch:4:outward`
 closes it, zooming out to the workspaces and back in. `pinch:3:outward`, three
 fingers spreading, toggles the launcher.
 
@@ -144,9 +145,14 @@ fingers spreading, toggles the launcher.
   the app. The browser recognizes these, not a page, so the compositor picks
   the window from where the pointer is. A browser window under the pointer
   gets nothing: Chrome has no use for them.
-- **A shortcut inhibitor silences gesture bindings,** as it does keys, but the
-  window holding it does not get them yet: the engine takes the gesture before
-  it knows. See [KNOWN-GAPS.md](/docs/KNOWN-GAPS.md).
+- **A shortcuts inhibitor passes gesture bindings through,** as it does keys.
+  While the window with the keyboard holds one, each page tells
+  `DeskGestures` (`KeyboardWindowInhibitsShortcuts`), and its grabs take
+  nothing. A bound swipe or hold then goes the unbound way, to the window
+  under the pointer; a bound pinch goes to the page under the pointer and an
+  edge swipe to nobody, since neither is forwarded. The owner is picked at
+  the begin, so an inhibitor taken or let go mid-gesture changes nothing until
+  it ends.
 
 ## Plan
 

@@ -97,11 +97,26 @@ Usual causes:
   `DRM_FORMAT_ABGR8888` buffer here means that check did not apply
   ([A tty desktop in a virtio-gpu VM](HARDWARE-CHECKS.md#a-tty-desktop-in-a-virtio-gpu-vm)).
 
+### A monitor that lost a page flip
+
+    domicile: CRTC <id> never finished a page flip in 1000 ms; drawing on without it
+
+- The driver never sent the flip's event. A DisplayLink dock (`evdi`) does
+  this, and the kernel logs `flip_done timed out` 10 s later.
+- Patch `0203` gives up on the flip after 1 s, so the desk page and the other
+  monitors keep drawing.
+- That monitor stays still until the kernel lets the flip go, after its own
+  10 s wait. Its frames are skipped until then.
+- A commit that fails after a modeset, or 15 s after the flip was given up
+  on, is a real failure: that monitor stops drawing, and upstream's
+  `PageFlipWatchdog` restarts the GPU process unless a modeset comes first.
+
 ### Scanout and render cards can differ
 
 A GPU process that falls back to software on its own sends windows in memory
-once the engine says so: the compositor logs "the engine changed how it
-composites". A client that drew in dmabufs before then stays blank.
+once the engine says so: the compositor logs "fell back to software
+compositing" as an error and shows a "Graphics aren't working"
+notification. A client that drew in dmabufs before then stays blank.
 `DOMICILE_SOFTWARE_COMPOSITING=yes` composites on the CPU from the start
 ([Software output](architecture/A-DESKTOP-ON-A-TTY.md#software-output)).
 

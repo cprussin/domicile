@@ -8,7 +8,7 @@ import { PopoverContainer } from "@domicile-desktop/component-library/Popover";
 import { UnlockRefusal } from "@domicile-desktop/sdk/system";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { memo, useEffect, useRef, useState } from "react";
 
 import { css, cva } from "../styled-system/css";
@@ -64,9 +64,11 @@ type Props = {
  * It stays mounted and is `inert` while unlocked so it can fade in and out;
  * once faded it is `display: none`, so it never catches clicks on the desktop.
  *
- * While locked, focus stays in the field, since nothing else takes keys. A
- * control in `bar` works by pointer and gives the focus back. A panel it opens
- * draws over the sheet and keeps the focus until it closes.
+ * While locked, focus stays in the field, since nothing else takes keys. It is
+ * taken back from anything else on the page, and a key pressed with focus on
+ * nothing goes to it. A control in `bar` works by pointer and gives the focus
+ * back. A panel it opens draws over the sheet and keeps the focus until it
+ * closes.
  *
  * Nothing dismisses it except unlocking: not Escape, an outside click or
  * submit. That is why it does not use `ModalDialog`.
@@ -103,6 +105,13 @@ export const Lock = memo(
       }
     }, [locked]);
 
+    // While locked, keep the keyboard in the field against the rest of the
+    // page too, which lies under the sheet.
+    useEffect(
+      () => (locked ? holdKeyboard(field, panels) : undefined),
+      [locked, panels],
+    );
+
     // Clear the field on a refusal, so a wrong guess is not left on a locked
     // screen.
     useEffect(() => {
@@ -118,12 +127,6 @@ export const Lock = memo(
       <div
         className={sheetStyles}
         inert={!locked}
-        // Take the focus back from a slider, which focuses itself on a click.
-        onFocus={(event) => {
-          if (!keepsFocus(event.target, field.current, panels)) {
-            field.current?.focus();
-          }
-        }}
         // Keep focus in the field. The button still submits on click, and Tab has
         // nowhere else to go.
         onKeyDown={(event) => {
@@ -157,7 +160,7 @@ export const Lock = memo(
           data-lock-content=""
           style={useScreenRegion(screen)}
         >
-          <LockClock />
+          <LockClock locked={locked} />
           <div className={entryStyles}>
             <form
               className={formStyles({ shaken: shaken(refusals), wrong })}
@@ -461,9 +464,43 @@ const refusalStyles = css({
   textShadow: "textOverPhoto",
 });
 
+/**
+ * Puts focus back in `field` whenever it lands anywhere else on the page, and
+ * before each key pressed with focus on nothing, so the key types into it.
+ * Returns a function that stops.
+ *
+ * Focus that lands elsewhere is taken back once that focus change has
+ * finished, not from inside it. Focusing the field from `focusin` re-enters
+ * the change: when it was a `<webview>` taking focus, the engine then hands
+ * its page the focus after the field took it, and the field holds the keys
+ * without being drawn focused.
+ */
+const holdKeyboard = (
+  field: RefObject<HTMLInputElement | null>,
+  panels: HTMLDivElement | null,
+): (() => void) => {
+  const reclaim = () => {
+    if (!keepsFocus(document.activeElement, field.current, panels)) {
+      field.current?.focus();
+    }
+  };
+  let pending: ReturnType<typeof setTimeout> | undefined;
+  const onFocusIn = () => {
+    clearTimeout(pending);
+    pending = setTimeout(reclaim);
+  };
+  document.addEventListener("focusin", onFocusIn, true);
+  window.addEventListener("keydown", reclaim, true);
+  return () => {
+    clearTimeout(pending);
+    document.removeEventListener("focusin", onFocusIn, true);
+    window.removeEventListener("keydown", reclaim, true);
+  };
+};
+
 /** Whether focus may stay on `target`: the field, or a panel the bar opened. */
 const keepsFocus = (
-  target: EventTarget,
+  target: EventTarget | null,
   field: HTMLInputElement | null,
   panels: HTMLDivElement | null,
 ): boolean =>

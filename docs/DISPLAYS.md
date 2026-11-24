@@ -55,15 +55,21 @@ all plugged in wins. This is kanshi's model.
   places unnamed connectors (`OriginsForLayout`).
 - `scale` is fractional. `wl_output` sends it rounded up, and `xdg_output`
   reports the real logical size.
-- `mode = [W, H]` asserts the monitor's mode. Positions add up mode sizes, so a
-  different mode would shift every display after it. `Layout::of` rejects a
-  mismatch with `ConfigError::Validation`, and a reload keeps the running
-  desktop.
-- A profile cannot request a mode. Each connector scans out its own
-  `native_mode()`. Supporting this needs a field on `DomicileDisplayLayout` and
-  a mode lookup in `drm_modeset.cc`.
-- `mode` has no refresh rate. A rate changes no layout math, cannot be chosen,
-  and some monitors report none.
+- `mode = [W, H]` asks for a mode, and `refresh` (Hz) for a rate. The layout
+  is made at the requested mode, so positions that add up mode sizes come out
+  as written. `Layout::of` refuses a size the monitor does not advertise with
+  `ConfigError::Validation`, naming the ones it does, and a reload keeps the
+  running desktop.
+- The engine picks the mode in `ModeForLayout` (`drm_screen.cc`), as sway's
+  `output mode` does: among the advertised modes of the size asked for (the
+  native size when only `refresh` is given), the rate nearest `refresh`, or
+  with none the native mode at the native size and the fastest at any other.
+  Progressive modes win over interlaced ones. A size it does not advertise
+  falls back to native. The modeset and the display list both use it, so the
+  window still matches its CRTC.
+- An engine reporting no modes (one older than `moded_displays`, or a nested
+  desktop) cannot set one. There `mode` is a check, as it used to be: the
+  profile applies only while the monitor is at it.
 
 ## Which connectors light
 
@@ -84,6 +90,9 @@ Rules:
   `Screens::from_the_engine` advertises it.
 - **Blank:** every connector listed with `enabled: false`. The desk stays as it
   was ([IDLE.md](IDLE.md)).
+- **A sleeping connector** is listed with `enabled: false` and a `desk`. It
+  keeps its place on the desk page but shows nothing
+  ([IDLE.md](IDLE.md#one-monitor)).
 - **A connector turned off is modeset with no mode**, which turns its CRTC off.
   Left out of the modeset, it would keep scanning out its last frame.
 - **Non-empty layout:** a connector the layout does not name is turned off. This
@@ -207,10 +216,11 @@ window so each can rotate and scale on its own.
 
 Each display gets its own browser window, and one shell page spans them all:
 [ONE-PAGE-FOR-THE-DESK.md](architecture/ONE-PAGE-FOR-THE-DESK.md). On a
-hotplug, `ShellWindows` opens new windows before closing old ones and never
-closes the last window, since that would exit the browser. A new host's window
-is created asynchronously, so `ShellWindows` reconciles again once it exists
-to watch its page.
+hotplug, sleep or wake that moves the host, `ShellWindows` moves the host's
+window to the new host rather than reopening it, which would reload the shell.
+It opens new windows before closing old ones and never closes the last window,
+since that would exit the browser. A new window is created asynchronously, so
+`ShellWindows` reconciles again once it exists to watch its page.
 
 ## Monitor names
 
@@ -223,6 +233,7 @@ A monitor's `wl_output` name is:
 A profile's `display` matches any of:
 
 - the `wl_output` name;
+- the connector, `DP-1`;
 - the description, `"<MAKE> <MODEL> <SERIAL>"`, as kanshi and sway use;
 - the description with the maker's full name.
 
@@ -259,9 +270,96 @@ code and the compositor logs one line at startup.
   `display::kInchInMm`.
 - `DomicileDisplay` carries both fields. Zero means unknown, as in
   `wl_output`.
-- `DisplayList::UpdateDisplay` does not copy either field. This is safe: the
-  display id comes from the EDID, so the same id is the same panel, with the
-  same size and native mode.
+- `DisplayList::UpdateDisplay` does not copy either field, and a profile can
+  change a listed monitor's mode. So `DrmScreen::panels`, lent through
+  `OzonePlatform::GetDomicilePanels`, carries each display's advertised modes,
+  the rate it scans out at and its millimeters, and `DisplayListFor` takes
+  them over the `display::Display`'s own.
+- The modes reach the compositor through `moded_displays`
+  (`DomicileModedDisplay`), and a profile's mode and rate go back through
+  `domicile_displays_configure_modes`. The rate reaches `wl_output.mode` and
+  the SDK's `Display.refreshMhz`.
+- `DisplayList` notices neither a new rate nor a new adaptive sync state, so
+  `DrmScreen` tells the display observers itself when a panel's changed
+  (`PanelChangedUnseen`). Otherwise a modeset that changed only those would
+  never reach the compositor.
+
+## Adaptive sync
+
+A profile entry with `"adaptive_sync": true` asks for a variable refresh rate
+(adaptive sync, FreeSync, G-Sync Compatible): a frame that runs late is shown
+as soon as it is ready rather than at the next fixed refresh. It is off by
+default.
+
+- `DrmModeset` asks for it, as `DisplayConfigurationParams::enable_vrr`, only
+  where the snapshot says the connector can: the connector has `vrr_capable`
+  and the EDID gives a minimum rate. Chromium's DRM platform then sets the
+  CRTC's `VRR_ENABLED` in the modeset commit.
+- A modeset that asked for it and was refused is asked again without it, as
+  sway does. That monitor is not asked again until it is unplugged
+  (`DrmModeset::adaptive_sync_refused_`).
+- What a display reports is what the hardware says, read off the CRTC when
+  the displays are read, not what was asked for. A modeset that turns it on
+  or off reads the displays again so the report follows.
+- It reaches the compositor through `adaptive_displays`
+  (`DomicileAdaptiveDisplay`), and the request goes back through
+  `domicile_displays_configure_adaptive`. The shell sees it as
+  `Display.adaptiveSync`: `unsupported`, `off` or `on`.
+- The browser still draws at the monitor's nominal rate. Adaptive sync helps
+  when a frame is late, not by drawing at a lower rate when nothing moves.
+
+## Bit depth
+
+A panel scans out in 10 bits a channel when its EDID reports at least 10 and
+its planes take `XB30` or `XR30`; otherwise in 8. There is no setting.
+
+- The browser draws its frames in `RGBA_1010102` (or `BGRA_1010102` on planes
+  with only `XR30`) (`DrawInTenBitsWhereThePanelTakesThem` in
+  `drm_screen.cc`).
+- `DrmDisplay` raises the connector's `max bpc` to 10, so the link carries
+  10 bits instead of a dithered 8 (patch `0210`).
+- `ten_bit_scanout.cc` decides both. The plan for HDR on top of it:
+  [COLOR.md](/docs/architecture/COLOR.md).
+
+## HDR
+
+A profile entry with `"hdr": true` drives that monitor in HDR10: BT.2020
+primaries with the PQ curve. It is off by default, and `sdr_white` sets how
+bright SDR content's white is there (203 cd/m², BT.2408's reference white, if
+absent).
+
+- A monitor takes it when its EDID's HDR static metadata lists PQ and it
+  scans out in 10 bits ([above](#bit-depth)). `hdr_output.cc` decides, and
+  `DrmModeset` and `DrmScreen` both ask it, so the GPU process and the browser
+  agree.
+- `DrmModeset` asks for it as `DisplayConfigurationParams::domicile_hdr`. Once
+  the modeset commits, `DrmDisplay::DomicileSetHdr` sets the connector's
+  `Colorspace` to BT.2020 RGB, its `HDR_OUTPUT_METADATA` to PQ with the
+  panel's luminances, and the planes' output primaries to the panel's (patch
+  `0216`). Upstream does this only on ChromeOS, from the snapshot's color
+  space.
+- `DrmScreen` gives the display HDR10 color spaces with SDR white at
+  `sdr_white` and headroom up to the panel's peak (`HdrColorSpaces`), so viz
+  composites in PQ and maps SDR content to that white. A panel that reports
+  no peak is taken to reach 1000 cd/m².
+- It reaches the compositor through `hdr_displays` (`DomicileHdrDisplay`):
+  `unsupported`, `off` or `on`, the panel's luminances, and the SDR white in
+  use. The request goes back through `domicile_displays_configure_hdr`.
+- The shell sees it as `Display.hdr` (`unsupported`, `off` or `on`),
+  `Display.peakLuminance` (cd/m², zero when the EDID reports none) and
+  `Display.sdrWhite` (cd/m² while on, zero otherwise).
+
+## DisplayLink docks
+
+- `evdi` hands DisplayLinkManager each page flip's `FB_DAMAGE_CLIPS`, and it
+  compresses that rect on the CPU. Its load follows how much of the screen
+  changes.
+- Each flip names its own frame's damage, on its plane's own device (patch
+  `0204`). Upstream sent no clip without ChromeOS's PSR2 flag, so evdi marked
+  the whole screen changed on every flip.
+- No gamma table, so the night light is a color matrix
+  ([below](#with-no-gamma-table)), and `wlr-gamma-control` clients are refused.
+- Planes take only 8-bit formats, so a dock's monitors scan out in 8 bits.
 
 ## Night light and gamma control
 
@@ -290,17 +388,60 @@ zwlr_gamma_control_v1.set_gamma            ─┴→  gamma::Ramps  →  domicil
 
 - `kelvin` is 1000 to 6500. 6500 is neutral: an identity ramp. An empty
   curve would leave the last ramp on the CRTC.
+- A new night light fades in from the one drawn
+  (`domicile-compositor/src/night_light.rs`), on ramps and color matrices
+  alike. The fade takes 2.5 s per whole step of the gain that changes most:
+  about 1.5 s to switch on at 3000 K, a few frames for each 15 s step of a
+  schedule's ease. The compositor sends a ramp or matrix every 16 ms during a
+  fade and nothing between fades. A `wlr-gamma-control` client's ramp is
+  drawn as it sets it.
 - A gamma ramp, not a color matrix, so it works on drivers without a CTM.
 - A client is told the CRTC's own ramp size: `GAMMA_LUT_SIZE`, or the legacy
   ramp's. The GPU process reads it into each display's report
   (`DomicileRampedDisplay.gamma_size`).
-- A monitor with no gamma gets `failed` at once: a DisplayLink dock, a nested
-  or headless desktop. So does a client whose monitor is unplugged.
+- A client on a monitor with no gamma gets `failed` at once: a DisplayLink
+  dock, a nested or headless desktop. So does a client whose monitor is unplugged.
 - A table that isn't three ramps of the advertised size is the
   `invalid_gamma` protocol error. The fd is read without waiting, as wlroots
   does.
+- A lit monitor takes a new ramp with its next page flip (patch 0161). So
+  the broker then redraws the browser window showing that monitor
+  (`RedrawDisplay`), and a still screen warms at once rather than when
+  something next changes.
 - `DrmModeset` sets each monitor's ramp again after each modeset, so a VT
   switch or resume keeps it. The compositor sends every ramp again after each
   display report, which covers a hotplug and an engine restart.
+
+### With no gamma table
+
+A monitor on a connector whose CRTC has no gamma (`GAMMA_LUT_SIZE` 0, as
+`evdi` on a DisplayLink dock) draws its night light through the color matrix
+[below](#in-hdr), as in HDR. A display on no connector (nested) is left to the
+host compositor.
+
+The cursor plane skips that matrix, and a white pointer on a warm screen looks
+blue. So the pointer on a monitor drawn through a matrix, with no gamma or in
+HDR, is warmed by the matrix's gains (patch `0269`): the broker sends them with each matrix
+(`OzonePlatform::SetDomicileCursorTint`), and `DrmCursor` scales the pointer
+image's encoded channels by their 2.2nd roots, as a ramp would. The broker
+refuses a matrix whose diagonal is outside 0 to 1. On every other monitor the
+CRTC's ramp warms the cursor plane with the rest.
+
+### In HDR
+
+A ramp scales the values the CRTC sends, and in HDR those are PQ-encoded, so
+a ramp there would bend the curve the panel decodes rather than warm the
+light. So a monitor driven in HDR:
+
+- keeps an identity ramp, and draws its night light through a color matrix
+  instead: `domicile_displays_set_color_matrix` → `FrameSinkBroker.SetColorMatrix`
+  → `ui::Compositor::SetDisplayColorMatrix` on the browser window showing it.
+  Viz applies it to the whole frame in linear light (patch `0217`). Each gain
+  is the ramp's raised to 2.2, so the night light looks the same in HDR as
+  in SDR.
+- refuses `wlr-gamma-control` clients with `failed`, since their ramps assume
+  SDR. A client holding a monitor when it goes into HDR is let go the same way.
+- Every other monitor draws through the identity matrix, so leaving HDR
+  undoes the night light's matrix.
 - A nested desktop does nothing: the host compositor owns the screen.
 - Sandboxed apps don't see the global.

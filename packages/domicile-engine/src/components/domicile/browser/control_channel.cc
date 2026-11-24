@@ -14,16 +14,20 @@
 
 #include "base/base64.h"
 #include "base/check.h"
+#include "base/containers/flat_map.h"
 #include "base/command_line.h"
+#include "base/dcheck_is_on.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/task/bind_post_task.h"
 #include "base/values.h"
 #include "components/domicile/browser/desk_lock.h"
 #include "components/domicile/browser/desk_pointer_hiding.h"
+#include "components/domicile/browser/input_method_lines.h"
 #include "components/domicile/browser/portal_request.h"
 #include "components/domicile/browser/shell_swap.h"
 #include "components/domicile/browser/system_call.h"
@@ -35,6 +39,18 @@
 
 namespace domicile {
 namespace {
+
+// Storage for SetBrowserProfilesSink's callback.
+BrowserProfilesSink& BrowserProfilesSlot() {
+  static base::NoDestructor<BrowserProfilesSink> sink;
+  return *sink;
+}
+
+// Storage for SetSpellcheckSink's callback.
+SpellcheckSink& SpellcheckSlot() {
+  static base::NoDestructor<SpellcheckSink> sink;
+  return *sink;
+}
 
 // The read buffer. One message is a line of JSON; this is sized for a batch of
 // them rather than for the largest one, because the remainder is carried across
@@ -146,6 +162,32 @@ mojom::GesturePhase GesturePhaseToMojo(ui::NativeGesturePhase phase) {
   NOTREACHED();
 }
 
+TapModifier TapModifierFromMojo(mojom::TapModifier modifier) {
+  switch (modifier) {
+    case mojom::TapModifier::kAlt:
+      return TapModifier::kAlt;
+    case mojom::TapModifier::kCtrl:
+      return TapModifier::kCtrl;
+    case mojom::TapModifier::kShift:
+      return TapModifier::kShift;
+    case mojom::TapModifier::kMeta:
+      return TapModifier::kMeta;
+  }
+}
+
+mojom::TapModifier TapModifierToMojo(TapModifier modifier) {
+  switch (modifier) {
+    case TapModifier::kAlt:
+      return mojom::TapModifier::kAlt;
+    case TapModifier::kCtrl:
+      return mojom::TapModifier::kCtrl;
+    case TapModifier::kShift:
+      return mojom::TapModifier::kShift;
+    case TapModifier::kMeta:
+      return mojom::TapModifier::kMeta;
+  }
+}
+
 GestureGrab GestureGrabFromMojo(const mojom::GestureGrab& grab) {
   return GestureGrab{GestureKindFromMojo(grab.kind), grab.fingers,
                      GestureEdgeFromMojo(grab.edge)};
@@ -158,6 +200,7 @@ ControlChannel::ControlChannel(
     mojo::PendingReceiver<mojom::ControlChannel> receiver,
     KeymapSink keymap_sink,
     PointerWarpSink warp_sink,
+    PointerConfineSink confine_sink,
     ThemeSink theme_sink,
     ExtensionsSink extensions_sink,
     CursorThemeSink cursor_theme_sink,
@@ -166,13 +209,15 @@ ControlChannel::ControlChannel(
     : socket_path_(socket_path),
       keymap_sink_(std::move(keymap_sink)),
       warp_sink_(std::move(warp_sink)),
+      confine_sink_(std::move(confine_sink)),
       theme_sink_(std::move(theme_sink)),
       extensions_sink_(std::move(extensions_sink)),
       cursor_theme_sink_(std::move(cursor_theme_sink)),
       force_dark_sink_(std::move(force_dark_sink)),
+      page_(page),
       receiver_(this, std::move(receiver)),
-      read_buffer_(base::MakeRefCounted<net::IOBufferWithSize>(
-          kReadBufferSize)) {
+      read_buffer_(
+          base::MakeRefCounted<net::IOBufferWithSize>(kReadBufferSize)) {
   // The page going away takes this with it; nothing else owns it.
   receiver_.set_disconnect_handler(
       base::BindOnce([](ControlChannel* self) { delete self; },
@@ -192,25 +237,42 @@ ControlChannel::ControlChannel(
   activity_ = DeskActivity::Get().AddListener(
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::SomebodyIsHere, weak_factory_.GetWeakPtr())));
+  faults_ = DeskFaults::Get().AddListener(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &ControlChannel::FaultFound, weak_factory_.GetWeakPtr())));
   gestures_ = DeskGestures::Get().AddChannel(
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::DeliverGesture, weak_factory_.GetWeakPtr())),
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::ForwardGesture, weak_factory_.GetWeakPtr())));
+  taps_ = DeskModifierTaps::Get().AddChannel(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &ControlChannel::DeliverModifierTap, weak_factory_.GetWeakPtr())));
   pointer_ = DeskPointer::Get().AddListener(
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::DeskPointerMoved, weak_factory_.GetWeakPtr())));
   cursor_ = ui::DeskCursorImageSource::Get().AddListener(
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::DeskCursorChanged, weak_factory_.GetWeakPtr())));
+  // The field is changed and a key typed on the UI thread, where the window's
+  // input method is; both are posted here like the registry's deliveries.
+  input_method_ = ui::DeskInputMethod::Get().AddChannel(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &ControlChannel::SendTextField, weak_factory_.GetWeakPtr())),
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &ControlChannel::SendKeyForInputMethod,
+          weak_factory_.GetWeakPtr())));
   give_up_at_ = base::TimeTicks::Now() + kReachFor;
   Connect();
 }
 
 ControlChannel::~ControlChannel() {
+  ui::DeskInputMethod::Get().RemoveChannel(input_method_);
   ui::DeskCursorImageSource::Get().RemoveListener(cursor_);
   DeskPointer::Get().RemoveListener(pointer_);
+  DeskModifierTaps::Get().RemoveChannel(taps_);
   DeskGestures::Get().RemoveChannel(gestures_);
+  DeskFaults::Get().RemoveListener(faults_);
   DeskActivity::Get().RemoveListener(activity_);
   ShortcutRegistry::Get().RemoveChannel(channel_);
 }
@@ -241,6 +303,8 @@ void ControlChannel::OnConnect(int result) {
   base::DictValue hello;
   hello.Set("type", "hello");
   hello.Set("protocol_version", kProtocolVersion);
+  // A checked build is much slower; the compositor tells the person.
+  hello.Set("checked", DCHECK_IS_ON());
   std::vector<std::string> greeting;
   std::string line;
   if (base::JSONWriter::Write(hello, &line)) {
@@ -267,6 +331,9 @@ void ControlChannel::OnConnect(int result) {
 
 void ControlChannel::OnHungUp() {
   connected_ = false;
+  // The input method went with the compositor. A key held for it is never
+  // passed back, so the window's next key is no longer held behind it.
+  ui::DeskInputMethod::Get().SetComposing(false);
   if (writing_) {
     RequeueTheLineInFlight();
   }
@@ -423,6 +490,24 @@ mojom::WindowOwnerPtr OwnerOf(const base::DictValue* owner) {
                                  SandboxOf(owner->FindDict("sandbox")));
 }
 
+// A client's own cursor image from `app_cursor`'s `image`, or null for none or
+// one missing a part. A PNG is passed on as the compositor encoded it; the
+// page's cursor decodes it, as it does any CSS cursor image.
+mojom::AppCursorImagePtr CursorImageOf(const base::DictValue* image) {
+  if (!image) {
+    return nullptr;
+  }
+  const std::string* png = image->FindString("png");
+  const base::ListValue* hotspot = image->FindList("hotspot");
+  const std::optional<int> scale = image->FindInt("scale");
+  if (!png || !hotspot || hotspot->size() != 2 || !(*hotspot)[0].is_int() ||
+      !(*hotspot)[1].is_int() || !scale || *scale < 1) {
+    return nullptr;
+  }
+  return mojom::AppCursorImage::New(*png, (*hotspot)[0].GetInt(),
+                                    (*hotspot)[1].GetInt(), *scale);
+}
+
 // A message's synced `frame`, 0 when absent. A whole number from base::Value
 // is a signed int, which a frame counted at 60 a second fills in a year.
 uint32_t FrameOf(const base::DictValue& message) {
@@ -483,6 +568,15 @@ mojom::DisplayTransform TransformNamed(const std::string* named) {
   }
   return DisplayTransformFromWire<mojom::DisplayTransform>(*named).value_or(
       mojom::DisplayTransform::kNormal);
+}
+
+// The wire's adaptive sync or HDR state, or `unsupported` for one this
+// browser has no name for, which asks nothing of a shell.
+std::string SupportNamed(const std::string* named) {
+  if (named && (*named == "off" || *named == "on")) {
+    return *named;
+  }
+  return "unsupported";
 }
 
 // `key` in `message`, if it is a list of strings and nothing else. One entry
@@ -556,6 +650,14 @@ void ControlChannel::CopyClipboardEntry(uint32_t entry) {
   SendMessage(std::move(message));
 }
 
+// An id, as CopyClipboardEntry's is: a page can forget a copy but not name one
+// that was never made.
+void ControlChannel::RemoveClipboardEntry(uint32_t entry) {
+  base::DictValue message = Typed("remove_clipboard_entry");
+  message.Set("entry", static_cast<int>(entry));
+  SendMessage(std::move(message));
+}
+
 // An icon and a button, and nothing about what the click does: that is the
 // application's. The wire names are `domicile_protocol::TrayAction`'s.
 void ControlChannel::ActivateTrayItem(const std::string& id,
@@ -622,6 +724,14 @@ void ControlChannel::WarpPointer(double x,
                                  double y,
                                  const std::optional<gfx::RectF>& unless_over) {
   warp_sink_.Run(x, y, unless_over);
+}
+
+// Nothing is sent, for WarpPointer's reason. The answer comes back from the UI
+// thread, and the page's callback must run on this one.
+void ControlChannel::ConfinePointer(const std::vector<gfx::RectF>& boxes,
+                                    ConfinePointerCallback confined) {
+  confine_sink_.Run(boxes,
+                    base::BindPostTaskToCurrentDefault(std::move(confined)));
 }
 
 // Nothing is sent, for WarpPointer's reason: the compositor does not swap
@@ -733,6 +843,25 @@ void ControlChannel::UngrabGesture(mojom::GestureGrabPtr grab) {
   DeskGestures::Get().Ungrab(gestures_, GestureGrabFromMojo(*grab));
 }
 
+void ControlChannel::GrabModifierTap(mojom::TapModifier modifier,
+                                     bool while_inhibited,
+                                     base::TimeDelta longest) {
+  // Recorded here, for GrabGesture's reason: aura sees every key in this
+  // process, and a modifier alone means nothing to the compositor.
+  DeskModifierTaps::Get().Grab(taps_, TapModifierFromMojo(modifier),
+                               while_inhibited, longest);
+}
+
+void ControlChannel::UngrabModifierTap(mojom::TapModifier modifier) {
+  DeskModifierTaps::Get().Ungrab(taps_, TapModifierFromMojo(modifier));
+}
+
+void ControlChannel::KeyboardWindowInhibitsShortcuts(bool inhibits) {
+  // Recorded here, for GrabGesture's reason.
+  DeskGestures::Get().SetInhibited(gestures_, inhibits);
+  DeskModifierTaps::Get().SetInhibited(taps_, inhibits);
+}
+
 void ControlChannel::Key(const std::string& app_id,
                          uint32_t keycode,
                          bool pressed) {
@@ -750,6 +879,26 @@ void ControlChannel::PointerMotion(const std::string& app_id,
   message.Set("x", x);
   message.Set("y", y);
   message.Set("moved", moved);
+  SendMessage(std::move(message));
+}
+
+void ControlChannel::PointerRelative(const std::string& app_id,
+                                     double dx,
+                                     double dy,
+                                     double dx_unaccel,
+                                     double dy_unaccel) {
+  base::DictValue message = ForApp("pointer_relative", app_id);
+  message.Set("dx", dx);
+  message.Set("dy", dy);
+  message.Set("dx_unaccel", dx_unaccel);
+  message.Set("dy_unaccel", dy_unaccel);
+  SendMessage(std::move(message));
+}
+
+void ControlChannel::PointerConstrained(const std::string& app_id,
+                                        bool active) {
+  base::DictValue message = ForApp("pointer_constrained", app_id);
+  message.Set("active", active);
   SendMessage(std::move(message));
 }
 
@@ -933,6 +1082,13 @@ void ControlChannel::DeliverGesture(const ui::NativeGesture& gesture) {
   }
 }
 
+void ControlChannel::DeliverModifierTap(TapModifier modifier,
+                                        base::TimeDelta held) {
+  if (client_) {
+    client_->ModifierTapped(TapModifierToMojo(modifier), held);
+  }
+}
+
 void ControlChannel::ForwardGesture(const ui::NativeGesture& gesture) {
   if (!connected_) {
     return;
@@ -984,6 +1140,12 @@ void ControlChannel::SomebodyIsHere(const std::string& input) {
   }
 }
 
+void ControlChannel::FaultFound(const std::string& what) {
+  base::DictValue message = Typed("engine_fault");
+  message.Set("what", what);
+  SendMessage(std::move(message));
+}
+
 void ControlChannel::DeskPointerMoved(const DeskPointerAt& at) {
   if (!connected_) {
     return;
@@ -1012,6 +1174,18 @@ void ControlChannel::DeskPointerMoved(const DeskPointerAt& at) {
 void ControlChannel::DeskCursorChanged(const ui::DeskCursorImage& image) {
   if (connected_) {
     SendMessage(DeskCursorMessage(image));
+  }
+}
+
+void ControlChannel::SendTextField(const ui::DeskTextField& field) {
+  if (connected_) {
+    SendMessage(TextInputMessage(field));
+  }
+}
+
+void ControlChannel::SendKeyForInputMethod(uint32_t evdev_code, bool pressed) {
+  if (connected_) {
+    SendMessage(KeyForInputMethodMessage(evdev_code, pressed));
   }
 }
 
@@ -1117,13 +1291,53 @@ void ControlChannel::DispatchLine(const std::string& line,
         Strings(message, "web_store");
     std::optional<std::vector<std::string>> unpacked =
         Strings(message, "unpacked");
-    if (web_store && unpacked) {
+    const base::DictValue* settings_value = message.FindDict("settings");
+    std::optional<ExtensionSettingsMap> settings =
+        settings_value == nullptr
+            ? std::nullopt
+            : ParseExtensionSettings(*settings_value);
+    // `private` is a private browser profile's switch, not the config's
+    // (ExtensionsFor), so a compositor that sends it is out of date.
+    if (settings && std::ranges::any_of(*settings, [](const auto& entry) {
+          return entry.second.in_private.has_value();
+        })) {
+      settings.reset();
+    }
+    if (web_store && unpacked && settings) {
       extensions_sink_.Run(ExtensionList{.web_store = std::move(*web_store),
-                                         .unpacked = std::move(*unpacked)});
+                                         .unpacked = std::move(*unpacked),
+                                         .settings = std::move(*settings)});
     } else {
       LOG(ERROR) << "domicile: the compositor sent an `extensions` message "
-                    "whose `web_store` or `unpacked` is not a list of "
-                    "strings. The profile keeps the extensions it had.";
+                    "whose `web_store` or `unpacked` is not a list of strings, "
+                    "or whose `settings` are not extensions' settings (a "
+                    "`private` one is a private browser profile's switch "
+                    "now). The profile keeps the extensions it had.";
+    }
+    return;
+  }
+
+  // For this process too, like `extensions`: the desk's browser profiles,
+  // which the profile this page is in makes into Chrome profiles. See
+  // chrome/browser/domicile/domicile_browser_profiles.h. Logged when
+  // malformed, for `extensions`' reason: dropped quietly, every page would
+  // open in the profiles it had and nothing would say why.
+  if (*type == "browser_profiles") {
+    std::optional<BrowserProfiles> profiles = ParseBrowserProfiles(message);
+    if (!profiles) {
+      LOG(ERROR) << "domicile: the compositor sent a `browser_profiles` "
+                    "message that does not describe browser profiles, or "
+                    "names a default, a private default or a site's profile "
+                    "it does not list. Pages keep the profiles they had.";
+    } else if (BrowserProfilesSlot().is_null()) {
+      // //chrome sets the sink before the shell can bind a channel, so this
+      // is an engine built without it, and every page would open in the
+      // shell's profile with nothing saying why.
+      LOG(ERROR) << "domicile: the compositor sent `browser_profiles` and "
+                    "this engine has nowhere to put them. Every page opens in "
+                    "the default profile.";
+    } else {
+      BrowserProfilesSlot().Run(page_, *profiles);
     }
     return;
   }
@@ -1138,6 +1352,62 @@ void ControlChannel::DispatchLine(const std::string& line,
       LOG(ERROR) << "domicile: the compositor sent a `force_dark` message "
                     "whose `sites` is not a list of strings. Pages keep the "
                     "sites they had.";
+    }
+    return;
+  }
+
+  // For this process too, like `force_dark`: how the browser's profiles check
+  // spelling. See chrome/browser/domicile/domicile_spellcheck.h.
+  if (*type == "spellcheck") {
+    const std::optional<bool> enabled = message.FindBool("enabled");
+    std::optional<std::vector<std::string>> languages =
+        Strings(message, "languages");
+    if (!enabled || !languages) {
+      LOG(ERROR) << "domicile: the compositor sent a `spellcheck` message "
+                    "whose `enabled` is not true or false, or whose "
+                    "`languages` is not a list of strings. Spelling is "
+                    "checked as it was.";
+    } else if (SpellcheckSlot().is_null()) {
+      // //chrome sets the sink before the shell can bind a channel, as
+      // `browser_profiles`'.
+      LOG(ERROR) << "domicile: the compositor sent `spellcheck` and this "
+                    "engine has nowhere to put it. Spelling is checked as it "
+                    "was.";
+    } else {
+      SpellcheckSlot().Run(SpellcheckSettings{
+          .enabled = *enabled, .languages = std::move(*languages)});
+    }
+    return;
+  }
+
+  // THE INPUT METHOD'S, for this process like `keymap`: the compositor is
+  // the editor of the field focused in it on the desk's input method. Every
+  // page's channel hears these, and the desk's input method keeps the first
+  // of each serial. See ui/base/ime/domicile/desk_input_method.h. Nothing
+  // goes on to the page: what was composed reaches it as typing.
+  if (*type == "input_method") {
+    if (const std::optional<bool> composing = message.FindBool("composing")) {
+      ui::DeskInputMethod::Get().SetComposing(*composing);
+    }
+    return;
+  }
+  if (*type == "composition") {
+    if (std::optional<HeardComposition> heard = ReadComposition(message)) {
+      ui::DeskInputMethod::Get().Compose(heard->serial,
+                                         std::move(heard->composition));
+    } else {
+      LOG(ERROR) << "domicile: the compositor sent a `composition` this "
+                    "engine cannot read; the field misses that much typing.";
+    }
+    return;
+  }
+  if (*type == "key_passed") {
+    if (const std::optional<PassedKey> passed = ReadPassedKey(message)) {
+      ui::DeskInputMethod::Get().PassKey(passed->serial, passed->evdev_code,
+                                         passed->pressed);
+    } else {
+      LOG(ERROR) << "domicile: the compositor sent a `key_passed` this "
+                    "engine cannot read; that key is lost.";
     }
     return;
   }
@@ -1206,13 +1476,30 @@ void ControlChannel::DispatchLine(const std::string& line,
     const base::ListValue* size = message.FindList("size");
     const std::optional<bool> dialog = message.FindBool("dialog");
     const std::optional<bool> client_frame = message.FindBool("client_frame");
-    if (size && size->size() == 2u && dialog && client_frame) {
+    const std::string* toplevel_id = message.FindString("toplevel_id");
+    if (size && size->size() == 2u && dialog && client_frame && toplevel_id) {
       client_->AppAppeared(*app_id, title ? *title : std::string(),
                            desktop_id ? *desktop_id : std::string(),
                            Number((*size)[0]), Number((*size)[1]), *dialog,
                            *client_frame, OwnerOf(message.FindDict("owner")),
-                           FrameOf(message));
+                           *toplevel_id, FrameOf(message));
     }
+    return;
+  }
+
+  if (*type == "browser_toplevel_ids") {
+    const base::DictValue* listed = message.FindDict("toplevel_ids");
+    if (!listed) {
+      return;
+    }
+    base::flat_map<std::string, std::string> toplevel_ids;
+    for (const auto [window, toplevel_id] : *listed) {
+      if (!toplevel_id.is_string()) {
+        return;
+      }
+      toplevel_ids.emplace(window, toplevel_id.GetString());
+    }
+    client_->BrowserToplevelIds(toplevel_ids);
     return;
   }
 
@@ -1317,7 +1604,57 @@ void ControlChannel::DispatchLine(const std::string& line,
                       "the request was dropped.";
       return;
     }
-    client_->AppCursor(*app_id, *shape);
+    client_->AppCursor(*app_id, *shape,
+                       CursorImageOf(message.FindDict("image")));
+    return;
+  }
+
+  if (*type == "app_pointer_constraint") {
+    const std::string* app_id = message.FindString("app_id");
+    if (!app_id) {
+      return;
+    }
+    // `null` for none; a name this build does not know is dropped, as an
+    // unknown cursor is, rather than read as one it does.
+    const base::Value* named = message.Find("constraint");
+    std::optional<mojom::PointerConstraint> constraint;
+    if (named && named->is_string()) {
+      if (named->GetString() == "lock") {
+        constraint = mojom::PointerConstraint::kLock;
+      } else if (named->GetString() == "confine") {
+        constraint = mojom::PointerConstraint::kConfine;
+      } else {
+        LOG(WARNING) << "domicile: the compositor offered a pointer "
+                        "constraint named '"
+                     << named->GetString()
+                     << "', which this engine does not know; dropped.";
+        return;
+      }
+    } else if (named && !named->is_none()) {
+      return;
+    }
+    // `null` for the whole window. A box that is not one is a compositor bug,
+    // so the message is dropped rather than read as some other region.
+    std::optional<std::vector<gfx::RectF>> region;
+    if (const base::ListValue* boxes = message.FindList("region")) {
+      region.emplace();
+      for (const base::Value& box : *boxes) {
+        const base::DictValue* sides = box.GetIfDict();
+        const std::optional<int> x = sides ? sides->FindInt("x") : std::nullopt;
+        const std::optional<int> y = sides ? sides->FindInt("y") : std::nullopt;
+        const std::optional<int> width =
+            sides ? sides->FindInt("width") : std::nullopt;
+        const std::optional<int> height =
+            sides ? sides->FindInt("height") : std::nullopt;
+        if (!x || !y || !width || !height || *width < 0 || *height < 0) {
+          LOG(ERROR) << "domicile: the compositor sent a pointer region box "
+                        "that is not one; dropped.";
+          return;
+        }
+        region->emplace_back(*x, *y, *width, *height);
+      }
+    }
+    client_->AppPointerConstraint(*app_id, constraint, std::move(region));
     return;
   }
 
@@ -1373,6 +1710,16 @@ void ControlChannel::DispatchLine(const std::string& line,
       const base::ListValue* mode = display->FindList("mode");
       const bool moded = mode && mode->size() == 2u;
       const std::string* transform = display->FindString("transform");
+      // Optional like the mode, and for the same reason: zero is unknown.
+      const std::optional<double> refresh = display->FindDouble("refresh_mhz");
+      // Optional too: a host that predates it has no adaptive sync.
+      const std::string* adaptive_sync = display->FindString("adaptive_sync");
+      // As is HDR, and a luminance it leaves out is unreported.
+      const std::string* hdr = display->FindString("hdr");
+      const auto luminance = [display](std::string_view key) {
+        const std::optional<double> nits = display->FindDouble(key);
+        return nits && *nits > 0 ? static_cast<uint32_t>(*nits) : 0u;
+      };
       displays.push_back(mojom::DisplayInfo::New(
           *name, static_cast<int32_t>(Number((*position)[0])),
           static_cast<int32_t>(Number((*position)[1])),
@@ -1381,6 +1728,9 @@ void ControlChannel::DispatchLine(const std::string& line,
           static_cast<uint32_t>(display->FindInt("scale").value_or(1)),
           moded ? static_cast<uint32_t>(Number((*mode)[0])) : 0u,
           moded ? static_cast<uint32_t>(Number((*mode)[1])) : 0u,
+          refresh && *refresh > 0 ? static_cast<uint32_t>(*refresh) : 0u,
+          SupportNamed(adaptive_sync), SupportNamed(hdr),
+          luminance("peak_luminance"), luminance("sdr_white"),
           TransformNamed(transform)));
     }
     // Sent even when every entry was malformed, because an empty desktop is an
@@ -1523,14 +1873,15 @@ void ControlChannel::DispatchLine(const std::string& line,
       std::optional<int> id = entry->FindInt("id");
       std::optional<bool> image = entry->FindBool("image");
       const std::string* preview = entry->FindString("preview");
-      if (!id || !image || !preview) {
+      std::optional<bool> current = entry->FindBool("current");
+      if (!id || !image || !preview || !current) {
         continue;
       }
       // Absent for a row with no picture, as a tray item's `icon` is.
       const std::string* thumbnail = entry->FindString("thumbnail");
       entries.push_back(mojom::ClipboardEntry::New(
           static_cast<uint32_t>(*id), *image, *preview,
-          thumbnail ? *thumbnail : std::string()));
+          thumbnail ? *thumbnail : std::string(), *current));
     }
     // Sent even when it is empty, for the reason `displays` and `files` are: a
     // desktop nothing has been copied on is an answer, and a panel that never
@@ -1713,9 +2064,20 @@ void ControlChannel::DispatchLine(const std::string& line,
   // cost an engine release to remove.
 }
 
+void SetBrowserProfilesSink(BrowserProfilesSink sink) {
+  CHECK(BrowserProfilesSlot().is_null() || sink.is_null());
+  BrowserProfilesSlot() = std::move(sink);
+}
+
+void SetSpellcheckSink(SpellcheckSink sink) {
+  CHECK(SpellcheckSlot().is_null() || sink.is_null());
+  SpellcheckSlot() = std::move(sink);
+}
+
 void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
                         KeymapSink keymap_sink,
                         PointerWarpSink warp_sink,
+                        PointerConfineSink confine_sink,
                         ThemeSink theme_sink,
                         ExtensionsSink extensions_sink,
                         CursorThemeSink cursor_theme_sink,
@@ -1736,9 +2098,10 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
   // Owns itself: it lives until the page drops the pipe or the compositor is
   // declared unreachable.
   new ControlChannel(socket_path, std::move(receiver), std::move(keymap_sink),
-                     std::move(warp_sink), std::move(theme_sink),
-                     std::move(extensions_sink), std::move(cursor_theme_sink),
-                     std::move(force_dark_sink), page);
+                     std::move(warp_sink), std::move(confine_sink),
+                     std::move(theme_sink), std::move(extensions_sink),
+                     std::move(cursor_theme_sink), std::move(force_dark_sink),
+                     page);
 }
 
 }  // namespace domicile

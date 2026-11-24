@@ -72,7 +72,7 @@ int ButtonsHeldAfter(const ui::MouseEvent& event) {
 }  // namespace
 
 // static
-std::set<ui::EventType> PointerHiding::Types() {
+ui::EventTypeSet PointerHiding::Types() {
   return {ui::EventType::kKeyPressed,
           ui::EventType::kMouseMoved,
           ui::EventType::kMouseDragged,

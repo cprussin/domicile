@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Display } from "@domicile-desktop/component-library/display-source";
 import type { DomicileBrowserWindow } from "@domicile-desktop/sdk/domicile-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
-import { act, renderHook } from "@testing-library/react";
+import { act, fireEvent, renderHook } from "@testing-library/react";
 
 import type { FloatingOptions } from "./floating/floating-rules";
 import { floatingRulesSchema } from "./floating/floating-rules";
@@ -265,6 +265,50 @@ describe("a client's window requests", () => {
 
     expect(result.current.workspaces).toBe(before.workspaces);
   });
+
+  const PRESS = { button: 0, clientX: 40, clientY: 12, pointerId: 3 };
+
+  it("hand a move to the window's grab with the press still held", async () => {
+    const { host, result } = desktop([LEFT]);
+    host.announces("gedit");
+    const id = listening(host);
+    fireEvent.pointerDown(window, PRESS);
+
+    await asks(host, id, "gedit", { kind: "move" });
+    expect(result.current.handed).toEqual({
+      press: PRESS,
+      resizes: false,
+      window: appWindowId("gedit"),
+    });
+
+    act(() => {
+      fireEvent.pointerUp(window, { pointerId: 3 });
+    });
+    expect(result.current.handed).toBeUndefined();
+  });
+
+  it("hand a resize as a resize", async () => {
+    const { host, result } = desktop([LEFT]);
+    host.announces("gedit");
+    const id = listening(host);
+    fireEvent.pointerDown(window, PRESS);
+
+    await asks(host, id, "gedit", { edges: "bottom_right", kind: "resize" });
+
+    expect(result.current.handed?.resizes).toBe(true);
+  });
+
+  it("drop a move asked for after the press ended", async () => {
+    const { host, result } = desktop([LEFT]);
+    host.announces("gedit");
+    const id = listening(host);
+    fireEvent.pointerDown(window, PRESS);
+    fireEvent.pointerUp(window, { pointerId: 3 });
+
+    await asks(host, id, "gedit", { kind: "move" });
+
+    expect(result.current.handed).toBeUndefined();
+  });
 });
 
 describe("the desk's browser windows", () => {
@@ -272,14 +316,31 @@ describe("the desk's browser windows", () => {
     appId: "",
     height: 0,
     id: "1",
+    ignoresPointer: false,
     isApp: false,
     isCaptured: false,
+    isHidden: false,
     isPrivate: false,
+    menu: null,
+    menuBarAutoHide: false,
+    menuBarVisible: true,
+    messageBox: null,
+    parent: null,
     partition: "",
+    popupMenu: null,
     popupWindow: null,
+    profile: "default",
+    shape: null,
     title: "",
+    toplevelId: null,
+    urgent: false,
     url: "https://example.com/",
+    wantsFullscreen: false,
+    wantsMaximized: false,
+    wantsMinimized: false,
     width: 0,
+    x: 0,
+    y: 0,
   };
 
   it("are drawn as the engine lists them", () => {
@@ -421,17 +482,6 @@ describe("a command", () => {
     ).toEqual(["kitty", "foot"]);
   });
 
-  it("takes what only the compositor can do with it", () => {
-    // An `exec` is a process the compositor starts.
-    const { host, result } = desktop([LEFT, RIGHT]);
-
-    act(() => {
-      result.current.act(WindowAction.CommandExecuted(["foot", "-e", "htop"]));
-    });
-
-    expect(host.spawned).toEqual([["foot", "-e", "htop"]]);
-  });
-
   it("asks the compositor to lock the desk", () => {
     const { host, result } = desktop([LEFT, RIGHT]);
 
@@ -453,11 +503,12 @@ describe("a command", () => {
   });
 
   describe("searching the clipboard", () => {
-    const searched = (copied: readonly string[]) => {
+    const searched = (copied: readonly string[], onClipboard = true) => {
       const { host, result } = desktop([LEFT, RIGHT]);
       act(() => {
         host.fake.set({
           clipboard: copied.map((preview, at) => ({
+            current: onClipboard && at === 0,
             id: at,
             image: false,
             preview,
@@ -489,6 +540,10 @@ describe("a command", () => {
       expect(searched([])).toEqual([]);
     });
 
+    it("opens nothing after the copy on the clipboard was removed", () => {
+      expect(searched(["hello world"], false)).toEqual([]);
+    });
+
     it("opens a private window from a private one", () => {
       const { host, result } = desktop([LEFT, RIGHT]);
       host.lists([
@@ -496,20 +551,43 @@ describe("a command", () => {
           appId: "",
           height: 0,
           id: "1",
+          ignoresPointer: false,
           isApp: false,
           isCaptured: false,
+          isHidden: false,
           isPrivate: true,
+          menu: null,
+          menuBarAutoHide: false,
+          menuBarVisible: true,
+          messageBox: null,
+          parent: null,
           partition: "",
+          popupMenu: null,
           popupWindow: null,
+          profile: "default",
+          shape: null,
           title: "",
+          toplevelId: null,
+          urgent: false,
           url: "https://example.com/",
+          wantsFullscreen: false,
+          wantsMaximized: false,
+          wantsMinimized: false,
           width: 0,
+          x: 0,
+          y: 0,
         },
       ]);
       act(() => {
         host.fake.set({
           clipboard: [
-            { id: 0, image: false, preview: "hello world", thumbnail: "" },
+            {
+              current: true,
+              id: 0,
+              image: false,
+              preview: "hello world",
+              thumbnail: "",
+            },
           ],
         });
       });
@@ -538,14 +616,31 @@ describe("a command", () => {
       appId: "messages",
       height: 0,
       id: "1",
+      ignoresPointer: false,
       isApp: true,
       isCaptured: false,
+      isHidden: false,
       isPrivate: false,
+      menu: null,
+      menuBarAutoHide: false,
+      menuBarVisible: true,
+      messageBox: null,
+      parent: null,
       partition: "",
+      popupMenu: null,
       popupWindow: null,
+      profile: "default",
+      shape: null,
       title: "",
+      toplevelId: null,
+      urgent: false,
       url: "https://messages.example/",
+      wantsFullscreen: false,
+      wantsMaximized: false,
+      wantsMinimized: false,
       width: 0,
+      x: 0,
+      y: 0,
     };
     host.lists([window, { ...window, appId: "", id: "2", isApp: false }]);
 

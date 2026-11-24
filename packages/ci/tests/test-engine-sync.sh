@@ -157,6 +157,30 @@ printf '%s\n' "an older pin" >"$STAMP"
 expect "a stamp naming another pin is synced again" ok "$(status "$(run_sync)")"
 expect "and gclient ran" "1" "$(gclient_runs)"
 
+# ---- devtools' generated sources from another pin ----------------------
+
+# They are not rebuilt when the pin moves, and devtools' generated_checked step
+# fails on another pin's. The first run at a pin clears them, even when the
+# DEPS are already synced back to it; later runs leave the build alone.
+GEN_STAMP="$WORK/chromium/.domicile-gen-pin"
+DEVTOOLS_GEN="$TREE/out/Release/gen/third_party/devtools-frontend"
+printf '%s\n' "$PIN" >"$STAMP"
+printf '%s\n' "another pin" >"$GEN_STAMP"
+mkdir -p "$DEVTOOLS_GEN/src/front_end/generated" "$TREE/out/Release/gen/kept"
+touch "$DEVTOOLS_GEN/src/front_end/generated/Deprecation.js"
+out="$(run_sync)"
+expect "a tree that built another pin is still synced" ok "$(status "$out")"
+expect "with devtools' generated sources cleared" "gone" \
+  "$([ -e "$DEVTOOLS_GEN" ] && echo there || echo gone)"
+expect "and the rest of the build kept" "there" \
+  "$([ -d "$TREE/out/Release/gen/kept" ] && echo there || echo gone)"
+expect "and the build is noted as at the pin" "$PIN" "$(cat "$GEN_STAMP")"
+mkdir -p "$DEVTOOLS_GEN"
+run_sync >/dev/null
+expect "a later run at the same pin leaves them" "there" \
+  "$([ -e "$DEVTOOLS_GEN" ] && echo there || echo gone)"
+rm -rf "$TREE/out"
+
 # ---- a sync that fails --------------------------------------------------
 
 # Later runs trust the stamp, so a sync that did not finish must not leave

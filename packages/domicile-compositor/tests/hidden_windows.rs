@@ -127,6 +127,7 @@ fn a_new_page_shows_every_hidden_window() {
     chrome
         .say(&ChromeMessage::Hello {
             protocol_version: domicile_protocol::PROTOCOL_VERSION,
+            checked: false,
         })
         .expect("the chrome socket takes a second hello");
 

@@ -14,6 +14,7 @@ describe("windows", () => {
         appId: "1",
         clientFrame: false,
         cursor: "default",
+        cursorImage: undefined,
         desktopId: "",
         dialog: false,
         frame: 0,
@@ -28,11 +29,14 @@ describe("windows", () => {
         parent: undefined,
         pid: undefined,
         pidfdInode: undefined,
+        pointerConstraint: undefined,
+        pointerRegion: undefined,
         sandboxAppId: undefined,
         sandboxEngine: undefined,
         sandboxed: undefined,
         sandboxInstanceId: undefined,
         title: "Terminal",
+        toplevelId: undefined,
         transientFor: undefined,
         uid: undefined,
         urgent: false,
@@ -63,12 +67,13 @@ describe("windows", () => {
     expect(windows.focused).toBe("1");
   });
 
-  it("moves the keyboard, closes a window and places one", () => {
+  it("moves the keyboard, closes a window, answers a pointer lock and places one", () => {
     const fake = new FakeDomicileHost();
     const { windows } = desktop(fake.host);
     windows.focus("1");
     windows.focusShell();
     windows.close("1");
+    windows.pointerConstrained("1", true);
     windows.setBounds("1", { height: 4, width: 3, x: 1, y: 2 });
     windows.syncFrames();
 
@@ -76,6 +81,7 @@ describe("windows", () => {
       ["focusApp", "1"],
       ["focusChrome"],
       ["closeApp", "1"],
+      ["pointerConstrained", "1", true],
       ["setAppBounds", "1", 1, 2, 3, 4],
       ["syncFrames"],
     ]);

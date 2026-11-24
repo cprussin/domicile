@@ -5,14 +5,18 @@
 #define COMPONENTS_DOMICILE_ENGINE_SURFACE_HOLDS_H_
 
 #include <cstdint>
+#include <optional>
+#include <vector>
 
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "gpu/command_buffer/common/sync_token.h"
 
 namespace domicile {
 
 // Counts viz's holds on a surface's buffers, so a buffer its client destroys
-// stays imported until viz is done drawing it.
+// stays imported until viz is done drawing it: until viz returns it, and its
+// GPU has read it.
 class SurfaceHolds {
  public:
   // What to do with a buffer viz returned.
@@ -33,16 +37,23 @@ class SurfaceHolds {
   // A frame showing `buffer` went to viz.
   void Sent(uint64_t buffer);
 
-  // Viz returned `count` holds on `buffer`.
-  Return Returned(uint64_t buffer, int count);
+  // Viz returned `count` holds on `buffer`. Its GPU is done reading it once
+  // every token in `read_done` passes: one per read, which may be on several
+  // GPU streams. On kDestroy, the import goes after them.
+  Return Returned(uint64_t buffer,
+                  int count,
+                  const std::vector<gpu::SyncToken>& read_done);
 
-  // The client destroyed `buffer`. True when viz holds none of it, so its
-  // import can be dropped now.
-  bool Destroyed(uint64_t buffer);
+  // The client destroyed `buffer`. When viz holds none of it, the tokens its
+  // import's destruction waits on: the ones viz last returned it with, or none
+  // if viz never had it. Nullopt while viz holds it.
+  std::optional<std::vector<gpu::SyncToken>> Destroyed(uint64_t buffer);
 
  private:
   base::flat_map<uint64_t, int> held_;
   base::flat_set<uint64_t> destroyed_;
+  // The tokens each returned buffer still alive was last returned with.
+  base::flat_map<uint64_t, std::vector<gpu::SyncToken>> read_done_;
 };
 
 }  // namespace domicile

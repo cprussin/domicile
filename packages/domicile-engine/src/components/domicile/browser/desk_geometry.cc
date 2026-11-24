@@ -26,7 +26,7 @@ std::vector<DeskPlace> DeskPlacesKept(
     }
     return placed;
   }
-  if (!lit->empty()) {
+  if (std::ranges::any_of(*lit, &DeskPlace::lit)) {
     return *lit;
   }
   std::vector<DeskPlace> kept = before;
@@ -40,15 +40,18 @@ std::optional<DeskGeometry> DeskGeometryOf(const std::vector<DeskPlace>& lit) {
   if (lit.empty()) {
     return std::nullopt;
   }
-  DeskGeometry desk{.box = lit.front().desk,
-                    .scale = lit.front().scale,
-                    .host = lit.front().id};
-  float fastest = lit.front().refresh_hz;
+  // A blank keeps places that were lit, so some display always hosts.
+  const bool any_lit = std::ranges::any_of(lit, &DeskPlace::lit);
+  const auto first =
+      any_lit ? std::ranges::find_if(lit, &DeskPlace::lit) : lit.begin();
+  DeskGeometry desk{
+      .box = first->desk, .scale = first->scale, .host = first->id};
+  float fastest = first->refresh_hz;
   for (const DeskPlace& place : lit) {
     desk.box.Union(place.desk);
     desk.scale = std::max(desk.scale, place.scale);
     // Strictly faster, so ties keep the first.
-    if (place.refresh_hz > fastest) {
+    if ((place.lit || !any_lit) && place.refresh_hz > fastest) {
       fastest = place.refresh_hz;
       desk.host = place.id;
     }

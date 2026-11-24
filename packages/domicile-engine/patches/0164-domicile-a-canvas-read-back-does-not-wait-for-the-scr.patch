@@ -28,7 +28,7 @@ job builds it on `crux`.
  1 file changed, 5 insertions(+), 4 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/gpu/gbm_surfaceless.cc b/ui/ozone/platform/drm/gpu/gbm_surfaceless.cc
-index 151bfe6..9925b6a 100644
+index d598868..d1359db 100644
 --- a/ui/ozone/platform/drm/gpu/gbm_surfaceless.cc
 +++ b/ui/ozone/platform/drm/gpu/gbm_surfaceless.cc
 @@ -236,10 +236,11 @@ void GbmSurfaceless::FenceRetired(uint32_t frame_id) {

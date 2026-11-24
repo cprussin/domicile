@@ -32,7 +32,8 @@
     "./addresses": "./src/addresses.ts",
     "./consent": "./src/consent.ts",
     "./desk-inbox": "./src/desk-inbox.ts",
-    "./inbox": "./src/inbox.ts"
+    "./inbox": "./src/inbox.ts",
+    "./write-mail": "./src/write-mail.ts"
   },
   "files": [
     "src/**",
@@ -57,5 +58,5 @@
     "test:unit": "bun test"
   },
   "type": "module",
-  "version": "2.0.2"
+  "version": "2.1.0"
 }

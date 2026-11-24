@@ -26,16 +26,16 @@ scripts/test-the-desk-does-not-flash-between-densities.sh.
  2 files changed, 21 insertions(+), 1 deletion(-)
 
 diff --git a/cc/tiles/picture_layer_tiling.h b/cc/tiles/picture_layer_tiling.h
-index 7e78f66..d27e7cd 100644
+index da596fa..446f21f 100644
 --- a/cc/tiles/picture_layer_tiling.h
 +++ b/cc/tiles/picture_layer_tiling.h
-@@ -21,6 +21,7 @@
+@@ -20,6 +20,7 @@
  #include "cc/base/region.h"
  #include "cc/base/tiling_data.h"
  #include "cc/cc_export.h"
 +#include "cc/domicile/display_regions.h"
  #include "cc/paint/paint_worklet_input.h"
- #include "cc/paint/scroll_offset_map.h"
+ #include "cc/paint/raster_inducing_values.h"
  #include "cc/raster/raster_source.h"
 @@ -135,6 +136,12 @@ class CC_EXPORT PictureLayerTiling {
      domicile_clip_in_layer_space_ = clip_in_layer_space;

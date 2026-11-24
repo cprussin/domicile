@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@cprussin/option-result": "catalog:",
     "@domicile-desktop/component-library": "workspace:*",
     "@domicile-desktop/react": "workspace:*",
     "@domicile-desktop/sdk": "workspace:*",
@@ -37,5 +38,5 @@
     "test:unit": "bun test"
   },
   "type": "module",
-  "version": "0.0.4"
+  "version": "0.0.5"
 }

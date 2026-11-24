@@ -10,7 +10,7 @@ const ROOT = {
 };
 
 describe("parseRootSchema", () => {
-  it("keeps what types a value and drops constraints TypeScript cannot state", () => {
+  it("keeps what types and constrains a value", () => {
     expect(
       parseRootSchema({
         ...ROOT,
@@ -26,7 +26,15 @@ describe("parseRootSchema", () => {
       }),
     ).toEqual({
       $defs: {},
-      properties: { size: { type: "integer" } },
+      properties: {
+        size: {
+          exclusiveMinimum: 0,
+          format: "uint16",
+          maximum: 65_535,
+          minimum: 0,
+          type: "integer",
+        },
+      },
       title: "Config",
       type: "object",
     });
@@ -48,6 +56,16 @@ describe("parseRootSchema", () => {
         properties: { options: { additionalProperties: true, type: "object" } },
       }).properties,
     ).toEqual({ options: { additionalProperties: true, type: "object" } });
+  });
+
+  it("keeps a map whose values have a schema", () => {
+    const map = {
+      additionalProperties: { $ref: "#/$defs/Mode" },
+      type: "object",
+    } as const;
+    expect(
+      parseRootSchema({ ...ROOT, properties: { modes: map } }).properties,
+    ).toEqual({ modes: map });
   });
 
   it("throws on an object open to other keys beside the ones it names", () => {

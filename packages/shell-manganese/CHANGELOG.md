@@ -1,5 +1,234 @@
 # @domicile-desktop/manganese
 
+## 1.3.0
+
+### Minor Changes
+
+- d3978bb: Electron apps' views show in their windows. The SDK lists them in `domicile.browser.views`, apart from `domicile.browser.windows`, so window lists, task switchers and tiling never treat a view as a window. Manganese draws each view over its window's page where its app asks, hides it while the app hides it, treats a click in it as a click in the window, and runs the app's menu keys pressed in it.
+- cd75f9a: Picture-in-picture video works: a video's picture-in-picture button, or a site's, floats the video over your windows in the corner of its screen. Drag it to move it, drag an edge to resize it, and point at it for play, pause, track, back-to-tab and close controls. Shells list the videos in `domicile.pictureInPicture` and show one with `<app picture-in-picture="id">`.
+- 09a3ad4: The profile menu switches the page's profile's extensions on and off. Every profile now has every extension the config names, switched on or off in it, so one switched off keeps its data. A profile whose config names its `extensions` has those switches locked to the config; any other starts each extension on (off in a private profile) and leaves it to the user. Shells get `browser.setExtensionEnabled(profile, id, enabled)` and each profile's `extensions`, `enabledExtensions` and `lockedExtensions`.
+- 24b88fb: Dragging the title bar or edge an app draws itself, such as a GNOME app's header bar or Firefox's tab strip, moves or resizes its window. The compositor checks the press is still held, takes it from the app, and reports `WindowRequest.Move` or `WindowRequest.Resize` (with a `ResizeEdge`); Manganese runs the drag as it does a Meta drag.
+- 86c57d9: An agent let reach the entire desktop can be remembered, and comes in without asking from then on. A running agent's reach can be changed from the bar, and Settings › Agents lists every agent connected or remembered, to stop or forget. `domicile list-agents`, `stop-agent` and `forget-agent` do the same. The SDK adds `PortalAnswer.Agent(reach, remember)`, `PortalAnswer.Change()`, the dialog's `current` and `remembered`, `portals.changeAgent`, `portals.agents` and `portals.forgetAgent`; `AgentDialog` draws the Remember switch and the change dialog, and the capturing indicator and Manganese's bar a Change button.
+- 52e71af: Private windows are a private browser profile's: its extension switches say what runs there. The config's `extensions.settings.<id>.private` is gone, and a config that sets it is refused; so are the SDK's `inPrivate` on installed extensions and in `configureExtension()`, and the Settings app's and tray's "Allow in private windows". The tray now shows the extensions of the last focused page's browser profile ("Extensions in Work"): its icons are those switched on there, and its switches switch them in that profile, locked where the config sets them.
+- 5c11ddc: `domicile list-bindings` prints the running shell's keys and gestures in each
+  binding mode and what they run. A shell command can now answer, and
+  `domicile send-shell` prints the answer: Manganese's `get-workspaces` and
+  `get-tree` answer with JSON, as `swaymsg -t get_workspaces` and `get_tree` do.
+  
+  Breaking: `onCommand` may return `Ok({ output })`;
+  `shell.commands(help, bindings)` takes the bindings, which `bindKeys`
+  describes for you; and `shell.answer(sent, ran)` takes the command's `Result`.
+- befeb71: Gmail and Messages inboxes, the Gmail bar module and launcher bookmarks take a `profile`, the browser profile they open in, so two Gmail accounts can live in two profiles. A site's app window is now in a browser profile, its site's by default, and `domicile open --app --profile <id>`, `browser.openApp(url, { profile })` and `browser.fetch(url, { profile })` pick one.
+- 4a4f057: Electron apps on the engine behave more like their own Electron:
+  
+  - Closing a window asks the app first, so an app that closes to its tray, as Slack and Element do, keeps running there instead of quitting.
+  - `win.hide()`, `win.show()` and `show: false` hide and show a window, its page still running. The engine lists a hidden window with `isHidden`, and Manganese keeps it off every workspace until its app shows it.
+  - A window's own title (`setTitle`, or `page-title-updated` prevented) is the one the desktop shows, so Claude Desktop reads "Claude", not "index.html".
+  - `ipcRenderer` is an EventEmitter, so `ipcRenderer.emit` reaches the preload's own listeners. Element's preload calls it as it starts, and showed "Unable to load config file" without it.
+  - Manganese draws an app window with its app's icon, in its title bar and in the screenshot and screen cast pickers, instead of its page's.
+  - A window has the properties Electron gives for what its methods set: `autoHideMenuBar`, `menuBarVisible`, `fullScreen`, `resizable` and the rest, and its page `audioMuted`, `backgroundThrottling` and `userAgent`. Element reads `autoHideMenuBar` once its page loads.
+- 69247ca: The tray has a menu of every icon at its end. Pin or unpin any app or extension icon, switch extensions on and off, and change what each can do: its options, which websites it can read, private windows, local files and user scripts, or uninstall it. Settings your config sets show locked. Shells get the same through `domicile.extensions.installed`, `setEnabled`, `configure` and `uninstall`. `Menu` holds check, radio and submenu items, and `ListRow` takes `actions` beside a pressed row.
+- bc8db8f: Remove a copy from the clipboard history: `clipboard.remove(id)` in the SDK, and a Remove button and the Delete key in manganese's clipboard panel. Each entry says whether it is `current`; removing the current one empties the clipboard.
+- 9c805c4: Back and Forward list the pages that way on a long press or right click, as in Chrome. `<webview>` gains `history()`, `goToHistoryEntry()` and `goToHistoryEntryInNewWindow()` for shells' own menus.
+- a2cab16: `domicile exec <program> [<arg>...]` and the SDK's `KeyAction.Exec` start a program for any shell, found on the desktop's `PATH`, and say why when it does not start; a key's failed start is a notification. Manganese's `exec` command is gone: its `exec()` builds `KeyAction.Exec`. `domicile drag` replaces `pointer press`/`release`, which let go as each command ended, and `domicile type` presses Return for a line break. The MCP server gains an `exec` tool, and its `drag` holds the button.
+- da632d6: A shell can give you a way back from a VM or remote desktop viewer that holds your shortcuts. A chord bound `--inhibited Meta+Escape` stays the shell's while that window has the keyboard, and `keyboard.switchShortcutsInhibitor` turns the window's hold off and on. Manganese has a `shortcuts-inhibitor toggle` command to bind to it.
+- e4f3394: Right-click a video for "Picture in picture", and drag a picture-in-picture video's progress bar to move through it. Shells get the menu's `picture-in-picture` action with `canPictureInPicture` / `inPictureInPicture`, and `pictureInPicture.seek(id, seconds)`.
+- e7b707c: The profile menu pins a site to a browser profile, so it opens there from now on. The engine keeps the pins across restarts, under the config's own `browser.sites`: a site the config names shows locked. Shells get `browser.pin(site, profile)`, `browser.siteFor(url)` and each profile's `pinnedSites` and `configSites`.
+- 73dc50f: Keep one wallpaper instead of a new one every minute: turn off **Change the wallpaper every minute** on Settings' Shell page (`shell_options.wallpaper.rotate`). `<Wallpaper still />` keeps the photograph on screen and stops its minute timer.
+- e458dd7: The address bar starts with the page's browser profile, in its color. Its menu moves the page to another profile in place or opens it in a new window of one. Tabs of pages outside the default profile carry a dot of its color on their icon.
+- b95da52: An agent asks before it drives the desktop. `domicile mcp`'s first tool call runs `domicile agent`, which puts an `agent` dialog to the shell: the entire desktop, or only the windows the user checks. Every tool call after is checked against the answer, and the agent is listed as an `agent` capturing session, with what it did last, until it disconnects or the user stops it. The SDK parses them as `PortalKind.Agent`, `PortalAnswer.Agent` and `CapturingKind.Agent`; `<PortalDialogs />` draws the dialog and takes `omitAgents`; Manganese's bar shows each agent as a violet pill with a Stop button.
+- a5ade39: Games and VM viewers can lock the pointer (`zwp_pointer_constraints_v1`). The compositor offers the lock to the shell for the window under the pointer as `pointerConstraint`, and tells the client only once the shell holds a pointer lock on the window's `<app>` and reports it with `windows.pointerConstrained()`. The engine grants a shell's pointer lock with no click first and no browser bubble. Manganese locks for the focused window and lets go when the keyboard moves away. Confining the pointer to a window is offered but not taken yet.
+- 5315b06: A video entering picture-in-picture grows out of its place in the page, and "Back to tab" shrinks it back in. Shells read where it was from the video's `source`.
+- f268f2d: Email links ask which inbox, and which of its addresses, to write from, then open a new message in that inbox's window. `Inbox.Watched` takes a `write`, and an inbox's `InboxReading.Counted` may name the addresses it sends from; `gmailInbox` writes from the account.
+- 0c5f1ce: Text, a link or an image dragged onto a group's tabs opens in a new tab there, where the blue bar shows.
+
+### Patch Changes
+
+- 0492adf: Switching workspaces keeps a floating window that hangs off the screen on its own workspace, instead of sliding its off-screen part into view.
+- 5090cbd: The drop target and the selection tint draw over Firefox and Tor Browser windows.
+- 5a70826: A video entering picture-in-picture grows out of its page again, the close button shrinks it back too, and neither way flashes. `<app picture-in-picture>` fires `PICTURE_IN_PICTURE_SHOWN_EVENT` once it draws the video.
+- 57f6fe2: Floating windows no longer vanish behind tiled windows for a moment as the overview closes.
+- 5b3650f: Popups close when the desk changes under them. `PopupScene` closes every popup inside it when its `scene` key changes, and `PopupBoundary` closes its popups when its box moves. Manganese keys the scene on the overview, launcher, clipboard, each screen's workspace, fullscreen and scratchpad windows.
+- 4b7a878: The overview opens and closes more smoothly: the engine no longer waits for hidden workspaces' windows to draw, and opening or closing no longer restyles every part of every window.
+- f0a0a61: The built-in wallpaper photos download and decode only as large as the screens show them, not always at 4K.
+- d1b3ab9: A picture-in-picture video floats in its own shape instead of stretched into a square, and its back-to-tab and close buttons work.
+- eaa92c7: Showing a background app's window, such as Messages, plays the opening animation.
+- 7921005: Agents in control are their own bar item, `Agents` from `@domicile-desktop/manganese-bar-module-sharing/agents`, apart from the sharing indicator. The default bar puts it right after sharing.
+- e3d8320: A nested tab group's only window drags out past the group's own tab, so it leaves a group that is the first or last tab of its strip.
+- 876c824: The overview's workspace rings slide with `translate` as workspaces swap, on the compositor with the cards they ring.
+- 14704ae: The lock screen is above every window depth, so the overview's workspace outline blurs with the rest of the desk instead of staying sharp over it.
+- 9ea68bf: A window dropped on the side of a nested group's window splits beside the group, as the overlay shows, instead of joining the outer strip.
+- 1209f22: Firefox and Tor Browser windows slide, open, close and ease with the rest of the desktop. A client's popups are drawn with its window and play its motion.
+- Updated dependencies [6f4cabd]
+- Updated dependencies [02fe478]
+- Updated dependencies [b7d85c0]
+- Updated dependencies [7680c50]
+- Updated dependencies [0829254]
+- Updated dependencies [9478a19]
+- Updated dependencies [87ac040]
+- Updated dependencies [394ecc7]
+- Updated dependencies [8f74f44]
+- Updated dependencies [d3978bb]
+- Updated dependencies [2794947]
+- Updated dependencies [79166e4]
+- Updated dependencies [0e71fa1]
+- Updated dependencies [51a769e]
+- Updated dependencies [0ee4ce8]
+- Updated dependencies [d194a0d]
+- Updated dependencies [ce56535]
+- Updated dependencies [f5fbd04]
+- Updated dependencies [4acd3cd]
+- Updated dependencies [3aaca85]
+- Updated dependencies [d0fbc5b]
+- Updated dependencies [3977a25]
+- Updated dependencies [94f365b]
+- Updated dependencies [64bda78]
+- Updated dependencies [0492adf]
+- Updated dependencies [03dcccf]
+- Updated dependencies [996cc29]
+- Updated dependencies [5ef4689]
+- Updated dependencies [bcb180a]
+- Updated dependencies [a9b83d4]
+- Updated dependencies [a77b1e0]
+- Updated dependencies [3e37020]
+- Updated dependencies [2a1913f]
+- Updated dependencies [cd75f9a]
+- Updated dependencies [5090cbd]
+- Updated dependencies [d2a68f5]
+- Updated dependencies [c454256]
+- Updated dependencies [09a3ad4]
+- Updated dependencies [3bdac3b]
+- Updated dependencies [f268f2d]
+- Updated dependencies [fb07c3f]
+- Updated dependencies [24b88fb]
+- Updated dependencies [b0fad3c]
+- Updated dependencies [81215c5]
+- Updated dependencies [728d513]
+- Updated dependencies [d566f68]
+- Updated dependencies [86c57d9]
+- Updated dependencies [057faa5]
+- Updated dependencies [51a769e]
+- Updated dependencies [52e71af]
+- Updated dependencies [15b8ec4]
+- Updated dependencies [0b38007]
+- Updated dependencies [5a70826]
+- Updated dependencies [046d172]
+- Updated dependencies [dba9a81]
+- Updated dependencies [57f6fe2]
+- Updated dependencies [5c11ddc]
+- Updated dependencies [8c477cc]
+- Updated dependencies [382819f]
+- Updated dependencies [befeb71]
+- Updated dependencies [c726064]
+- Updated dependencies [4a4f057]
+- Updated dependencies [5b3650f]
+- Updated dependencies [4b7a878]
+- Updated dependencies [ebfad4b]
+- Updated dependencies [2bf4b1b]
+- Updated dependencies [1cbbfb5]
+- Updated dependencies [adb0ef5]
+- Updated dependencies [3e08ff0]
+- Updated dependencies [5a896a8]
+- Updated dependencies [637cc16]
+- Updated dependencies [bc4e5bf]
+- Updated dependencies [f0a0a61]
+- Updated dependencies [28238ca]
+- Updated dependencies [6a0772b]
+- Updated dependencies [d1b3ab9]
+- Updated dependencies [69247ca]
+- Updated dependencies [eaa92c7]
+- Updated dependencies [7921005]
+- Updated dependencies [537a8d8]
+- Updated dependencies [4799f21]
+- Updated dependencies [94e5909]
+- Updated dependencies [bc8db8f]
+- Updated dependencies [e821d1f]
+- Updated dependencies [46d7737]
+- Updated dependencies [e3d8320]
+- Updated dependencies [0c6e2df]
+- Updated dependencies [8ff882e]
+- Updated dependencies [876c824]
+- Updated dependencies [14704ae]
+- Updated dependencies [18c887f]
+- Updated dependencies [0a4d218]
+- Updated dependencies [3600d3b]
+- Updated dependencies [0a23f7c]
+- Updated dependencies [9c805c4]
+- Updated dependencies [9bd54ab]
+- Updated dependencies [9ea68bf]
+- Updated dependencies [a2cab16]
+- Updated dependencies [d6373e3]
+- Updated dependencies [09be8b7]
+- Updated dependencies [dabcc0c]
+- Updated dependencies [da632d6]
+- Updated dependencies [85ad296]
+- Updated dependencies [539ce11]
+- Updated dependencies [e4f3394]
+- Updated dependencies [e7b707c]
+- Updated dependencies [8a2777f]
+- Updated dependencies [8eb261d]
+- Updated dependencies [756c1bd]
+- Updated dependencies [73dc50f]
+- Updated dependencies [60e5932]
+- Updated dependencies [133ce8a]
+- Updated dependencies [e458dd7]
+- Updated dependencies [b95da52]
+- Updated dependencies [1209f22]
+- Updated dependencies [9478a19]
+- Updated dependencies [a85afe8]
+- Updated dependencies [3a8d01f]
+- Updated dependencies [c70a16a]
+- Updated dependencies [bab0ed1]
+- Updated dependencies [6e41263]
+- Updated dependencies [25522ef]
+- Updated dependencies [19cc2c5]
+- Updated dependencies [a5ade39]
+- Updated dependencies [5315b06]
+- Updated dependencies [f268f2d]
+- Updated dependencies [5fe0d76]
+- Updated dependencies [52a2a9c]
+- Updated dependencies [6e41263]
+- Updated dependencies [0c5f1ce]
+- Updated dependencies [dec9fc2]
+- Updated dependencies [6aad1fa]
+- Updated dependencies [b5edfcd]
+  - @domicile-desktop/component-library@2.2.0
+  - @domicile-desktop/manganese-bar-module-network@1.2.0
+  - @domicile-desktop/manganese-bar-module-bluetooth@1.1.3
+  - @domicile-desktop/manganese-page-requests@1.3.0
+  - @domicile-desktop/sdk@3.0.0
+  - @domicile-desktop/manganese-bar-module-tray@1.2.0
+  - @domicile-desktop/system-audio@1.2.0
+  - @domicile-desktop/manganese-bar-module-volume@2.0.3
+  - @domicile-desktop/manganese-window-management@2.0.0
+  - @domicile-desktop/manganese-bar-module-gmail@2.1.0
+  - @domicile-desktop/manganese-inbox-gmail@0.2.0
+  - @domicile-desktop/manganese-launcher@1.2.0
+  - @domicile-desktop/react@0.2.0
+  - @domicile-desktop/manganese-bar-module-sharing@1.2.0
+  - @domicile-desktop/manganese-bar-module-clock@1.0.4
+  - @domicile-desktop/manganese-lock@1.0.4
+  - @domicile-desktop/system-apps@1.3.0
+  - @domicile-desktop/manganese-notifications@2.1.0
+  - @domicile-desktop/manganese-inbox-google-messages@0.2.0
+  - @domicile-desktop/manganese-bar-module-workspace-switcher@1.2.1
+  - @domicile-desktop/manganese-wallpaper@1.2.0
+  - @domicile-desktop/manganese-clipboard@1.2.0
+  - @domicile-desktop/manganese-bar-module-downloads@0.1.3
+  - @domicile-desktop/manganese-bar@1.1.3
+  - @domicile-desktop/manganese-bar-module-battery@1.1.3
+  - @domicile-desktop/manganese-bar-module-brightness@2.0.3
+  - @domicile-desktop/manganese-bar-module-cast@0.1.3
+  - @domicile-desktop/manganese-bar-module-google-messages@1.0.3
+  - @domicile-desktop/manganese-bar-module-idle-inhibitor@1.1.3
+  - @domicile-desktop/manganese-bar-module-keymap@0.1.3
+  - @domicile-desktop/manganese-bar-module-launcher-button@1.1.1
+  - @domicile-desktop/manganese-bar-module-notifications@2.0.1
+  - @domicile-desktop/manganese-bar-module-theme-switch@1.1.3
+  - @domicile-desktop/manganese-host@2.0.3
+  - @domicile-desktop/manganese-quick-settings@1.0.3
+  - @domicile-desktop/system-backlight@1.1.3
+
 ## 1.2.0
 
 ### Minor Changes

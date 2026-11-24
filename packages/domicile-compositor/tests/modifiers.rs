@@ -178,6 +178,7 @@ fn a_chrome_that_reloads_holding_a_modifier_has_it_released() {
     chrome
         .say(&ChromeMessage::Hello {
             protocol_version: domicile_protocol::PROTOCOL_VERSION,
+            checked: false,
         })
         .expect("the chrome socket takes a second hello");
 

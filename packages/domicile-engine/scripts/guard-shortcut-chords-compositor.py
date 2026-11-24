@@ -26,6 +26,7 @@ SEQUENCE = [
             "size": [300, 200],
             "dialog": False,
             "client_frame": False,
+            "toplevel_id": "viewer-listed",
         },
     ),
     (0, {"type": "app_inhibits_shortcuts", "app_id": "viewer", "inhibits": True}),
