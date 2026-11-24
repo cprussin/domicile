@@ -5,6 +5,7 @@
 #   .github/scripts/engine-tree-pool.sh compiles <pin>
 #   .github/scripts/engine-tree-pool.sh use  <pin>
 #   .github/scripts/engine-tree-pool.sh list
+#   .github/scripts/engine-tree-pool.sh refresh <chromium/src> <owner>
 #
 # Moving `CHROMIUM_PIN` forces a rebuild of about four hours, in both
 # directions. With several trees, pull requests on different pins each keep a
@@ -25,6 +26,7 @@ set -u
 
 usage() {
   echo "usage: $(basename "$0") <pick|compiles|use|list> [pin] [owner]" >&2
+  echo "       $(basename "$0") refresh <chromium/src> <owner>" >&2
   exit 2
 }
 
@@ -484,6 +486,98 @@ case "$action" in
         "${slot##*/}" \
         "$(slot_pin "$slot" || true)"
     done
+    ;;
+
+  refresh)
+    # Copies the tree this run holds over a free tree at another pin, so the
+    # next run on this pin finds it built instead of rebuilding Chromium in it
+    # from scratch (4h50m on 2026-11-23, after a pin roll).
+    #
+    # - Only engine-release.yml calls it, from main and after its build passed:
+    #   a pull request's tree may be at a pin main never takes.
+    # - The copy shares blocks (`cp --reflink=always`, ZFS block cloning), so it
+    #   takes minutes and almost no space. /build has room for two trees, not
+    #   three, so without cloning it copies nothing.
+    # - Paths: compiles are relative, and `gn gen` rewrites the rest at the next
+    #   build. engine-release-build.sh refuses a build whose files still name
+    #   another tree.
+    # - It takes the other tree's lock like any run, so it never touches a tree
+    #   in use, and it holds this run's tree locked while it reads it.
+    #
+    # A failure to copy is a warning: the tree it would have replaced is still
+    # whole, and the next run rebuilds it as before.
+    from="${2:-}"
+    owner="${3:-}"
+    [ -n "$from" ] && [ -n "$owner" ] || usage
+    from="$(cd "$from" 2>/dev/null && pwd -P)" || {
+      echo "::error::refresh: no tree at ${2}" >&2; exit 1; }
+    src_slot="$(dirname "$from")"
+    pin="$(slot_pin "$src_slot")"
+    [ -n "$pin" ] || { echo "refresh: ${src_slot##*/} carries no pin, so there is nothing to copy"; exit 0; }
+    "$LOCK_SH" holds "$from" "$owner" >/dev/null 2>&1 || {
+      echo "::error::refresh: '$owner' does not hold ${src_slot##*/}, so its tree could change under the copy" >&2
+      exit 1
+    }
+    COPY="${DOMICILE_TREE_COPY:-cp -a --reflink=always}"
+
+    if [ -d "$ROOT/.domicile-tree-lock" ]; then
+      echo "refresh: a run holds the old single lock and may be in any tree, so nothing is copied"
+      exit 0
+    fi
+    # The cheapest tree to lose first, as for a pick: one with no pin, then the
+    # least recently used.
+    target=""
+    for slot in $(candidates "$pin" ""); do
+      [ "$(cd "$slot" && pwd -P)" = "$src_slot" ] && continue
+      [ "$(slot_pin "$slot")" = "$pin" ] && continue
+      if take_slot "$slot" "$owner (copying ${src_slot##*/} into it)"; then
+        target="$slot"
+        break
+      fi
+    done
+    if [ -z "$target" ]; then
+      echo "refresh: every other tree is at $pin or in use, so there is nothing to copy into"
+      exit 0
+    fi
+    copier="$owner (copying ${src_slot##*/} into it)"
+    release() { "$LOCK_SH" drop "$target/src" "$copier" >/dev/null 2>&1 || true; }
+    trap release EXIT
+
+    # Cloning or nothing: a plain copy of a 137G tree does not fit beside two.
+    probe="$src_slot/.domicile-clone-probe"
+    rm -f "$probe" "$target/.domicile-clone-probe"
+    : >"$probe"
+    if ! $COPY "$probe" "$target/.domicile-clone-probe" 2>/dev/null; then
+      rm -f "$probe" "$target/.domicile-clone-probe"
+      echo "::warning::refresh: '$COPY' cannot share blocks between ${src_slot##*/} and ${target##*/}, so ${target##*/} stays at $(slot_pin "$target") and the next run on $pin there rebuilds it"
+      exit 0
+    fi
+    rm -f "$probe" "$target/.domicile-clone-probe"
+
+    was="$(slot_pin "$target")"
+    started="$(date +%s)"
+    rm -rf "$target/src.copying"
+    if ! $COPY "$from" "$target/src.copying"; then
+      rm -rf "$target/src.copying"
+      echo "::warning::refresh: copying ${src_slot##*/} into ${target##*/} failed, so ${target##*/} stays as it was"
+      exit 0
+    fi
+    # The stamps go first, so a run that dies past here sees no pin and ranks
+    # the tree as free rather than trusting a half-swapped one.
+    rm -f "$target/.domicile-synced-pin" "$target/.domicile-series-stamp" "$target/.domicile-built"
+    mv -T "$target/src" "$target/src.old"
+    mv -T "$target/src.copying" "$target/src"
+    for stamp in .domicile-gen-pin .domicile-series-files .domicile-kept-mtimes \
+                 .domicile-series-stamp .domicile-built .domicile-synced-pin; do
+      if [ -e "$src_slot/$stamp" ]; then
+        cp -p "$src_slot/$stamp" "$target/$stamp"
+      else
+        rm -f "$target/$stamp"
+      fi
+    done
+    printf '%s %s\n' "$src_slot" "$(date -u +%FT%TZ)" >"$target/.domicile-copied-from"
+    rm -rf "$target/src.old"
+    echo "refresh: copied ${src_slot##*/} into ${target##*/} in $(( $(date +%s) - started ))s; ${target##*/} was at ${was:-no pin} and is now at $pin"
     ;;
 
   *) usage ;;
