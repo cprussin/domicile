@@ -217,7 +217,7 @@ jobs:
   # `site` follows the release, keeping the site fixes it doesn't have.
   site:
     needs: release
-    if: ${{ !inputs.dry_run && !inputs.prerelease && needs.release.result == 'success' }}
+    if: ${{ !cancelled() && !inputs.dry_run && !inputs.prerelease && needs.release.result == 'success' }}
     permissions:
       contents: write
     uses: ./.github/workflows/site.yml
