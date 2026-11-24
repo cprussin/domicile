@@ -39,6 +39,7 @@
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "components/domicile/common/synced_frame.h"
+#include "components/domicile/engine/broker_socket.h"
 #include "components/domicile/engine/buffer_color.h"
 #include "components/domicile/engine/engine_event_queue.h"
 #include "components/domicile/engine/domicile_engine_spike.h"
@@ -73,7 +74,6 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "mojo/public/cpp/platform/named_platform_channel.h"
 #include "mojo/public/cpp/platform/platform_channel_endpoint.h"
 #include "mojo/public/cpp/system/invitation.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
@@ -217,7 +217,7 @@ class Surface : public mojom::SurfaceObserver,
   // it: the browser holds the only reference to its SharedImage, and viz draws
   // a fallback image over any it cannot find.
   void Forget(uint64_t buffer_id) {
-    const std::optional<gpu::SyncToken> read_done =
+    std::optional<std::vector<gpu::SyncToken>> read_done =
         holds_.Destroyed(buffer_id);
     auto iter = buffers_.find(buffer_id);
     if (iter != buffers_.end()) {
@@ -227,7 +227,8 @@ class Surface : public mojom::SurfaceObserver,
       buffers_.erase(iter);
     }
     if (read_done.has_value()) {
-      broker_->DestroyBuffer(frame_sink_id_, buffer_id, *read_done);
+      broker_->DestroyBuffer(frame_sink_id_, buffer_id,
+                             std::move(*read_done));
     }
   }
 
@@ -591,8 +592,11 @@ class Surface : public mojom::SurfaceObserver,
         continue;
       }
       const uint64_t buffer = iter->second.buffer;
-      const gpu::SyncToken read_done = iter->second.shared_image->EndExport(
-          std::move(resource.shared_image_export_result));
+      // A token per read: viz may have read the buffer on several GPU streams,
+      // which EndExport refuses with a CHECK.
+      std::vector<gpu::SyncToken> read_done =
+          iter->second.shared_image->EndExportAsVector(
+              std::move(resource.shared_image_export_result));
       switch (holds_.Returned(buffer, resource.count, read_done)) {
         case SurfaceHolds::Return::kRelease:
           queue_->Push({.type = EngineEvent::Type::kReleased,
@@ -601,7 +605,8 @@ class Surface : public mojom::SurfaceObserver,
           break;
         case SurfaceHolds::Return::kDestroy:
           resource_to_buffer_.erase(iter);
-          broker_->DestroyBuffer(frame_sink_id_, buffer, read_done);
+          broker_->DestroyBuffer(frame_sink_id_, buffer,
+                                 std::move(read_done));
           break;
         case SurfaceHolds::Return::kKeep:
           break;
@@ -2057,8 +2062,7 @@ struct DomicileEngine {
 
   void ConnectOnThread(const std::string& socket_path, bool* connected) {
     mojo::PlatformChannelEndpoint endpoint =
-        mojo::NamedPlatformChannel::ConnectToServer(
-            mojo::NamedPlatformChannel::ServerNameFromUTF8(socket_path));
+        domicile::ConnectToBroker(socket_path);
     if (!endpoint.is_valid()) {
       LOG(ERROR) << "domicile: no browser listening at " << socket_path;
       *connected = false;

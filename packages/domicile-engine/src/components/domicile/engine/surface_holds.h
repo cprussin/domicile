@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
@@ -37,19 +38,22 @@ class SurfaceHolds {
   void Sent(uint64_t buffer);
 
   // Viz returned `count` holds on `buffer`. Its GPU is done reading it once
-  // `read_done` passes. On kDestroy, the import goes after `read_done`.
-  Return Returned(uint64_t buffer, int count, const gpu::SyncToken& read_done);
+  // every token in `read_done` passes: one per read, which may be on several
+  // GPU streams. On kDestroy, the import goes after them.
+  Return Returned(uint64_t buffer,
+                  int count,
+                  const std::vector<gpu::SyncToken>& read_done);
 
-  // The client destroyed `buffer`. When viz holds none of it, the token its
-  // import's destruction waits on: the one viz last returned it with, or none
+  // The client destroyed `buffer`. When viz holds none of it, the tokens its
+  // import's destruction waits on: the ones viz last returned it with, or none
   // if viz never had it. Nullopt while viz holds it.
-  std::optional<gpu::SyncToken> Destroyed(uint64_t buffer);
+  std::optional<std::vector<gpu::SyncToken>> Destroyed(uint64_t buffer);
 
  private:
   base::flat_map<uint64_t, int> held_;
   base::flat_set<uint64_t> destroyed_;
-  // The token each returned buffer still alive was last returned with.
-  base::flat_map<uint64_t, gpu::SyncToken> read_done_;
+  // The tokens each returned buffer still alive was last returned with.
+  base::flat_map<uint64_t, std::vector<gpu::SyncToken>> read_done_;
 };
 
 }  // namespace domicile

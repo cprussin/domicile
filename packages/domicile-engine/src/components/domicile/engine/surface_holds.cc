@@ -3,6 +3,8 @@
 
 #include "components/domicile/engine/surface_holds.h"
 
+#include <utility>
+
 #include "base/check.h"
 #include "base/check_op.h"
 
@@ -16,9 +18,10 @@ void SurfaceHolds::Sent(uint64_t buffer) {
   ++held_[buffer];
 }
 
-SurfaceHolds::Return SurfaceHolds::Returned(uint64_t buffer,
-                                            int count,
-                                            const gpu::SyncToken& read_done) {
+SurfaceHolds::Return SurfaceHolds::Returned(
+    uint64_t buffer,
+    int count,
+    const std::vector<gpu::SyncToken>& read_done) {
   auto iter = held_.find(buffer);
   CHECK(iter != held_.end()) << "domicile: viz returned a buffer never sent";
   iter->second -= count;
@@ -37,16 +40,17 @@ SurfaceHolds::Return SurfaceHolds::Returned(uint64_t buffer,
   return Return::kDestroy;
 }
 
-std::optional<gpu::SyncToken> SurfaceHolds::Destroyed(uint64_t buffer) {
+std::optional<std::vector<gpu::SyncToken>> SurfaceHolds::Destroyed(
+    uint64_t buffer) {
   if (held_.contains(buffer)) {
     destroyed_.insert(buffer);
     return std::nullopt;
   }
   auto iter = read_done_.find(buffer);
   if (iter == read_done_.end()) {
-    return gpu::SyncToken();
+    return std::vector<gpu::SyncToken>();
   }
-  const gpu::SyncToken read_done = iter->second;
+  std::vector<gpu::SyncToken> read_done = std::move(iter->second);
   read_done_.erase(iter);
   return read_done;
 }

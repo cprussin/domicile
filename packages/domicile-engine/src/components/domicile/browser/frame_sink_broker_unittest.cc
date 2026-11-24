@@ -89,7 +89,7 @@ constexpr uint32_t kArgb8888 = 0x34325241;
 constexpr gfx::Size kBufferSize(64, 48);
 
 // The browser's SharedImageInterface, recording the images it is told to read
-// only after an acquire fence.
+// only after an acquire fence, and the tokens it is told to wait for.
 class FenceRecordingSharedImageInterface : public gpu::TestSharedImageInterface {
  public:
   FenceRecordingSharedImageInterface();
@@ -99,13 +99,19 @@ class FenceRecordingSharedImageInterface : public gpu::TestSharedImageInterface 
                          std::unique_ptr<gfx::GpuFence> acquire_fence,
                          const gpu::Mailbox& mailbox) override;
 
+  void WaitSyncToken(const gpu::SyncToken& sync_token) override;
+
   // Every image given a fence, in order.
   const std::vector<gpu::Mailbox>& fenced() const { return fenced_; }
+
+  // Every token waited for, in order.
+  const std::vector<gpu::SyncToken>& waited() const { return waited_; }
 
  private:
   ~FenceRecordingSharedImageInterface() override;
 
   std::vector<gpu::Mailbox> fenced_;
+  std::vector<gpu::SyncToken> waited_;
 };
 
 FenceRecordingSharedImageInterface::FenceRecordingSharedImageInterface() =
@@ -122,6 +128,12 @@ void FenceRecordingSharedImageInterface::UpdateSharedImage(
   fenced_.push_back(mailbox);
   gpu::TestSharedImageInterface::UpdateSharedImage(
       sync_token, std::move(acquire_fence), mailbox);
+}
+
+void FenceRecordingSharedImageInterface::WaitSyncToken(
+    const gpu::SyncToken& sync_token) {
+  // TestSharedImageInterface's own is NOTREACHED.
+  waited_.push_back(sync_token);
 }
 
 // The browser's SharedImageInterface while it composites in software,
@@ -2058,12 +2070,43 @@ TEST_F(FrameSinkBrokerTest, ADestroyedBufferGoesAfterVizsLastReadOfIt) {
                            /*release_count=*/42);
   read_done.SetVerifyFlush();
 
-  remote->DestroyBuffer(frame_sink_id, buffer_id, read_done);
+  remote->DestroyBuffer(frame_sink_id, buffer_id, {read_done});
   remote.FlushForTesting();
 
   EXPECT_FALSE(sii_->CheckSharedImageExists(mailbox));
   EXPECT_EQ(sii_->MostRecentDestroyTokens(),
             std::vector<gpu::SyncToken>{read_done});
+}
+
+// Viz returns a buffer it read on several GPU streams with a token for each.
+// The image goes after every one of those reads.
+TEST_F(FrameSinkBrokerTest, ABufferReadOnSeveralStreamsGoesAfterEveryRead) {
+  UseTheGpu();
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const auto [buffer_id, mailbox] = ImportABuffer(remote, frame_sink_id);
+  std::vector<gpu::SyncToken> read_done = {
+      gpu::SyncToken(gpu::CommandBufferNamespace::GPU_IO,
+                     gpu::CommandBufferId::FromUnsafeValue(7),
+                     /*release_count=*/42),
+      gpu::SyncToken(gpu::CommandBufferNamespace::GPU_IO,
+                     gpu::CommandBufferId::FromUnsafeValue(8),
+                     /*release_count=*/3)};
+  for (gpu::SyncToken& token : read_done) {
+    token.SetVerifyFlush();
+  }
+
+  remote->DestroyBuffer(frame_sink_id, buffer_id, read_done);
+  remote.FlushForTesting();
+
+  EXPECT_FALSE(sii_->CheckSharedImageExists(mailbox));
+  EXPECT_EQ(sii_->waited(), read_done);
+  EXPECT_EQ(sii_->MostRecentDestroyTokens(),
+            std::vector<gpu::SyncToken>{sii_->MostRecentGeneratedToken()});
 }
 
 TEST_F(FrameSinkBrokerTest, FencingABufferNeverImportedIsRefused) {

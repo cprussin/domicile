@@ -338,17 +338,40 @@ std::optional<gpu::SyncToken> BrokeredFrameSink::FenceBuffer(
   return sii->GenVerifiedSyncToken();
 }
 
-void BrokeredFrameSink::DestroyBuffer(uint64_t buffer_id,
-                                      const gpu::SyncToken& read_done) {
+void BrokeredFrameSink::DestroyBuffer(
+    uint64_t buffer_id,
+    const std::vector<gpu::SyncToken>& read_done) {
   auto iter = buffers_.find(buffer_id);
   if (iter == buffers_.end()) {
     return;
   }
-  // The GPU destroys the image once viz's read of it lands, as
+  // The GPU destroys the image once viz's reads of it land, as
   // exo::Buffer::Texture does for a released buffer.
-  iter->second.shared_image->UpdateDestructionSyncToken(read_done);
+  iter->second.shared_image->UpdateDestructionSyncToken(
+      AfterEvery(read_done));
   resource_to_buffer_.erase(iter->second.resource.id);
   buffers_.erase(iter);
+}
+
+gpu::SyncToken BrokeredFrameSink::AfterEvery(
+    const std::vector<gpu::SyncToken>& tokens) {
+  switch (tokens.size()) {
+    case 0:
+      return gpu::SyncToken();
+    case 1:
+      return tokens[0];
+    default:
+      break;
+  }
+  gpu::SharedImageInterface* sii = get_shared_image_interface_.Run();
+  CHECK(sii) << "domicile: viz returned " << tokens.size()
+             << " GPU reads of a buffer, and there is no GPU";
+  for (const gpu::SyncToken& token : tokens) {
+    sii->WaitSyncToken(token);
+  }
+  // Unverified: it is waited on through this interface alone, by the image's
+  // destruction.
+  return sii->GenUnverifiedSyncToken();
 }
 
 void BrokeredFrameSink::ReleaseReturnedResources(

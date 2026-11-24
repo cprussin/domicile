@@ -22,6 +22,31 @@ source_set("event_queue") {
   public_deps = [ "//base" ]
 }
 
+# Connects to the browser's broker socket, close-on-exec.
+source_set("broker_socket") {
+  sources = [
+    "broker_socket.cc",
+    "broker_socket.h",
+  ]
+
+  deps = [ "//base" ]
+
+  public_deps = [ "//mojo/public/cpp/platform" ]
+}
+
+source_set("broker_socket_unit_tests") {
+  testonly = true
+
+  sources = [ "broker_socket_unittest.cc" ]
+
+  deps = [
+    ":broker_socket",
+    "//base",
+    "//mojo/public/cpp/platform",
+    "//testing/gtest",
+  ]
+}
+
 # Converts a client's window geometry to texture coordinates.
 source_set("surface_crop") {
   sources = [
@@ -283,6 +308,7 @@ shared_library("domicile_engine") {
   ]
 
   deps = [
+    ":broker_socket",
     ":buffer_color",
     ":event_queue",
     ":probe_wait",

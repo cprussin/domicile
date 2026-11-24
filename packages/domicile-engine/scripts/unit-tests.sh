@@ -18,9 +18,9 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$ROOT/packages/domicile-engine/scripts/lib-engine-guard.sh"
 require_engine_out
 
-FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:ShellWindowPlacesTest.*:ShellWindowsToFitTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:SurfaceTransformTest.*:SurfaceAlphaTest.*:ExtensionInstallerTest.*:ExtensionSettingsTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*:DeskGeometryTest.*:DomicileDisplayRegionsTest.*:DomicileDeskTargeterTest.*:PlaceholderStageTest.*:SystemCallTest.*:PortalRequestTest.*:FileChoiceTest.*:DisplayCaptureTest.*:CapturedFourccTest.*:DisplayCaptureTargetTest.*:HeldChordsTest.*:ForwardedKeysTest.*:SitePermissionsTest.*:ControlChannelTest.*:DeviceChoicesTest.*:SurfaceFramesTest.*:SurfaceHoldsTest.*:GuestDialogsTest.*:DownloadTallyTest.*:SurfaceSubmitsTest.*:SurfaceBacklogTest.*:PrivatePagesTest.*:ShellOriginTest.*:AppRootsTest.*:AppChannelTest.*:AppDocumentTest.*:WebViewUrlTest.*:ShellFetchTest.*:BrowserWindowCaptureTargetTest.*:BrowserWindowListingTest.*:ShellWindowWaitTest.*:ShellSwapTest.*:DeskCursorThemeSourceTest.*:XCursorThemeTest.*:XCursorThemeDirectoryTest.*:SyncedFrameTest.*:RenderProcessTest.*:ShellDeathTest.*:ProbeWaitTest.*:ScreenCaptureTest.*:ScreenChoiceTest.*:WebViewPartitionTest.*:WillNavigateTest.*:DeskActivityTest.*:DeskPointerTest.*:PointerWarpTest.*:PageMatchesTest.*:ForceDarkTest.*:HiddenFromCapturesTest.*:LocaleFallbackTest.*:DomicileLcdTextActivationTest.*:RtkitTest.*:DeskGesturesTest.*:NativeGestureSequenceTest.*:EdgeSwipeTest.*:DeskPointerHidingTest.*:PointerHidingTest.*:InputMethodLinesTest.*:DeskModifierTapsTest.*:TapModifierOfTest.*:IdentityDialogTest.*:PictureInPictureVideosTest.*:BufferColorTest.*:ElectronProtocolTest.*:ElectronAppTest.*:ElectronSessionEventsTest.*:ElectronPageCallTest.*:ElectronPageReportsTest.*:ElectronInputTest.*:ElectronPermissionForTest.*:ElectronSchemesTest.*:ContextBridgeTest.*:ContextMenuTest.*:UnacceleratedMotionTest.*:WarpLandingTest.*:PointerConfinementBoxesTest.*:BrowserProfilesTest.*:UnfocusedWebViewsTest.*:HistoryMenuTest.*:ShellDevServerTest.*:ShellDevServerLoadTest.*:ShellDevServerGoneTest.*:ForCaptureToolsTest.*:DeskDragTest.*:DomicileMonitorTwinActivationTest.*:CursorDisplayTest.*:DomicileHiddenPageTilesTest.*:ChannelDisconnectOrderTest.*'
+FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:ShellWindowPlacesTest.*:ShellWindowsToFitTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:SurfaceTransformTest.*:SurfaceAlphaTest.*:ExtensionInstallerTest.*:ExtensionSettingsTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*:DeskGeometryTest.*:DomicileDisplayRegionsTest.*:DomicileDeskTargeterTest.*:PlaceholderStageTest.*:SystemCallTest.*:PortalRequestTest.*:FileChoiceTest.*:DisplayCaptureTest.*:CapturedFourccTest.*:DisplayCaptureTargetTest.*:HeldChordsTest.*:ForwardedKeysTest.*:SitePermissionsTest.*:ControlChannelTest.*:DeviceChoicesTest.*:SurfaceFramesTest.*:SurfaceHoldsTest.*:GuestDialogsTest.*:DownloadTallyTest.*:SurfaceSubmitsTest.*:SurfaceBacklogTest.*:PrivatePagesTest.*:ShellOriginTest.*:AppRootsTest.*:AppChannelTest.*:AppDocumentTest.*:WebViewUrlTest.*:ShellFetchTest.*:BrowserWindowCaptureTargetTest.*:BrowserWindowListingTest.*:ShellWindowWaitTest.*:ShellSwapTest.*:DeskCursorThemeSourceTest.*:XCursorThemeTest.*:XCursorThemeDirectoryTest.*:SyncedFrameTest.*:RenderProcessTest.*:ShellDeathTest.*:ProbeWaitTest.*:ScreenCaptureTest.*:ScreenChoiceTest.*:WebViewPartitionTest.*:WillNavigateTest.*:DeskActivityTest.*:DeskPointerTest.*:PointerWarpTest.*:PageMatchesTest.*:ForceDarkTest.*:HiddenFromCapturesTest.*:LocaleFallbackTest.*:DomicileLcdTextActivationTest.*:RtkitTest.*:DeskGesturesTest.*:NativeGestureSequenceTest.*:EdgeSwipeTest.*:DeskPointerHidingTest.*:PointerHidingTest.*:InputMethodLinesTest.*:DeskModifierTapsTest.*:TapModifierOfTest.*:IdentityDialogTest.*:PictureInPictureVideosTest.*:BufferColorTest.*:ElectronProtocolTest.*:ElectronAppTest.*:ElectronSessionEventsTest.*:ElectronPageCallTest.*:ElectronPageReportsTest.*:ElectronInputTest.*:ElectronPermissionForTest.*:ElectronSchemesTest.*:ContextBridgeTest.*:ContextMenuTest.*:UnacceleratedMotionTest.*:WarpLandingTest.*:PointerConfinementBoxesTest.*:BrowserProfilesTest.*:UnfocusedWebViewsTest.*:HistoryMenuTest.*:ShellDevServerTest.*:ShellDevServerLoadTest.*:ShellDevServerGoneTest.*:ForCaptureToolsTest.*:DeskDragTest.*:DomicileMonitorTwinActivationTest.*:CursorDisplayTest.*:DomicileHiddenPageTilesTest.*:ChannelDisconnectOrderTest.*:BrokerSocketTest.*'
 
-# Every suite in the filter, counted rather than estimated: FrameSinkBroker 57,
+# Every suite in the filter, counted rather than estimated: FrameSinkBroker 58,
 # WindowDiff 7, EngineEventQueue 9, ShortcutRegistry 17, ShellURLLoaderFactory
 # 16, ShellDocument 13, ShellSource 6, CursorShape 3, CommandProtocol 75,
 # DomicileDisplayList 13, DomicileKeyboardLayout 3, ShellWindows 10,
@@ -31,7 +31,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # SystemCall 6, PortalRequest 3, FileChoice 13, DisplayCapture 9,
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, ForwardedKeys 5,
 # SitePermissions 11,
-# ControlChannel 30, DeviceChoices 9, SurfaceFrames 8, SurfaceHolds 4,
+# ControlChannel 30, DeviceChoices 9, SurfaceFrames 8, SurfaceHolds 6,
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4, SurfaceBacklog 4,
 # PrivatePages 3, ShellOrigin 4, AppRoots 4, AppChannel 3, AppDocument 3,
 # WebViewUrl 5, ShellFetch 22, BrowserWindowCaptureTarget 3, BrowserWindowListing 3, ShellWindowWait 4, ShellSwap 12,
@@ -49,8 +49,12 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # BrowserProfiles 12, UnfocusedWebViews 7, HistoryMenu 2, ShellDevServer 7,
 # ShellDevServerLoad 4, ShellDevServerGone 1, ForCaptureTools 2, DeskDrag 6,
 # DomicileMonitorTwinActivation 1, CursorDisplay 7, DomicileHiddenPageTiles 4,
-# ChannelDisconnectOrder 2.
+# ChannelDisconnectOrder 2, BrokerSocket 3.
 #
+# 1025, and it was 1020 — a buffer viz read on several GPU streams is one
+# more FrameSinkBroker case and one more SurfaceHolds one, and the broker
+# connection closing on exec and never blocking are three BrokerSocket cases.
+# Before that
 # 1020, and it was 1011 — an Electron app's window looks and input
 # (attention, the pointer let through, a shape), its blank and data: pages and
 # the mouse's back and forward buttons are five more ElectronProtocol cases and
@@ -364,7 +368,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=1020
+FLOOR=1025
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

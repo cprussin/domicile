@@ -265,7 +265,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
                    FenceBufferCallback callback) override;
   void DestroyBuffer(const viz::FrameSinkId& frame_sink_id,
                      uint64_t buffer_id,
-                     const gpu::SyncToken& read_done) override;
+                     const std::vector<gpu::SyncToken>& read_done) override;
   void ConfigureDisplays(
       std::vector<mojom::DisplayLayoutPtr> layout) override;
   void ConfigurePointers(

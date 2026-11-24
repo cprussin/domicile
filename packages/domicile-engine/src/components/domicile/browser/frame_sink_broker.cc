@@ -344,13 +344,14 @@ void FrameSinkBroker::FenceBuffer(const viz::FrameSinkId& frame_sink_id,
                  : std::nullopt);
 }
 
-void FrameSinkBroker::DestroyBuffer(const viz::FrameSinkId& frame_sink_id,
-                                    uint64_t buffer_id,
-                                    const gpu::SyncToken& read_done) {
+void FrameSinkBroker::DestroyBuffer(
+    const viz::FrameSinkId& frame_sink_id,
+    uint64_t buffer_id,
+    const std::vector<gpu::SyncToken>& read_done) {
   BrokeredFrameSink* frame_sink = OwnedFrameSink(frame_sink_id);
   if (frame_sink) {
     VLOG(3) << "domicile: app " << frame_sink->app_id() << " destroys buffer "
-            << buffer_id << " after " << read_done.ToDebugString();
+            << buffer_id << " after " << read_done.size() << " reads";
     frame_sink->DestroyBuffer(buffer_id, read_done);
   }
 }
