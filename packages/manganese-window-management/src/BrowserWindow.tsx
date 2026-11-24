@@ -302,6 +302,7 @@ export const BrowserWindow = ({
   // The box the window eases from, while it settles.
   const [settlingFrom, setSettlingFrom] = useState<Rect | undefined>(undefined);
   useSettling({
+    dragged: dragging,
     element: element,
     onSettling: setSettlingFrom,
     origin:

@@ -36,6 +36,16 @@ const SCRATCHPAD_SLIDE = {
   "100%": { opacity: "1", transform: "translateY(0)" },
 };
 
+/**
+ * Where a window travels to, scaled to `scale` unless its travel sizes it.
+ * See `traveled`.
+ */
+const traveledTo = (scale: string): string =>
+  `translate(var(--travel-x, 0px), var(--travel-y, 0px)) scale(var(--travel-scale, ${scale}))`;
+
+const TRAVELED_TO_085 = traveledTo("0.85");
+const TRAVELED_TO_06 = traveledTo("0.6");
+
 // A workspace switch slides every window on the workspace by one screen width
 // (`--workspace-width`; see `slidAcross`). The arriving workspace starts where
 // the leaving one ends, so they never overlap and nothing needs to fade.
@@ -198,10 +208,12 @@ export const windowManagementPreset = definePreset({
         // redraw every frame.
         //
         // The bar and contents are separate elements, so each gets an inline
-        // `transform-origin` at the frame's center; see `scaledAbout`.
+        // `transform-origin` at the frame's center; see `scaledAbout`. A
+        // dialog grows out of the window it is for, from that window's middle
+        // (`--travel-*`, see `traveled`).
         windowOpening: {
-          "0%": { opacity: "0", transform: "scale(0.85)" },
-          "100%": { opacity: "1", transform: "scale(1)" },
+          "0%": { opacity: "0", transform: TRAVELED_TO_085 },
+          "100%": { opacity: "1", transform: "none" },
         },
         // The reverse of `windowClosingIntoTab`.
         windowOpeningFromTab: {
@@ -237,11 +249,13 @@ export const windowManagementPreset = definePreset({
           },
           "100%": { opacity: "1", transform: "none" },
         },
-        // A window sent to a workspace no screen shows. It shrinks further
-        // than `windowClosing`, so it does not look closed.
+        // A window sent to a workspace no screen shows. It flies into the
+        // workspace's chip in the bar (`--travel-*`, see `traveled`), or
+        // without one shrinks in place, further than `windowClosing`, so it
+        // does not look closed.
         windowSending: {
-          "0%": { opacity: "1", transform: "scale(1)" },
-          "100%": { opacity: "0", transform: "scale(0.6)" },
+          "0%": { opacity: "1", transform: "none" },
+          "100%": { opacity: "0", transform: TRAVELED_TO_06 },
         },
         windowStowing: SCRATCHPAD_SLIDE,
       },

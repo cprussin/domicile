@@ -419,16 +419,25 @@ Moves run on the preset's springs (`springs.smooth` for what arrives,
 [MOTION.md](/docs/architecture/MOTION.md)). Fades and settles keep fixed
 curves.
 
-- Opening: fade in and grow from the center.
+- Opening: fade in and grow from the center. A client's dialog grows out of
+  the middle of the window it is for (its `transientFor`), when that window
+  is drawn on its screen (`useTravels`). Browser popups and launched apps
+  grow in place: nothing tells the shell what opened them.
 - Opening a tab: the tab opens out from its start as the tabs after it slide
   along; the contents grow out of the tab and fade in over the tab they
   hide, slower than the tab so the move is seen.
 - Rearranging: windows ease to their new boxes.
+- Dropping a dragged window: it lands in its new box on `springs.smooth`, so
+  it settles like a thrown thing. Only the settle in the commit that lets go
+  springs (`useSettling`'s `dragged`).
 - Moving a tab along its strip, by keys or by dragging: the tabs slide to
   their new places, the moved one included.
 - Closing: shrink and fade out.
-- Sending to a workspace no screen shows: shrink further and fade out. A
-  tab group leaves as one: every part scales about the group's middle.
+- Sending to a workspace no screen shows: fly into the workspace's chip in
+  the bar, shrinking to fit inside it, and fade out. The chip
+  (`WORKSPACE_CHIP`) is measured once, as the window sets out. With no chip
+  showing, the window shrinks in place instead. A tab group leaves as one:
+  every part scales about the group's middle.
 - Closing a tab: it closes up toward its start as the tabs after it slide
   back. Its contents shrink into the tab and fade out over the tab it
   uncovers, as slowly as a new tab's grow out.
@@ -457,7 +466,9 @@ curves.
 Rules:
 
 - Open and close use transforms. Resizing the element would reconfigure the
-  client every frame.
+  client every frame. Where a window travels (`--travel-x`, `--travel-y`,
+  `--travel-scale`) is set on the wrappers of its parts, which all scale
+  about the frame's middle, so they travel together.
 - A browser window's page keeps its raster scale while a transform animation
   runs on it or a box around it, and takes the resting scale when it ends
   (engine patch 0233). Otherwise a heavy page rasters again every frame of an
@@ -467,7 +478,7 @@ Rules:
   and `scale` (`useSettling`). Eased boxes would hold every frame: the engine
   waits for a resized client to draw. Contents snap while a motion plays,
   since `scale` would scale the motion's travel. The ease takes
-  `durations.fastest` under reduced motion.
+  `durations.fastest` under reduced motion, a drop's spring included.
 - The box clips what it holds, which keeps its own size about the box's top
   left corner (`UPRIGHT`): the `<app>`, or a browser window's address bar and
   page. Scaling it would stretch the client's pixels; the box crops it

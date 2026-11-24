@@ -15,6 +15,7 @@ import { useContext } from "react";
 import type { Seen } from "./overview/sight";
 import type { Point } from "./settle";
 import { SlidingScreen } from "./sliding-screen";
+import type { Travel } from "./travel";
 import { WindowFrame } from "./WindowFrame";
 import type { WindowMotion } from "./window-motion";
 import { clippedAlong } from "./window-styles";
@@ -58,6 +59,7 @@ describe("WindowFrame", () => {
         rewound={0}
         screen={undefined}
         seen={undefined}
+        travel={undefined}
       >
         <Popover trigger={<Button>Site settings</Button>}>Body</Popover>
       </WindowFrame>,
@@ -91,6 +93,7 @@ describe("WindowFrame", () => {
         rewound={0}
         screen={undefined}
         seen={undefined}
+        travel={undefined}
       >
         <button type="button">part</button>
       </WindowFrame>,
@@ -122,6 +125,7 @@ describe("WindowFrame", () => {
         rewound={0}
         screen={undefined}
         seen={undefined}
+        travel={undefined}
       >
         <button type="button">part</button>
       </WindowFrame>,
@@ -139,6 +143,7 @@ describe("WindowFrame", () => {
       seen: Seen | undefined = undefined,
       fillsScreen = false,
       revealedFrom: Point | undefined = undefined,
+      travel: Travel | undefined = undefined,
     ) => {
       render(
         <WindowFrame
@@ -152,6 +157,7 @@ describe("WindowFrame", () => {
           rewound={0}
           screen={SCREEN}
           seen={seen}
+          travel={travel}
         >
           <button type="button">part</button>
         </WindowFrame>,
@@ -182,6 +188,22 @@ describe("WindowFrame", () => {
         wrapper?.getPropertyValue("--tab-slide-x"),
         wrapper?.getPropertyValue("--tab-slide-y"),
       ]).toStrictEqual(["-1", "0"]);
+    });
+
+    // A dialog grows out of the window it is for; a window sent away flies
+    // into its workspace's chip.
+    it("gives its parts the window's travel", () => {
+      const { wrapper } = styleOf("opening", undefined, false, undefined, {
+        scale: 0.5,
+        x: -40,
+        y: 30,
+      });
+
+      expect([
+        wrapper?.getPropertyValue("--travel-x"),
+        wrapper?.getPropertyValue("--travel-y"),
+        wrapper?.getPropertyValue("--travel-scale"),
+      ]).toStrictEqual(["-40px", "30px", "0.5"]);
     });
 
     it("slides its parts the width of the screen", () => {
@@ -239,6 +261,7 @@ describe("WindowFrame", () => {
           rewound={0}
           screen={{ height: 800, width: 1280, x: 0, y: 100 }}
           seen={undefined}
+          travel={undefined}
         >
           <SlidingPart />
         </WindowFrame>,
@@ -276,6 +299,7 @@ describe("WindowFrame", () => {
         rewound={0}
         screen={undefined}
         seen={undefined}
+        travel={undefined}
       >
         <button type="button">part</button>
       </WindowFrame>,

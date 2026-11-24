@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { WORKSPACE_CHIP } from "@domicile-desktop/manganese-window-management/travel";
 import { render, screen } from "@testing-library/react";
 
 import { css } from "../styled-system/css";
@@ -53,6 +54,13 @@ const boldCopy = css({
 });
 
 describe("Workspaces", () => {
+  // A window sent to a workspace flies into its chip.
+  it("marks each chip with its workspace", () => {
+    const { workspace } = switcher();
+
+    expect(workspace("3").getAttribute(WORKSPACE_CHIP)).toBe("3");
+  });
+
   describe("the highlight", () => {
     it("sits under the one on screen", () => {
       const { asked, highlight, workspace } = switcher();

@@ -15,7 +15,8 @@ export type Settler = {
    * Stops the element's settle, then eases it from `offset` to its box,
    * keeping each `upright` part at its own size and the element at depth
    * `over`, if any. Only stops for `undefined`. Calls `onEnded` when the
-   * settle runs to its end, not when it is stopped.
+   * settle runs to its end, not when it is stopped. A settle that follows a
+   * release of the pointer, as when a dragged window lands, is `released`.
    */
   play: (
     element: Element,
@@ -23,6 +24,7 @@ export type Settler = {
     upright: readonly Element[],
     over: number | undefined,
     onEnded: () => void,
+    released: boolean,
   ) => void;
 };
 
@@ -43,6 +45,11 @@ type Placed = { origin: Point; rect: Rect; row: Rect | undefined };
 type Unknown<T> = { [K in keyof T]: T[K] | undefined };
 
 type Options = {
+  /**
+   * Whether the box follows the pointer, as `still` holds it. The settle in
+   * the commit that lets go plays on a spring, so the box lands as if thrown.
+   */
+  dragged?: boolean | undefined;
   element: RefObject<Element | null>;
   /**
    * Called with the box the element is drawn at when a settle starts, and
@@ -105,6 +112,7 @@ type Options = {
  * Runs before paint, so no frame shows the new box without the offset.
  */
 export const useSettling = ({
+  dragged = false,
   element,
   onSettling = IGNORED,
   origin,
@@ -117,6 +125,7 @@ export const useSettling = ({
   takesOver = NO_KEYS,
 }: Options): void => {
   const last = useRef<Placed | undefined>(undefined);
+  const wasDragged = useRef(dragged);
   const { x, y, width, height } = rect ?? {};
   const { x: originX, y: originY } = origin ?? {};
   const { x: rowX, y: rowY, width: rowWidth, height: rowHeight } = row ?? {};
@@ -125,6 +134,8 @@ export const useSettling = ({
   const taken = [...shared, ...takesOver].join("\n");
   useLayoutEffect(() => {
     const was = last.current;
+    const released = wasDragged.current && !dragged;
+    wasDragged.current = dragged;
     const shown = element.current;
     const now = placedOf(
       { height, width, x, y },
@@ -143,6 +154,7 @@ export const useSettling = ({
             offsetFrom(from, now.rect, now.origin),
             over,
             onSettling,
+            false,
           );
         }
       } else if (!sameBox(was.rect, now.rect)) {
@@ -153,10 +165,12 @@ export const useSettling = ({
           still ? undefined : offsetTo(shown, leftRow(was, now), now, settler),
           over,
           onSettling,
+          released,
         );
       }
     }
   }, [
+    dragged,
     element,
     handoffs,
     onSettling,
@@ -202,7 +216,7 @@ const IGNORED = () => undefined;
 /**
  * Plays the element's settle from `offset` to its box `now`, at depth `over`
  * if any, or stops it for `undefined`, and tells `onSettling` the box it
- * starts from.
+ * starts from. A `released` settle plays on a spring.
  */
 const settle = (
   settler: Settler,
@@ -211,13 +225,21 @@ const settle = (
   offset: Offset | undefined,
   over: number | undefined,
   onSettling: (from: Rect | undefined) => void,
+  released: boolean,
 ): void => {
   onSettling(
     offset === undefined ? undefined : drawnAt(now.rect, now.origin, offset),
   );
-  settler.play(element, offset, uprightIn(element), over, () => {
-    onSettling(undefined);
-  });
+  settler.play(
+    element,
+    offset,
+    uprightIn(element),
+    over,
+    () => {
+      onSettling(undefined);
+    },
+    released,
+  );
 };
 
 /** The parts of `element` kept upright; see {@link UPRIGHT}. */
@@ -333,7 +355,7 @@ const WEB_ANIMATIONS: Settler = {
       ? NONE
       : partway(settle.from, progress);
   },
-  play: (element, offset, upright, over, onEnded) => {
+  play: (element, offset, upright, over, onEnded, released) => {
     const was = settles.get(element);
     was?.animation.cancel();
     was?.held?.cancel();
@@ -342,7 +364,7 @@ const WEB_ANIMATIONS: Settler = {
     }
     settles.delete(element);
     if (offset !== undefined) {
-      const timing = settleTiming();
+      const timing = settleTiming(released);
       const animation = settled(element, timing, [
         {
           scale: `${offset.scaleX.toString()} ${offset.scaleY.toString()}`,
@@ -382,15 +404,28 @@ const WEB_ANIMATIONS: Settler = {
   },
 };
 
-/** The shortest duration under reduced motion, as the preset gives others. */
-const settleTiming = (): KeyframeAnimationOptions => ({
-  duration: millisecondsOf(
-    document.documentElement.hasAttribute("data-reduced-motion")
-      ? token("durations.fastest")
-      : token("durations.fast"),
-  ),
-  easing: token("easings.out"),
-});
+/**
+ * A settle's timing: a spring for one that follows a release of the pointer,
+ * and the shortest duration under reduced motion, as the preset gives others.
+ */
+export const settleTiming = (released: boolean): KeyframeAnimationOptions => {
+  if (document.documentElement.hasAttribute("data-reduced-motion")) {
+    return {
+      duration: millisecondsOf(token("durations.fastest")),
+      easing: token("easings.out"),
+    };
+  } else if (released) {
+    return {
+      duration: millisecondsOf(token("durations.springs.smooth")),
+      easing: token("easings.springs.smooth"),
+    };
+  } else {
+    return {
+      duration: millisecondsOf(token("durations.fast")),
+      easing: token("easings.out"),
+    };
+  }
+};
 
 /** Plays `keyframes` on `element` as part of a settle. */
 const settled = (

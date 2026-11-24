@@ -222,13 +222,15 @@ Tooling:
 Windows (no engine change):
 
 - [x] open, close, tab open / close, restack on springs; tab edge as a layer
-- [ ] open from the launcher or the window that opened it (needs the opener
-      in the window model)
+- [x] open from the window that opened it, for a client's dialog
+      (`transientFor`)
+- [ ] open from the launcher, or a browser popup from its opener (needs the
+      engine to say what opened a window)
 - [x] workspace switch and scratchpad as reversible transitions
-- [ ] send to workspace flies to its switcher chip
+- [x] send to workspace flies to its switcher chip
 - [x] tab switch directional slide
 - [x] picture-in-picture on springs
-- [ ] drag release on springs
+- [x] drag release on springs
 
 Overview:
 

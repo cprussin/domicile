@@ -615,6 +615,29 @@ describe("AppWindow", () => {
       expect(played).toStrictEqual([undefined]);
     });
 
+    it("lands on a spring when it is let go", () => {
+      const { released, settler } = recordedSettles();
+      const { rerender } = render(
+        <AppWindow
+          {...windowProps}
+          dragging
+          focused={false}
+          settler={settler}
+        />,
+      );
+
+      rerender(
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          rect={{ ...ON_SCREEN, x: 40 }}
+          settler={settler}
+        />,
+      );
+
+      expect(released).toStrictEqual([true]);
+    });
+
     it("stays opaque while it is being dragged", () => {
       const { container } = render(
         <AppWindow {...windowProps} dragging focused={false} />,

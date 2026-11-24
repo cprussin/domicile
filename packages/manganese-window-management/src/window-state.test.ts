@@ -100,6 +100,21 @@ describe("the windows a host announces", () => {
     expect(activeIdOf(state)).toBe(APP("editor"));
   });
 
+  it("remembers the window that opened one", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.AppAppeared("editor", "editor", "kitty"),
+    );
+
+    expect(state.windows.find(({ id }) => id === APP("editor"))).toMatchObject({
+      opener: APP("kitty"),
+    });
+  });
+
+  it("remembers no opener for a window nothing opened", () => {
+    expect(desktop("kitty").windows).toMatchObject([{ opener: undefined }]);
+  });
+
   it("takes the window away when the client goes", () => {
     const state = reduce(
       desktop("kitty", "editor"),
@@ -620,6 +635,23 @@ describe("the clients that open floating", () => {
       width: 400,
       x: 760,
       y: Math.round((1080 - height) / 2),
+    });
+  });
+
+  it("remembers the window that opened one", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.AppAppearedFloating(
+        "pin",
+        "pinentry",
+        [400, 300],
+        false,
+        "kitty",
+      ),
+    );
+
+    expect(state.windows.find(({ id }) => id === APP("pin"))).toMatchObject({
+      opener: APP("kitty"),
     });
   });
 

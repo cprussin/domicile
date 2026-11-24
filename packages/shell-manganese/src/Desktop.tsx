@@ -111,6 +111,7 @@ import {
   shutIdsOf,
   WindowAction,
   WindowActionKind,
+  workspaceHolding,
 } from "@domicile-desktop/manganese-window-management/window-state";
 import type { Workspaces } from "@domicile-desktop/manganese-window-management/workspaces-context";
 import { WorkspacesContext } from "@domicile-desktop/manganese-window-management/workspaces-context";
@@ -674,6 +675,12 @@ export const Desktop = ({
   );
   // A video in picture-in-picture opens on its window's screen, or on the
   // focused one while its window is on none.
+  // A window sent to a workspace flies into its chip in the bar.
+  const workspaceOf = useCallback(
+    (id: string): string | undefined =>
+      workspaceHolding({ workspaces }, id)?.name,
+    [workspaces],
+  );
   const pictureInPictureWorkspace = useCallback(
     (window: string): Rect => {
       const name =
@@ -883,6 +890,7 @@ export const Desktop = ({
             screens={screens}
             shut={shut}
             windows={windows.windows}
+            workspaceOf={workspaceOf}
           />
         )}
         {/*

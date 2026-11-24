@@ -62,6 +62,7 @@ export const GroupWell = ({
   const lowered = useLowered(depth);
   const sliding = useContext(SlidingScreen);
   useSettling({
+    dragged: dragging,
     element,
     origin: originOf(rect, rect),
     rect,

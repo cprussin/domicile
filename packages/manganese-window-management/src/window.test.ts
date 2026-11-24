@@ -23,9 +23,14 @@ describe("ShellWindow", () => {
         kind: WindowKind.App,
         maxSize: [undefined, undefined],
         minSize: [undefined, undefined],
+        opener: undefined,
         syncedFrame: 0,
         title: "Terminal",
       });
+    });
+
+    it("names the window that opened it the same way", () => {
+      expect(ShellWindow.App("dialog", "Save", "term").opener).toBe("app:term");
     });
   });
 

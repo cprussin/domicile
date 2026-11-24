@@ -197,6 +197,7 @@ export const AppWindow = ({
   // Its popups, which ease along with it.
   const layer = useRef<HTMLDivElement>(null);
   const settling = {
+    dragged: dragging,
     origin:
       rect === undefined || frame === undefined
         ? undefined

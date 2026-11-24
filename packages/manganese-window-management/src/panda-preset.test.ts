@@ -50,4 +50,27 @@ describe("window keyframes", () => {
       "100%": { opacity: "1", transform: "none" },
     });
   });
+
+  // `--travel-x`, `--travel-y` and `--travel-scale` are set by `traveled`.
+  it("opens a window from the window that opened it", () => {
+    expect(keyframes.windowOpening).toStrictEqual({
+      "0%": {
+        opacity: "0",
+        transform:
+          "translate(var(--travel-x, 0px), var(--travel-y, 0px)) scale(var(--travel-scale, 0.85))",
+      },
+      "100%": { opacity: "1", transform: "none" },
+    });
+  });
+
+  it("sends a window off into its workspace's chip", () => {
+    expect(keyframes.windowSending).toStrictEqual({
+      "0%": { opacity: "1", transform: "none" },
+      "100%": {
+        opacity: "0",
+        transform:
+          "translate(var(--travel-x, 0px), var(--travel-y, 0px)) scale(var(--travel-scale, 0.6))",
+      },
+    });
+  });
 });

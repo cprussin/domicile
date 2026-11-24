@@ -218,6 +218,7 @@ export const TitleBar = ({
   const lowered = useLowered(shownDepth);
   const sliding = useContext(SlidingScreen);
   useSettling({
+    dragged: dragging,
     element,
     origin,
     // Over its window's contents.

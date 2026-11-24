@@ -1,3 +1,4 @@
+import { WORKSPACE_CHIP } from "@domicile-desktop/manganese-window-management/travel";
 import type { CSSProperties } from "react";
 import { useLayoutEffect, useRef, useState } from "react";
 
@@ -74,6 +75,8 @@ export const Workspaces = ({
             workspaceStyles({ shown: shownAs(name === current, focused) }),
           )}
           data-label={name}
+          // A window sent to the workspace flies into its chip.
+          {...{ [WORKSPACE_CHIP]: name }}
           key={name}
           onClick={() => {
             onSelect(name);

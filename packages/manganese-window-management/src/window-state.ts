@@ -512,26 +512,37 @@ export enum WindowActionKind {
 }
 
 export const WindowAction = {
-  /** The host announced a Wayland client. */
-  AppAppeared: (appId: string, title: string | undefined) => ({
+  /**
+   * The host announced a Wayland client, a dialog for client `opener` if
+   * given.
+   */
+  AppAppeared: (
+    appId: string,
+    title: string | undefined,
+    opener: string | undefined = undefined,
+  ) => ({
     appId,
     kind: WindowActionKind.AppAppeared as const,
+    opener,
     title,
   }),
 
   /**
    * The host announced a Wayland client that opens floating, at the `size` it
    * drew. `bare` drops the title bar for a client that draws its own frame.
+   * `opener` is the client it is a dialog for, if any.
    */
   AppAppearedFloating: (
     appId: string,
     title: string | undefined,
     size: readonly [width: number, height: number],
     bare: boolean,
+    opener: string | undefined = undefined,
   ) => ({
     appId,
     bare,
     kind: WindowActionKind.AppAppearedFloating as const,
+    opener,
     size,
     title,
   }),
@@ -1368,7 +1379,7 @@ const reduceAction = (
 ): WindowState => {
   switch (action.kind) {
     case WindowActionKind.AppAppeared: {
-      return openApp(state, action.appId, action.title);
+      return openApp(state, action.appId, action.title, action.opener);
     }
     case WindowActionKind.AppAppearedFloating: {
       return openFloatingApp(state, action);
@@ -1907,8 +1918,9 @@ const openApp = (
   state: WindowState,
   appId: string,
   title: string | undefined,
+  opener: string | undefined,
 ): WindowState => {
-  const window = Window.App(appId, title ?? appId);
+  const window = Window.App(appId, title ?? appId, opener);
   return windowOf(state, window.id) === undefined
     ? openWindow(state, window)
     : state;
@@ -1923,11 +1935,12 @@ const openFloatingApp = (
   {
     appId,
     bare,
+    opener,
     size: [width, height],
     title,
   }: ReturnType<typeof WindowAction.AppAppearedFloating>,
 ): WindowState => {
-  const window = Window.App(appId, title ?? appId);
+  const window = Window.App(appId, title ?? appId, opener);
   return windowOf(state, window.id) === undefined
     ? onCurrent(
         { ...state, windows: [...state.windows, window] },

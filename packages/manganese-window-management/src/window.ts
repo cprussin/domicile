@@ -51,6 +51,11 @@ export type ClientWindow = {
   maxSize: SizeLimit;
   /** The smallest the client will draw its window. */
   minSize: SizeLimit;
+  /**
+   * The window it is a dialog for, which it opens from, or `undefined` for
+   * none.
+   */
+  opener: string | undefined;
   /** The synced frame its `<app>` shows. See `DomicileWindow.frame`. */
   syncedFrame: number;
   title: string;
@@ -71,9 +76,14 @@ export const UNLIMITED: SizeLimit = [undefined, undefined];
 export const ShellWindow = {
   /**
    * A Wayland client's window. `id` is namespaced so it cannot collide with a
-   * browser window's.
+   * browser window's. `opener` is the client window it is a dialog for, by
+   * its client's id.
    */
-  App: (appId: string, title: string): ClientWindow => ({
+  App: (
+    appId: string,
+    title: string,
+    opener: string | undefined = undefined,
+  ): ClientWindow => ({
     appId,
     cursor: undefined,
     cursorImage: undefined,
@@ -82,6 +92,7 @@ export const ShellWindow = {
     kind: WindowKind.App,
     maxSize: UNLIMITED,
     minSize: UNLIMITED,
+    opener: opener === undefined ? undefined : appWindowId(opener),
     syncedFrame: 0,
     title,
   }),

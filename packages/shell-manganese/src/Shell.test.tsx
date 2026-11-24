@@ -3324,6 +3324,20 @@ describe("Shell", () => {
       expect(windowsOnScreen(container)).toEqual(["two"]);
     });
 
+    // Its chip shows once the workspace holds a window, in the same commit.
+    it("sends a window flying into its workspace's chip", async () => {
+      const { container } = await renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      press("parenright", true);
+
+      const frame = appBox(container, "two").closest<HTMLElement>(
+        "[data-window-frame]",
+      );
+      expect(frame?.style.getPropertyValue("--travel-scale")).not.toBe("");
+    });
+
     it("goes back to the last workspace when the same key is pressed", async () => {
       // `workspaceAutoBackAndForth = true`.
       const { container } = await renderShell();
@@ -3346,6 +3360,24 @@ describe("Shell", () => {
   });
 
   describe("floating windows", () => {
+    it("opens a dialog out of the window it is for", async () => {
+      const { container } = await renderShell();
+      clientAppears("term");
+      motionsPlayOut(container);
+
+      domicile.appear("pin", {
+        dialog: true,
+        height: 300,
+        transientFor: "term",
+        width: 400,
+      });
+
+      const frame = appBox(container, "pin").closest<HTMLElement>(
+        "[data-window-frame]",
+      );
+      expect(frame?.style.getPropertyValue("--travel-x")).not.toBe("");
+    });
+
     it("opens a dialog at the size it drew, with a title bar", async () => {
       const { container } = await renderShell();
       domicile.appear("pin", { dialog: true, height: 300, width: 400 });

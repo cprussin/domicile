@@ -62,6 +62,7 @@ export const FloatShadow = ({
   const lowered = useLowered(depth);
   const sliding = useContext(SlidingScreen);
   useSettling({
+    dragged: dragging,
     element,
     origin: originOf(frame, frame),
     rect: frame,

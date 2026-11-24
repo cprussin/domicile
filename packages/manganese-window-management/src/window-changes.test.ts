@@ -82,6 +82,39 @@ describe("windowChanges", () => {
       ]);
     });
 
+    // So it opens from the window that asked for it.
+    it("names the window it is a dialog for", () => {
+      expect(
+        windowChanges(
+          NO_RULES,
+          [],
+          [
+            {
+              ...TERM,
+              dialog: true,
+              height: 300,
+              transientFor: "editor",
+              width: 400,
+            },
+          ],
+        ),
+      ).toStrictEqual([
+        WindowAction.AppAppearedFloating(
+          "term",
+          "Terminal",
+          [400, 300],
+          false,
+          "editor",
+        ),
+      ]);
+    });
+
+    it("names the window it is tiled for", () => {
+      expect(
+        windowChanges(NO_RULES, [], [{ ...TERM, transientFor: "editor" }]),
+      ).toStrictEqual([WindowAction.AppAppeared("term", "Terminal", "editor")]);
+    });
+
     it("opens floating when a rule names it", () => {
       expect(
         windowChanges(

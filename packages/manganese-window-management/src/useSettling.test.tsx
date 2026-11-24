@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { act, render, renderHook } from "@testing-library/react";
 import { useRef } from "react";
 import { recordedSettles } from "./recorded-settles";
@@ -6,13 +6,14 @@ import type { Rect } from "./rect";
 import { SettleHandoffs } from "./SettleHandoffs";
 import type { Offset, Point } from "./settle";
 import type { Settler } from "./useSettling";
-import { useSettling } from "./useSettling";
+import { settleTiming, useSettling } from "./useSettling";
 
 const WAS = { height: 400, width: 600, x: 100, y: 50 };
 const NOW = { height: 800, width: 1200, x: 0, y: 30 };
 const CORNER = { x: 0, y: 0 };
 
 type Props = {
+  dragged?: boolean;
   origin: Point | undefined;
   over?: number | undefined;
   rect: Rect | undefined;
@@ -29,14 +30,24 @@ const settling = (
   element = { current: document.createElement("div") },
   onSettling?: (from: Rect | undefined) => void,
 ) => {
-  const { ends, held, kept, played, settler } = recordedSettles(current);
+  const { ends, held, kept, played, released, settler } =
+    recordedSettles(current);
   const { rerender } = renderHook(
-    ({ origin, over, rect, still }: Props) => {
-      useSettling({ element, onSettling, origin, over, rect, settler, still });
+    ({ dragged, origin, over, rect, still }: Props) => {
+      useSettling({
+        dragged,
+        element,
+        onSettling,
+        origin,
+        over,
+        rect,
+        settler,
+        still,
+      });
     },
     { initialProps: first },
   );
-  return { ends, held, kept, played, rerender };
+  return { ends, held, kept, played, released, rerender };
 };
 
 describe("useSettling", () => {
@@ -151,6 +162,62 @@ describe("useSettling", () => {
     rerender({ origin: CORNER, rect: NOW, still: true });
 
     expect(played).toStrictEqual([undefined]);
+  });
+
+  // A dropped window lands like a thrown thing, where a box the layout moves
+  // eases quietly into place.
+  describe("the settle after the pointer lets go", () => {
+    it("plays on a spring", () => {
+      const { released, rerender } = settling({
+        dragged: true,
+        origin: CORNER,
+        rect: WAS,
+        still: true,
+      });
+
+      rerender({ dragged: false, origin: CORNER, rect: NOW, still: false });
+
+      expect(released).toStrictEqual([true]);
+    });
+
+    it("plays only once", () => {
+      const { released, rerender } = settling({
+        dragged: true,
+        origin: CORNER,
+        rect: WAS,
+        still: true,
+      });
+
+      rerender({ dragged: false, origin: CORNER, rect: NOW, still: false });
+      rerender({ dragged: false, origin: CORNER, rect: WAS, still: false });
+
+      expect(released).toStrictEqual([true, false]);
+    });
+
+    it("is not the settle of a box the layout moves", () => {
+      const { released, rerender } = settling({
+        origin: CORNER,
+        rect: WAS,
+        still: false,
+      });
+
+      rerender({ origin: CORNER, rect: NOW, still: false });
+
+      expect(released).toStrictEqual([false]);
+    });
+
+    // A motion holds the box still too, but nothing was thrown.
+    it("is not the settle after a motion", () => {
+      const { released, rerender } = settling({
+        origin: CORNER,
+        rect: WAS,
+        still: true,
+      });
+
+      rerender({ origin: CORNER, rect: NOW, still: false });
+
+      expect(released).toStrictEqual([false]);
+    });
   });
 
   // A window back from off screen has its own arrival.
@@ -274,6 +341,37 @@ describe("useSettling", () => {
           [{ name: "two", rect: NOW, shared: ["a"] }],
         ]),
       ).toStrictEqual([]);
+    });
+  });
+});
+
+describe("settleTiming", () => {
+  afterEach(() => {
+    document.documentElement.removeAttribute("data-reduced-motion");
+  });
+
+  it("eases a box the layout moves quickly into place", () => {
+    expect(settleTiming(false)).toStrictEqual({
+      duration: 150,
+      easing: "cubic-bezier(0, 0, 0.2, 1)",
+    });
+  });
+
+  it("lands a released box on a spring", () => {
+    const { duration, easing } = settleTiming(true);
+
+    expect([duration, easing?.startsWith("linear(")]).toStrictEqual([
+      513,
+      true,
+    ]);
+  });
+
+  it("keeps to the shortest duration under reduced motion", () => {
+    document.documentElement.toggleAttribute("data-reduced-motion", true);
+
+    expect(settleTiming(true)).toStrictEqual({
+      duration: 50,
+      easing: "cubic-bezier(0, 0, 0.2, 1)",
     });
   });
 });

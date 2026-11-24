@@ -10,6 +10,8 @@ import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
 import type { Point } from "./settle";
 import { SlidingScreen } from "./sliding-screen";
+import type { Travel } from "./travel";
+import { traveled } from "./travel";
 import type { WindowMotion } from "./window-motion";
 import {
   clippedTo,
@@ -58,6 +60,8 @@ type Props = {
   screen: Rect | undefined;
   /** How the overview shows it, if open. See `seenAt`. */
   seen: Seen | undefined;
+  /** Where the window travels as it opens or leaves. See `useTravels`. */
+  travel: Travel | undefined;
 };
 
 /**
@@ -82,10 +86,10 @@ const KEY_DELIVERED = new Set([
  * the windows beside it.
  *
  * Takes no space, stacking or pointer of its own (see `screenClipStyles`).
- * Its children inherit the slide distances and tab edge from it, and it clips
- * them to their screen during a workspace switch. Each part also clips itself
- * to its workspace then (see `clippedAlong`). In the overview, it shows
- * them through their workspace's tile.
+ * Its children inherit the slide distances, travel and tab edge from it, and
+ * it clips them to their screen during a workspace switch. Each part also
+ * clips itself to its workspace then (see `clippedAlong`). In the overview, it
+ * shows them through their workspace's tile.
  */
 export const WindowFrame = ({
   children,
@@ -99,6 +103,7 @@ export const WindowFrame = ({
   rewound,
   screen,
   seen,
+  travel,
 }: Props) => {
   const element = useRef<HTMLDivElement>(null);
   const reached = useEffectEvent(() => {
@@ -136,6 +141,7 @@ export const WindowFrame = ({
       style={{
         ...unedgedOn(fillsScreen),
         ...tabSlidFrom(revealedFrom),
+        ...traveled(travel),
         ...(screen === undefined
           ? {}
           : {

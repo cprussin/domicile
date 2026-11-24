@@ -50,6 +50,8 @@ import { TileBorder } from "./tiled/TileBorder";
 import { TileGrab } from "./tiled/TileGrab";
 import { tabTargetsOf } from "./tiled/tab-targets";
 import { titleFocus } from "./title-focus";
+import type { Travel } from "./travel";
+import { traveled } from "./travel";
 import type { StripPlace } from "./tree/frames";
 import { tabKeyOf } from "./tree/frames";
 import { windowsIn } from "./tree/node";
@@ -58,6 +60,7 @@ import { focusedWindowIn } from "./tree/tiling";
 import { useCaptured } from "./useCaptured";
 import { keyOf, useFocusGlows } from "./useFocusGlows";
 import { useTabDrop } from "./useTabDrop";
+import { useTravels } from "./useTravels";
 import type { DrawnWindow, WindowMotions } from "./useWindowMotion";
 import { useWindowMotion } from "./useWindowMotion";
 import { WindowFrame } from "./WindowFrame";
@@ -162,6 +165,11 @@ type Props = {
   /** The open windows shown as closed. See `Shown.shut`. */
   shut: readonly string[];
   windows: readonly ShellWindow[];
+  /**
+   * The workspace holding window `id`, so a window sent there flies into its
+   * chip in the bar. See `useTravels`.
+   */
+  workspaceOf: (id: string) => string | undefined;
 };
 
 /**
@@ -215,6 +223,7 @@ export const Stage = memo(
     screens,
     shut,
     windows,
+    workspaceOf,
   }: Props) => {
     const motions = useWindowMotion(
       Object.fromEntries(
@@ -261,6 +270,12 @@ export const Stage = memo(
       () => motions.drawn.map((window) => seenIn(window, overview)),
       [motions.drawn, overview],
     );
+    const travels = useTravels(motions.drawn, workspaceOf);
+    // A tab's parts travel with the windows of its group.
+    const tabTravel = (tab: PlacedTab): Travel | undefined =>
+      tab.strip.group.windows
+        .map((id) => travels.get(id))
+        .find((travel) => travel !== undefined);
     // What the overview leaves out: it is for picking, not for working.
     const working = overview === undefined;
     const lit = focusBoxShowing(screens, activeId);
@@ -338,6 +353,7 @@ export const Stage = memo(
                   on={screenNamed(desk, screen)}
                   rewound={rewound}
                   seen={seen}
+                  travel={travels.get(window.id)}
                 >
                   <FloatShadow
                     depth={placement.depth}
@@ -365,6 +381,7 @@ export const Stage = memo(
                 on={screenNamed(desk, screen)}
                 rewound={rewound}
                 seen={overview?.shown.get(screen)}
+                travel={tabTravel(tab)}
               >
                 <GroupWell
                   // None for fullscreen floats, as for `FloatShadow`.
@@ -403,6 +420,11 @@ export const Stage = memo(
                   on={screenNamed(desk, following?.screen)}
                   rewound={following?.rewound ?? 0}
                   seen={undefined}
+                  travel={
+                    following === undefined
+                      ? undefined
+                      : travels.get(following.window.id)
+                  }
                 >
                   <FocusGlow
                     depth={box.depth}
@@ -484,6 +506,7 @@ export const Stage = memo(
                 screen={screen}
                 screenBox={screenNamed(desk, screen)?.geometry.screen}
                 seen={seen}
+                travel={travels.get(window.id)}
                 window={window}
               />
             ),
@@ -535,6 +558,7 @@ export const Stage = memo(
                   seen={seen}
                   strip={placement.strip}
                   targets={targets}
+                  travel={travels.get(window.id)}
                 />
               ) : undefined,
           )}
@@ -566,6 +590,7 @@ export const Stage = memo(
                 seen={overview?.shown.get(screen)}
                 strip={tab.strip}
                 targets={targets}
+                travel={tabTravel(tab)}
               />
             ) : undefined,
           )}
@@ -619,6 +644,7 @@ export const Stage = memo(
                   screenBox={screenNamed(desk, screen)?.geometry.screen}
                   seen={seen}
                   targets={targets}
+                  travel={travels.get(window.id)}
                   window={window}
                 />
               ),
@@ -834,6 +860,7 @@ export const Stage = memo(
                   tab={tab}
                   targets={targets}
                   title={tabbed.title}
+                  travel={tabTravel(tab)}
                 />
               );
             },
@@ -851,6 +878,9 @@ export const Stage = memo(
               on={screenNamed(desk, active?.screen)}
               rewound={active?.rewound ?? 0}
               seen={undefined}
+              travel={
+                active === undefined ? undefined : travels.get(active.window.id)
+              }
             >
               <SelectionTint
                 depth={raised(lit.depth)}
@@ -961,6 +991,8 @@ type WindowContentsProps = {
   screenBox: Rect | undefined;
   /** How the overview shows it, if open. */
   seen: Seen | undefined;
+  /** Where it travels as it opens or leaves. See `useTravels`. */
+  travel: Travel | undefined;
   window: ShellWindow;
 };
 
@@ -997,6 +1029,7 @@ const WindowContents = memo(
     screen,
     screenBox,
     seen,
+    travel,
     window,
   }: WindowContentsProps) => {
     const { id } = window;
@@ -1042,6 +1075,7 @@ const WindowContents = memo(
         rewound={rewound}
         screen={screenBox}
         seen={seen}
+        travel={travel}
       >
         {(motion === "opening-tab" || motion === "closing-tab") &&
           contents !== undefined &&
@@ -1147,6 +1181,8 @@ type WindowBarProps = {
   /** How the overview shows it, if open. */
   seen: Seen | undefined;
   targets: DropTargets;
+  /** Where it travels as it opens or leaves. See `useTravels`. */
+  travel: Travel | undefined;
   window: ShellWindow;
 };
 
@@ -1181,6 +1217,7 @@ const WindowBar = memo(
     screenBox,
     seen,
     targets,
+    travel,
     window,
   }: WindowBarProps) => {
     const { id } = window;
@@ -1236,6 +1273,7 @@ const WindowBar = memo(
         rewound={rewound}
         screen={screenBox}
         seen={seen}
+        travel={travel}
       >
         <WindowTitleBar
           crossing={crossing}
@@ -1313,6 +1351,8 @@ type ContainerTabProps = {
   targets: DropTargets;
   /** The title of the window the tab is named after. */
   title: string;
+  /** Where it travels as it opens or leaves. See `useTravels`. */
+  travel: Travel | undefined;
 };
 
 /** A container's tab, memoized as {@link WindowContents} is. */
@@ -1343,6 +1383,7 @@ const ContainerTab = memo(
     tab,
     targets,
     title,
+    travel,
   }: ContainerTabProps) => {
     const { id, node } = tab;
     const closed = useCallback(() => {
@@ -1377,6 +1418,7 @@ const ContainerTab = memo(
         on={on}
         rewound={rewound}
         seen={seen}
+        travel={travel}
       >
         <GroupTitleBar
           depth={tab.depth}
@@ -1436,6 +1478,7 @@ const Sliding = ({
   on,
   rewound,
   seen,
+  travel,
 }: {
   children: ReactNode;
   /** The depth of the part it holds. */
@@ -1445,18 +1488,21 @@ const Sliding = ({
   on: StageScreen | undefined;
   rewound: number;
   seen: Seen | undefined;
+  /** Where its window travels as it opens or leaves. See `useTravels`. */
+  travel: Travel | undefined;
 }) => (
   <div
     className={screenClipStyles}
-    style={
-      on === undefined
-        ? undefined
+    style={{
+      ...traveled(travel),
+      ...(on === undefined
+        ? {}
         : {
             ...slidAcross(on.geometry.screen, frame, motion, rewound),
             ...clippedTo(on.geometry.screen, motion),
             ...seenClip(seen, on.geometry.screen, depth),
-          }
-    }
+          }),
+    }}
   >
     <div
       className={seenStyles({
@@ -1524,6 +1570,8 @@ type GroupStripProps = {
   seen: Seen | undefined;
   strip: StripPlace;
   targets: DropTargets;
+  /** Where it travels as it opens or leaves. See `useTravels`. */
+  travel: Travel | undefined;
 };
 
 /**
@@ -1556,6 +1604,7 @@ const GroupStrip = memo(
     seen,
     strip,
     targets,
+    travel,
   }: GroupStripProps) => {
     const { node } = strip.group;
     const floating = float !== undefined;
@@ -1603,6 +1652,7 @@ const GroupStrip = memo(
         on={on}
         rewound={rewound}
         seen={seen}
+        travel={travel}
       >
         <TabStrip
           box={strip.box}
