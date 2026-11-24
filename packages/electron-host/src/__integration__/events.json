@@ -3,8 +3,6 @@
     "App.gpu-info-update": "the engine reports no GPU info to the host, as getGPUInfo",
     "BaseWindow.app-command": "not fired yet",
     "BrowserWindow.app-command": "not fired yet",
-    "Debugger.detach": "no webContents.debugger",
-    "Debugger.message": "no webContents.debugger",
     "Extensions.extension-loaded": "no app-loaded extensions",
     "Extensions.extension-ready": "no app-loaded extensions",
     "Extensions.extension-unloaded": "no app-loaded extensions",
@@ -31,16 +29,9 @@
     "Session.usb-device-removed": "no device chooser for apps",
     "Session.usb-device-revoked": "no device chooser for apps",
     "UtilityProcess.login": "the engine asks no sign-in or certificate question",
-    "WebContents.devtools-closed": "no devtools for apps",
-    "WebContents.devtools-focused": "no devtools for apps",
-    "WebContents.devtools-open-url": "no devtools for apps",
-    "WebContents.devtools-opened": "no devtools for apps",
-    "WebContents.devtools-reload-page": "no devtools for apps",
-    "WebContents.devtools-search-query": "no devtools for apps",
-    "WebContents.did-attach-webview": "not fired yet",
-    "WebContents.paint": "not fired yet",
+    "WebContents.did-attach-webview": "Electron pages have no <webview> yet",
     "WebContents.select-bluetooth-device": "no device chooser for apps",
-    "WebContents.will-attach-webview": "not fired yet"
+    "WebContents.will-attach-webview": "Electron pages have no <webview> yet"
   },
   "honest": {
     "AutoUpdater.before-quit-for-update": "Electron has no autoUpdater on Linux",
@@ -57,6 +48,13 @@
     "BrowserWindow.persisted-state-restored": "the desktop places and sizes windows, so there is no saved state to restore",
     "BrowserWindow.system-context-menu": "the shell draws title bars and their menus",
     "IncomingMessage.data": "a Node Readable, which fires it itself",
+    "WebContents.devtools-closed": "the desktop has no devtools for apps: openDevTools opens none",
+    "WebContents.devtools-focused": "the desktop has no devtools for apps: openDevTools opens none",
+    "WebContents.devtools-open-url": "the desktop has no devtools for apps: openDevTools opens none",
+    "WebContents.devtools-opened": "the desktop has no devtools for apps: openDevTools opens none",
+    "WebContents.devtools-reload-page": "the desktop has no devtools for apps: openDevTools opens none",
+    "WebContents.devtools-search-query": "the desktop has no devtools for apps: openDevTools opens none",
+    "WebContents.paint": "no window is offscreen: one that asks is refused",
     "WebContents.plugin-crashed": "Chromium runs no plugins, so none crashes"
   }
 }
