@@ -1,88 +1,19 @@
-# Temporary: proves engine-tree-pool.sh refresh's copy on crux. Not for main.
-name: probe tree copy
+# Temporary: removes the partial copy the tree-copy probe left on crux.
+name: probe tree copy cleanup
 on:
   push:
     branches: [claude/project-thread-04t7b9]
 permissions:
   contents: read
 jobs:
-  probe:
+  clean:
+    strategy:
+      matrix:
+        n: [1, 2]
     runs-on: [self-hosted, crux]
-    timeout-minutes: 90
-    env:
-      OWNER: probe-tree-copy run ${{ github.run_id }}
-      OUT: out/Official
-      DOMICILE_ENGINE_BUILD: official
-      GIT_AUTHOR_NAME: domicile CI
-      GIT_AUTHOR_EMAIL: ci@domicile.invalid
-      GIT_COMMITTER_NAME: domicile CI
-      GIT_COMMITTER_EMAIL: ci@domicile.invalid
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - name: Copy
+      - name: Remove the partial copy
         run: |
-          set -u
-          pin="$(grep -v '^#' packages/domicile-engine/CHROMIUM_PIN | tr -d '[:space:]')"
-          echo "main pin $pin"
-          for t in /build/trees/tree-*; do
-            echo "$t pin=$(cat $t/.domicile-synced-pin 2>/dev/null) gen=$(cat $t/.domicile-gen-pin 2>/dev/null) built=$([ -e $t/.domicile-built ] && echo y) lock=$(cat /build/.domicile-tree-lock-$(basename $t)/owner 2>/dev/null) official=$(ls -d $t/src/out/Official 2>/dev/null)"
-          done
-          src=""
-          for t in /build/trees/tree-*; do
-            [ "$(cat $t/.domicile-synced-pin 2>/dev/null | tr -d '[:space:]')" = "$pin" ] || continue
-            [ -d "$t/src/out/Official" ] || continue
-            if .github/scripts/engine-tree-lock.sh take "$t/src" "$OWNER"; then src="$t"; break; fi
-          done
-          [ -n "$src" ] || { echo "::error::no free tree at $pin with out/Official"; exit 1; }
-          echo "SRC=$src" >>"$GITHUB_ENV"
-          dst="$src/.probe/trees/tree-copy"
-          rm -rf "$src/.probe"; mkdir -p "$dst"
-          echo "DST=$dst/src" >>"$GITHUB_ENV"
-          echo "== space before"; df -h /build; zfs list -o name,used,avail,refer tank-fast/chromium 2>/dev/null || true
-          zpool get bcloneused,bclonesaved 2>/dev/null || true
-          files="$(find "$src/src" -xdev | wc -l)"; echo "files: $files"
-          start=$(date +%s)
-          if cp -a --reflink=always "$src/src" "$dst/src"; then echo "copy ok"; else echo "::error::copy failed"; fi
-          echo "copy took $(( $(date +%s) - start ))s"
-          echo "== space after"; df -h /build; zfs list -o name,used,avail,refer tank-fast/chromium 2>/dev/null || true
-          zpool get bcloneused,bclonesaved 2>/dev/null || true
-          .github/scripts/engine-tree-lock.sh drop "$src/src" "$OWNER"
-          echo "== absolute tree paths in the copy before gn gen"
-          cd "$dst/src"
-          grep -rhoE --include='*.ninja' "/build/trees/[^/\"' ]+/" "$OUT" 2>/dev/null | sort | uniq -c
-          echo "== siso state files"
-          ls -la "$OUT" | grep -i -E 'siso|ninja_' || true
-          for f in "$OUT"/.siso_* "$OUT"/.ninja_*; do
-            [ -f "$f" ] || continue
-            echo "$f: $(grep -aoE "/build/trees/[^/]+/" "$f" 2>/dev/null | sort | uniq -c | tr '\n' ' ')"
-          done
-      - name: Build in the copy
-        run: |
-          set -u
-          nixpkgs="$(nix eval --raw --impure --expr '(builtins.getFlake "nixpkgs").outPath')"
-          export NIX_PATH="nixpkgs=$nixpkgs"
-          cat > /tmp/probe-copy-build <<EOS
-          #!/usr/bin/env bash
-          set -uo pipefail
-          "$GITHUB_WORKSPACE/.github/scripts/engine-release-build.sh" "$DST" "$OUT"
-          echo "build exit \$?"
-          EOS
-          chmod +x /tmp/probe-copy-build
-          start=$(date +%s)
-          .github/scripts/engine-compile-slot.sh take "$OWNER"
-          NIX_SHELL_RUN=/tmp/probe-copy-build timeout 3600 \
-            nix-shell "$DST/tools/nix/shell.nix" >/tmp/probe-copy.log 2>&1
-          echo "shell exit $?"
-          .github/scripts/engine-compile-slot.sh drop "$OWNER"
-          echo "build took $(( $(date +%s) - start ))s"
-          grep -aE 'error|FAILED|still name|build finished|steps|siso|ninja: ' /tmp/probe-copy.log | tail -40
-          tail -40 /tmp/probe-copy.log
-          echo "== absolute tree paths after gn gen"
-          grep -rhoE --include='*.ninja' "/build/trees/[^\"' ]+/src/" "$DST/$OUT" 2>/dev/null | sort | uniq -c
-      - name: Clean up
-        if: always()
-        run: |
-          [ -n "${SRC:-}" ] && rm -rf "$SRC/.probe"
-          .github/scripts/engine-tree-lock.sh drop "${SRC:-/nonexistent}/src" "$OWNER" || true
-          .github/scripts/engine-compile-slot.sh drop "$OWNER" || true
+          rm -rf /build/trees/tree-0/.probe /build/trees/tree-1/.probe
           df -h /build
