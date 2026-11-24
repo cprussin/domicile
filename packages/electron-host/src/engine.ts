@@ -63,6 +63,14 @@ export type ViewPlacement = {
   readonly hidden?: true;
 };
 
+/** A rectangle of a window's page, in its CSS pixels from its top left. */
+export type WindowRect = {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+};
+
 /** What `open_window` and an allowing `window_open_answer` say of a page. */
 export type OpenKeys = {
   readonly window: number;
@@ -225,6 +233,30 @@ export type EngineRequest =
       /** app.userAgentFallback: each session's pages' unless it has its own. */
       readonly type: "set_user_agent_fallback";
       readonly user_agent: string;
+    }
+  /**
+   * `flashFrame`: whether window `window` asks for the user's attention,
+   * which the desktop shows until it has the keyboard.
+   */
+  | {
+      readonly type: "flash_frame";
+      readonly window: number;
+      readonly flash: boolean;
+    }
+  /** `setIgnoreMouseEvents`: the pointer goes through to what is under it. */
+  | {
+      readonly type: "set_ignore_mouse_events";
+      readonly window: number;
+      readonly ignore: boolean;
+    }
+  /**
+   * `setShape`: the window draws and takes input only within `rects`, in
+   * CSS pixels from its page's top left.
+   */
+  | {
+      readonly type: "set_shape";
+      readonly window: number;
+      readonly rects: readonly WindowRect[];
     }
   | { readonly type: "close_window"; readonly window: number }
   | { readonly type: "destroy_window"; readonly window: number }
@@ -680,6 +712,13 @@ const engineEvent = z.discriminatedUnion("type", [
   z.object({
     command: z.number(),
     type: z.literal("menu_clicked"),
+    window: z.number(),
+  }),
+  // The user pressed the mouse's back or forward button in the page:
+  // Electron's app-command on Linux.
+  z.object({
+    command: z.enum(["browser-backward", "browser-forward"]),
+    type: z.literal("app_command"),
     window: z.number(),
   }),
   // What the shell made the window, each time that changes.

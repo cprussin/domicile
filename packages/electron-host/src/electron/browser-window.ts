@@ -1,7 +1,8 @@
-// The stand-ins for Electron's `BrowserWindow`, `WebContentsView` and
-// `BrowserView`. Each window is an app window on the desk, opened over the
-// engine's Electron socket. Each view is a page the shell draws as part of the
-// window that holds it. See "Windows" in docs/architecture/ELECTRON-APPS.md.
+// The stand-ins for Electron's `BaseWindow`, `BrowserWindow`, `View`,
+// `WebContentsView`, `ImageView` and `BrowserView`. Each window is an app
+// window on the desk, opened over the engine's Electron socket. Each view's
+// page is one the shell draws as part of the window that holds it. See
+// "Windows" in docs/architecture/ELECTRON-APPS.md.
 
 import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
@@ -17,6 +18,7 @@ import type {
   RestoredHistory,
   ViewPlacement,
   WindowEvent,
+  WindowRect,
   WireFrame,
 } from "../engine";
 import { Priority, say } from "../journal";
@@ -30,6 +32,7 @@ import { IpcMain } from "./ipc-main";
 import type { MenuEntry } from "./menu";
 import type { MessagePortMain } from "./message-port-main";
 import { createPagePorts } from "./message-port-main";
+import type { NativeImage } from "./native-image";
 import {
   ASKS_BEFORE_NAVIGATING,
   asksBeforeNavigating,
@@ -100,6 +103,9 @@ const STOP_FIND_ACTIONS = {
 } as const;
 
 export type StopFindAction = keyof typeof STOP_FIND_ACTIONS;
+
+/** Electron's app commands on Linux: the mouse's back and forward buttons. */
+type AppCommand = Extract<WindowEvent, { type: "app_command" }>["command"];
 
 /** A search's last answer, as the engine says it. */
 type FoundInPage = Extract<WindowEvent, { type: "found_in_page" }>;
@@ -247,6 +253,12 @@ export type WindowMenus<Menu> = {
 /** Electron's size for a window that asks for none. */
 const DEFAULT_SIZE = { height: 600, width: 800 };
 
+/** What a BaseWindow's own page shows: nothing. */
+const BLANK_PAGE = "about:blank";
+
+/** Chromium's longest address (`url::kMaxURLChars`). */
+const MAX_URL_LENGTH = 2 * 1024 * 1024;
+
 /** What this host has warned of, so each warning shows once. */
 const warned = new Set<string>();
 const warnOnce = (key: string, why: string) => {
@@ -305,7 +317,8 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
 ) => {
   /** Every page by the engine's number: windows' and views'. */
   const pages = new Map<number, Page>();
-  const windows = new Map<number, BrowserWindow>();
+  /** Every window: BaseWindows', BrowserWindows' among them. */
+  const windows = new Map<number, BaseWindow>();
   /**
    * Sends `request` to the engine, unless it's for a page the engine hasn't
    * opened yet, which the engine would refuse: that is said and dropped.
@@ -674,9 +687,9 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly getTitle = () => this.owner.getTitle();
     /** A window's page, or a view's. */
     readonly getType = () =>
-      this.owner instanceof BrowserWindow ? "window" : "browserView";
+      this.owner instanceof BaseWindow ? "window" : "browserView";
     readonly focus = () => {
-      if (this.owner instanceof BrowserWindow) {
+      if (this.owner instanceof BaseWindow) {
         this.owner.focus();
       }
     };
@@ -1089,10 +1102,21 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly #view: boolean;
     /** Its webPreferences, which the windows its page opens start from. */
     readonly preferences: WebPreferences;
+    /**
+     * Whether its page is one of the app's webContents: not a BaseWindow's
+     * or an ImageView's, which the app sees no page of.
+     */
+    readonly listed: boolean;
 
-    constructor(preferences: WebPreferences, title: string, view: boolean) {
+    constructor(
+      preferences: WebPreferences,
+      title: string,
+      view: boolean,
+      listed: boolean,
+    ) {
       super();
       this.preferences = preferences;
+      this.listed = listed;
       // As Electron decides: nodeIntegration turns the default sandbox off.
       const sandboxed =
         preferences.sandbox ?? preferences.nodeIntegration !== true;
@@ -1499,6 +1523,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           this.menuClicked(event.command);
           break;
         }
+        case "app_command": {
+          this.appCommand(event.command);
+          break;
+        }
         case "popup_menu_closed": {
           this.popupMenuClosed(event.popup, event.command);
           break;
@@ -1607,6 +1635,11 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     /** Its page took or lost the keyboard focus. */
     focusChanged(_focused: boolean) {
       // Only a window has focus events of its own.
+    }
+
+    /** The user pressed the mouse's back or forward button in the page. */
+    appCommand(_command: AppCommand) {
+      // Only a window, or a view in one, has app commands.
     }
 
     /** The user asked to close the page's window. */
@@ -1736,22 +1769,29 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
   }
 
   /**
-   * Electron's `WebContentsView`: a page the shell draws as part of the window
-   * whose `contentView` holds it, where the app puts it. It outlives that
-   * window until the app closes its page.
+   * Electron's `View`: a box in a window that holds views, bottom first, each
+   * placed from its top left corner. Only pages show on Domicile: the engine
+   * is told where each page a window's views hold goes in it, from its
+   * holders' corners, and the shell draws the boxes' own looks.
    */
-  class WebContentsView extends Page {
+  class View extends EventEmitter {
     #bounds: Rectangle = NO_BOUNDS;
     #visible = true;
-    /** The window whose contentView holds it. */
-    holder: BrowserWindow | undefined;
+    #children: View[] = [];
+    /** The view that holds it. */
+    #parent: View | undefined;
+    /** The window whose content view it is. */
+    #window: BaseWindow | undefined;
 
-    constructor(options: ViewOptions = {}) {
-      super(options.webPreferences ?? {}, "", true);
-      this.created();
+    get children(): readonly View[] {
+      return [...this.#children];
     }
 
-    /** Where the app asks for it in its window, in CSS pixels. */
+    /** The window it shows in: its own, or its holders'. */
+    readonly window = (): BaseWindow | undefined =>
+      this.#parent === undefined ? this.#window : this.#parent.window();
+
+    /** Where the app asks for it in its holder, in CSS pixels. */
     readonly setBounds = (bounds: Rectangle) => {
       const next = {
         height: bounds.height,
@@ -1761,7 +1801,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       };
       const from = this.#bounds;
       this.#bounds = next;
-      this.holder?.placeViews();
+      this.window()?.placeViews();
       if (
         next.x !== from.x ||
         next.y !== from.y ||
@@ -1774,54 +1814,239 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
 
     readonly getBounds = (): Rectangle => this.#bounds;
 
-    /** Hides or shows it. A hidden view keeps its page and its place. */
+    /** Hides or shows it and what it holds, which keep their pages and places. */
     readonly setVisible = (visible: boolean) => {
       this.#visible = visible;
-      this.holder?.placeViews();
+      this.window()?.placeViews();
     };
 
     readonly getVisible = () => this.#visible;
-    /** Whether a window that shows holds it, and it isn't hidden there. */
-    readonly isShowing = () =>
-      this.#visible && this.holder?.isShowing() === true;
+
+    /** Whether it and its holders aren't hidden, in a window that shows. */
+    readonly isShowing = (): boolean =>
+      this.#visible &&
+      (this.#parent === undefined
+        ? this.#window?.isShowing() === true
+        : this.#parent.isShowing());
 
     /** The shell draws views; the app's color and corners are its own look. */
     readonly setBackgroundColor = (_color: string) => undefined;
     readonly setBorderRadius = (_radius: number) => undefined;
     readonly setBackgroundBlur = (_blur: number) => undefined;
 
-    readonly children: readonly WebContentsView[] = [];
-
-    /** Electron nests views; Domicile's engine has only a window hold them. */
-    readonly addChildView = (_view: WebContentsView, _index?: number) => {
-      throw new Error(
-        "only a window's contentView holds views on Domicile: this app nests a view in a view",
-      );
+    /**
+     * Puts `view` at `index`, or on top, taking it from the view that held
+     * it. A view it already holds moves.
+     */
+    readonly addChildView = (view: View, index?: number) => {
+      if (view.#holds(this)) {
+        throw new Error("a view can't hold itself, or a view that holds it");
+      } else if (view.#window === undefined) {
+        const from = view.window();
+        const was = view.#parent;
+        if (was !== undefined) {
+          was.#children = was.#children.filter((child) => child !== view);
+        }
+        this.#children = this.#children.filter((child) => child !== view);
+        this.#children.splice(index ?? this.#children.length, 0, view);
+        view.#parent = this;
+        moved(view, from, this.window());
+      } else {
+        throw new Error(
+          "a view can't hold a window's content view: give the window another first",
+        );
+      }
     };
 
-    readonly removeChildView = (_view: WebContentsView) => undefined;
+    readonly removeChildView = (view: View) => {
+      if (this.#children.includes(view)) {
+        const from = this.window();
+        this.#children = this.#children.filter((child) => child !== view);
+        view.#parent = undefined;
+        moved(view, from, undefined);
+      }
+    };
+
+    /** Leaves the view that holds it, if one does. */
+    readonly leave = () => {
+      this.#parent?.removeChildView(this);
+    };
+
+    /** Makes it `window`'s content view, or no window's. */
+    readonly beContentOf = (window: BaseWindow | undefined) => {
+      if (
+        window !== undefined &&
+        this.#window !== undefined &&
+        this.#window !== window
+      ) {
+        throw new Error("this view is already another window's content view");
+      } else {
+        this.leave();
+        this.#window = window;
+      }
+    };
+
+    /**
+     * Where the engine puts each page it and its views show, bottom first,
+     * from (`x`, `y`) in the window's page: hidden when a holder is.
+     */
+    readonly placements = (
+      x: number,
+      y: number,
+      hidden: boolean,
+    ): ViewPlacement[] => {
+      const at = {
+        ...this.#bounds,
+        x: x + this.#bounds.x,
+        y: y + this.#bounds.y,
+      };
+      const unseen = hidden || !this.#visible;
+      return [
+        ...this.placed(at, unseen),
+        ...this.#children.flatMap((child) =>
+          child.placements(at.x, at.y, unseen),
+        ),
+      ];
+    };
+
+    /** The pages it and its views show, for the window's focus and input. */
+    readonly pages = (): Page[] => [
+      ...this.ownPages(),
+      ...this.#children.flatMap((child) => child.pages()),
+    ];
+
+    /** Where the engine puts its own page, at `at`: a plain view has none. */
+    protected placed(_at: Rectangle, _hidden: boolean): ViewPlacement[] {
+      return [];
+    }
+
+    /** Its own page: a plain view has none. */
+    protected ownPages(): Page[] {
+      return [];
+    }
+
+    /** Whether it is `view` or holds it, however far down. */
+    readonly #holds = (view: View): boolean =>
+      this === view || this.#children.some((child) => child.#holds(view));
+  }
+
+  /** `view` went from window `from` to window `to`: both place their views again. */
+  const moved = (
+    view: View,
+    from: BaseWindow | undefined,
+    to: BaseWindow | undefined,
+  ) => {
+    if (from !== to) {
+      from?.viewHeld(view, false);
+      to?.viewHeld(view, true);
+    }
+    for (const window of new Set([from, to])) {
+      window?.placeViews();
+      window?.focusMoved();
+    }
+  };
+
+  /**
+   * The page a view shows: a `WebContentsView`'s, or an `ImageView`'s
+   * picture, which is no webContents of the app's.
+   */
+  class ViewPage extends Page {
+    constructor(
+      readonly view: View,
+      preferences: WebPreferences,
+      listed: boolean,
+    ) {
+      super(preferences, "", true, listed);
+      if (listed) {
+        this.created();
+      }
+    }
+
+    readonly isShowing = () => this.view.isShowing();
 
     /** Where the engine is told to put it, or nothing before it opens. */
-    readonly placement = (): ViewPlacement | undefined =>
+    readonly placement = (at: Rectangle, hidden: boolean): ViewPlacement[] =>
       this.opened && !this.destroyed
-        ? {
-            ...this.#bounds,
-            ...(this.#visible ? {} : { hidden: true }),
-            window: this.id,
-          }
-        : undefined;
+        ? [{ ...at, ...(hidden ? { hidden: true } : {}), window: this.id }]
+        : [];
 
     protected override wasOpened() {
-      this.holder?.placeViews();
+      this.view.window()?.placeViews();
     }
 
     protected override wasClosed() {
-      this.holder?.contentView.removeChildView(this);
+      this.view.leave();
     }
 
     /** Its window has the keyboard while the view's page does. */
     override focusChanged(_focused: boolean) {
-      this.holder?.focusMoved();
+      this.view.window()?.focusMoved();
+    }
+
+    /** The mouse's back and forward buttons in a view are its window's. */
+    override appCommand(command: AppCommand) {
+      this.view.window()?.appCommand(command);
+    }
+  }
+
+  /**
+   * Electron's `WebContentsView`: a view showing a page, which the shell
+   * draws as part of the window that holds it, where the app puts it. It
+   * outlives that window until the app closes its page.
+   */
+  class WebContentsView extends View {
+    readonly #page: ViewPage;
+
+    constructor(options: ViewOptions = {}) {
+      super();
+      this.#page = new ViewPage(this, options.webPreferences ?? {}, true);
+    }
+
+    get webContents() {
+      return this.#page.webContents;
+    }
+
+    /** Its page's number on the engine. */
+    get id() {
+      return this.#page.id;
+    }
+
+    protected override placed(at: Rectangle, hidden: boolean) {
+      return this.#page.placement(at, hidden);
+    }
+
+    protected override ownPages(): Page[] {
+      return [this.#page];
+    }
+  }
+
+  /**
+   * Electron's `ImageView`: a view showing a picture, centered at its size.
+   * The engine shows it as a page of its own, which is no webContents of the
+   * app's.
+   */
+  class ImageView extends View {
+    #page: ViewPage | undefined;
+
+    readonly setImage = (image: NativeImage) => {
+      const url = imagePage(image);
+      this.#page ??= new ViewPage(this, {}, false);
+      // The app has no promise to hear of it: a view closed before its
+      // picture loads is the app's own doing, and the log says why else.
+      this.#page.loadURL(url).catch((error: unknown) => {
+        say(
+          Priority.Debug,
+          `electron-host: an ImageView's picture didn't show: ${String(error)}`,
+        );
+      });
+    };
+
+    protected override placed(at: Rectangle, hidden: boolean) {
+      return this.#page?.placement(at, hidden) ?? [];
+    }
+
+    protected override ownPages(): Page[] {
+      return this.#page === undefined ? [] : [this.#page];
     }
   }
 
@@ -1874,75 +2099,36 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     };
   }
 
-  /** A window's `contentView`: its page, and the views over it, bottom first. */
-  class ContentView {
-    #children: WebContentsView[] = [];
-
-    constructor(private readonly window: BrowserWindow) {}
-
-    get children(): readonly WebContentsView[] {
-      return [...this.#children];
+  /**
+   * A `BrowserWindow`'s own content view: its page, as Electron's
+   * `WebContentsView` for it, which the views it holds go over.
+   */
+  class WindowPageView extends View {
+    constructor(private readonly page: BaseWindow) {
+      super();
     }
 
-    /**
-     * Puts `view` at `index`, or on top, taking it from any window that held
-     * it. A view it already holds moves.
-     */
-    readonly addChildView = (view: WebContentsView, index?: number) => {
-      const from = view.holder;
-      if (from !== undefined && from !== this.window) {
-        from.contentView.removeChildView(view);
-      }
-      this.#children = this.#children.filter((child) => child !== view);
-      this.#children.splice(index ?? this.#children.length, 0, view);
-      view.holder = this.window;
-      if (from !== this.window) {
-        this.window.viewHeld(view, true);
-      }
-      this.window.placeViews();
-      this.window.focusMoved();
-    };
-
-    readonly removeChildView = (view: WebContentsView) => {
-      if (this.#children.includes(view)) {
-        this.#children = this.#children.filter((child) => child !== view);
-        view.holder = undefined;
-        this.window.viewHeld(view, false);
-        this.window.placeViews();
-        this.window.focusMoved();
-      }
-    };
-
-    /** The window's page fills it, at the size the shell gave it. */
-    readonly getBounds = () => this.window.getContentBounds();
-
-    /** The shell lays out windows: a window's size is not the app's to set. */
-    readonly setBounds = (_bounds: Rectangle) => undefined;
-    readonly setBackgroundColor = (_color: string) => undefined;
+    get webContents() {
+      return this.page.webContents;
+    }
   }
 
-  class BrowserWindow extends Page {
-    static readonly fromId = (id: number) => windows.get(id) ?? null;
-    static readonly getAllWindows = () => [...windows.values()];
+  /**
+   * Electron's `BaseWindow`: an app window whose content view holds its
+   * views. One made as a BaseWindow has no page of its own: the engine opens
+   * it as a blank page, which the app sees no webContents of.
+   */
+  class BaseWindow extends Page {
+    static readonly fromId = (id: number): BaseWindow | null =>
+      windows.get(id) ?? null;
+    static readonly getAllWindows = (): BaseWindow[] => [...windows.values()];
     /** The window whose page has the keyboard focus, if one of the app's does. */
-    static readonly getFocusedWindow = () =>
+    static readonly getFocusedWindow = (): BaseWindow | null =>
       [...windows.values()].find((window) => window.isFocused()) ?? null;
-    /** The window of `webContents`' page, or of the view it is. */
-    static readonly fromWebContents = (webContents: WebContents) => {
-      const { owner } = webContents;
-      if (owner instanceof BrowserWindow) {
-        return owner;
-      } else if (owner instanceof WebContentsView) {
-        return owner.holder ?? null;
-      } else {
-        return null;
-      }
-    };
-    static readonly fromBrowserView = (view: BrowserView) =>
-      view.holder ?? null;
+    /** The desktop places and sizes windows, so there is no state to restore. */
+    static readonly clearPersistedState = (_name: string) => undefined;
 
-    readonly contentView = new ContentView(this);
-    readonly getContentView = () => this.contentView;
+    #contentView: View;
     /**
      * Kept for the app: the desktop names a window to accessibility tools by
      * the title it shows.
@@ -1971,22 +2157,30 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     /** What the engine holds the app asked, so it hears each only once. */
     #asked: WindowState = NORMAL;
     #fullScreenable: boolean;
-    #parent: BrowserWindow | undefined;
+    #parent: BaseWindow | undefined;
     readonly #modal: boolean;
     /** Whether the app has it take input: setEnabled. */
     #enabled = true;
     /** The modals showing over it, which keep its input from it. */
-    readonly #modals = new Set<BrowserWindow>();
+    readonly #modals = new Set<BaseWindow>();
     /** Whether the engine was told its pages take no input. */
     #ignoring = false;
+    /** Whether it asks for the user's attention: flashFrame. */
+    #flashing = false;
+    /** Whether the pointer goes through it: setIgnoreMouseEvents. */
+    #ignoringMouse = false;
+    /** Where it draws and takes input, if the app gave it a shape. */
+    #shape: readonly WindowRect[] | undefined;
 
-    constructor(options: BrowserWindowOptions = {}) {
+    /** `ownPage` for a BrowserWindow, whose page is its webContents. */
+    constructor(options: BrowserWindowOptions = {}, ownPage = false) {
       // Before anything holds the window, so a parent refused leaves nothing.
       const parent = parentWindow(options.parent);
       super(
-        options.webPreferences ?? {},
+        ownPage ? (options.webPreferences ?? {}) : {},
         options.title ?? app.getName(),
         false,
+        ownPage,
       );
       this.#hidden = options.show === false;
       this.#size = {
@@ -2001,16 +2195,56 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       this.#menu?.on("changed", this.#showMenuBar);
       this.#parent = parent;
       this.#modal = options.modal === true && this.#parent !== undefined;
+      this.#contentView = ownPage ? new WindowPageView(this) : new View();
+      this.#contentView.beContentOf(this);
+      this.#contentView.setBounds(this.getContentBounds());
       windows.set(this.id, this);
       this.#holdParent();
-      this.created();
-      app.emit("browser-window-created", eventObject(), this);
+      if (!ownPage) {
+        // The app has no promise to hear of it: a window closed before its
+        // blank page loads is the app's own doing, and the log says why else.
+        this.loadURL(BLANK_PAGE).catch((error: unknown) => {
+          say(
+            Priority.Debug,
+            `electron-host: a BaseWindow didn't open: ${String(error)}`,
+          );
+        });
+      }
     }
+
+    get contentView(): View {
+      return this.#contentView;
+    }
+
+    set contentView(view: View) {
+      this.setContentView(view);
+    }
+
+    readonly getContentView = () => this.#contentView;
+
+    /**
+     * Makes `view` what the window shows, filling it at its size, in place
+     * of its content view. A BrowserWindow's own page stays under it.
+     */
+    readonly setContentView = (view: View) => {
+      this.assertAlive();
+      const was = this.#contentView;
+      if (view !== was) {
+        was.beContentOf(undefined);
+        this.viewHeld(was, false);
+        view.beContentOf(this);
+        this.#contentView = view;
+        this.viewHeld(view, true);
+        view.setBounds(this.getContentBounds());
+        this.placeViews();
+        this.focusMoved();
+      }
+    };
 
     readonly getParentWindow = () => this.#parent ?? null;
     readonly getChildWindows = () =>
       [...windows.values()].filter((window) => window.#parent === this);
-    readonly setParentWindow = (parent: BrowserWindow | null) => {
+    readonly setParentWindow = (parent: BaseWindow | null) => {
       const next = parentWindow(parent);
       if (next !== undefined && descendsFrom(next, this)) {
         throw new TypeError(
@@ -2044,7 +2278,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         }
       }
     };
-    readonly #release = (modal: BrowserWindow) => {
+    readonly #release = (modal: BaseWindow) => {
       if (this.#modals.delete(modal)) {
         this.#tellInput();
       }
@@ -2055,28 +2289,32 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       const ignore = !this.isEnabled();
       if (ignore !== this.#ignoring) {
         this.#ignoring = ignore;
-        for (const page of [this, ...this.contentView.children]) {
+        for (const page of [this, ...this.#contentView.pages()]) {
           page.set({ ignore, method: "set_ignore_input" });
         }
       }
     };
 
-    /** A view it now holds, or holds no more, takes input as it does. */
-    readonly viewHeld = (view: WebContentsView, held: boolean) => {
-      // A view that closed takes nothing more.
-      if (this.#ignoring && !view.isDestroyed()) {
-        view.set({ ignore: held, method: "set_ignore_input" });
+    /** The pages a view it now holds, or holds no more, shows take input as it does. */
+    readonly viewHeld = (view: View, held: boolean) => {
+      if (this.#ignoring) {
+        // A page that closed takes nothing more.
+        for (const page of view
+          .pages()
+          .filter((shown) => !shown.isDestroyed())) {
+          page.set({ ignore: held, method: "set_ignore_input" });
+        }
       }
     };
 
     /** Whether it shows on the desk: not hidden, and not closed. */
     readonly isShowing = () => !this.#hidden && !this.destroyed;
 
-    /** Its page as the shell last drew it. */
-    readonly capturePage: WebContents["capturePage"] = (rect, options) =>
-      this.webContents.capturePage(rect, options);
-
-    readonly getMediaSourceId = () => "";
+    /**
+     * What a page's getUserMedia() takes as `chromeMediaSourceId` to capture
+     * this window, as a desktopCapturer source names one.
+     */
+    readonly getMediaSourceId = () => `window:${this.id}:0`;
 
     /** Shows the window if the app hid it, and focuses it. */
     readonly show = () => {
@@ -2116,11 +2354,6 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       if (this.opened) {
         toEngine({ type: "focus_window", window: this.id });
       }
-    };
-
-    /** Gives the window's own page the keyboard, as focusing the window does. */
-    readonly focusOnWebView = () => {
-      this.focus();
     };
 
     /** Closes the window once its page agrees, unless a `close` listener prevents it. */
@@ -2204,7 +2437,6 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly isClosable = () => true;
     readonly isVisibleOnAllWorkspaces = () => false;
     readonly blur = () => undefined;
-    readonly blurWebView = () => undefined;
     readonly center = () => undefined;
     readonly setSimpleFullScreen = (_flag: boolean) => undefined;
     readonly setKiosk = (_flag: boolean) => undefined;
@@ -2239,15 +2471,72 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly hasShadow = () => false;
     readonly setOpacity = (_opacity: number) => undefined;
     readonly getOpacity = () => 1;
-    readonly setIgnoreMouseEvents = (_ignore: boolean) => undefined;
+    /**
+     * Lets the pointer through to what is under the window while `ignore`.
+     * `forward` is macOS's and Windows': Electron ignores it on Linux.
+     */
+    readonly setIgnoreMouseEvents = (
+      ignore: boolean,
+      _options?: { forward?: boolean },
+    ) => {
+      if (ignore !== this.#ignoringMouse) {
+        this.#ignoringMouse = ignore;
+        this.#tellIgnoringMouse();
+      }
+    };
+    readonly #tellIgnoringMouse = () => {
+      if (this.opened && !this.destroyed) {
+        toEngine({
+          ignore: this.#ignoringMouse,
+          type: "set_ignore_mouse_events",
+          window: this.id,
+        });
+      }
+    };
+
+    /**
+     * The window draws and takes input only within `rects`, in whole CSS
+     * pixels; none is the whole window again.
+     */
+    readonly setShape = (rects: readonly Rectangle[]) => {
+      this.#shape = rects.map(({ height, width, x, y }) => ({
+        height: Math.max(0, Math.round(height)),
+        width: Math.max(0, Math.round(width)),
+        x: Math.round(x),
+        y: Math.round(y),
+      }));
+      this.#tellShape();
+    };
+    readonly #tellShape = () => {
+      if (this.#shape !== undefined && this.opened && !this.destroyed) {
+        toEngine({ rects: this.#shape, type: "set_shape", window: this.id });
+      }
+    };
     readonly setProgressBar = (_progress: number) => undefined;
     // The shell draws every window's frame, so there is no title bar to
     // overlay.
     readonly setTitleBarOverlay = (_options: unknown) => undefined;
     readonly setContentProtection = (_enable: boolean) => undefined;
     readonly isContentProtected = () => false;
-    /** No shell shows an attention request yet. */
-    readonly flashFrame = (_flag: boolean) => undefined;
+    /**
+     * Asks the desktop for the user's attention, or stops. Asking stops once
+     * the window has the keyboard.
+     */
+    readonly flashFrame = (flag: boolean) => {
+      if (flag !== this.#flashing) {
+        this.#flashing = flag;
+        this.#tellFlashing();
+      }
+    };
+    readonly #tellFlashing = () => {
+      if (this.opened && !this.destroyed) {
+        toEngine({
+          flash: this.#flashing,
+          type: "flash_frame",
+          window: this.id,
+        });
+      }
+    };
     readonly getNativeWindowHandle = () => Buffer.alloc(8);
     /**
      * Whether it is the app's window with the keyboard, as Electron's: its
@@ -2270,9 +2559,12 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly focusMoved = () => {
       const focused =
         this.webContents.isFocused() ||
-        this.contentView.children.some((view) => view.webContents.isFocused());
+        this.#contentView.pages().some((page) => page.webContents.isFocused());
       if (focused !== this.#focused) {
         this.#focused = focused;
+        if (focused) {
+          this.flashFrame(false);
+        }
         const event = eventObject();
         this.emit(focused ? "focus" : "blur", event);
         app.emit(
@@ -2282,47 +2574,6 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         );
       }
     };
-    readonly reload = () => this.webContents.reload();
-
-    readonly setBrowserView = (view: BrowserView | null) => {
-      for (const held of this.getBrowserViews()) {
-        if (held !== view) {
-          this.contentView.removeChildView(held);
-        }
-      }
-      if (view !== null) {
-        this.contentView.addChildView(view);
-      }
-    };
-
-    readonly addBrowserView = (view: BrowserView) => {
-      this.contentView.addChildView(view);
-    };
-
-    readonly removeBrowserView = (view: BrowserView) => {
-      this.contentView.removeChildView(view);
-    };
-
-    readonly setTopBrowserView = (view: BrowserView) => {
-      this.contentView.addChildView(view);
-    };
-
-    readonly getBrowserViews = () =>
-      this.contentView.children.filter(
-        (child): child is BrowserView => child instanceof BrowserView,
-      );
-
-    /** Its one BrowserView, as Electron throws for a window with more. */
-    readonly getBrowserView = () => {
-      const views = this.getBrowserViews();
-      if (views.length > 1) {
-        throw new Error(
-          "BrowserWindow have multiple BrowserViews, use getBrowserViews() instead: this window holds more than one BrowserView",
-        );
-      }
-      return views[0] ?? null;
-    };
-
     /** Shows `menu` in the window's menu bar, or no menu bar for null. */
     readonly setMenu = (menu: Menu | null) => {
       this.assertAlive();
@@ -2422,9 +2673,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     /** Tells the engine where the window's open views go, if that changed. */
     readonly placeViews = () => {
       if (this.opened && !this.destroyed) {
-        const views = this.contentView.children.flatMap(
-          (view) => view.placement() ?? [],
-        );
+        const views = this.#contentView.placements(0, 0, false);
         const placed = JSON.stringify(views);
         if (placed !== this.#placed) {
           this.#placed = placed;
@@ -2488,6 +2737,14 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       if (this.#menu !== null) {
         this.#showMenuBar();
       }
+      // Nor any of these asked.
+      if (this.#flashing) {
+        this.#tellFlashing();
+      }
+      if (this.#ignoringMouse) {
+        this.#tellIgnoringMouse();
+      }
+      this.#tellShape();
     }
 
     protected override menuClicked(command: number) {
@@ -2558,16 +2815,22 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     protected override wasLoaded() {
       if (!this.#shown) {
         this.#shown = true;
-        this.emit("ready-to-show");
+        this.readyToShow();
       }
     }
 
-    protected override titled(title: string) {
-      const titleEvent = eventObject();
-      this.emit("page-title-updated", titleEvent, title, false);
-      if (!titleEvent.defaultPrevented) {
-        this.setTitle(title);
-      }
+    /** Its page drew for the first time: a BrowserWindow tells the app. */
+    protected readyToShow() {
+      // A BaseWindow's blank page is no page of the app's.
+    }
+
+    protected override titled(_title: string) {
+      // A BaseWindow's blank page is no page of the app's: it keeps its title.
+    }
+
+    /** Its window is the one the mouse's back and forward buttons were for. */
+    override appCommand(command: AppCommand) {
+      this.emit("app-command", eventObject(), command);
     }
 
     protected override opening() {
@@ -2585,10 +2848,17 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     protected override resized(width: number, height: number) {
       const from = this.#size;
       this.#size = { height, width };
-      for (const view of this.getBrowserViews()) {
-        view.follow(from, this.#size);
-      }
+      this.#contentView.setBounds(this.getContentBounds());
+      this.followed(from, this.#size);
       this.emit("resize");
+    }
+
+    /** It went from `from` to `to`: a BrowserWindow's BrowserViews follow. */
+    protected followed(
+      _from: { width: number; height: number },
+      _to: { width: number; height: number },
+    ) {
+      // A BaseWindow holds no BrowserViews.
     }
 
     protected override wasClosed() {
@@ -2607,10 +2877,8 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         closed(0);
       }
       // The engine lets go of the window's views; they live on unheld.
-      for (const view of this.contentView.children) {
-        view.holder = undefined;
-        this.viewHeld(view, false);
-      }
+      this.viewHeld(this.#contentView, false);
+      this.#contentView.beContentOf(undefined);
       this.emit("closed");
       if (windows.size === 0) {
         allClosed();
@@ -2618,11 +2886,114 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     }
   }
 
+  /** Electron's `BrowserWindow`: a window whose page is its webContents. */
+  class BrowserWindow extends BaseWindow {
+    static override readonly fromId = (id: number): BrowserWindow | null => {
+      const window = windows.get(id);
+      return window instanceof BrowserWindow ? window : null;
+    };
+    static override readonly getAllWindows = (): BrowserWindow[] =>
+      [...windows.values()].filter(
+        (window): window is BrowserWindow => window instanceof BrowserWindow,
+      );
+    static override readonly getFocusedWindow = (): BrowserWindow | null =>
+      BrowserWindow.getAllWindows().find((window) => window.isFocused()) ??
+      null;
+    /** The window of `webContents`' page, or of the view showing it. */
+    static readonly fromWebContents = (webContents: WebContents) => {
+      const { owner } = webContents;
+      if (owner instanceof BaseWindow) {
+        return owner;
+      } else if (owner instanceof ViewPage) {
+        return owner.view.window() ?? null;
+      } else {
+        return null;
+      }
+    };
+    static readonly fromBrowserView = (view: BrowserView) =>
+      view.window() ?? null;
+
+    constructor(options: BrowserWindowOptions = {}) {
+      super(options, true);
+      this.created();
+      app.emit("browser-window-created", eventObject(), this);
+    }
+
+    /** Its page as the shell last drew it. */
+    readonly capturePage: WebContents["capturePage"] = (rect, options) =>
+      this.webContents.capturePage(rect, options);
+
+    /** Gives the window's own page the keyboard, as focusing the window does. */
+    readonly focusOnWebView = () => {
+      this.focus();
+    };
+    readonly blurWebView = () => undefined;
+
+    readonly reload = () => this.webContents.reload();
+
+    readonly setBrowserView = (view: BrowserView | null) => {
+      for (const held of this.getBrowserViews()) {
+        if (held !== view) {
+          this.contentView.removeChildView(held);
+        }
+      }
+      if (view !== null) {
+        this.contentView.addChildView(view);
+      }
+    };
+
+    readonly addBrowserView = (view: BrowserView) => {
+      this.contentView.addChildView(view);
+    };
+
+    readonly removeBrowserView = (view: BrowserView) => {
+      this.contentView.removeChildView(view);
+    };
+
+    readonly setTopBrowserView = (view: BrowserView) => {
+      this.contentView.addChildView(view);
+    };
+
+    readonly getBrowserViews = () =>
+      this.contentView.children.filter(
+        (child): child is BrowserView => child instanceof BrowserView,
+      );
+
+    /** Its one BrowserView, as Electron throws for a window with more. */
+    readonly getBrowserView = () => {
+      const views = this.getBrowserViews();
+      if (views.length > 1) {
+        throw new Error(
+          "BrowserWindow have multiple BrowserViews, use getBrowserViews() instead: this window holds more than one BrowserView",
+        );
+      }
+      return views[0] ?? null;
+    };
+
+    protected override readyToShow() {
+      this.emit("ready-to-show");
+    }
+
+    protected override titled(title: string) {
+      const titleEvent = eventObject();
+      this.emit("page-title-updated", titleEvent, title, false);
+      if (!titleEvent.defaultPrevented) {
+        this.setTitle(title);
+      }
+    }
+
+    protected override followed(
+      from: { width: number; height: number },
+      to: { width: number; height: number },
+    ) {
+      for (const view of this.getBrowserViews()) {
+        view.follow(from, to);
+      }
+    }
+  }
+
   /** Whether `child` is `window`, or a child of it, however far down. */
-  const descendsFrom = (
-    child: BrowserWindow,
-    window: BrowserWindow,
-  ): boolean => {
+  const descendsFrom = (child: BaseWindow, window: BaseWindow): boolean => {
     const parent = child.getParentWindow();
     return (
       child === window || (parent !== null && descendsFrom(parent, window))
@@ -2633,12 +3004,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
   const parentWindow = (parent: unknown) => {
     if (parent === undefined || parent === null) {
       return undefined;
-    } else if (parent instanceof BrowserWindow && !parent.isDestroyed()) {
+    } else if (parent instanceof BaseWindow && !parent.isDestroyed()) {
       return parent;
     } else {
-      throw new TypeError(
-        "a window's parent is one of the app's open BrowserWindows",
-      );
+      throw new TypeError("a window's parent is one of the app's open windows");
     }
   };
 
@@ -2655,17 +3024,21 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     pages.get(event.window)?.take(event);
   });
 
+  /** The pages that are the app's webContents. */
+  const listed = () => [...pages.values()].filter((page) => page.listed);
+
   /** Electron's `webContents` module: the app's pages. */
   const webContents = {
     /** The page of `frame`, which is a page's main frame here. */
     fromFrame: (frame: WebFrameMain) => frame.page.webContents,
-    fromId: (id: number) => pages.get(id)?.webContents,
+    fromId: (id: number) =>
+      listed().find((page) => page.id === id)?.webContents,
     getAllWebContents: () =>
-      [...pages.values()]
+      listed()
         .filter((page) => !page.isDestroyed())
         .map((page) => page.webContents),
     getFocusedWebContents: () =>
-      [...pages.values()]
+      listed()
         .map((page) => page.webContents)
         .find((contents) => contents.isFocused()) ?? null,
   };
@@ -2684,14 +3057,17 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       ),
   };
   const mainFrameWhere = (matches: (frame: WebFrameMain) => boolean) =>
-    [...pages.values()]
+    listed()
       .filter((page) => page.webContents.pageState() !== undefined)
       .map((page) => page.webContents.mainFrame)
       .find(matches);
 
   return {
+    BaseWindow,
     BrowserView,
     BrowserWindow,
+    ImageView,
+    View,
     WebContents,
     WebContentsView,
     WebFrameMain,
@@ -2703,6 +3079,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
 };
 
 type Windows = ReturnType<typeof createBrowserWindow>;
+export type BaseWindow = InstanceType<Windows["BaseWindow"]>;
 export type BrowserWindow = InstanceType<Windows["BrowserWindow"]>;
 export type WebContentsView = InstanceType<Windows["WebContentsView"]>;
 export type BrowserView = InstanceType<Windows["BrowserView"]>;
@@ -2728,4 +3105,17 @@ const preloadSource = (
       )
       .join("");
   }
+};
+
+/** A page showing `image` centered at its size, for an ImageView. */
+const imagePage = (image: NativeImage) => {
+  const { height, width } = image.getSize();
+  const html = `<!doctype html><body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden"><img src="${image.toDataURL()}" width="${width}" height="${height}">`;
+  const url = `data:text/html,${encodeURIComponent(html)}`;
+  if (url.length > MAX_URL_LENGTH) {
+    throw new Error(
+      `this ImageView's image is too big for Domicile's engine to show: ${url.length} characters of address, over Chromium's ${MAX_URL_LENGTH}`,
+    );
+  }
+  return url;
 };

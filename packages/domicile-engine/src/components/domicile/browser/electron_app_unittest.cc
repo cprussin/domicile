@@ -168,6 +168,24 @@ class FakeDesk final : public ElectronDesk {
         {"state of ", id, state.maximized ? " max" : "",
          state.minimized ? " min" : "", state.fullscreen ? " full" : ""}));
   }
+  void SetUrgent(const std::string& id, bool urgent) override {
+    calls.push_back(std::string(urgent ? "urgent " : "not urgent ") + id);
+  }
+  void SetIgnoresPointer(const std::string& id, bool ignores) override {
+    calls.push_back(std::string(ignores ? "pointer through " : "pointer in ") +
+                    id);
+  }
+  void SetShape(const std::string& id,
+                const std::vector<ElectronShapeRect>& rects) override {
+    std::string line = "shape " + id;
+    for (const ElectronShapeRect& rect : rects) {
+      line += base::StrCat({" ", base::NumberToString(rect.x), ",",
+                            base::NumberToString(rect.y), " ",
+                            base::NumberToString(rect.width), "x",
+                            base::NumberToString(rect.height)});
+    }
+    calls.push_back(line);
+  }
   void AskToClose(const std::string& id) override {
     calls.push_back("ask to close " + id);
   }
@@ -1032,6 +1050,81 @@ TEST_F(ElectronAppTest, AWindowHasItsOwnTitleAndMayHide) {
                    "view, and only a window has hiding\",\"window\":2}\n",
                    "{\"type\":\"window_refused\",\"why\":\"window 9 is not "
                    "open\",\"window\":9}\n"}));
+}
+
+TEST_F(ElectronAppTest, AWindowAsksForAttentionLetsThePointerThroughAndIsShaped) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/",)"
+             R"("view":true})");
+  sent_.clear();
+  desk_.calls.clear();
+
+  app_->Take(R"({"type":"flash_frame","window":1,"flash":true})");
+  app_->Take(R"({"type":"set_ignore_mouse_events","window":1,"ignore":true})");
+  app_->Take(R"({"type":"set_shape","window":1,"rects":[)"
+             R"({"x":1,"y":2,"width":30,"height":40},)"
+             R"({"x":50,"y":60,"width":7,"height":8}]})");
+  app_->Take(R"({"type":"flash_frame","window":1,"flash":false})");
+  app_->Take(R"({"type":"set_shape","window":2,"rects":[]})");
+
+  EXPECT_EQ(desk_.calls, (Lines{"urgent 10", "pointer through 10",
+                                "shape 10 1,2 30x40 50,60 7x8",
+                                "not urgent 10"}));
+  EXPECT_EQ(sent_, Lines{"{\"type\":\"window_refused\",\"why\":\"window 2 is a "
+                         "view, and only a window has a shape\",\"window\":2}\n"});
+}
+
+TEST_F(ElectronAppTest, AWindowOpensTheEnginesOwnBlankAndDataPages) {
+  Hello();
+
+  app_->Take(R"({"type":"open_window","window":1,"url":"about:blank"})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"data:text/html,a",)"
+             R"("view":true})");
+  app_->Take(R"({"type":"load_url","window":2,"url":"data:text/html,b"})");
+
+  EXPECT_EQ(desk_.calls,
+            (Lines{"open about:blank as com.anthropic.Claude",
+                   "open view data:text/html,a as com.anthropic.Claude",
+                   "load 11 data:text/html,b"}));
+  EXPECT_EQ(sent_, (Lines{"{\"type\":\"window_opened\",\"window\":1}\n",
+                          "{\"type\":\"window_opened\",\"window\":2}\n"}));
+}
+
+TEST_F(ElectronAppTest, TheMouseBackAndForwardButtonsAreTheAppsCommands) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  sent_.clear();
+
+  page.app_command.Run(ElectronAppCommand::kBrowserBackward);
+  page.app_command.Run(ElectronAppCommand::kBrowserForward);
+  EXPECT_EQ(sent_, (Lines{"{\"command\":\"browser-backward\",\"type\":"
+                          "\"app_command\",\"window\":3}\n",
+                          "{\"command\":\"browser-forward\",\"type\":"
+                          "\"app_command\",\"window\":3}\n"}));
+
+  // A press that raced the window closing says nothing.
+  app_->Listed({});
+  sent_.clear();
+  page.app_command.Run(ElectronAppCommand::kBrowserBackward);
+  EXPECT_TRUE(sent_.empty());
+}
+
+TEST_F(ElectronAppTest, APageFindsTheAppsWindowsByTheirNumbers) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"open_window","window":4,"url":"https://a.test/",)"
+             R"("view":true})");
+  ElectronPageCalls page = desk_.pages.at("11");
+
+  EXPECT_EQ(page.window_source.Run(3), "10");
+  // A view is no window to capture, and 9 is no window at all.
+  EXPECT_EQ(page.window_source.Run(4), std::nullopt);
+  EXPECT_EQ(page.window_source.Run(9), std::nullopt);
+
+  app_->Listed({});
+  EXPECT_EQ(page.window_source.Run(3), std::nullopt);
 }
 
 TEST_F(ElectronAppTest, AMessageBoxGoesOverItsWindowAndItsAnswerBack) {

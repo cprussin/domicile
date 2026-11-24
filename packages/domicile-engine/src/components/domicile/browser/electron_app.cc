@@ -308,6 +308,22 @@ void ElectronApp::Take(std::string_view line) {
             WindowIdOf(asked->window, "a window state")) {
       desk_->SetWindowState(*id, asked->state);
     }
+  } else if (const auto* flash = std::get_if<ElectronFlashFrame>(&*request)) {
+    if (const std::optional<std::string> id =
+            WindowIdOf(flash->window, "attention")) {
+      desk_->SetUrgent(*id, flash->flash);
+    }
+  } else if (const auto* through =
+                 std::get_if<ElectronSetIgnoreMouseEvents>(&*request)) {
+    if (const std::optional<std::string> id =
+            WindowIdOf(through->window, "mouse events to ignore")) {
+      desk_->SetIgnoresPointer(*id, through->ignore);
+    }
+  } else if (const auto* shape = std::get_if<ElectronSetShape>(&*request)) {
+    if (const std::optional<std::string> id =
+            WindowIdOf(shape->window, "a shape")) {
+      desk_->SetShape(*id, shape->rects);
+    }
   } else if (const auto* fallback =
                  std::get_if<ElectronSetUserAgentFallback>(&*request)) {
     SetUserAgentFallback(*fallback);
@@ -559,6 +575,21 @@ ElectronPageCalls ElectronApp::CallsFor(ElectronWindow number) {
                               weak_factory_.GetWeakPtr(), number),
       .reported = base::BindRepeating(&ElectronApp::PageReported,
                                       weak_factory_.GetWeakPtr(), number),
+      .app_command = base::BindRepeating(&ElectronApp::AppCommanded,
+                                         weak_factory_.GetWeakPtr(), number),
+      .window_source = base::BindRepeating(
+          [](base::WeakPtr<ElectronApp> app,
+             int window) -> std::optional<std::string> {
+            if (!app) {
+              return std::nullopt;
+            }
+            const auto found = app->windows_.find(window);
+            if (found == app->windows_.end() || found->second.view) {
+              return std::nullopt;
+            }
+            return found->second.id;
+          },
+          weak_factory_.GetWeakPtr()),
   };
 }
 
@@ -895,6 +926,13 @@ void ElectronApp::WindowStateChanged(ElectronWindow number,
 void ElectronApp::MenuClicked(ElectronWindow number, int command) {
   if (windows_.contains(number)) {
     send_.Run(ElectronMenuClicked(number, command));
+  }
+}
+
+void ElectronApp::AppCommanded(ElectronWindow number,
+                               ElectronAppCommand command) {
+  if (windows_.contains(number)) {
+    send_.Run(ElectronAppCommanded(number, command));
   }
 }
 
@@ -1362,7 +1400,7 @@ void ElectronApp::HandleProtocol(const ElectronHandleProtocol& handle) {
 bool ElectronApp::Opens(ElectronWindow number,
                         const std::string& session,
                         const GURL& url) {
-  if (IsNetworkScheme(url.scheme()) ||
+  if (IsNetworkScheme(url.scheme()) || IsElectronEnginePage(url) ||
       SessionNamed(session).Handles(url.scheme())) {
     return true;
   }

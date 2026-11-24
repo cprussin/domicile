@@ -125,6 +125,12 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 
 - **`new BrowserWindow()`** asks for an app window pinned to the app, as
   `open --app` does ([WEB-APPS.md](WEB-APPS.md)).
+- **`new BaseWindow()`** is a window with no page of its own: the host opens
+  it at once on `about:blank`, which is no webContents of the app's, and the
+  app fills it with views. The engine opens `about:blank` and `data:` pages
+  as its own (`IsElectronEnginePage`). `BrowserWindow` is a `BaseWindow`, so
+  `BaseWindow.getAllWindows` lists both kinds and `BrowserWindow`'s statics
+  only its own.
 - **`WebContentsView`** and **`BrowserView`** are views: pages that are part
   of a window, not windows. Claude Desktop's whole chat is one, under its
   title bar page.
@@ -152,9 +158,24 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
     window's `set_views`, only once the window and the view have opened and
     only when something moved. `BrowserView` is a view placed with
     `setBrowserView` and kin; its `setAutoResize` follows the window's
-    `resized`. A view nested in a view throws, since only a window holds
-    views. `BrowserWindow.fromWebContents` finds the window holding a view's
-    page.
+    `resized`. `BrowserWindow.fromWebContents` finds the window holding a
+    view's page.
+  - **Nesting:** a `View` holds views as a window's content view does. The
+    engine only knows a window holding views, so the host flattens the tree
+    into the window's `set_views`, bottom first, each at its holders'
+    corners added up and hidden while any holder is. A plain `View` has no
+    page and only places what it holds; the shell draws its background,
+    corners and blur (`setBackgroundColor` and kin do nothing). A view isn't
+    clipped to its holder's bounds. A view can't hold itself, a view that
+    holds it, or a window's content view.
+  - **Content view:** a `BrowserWindow`'s `contentView` is a `View` for its
+    page, which the views it holds go over. `setContentView(view)` (and
+    assigning `contentView`) puts `view` in its place, at the window's size
+    and following its `resized`; a `BrowserWindow`'s own page then draws
+    under it.
+  - **`ImageView`:** its picture shows centered, at its size, as a `data:`
+    page of the engine's own in a view, which is no webContents of the
+    app's. A picture past the engine's 2 MB URL limit throws.
 - **`loadURL`, `loadFile`, title, show, focus and close** map to existing
   window requests.
   - **Title:** a window has its own title, which the desktop shows (the
@@ -162,6 +183,28 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
     then `set_title {window, title}` on `setTitle` and on each page title the
     app's `page-title-updated` listeners let through. An app that prevents
     them, as Claude Desktop does, keeps its own.
+  - **Looks and input:** `flashFrame` sends `flash_frame {window, flash}`,
+    `setIgnoreMouseEvents` sends `set_ignore_mouse_events {window, ignore}`
+    (`forward` is macOS's and Windows', so Linux has none), and `setShape`
+    sends `set_shape {window, rects}`, each only when it changed and asked
+    again once the window's page opens. The engine lists them with the
+    window as `urgent`, `ignoresPointer` and `shape`
+    ([SHELL-BROWSER-WINDOWS.md](../SHELL-BROWSER-WINDOWS.md)); an empty
+    shape is the whole window again. The host stops flashing once the
+    window has the keyboard, as an urgency hint ends on Linux. Manganese draws an
+    urgent window's edge in the warning color, lets the pointer through the
+    whole window, and clips its page to the shape.
+  - **`app-command`:** the mouse's back and forward buttons pressed in a
+    window's page or any of its views' send `app_command {window,
+    command}` with `browser-backward` or `browser-forward`, which the host
+    emits on the window, as Electron does on Linux.
+  - **`getMediaSourceId`:** a window names itself `window:<number>:0`. A
+    page of the same app that passes it to `getUserMedia` as
+    `chromeMediaSourceId` (as `desktopCapturer`'s sources are) captures that
+    window's page as a tab, with no picker
+    (`WebViewGuest::NamedWindowSource`). A number that names none of the
+    app's windows, as `desktopCapturer`'s own `window:0:0` doesn't, opens
+    the desktop's picker instead.
   - **Close:** the user closing a window doesn't close it. The engine says
     `close_asked {window}`, and the host emits the window's `close` event;
     only if no listener prevents it does the host ask with `close_window`.
@@ -363,8 +406,9 @@ The host carries out the webContents members that act on the page with
   `savePage` as HTML (a download), `clone`, `startDrag`, `opener` (the engine
   doesn't say which new windows keep theirs), the synchronous
   `isBeingCaptured`, `getAllSharedWorkers` and DevTools target ids, which
-  the engine doesn't report to the host, and `getMediaSourceId`, which no
-  capture source in the engine answers to.
+  the engine doesn't report to the host, and `webContents.getMediaSourceId`,
+  which names a page rather than its window (`win.getMediaSourceId` does
+  work: see "Windows").
 
 ### Preload and IPC
 
@@ -875,6 +919,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: the Edit menu's commands and `replace` at the page's focus (`edit`, `replace`), and find in page (`find_in_page`, `found_in_page`, `stop_find_in_page`), with the Edit menu's roles (`guard-electron-socket.sh`)
 - [x] engine: a page's context menus reach its app as `context-menu` (`context_menu`), and the shell draws none for it
 - [x] engine and `electron-host`: a page's console, preload errors, hangs, fullscreen, media, sound, icons, link, zoom, theme color, cursor and sizes reach its `webContents`; `before-input-event` and `before-mouse-event` hold input for the app, `input-event` and `sendInputEvent`; a page's own mute, user agent and menu shortcuts (`electron_page_reports.h`, patch 0267)
+- [x] engine, Manganese and `electron-host`: `BaseWindow`, `View` trees, `ImageView` and `setContentView`; `flashFrame`, `setIgnoreMouseEvents` and `setShape` (`flash_frame`, `set_ignore_mouse_events`, `set_shape`), listed with the window; `app-command` from the mouse's back and forward buttons (`app_command`); and `win.getMediaSourceId` for `getUserMedia`
 - [ ] engine: a message box before any window has a page, which Element shows when there's no keyring and hands itself back on
 - [ ] phase 2, engine: Electron's Node built into the engine, and the engine run as Node
 - [x] phase 2, engine: Node in the pages of windows that ask for it (`guard-electron-node.sh`)

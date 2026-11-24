@@ -1,7 +1,5 @@
 {
   "gaps": {
-    "BaseWindow.app-command": "not fired yet",
-    "BrowserWindow.app-command": "not fired yet",
     "Extensions.extension-loaded": "extensions belong to a Chrome profile, and an app's sessions are partitions of the shell's, which holds the user's own extensions: one an app loaded would reach the user's browsing",
     "Extensions.extension-ready": "extensions belong to a Chrome profile, and an app's sessions are partitions of the shell's, which holds the user's own extensions: one an app loaded would reach the user's browsing",
     "Extensions.extension-unloaded": "extensions belong to a Chrome profile, and an app's sessions are partitions of the shell's, which holds the user's own extensions: one an app loaded would reach the user's browsing",

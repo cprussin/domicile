@@ -10,6 +10,7 @@
     "autoUpdater.quitAndInstall": "Electron has no autoUpdater on Linux",
     "BaseWindow.blur": "the desktop owns focus",
     "BaseWindow.center": "the desktop places windows",
+    "BaseWindow.clearPersistedState": "the desktop places and sizes windows, so there is no saved state to clear",
     "BaseWindow.getOpacity": "the shell draws windows",
     "BaseWindow.hasShadow": "the shell draws windows",
     "BaseWindow.isAlwaysOnTop": "the desktop stacks windows",
@@ -46,6 +47,9 @@
     "NativeImage.isTemplateImage": "template images are macOS's",
     "NativeImage.setTemplateImage": "template images are macOS's",
     "Notification.isSupported": "the desktop shows notifications",
+    "View.setBackgroundBlur": "the shell draws views",
+    "View.setBackgroundColor": "the shell draws views",
+    "View.setBorderRadius": "the shell draws views",
     "WebContents.addWorkSpace": "a workspace is DevTools', and the desktop has no devtools for apps",
     "WebContents.closeDevTools": "the desktop has no devtools for apps",
     "WebContents.getBackgroundThrottling": "the engine throttles hidden pages as the browser does",
@@ -69,16 +73,12 @@
     "WebContents.startPainting": "no window is offscreen: one that asks is refused, and Electron's answer for a window that isn't",
     "WebContents.stopPainting": "no window is offscreen: one that asks is refused, and Electron's answer for a window that isn't",
     "WebContents.toggleDevTools": "the desktop has no devtools for apps",
-    "WebContentsView.removeChildView": "a view never holds views here: addChildView refuses",
     "WebContentsView.setBackgroundBlur": "the shell draws views",
     "WebContentsView.setBackgroundColor": "the shell draws views",
     "WebContentsView.setBorderRadius": "the shell draws views"
   },
   "lies": {
     "app.setClientCertRequestPasswordHandler": "the handler is never called: the engine asks no one for a smart card's PIN",
-    "BaseWindow.flashFrame": "does nothing, where it should ask for the user's attention",
-    "BaseWindow.getMediaSourceId": "always empty, so the app can't name its own window to desktopCapturer",
-    "BaseWindow.setIgnoreMouseEvents": "does nothing, so a click-through overlay takes the clicks",
     "ServiceWorkers.getWorkerFromVersionID": "always nothing: the engine gives the app no handle on a running worker"
   }
 }

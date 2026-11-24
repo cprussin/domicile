@@ -115,6 +115,13 @@ struct ElectronPageCalls {
   // What else the app's webContents hears of its page: its console, its
   // sound, its input, and the rest of electron_page_reports.h.
   base::RepeatingCallback<void(ElectronPageReport report)> reported;
+  // The user pressed the mouse's back or forward button in the page.
+  base::RepeatingCallback<void(ElectronAppCommand command)> app_command;
+  // The desk's id of the app's window `window`, which the page's desktop
+  // getUserMedia() captures when it names it as win.getMediaSourceId does;
+  // nothing when `window` names none of the app's windows, or a view.
+  base::RepeatingCallback<std::optional<std::string>(int window)>
+      window_source;
 };
 
 // A window's menu bar, as the desk lists it: the menu's entries as JSON
@@ -409,6 +416,16 @@ class ElectronDesk {
   // decides and says what it did through the page's window_state call.
   virtual void SetWindowState(const std::string& id,
                               ElectronWindowState state) = 0;
+  // Whether window `id` asks for the user's attention, listed for the shell
+  // until the window has the keyboard.
+  virtual void SetUrgent(const std::string& id, bool urgent) = 0;
+  // Whether the pointer goes through window `id` to what is under it, listed
+  // for the shell.
+  virtual void SetIgnoresPointer(const std::string& id, bool ignores) = 0;
+  // Where window `id` draws and takes input, listed for the shell: within
+  // `rects`, in CSS pixels from its page's top left.
+  virtual void SetShape(const std::string& id,
+                        const std::vector<ElectronShapeRect>& rects) = 0;
   // Closes window `id` once its page agrees.
   virtual void AskToClose(const std::string& id) = 0;
   // Closes window `id` without asking.
@@ -656,6 +673,7 @@ class ElectronApp {
   void PageResized(ElectronWindow number, int width, int height);
   void SetViews(const ElectronSetViews& set);
   void MenuClicked(ElectronWindow number, int command);
+  void AppCommanded(ElectronWindow number, ElectronAppCommand command);
   void CloseAsked(ElectronWindow number);
   void PageStateChanged(ElectronWindow number, ElectronPageState state);
   void WindowStateChanged(ElectronWindow number, ElectronWindowState state);

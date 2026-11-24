@@ -77,7 +77,7 @@ import { ringBell, waylandSocket } from "./wayland-bell";
 
 /**
  * A window as the app's menus hand it to a click and pop up over: one of its
- * BrowserWindows.
+ * windows.
  */
 type MenuWindow = RoleWindow & {
   readonly popupMenu: (
@@ -262,7 +262,7 @@ const main = async ([resources, ...args]: string[]) => {
     accent.changed = accentColorChanged;
     const { click, Menu, MenuItem, model } = createMenu<MenuWindow>({
       appName: app.getName,
-      focusedWindow: (): MenuWindow | null => BrowserWindow.getFocusedWindow(),
+      focusedWindow: (): MenuWindow | null => BaseWindow.getFocusedWindow(),
       popup: (window, entries, at, closed) =>
         window.popupMenu(entries, at, closed),
       roles: windowRoles(() => {
@@ -270,14 +270,17 @@ const main = async ([resources, ...args]: string[]) => {
       }),
       // Electron gives every window the app's menu, as each new one starts with.
       setApplicationMenu: (menu) => {
-        for (const window of BrowserWindow.getAllWindows()) {
+        for (const window of BaseWindow.getAllWindows()) {
           window.setMenu(menu);
         }
       },
     });
     const {
+      BaseWindow,
       BrowserView,
       BrowserWindow,
+      ImageView,
+      View,
       WebContents,
       WebContentsView,
       WebFrameMain,
@@ -292,7 +295,7 @@ const main = async ([resources, ...args]: string[]) => {
       {
         applicationMenu: Menu.getApplicationMenu,
         click: (menu, command, window) => {
-          click(menu, command, undefined, BrowserWindow.fromId(window));
+          click(menu, command, undefined, BaseWindow.fromId(window));
         },
         model,
       },
@@ -313,7 +316,7 @@ const main = async ([resources, ...args]: string[]) => {
     });
     const desktopState = subscribeDesktop();
     hooks.focus = () => {
-      for (const window of BrowserWindow.getAllWindows()) {
+      for (const window of BaseWindow.getAllWindows()) {
         window.show();
         window.focus();
       }
@@ -329,6 +332,7 @@ const main = async ([resources, ...args]: string[]) => {
     const electron: Record<string, unknown> = {
       app,
       autoUpdater: createAutoUpdater(),
+      BaseWindow,
       BrowserView,
       BrowserWindow,
       ClipboardItem,
@@ -338,7 +342,7 @@ const main = async ([resources, ...args]: string[]) => {
       desktopCapturer,
       dialog: createDialog({
         askMessageBox: async (window, options) => {
-          const over = boxWindow(window, BrowserWindow);
+          const over = boxWindow(window, BaseWindow);
           if (over === undefined) {
             // Electron shows it on its own; the engine shows boxes only
             // over a page.
@@ -358,6 +362,7 @@ const main = async ([resources, ...args]: string[]) => {
         },
       }),
       globalShortcut: createGlobalShortcut(warn),
+      ImageView,
       ipcMain,
       Menu,
       MenuItem,
@@ -425,6 +430,7 @@ const main = async ([resources, ...args]: string[]) => {
         name: app.getName,
       }),
       utilityProcess: createUtilityProcess(appEvents.childProcessGone),
+      View,
       WebContentsView,
       WebSocket,
       webContents,
@@ -433,6 +439,7 @@ const main = async ([resources, ...args]: string[]) => {
     completeElectron(electron, app.getName(), { absent, unsupported, warn });
     completeInstances(
       {
+        BaseWindow: BaseWindow.prototype,
         BrowserView: BrowserView.prototype,
         BrowserWindow: BrowserWindow.prototype,
         Menu: Object.getPrototypeOf(new Menu()),
@@ -444,6 +451,7 @@ const main = async ([resources, ...args]: string[]) => {
         Session: Object.getPrototypeOf(session.defaultSession),
         Tray: (electron.Tray as { prototype: object }).prototype,
         UtilityProcess: UtilityProcess.prototype,
+        View: View.prototype,
         WebContents: WebContents.prototype,
         WebContentsView: WebContentsView.prototype,
         WebFrameMain: WebFrameMain.prototype,

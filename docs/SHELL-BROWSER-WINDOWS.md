@@ -670,6 +670,26 @@ Manganese fills the screen with a window whose app wants fullscreen, as for a
 fullscreen page, and reports whether the window fills its screen. Its windows
 tile, so it reports none maximized or minimized (`useAppWindowState`).
 
+## An Electron app's looks and input
+
+An Electron app can ask the desktop for the user's attention, let the pointer
+through its window, or shape it. Each is listed with the window, `change`
+fires when one changes, and each is false or `undefined` for any other window:
+
+- **`urgent`** (`win.flashFrame`): the app asks for the user's attention.
+  The app stops asking once the window has the keyboard. Show it as sway
+  does an urgent window.
+- **`ignoresPointer`** (`win.setIgnoreMouseEvents`): the window's page takes
+  no clicks, and the pointer goes through to whatever the shell draws under
+  it.
+- **`shape`** (`win.setShape`): JSON, a list of `{x, y, width, height}` in
+  CSS pixels from the page's top left. Draw the page and pass it clicks only
+  within them. An app that sets an empty shape has none again.
+
+Manganese draws an urgent window's edge in the warning color, makes the whole
+window `pointer-events: none` while it ignores the pointer, and clips its
+page to its shape with `clip-path` (`useAppWindowLooks`).
+
 ## Picture-in-picture video
 
 A page's `requestPictureInPicture()`, its video controls' button, or the
