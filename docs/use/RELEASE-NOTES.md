@@ -65,6 +65,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 
 ### Fixes
 
+- A download that waits on a picker nobody answers, such as a Slack download from a hidden window, no longer stops every later download in the browser from asking where to save. "Save video as…" asks again.
 - Speakers behind sound correction show as muted when the hardware behind them is muted, and unmuting them unmutes it. The hardware itself is no longer offered as a separate choice.
 - Switching workspaces keeps a floating window that hangs off the screen on its own workspace, instead of sliding its off-screen part into view.
 - The screen stays black from the boot screen until the desktop draws, instead of flashing white. [#2467](https://github.com/cprussin/domicile/issues/2467)
