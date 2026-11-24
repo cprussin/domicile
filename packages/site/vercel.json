@@ -5,7 +5,8 @@
   "git": {
     "deploymentEnabled": {
       "**": false,
-      "site": true
+      "site": true,
+      "claude/project-thread-81aydt": true
     }
   },
   "ignoreCommand": "bash vercel-ignore.sh",
