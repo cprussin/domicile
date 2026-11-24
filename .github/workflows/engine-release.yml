@@ -254,6 +254,17 @@ jobs:
           DOMICILE_ENGINE_TAG="engine-official-s${identity:0:12}" \
             .github/scripts/engine-official-repin.sh
 
+      # After a pin roll the other tree is still at the old pin, and the next
+      # run that lands there rebuilds Chromium from scratch. A block-cloned copy
+      # of this built tree takes minutes instead. Only from main: a pull
+      # request's pin may never land. See BUILD-MACHINE.md#tree-pool.
+      - name: Copy this tree over a stale one
+        if: ${{ github.ref == 'refs/heads/main' }}
+        # The engine is already published; a failed copy only means the next
+        # run rebuilds, as before. The error still shows on the run.
+        continue-on-error: true
+        run: .github/scripts/engine-tree-pool.sh refresh "$CHROMIUM" "$LOCK_OWNER"
+
       - name: What the guard wrote down
         if: ${{ failure() }}
         run: |

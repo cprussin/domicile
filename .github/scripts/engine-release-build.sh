@@ -114,6 +114,22 @@ gn gen "$OUT" --args="
   import(\"//build/args/domicile_node.gn\")
 $CACHE_ARG" || exit 1
 
+# A tree copied from another (`engine-tree-pool.sh refresh`) carries the other
+# tree's absolute paths until `gn gen` rewrites them. Any left would build from
+# the other tree's files, so stop rather than link from two trees.
+here="$(pwd -P)"
+trees="$(dirname "$(dirname "$here")")"
+if [ "$(basename "$trees")" = trees ]; then
+  self="$trees/$(basename "$(dirname "$here")")/"
+  foreign="$(grep -rhoE --include='*.ninja' "$trees/[^/\"' ]+/" "$OUT" 2>/dev/null |
+    sort -u | grep -vxF "$self" || true)"
+  if [ -n "$foreign" ]; then
+    echo "::error::$OUT's build files still name another tree after gn gen: $(printf '%s ' $foreign)" >&2
+    grep -rlF --include='*.ninja' "$(printf '%s\n' "$foreign" | head -1)" "$OUT" | head -5 >&2
+    exit 1
+  fi
+fi
+
 # Nothing in `chrome` depends on `domicile_engine`, which the compositor
 # dlopens, so it is named explicitly.
 exec autoninja -C "$OUT" chrome domicile_engine "${@:3}"

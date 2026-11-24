@@ -578,6 +578,104 @@ expect "a run holding the old single lock blocks every pick" refused \
 contains "and the refusal names it" "old run" "$out"
 
 echo
+echo "== after a pin roll, a built tree is copied over a stale one =="
+
+# After a roll every tree but one is at the old pin, and the next run that
+# lands on one rebuilds Chromium from scratch (4h50m on 2026-11-23). Copying
+# the built tree over it costs minutes with block cloning.
+refresh() { # root, owner, [copy command]
+  local out
+  if out="$(DOMICILE_BUILD_ROOT="$1" DOMICILE_TREE_COPY="${3:-cp -a}" \
+      "$POOL_SH" refresh "$1/trees/tree-0/src" "$2" 2>&1)"; then
+    printf 'ok\n%s\n' "$out"
+  else
+    printf 'refused\n%s\n' "$out"
+  fi
+}
+held() { # root, slot, owner
+  DOMICILE_BUILD_ROOT="$1" "$LOCK_SH" take "$1/trees/tree-$2/src" "$3" >/dev/null 2>&1
+}
+freed() { # root, slot
+  if [ -d "$1/.domicile-tree-lock-tree-$2" ]; then echo held; else echo free; fi
+}
+
+root="$(build_root 3)"
+carrying "$root" 0 newpin1
+echo built >"$root/trees/tree-0/src/out-marker"
+echo series >"$root/trees/tree-0/.domicile-series-stamp"
+: >"$root/trees/tree-0/.domicile-built"
+echo newpin1 >"$root/trees/tree-0/.domicile-gen-pin"
+carrying "$root" 1 oldpin1
+used_at "$root" 1 60
+echo stale >"$root/trees/tree-1/src/out-marker"
+carrying "$root" 2 oldpin1
+used_at "$root" 2 99999
+echo stale >"$root/trees/tree-2/src/out-marker"
+held "$root" 0 'release run'
+out="$(refresh "$root" 'release run')"
+expect "a refresh succeeds" ok "$(status "$out")"
+expect "it copies into the least recently used stale tree" built \
+  "$(cat "$root/trees/tree-2/src/out-marker")"
+expect "and leaves the newer stale tree alone" stale \
+  "$(cat "$root/trees/tree-1/src/out-marker")"
+expect "the copy carries the pin" newpin1 "$(cat "$root/trees/tree-2/.domicile-synced-pin")"
+expect "and the series stamp" series "$(cat "$root/trees/tree-2/.domicile-series-stamp")"
+expect "and the built stamp" yes "$([ -e "$root/trees/tree-2/.domicile-built" ] && echo yes)"
+expect "and no copy is left half-made" no \
+  "$([ -e "$root/trees/tree-2/src.copying" ] || [ -e "$root/trees/tree-2/src.old" ] && echo yes || echo no)"
+expect "the copied-into tree is unlocked after" free "$(freed "$root" 2)"
+expect "the run's own tree stays locked for its drop step" held "$(freed "$root" 0)"
+contains "and it says what it did" "copied tree-0 into tree-2" "$out"
+
+out="$(refresh "$root" 'release run')"
+expect "a second refresh copies into the remaining stale tree" built \
+  "$(cat "$root/trees/tree-1/src/out-marker")"
+out="$(refresh "$root" 'release run')"
+expect "with every tree at the pin, there is nothing to copy" ok "$(status "$out")"
+contains "and it says so" "nothing to copy into" "$out"
+
+# A tree another run holds may be mid-build: copying over it would change its
+# files under the compiler.
+root="$(build_root 2)"
+carrying "$root" 0 newpin1
+carrying "$root" 1 oldpin1
+echo stale >"$root/trees/tree-1/src/out-marker"
+held "$root" 0 'release run'
+held "$root" 1 'pr run'
+out="$(refresh "$root" 'release run')"
+expect "a held stale tree is not copied over" stale "$(cat "$root/trees/tree-1/src/out-marker")"
+expect "and its lock stays its holder's" "pr run" "$(cat "$root/.domicile-tree-lock-tree-1/owner")"
+
+# The source must stay still while it is read.
+root="$(build_root 2)"
+carrying "$root" 0 newpin1
+carrying "$root" 1 oldpin1
+out="$(refresh "$root" 'release run')"
+expect "a run that does not hold its own tree is refused" refused "$(status "$out")"
+
+# Without block cloning a copy is another 137G, which /build does not have.
+root="$(build_root 2)"
+carrying "$root" 0 newpin1
+carrying "$root" 1 oldpin1
+echo stale >"$root/trees/tree-1/src/out-marker"
+held "$root" 0 'release run'
+out="$(refresh "$root" 'release run' false)"
+expect "a filesystem that cannot clone is a warning, not a failure" ok "$(status "$out")"
+contains "and the warning says the tree stays" "stays at oldpin1" "$out"
+expect "and the stale tree is untouched" stale "$(cat "$root/trees/tree-1/src/out-marker")"
+expect "and unlocked" free "$(freed "$root" 1)"
+
+# A run from a workflow older than per-tree locks may be in any tree.
+root="$(build_root 2)"
+carrying "$root" 0 newpin1
+carrying "$root" 1 oldpin1
+echo stale >"$root/trees/tree-1/src/out-marker"
+held "$root" 0 'release run'
+mkdir "$root/.domicile-tree-lock"
+out="$(refresh "$root" 'release run')"
+expect "the old single lock stops a copy" stale "$(cat "$root/trees/tree-1/src/out-marker")"
+
+echo
 if [ "$FAILED" -eq 0 ]; then
   echo "engine-tree-pool: all cases passed"
 else
