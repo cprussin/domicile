@@ -16,6 +16,7 @@
 #include "components/domicile/mojom/downloads.mojom-blink.h"
 #include "components/domicile/mojom/extension_tray.mojom-blink.h"
 #include "components/domicile/mojom/picture_in_picture.mojom-blink.h"
+#include "components/domicile/mojom/shader_effects.mojom-blink.h"
 #include "components/domicile/mojom/shell_fetch.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
@@ -93,6 +94,7 @@ class MODULES_EXPORT DomicileHost final
       public domicile::mojom::blink::CastSinksClient,
       public domicile::mojom::blink::DownloadsClient,
       public domicile::mojom::blink::PictureInPictureVideosClient,
+      public domicile::mojom::blink::ShaderEffectsClient,
       public AppInputClient {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -396,6 +398,14 @@ class MODULES_EXPORT DomicileHost final
                                    uint32_t width,
                                    uint32_t height,
                                    ExceptionState&);
+  // Compiles `sksl` in the GPU process as shader effect `name`, which
+  // `domicile-shader(name, …)` then draws. Resolves with how many numbers it
+  // takes; rejects with the compiler's error. See the IDL.
+  ScriptPromise<IDLUnsignedLong> registerShaderEffect(ScriptState*,
+                                                      const String& name,
+                                                      const String& sksl,
+                                                      double outset,
+                                                      ExceptionState&);
   // Sends `method` to `url` with the profile's cookies, through the browser's
   // own pipe.
   // The browser refuses what the page may not send; see the IDL.
@@ -540,6 +550,9 @@ class MODULES_EXPORT DomicileHost final
   // domicile::mojom::blink::PictureInPictureVideosClient:
   void VideosChanged(
       Vector<domicile::mojom::blink::PictureInPictureVideoPtr> videos) override;
+
+  // domicile::mojom::blink::ShaderEffectsClient:
+  void Lost(uint32_t id) override;
 
   void Trace(Visitor*) const override;
 
@@ -781,6 +794,20 @@ class MODULES_EXPORT DomicileHost final
   // The fetches with the profile's cookies, the browser's own pipe too. Bound
   // on the first fetch, since nothing arrives on it unasked.
   HeapMojoRemote<domicile::mojom::blink::ShellFetch> shell_fetch_;
+  // The shader effects, the browser's own pipe too. Bound on the first
+  // register.
+  HeapMojoRemote<domicile::mojom::blink::ShaderEffects> shader_effects_;
+  HeapMojoReceiver<domicile::mojom::blink::ShaderEffectsClient, DomicileHost>
+      shader_effects_receiver_;
+
+  // The browser's answer to registerShaderEffect(): `id` names effect `name`
+  // in a filter, or is 0 and `error` says why.
+  void ShaderEffectRegistered(ScriptPromiseResolver<IDLUnsignedLong>* resolver,
+                              const AtomicString& name,
+                              float outset,
+                              uint32_t id,
+                              uint32_t arguments,
+                              const String& error);
 
   // A chord grabbed by name, the press it is on the last keyboard heard, and
   // how many grabShortcut calls no ungrabShortcut has answered yet.

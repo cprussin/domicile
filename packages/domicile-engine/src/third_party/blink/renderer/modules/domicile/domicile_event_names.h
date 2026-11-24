@@ -49,7 +49,8 @@
   X(shelloptionschanged, Shelloptionschanged)                     \
   X(system, System)                                               \
   X(portalrequests, Portalrequests)                               \
-  X(compositorreplaced, Compositorreplaced)
+  X(compositorreplaced, Compositorreplaced)                       \
+  X(shadereffectlost, Shadereffectlost)
 
 namespace blink::domicile_event_names {
 

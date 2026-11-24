@@ -1811,9 +1811,11 @@ source_set("unit_tests") {
     # A channel endpoint's disconnect queued behind its messages, beside the
     # //ipc code that queues them.
     "//ipc/domicile:unit_tests",
-    # What the shell hides from captures of the desk, beside the viz code
-    # that leaves it out.
+    # What the shell hides from captures of the desk and its shader effects,
+    # beside the viz code that runs them.
     "//components/viz/service/display/domicile:unit_tests",
+    # The browser's end of the shader effects, beside //components/viz/host.
+    "//components/viz/host/domicile:unit_tests",
     # The locale fallback's test reads its strings through ResourceBundle.
     "//ui/base",
   ]

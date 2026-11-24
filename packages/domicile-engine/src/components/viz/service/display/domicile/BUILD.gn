@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: MIT
 
 # What the shell hides from captures of the desk, such as a screen
-# recording's toolbar. Linked from //components/viz/service, which makes GN
-# load this file; tested from //components/domicile:unit_tests.
+# recording's toolbar, and the shell's shader effects. Linked from
+# //components/viz/service, which makes GN load this file; tested from
+# //components/domicile:unit_tests.
 
 # The restriction target id the shell's elements get. Its own target so
 # //content, which mints it, needs nothing else from viz.
@@ -26,17 +27,46 @@ source_set("hidden_from_captures") {
   ]
 }
 
+# The shell's shader effects: the registry viz keeps and the image filter
+# SkiaRenderer runs. See shader_effects.h.
+source_set("shader_effects") {
+  sources = [
+    "shader_effects.cc",
+    "shader_effects.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//cc/paint",
+    "//components/viz/common",
+    "//mojo/public/cpp/bindings",
+    "//services/viz/privileged/mojom/compositing",
+    "//skia",
+    "//ui/gfx/geometry",
+    "//ui/gfx/geometry:geometry_skia",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
 
-  sources = [ "hidden_from_captures_unittest.cc" ]
+  sources = [
+    "hidden_from_captures_unittest.cc",
+    "shader_effects_unittest.cc",
+  ]
 
   deps = [
     ":hidden_from_captures",
+    ":shader_effects",
     "//base",
     "//base/test:test_support",
+    "//cc/paint",
     "//components/viz/common",
+    "//mojo/public/cpp/test_support:test_utils",
+    "//services/viz/public/mojom",
+    "//skia",
     "//testing/gtest",
     "//ui/gfx/geometry",
+    "//ui/gfx/geometry:geometry_skia",
   ]
 }

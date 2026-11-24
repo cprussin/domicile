@@ -21,6 +21,7 @@ mojom("mojom") {
     "external_surface.mojom",
     "frame_sink_broker.mojom",
     "picture_in_picture.mojom",
+    "shader_effects.mojom",
     "shell_fetch.mojom",
     "web_view_guest.mojom",
   ]

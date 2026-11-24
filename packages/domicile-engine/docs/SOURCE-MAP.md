@@ -83,6 +83,25 @@ Test-only. `spike.sh` runs it, and `guard-css-and-resize.sh` runs `spike.sh`.
 | `components/domicile/spike/spike_color.{h,cc}` | compares the drawn color with the submitted one |
 | `components/domicile/spike/mojom/spike_probe.mojom`, `content/browser/domicile/domicile_spike_probe.{h,cc}` | the pixel probe: a `CopyOutputRequest` on the browser window |
 
+## Shader effects
+
+The shell's SkSL, drawn as `filter: domicile-shader()`. Design:
+[MOTION.md](/docs/architecture/MOTION.md#shader-primitive).
+
+| File | Role |
+|---|---|
+| `components/domicile/mojom/shader_effects.mojom` | what a shell document calls: register an effect's source, and hear one was lost |
+| `content/browser/domicile/domicile_shader_effects.{h,cc}` | that interface's browser side, bound for the shell only; registers under the shell frame's `FrameSinkId` |
+| `components/viz/host/domicile/shader_effects_host.{h,cc}` | the browser's end of viz's registry in `HostFrameSinkManager`; keeps each source to register again after a GPU restart, and drops what was drawing when the GPU process went |
+| `components/viz/service/display/domicile/shader_effects.{h,cc}` | viz's registry, on `SurfaceManager`: compiles strict ES2 SkSL, attaches a program to its owner's passes for the aggregator, and builds the `SkImageFilter` `SkiaRenderer` runs |
+| `third_party/blink/renderer/core/css/domicile/domicile_shader_effects.{h,cc}` | a document's effects by name; turns `domicile-shader(name, …)` into a filter |
+| `third_party/blink/renderer/core/style/domicile/domicile_shader_filter_operation.{h,cc}` | that filter in style: name, viz's id, outset and arguments |
+
+Patch 0273 adds `cc::FilterOperation::SHADER` and its mojo, the aggregator
+and renderer hooks, the CSS parsing and interpolation, and the binder.
+`DomicileHost.registerShaderEffect` and `shadereffectlost` are in
+`modules/domicile/`.
+
 ## Tests
 
 - Unit tests: `frame_sink_broker_unittest.cc` (the broker and its provider,
@@ -92,6 +111,10 @@ Test-only. `spike.sh` runs it, and `guard-css-and-resize.sh` runs `spike.sh`.
   `engine_event_queue_unittest.cc`, `surface_frames_unittest.cc`,
   `surface_holds_unittest.cc`, `broker_socket_unittest.cc`,
   `surface_submits_unittest.cc`, `synced_frame_unittest.cc`,
-  `probe_wait_unittest.cc`, `hidden_from_captures_unittest.cc`.
+  `probe_wait_unittest.cc`, `hidden_from_captures_unittest.cc`,
+  `shader_effects_unittest.cc` (compiling, the `SHADER` filter, viz's registry
+  and drawing on the CPU), `shader_effects_host_unittest.cc`.
 - The Blink side and the probe have no unit tests. They need a display
   compositor. `spike.sh` and `guard-css-and-resize.sh` cover them.
+  `guard-shader-effect.sh` covers a shader effect's Blink side and the
+  browser's service.

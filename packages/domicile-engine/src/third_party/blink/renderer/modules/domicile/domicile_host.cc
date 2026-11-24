@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_fetch_response.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_search.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
+#include "third_party/blink/renderer/core/css/domicile/domicile_shader_effects.h"
 #include "third_party/blink/renderer/core/css/media_query_list.h"
 #include "third_party/blink/renderer/core/css/media_query_list_listener.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -277,7 +278,9 @@ DomicileHost::DomicileHost(LocalDOMWindow& window)
       downloads_receiver_(this, &window),
       picture_in_picture_(&window),
       picture_in_picture_receiver_(this, &window),
-      shell_fetch_(&window) {}
+      shell_fetch_(&window),
+      shader_effects_(&window),
+      shader_effects_receiver_(this, &window) {}
 
 DomicileHost::~DomicileHost() = default;
 
@@ -2924,6 +2927,90 @@ ScriptPromise<DomicileFetchResponse> DomicileHost::fetchWithCookies(
   return promise;
 }
 
+// Not Ready() either: the browser answers this, and viz compiles it.
+ScriptPromise<IDLUnsignedLong> DomicileHost::registerShaderEffect(
+    ScriptState* script_state,
+    const String& name,
+    const String& sksl,
+    double outset,
+    ExceptionState& exception_state) {
+  if (name.empty()) {
+    exception_state.ThrowTypeError("name must not be empty");
+    return EmptyPromise();
+  }
+  if (!std::isfinite(outset) || outset < 0) {
+    exception_state.ThrowRangeError("outset must be 0 or more pixels");
+    return EmptyPromise();
+  }
+  if (!window_->GetFrame()) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "There is no browser for this document to register with.");
+    return EmptyPromise();
+  }
+  if (!shader_effects_.is_bound()) {
+    auto task_runner = window_->GetTaskRunner(TaskType::kInternalDefault);
+    window_->GetBrowserInterfaceBroker().GetInterface(
+        shader_effects_.BindNewPipeAndPassReceiver(task_runner));
+    shader_effects_->Listen(
+        shader_effects_receiver_.BindNewPipeAndPassRemote(task_runner));
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUnsignedLong>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  shader_effects_->Register(
+      sksl, BindOnce(&DomicileHost::ShaderEffectRegistered,
+                     WrapWeakPersistent(this), WrapPersistent(resolver),
+                     AtomicString(name), static_cast<float>(outset)));
+  return promise;
+}
+
+void DomicileHost::ShaderEffectRegistered(
+    ScriptPromiseResolver<IDLUnsignedLong>* resolver,
+    const AtomicString& name,
+    float outset,
+    uint32_t id,
+    uint32_t arguments,
+    const String& error) {
+  if (!id) {
+    resolver->RejectWithDOMException(DOMExceptionCode::kOperationError, error);
+    return;
+  }
+  Document* document = window_ ? window_->document() : nullptr;
+  if (!document) {
+    shader_effects_->Unregister(id);
+    return;
+  }
+  // A second register of a name replaces its effect, so the first goes.
+  const uint32_t replaced = DomicileShaderEffects::From(*document).Register(
+      name, {.id = id, .outset = outset, .arguments = arguments});
+  if (replaced) {
+    shader_effects_->Unregister(replaced);
+  }
+  resolver->Resolve(arguments);
+}
+
+// A GPU hang dropped effect `id`: its filters draw nothing until the shell
+// registers it again. A MessageEvent, as System() builds one, whose `data`
+// is the effect's name.
+void DomicileHost::Lost(uint32_t id) {
+  Document* document = window_ ? window_->document() : nullptr;
+  if (!document) {
+    return;
+  }
+  const AtomicString name = DomicileShaderEffects::From(*document).Drop(id);
+  if (name.IsNull()) {
+    return;
+  }
+  MessageEvent* event = MessageEvent::Create();
+  event->initMessageEvent(domicile_event_names::Shadereffectlost(),
+                          /*bubbles=*/false, /*cancelable=*/false,
+                          name.GetString(), /*origin=*/nullptr,
+                          /*last_event_id=*/String(), /*source=*/nullptr,
+                          /*ports=*/nullptr);
+  DispatchEvent(*event);
+}
+
 // Stored, like Displays: the event signals a change and the attribute holds
 // the list, so a shell that mounts late can still read it.
 void DomicileHost::WindowsChanged(
@@ -3202,6 +3289,8 @@ void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(picture_in_picture_);
   visitor->Trace(picture_in_picture_receiver_);
   visitor->Trace(shell_fetch_);
+  visitor->Trace(shader_effects_);
+  visitor->Trace(shader_effects_receiver_);
   visitor->Trace(input_listeners_);
   EventTarget::Trace(visitor);
   AppInputClient::Trace(visitor);

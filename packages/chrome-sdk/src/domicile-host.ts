@@ -815,6 +815,12 @@ export type DomicileHostEventMap = {
    * open again only if something starts them.
    */
   compositorreplaced: Event;
+  /**
+   * The engine dropped a shader effect, as a MessageEvent whose `data` is
+   * its name: the GPU process went while drawing it, which a hung effect
+   * does. Its filters draw nothing until it is registered again.
+   */
+  shadereffectlost: MessageEvent<string>;
 };
 
 /**
@@ -1325,6 +1331,26 @@ export type DomicileHost = {
    * nothing.
    */
   resizePictureInPictureVideo(id: string, width: number, height: number): void;
+  /**
+   * Compiles `sksl`, strict ES2 SkSL of at most 32 KiB, in the GPU process
+   * as shader effect `name`, which `filter: domicile-shader(name, …)` and
+   * `backdrop-filter` then draw. Its child is `uniform shader content`, its
+   * first uniform `uniform float2 size`, and the rest are the function's
+   * numbers in order, at most 16 floats. `outset` is how many CSS pixels it
+   * may draw outside the content.
+   *
+   * Resolves with how many numbers it takes. Rejects with an OperationError
+   * whose message is the compiler's. A second register of `name` replaces
+   * the first. Throws a RangeError for a negative outset.
+   *
+   * Handled by the browser process, over its own pipe: see
+   * components/domicile/mojom/shader_effects.mojom.
+   */
+  registerShaderEffect(
+    name: string,
+    sksl: string,
+    outset: number,
+  ): Promise<number>;
   /**
    * Sends `method`, "GET" or "POST", to `url` from the browser process with
    * the cookies of browser profile `profile`, one of `browserProfiles`, or

@@ -14,6 +14,12 @@ While the user is at the computer, agents can't click, type, scroll, focus windo
 
 [Agents](AGENTS.md) · [`domicile idle-time`](CLI.md#domicile-idle-time---json)
 
+### Shader effects
+
+Your shell can draw its own SkSL over any element. Register it with `domicile.effects.register(name, { sksl, outset })`, then use it with `filter: domicile-shader(name, …)` or `backdrop-filter`. Its numbers animate with CSS transitions, and it composes with the built-in filters. When the GPU hangs on an effect, the engine drops it and `effects.on("lost")` names it.
+
+[Design](architecture/MOTION.md#shader-primitive)
+
 ## 1.3.0
 
 _November 24, 2026_

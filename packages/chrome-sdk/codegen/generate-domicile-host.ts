@@ -38,6 +38,7 @@ const EVENT_TYPES = {
   focusrequested: "DomicileAppEvent",
   gesture: "DomicileGestureEvent",
   portalrequests: "MessageEvent<string>",
+  shadereffectlost: "MessageEvent<string>",
   shortcut: "DomicileShortcutEvent",
   shortcutrelease: "DomicileShortcutEvent",
   system: "MessageEvent<string>",

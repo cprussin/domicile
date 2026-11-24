@@ -223,6 +223,11 @@ The engine has two channels to the rest of Domicile:
     `components/domicile/browser/shell_fetch.h`, unit tested.
   - The request: `chrome/browser/domicile/domicile_shell_fetch.h`.
   - Shell side: [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md#the-browsers-cookies).
+- **Shader effects:** `registerShaderEffect()` and the `shadereffectlost`
+  event use `components/domicile/mojom/shader_effects.mojom`, a browser-side
+  pipe bound only for the shell's origin (patch 0273). The browser hands the
+  SkSL to viz, which compiles it. The compositor never sees it. See
+  [MOTION.md](/docs/architecture/MOTION.md#shader-primitive).
 - **Tabs:** to `chrome.tabs` and `chrome.windows`, every `<webview>` is a tab
   and the desk is one window. See `chrome/browser/domicile/domicile_desk.h`.
   Patch 0057 routes Chrome's tab lookups to `DomicileDesk`. Fork versions of

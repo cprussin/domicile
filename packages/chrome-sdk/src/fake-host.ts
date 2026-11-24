@@ -155,6 +155,7 @@ const ASKS = new Set([
   "confinePointer",
   "countBrowserWindowMatches",
   "fetchWithCookies",
+  "registerShaderEffect",
   "searchFiles",
   "setExtensionEnabled",
   "startCasting",

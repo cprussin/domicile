@@ -93,6 +93,17 @@ app[data-closing] {
   mesh's texture with `drawMesh`. Works on Ganesh and Graphite.
 - **Gate:** an origin trial feature for `domicile://shell/` only, as `<app>`
   is (patch 0116). Viz refuses effects from any other frame sink.
+- **As built (patch 0273, fragment effects):** the shell calls
+  `registerShaderEffect(name, sksl, outset)`. The browser's `ShaderEffects`
+  service, which only a shell document can bind, hands the source to viz
+  through `HostFrameSinkManager`. That service keeps it to register again
+  after a GPU restart. Viz compiles the source and keeps it under the shell's
+  `FrameSinkId`. The aggregator attaches the program only to a pass of that
+  frame sink. `size` and `p` are in the pass's device pixels: Skia drops a
+  runtime shader under the display scale's local matrix, so viz runs the
+  effect unscaled and scales only its outset. An effect with an outset moves
+  pixels, so its animations run on the main thread. One with no outset
+  animates on the compositor. The software renderer draws no effects.
 
 ### Key decisions
 
@@ -248,10 +259,11 @@ Shell surfaces:
 
 Shader primitive (engine):
 
-- [ ] `cc::FilterOperation` `SHADER`, mojo, `SkiaRenderer` filter, guard on
-      `crux` that reads a shaded `<app>` off a cast
-- [ ] Blink `domicile-shader()` parsing and interpolation
-- [ ] `domicile.effects.register` in the SDK, the shell-only gate, the GPU
+- [x] `cc::FilterOperation` `SHADER`, mojo, `SkiaRenderer` filter, guard on
+      `crux` that reads a shaded `<app>` off the compositor's readback
+      (`guard-shader-effect.sh`)
+- [x] Blink `domicile-shader()` parsing and interpolation
+- [x] `domicile.effects.register` in the SDK, the shell-only gate, the GPU
       hang handling
 - [ ] mesh effects: `SkMesh` grid and instances, `vertex`, `update` arrays
 - [ ] `images` inputs and `outset: "screen"`

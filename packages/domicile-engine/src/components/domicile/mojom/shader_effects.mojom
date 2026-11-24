@@ -1,0 +1,26 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+module domicile.mojom;
+
+// The shell's shader effects: SkSL programs that `filter: domicile-shader()`
+// runs in viz. Bound for the shell's document only. See
+// docs/architecture/MOTION.md#shader-primitive.
+interface ShaderEffects {
+  // Hears which effects the engine drops. Once per document.
+  Listen(pending_remote<ShaderEffectsClient> client);
+
+  // Compiles `sksl` in viz for this document's frames. `id` names the effect
+  // in a filter and `arguments` is how many floats it takes after `size`.
+  // When it does not compile, `id` is 0 and `error` says why.
+  Register(string sksl) => (uint32 id, uint32 arguments, string error);
+
+  // Forgets an effect this document registered.
+  Unregister(uint32 id);
+};
+
+interface ShaderEffectsClient {
+  // The engine dropped effect `id`: the GPU process went while drawing it,
+  // which a hung effect does.
+  Lost(uint32 id);
+};

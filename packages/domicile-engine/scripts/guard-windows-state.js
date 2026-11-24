@@ -57,6 +57,7 @@ const EVENT_NAMES = [
   "system",
   "portalrequests",
   "compositorreplaced",
+  "shadereffectlost",
 ];
 
 // Under guard-windows-state.sh's 60-second wait for this page's last line.

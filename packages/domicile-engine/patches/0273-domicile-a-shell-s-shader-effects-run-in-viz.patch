@@ -1,0 +1,1428 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a shell's shader effects run in viz
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The shell registers an SkSL effect with domicile.registerShaderEffect(),
+and `filter: domicile-shader(name, …)` or `backdrop-filter` draws it.
+
+- cc::FilterOperation gains SHADER: an effect id, its outset as the amount
+  and at most 16 float arguments. It crosses mojo without its program.
+  Arguments interpolate when both sides are one effect, a missing side is
+  that effect with zero arguments, and different effects step halfway.
+- The browser compiles nothing. Its ShaderEffects service, bound for
+  domicile://shell/ documents only, hands the source to viz once through
+  HostFrameSinkManager, which keeps it to register again after a GPU
+  restart. viz compiles it strict ES2, checks its uniforms and keeps it
+  under its owner's FrameSinkId.
+- SurfaceAggregator attaches the program to a pass's SHADER filters only
+  when the pass's frame sink owns the effect, and reports which effects
+  each frame draws. SkiaRenderer runs them with
+  SkImageFilters::RuntimeShader, composed with the other filters.
+- When the GPU process goes, the effects it was drawing are dropped and the
+  shell hears `shadereffectlost`, since a hung effect is what trips the
+  watchdog.
+- Blink parses domicile-shader() for the shell only, resolves it by name,
+  interpolates its arguments, and composites any element that has one.
+
+Verified: not built. This repository cannot build Chromium; the engine job builds it on `crux`.
+---
+ cc/paint/filter_operation.cc                  | 74 +++++++++++++++++++
+ cc/paint/filter_operation.h                   | 63 +++++++++++++++-
+ cc/paint/filter_operations.cc                 |  5 ++
+ cc/paint/render_surface_filters.cc            |  5 ++
+ components/viz/host/BUILD.gn                  |  4 +
+ .../viz/host/host_frame_sink_manager.cc       |  7 ++
+ components/viz/host/host_frame_sink_manager.h |  8 ++
+ components/viz/service/BUILD.gn               |  4 +
+ .../viz/service/display/skia_renderer.cc      | 32 ++++++--
+ .../viz/service/display/surface_aggregator.cc | 31 +++++++-
+ .../viz/service/display/surface_aggregator.h  |  3 +
+ .../frame_sinks/frame_sink_manager_impl.cc    |  7 ++
+ .../frame_sinks/frame_sink_manager_impl.h     |  3 +
+ .../viz/service/surfaces/surface_manager.h    |  8 ++
+ components/viz/test/test_frame_sink_manager.h |  4 +
+ content/browser/BUILD.gn                      |  2 +
+ content/browser/browser_interface_binders.cc  |  5 ++
+ .../compositing/frame_sink_manager.mojom      | 26 +++++++
+ .../filter_operation_mojom_traits.cc          | 20 +++++
+ .../filter_operation_mojom_traits.h           | 16 ++++
+ .../cpp/compositing/mojom_traits_unittest.cc  |  4 +
+ .../mojom/compositing/filter_operation.mojom  |  8 +-
+ .../css_filter_list_interpolation_type.cc     | 14 ++--
+ .../core/animation/interpolable_filter.cc     | 56 ++++++++++++++
+ .../core/animation/interpolable_filter.h      | 25 ++++++-
+ third_party/blink/renderer/core/css/build.gni |  4 +
+ .../core/css/css_value_keywords.json5         |  3 +
+ .../css/properties/computed_style_utils.cc    | 15 ++++
+ .../core/css/properties/css_parsing_utils.cc  | 41 ++++++++++
+ .../css/resolver/filter_operation_resolver.cc | 14 ++++
+ .../compositing/compositing_reason_finder.cc  |  6 ++
+ .../core/paint/filter_effect_builder.cc       | 12 +++
+ .../blink/renderer/core/style/build.gni       |  2 +
+ .../renderer/core/style/filter_operation.h    |  3 +
+ .../renderer/core/style/filter_operations.cc  |  6 ++
+ .../renderer/core/style/filter_operations.h   |  2 +
+ .../graphics/compositor_filter_operations.cc  | 10 +++
+ .../graphics/compositor_filter_operations.h   |  8 ++
+ 38 files changed, 538 insertions(+), 22 deletions(-)
+
+diff --git a/cc/paint/filter_operation.cc b/cc/paint/filter_operation.cc
+index 7c90cb99..09e156b4 100644
+--- a/cc/paint/filter_operation.cc
++++ b/cc/paint/filter_operation.cc
+@@ -43,6 +43,13 @@ bool FilterOperation::operator==(const FilterOperation& other) const {
+   if (type_ == OFFSET) {
+     return offset_ == other.offset_;
+   }
++  // Domicile: the compiled program follows from the effect, so it is left
++  // out.
++  if (type_ == SHADER) {
++    return shader_effect_ == other.shader_effect_ &&
++           amount_ == other.amount_ &&
++           shader_arguments_ == other.shader_arguments_;
++  }
+   return amount_ == other.amount_;
+ }
+ 
+@@ -140,6 +147,22 @@ FilterOperation::FilterOperation(FilterType type, const ShapeRects& shape)
+   matrix_.fill(0.0f);
+ }
+ 
++FilterOperation::FilterOperation(FilterType type,
++                                 uint32_t effect,
++                                 float outset,
++                                 std::vector<float> arguments)
++    : type_(type),
++      amount_(outset),
++      offset_(0, 0),
++      drop_shadow_color_(SkColors::kTransparent),
++      zoom_inset_(0),
++      shader_effect_(effect),
++      shader_arguments_(std::move(arguments)) {
++  DCHECK_EQ(type_, SHADER);
++  DCHECK_LE(shader_arguments_.size(), kMaxShaderArguments);
++  matrix_.fill(0.0f);
++}
++
+ FilterOperation::FilterOperation(const FilterOperation& other) = default;
+ FilterOperation::~FilterOperation() = default;
+ 
+@@ -182,6 +205,10 @@ static FilterOperation CreateNoOpFilter(FilterOperation::FilterType type) {
+           FilterOperation::ShapeRects());
+     case FilterOperation::OFFSET:
+       return FilterOperation::CreateOffsetFilter(gfx::Point(0, 0));
++    // Domicile: no arguments leave content as it is, so Blend() starts an
++    // effect from zero arguments itself.
++    case FilterOperation::SHADER:
++      NOTREACHED();
+   }
+   NOTREACHED();
+ }
+@@ -209,6 +236,7 @@ static float ClampAmountForFilterType(float amount,
+     case FilterOperation::COLOR_MATRIX:
+     case FilterOperation::OFFSET:
+     case FilterOperation::REFERENCE:
++    case FilterOperation::SHADER:
+       NOTREACHED();
+   }
+   NOTREACHED();
+@@ -223,6 +251,31 @@ FilterOperation FilterOperation::Blend(const FilterOperation* from,
+   if (!from && !to)
+     return blended_filter;
+ 
++  // Domicile: one effect's arguments interpolate, and a missing side is that
++  // effect with every argument zero, as Blink starts one. Two different
++  // filters step halfway, as a reference filter does.
++  if ((from && from->type() == SHADER) || (to && to->type() == SHADER)) {
++    if (from && to &&
++        (from->type() != to->type() ||
++         from->shader_effect() != to->shader_effect() ||
++         from->shader_arguments().size() != to->shader_arguments().size())) {
++      return progress > 0.5 ? *to : *from;
++    }
++    const FilterOperation& shader = from ? *from : *to;
++    const std::vector<float> zeros(shader.shader_arguments().size());
++    const std::vector<float>& from_arguments =
++        from ? from->shader_arguments() : zeros;
++    const std::vector<float>& to_arguments = to ? to->shader_arguments() : zeros;
++    std::vector<float> arguments(zeros.size());
++    for (size_t i = 0; i < arguments.size(); ++i) {
++      arguments[i] = gfx::Tween::FloatValueBetween(progress, from_arguments[i],
++                                                   to_arguments[i]);
++    }
++    FilterOperation blended = shader;
++    blended.set_shader_arguments(std::move(arguments));
++    return blended;
++  }
++
+   const FilterOperation& from_op = from ? *from : CreateNoOpFilter(to->type());
+   const FilterOperation& to_op = to ? *to : CreateNoOpFilter(from->type());
+ 
+@@ -325,6 +378,15 @@ void FilterOperation::AsValueInto(base::trace_event::TracedValue* value) const {
+     case FilterOperation::OFFSET:
+       MathUtil::AddToTracedValue("offset", offset_, value);
+       break;
++    case FilterOperation::SHADER:
++      value->SetInteger("effect", static_cast<int>(shader_effect_));
++      value->SetDouble("outset", amount_);
++      value->BeginArray("arguments");
++      for (const float& argument : shader_arguments_) {
++        value->AppendDouble(argument);
++      }
++      value->EndArray();
++      break;
+   }
+ }
+ 
+@@ -394,6 +456,18 @@ gfx::Rect MapRectInternal(const FilterOperation& op,
+           gfx::RectF(rect) +
+           gfx::Vector2dF(mapped_offset.x(), mapped_offset.y()));
+     }
++    // Domicile: an effect may draw up to its outset past the content, and
++    // read anywhere in it.
++    case FilterOperation::SHADER: {
++      SkVector outset = SkVector::Make(op.amount(), op.amount());
++      if (ctm) {
++        outset = ctm->mapVector(outset);
++      }
++      gfx::RectF result(rect);
++      result.Outset(
++          gfx::OutsetsF::VH(std::abs(outset.y()), std::abs(outset.x())));
++      return gfx::ToEnclosingRect(result);
++    }
+     default:
+       return rect;
+   }
+diff --git a/cc/paint/filter_operation.h b/cc/paint/filter_operation.h
+index f7e1213e..1e501520 100644
+--- a/cc/paint/filter_operation.h
++++ b/cc/paint/filter_operation.h
+@@ -6,6 +6,7 @@
+ #define CC_PAINT_FILTER_OPERATION_H_
+ 
+ #include <array>
++#include <cstdint>
+ #include <memory>
+ #include <optional>
+ #include <utility>
+@@ -18,6 +19,7 @@
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "third_party/skia/include/core/SkScalar.h"
+ #include "third_party/skia/include/core/SkTileMode.h"
++#include "third_party/skia/include/effects/SkRuntimeEffect.h"
+ #include "ui/gfx/geometry/point.h"
+ #include "ui/gfx/geometry/rect.h"
+ 
+@@ -51,9 +53,15 @@ class CC_PAINT_EXPORT FilterOperation {
+     SATURATING_BRIGHTNESS,  // Not used in CSS/SVG.
+     ALPHA_THRESHOLD,        // Not used in CSS/SVG.
+     OFFSET,                 // Not used in CSS/SVG.
+-    FILTER_TYPE_LAST = OFFSET
++    // Domicile: a shell's shader effect, `domicile-shader()` in CSS. See
++    // //components/viz/service/display/domicile/shader_effects.h.
++    SHADER,
++    FILTER_TYPE_LAST = SHADER
+   };
+ 
++  // Domicile: the most floats a SHADER filter passes its effect.
++  static constexpr size_t kMaxShaderArguments = 16;
++
+   FilterOperation();
+ 
+   FilterOperation(const FilterOperation& other);
+@@ -104,6 +112,27 @@ class CC_PAINT_EXPORT FilterOperation {
+     return blur_tile_mode_;
+   }
+ 
++  // Domicile: a SHADER filter's effect, as the shell registered it with viz.
++  // Its `amount()` is how far, in filter space, the effect may draw outside
++  // the content it shades.
++  uint32_t shader_effect() const {
++    DCHECK_EQ(type_, SHADER);
++    return shader_effect_;
++  }
++
++  const std::vector<float>& shader_arguments() const {
++    DCHECK_EQ(type_, SHADER);
++    return shader_arguments_;
++  }
++
++  // The effect's compiled program. Only viz's aggregator sets it, once the
++  // effect is found to be the drawing frame sink's own; it never crosses
++  // mojo, and a SHADER filter without it draws nothing.
++  const sk_sp<SkRuntimeEffect>& shader_runtime_effect() const {
++    DCHECK_EQ(type_, SHADER);
++    return shader_runtime_effect_;
++  }
++
+   static FilterOperation CreateGrayscaleFilter(float amount) {
+     return FilterOperation(GRAYSCALE, amount);
+   }
+@@ -173,6 +202,12 @@ class CC_PAINT_EXPORT FilterOperation {
+     return FilterOperation(OFFSET, offset);
+   }
+ 
++  static FilterOperation CreateShaderFilter(uint32_t effect,
++                                            float outset,
++                                            std::vector<float> arguments) {
++    return FilterOperation(SHADER, effect, outset, std::move(arguments));
++  }
++
+   bool operator==(const FilterOperation& other) const;
+ 
+   bool operator!=(const FilterOperation& other) const {
+@@ -229,6 +264,22 @@ class CC_PAINT_EXPORT FilterOperation {
+     blur_tile_mode_ = tile_mode;
+   }
+ 
++  void set_shader_effect(uint32_t effect) {
++    DCHECK_EQ(type_, SHADER);
++    shader_effect_ = effect;
++  }
++
++  void set_shader_arguments(std::vector<float> arguments) {
++    DCHECK_EQ(type_, SHADER);
++    DCHECK_LE(arguments.size(), kMaxShaderArguments);
++    shader_arguments_ = std::move(arguments);
++  }
++
++  void set_shader_runtime_effect(sk_sp<SkRuntimeEffect> effect) {
++    DCHECK_EQ(type_, SHADER);
++    shader_runtime_effect_ = std::move(effect);
++  }
++
+   // Given two filters of the same type, returns a filter operation created by
+   // linearly interpolating a |progress| fraction from |from| to |to|. If either
+   // |from| or |to| (but not both) is null, it is treated as a no-op filter of
+@@ -270,6 +321,11 @@ class CC_PAINT_EXPORT FilterOperation {
+ 
+   FilterOperation(FilterType type, const ShapeRects& shape);
+ 
++  FilterOperation(FilterType type,
++                  uint32_t effect,
++                  float outset,
++                  std::vector<float> arguments);
++
+   FilterType type_;
+   float amount_;
+   gfx::Point offset_;
+@@ -281,6 +337,11 @@ class CC_PAINT_EXPORT FilterOperation {
+   // Use a collection of |gfx::Rect| to make serialization simpler.
+   ShapeRects shape_;
+   SkTileMode blur_tile_mode_;
++
++  // Domicile: a SHADER filter's.
++  uint32_t shader_effect_ = 0;
++  std::vector<float> shader_arguments_;
++  sk_sp<SkRuntimeEffect> shader_runtime_effect_;
+ };
+ 
+ }  // namespace cc
+diff --git a/cc/paint/filter_operations.cc b/cc/paint/filter_operations.cc
+index 0f1161a0..f918fa12 100644
+--- a/cc/paint/filter_operations.cc
++++ b/cc/paint/filter_operations.cc
+@@ -100,6 +100,9 @@ bool FilterOperations::HasFilterThatMovesPixels() const {
+         // TODO(hendrikw): SkImageFilter needs a function that tells us if the
+         // filter can move pixels. See crbug.com/523538.
+         return true;
++      // Domicile: an effect reads anywhere in its content.
++      case FilterOperation::SHADER:
++        return true;
+       case FilterOperation::OPACITY:
+       case FilterOperation::COLOR_MATRIX:
+       case FilterOperation::GRAYSCALE:
+@@ -129,6 +132,7 @@ bool FilterOperations::HasFilterThatAffectsOpacity() const {
+       case FilterOperation::ZOOM:
+       case FilterOperation::REFERENCE:
+       case FilterOperation::ALPHA_THRESHOLD:
++      case FilterOperation::SHADER:
+         return true;
+       case FilterOperation::COLOR_MATRIX: {
+         auto& matrix = op.matrix();
+@@ -243,6 +247,7 @@ bool FilterOperations::AllowsLCDText() const {
+     case FilterOperation::SATURATING_BRIGHTNESS:
+     case FilterOperation::ALPHA_THRESHOLD:
+     case FilterOperation::OFFSET:
++    case FilterOperation::SHADER:
+       return false;
+   }
+ }
+diff --git a/cc/paint/render_surface_filters.cc b/cc/paint/render_surface_filters.cc
+index b3918a57..076f8507 100644
+--- a/cc/paint/render_surface_filters.cc
++++ b/cc/paint/render_surface_filters.cc
+@@ -281,6 +281,11 @@ sk_sp<PaintFilter> RenderSurfaceFilters::BuildImageFilter(
+             std::move(image_filter));
+         break;
+       }
++      // Domicile: viz's SkiaRenderer runs an effect itself, since it needs
++      // the content's bounds. See
++      // //components/viz/service/display/domicile/shader_effects.h.
++      case FilterOperation::SHADER:
++        break;
+     }
+   }
+   return image_filter;
+diff --git a/components/viz/host/BUILD.gn b/components/viz/host/BUILD.gn
+index a95996aa..64061034 100644
+--- a/components/viz/host/BUILD.gn
++++ b/components/viz/host/BUILD.gn
+@@ -13,6 +13,10 @@ viz_component("host") {
+     "client_frame_sink_video_capturer.h",
+     "compositing_mode_reporter_impl.cc",
+     "compositing_mode_reporter_impl.h",
++
++    # Domicile: the browser's end of the shell's shader effects.
++    "domicile/shader_effects_host.cc",
++    "domicile/shader_effects_host.h",
+     "gpu_client.cc",
+     "gpu_client.h",
+     "gpu_client_delegate.h",
+diff --git a/components/viz/host/host_frame_sink_manager.cc b/components/viz/host/host_frame_sink_manager.cc
+index 427fd285..bf169c78 100644
+--- a/components/viz/host/host_frame_sink_manager.cc
++++ b/components/viz/host/host_frame_sink_manager.cc
+@@ -43,6 +43,7 @@ void HostFrameSinkManager::SetLocalManager(
+     mojom::FrameSinkManager* frame_sink_manager) {
+   DCHECK(!frame_sink_manager_remote_);
+   frame_sink_manager_ = frame_sink_manager;
++  domicile_shader_effects_.Connect(*frame_sink_manager_);
+ }
+ 
+ void HostFrameSinkManager::BindAndSetManager(
+@@ -64,6 +65,8 @@ void HostFrameSinkManager::BindAndSetManager(
+         rir_delegate_registry_.BindNewPipeAndPassReceiver());
+   }
+ 
++  domicile_shader_effects_.Connect(*frame_sink_manager_);
++
+   if (connection_was_lost_) {
+     RegisterAfterConnectionLoss();
+     connection_was_lost_ = false;
+@@ -536,6 +539,10 @@ void HostFrameSinkManager::OnConnectionLost() {
+ 
+   frame_sink_invalidate_callbacks_.clear();
+ 
++  // Domicile: a hung shader effect trips the GPU watchdog, so the effects
++  // that were drawing go with the GPU process.
++  domicile_shader_effects_.OnConnectionLost();
++
+   if (!connection_lost_callback_.is_null()) {
+     connection_lost_callback_.Run();
+   }
+diff --git a/components/viz/host/host_frame_sink_manager.h b/components/viz/host/host_frame_sink_manager.h
+index 17b3435d..0ed1aa99 100644
+--- a/components/viz/host/host_frame_sink_manager.h
++++ b/components/viz/host/host_frame_sink_manager.h
+@@ -32,6 +32,7 @@
+ #include "components/viz/common/surfaces/frame_sink_bundle_id.h"
+ #include "components/viz/common/surfaces/frame_sink_id.h"
+ #include "components/viz/host/client_frame_sink_video_capturer.h"
++#include "components/viz/host/domicile/shader_effects_host.h"
+ #include "components/viz/host/host_frame_sink_client.h"
+ #include "components/viz/host/viz_host_export.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+@@ -85,6 +86,11 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
+   // on |frame_sink_manager_remote_| is lost.
+   void SetConnectionLostCallback(base::RepeatingClosure callback);
+ 
++  // Domicile: the shell's shader effects, kept across GPU process launches.
++  domicile::ShaderEffectsHost& domicile_shader_effects() {
++    return domicile_shader_effects_;
++  }
++
+   void SetViewTransitionResourcesCapturedCallback(
+       const blink::ViewTransitionToken& token,
+       base::OnceClosure callback);
+@@ -516,6 +522,8 @@ class VIZ_HOST_EXPORT HostFrameSinkManager
+                  ScreenshotDestinationReadyCallback>
+       screenshot_destinations_;
+ 
++  domicile::ShaderEffectsHost domicile_shader_effects_;
++
+   base::WeakPtrFactory<HostFrameSinkManager> weak_ptr_factory_{this};
+ };
+ 
+diff --git a/components/viz/service/BUILD.gn b/components/viz/service/BUILD.gn
+index 1a7396fd..449e89e7 100644
+--- a/components/viz/service/BUILD.gn
++++ b/components/viz/service/BUILD.gn
+@@ -350,6 +350,10 @@ viz_component("service") {
+     "//services/viz/privileged/mojom/gl",
+     "//services/viz/public/mojom",
+     "//services/webnn/public/mojom",
++
++    # Domicile: the shell's shader effects. Public, since SurfaceManager holds
++    # them.
++    "//components/viz/service/display/domicile:shader_effects",
+     "//skia",
+     "//ui/base/prediction",
+     "//ui/gfx",
+diff --git a/components/viz/service/display/skia_renderer.cc b/components/viz/service/display/skia_renderer.cc
+index 24032bc4..d727a4df 100644
+--- a/components/viz/service/display/skia_renderer.cc
++++ b/components/viz/service/display/skia_renderer.cc
+@@ -58,6 +58,7 @@
+ #include "components/viz/service/display/delegated_ink_point_renderer_skia.h"
+ #include "components/viz/service/display/display_resource_provider.h"
+ #include "components/viz/service/display/display_resource_provider_skia.h"
++#include "components/viz/service/display/domicile/shader_effects.h"
+ #include "components/viz/service/display/output_surface.h"
+ #include "components/viz/service/display/output_surface_frame.h"
+ #include "components/viz/service/display/renderer_utils.h"
+@@ -3201,10 +3202,17 @@ SkiaRenderer::DrawRPDQParams SkiaRenderer::CalculateRPDQParams(
+ 
+   // Convert CC image filters into a SkImageFilter root node
+   if (!quad->filters.IsEmpty()) {
+-    auto paint_filter =
+-        cc::RenderSurfaceFilters::BuildImageFilter(quad->filters);
+-    rpdq_params.image_filter =
+-        to_sk_image_filter(std::move(paint_filter), local_matrix);
++    // Domicile: a shell's shader effect runs over the pass's content, so it
++    // needs the content's bounds.
++    if (quad->filters.HasFilterOfType(cc::FilterOperation::SHADER)) {
++      rpdq_params.image_filter = domicile::BuildShadedImageFilter(
++          quad->filters, gfx::RectF(quad->rect), local_matrix);
++    } else {
++      auto paint_filter =
++          cc::RenderSurfaceFilters::BuildImageFilter(quad->filters);
++      rpdq_params.image_filter =
++          to_sk_image_filter(std::move(paint_filter), local_matrix);
++    }
+ 
+     if (rpdq_params.image_filter) {
+       // Update the filter bounds to account for how the image filters
+@@ -3237,11 +3245,19 @@ SkiaRenderer::DrawRPDQParams SkiaRenderer::CalculateRPDQParams(
+     if (local_matrix.invert(&inv_local_matrix)) {
+       SkIRect filter_rect =
+           inv_local_matrix.mapRect(gfx::RectToSkRect(quad->rect)).roundOut();
+-      auto bg_paint_filter = cc::RenderSurfaceFilters::BuildImageFilter(
+-          quad->backdrop_filters, gfx::SkIRectToRect(filter_rect));
++      // Domicile: a shell's shader effect runs over the backdrop in the
++      // quad's bounds.
++      if (quad->backdrop_filters.HasFilterOfType(
++              cc::FilterOperation::SHADER)) {
++        rpdq_params.backdrop_filter = domicile::BuildShadedImageFilter(
++            quad->backdrop_filters, gfx::RectF(quad->rect), local_matrix);
++      } else {
++        auto bg_paint_filter = cc::RenderSurfaceFilters::BuildImageFilter(
++            quad->backdrop_filters, gfx::SkIRectToRect(filter_rect));
+ 
+-      rpdq_params.backdrop_filter =
+-          to_sk_image_filter(std::move(bg_paint_filter), local_matrix);
++        rpdq_params.backdrop_filter =
++            to_sk_image_filter(std::move(bg_paint_filter), local_matrix);
++      }
+     }
+   }
+ 
+diff --git a/components/viz/service/display/surface_aggregator.cc b/components/viz/service/display/surface_aggregator.cc
+index c4dbf37b..73348d11 100644
+--- a/components/viz/service/display/surface_aggregator.cc
++++ b/components/viz/service/display/surface_aggregator.cc
+@@ -43,6 +43,7 @@
+ #include "components/viz/service/display/display_resource_provider.h"
+ #include "components/viz/service/display/domicile/hidden_from_captures.h"
+ #include "components/viz/service/display/domicile/hidden_from_captures_id.h"
++#include "components/viz/service/display/domicile/shader_effects.h"
+ #include "components/viz/service/display/overlay_candidate.h"
+ #include "components/viz/service/display/renderer_utils.h"
+ #include "components/viz/service/display/resolved_frame_data.h"
+@@ -435,6 +436,7 @@ SurfaceAggregator::SurfaceAggregator(
+ 
+ SurfaceAggregator::~SurfaceAggregator() {
+   manager_->RemoveObserver(this);
++  manager_->domicile_shader_effects().SetDrawing(this, {});
+ 
+   contained_surfaces_.clear();
+   contained_frame_sinks_.clear();
+@@ -1451,8 +1453,27 @@ void SurfaceAggregator::CopyQuadsToPass(
+             resolved_frame.GetRenderPassDataById(original_pass_id)
+                 .remapped_id();
+ 
+-        dest_quad = dest_pass->CopyFromAndAppendRenderPassDrawQuad(
+-            pass_quad, remapped_pass_id);
++        AggregatedRenderPassDrawQuad* aggregated_quad =
++            dest_pass->CopyFromAndAppendRenderPassDrawQuad(pass_quad,
++                                                           remapped_pass_id);
++        dest_quad = aggregated_quad;
++
++        // Domicile: a SHADER filter draws only an effect its own frame sink
++        // registered, which only the shell may.
++        const FrameSinkId& owner = resolved_frame.surface_id().frame_sink_id();
++        if (aggregated_quad->filters.HasFilterOfType(
++                cc::FilterOperation::SHADER)) {
++          aggregated_quad->filters = domicile::ResolveShaderEffects(
++              aggregated_quad->filters, manager_->domicile_shader_effects(),
++              owner, domicile_shader_effects_drawn_);
++        }
++        if (aggregated_quad->backdrop_filters.HasFilterOfType(
++                cc::FilterOperation::SHADER)) {
++          aggregated_quad->backdrop_filters = domicile::ResolveShaderEffects(
++              aggregated_quad->backdrop_filters,
++              manager_->domicile_shader_effects(), owner,
++              domicile_shader_effects_drawn_);
++        }
+ 
+         if (resolved_pass.aggregation().will_draw &&
+             (needs_surface_damage_rect_list_ ||
+@@ -2328,6 +2349,11 @@ AggregatedFrame SurfaceAggregator::Aggregate(
+     copies_without_hidden_ = std::move(copy_ids);
+   }
+ 
++  // Domicile: says which shader effects this frame draws, so that the
++  // browser can drop them if the GPU hangs.
++  manager_->domicile_shader_effects().SetDrawing(
++      this, std::move(domicile_shader_effects_drawn_));
++
+   ProcessAddedAndRemovedSurfaces();
+   contained_surfaces_.swap(previous_contained_surfaces_);
+   contained_frame_sinks_.swap(previous_contained_frame_sinks_);
+@@ -2390,6 +2416,7 @@ void SurfaceAggregator::ResetAfterAggregate() {
+   display_trace_id_ = -1;
+   has_copy_requests_ = false;
+   hidden_from_captures_.clear();
++  domicile_shader_effects_drawn_.clear();
+   resolved_surface_ranges_.clear();
+   contained_surfaces_.clear();
+   contained_frame_sinks_.clear();
+diff --git a/components/viz/service/display/surface_aggregator.h b/components/viz/service/display/surface_aggregator.h
+index d88178d4..d3889acc 100644
+--- a/components/viz/service/display/surface_aggregator.h
++++ b/components/viz/service/display/surface_aggregator.h
+@@ -436,6 +436,9 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator : public SurfaceObserver {
+   base::flat_map<AggregatedRenderPassId, AggregatedRenderPassId>
+       copies_without_hidden_;
+ 
++  // Domicile: the shader effects the frame being aggregated draws.
++  base::flat_set<uint32_t> domicile_shader_effects_drawn_;
++
+   // For each FrameSinkId, contains a vector of SurfaceRanges that will damage
+   // the display if they're damaged.
+   base::flat_map<FrameSinkId, std::vector<SurfaceRange>> damage_ranges_;
+diff --git a/components/viz/service/frame_sinks/frame_sink_manager_impl.cc b/components/viz/service/frame_sinks/frame_sink_manager_impl.cc
+index 76620f30..1bf0aaaa 100644
+--- a/components/viz/service/frame_sinks/frame_sink_manager_impl.cc
++++ b/components/viz/service/frame_sinks/frame_sink_manager_impl.cc
+@@ -1604,6 +1604,13 @@ void FrameSinkManagerImpl::RequestInputBack() {
+                       "success", success);
+ }
+ 
++void FrameSinkManagerImpl::BindDomicileShaderEffects(
++    mojo::PendingReceiver<mojom::DomicileShaderEffects> receiver,
++    mojo::PendingRemote<mojom::DomicileShaderEffectsClient> client) {
++  surface_manager_.domicile_shader_effects().Bind(std::move(receiver),
++                                                  std::move(client));
++}
++
+ void FrameSinkManagerImpl::RequestBeginFrameForGpuService(bool toggle) {
+   if (root_begin_frame_source_ && gpu_service_) {
+     if (toggle) {
+diff --git a/components/viz/service/frame_sinks/frame_sink_manager_impl.h b/components/viz/service/frame_sinks/frame_sink_manager_impl.h
+index 15ceb9ff..cf982e84 100644
+--- a/components/viz/service/frame_sinks/frame_sink_manager_impl.h
++++ b/components/viz/service/frame_sinks/frame_sink_manager_impl.h
+@@ -225,6 +225,9 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
+       bool blocked,
+       const std::vector<FrameSinkId>& render_input_routers) override;
+   void RequestInputBack() override;
++  void BindDomicileShaderEffects(
++      mojo::PendingReceiver<mojom::DomicileShaderEffects> receiver,
++      mojo::PendingRemote<mojom::DomicileShaderEffectsClient> client) override;
+ 
+   // mojom::FrameSinksMetricsTracker implementation:
+   void StartFrameCounting(base::TimeTicks start_time,
+diff --git a/components/viz/service/surfaces/surface_manager.h b/components/viz/service/surfaces/surface_manager.h
+index f3c9f6df..5464b533 100644
+--- a/components/viz/service/surfaces/surface_manager.h
++++ b/components/viz/service/surfaces/surface_manager.h
+@@ -31,6 +31,7 @@
+ #include "components/viz/common/quads/compositor_frame_metadata.h"
+ #include "components/viz/common/surfaces/frame_sink_id.h"
+ #include "components/viz/common/surfaces/surface_id.h"
++#include "components/viz/service/display/domicile/shader_effects.h"
+ #include "components/viz/service/frame_sinks/frame_sink_observer.h"
+ #include "components/viz/service/surfaces/surface_observer.h"
+ #include "components/viz/service/surfaces/surface_reference.h"
+@@ -85,6 +86,11 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
+   // Returns the base::TickClock used to set surface synchronization deadlines.
+   const base::TickClock* tick_clock() { return tick_clock_; }
+ 
++  // Domicile: the shell's shader effects, which aggregation finds by id.
++  domicile::ShaderEffects& domicile_shader_effects() {
++    return domicile_shader_effects_;
++  }
++
+   // Creates a Surface for the given SurfaceClient. The surface will be
+   // destroyed when MarkSurfaceForDestruction is called, all of its destruction
+   // dependencies are satisfied, and it is not reachable from the root surface.
+@@ -400,6 +406,8 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
+ 
+   std::optional<uint64_t>
+       cooldown_frames_for_ack_on_activation_during_interaction_;
++
++  domicile::ShaderEffects domicile_shader_effects_;
+ };
+ 
+ }  // namespace viz
+diff --git a/components/viz/test/test_frame_sink_manager.h b/components/viz/test/test_frame_sink_manager.h
+index 629ce42b..5c3d25ef 100644
+--- a/components/viz/test/test_frame_sink_manager.h
++++ b/components/viz/test/test_frame_sink_manager.h
+@@ -109,6 +109,10 @@ class TestFrameSinkManagerImpl : public mojom::FrameSinkManager {
+       bool blocked,
+       const std::vector<FrameSinkId>& render_input_routers) override {}
+   void RequestInputBack() override {}
++  void BindDomicileShaderEffects(
++      mojo::PendingReceiver<mojom::DomicileShaderEffects> receiver,
++      mojo::PendingRemote<mojom::DomicileShaderEffectsClient> client)
++      override {}
+ 
+   mojo::Receiver<mojom::FrameSinkManager> receiver_{this};
+   mojo::Remote<mojom::FrameSinkManagerClient> client_;
+diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
+index 15ba5e08..00104bee 100644
+--- a/content/browser/BUILD.gn
++++ b/content/browser/BUILD.gn
+@@ -973,6 +973,8 @@ source_set("browser") {
+     "domicile/domicile_frame_sink_broker.h",
+     "domicile/domicile_log_levels.cc",
+     "domicile/domicile_log_levels.h",
++    "domicile/domicile_shader_effects.cc",
++    "domicile/domicile_shader_effects.h",
+     "domicile/domicile_spike_probe.cc",
+     "domicile/domicile_spike_probe.h",
+     "download/download_item_utils.cc",
+diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
+index bc190328..7edefa2b 100644
+--- a/content/browser/browser_interface_binders.cc
++++ b/content/browser/browser_interface_binders.cc
+@@ -35,6 +35,7 @@
+ #include "content/browser/declarative_performance_observer/declarative_performance_observer.h"
+ #include "content/browser/device_posture/device_posture_provider_impl.h"
+ #include "content/browser/domicile/domicile_frame_sink_broker.h"
++#include "content/browser/domicile/domicile_shader_effects.h"
+ #include "content/browser/eye_dropper_chooser_impl.h"
+ #include "content/browser/handwriting/handwriting_recognition_service_factory.h"
+ #include "content/browser/haptics/haptics_service_impl.h"
+@@ -1611,6 +1612,10 @@ void PopulateBinderMapWithContext(
+   map->Add<domicile::mojom::ExternalSurfaceProvider>(
+       &BindDomicileExternalSurfaceProvider);
+ 
++  // Domicile: the shell's shader effects, SkSL it runs in the GPU process.
++  // Refused to every frame but the shell's, as above.
++  map->Add<domicile::mojom::ShaderEffects>(&BindDomicileShaderEffects);
++
+   // This should be last to allow overrides of any interface.
+   GetContentClient()->browser()->RegisterBrowserInterfaceBindersForFrame(host,
+                                                                          map);
+diff --git a/services/viz/privileged/mojom/compositing/frame_sink_manager.mojom b/services/viz/privileged/mojom/compositing/frame_sink_manager.mojom
+index bab4d6a1..6a00fa8b 100644
+--- a/services/viz/privileged/mojom/compositing/frame_sink_manager.mojom
++++ b/services/viz/privileged/mojom/compositing/frame_sink_manager.mojom
+@@ -282,6 +282,32 @@ interface FrameSinkManager {
+   // from the VizCompositorThread. Safe to call even if the VizCompositorThread
+   // is not currently handling input, the request is a no-op in that case.
+   RequestInputBack();
++
++  // Domicile: binds the registry of the shell's shader effects. A new binding
++  // replaces the last and its effects.
++  BindDomicileShaderEffects(
++      pending_receiver<DomicileShaderEffects> receiver,
++      pending_remote<DomicileShaderEffectsClient> client);
++};
++
++// Domicile: the shell's shader effects, SkSL programs that
++// `filter: domicile-shader()` runs. See
++// //components/viz/service/display/domicile/shader_effects.h.
++interface DomicileShaderEffects {
++  // Compiles `sksl` as effect `id`, which only `owner`'s frames draw.
++  // `arguments` is how many floats it takes. `error` is why it did not
++  // compile, and empty when it did.
++  Register(uint32 id, FrameSinkId owner, string sksl)
++      => (uint32 arguments, string error);
++
++  Unregister(uint32 id);
++};
++
++// The browser's end of DomicileShaderEffects.
++interface DomicileShaderEffectsClient {
++  // The effects viz's displays drew last, each time they change. A GPU hang
++  // drops these.
++  Drawing(array<uint32> ids);
+ };
+ 
+ // The FrameSinkManagerClient interface is implemented by the Display
+diff --git a/services/viz/public/cpp/compositing/filter_operation_mojom_traits.cc b/services/viz/public/cpp/compositing/filter_operation_mojom_traits.cc
+index 49473885..1bf258e8 100644
+--- a/services/viz/public/cpp/compositing/filter_operation_mojom_traits.cc
++++ b/services/viz/public/cpp/compositing/filter_operation_mojom_traits.cc
+@@ -4,7 +4,9 @@
+ 
+ #include "services/viz/public/cpp/compositing/filter_operation_mojom_traits.h"
+ 
++#include <cmath>
+ #include <utility>
++#include <vector>
+ 
+ #include "base/check_op.h"
+ #include "base/notreached.h"
+@@ -48,6 +50,8 @@ viz::mojom::FilterType CCFilterTypeToMojo(
+       return viz::mojom::FilterType::ALPHA_THRESHOLD;
+     case cc::FilterOperation::OFFSET:
+       return viz::mojom::FilterType::OFFSET;
++    case cc::FilterOperation::SHADER:
++      return viz::mojom::FilterType::SHADER;
+   }
+   NOTREACHED();
+ }
+@@ -87,6 +91,8 @@ cc::FilterOperation::FilterType MojoFilterTypeToCC(
+       return cc::FilterOperation::ALPHA_THRESHOLD;
+     case viz::mojom::FilterType::OFFSET:
+       return cc::FilterOperation::OFFSET;
++    case viz::mojom::FilterType::SHADER:
++      return cc::FilterOperation::SHADER;
+   }
+   NOTREACHED();
+ }
+@@ -172,6 +178,20 @@ bool StructTraits<viz::mojom::FilterOperationDataView, cc::FilterOperation>::
+       out->set_offset(offset);
+       return true;
+     }
++    // Domicile: the compiled program is viz's own, never the sender's.
++    case cc::FilterOperation::SHADER: {
++      std::vector<float> arguments;
++      if (!std::isfinite(data.amount()) || data.amount() < 0.f ||
++          !data.ReadShaderArguments(&arguments) ||
++          arguments.size() > cc::FilterOperation::kMaxShaderArguments) {
++        return false;
++      }
++      out->set_amount(data.amount());
++      out->set_shader_effect(data.shader_effect());
++      out->set_shader_arguments(std::move(arguments));
++      out->set_shader_runtime_effect(nullptr);
++      return true;
++    }
+   }
+   return false;
+ }
+diff --git a/services/viz/public/cpp/compositing/filter_operation_mojom_traits.h b/services/viz/public/cpp/compositing/filter_operation_mojom_traits.h
+index 52c097eb..011a49f3 100644
+--- a/services/viz/public/cpp/compositing/filter_operation_mojom_traits.h
++++ b/services/viz/public/cpp/compositing/filter_operation_mojom_traits.h
+@@ -5,6 +5,7 @@
+ #ifndef SERVICES_VIZ_PUBLIC_CPP_COMPOSITING_FILTER_OPERATION_MOJOM_TRAITS_H_
+ #define SERVICES_VIZ_PUBLIC_CPP_COMPOSITING_FILTER_OPERATION_MOJOM_TRAITS_H_
+ 
++#include <cstdint>
+ #include <optional>
+ 
+ #include "base/containers/span.h"
+@@ -80,6 +81,21 @@ struct StructTraits<viz::mojom::FilterOperationDataView, cc::FilterOperation> {
+     return operation.blur_tile_mode();
+   }
+ 
++  static uint32_t shader_effect(const cc::FilterOperation& operation) {
++    if (operation.type() != cc::FilterOperation::SHADER) {
++      return 0;
++    }
++    return operation.shader_effect();
++  }
++
++  static base::span<const float> shader_arguments(
++      const cc::FilterOperation& operation) {
++    if (operation.type() != cc::FilterOperation::SHADER) {
++      return base::span<const float>();
++    }
++    return operation.shader_arguments();
++  }
++
+   static bool Read(viz::mojom::FilterOperationDataView data,
+                    cc::FilterOperation* out);
+ };
+diff --git a/services/viz/public/cpp/compositing/mojom_traits_unittest.cc b/services/viz/public/cpp/compositing/mojom_traits_unittest.cc
+index a25df6ff..dbf8ccb1 100644
+--- a/services/viz/public/cpp/compositing/mojom_traits_unittest.cc
++++ b/services/viz/public/cpp/compositing/mojom_traits_unittest.cc
+@@ -297,6 +297,10 @@ void ExpectEqual(const cc::FilterOperation& input,
+     case cc::FilterOperation::OFFSET:
+       EXPECT_EQ(input.offset(), output.offset());
+       break;
++    // Domicile: see ShaderFilterTest in //components/viz/service/display/domicile.
++    case cc::FilterOperation::SHADER:
++      EXPECT_EQ(input, output);
++      break;
+   }
+ }
+ 
+diff --git a/services/viz/public/mojom/compositing/filter_operation.mojom b/services/viz/public/mojom/compositing/filter_operation.mojom
+index 0084c908..cb64375e 100644
+--- a/services/viz/public/mojom/compositing/filter_operation.mojom
++++ b/services/viz/public/mojom/compositing/filter_operation.mojom
+@@ -26,7 +26,9 @@ enum FilterType {
+   SATURATING_BRIGHTNESS,
+   ALPHA_THRESHOLD,
+   OFFSET,
+-  FILTER_TYPE_LAST = OFFSET
++  // Domicile: a shell's shader effect.
++  SHADER,
++  FILTER_TYPE_LAST = SHADER
+ };
+ 
+ // See cc/paint/filter_operation.h.
+@@ -40,4 +42,8 @@ struct FilterOperation {
+   int32 zoom_inset;
+   skia.mojom.TileMode blur_tile_mode;
+   array<gfx.mojom.Rect>? shape;
++  // Domicile: a SHADER filter's effect, as the shell registered it, and its
++  // arguments, at most 16. `amount` is its outset.
++  uint32 shader_effect;
++  array<float> shader_arguments;
+ };
+diff --git a/third_party/blink/renderer/core/animation/css_filter_list_interpolation_type.cc b/third_party/blink/renderer/core/animation/css_filter_list_interpolation_type.cc
+index 81241033..eb910dbd 100644
+--- a/third_party/blink/renderer/core/animation/css_filter_list_interpolation_type.cc
++++ b/third_party/blink/renderer/core/animation/css_filter_list_interpolation_type.cc
+@@ -220,8 +220,9 @@ PairwiseInterpolationValue CSSFilterListInterpolationType::MaybeMergeSingles(
+   wtf_size_t end_length = end_interpolable_list.length();
+ 
+   for (wtf_size_t i = 0; i < start_length && i < end_length; i++) {
+-    if (To<InterpolableFilter>(start_interpolable_list.Get(i))->GetType() !=
+-        To<InterpolableFilter>(end_interpolable_list.Get(i))->GetType()) {
++    // Domicile: two shader effects interpolate only if they are one.
++    if (!To<InterpolableFilter>(start_interpolable_list.Get(i))
++             ->Matches(*To<InterpolableFilter>(end_interpolable_list.Get(i)))) {
+       return nullptr;
+     }
+   }
+@@ -249,10 +250,10 @@ PairwiseInterpolationValue CSSFilterListInterpolationType::MaybeMergeSingles(
+       extended_interpolable_list->Set(
+           i, std::move(shorter_interpolable_list.GetMutable(i)));
+     } else {
++      // Domicile: a shader effect starts from zero arguments.
+       extended_interpolable_list->Set(
+           i, InterpolableFilter::CreateInitialValue(
+-                 To<InterpolableFilter>(longer_interpolable_list.Get(i))
+-                     ->GetType()));
++                 *To<InterpolableFilter>(longer_interpolable_list.Get(i))));
+     }
+   }
+   shorter.interpolable_value = std::move(extended_interpolable_list);
+@@ -361,8 +362,9 @@ CSSFilterListInterpolationType::PerformAccumulativeComposition(
+ 
+   // If any of the types don't match, fallback to replace behavior.
+   for (wtf_size_t i = 0; i < underlying_length && i < length; i++) {
+-    if (To<InterpolableFilter>(underlying_list.Get(i))->GetType() !=
+-        To<InterpolableFilter>(interpolable_list->Get(i))->GetType()) {
++    // Domicile: two shader effects accumulate only if they are one.
++    if (!To<InterpolableFilter>(underlying_list.Get(i))
++             ->Matches(*To<InterpolableFilter>(interpolable_list->Get(i)))) {
+       return InterpolationValue(interpolable_list);
+     }
+   }
+diff --git a/third_party/blink/renderer/core/animation/interpolable_filter.cc b/third_party/blink/renderer/core/animation/interpolable_filter.cc
+index e391155d..464d0987 100644
+--- a/third_party/blink/renderer/core/animation/interpolable_filter.cc
++++ b/third_party/blink/renderer/core/animation/interpolable_filter.cc
+@@ -9,6 +9,7 @@
+ #include "third_party/blink/renderer/core/css/css_identifier_value.h"
+ #include "third_party/blink/renderer/core/css/css_shadow_value.h"
+ #include "third_party/blink/renderer/core/css/css_value.h"
++#include "third_party/blink/renderer/core/css/domicile/domicile_shader_effects.h"
+ #include "third_party/blink/renderer/core/css/resolver/filter_operation_resolver.h"
+ #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
+ 
+@@ -82,6 +83,18 @@ InterpolableNumber* CreateDefaultValue(CSSValueID type) {
+   }
+ }
+ 
++// Domicile: `shader`'s arguments, to interpolate as a list.
++InterpolableFilter* CreateDomicileShader(
++    const DomicileShaderFilterOperation& shader) {
++  const Vector<float>& arguments = shader.Arguments();
++  auto* list = MakeGarbageCollected<InterpolableList>(arguments.size());
++  for (wtf_size_t i = 0; i < arguments.size(); ++i) {
++    list->Set(i, MakeGarbageCollected<InterpolableNumber>(arguments[i]));
++  }
++  return MakeGarbageCollected<InterpolableFilter>(
++      list, FilterOperation::OperationType::kDomicileShader, &shader);
++}
++
+ }  // namespace
+ 
+ // static
+@@ -134,6 +147,9 @@ InterpolableFilter* InterpolableFilter::MaybeCreate(
+     case FilterOperation::OperationType::kReference:
+       return nullptr;
+ 
++    case FilterOperation::OperationType::kDomicileShader:
++      return CreateDomicileShader(To<DomicileShaderFilterOperation>(filter));
++
+     default:
+       NOTREACHED();
+   }
+@@ -152,6 +168,11 @@ InterpolableFilter* InterpolableFilter::MaybeConvertCSSValue(
+     return nullptr;
+ 
+   const auto& filter = To<CSSFunctionValue>(css_value);
++  // Domicile: a shader effect's arguments, once the name finds it.
++  if (filter.FunctionType() == CSSValueID::kDomicileShader) {
++    return CreateDomicileShader(*DomicileShaderEffects::Resolve(
++        filter, state.GetDocument(), state.CssToLengthConversionData()));
++  }
+   DCHECK_LE(filter.length(), 1u);
+ 
+   InterpolableValue* value = nullptr;
+@@ -231,6 +252,28 @@ InterpolableFilter* InterpolableFilter::CreateInitialValue(
+   return MakeGarbageCollected<InterpolableFilter>(value, type);
+ }
+ 
++// static
++InterpolableFilter* InterpolableFilter::CreateInitialValue(
++    const InterpolableFilter& filter) {
++  if (filter.type_ != FilterOperation::OperationType::kDomicileShader) {
++    return CreateInitialValue(filter.type_);
++  }
++  return MakeGarbageCollected<InterpolableFilter>(
++      filter.value_->CloneAndZero(), filter.type_, filter.shader_.Get());
++}
++
++bool InterpolableFilter::Matches(const InterpolableFilter& other) const {
++  if (type_ != other.type_) {
++    return false;
++  }
++  if (type_ != FilterOperation::OperationType::kDomicileShader) {
++    return true;
++  }
++  return shader_->Name() == other.shader_->Name() &&
++         shader_->Effect() == other.shader_->Effect() &&
++         shader_->Arguments().size() == other.shader_->Arguments().size();
++}
++
+ FilterOperation* InterpolableFilter::CreateFilterOperation(
+     const StyleResolverState& state) const {
+   switch (type_) {
+@@ -268,6 +311,19 @@ FilterOperation* InterpolableFilter::CreateFilterOperation(
+       return MakeGarbageCollected<DropShadowFilterOperation>(shadow_data);
+     }
+ 
++    case FilterOperation::OperationType::kDomicileShader: {
++      const auto& list = To<InterpolableList>(*value_);
++      Vector<float> arguments(list.length());
++      for (wtf_size_t i = 0; i < list.length(); ++i) {
++        arguments[i] = static_cast<float>(
++            To<InterpolableNumber>(list.Get(i))
++                ->Value(state.CssToLengthConversionData()));
++      }
++      return MakeGarbageCollected<DomicileShaderFilterOperation>(
++          shader_->Name(), shader_->Effect(), shader_->Outset(),
++          std::move(arguments));
++    }
++
+     default:
+       NOTREACHED();
+   }
+diff --git a/third_party/blink/renderer/core/animation/interpolable_filter.h b/third_party/blink/renderer/core/animation/interpolable_filter.h
+index e8b6a82d..65db38c4 100644
+--- a/third_party/blink/renderer/core/animation/interpolable_filter.h
++++ b/third_party/blink/renderer/core/animation/interpolable_filter.h
+@@ -11,6 +11,7 @@
+ #include "third_party/blink/renderer/core/animation/interpolable_value.h"
+ #include "third_party/blink/renderer/core/animation/interpolation_type.h"
+ #include "third_party/blink/renderer/core/core_export.h"
++#include "third_party/blink/renderer/core/style/domicile/domicile_shader_filter_operation.h"
+ #include "third_party/blink/renderer/core/style/filter_operation.h"
+ 
+ namespace blink {
+@@ -24,9 +25,11 @@ struct ColorThemeInfo;
+ // interpolated from/to.
+ class CORE_EXPORT InterpolableFilter final : public InterpolableValue {
+  public:
++  // `shader` is a Domicile shader effect's, whose arguments `value` lists.
+   InterpolableFilter(InterpolableValue* value,
+-                     FilterOperation::OperationType type)
+-      : value_(value), type_(type) {
++                     FilterOperation::OperationType type,
++                     const DomicileShaderFilterOperation* shader = nullptr)
++      : value_(value), shader_(shader), type_(type) {
+     static_assert(std::is_trivially_destructible_v<InterpolableFilter>,
+                   "Require trivial destruction for faster sweeping");
+     DCHECK(value_);
+@@ -44,6 +47,14 @@ class CORE_EXPORT InterpolableFilter final : public InterpolableValue {
+   // Create an InterpolableFilter representing the 'initial value for
+   // interpolation' for the given OperationType.
+   static InterpolableFilter* CreateInitialValue(FilterOperation::OperationType);
++  // As above, for a filter like `filter`. A Domicile shader effect starts
++  // from all its arguments zero.
++  static InterpolableFilter* CreateInitialValue(
++      const InterpolableFilter& filter);
++
++  // Whether this interpolates with `other`: the same function, and for a
++  // Domicile shader effect the same effect.
++  bool Matches(const InterpolableFilter& other) const;
+ 
+   FilterOperation::OperationType GetType() const { return type_; }
+ 
+@@ -64,21 +75,27 @@ class CORE_EXPORT InterpolableFilter final : public InterpolableValue {
+   void Trace(Visitor* v) const override {
+     InterpolableValue::Trace(v);
+     v->Trace(value_);
++    v->Trace(shader_);
+   }
+ 
+  private:
+   InterpolableFilter* RawClone() const final {
+-    return MakeGarbageCollected<InterpolableFilter>(value_->Clone(), type_);
++    return MakeGarbageCollected<InterpolableFilter>(value_->Clone(), type_,
++                                                    shader_.Get());
+   }
+   InterpolableFilter* RawCloneAndZero() const final {
+     return MakeGarbageCollected<InterpolableFilter>(value_->CloneAndZero(),
+-                                                    type_);
++                                                    type_, shader_.Get());
+   }
+ 
+   // Stores the interpolable data for the filter. The form varies depending on
+   // the |type_|; see the implementation file for details of the mapping.
+   Member<InterpolableValue> value_;
+ 
++  // Domicile: a shader effect's name, effect and outset. Its arguments are
++  // in `value_`.
++  Member<const DomicileShaderFilterOperation> shader_;
++
+   FilterOperation::OperationType type_;
+ };
+ 
+diff --git a/third_party/blink/renderer/core/css/build.gni b/third_party/blink/renderer/core/css/build.gni
+index a1093017..330bde73 100644
+--- a/third_party/blink/renderer/core/css/build.gni
++++ b/third_party/blink/renderer/core/css/build.gni
+@@ -715,6 +715,10 @@ blink_core_sources_css = [
+   "resolver/element_style_resources.h",
+   "resolver/filter_operation_resolver.cc",
+   "resolver/filter_operation_resolver.h",
++
++  # Domicile: the shell's shader effects, by name.
++  "domicile/domicile_shader_effects.cc",
++  "domicile/domicile_shader_effects.h",
+   "resolver/font_builder.cc",
+   "resolver/font_builder.h",
+   "resolver/font_style_resolver.cc",
+diff --git a/third_party/blink/renderer/core/css/css_value_keywords.json5 b/third_party/blink/renderer/core/css/css_value_keywords.json5
+index 115d0fff..b5446fef 100644
+--- a/third_party/blink/renderer/core/css/css_value_keywords.json5
++++ b/third_party/blink/renderer/core/css/css_value_keywords.json5
+@@ -2171,5 +2171,8 @@
+     // animation-navigation-behavior
+     // "continuous" already exists above
+     "abrupt",
++
++    // Domicile: filter, backdrop-filter. A shell's shader effect.
++    "domicile-shader",
+   ],
+ }
+diff --git a/third_party/blink/renderer/core/css/properties/computed_style_utils.cc b/third_party/blink/renderer/core/css/properties/computed_style_utils.cc
+index 3a63f82a..d0cb2d7c 100644
+--- a/third_party/blink/renderer/core/css/properties/computed_style_utils.cc
++++ b/third_party/blink/renderer/core/css/properties/computed_style_utils.cc
+@@ -78,6 +78,7 @@
+ #include "third_party/blink/renderer/core/page/scrolling/sticky_position_scrolling_constraints.h"
+ #include "third_party/blink/renderer/core/style/computed_style_constants.h"
+ #include "third_party/blink/renderer/core/style/counter_directives.h"
++#include "third_party/blink/renderer/core/style/domicile/domicile_shader_filter_operation.h"
+ #include "third_party/blink/renderer/core/style/position_area.h"
+ #include "third_party/blink/renderer/core/style/style_intrinsic_length.h"
+ #include "third_party/blink/renderer/core/style/style_svg_resource.h"
+@@ -4073,6 +4074,20 @@ CSSValue* ComputedStyleUtils::ValueForFilter(
+                                 CSSValuePhase::kComputedValue));
+         break;
+       }
++      // Domicile: the effect's name and the arguments it takes.
++      case FilterOperation::OperationType::kDomicileShader: {
++        const auto& shader =
++            To<DomicileShaderFilterOperation>(*filter_operation);
++        filter_value =
++            MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kDomicileShader);
++        filter_value->Append(
++            *MakeGarbageCollected<CSSCustomIdentValue>(shader.Name()));
++        for (const float& argument : shader.Arguments()) {
++          filter_value->Append(*CSSNumericLiteralValue::Create(
++              argument, CSSPrimitiveValue::UnitType::kNumber));
++        }
++        break;
++      }
+       default:
+         NOTREACHED();
+     }
+diff --git a/third_party/blink/renderer/core/css/properties/css_parsing_utils.cc b/third_party/blink/renderer/core/css/properties/css_parsing_utils.cc
+index f49fff7e..80bc3863 100644
+--- a/third_party/blink/renderer/core/css/properties/css_parsing_utils.cc
++++ b/third_party/blink/renderer/core/css/properties/css_parsing_utils.cc
+@@ -809,10 +809,51 @@ bool ShouldClampFilterFunctionArgument(CSSValueID filter_type) {
+          filter_type == CSSValueID::kSepia;
+ }
+ 
++// Domicile: `domicile-shader(<custom-ident> [, <number>]{0,16})`, a shell's
++// shader effect and its arguments. Only the shell has it, as it has <app>.
++CSSFunctionValue* ConsumeDomicileShader(CSSParserTokenStream& stream,
++                                        const CSSParserContext& context,
++                                        CSSParserLocalContext& local_context) {
++  if (!RuntimeEnabledFeatures::DomicileExternalSurfaceEnabled(
++          context.GetExecutionContext())) {
++    return nullptr;
++  }
++  auto* filter_value =
++      MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kDomicileShader);
++  {
++    CSSParserTokenStream::BlockGuard guard(stream);
++    stream.ConsumeWhitespace();
++    CSSCustomIdentValue* name =
++        ConsumeCustomIdent(stream, context, local_context);
++    if (!name) {
++      return nullptr;
++    }
++    filter_value->Append(*name);
++    while (ConsumeCommaIncludingWhitespace(stream)) {
++      CSSPrimitiveValue* argument =
++          ConsumeNumber(stream, context, local_context,
++                        CSSPrimitiveValue::ValueRange::kAll);
++      // The name, then at most 16 numbers.
++      if (!argument || filter_value->length() > 16) {
++        return nullptr;
++      }
++      filter_value->Append(*argument);
++    }
++    if (!stream.AtEnd()) {
++      return nullptr;
++    }
++  }
++  stream.ConsumeWhitespace();
++  return filter_value;
++}
++
+ CSSFunctionValue* ConsumeFilterFunction(CSSParserTokenStream& stream,
+                                         const CSSParserContext& context,
+                                         CSSParserLocalContext& local_context) {
+   CSSValueID filter_type = stream.Peek().FunctionId();
++  if (filter_type == CSSValueID::kDomicileShader) {
++    return ConsumeDomicileShader(stream, context, local_context);
++  }
+   if (filter_type < CSSValueID::kInvert ||
+       filter_type > CSSValueID::kDropShadow) {
+     return nullptr;
+diff --git a/third_party/blink/renderer/core/css/resolver/filter_operation_resolver.cc b/third_party/blink/renderer/core/css/resolver/filter_operation_resolver.cc
+index 98fffefe..317b480b 100644
+--- a/third_party/blink/renderer/core/css/resolver/filter_operation_resolver.cc
++++ b/third_party/blink/renderer/core/css/resolver/filter_operation_resolver.cc
+@@ -32,6 +32,7 @@
+ 
+ #include "third_party/blink/renderer/core/css/css_function_value.h"
+ #include "third_party/blink/renderer/core/css/css_uri_value.h"
++#include "third_party/blink/renderer/core/css/domicile/domicile_shader_effects.h"
+ #include "third_party/blink/renderer/core/css/resolver/style_builder_converter.h"
+ #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
+ #include "third_party/blink/renderer/core/frame/web_feature.h"
+@@ -81,6 +82,9 @@ static void CountFilterUse(FilterOperation::OperationType operation_type,
+     case FilterOperation::OperationType::kComponentTransfer:
+     case FilterOperation::OperationType::kTurbulence:
+       NOTREACHED();
++    // Domicile: only the shell has it, so there is nothing to count.
++    case FilterOperation::OperationType::kDomicileShader:
++      return;
+     case FilterOperation::OperationType::kReference:
+       feature = WebFeature::kCSSFilterReference;
+       break;
+@@ -219,6 +223,12 @@ FilterOperations FilterOperationResolver::CreateFilterOperations(
+     }
+ 
+     const auto* filter_value = To<CSSFunctionValue>(curr_value.Get());
++    // Domicile: the shell's shader effect, found by its name.
++    if (filter_value->FunctionType() == CSSValueID::kDomicileShader) {
++      operations.Operations().push_back(DomicileShaderEffects::Resolve(
++          *filter_value, state.GetDocument(), conversion_data));
++      continue;
++    }
+     FilterOperation::OperationType operation_type =
+         FilterOperationForType(filter_value->FunctionType());
+     CountFilterUse(operation_type, state.GetDocument());
+@@ -302,6 +312,10 @@ FilterOperations FilterOperationResolver::CreateOffscreenFilterOperations(
+     }
+ 
+     const auto* filter_value = To<CSSFunctionValue>(curr_value.Get());
++    // Domicile: a shader effect runs only in viz, so a canvas has none.
++    if (filter_value->FunctionType() == CSSValueID::kDomicileShader) {
++      continue;
++    }
+     FilterOperation::OperationType operation_type =
+         FilterOperationForType(filter_value->FunctionType());
+     // TODO(fserb): Take an ExecutionContext argument to this function,
+diff --git a/third_party/blink/renderer/core/paint/compositing/compositing_reason_finder.cc b/third_party/blink/renderer/core/paint/compositing/compositing_reason_finder.cc
+index e03815e3..3f420a21 100644
+--- a/third_party/blink/renderer/core/paint/compositing/compositing_reason_finder.cc
++++ b/third_party/blink/renderer/core/paint/compositing/compositing_reason_finder.cc
+@@ -467,6 +467,12 @@ CompositingReasons CompositingReasonFinder::DirectReasonsForPaintProperties(
+   if (style.HasBackdropFilter())
+     reasons.Put(CompositingReason::kBackdropFilter);
+ 
++  // Domicile: a shell's shader effect runs only in viz, on a render surface
++  // of its own. A filter painted into its layer would drop it.
++  if (style.Filter().HasDomicileShader()) {
++    reasons.Put(CompositingReason::kWillChangeFilter);
++  }
++
+   reasons.PutAll(BackfaceInvisibility3DAncestorReason(*layer));
+ 
+   switch (style.StyleType()) {
+diff --git a/third_party/blink/renderer/core/paint/filter_effect_builder.cc b/third_party/blink/renderer/core/paint/filter_effect_builder.cc
+index 778a3f40..e9115a9e 100644
+--- a/third_party/blink/renderer/core/paint/filter_effect_builder.cc
++++ b/third_party/blink/renderer/core/paint/filter_effect_builder.cc
+@@ -29,6 +29,7 @@
+ #include <algorithm>
+ 
+ #include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_container.h"
++#include "third_party/blink/renderer/core/style/domicile/domicile_shader_filter_operation.h"
+ #include "third_party/blink/renderer/core/style/filter_operations.h"
+ #include "third_party/blink/renderer/core/svg/graphics/filters/svg_filter_builder.h"
+ #include "third_party/blink/renderer/core/svg/svg_animated_length.h"
+@@ -493,6 +494,17 @@ CompositorFilterOperations FilterEffectBuilder::BuildFilterOperations(
+         }
+         break;
+       }
++      // Domicile: viz runs a shell's shader effect. One the shell has not
++      // registered draws nothing.
++      case FilterOperation::OperationType::kDomicileShader: {
++        const auto& shader = To<DomicileShaderFilterOperation>(*op);
++        if (shader.Effect()) {
++          filters.AppendDomicileShaderFilter(shader.Effect(),
++                                             shader.Outset() * shorthand_scale_,
++                                             shader.Arguments());
++        }
++        break;
++      }
+       case FilterOperation::OperationType::kBoxReflect: {
+         // TODO(jbroman): Consider explaining box reflect to the compositor,
+         // instead of calling this a "reference filter".
+diff --git a/third_party/blink/renderer/core/style/build.gni b/third_party/blink/renderer/core/style/build.gni
+index 8145e6a5..a35fff2b 100644
+--- a/third_party/blink/renderer/core/style/build.gni
++++ b/third_party/blink/renderer/core/style/build.gni
+@@ -36,6 +36,8 @@ blink_core_sources_style = [
+   "display_style.h",
+   "fill_layer.cc",
+   "fill_layer.h",
++  "domicile/domicile_shader_filter_operation.cc",
++  "domicile/domicile_shader_filter_operation.h",
+   "filter_operation.cc",
+   "filter_operation.h",
+   "filter_operations.cc",
+diff --git a/third_party/blink/renderer/core/style/filter_operation.h b/third_party/blink/renderer/core/style/filter_operation.h
+index fada0eb1..8349321a 100644
+--- a/third_party/blink/renderer/core/style/filter_operation.h
++++ b/third_party/blink/renderer/core/style/filter_operation.h
+@@ -76,6 +76,9 @@ class CORE_EXPORT FilterOperation : public GarbageCollected<FilterOperation> {
+     kComponentTransfer,
+     kConvolveMatrix,
+     kTurbulence,
++    // Domicile: a shell's shader effect. See
++    // domicile/domicile_shader_filter_operation.h.
++    kDomicileShader,
+   };
+ 
+   virtual ~FilterOperation() = default;
+diff --git a/third_party/blink/renderer/core/style/filter_operations.cc b/third_party/blink/renderer/core/style/filter_operations.cc
+index 0cdd9ca7..47d0cf16 100644
+--- a/third_party/blink/renderer/core/style/filter_operations.cc
++++ b/third_party/blink/renderer/core/style/filter_operations.cc
+@@ -73,6 +73,12 @@ bool FilterOperations::HasReferenceFilter() const {
+                                &FilterOperation::GetType);
+ }
+ 
++bool FilterOperations::HasDomicileShader() const {
++  return std::ranges::contains(operations_,
++                               FilterOperation::OperationType::kDomicileShader,
++                               &FilterOperation::GetType);
++}
++
+ bool FilterOperations::UsesCurrentColor() const {
+   return std::ranges::any_of(operations_, [](const auto& operation) {
+     return operation->UsesCurrentColor();
+diff --git a/third_party/blink/renderer/core/style/filter_operations.h b/third_party/blink/renderer/core/style/filter_operations.h
+index cbb6e954..8f907ce9 100644
+--- a/third_party/blink/renderer/core/style/filter_operations.h
++++ b/third_party/blink/renderer/core/style/filter_operations.h
+@@ -73,6 +73,8 @@ class CORE_EXPORT FilterOperations {
+ 
+   bool HasFilterThatMovesPixels() const;
+   bool HasReferenceFilter() const;
++  // Domicile: whether the list holds a shell's shader effect.
++  bool HasDomicileShader() const;
+   bool UsesCurrentColor() const;
+ 
+   void AddClient(SVGResourceClient&) const;
+diff --git a/third_party/blink/renderer/platform/graphics/compositor_filter_operations.cc b/third_party/blink/renderer/platform/graphics/compositor_filter_operations.cc
+index 175a356b..3de7951c 100644
+--- a/third_party/blink/renderer/platform/graphics/compositor_filter_operations.cc
++++ b/third_party/blink/renderer/platform/graphics/compositor_filter_operations.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "third_party/blink/renderer/platform/graphics/compositor_filter_operations.h"
+ 
++#include <vector>
++
+ #include "third_party/blink/renderer/platform/graphics/color.h"
+ #include "third_party/blink/renderer/platform/wtf/text/strcat.h"
+ #include "ui/gfx/geometry/rect.h"
+@@ -62,6 +64,14 @@ void CompositorFilterOperations::AppendOpacityFilter(float amount) {
+   filter_operations_.Append(cc::FilterOperation::CreateOpacityFilter(amount));
+ }
+ 
++void CompositorFilterOperations::AppendDomicileShaderFilter(
++    uint32_t effect,
++    float outset,
++    const Vector<float>& arguments) {
++  filter_operations_.Append(cc::FilterOperation::CreateShaderFilter(
++      effect, outset, std::vector<float>(arguments.begin(), arguments.end())));
++}
++
+ void CompositorFilterOperations::AppendBlurFilter(float amount,
+                                                   SkTileMode tile_mode) {
+   filter_operations_.Append(
+diff --git a/third_party/blink/renderer/platform/graphics/compositor_filter_operations.h b/third_party/blink/renderer/platform/graphics/compositor_filter_operations.h
+index 48189b64..f47b0ac5 100644
+--- a/third_party/blink/renderer/platform/graphics/compositor_filter_operations.h
++++ b/third_party/blink/renderer/platform/graphics/compositor_filter_operations.h
+@@ -5,10 +5,13 @@
+ #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_COMPOSITOR_FILTER_OPERATIONS_H_
+ #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_COMPOSITOR_FILTER_OPERATIONS_H_
+ 
++#include <cstdint>
++
+ #include "cc/paint/filter_operations.h"
+ #include "third_party/blink/renderer/platform/graphics/paint/paint_filter.h"
+ #include "third_party/blink/renderer/platform/platform_export.h"
+ #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
++#include "third_party/blink/renderer/platform/wtf/vector.h"
+ #include "third_party/skia/include/core/SkScalar.h"
+ #include "ui/gfx/geometry/point.h"
+ #include "ui/gfx/geometry/rect_f.h"
+@@ -40,6 +43,11 @@ class PLATFORM_EXPORT CompositorFilterOperations {
+   void AppendColorMatrixFilter(const cc::FilterOperation::Matrix&);
+ 
+   void AppendReferenceFilter(sk_sp<PaintFilter>);
++  // Domicile: a shell's shader effect, by viz's id for it, with how far it
++  // may draw outside the content and its arguments.
++  void AppendDomicileShaderFilter(uint32_t effect,
++                                  float outset,
++                                  const Vector<float>& arguments);
+ 
+   void Clear();
+   bool IsEmpty() const;
+-- 
+2.43.0
+

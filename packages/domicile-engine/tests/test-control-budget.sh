@@ -186,7 +186,7 @@ for guard in guard-client-window guard-shell guard-webview-framing \
   guard-extension-in-private \
   guard-extension-tray guard-webview-tabs guard-webview-active-tab \
   guard-webview-popup-window \
-  guard-webview-passkey-extension; do
+  guard-webview-passkey-extension guard-shader-effect; do
   file="$GUARDS/$guard.sh"
   if [ ! -f "$file" ]; then
     printf '  FAIL  %s is a guard this repository has

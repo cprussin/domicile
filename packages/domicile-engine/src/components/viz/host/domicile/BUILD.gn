@@ -1,0 +1,21 @@
+# Copyright 2026 Connor Prussin
+# SPDX-License-Identifier: MIT
+
+# The browser's end of the shell's shader effects. The sources are in
+# //components/viz/host itself, which exports them to //content; this file
+# only tests them, from //components/domicile:unit_tests.
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [ "shader_effects_host_unittest.cc" ]
+
+  deps = [
+    "//base",
+    "//base/test:test_support",
+    "//components/viz/host",
+    "//components/viz/test:test_support",
+    "//mojo/public/cpp/bindings",
+    "//services/viz/privileged/mojom/compositing",
+    "//testing/gtest",
+  ]
+}

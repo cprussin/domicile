@@ -31,6 +31,7 @@ FIRST=(
   guard-two-windows
   guard-buffer-transform
   guard-buffer-formats
+  guard-shader-effect
   guard-scrolling-bubble
   guard-webview-permissions
   guard-electron-permissions
@@ -216,6 +217,7 @@ UNDER_WAYLAND=(
   guard-buffer-transform
   guard-client-window
   guard-scrolling-bubble
+  guard-shader-effect
   guard-shell
   guard-shortcuts-inhibitor
   guard-shortcuts-inhibitor-chord

@@ -16,6 +16,8 @@ import type { Displays } from "./displays";
 import { displays } from "./displays";
 import type { Downloads } from "./downloads";
 import { downloads } from "./downloads";
+import type { Effects } from "./effects";
+import { effects } from "./effects";
 import type { Extensions } from "./extensions";
 import { extensions } from "./extensions";
 import type { Files } from "./files";
@@ -70,6 +72,7 @@ export type Domicile = {
   readonly dbus: Dbus;
   readonly displays: Displays;
   readonly downloads: Downloads;
+  readonly effects: Effects;
   readonly extensions: Extensions;
   readonly files: Files;
   readonly gestures: Gestures;
@@ -114,6 +117,7 @@ const build = (host: DomicileHost): Domicile => {
     dbus: bus,
     displays: displays(host, calls),
     downloads: downloads(host),
+    effects: effects(host),
     extensions: extensions(host),
     files: files(host, calls),
     gestures: gestures(host),
