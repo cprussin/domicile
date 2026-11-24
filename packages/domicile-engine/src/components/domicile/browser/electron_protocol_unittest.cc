@@ -620,6 +620,75 @@ TEST(ElectronProtocolTest, SetTitleAndSetHiddenNameTheirWindow) {
             "\"hidden\" must be true or false");
 }
 
+TEST(ElectronProtocolTest, AWindowAsksForAttentionAndToLetThePointerThrough) {
+  const auto flash = ParseElectronRequest(
+      R"({"type":"flash_frame","window":2,"flash":true})");
+  const auto through = ParseElectronRequest(
+      R"({"type":"set_ignore_mouse_events","window":3,"ignore":false})");
+
+  ASSERT_TRUE(flash.has_value() && through.has_value());
+  EXPECT_EQ(std::get<ElectronFlashFrame>(*flash).window, 2);
+  EXPECT_TRUE(std::get<ElectronFlashFrame>(*flash).flash);
+  EXPECT_EQ(std::get<ElectronSetIgnoreMouseEvents>(*through).window, 3);
+  EXPECT_FALSE(std::get<ElectronSetIgnoreMouseEvents>(*through).ignore);
+  EXPECT_EQ(WhyRefused(R"({"type":"flash_frame","window":2})"),
+            "\"flash\" must be true or false");
+  EXPECT_EQ(
+      WhyRefused(R"({"type":"set_ignore_mouse_events","window":2,"ignore":1})"),
+      "\"ignore\" must be true or false");
+}
+
+TEST(ElectronProtocolTest, SetShapeKeepsEachRectOrNone) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"set_shape","window":1,"rects":[)"
+      R"({"x":-1,"y":2,"width":30,"height":0}]})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  const auto& set = std::get<ElectronSetShape>(*request);
+  EXPECT_EQ(set.window, 1);
+  EXPECT_EQ(set.rects,
+            (std::vector<ElectronShapeRect>{
+                {.x = -1, .y = 2, .width = 30, .height = 0}}));
+  EXPECT_TRUE(std::get<ElectronSetShape>(
+                  *ParseElectronRequest(
+                      R"({"type":"set_shape","window":1,"rects":[]})"))
+                  .rects.empty());
+}
+
+TEST(ElectronProtocolTest, ABadSetShapeIsRefusedAsTheWindows) {
+  EXPECT_EQ(ParseElectronRequest(R"({"type":"set_shape","window":4})").error(),
+            (ElectronRefusal{.why = "\"rects\" must be a list", .window = 4}));
+  EXPECT_EQ(WhyRefused(R"({"type":"set_shape","window":1,"rects":[2]})"),
+            "each of \"rects\" must be an object");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_shape","window":1,"rects":[)"
+                       R"({"y":0,"width":1,"height":1}]})"),
+            "a rect's \"x\" and \"y\" must be whole numbers");
+  EXPECT_EQ(WhyRefused(R"({"type":"set_shape","window":1,"rects":[)"
+                       R"({"x":0,"y":0,"width":1,"height":-1}]})"),
+            "a rect's \"width\" and \"height\" must be whole numbers from 0");
+}
+
+TEST(ElectronProtocolTest, TheEnginesOwnBlankAndDataPagesOpen) {
+  EXPECT_TRUE(IsElectronEnginePage(GURL("about:blank")));
+  EXPECT_TRUE(IsElectronEnginePage(GURL("data:text/html,a")));
+  EXPECT_FALSE(IsElectronEnginePage(GURL("about:version")));
+  EXPECT_FALSE(IsElectronEnginePage(GURL("https://a.test/")));
+
+  const auto request = ParseElectronRequest(
+      R"({"type":"open_window","window":1,"url":"about:blank"})");
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(std::get<ElectronOpenWindow>(*request).url, GURL("about:blank"));
+}
+
+TEST(ElectronProtocolTest, AnAppCommandIsOneLine) {
+  EXPECT_EQ(ElectronAppCommanded(3, ElectronAppCommand::kBrowserBackward),
+            "{\"command\":\"browser-backward\",\"type\":\"app_command\","
+            "\"window\":3}\n");
+  EXPECT_EQ(ElectronAppCommanded(4, ElectronAppCommand::kBrowserForward),
+            "{\"command\":\"browser-forward\",\"type\":\"app_command\","
+            "\"window\":4}\n");
+}
+
 TEST(ElectronProtocolTest, SetWindowStateKeepsEachStateTheAppAsks) {
   const auto asked = ParseElectronRequest(
       R"({"type":"set_window_state","window":4,"maximized":true,)"

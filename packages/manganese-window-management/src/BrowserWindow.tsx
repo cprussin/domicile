@@ -63,6 +63,7 @@ import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useAppMenuBar } from "./browser/useAppMenuBar";
 import { useAppMessageBox } from "./browser/useAppMessageBox";
 import { useAppPopupMenu } from "./browser/useAppPopupMenu";
+import { useAppWindowLooks } from "./browser/useAppWindowLooks";
 import { useAppWindowState } from "./browser/useAppWindowState";
 import {
   useBrowserProfile,
@@ -556,6 +557,8 @@ export const BrowserWindow = ({
   // An Electron app's menu bar, the menu open on it, and whether Alt showed a
   // bar that hides until Alt (`autoHideMenuBar`).
   const menuBar = useAppMenuBar(domicile, window);
+  // What an Electron app asks of its window's looks and input.
+  const looks = useAppWindowLooks(domicile, window);
   const [openMenu, setOpenMenu] = useState<number | undefined>(undefined);
   const [menuBarShown, setMenuBarShown] = useState(false);
   // Whether Alt is down with nothing pressed with it, so letting it go is a
@@ -774,7 +777,10 @@ export const BrowserWindow = ({
         !fullscreen && bottomCornerStyles,
         noTopEdgeStyles,
         movingStyles({ contents: true, motion }),
-        (clickThrough || leaving) && clickThroughStyles,
+        // An Electron app's window that ignores the mouse lets it through to
+        // what is under it (`setIgnoreMouseEvents`).
+        (clickThrough || leaving || looks.ignoresPointer) && clickThroughStyles,
+        urgentStyles,
         // The page's box takes its new size at once; `useSettling` eases it.
         // Colors still ease; see `settlingStyles`.
         settlingStyles({ lowered }),
@@ -782,6 +788,8 @@ export const BrowserWindow = ({
       )}
       // Exposes the motion on the element for tests and debugging.
       data-motion={motion}
+      // An Electron app asks for the user's attention (`flashFrame`).
+      data-urgent={looks.urgent ? "" : undefined}
       hidden={rect === undefined}
       // A leaving window is unreachable by keyboard.
       inert={leaving}
@@ -937,7 +945,18 @@ export const BrowserWindow = ({
         Wraps the page so the find bar and file picker cover the page but not
         the address bar.
       */}
-        <div className={pageStyles} ref={setPage}>
+        <div
+          className={pageStyles}
+          ref={setPage}
+          // Inline because an Electron app's shape (`setShape`) is a runtime
+          // value Panda cannot extract. The page draws and takes input only
+          // within it.
+          style={
+            looks.clipPath === undefined
+              ? undefined
+              : { clipPath: looks.clipPath }
+          }
+        >
           <webview
             className={viewStyles}
             ref={setView}
@@ -1201,6 +1220,11 @@ const viewStyles = css({
   minBlockSize: 0,
   minInlineSize: 0,
 });
+
+// An Electron app's window asking for the user's attention, as sway draws an
+// urgent window's border. An attribute selector, so it outranks the edge's
+// own color.
+const urgentStyles = css({ "&[data-urgent]": { borderColor: "warning" } });
 
 // The title bar draws the top edge.
 const noTopEdgeStyles = css({ borderBlockStartWidth: 0 });

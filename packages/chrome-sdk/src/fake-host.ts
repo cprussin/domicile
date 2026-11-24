@@ -343,6 +343,7 @@ export class FakeDomicileHost {
           appId,
           height,
           id: this.#browsersOpened.toString(),
+          ignoresPointer: false,
           isApp,
           isCaptured: false,
           isHidden,
@@ -356,8 +357,10 @@ export class FakeDomicileHost {
           popupMenu: null,
           popupWindow,
           profile: profile ?? (isApp ? null : fallback),
+          shape: null,
           title: "",
           toplevelId: null,
+          urgent: false,
           url,
           wantsFullscreen: false,
           wantsMaximized: false,
@@ -458,6 +461,23 @@ export class FakeDomicileHost {
     this.set({
       browserWindows: (this.#state.browserWindows ?? []).map((window) =>
         window.id === id ? { ...window, ...wants } : window,
+      ),
+    });
+  }
+
+  /**
+   * Browser window `id`'s Electron app asks for the user's attention, lets
+   * the pointer through or shapes it, as the engine lists it.
+   */
+  setLooks(
+    id: string,
+    looks: Partial<
+      Pick<DomicileBrowserWindow, "ignoresPointer" | "shape" | "urgent">
+    >,
+  ): void {
+    this.set({
+      browserWindows: (this.#state.browserWindows ?? []).map((window) =>
+        window.id === id ? { ...window, ...looks } : window,
       ),
     });
   }

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
 import type { EngineRequest } from "../engine";
+import { encodePng } from "../png";
 import { contextMenuAt, setUp } from "./browser-window-fixture";
+import { nativeImage } from "./native-image";
 
 /** Loads `url` in `page`, whose load a test may cut short by closing it. */
 const load = (
@@ -305,15 +307,6 @@ describe("WebContentsView", () => {
     expect(changes).toBe(2);
   });
 
-  it("holds no views of its own, as only a window does on Domicile", () => {
-    const { WebContentsView } = setUp();
-    const view = new WebContentsView();
-
-    expect(() => view.addChildView(new WebContentsView())).toThrow(
-      "only a window's contentView holds views",
-    );
-  });
-
   it("hears its own page's IPC, as its webContents", () => {
     const { ipcMain, say, WebContentsView } = setUp();
     const view = new WebContentsView();
@@ -350,6 +343,191 @@ describe("WebContentsView", () => {
     expect(webContentsOf(window.id)).toBe(window.webContents);
     expect(webContentsOf(view.id)).toBe(view.webContents);
     expect(webContentsOf(99)).toBeUndefined();
+  });
+});
+
+describe("View", () => {
+  it("nests views, each placed from its holders' corners", () => {
+    const { BrowserWindow, sent, View, WebContentsView } = setUp();
+    const window = new BrowserWindow();
+    load(window, "app://notes/");
+    const sidebar = new View();
+    const chat = new WebContentsView();
+    const find = new WebContentsView();
+    load(chat.webContents, "app://notes/chat");
+    load(find.webContents, "app://notes/find");
+    sidebar.setBounds({ height: 500, width: 300, x: 10, y: 20 });
+    chat.setBounds({ height: 400, width: 200, x: 5, y: 5 });
+    find.setBounds({ height: 40, width: 100, x: 1, y: 2 });
+
+    window.contentView.addChildView(sidebar);
+    sidebar.addChildView(chat);
+    chat.addChildView(find);
+
+    expect(sidebar.children).toEqual([chat]);
+    expect(chat.children).toEqual([find]);
+    expect(BrowserWindow.fromWebContents(find.webContents)).toBe(window);
+    expect(placed(sent, window.id)).toEqual({
+      type: "set_views",
+      views: [
+        { height: 400, width: 200, window: chat.id, x: 15, y: 25 },
+        { height: 40, width: 100, window: find.id, x: 16, y: 27 },
+      ],
+      window: window.id,
+    });
+
+    sidebar.setBounds({ height: 500, width: 300, x: 0, y: 0 });
+
+    expect(placed(sent, window.id)).toMatchObject({
+      views: [
+        { window: chat.id, x: 5, y: 5 },
+        { window: find.id, x: 6, y: 7 },
+      ],
+    });
+  });
+
+  it("hides what a hidden view holds", () => {
+    const { BrowserWindow, sent, View, WebContentsView } = setUp();
+    const window = new BrowserWindow();
+    load(window, "app://notes/");
+    const panel = new View();
+    const chat = new WebContentsView();
+    load(chat.webContents, "app://notes/chat");
+    panel.addChildView(chat);
+    window.contentView.addChildView(panel);
+
+    panel.setVisible(false);
+
+    expect(chat.webContents.isDestroyed()).toBe(false);
+    expect(placed(sent, window.id)).toMatchObject({
+      views: [{ hidden: true, window: chat.id }],
+    });
+  });
+
+  it("takes a view from the view that held it, and lets it go", () => {
+    const { BrowserWindow, sent, View, WebContentsView } = setUp();
+    const window = new BrowserWindow();
+    load(window, "app://notes/");
+    const left = new View();
+    const right = new View();
+    const chat = new WebContentsView();
+    load(chat.webContents, "app://notes/chat");
+    window.contentView.addChildView(left);
+    window.contentView.addChildView(right);
+    left.addChildView(chat);
+
+    right.addChildView(chat);
+    expect(left.children).toEqual([]);
+    expect(right.children).toEqual([chat]);
+
+    window.contentView.removeChildView(right);
+    expect(BrowserWindow.fromWebContents(chat.webContents)).toBeNull();
+    expect(placed(sent, window.id)).toMatchObject({ views: [] });
+  });
+
+  it("refuses to hold itself, or a view that holds it", () => {
+    const { View } = setUp();
+    const outer = new View();
+    const inner = new View();
+    outer.addChildView(inner);
+
+    expect(() => outer.addChildView(outer)).toThrow("a view can't hold");
+    expect(() => inner.addChildView(outer)).toThrow("a view can't hold");
+  });
+
+  it("focuses its window while a page it holds has the keyboard", () => {
+    const { BrowserWindow, say, View, WebContentsView } = setUp();
+    const window = new BrowserWindow();
+    load(window, "app://notes/");
+    const panel = new View();
+    const chat = new WebContentsView();
+    load(chat.webContents, "app://notes/chat");
+    panel.addChildView(chat);
+    window.contentView.addChildView(panel);
+
+    say({
+      crashed: false,
+      entries: [{ title: "", url: "app://notes/chat" }],
+      focused: true,
+      frame_token: "T",
+      index: 0,
+      loading: false,
+      pid: 7,
+      process_id: 4,
+      routing_id: 1,
+      type: "page_state",
+      waiting: false,
+      window: chat.id,
+    });
+
+    expect(window.isFocused()).toBe(true);
+  });
+});
+
+describe("ImageView", () => {
+  /** A 2x1 PNG. */
+  const image = () =>
+    nativeImage.createFromBuffer(
+      Buffer.from(
+        encodePng({
+          height: 1,
+          rgba: new Uint8Array([255, 0, 0, 255, 0, 0, 255, 255]),
+          width: 2,
+        }),
+      ),
+    );
+
+  it("shows its image in its window, centered at its size", () => {
+    const { BaseWindow, ImageView, sent, View, webContents } = setUp();
+    const window = new BaseWindow();
+    const view = new ImageView();
+    const picture = image();
+
+    view.setImage(picture);
+    window.setContentView(view);
+
+    expect(view).toBeInstanceOf(View);
+    const opened = sent.find(
+      (request) => request.type === "open_window" && request.view === true,
+    );
+    expect(opened).toMatchObject({ type: "open_window", view: true });
+    const html = decodeURIComponent(
+      (opened as { url: string }).url.replace("data:text/html,", ""),
+    );
+    expect(html).toContain(`src="${picture.toDataURL()}"`);
+    expect(html).toContain('width="2" height="1"');
+    expect(placed(sent, window.id)).toMatchObject({
+      views: [{ height: 600, width: 800, x: 0, y: 0 }],
+    });
+    expect(webContents.getAllWebContents()).toEqual([]);
+  });
+
+  it("shows the next image it is given in place of the last", () => {
+    const { ImageView, sent } = setUp();
+    const view = new ImageView();
+    view.setImage(image());
+    sent.length = 0;
+
+    view.setImage(nativeImage.createEmpty());
+
+    expect(sent).toMatchObject([{ type: "load_url" }]);
+  });
+
+  it("refuses an image too big for an address", () => {
+    const { ImageView } = setUp();
+    // Noise, which no PNG compresses below Chromium's 2 MB for an address.
+    const noise = new Uint8Array(800 * 800 * 4);
+    for (let at = 0; at < noise.length; at += 65_536) {
+      crypto.getRandomValues(noise.subarray(at, at + 65_536));
+    }
+    const big = nativeImage.createFromBitmap(noise, {
+      height: 800,
+      width: 800,
+    });
+
+    expect(() => new ImageView().setImage(big)).toThrow(
+      "too big for Domicile's engine",
+    );
   });
 });
 

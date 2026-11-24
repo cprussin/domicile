@@ -12,11 +12,11 @@ _Unreleased_
 
 ![Element on the engine, its menu bar drawn by the shell](media/release-electron.png)
 
-Electron apps run on the desktop's engine, and your shell draws their windows, menu bars and message boxes. List the apps in `electron.apps`.
+Electron apps run on the desktop's engine, and your shell draws their windows, menu bars and message boxes. List the apps in `electron.apps`. When an app asks for attention, lets the pointer through its window or shapes it, the window says so: `urgent`, `ignoresPointer` and `shape`.
 
 An Electron app answers its pages' sign-ins, certificate errors and client certificates itself, as in Electron; a sign-in it leaves alone still asks through your shell's prompt. Its sessions clear their data, resolve hosts, report their storage path and service workers, run their own preloads, emulate slow or offline networks, and hear their pages' preconnects and spelling dictionaries.
 
-[Menu bars](SHELL-BROWSER-WINDOWS.md#menu-bars) · [Message boxes](SHELL-BROWSER-WINDOWS.md#message-boxes) · [`electron.apps`](SHELL-CONFIG.md#other-sections) · [Design](architecture/ELECTRON-APPS.md) · [#2091](https://github.com/cprussin/domicile/pull/2091) · [#2151](https://github.com/cprussin/domicile/pull/2151) · [#2161](https://github.com/cprussin/domicile/pull/2161) · [#2172](https://github.com/cprussin/domicile/pull/2172) · [#2201](https://github.com/cprussin/domicile/pull/2201) · [#2256](https://github.com/cprussin/domicile/pull/2256)
+[Menu bars](SHELL-BROWSER-WINDOWS.md#menu-bars) · [Message boxes](SHELL-BROWSER-WINDOWS.md#message-boxes) · [Looks and input](SHELL-BROWSER-WINDOWS.md#an-electron-apps-looks-and-input) · [`electron.apps`](SHELL-CONFIG.md#other-sections) · [Design](architecture/ELECTRON-APPS.md) · [#2091](https://github.com/cprussin/domicile/pull/2091) · [#2151](https://github.com/cprussin/domicile/pull/2151) · [#2161](https://github.com/cprussin/domicile/pull/2161) · [#2172](https://github.com/cprussin/domicile/pull/2172) · [#2201](https://github.com/cprussin/domicile/pull/2201) · [#2256](https://github.com/cprussin/domicile/pull/2256)
 
 ### Let agents drive the desktop
 
@@ -49,6 +49,7 @@ Grouped `--help`, `domicile help <command>` for usage and examples, and man page
 - A local shell can name its prebuilt module in `package.json` as a package does, `"domicile": { "shell": "dist/shell.js" }`, and `domicile ./my-desktop` serves it without a build. [Distributing](SHELL-PACKAGING.md#distributing) · [#2468](https://github.com/cprussin/domicile/issues/2468)
 - `domicile.shell.links(["mailto"])` claims a scheme's links: `domicile open`, apps' links (`xdg-open`, `xdg-email`), pages' `mailto:` links and the Email portal hand them to the shell instead of an app. [Links](WRITING-A-SHELL.md#links)
 - `clipboard.remove(id)` drops a clipboard history entry; removing the `current` one empties the clipboard. [System access](SHELL-SYSTEM-ACCESS.md)
+- Electron apps get `webContents.debugger`, on a DevTools client of their own, and `takeHeapSnapshot`, `savePage` as MHTML, `insertText`, `stop`, `scrollToTop`, `getPrintersAsync`, `setImageAnimationPolicy`, `setWebRTCUDPPortRange`, `forcefullyCrashRenderer`, `saveVideoFrameAs` and `collectJavaScriptCallStack`. [Page calls](architecture/ELECTRON-APPS.md#page-calls)
 - Electron apps control their pages, with `insertCSS`, `executeJavaScriptInIsolatedWorld`, `capturePage`, `printToPDF`, device emulation and frame subscription, and their windows have parents, modals and `setEnabled`. [Page calls](architecture/ELECTRON-APPS.md#page-calls)
 - Spell checking in pages and Electron apps, in the languages of `spellcheck`. A context menu event over a misspelling carries `misspelledWord`, `spellingSuggestions` and `replaceMisspelling()`, and runs `add-to-dictionary`. [`spellcheck`](SHELL-CONFIG.md#spelling) · [Context menus](SHELL-BROWSER-WINDOWS.md#the-keyboard)
 - HDR and 10-bit color. [`hdr`](SHELL-CONFIG.md#hdr) · [Design](architecture/COLOR.md) · [#1974](https://github.com/cprussin/domicile/issues/1974)

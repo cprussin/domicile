@@ -582,8 +582,15 @@ void ElectronPage::DidReceiveFindReply(int request_id,
 
 void ElectronPage::DidGetUserInteraction(const blink::WebInputEvent& event) {
   if (event.GetType() == blink::WebInputEvent::Type::kMouseDown) {
-    last_press_ = gfx::ToFlooredPoint(
-        static_cast<const blink::WebMouseEvent&>(event).PositionInWidget());
+    const auto& mouse = static_cast<const blink::WebMouseEvent&>(event);
+    last_press_ = gfx::ToFlooredPoint(mouse.PositionInWidget());
+    // Electron's app-command on Linux: the window hears the mouse's back and
+    // forward buttons wherever they are pressed in it.
+    if (mouse.button == blink::WebPointerProperties::Button::kBack) {
+      calls_.app_command.Run(ElectronAppCommand::kBrowserBackward);
+    } else if (mouse.button == blink::WebPointerProperties::Button::kForward) {
+      calls_.app_command.Run(ElectronAppCommand::kBrowserForward);
+    }
   } else if (event.GetType() == blink::WebInputEvent::Type::kTouchStart) {
     const auto& touch = static_cast<const blink::WebTouchEvent&>(event);
     if (touch.touches_length > 0) {

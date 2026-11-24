@@ -192,6 +192,16 @@ class ChromeElectronDesk final : public ElectronDesk {
                       ElectronWindowState state) override {
     SetElectronWindowState(id, state);
   }
+  void SetUrgent(const std::string& id, bool urgent) override {
+    SetElectronUrgent(id, urgent);
+  }
+  void SetIgnoresPointer(const std::string& id, bool ignores) override {
+    SetElectronIgnoresPointer(id, ignores);
+  }
+  void SetShape(const std::string& id,
+                const std::vector<ElectronShapeRect>& rects) override {
+    SetElectronShape(id, rects);
+  }
   void AskToClose(const std::string& id) override {
     AskToCloseBrowserWindow(id);
   }
