@@ -119,19 +119,66 @@ const element = (
   </>
 );
 
-/** The rows still sliding out of the list. */
+/** The rows leaving the list. */
 const leaving = () => [...document.querySelectorAll("li[data-leaving]")];
 
+/** Fires `transitionend` for `propertyName` on `element`. */
+const transitionEnd = (element: Element, propertyName: string) => {
+  // happy-dom's `TransitionEvent` drops `propertyName`.
+  fireEvent(
+    element,
+    Object.assign(new Event("transitionend", { bubbles: true }), {
+      propertyName,
+    }),
+  );
+};
+
+/** Lays the rows out 60 pixels apart, as layout would. */
+const spaceRows = () => {
+  for (const [index, row] of screen.getAllByRole("listitem").entries()) {
+    Object.defineProperty(row, "offsetTop", { value: index * 60 });
+  }
+};
+
+/** Ends the slide out of `row`, which its body makes. */
+const slideOutOf = (row: Element) => {
+  const body = row.firstElementChild;
+  if (body === null) {
+    throw new Error("The row has no body");
+  } else {
+    transitionEnd(body, "transform");
+  }
+};
+
 /** Ends the slide out of every row sliding out. */
+const slideOut = () => {
+  for (const row of document.querySelectorAll(
+    "li[data-leaving]:not([data-closing])",
+  )) {
+    slideOutOf(row);
+  }
+};
+
+/** Ends the rise over every slid out row. */
+const closeUp = () => {
+  for (const row of document.querySelectorAll("li[data-closing]")) {
+    transitionEnd(row, "scale");
+  }
+};
+
+/** Takes every leaving row through its slide out and the rise over it. */
 const finishLeaving = () => {
-  for (const row of leaving()) {
-    // happy-dom's `TransitionEvent` drops `propertyName`.
-    fireEvent(
-      row,
-      Object.assign(new Event("transitionend", { bubbles: true }), {
-        propertyName: "grid-template-rows",
-      }),
-    );
+  slideOut();
+  closeUp();
+};
+
+/** The list item holding `text`. */
+const rowOf = (text: string): HTMLElement => {
+  const row = screen.getByText(text).closest("li");
+  if (row === null) {
+    throw new Error(`${text} is in no row`);
+  } else {
+    return row;
   }
 };
 
@@ -357,19 +404,45 @@ describe("NotificationDrawer", () => {
       );
     });
 
-    it("holds the caught-up note's height as the last leave, not shrinking first", async () => {
+    it("rises the rows below over a cleared one once it has slid out, then drops it", async () => {
+      const view = await drawer([
+        notification({ id: 3, summary: "Newest" }),
+        notification({ id: 2, summary: "Newer" }),
+        notification({ id: 1, summary: "Older" }),
+      ]);
+      spaceRows();
+      const older = rowOf("Older");
+
+      await view.update([
+        notification({ id: 3, summary: "Newest" }),
+        notification({ id: 1, summary: "Older" }),
+      ]);
+      expect(older).not.toHaveAttribute("data-rising");
+      slideOut();
+
+      expect(older).toHaveAttribute("data-rising");
+      expect(older.style.getPropertyValue("--rise")).toBe("60px");
+      closeUp();
+      expect(screen.queryByText("Newer")).not.toBeInTheDocument();
+      expect(older).not.toHaveAttribute("data-rising");
+    });
+
+    it("drops the cleared rows together, once every one is risen over", async () => {
       const view = await drawer([
         notification({ id: 2, summary: "Newer" }),
         notification({ id: 1, summary: "Older" }),
       ]);
-      const list = screen.getByRole("list");
+      spaceRows();
+      const [newer, older] = [rowOf("Newer"), rowOf("Older")];
 
-      await view.update([notification({ id: 1, summary: "Older" })]);
-      expect(globalThis.getComputedStyle(list).minBlockSize).toBe("0rem");
       await view.update([]);
+      slideOutOf(newer);
+      transitionEnd(newer, "scale");
+      expect(newer).toBeInTheDocument();
 
-      // `EmptyState`'s height, spacing 40.
-      expect(globalThis.getComputedStyle(list).minBlockSize).toBe("10rem");
+      slideOutOf(older);
+      transitionEnd(older, "scale");
+      expect(leaving()).toEqual([]);
     });
 
     it("drops a notification cleared while it is closed at once", async () => {

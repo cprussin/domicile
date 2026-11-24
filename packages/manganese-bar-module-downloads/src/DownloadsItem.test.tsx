@@ -1,7 +1,7 @@
 import { describe, expect, it, jest } from "bun:test";
 import type { Download } from "@domicile-desktop/sdk/desktop/downloads";
 import { DownloadState } from "@domicile-desktop/sdk/desktop/downloads";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { css } from "../styled-system/css";
@@ -72,6 +72,17 @@ const item = (
 
 const open = async (name = "Downloads") => {
   await userEvent.click(screen.getByRole("button", { name }));
+};
+
+/** Fires `transitionend` for `propertyName` on `element`. */
+const transitionEnd = (element: Element, propertyName: string) => {
+  // happy-dom's `TransitionEvent` drops `propertyName`.
+  fireEvent(
+    element,
+    Object.assign(new Event("transitionend", { bubbles: true }), {
+      propertyName,
+    }),
+  );
 };
 
 /** The panel's row for the file `name`. */
@@ -283,6 +294,23 @@ describe("DownloadsItem", () => {
       expect(document.querySelector("li[data-leaving]")).toHaveTextContent(
         "broken.iso",
       );
+    });
+
+    it("drops a removed row once it has slid out and been risen over", async () => {
+      const { now } = item([INVOICE, BROKEN]);
+      await open();
+      now([INVOICE]);
+      const leaving = document.querySelector("li[data-leaving]");
+      const body = leaving?.firstElementChild;
+      if (leaving === null || body === null || body === undefined) {
+        throw new Error("No row leaving");
+      }
+
+      transitionEnd(body, "transform");
+      expect(screen.getByText("broken.iso")).toBeInTheDocument();
+      transitionEnd(leaving, "scale");
+
+      expect(screen.queryByText("broken.iso")).not.toBeInTheDocument();
     });
   });
 

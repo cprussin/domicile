@@ -4,10 +4,10 @@ import { AnimatedDownloadIcon } from "@domicile-desktop/component-library/Animat
 import { Button } from "@domicile-desktop/component-library/Button";
 import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import { List, ListRow } from "@domicile-desktop/component-library/ListRow";
-import type { Row } from "@domicile-desktop/component-library/leaving-rows";
 import { Panel, PanelAction } from "@domicile-desktop/component-library/Panel";
 import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
 import { Popover } from "@domicile-desktop/component-library/Popover";
+import type { MovingRow } from "@domicile-desktop/component-library/useLeavingRows";
 import { useLeavingRows } from "@domicile-desktop/component-library/useLeavingRows";
 import type { Download } from "@domicile-desktop/sdk/desktop/downloads";
 import { DownloadState } from "@domicile-desktop/sdk/desktop/downloads";
@@ -93,7 +93,7 @@ export const DownloadsItem = ({ downloads, popsUp, ...actions }: Props) => {
     () => downloads?.toReversed() ?? NONE,
     [downloads],
   );
-  const { onLeft, rows } = useLeavingRows(newestFirst, idOf, open);
+  const { rows } = useLeavingRows(newestFirst, idOf, open);
   const phase = useFinish(downloads);
   if (rows.length === 0) {
     if (open) {
@@ -147,12 +147,7 @@ export const DownloadsItem = ({ downloads, popsUp, ...actions }: Props) => {
       }
       wide
     >
-      <DownloadsPanel
-        downloads={downloads ?? NONE}
-        onLeft={onLeft}
-        rows={rows}
-        {...actions}
-      />
+      <DownloadsPanel downloads={downloads ?? NONE} rows={rows} {...actions} />
     </Popover>
   );
 };
@@ -205,15 +200,13 @@ const DownloadsPanel = ({
   downloads,
   onCancel,
   onClear,
-  onLeft,
   onOpen,
   onRemove,
   onShowInFolder,
   rows,
 }: Actions & {
   downloads: readonly Download[];
-  onLeft: (id: string) => void;
-  rows: readonly Row<Download>[];
+  rows: readonly MovingRow<Download>[];
 }) => {
   const secondsLeft = useSecondsLeft(downloads);
   // The downloads whose file no app opens, since the user tried.
@@ -248,7 +241,7 @@ const DownloadsPanel = ({
         </PanelAction>
       )}
       <List>
-        {rows.map(({ arriving, item: download, leaving }) => {
+        {rows.map(({ item: download, motion }) => {
           const name = fileName(download.path);
           return (
             <ListRow
@@ -306,13 +299,7 @@ const DownloadsPanel = ({
               }
               key={download.id}
               label={name}
-              motion={{
-                arriving,
-                leaving,
-                onLeft: () => {
-                  onLeft(download.id);
-                },
-              }}
+              motion={motion}
               surface="filled"
             >
               {download.state === DownloadState.InProgress && (

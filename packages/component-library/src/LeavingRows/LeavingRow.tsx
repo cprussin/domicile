@@ -1,19 +1,21 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, ReactNode, TransitionEvent } from "react";
 
 import { css, cva } from "../../styled-system/css";
+import type { Leaving } from "./leaving-rows";
 import "../stylesheet";
 
 /** How a row comes and goes. See `useLeavingRows`. */
 export type RowMotion = {
   /** It came in while its list showed, so it slides in. */
   arriving: boolean;
-  /**
-   * While it animates out, its place among the rows removed with it, top to
-   * bottom, which staggers them.
-   */
-  leaving: number | undefined;
-  /** Its animation out has ended, so it can be dropped. */
-  onLeft: () => void;
+  /** Where it is in animating out, while it does. */
+  leaving: Leaving | undefined;
+  /** How far it rises, in pixels, over the slid out rows above it. */
+  rise: number;
+  /** It has slid out, and takes `room` pixels, which the rows below rise over. */
+  onSlid: (room: number) => void;
+  /** The rows below have risen over it. */
+  onClosed: () => void;
 };
 
 type Props = {
@@ -24,82 +26,84 @@ type Props = {
 };
 
 /**
- * A list item that slides in as it arrives, and out as it leaves: it slides
- * aside and fades, then its height and the list's gap under it close. Several
- * leaving together go in turn, top to bottom. What leaves is out of reach.
+ * A list item that slides in as it arrives, and out as it leaves. Once it has
+ * slid out, the rows below rise over its room. Several leaving together go in
+ * turn, top to bottom. What leaves is out of reach.
+ *
+ * Every motion is a transform, so none of it lays the list out again. The
+ * leaving rows stay in the list until all have been risen over; then they go,
+ * and the rows below drop their rise, in one frame.
  *
  * The notification drawer's and the downloads panel's rows move this way.
  */
 export const LeavingRow = ({
   children,
-  motion: { arriving, leaving, onLeft },
+  motion: { arriving, leaving, onClosed, onSlid, rise },
   surface = "plain",
 }: Props) => (
   <li
     aria-hidden={leaving === undefined ? undefined : true}
-    className={rowStyles({ surface })}
+    className={rowStyles}
     data-arriving={arriving ? "" : undefined}
+    data-closing={leaving?.room === undefined ? undefined : ""}
     data-leaving={leaving === undefined ? undefined : ""}
+    // A closing row is out of sight, and rising would take the transition
+    // its collapse needs.
+    data-rising={rise === 0 || leaving?.room !== undefined ? undefined : ""}
     data-surface={surface}
     inert={leaving !== undefined}
     onTransitionEnd={(event) => {
-      // The height closes last.
-      if (
-        leaving !== undefined &&
-        event.target === event.currentTarget &&
-        event.propertyName === "grid-template-rows"
-      ) {
-        onLeft();
+      if (leaving !== undefined) {
+        leaveStep(event, leaving, onSlid, onClosed);
       }
     }}
-    style={leaving === undefined ? undefined : leaveOrder(leaving)}
+    style={motionVars(leaving, rise)}
   >
-    <div className={bodyStyles}>{children}</div>
+    <div className={bodyStyles({ surface })}>{children}</div>
   </li>
 );
 
-/**
- * Inline style handing `order` to `rowStyles` as `--leave-order`, the delay
- * it is multiplied by. Inline because Panda only extracts build-time literals.
- */
-const leaveOrder = (
-  order: number,
-): CSSProperties & Record<`--${string}`, string> => ({
-  "--leave-order": String(Math.min(order, 8)),
+// The row rises, and its body slides, so the two never share a `transition`.
+// Rising has a transition only while it rises: dropping the rise as the rows
+// it rose over go must not animate.
+const rowStyles = css({
+  // Out of sight by now. Its collapse lasts as long as the rise over it, and
+  // its end says the rise has ended, even with no rows below to rise.
+  "&[data-closing]": {
+    scale: "1 0",
+    transformOrigin: "top",
+    transition: "scale {durations.springs.snappy} {easings.springs.snappy}",
+  },
+  "&[data-rising]": {
+    transition: "translate {durations.springs.snappy} {easings.springs.snappy}",
+    translate: "0 calc(-1 * var(--rise))",
+  },
+  minInlineSize: 0,
 });
 
-// A one-row grid, so the height can close.
-const rowStyles = cva({
+const bodyStyles = cva({
   base: {
-    "&[data-arriving]": {
+    "[data-arriving] > &": {
       _starting: {
         opacity: 0,
         transform: "translateX({spacing.4})",
       },
     },
-    "&[data-leaving]": {
-      gridTemplateRows: "0fr",
-      marginBlockEnd: "calc(-1 * {spacing.1})",
+    "[data-leaving] > &": {
       opacity: 0,
       pointerEvents: "none",
       transform: "translateX({spacing.6})",
-      // main-thread animation: a row's height opens or closes once, so the rows
-      // below make room.
       transition:
-        "opacity {durations.normal} {easings.in} calc(var(--leave-order) * {durations.fastest}), transform {durations.normal} {easings.in} calc(var(--leave-order) * {durations.fastest}), grid-template-rows {durations.normal} {easings.in-out} calc(var(--leave-order) * {durations.fastest} + {durations.normal}), margin-block-end {durations.normal} {easings.in-out} calc(var(--leave-order) * {durations.fastest} + {durations.normal})",
+        "opacity {durations.normal} {easings.in} calc(var(--leave-order) * {durations.fastest}), transform {durations.springs.snappy} {easings.springs.snappy} calc(var(--leave-order) * {durations.fastest})",
     },
     borderRadius: "lg",
-    display: "grid",
-    gridTemplateRows: "1fr",
-    marginBlockEnd: 0,
+    display: "flex",
+    flexDirection: "column",
     minInlineSize: 0,
     opacity: 1,
-    overflow: "hidden",
     transform: "translateX(0)",
-    // main-thread animation: a row's height opens or closes once, so the rows
-    // below make room.
     transition:
-      "background-color {durations.fast} {easings.default}, opacity {durations.slow} {easings.outQuart}, transform {durations.slow} {easings.outQuart}, grid-template-rows {durations.normal} {easings.in-out}, margin-block-end {durations.normal} {easings.in-out}",
+      "background-color {durations.fast} {easings.default}, opacity {durations.slow} {easings.outQuart}, transform {durations.springs.smooth} {easings.springs.smooth}",
   },
   variants: {
     surface: {
@@ -109,10 +113,54 @@ const rowStyles = cva({
   },
 });
 
-// Lets the row close past its content's padding.
-const bodyStyles = css({
-  display: "flex",
-  flexDirection: "column",
-  minBlockSize: 0,
-  minInlineSize: 0,
+/**
+ * Inline style handing the leaving order and the rise to the styles, as
+ * `--leave-order` and `--rise`. Inline because Panda only extracts build-time
+ * literals.
+ */
+const motionVars = (
+  leaving: Leaving | undefined,
+  rise: number,
+): CSSProperties & Record<`--${string}`, string> => ({
+  ...(leaving === undefined
+    ? {}
+    : { "--leave-order": String(Math.min(leaving.order, 8)) }),
+  ...(rise === 0 ? {} : { "--rise": `${rise}px` }),
 });
+
+/**
+ * Moves a leaving row on as one of its transitions ends: from sliding out to
+ * closing once its body has slid, then to closed once its own collapse ends.
+ */
+const leaveStep = (
+  event: TransitionEvent<HTMLLIElement>,
+  { room }: Leaving,
+  onSlid: (room: number) => void,
+  onClosed: () => void,
+) => {
+  const row = event.currentTarget;
+  if (
+    room === undefined &&
+    event.target === row.firstElementChild &&
+    event.propertyName === "transform"
+  ) {
+    onSlid(roomOf(row));
+  } else if (
+    room !== undefined &&
+    event.target === row &&
+    event.propertyName === "scale"
+  ) {
+    onClosed();
+  }
+};
+
+/**
+ * The pixels `row` takes in its list, its gap included: down to the next row's
+ * top, or its own height when it is last.
+ */
+const roomOf = (row: HTMLElement): number => {
+  const next = row.nextElementSibling;
+  return next instanceof HTMLElement
+    ? next.offsetTop - row.offsetTop
+    : row.offsetHeight;
+};

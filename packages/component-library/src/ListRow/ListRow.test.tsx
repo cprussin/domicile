@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 
 import { springTransition } from "../__test__/spring-transition";
 import { Button } from "../Button/Button";
+import type { RowMotion } from "../LeavingRows/LeavingRow";
 import { PanelFooter } from "../PanelFooter/PanelFooter";
 import { List, ListRow } from "./ListRow";
 
@@ -257,16 +258,20 @@ describe(ListRow, () => {
   });
 
   describe("motion", () => {
+    const STAYING: RowMotion = {
+      arriving: false,
+      leaving: undefined,
+      onClosed: () => undefined,
+      onSlid: () => undefined,
+      rise: 0,
+    };
+
     it("is still its list's item, with its label, when it can move", () => {
       render(
         <List>
           <ListRow
             label="invoice.pdf"
-            motion={{
-              arriving: true,
-              leaving: undefined,
-              onLeft: () => undefined,
-            }}
+            motion={{ ...STAYING, arriving: true }}
             surface="filled"
           />
         </List>,
@@ -283,7 +288,10 @@ describe(ListRow, () => {
           <ListRow
             end={<button type="button">Open</button>}
             label="invoice.pdf"
-            motion={{ arriving: false, leaving: 0, onLeft: () => undefined }}
+            motion={{
+              ...STAYING,
+              leaving: { closed: false, order: 0, room: undefined },
+            }}
           />
         </List>,
       );

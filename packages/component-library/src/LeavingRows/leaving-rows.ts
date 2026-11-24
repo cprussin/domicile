@@ -6,11 +6,24 @@ export type Row<T> = {
   item: T;
   /** It came in while the list showed, so it animates in. */
   arriving: boolean;
+  /** Where it is in animating out, while it does. */
+  leaving: Leaving | undefined;
+};
+
+/**
+ * A row animating out: it slides out, then the rows below rise over the room
+ * it takes.
+ */
+export type Leaving = {
   /**
-   * While it animates out, its place among the rows removed with it, top to
-   * bottom, which staggers them.
+   * Its place among the rows removed with it, top to bottom, which staggers
+   * them.
    */
-  leaving: number | undefined;
+  order: number;
+  /** Once it has slid out, the height and gap it takes, in pixels. */
+  room: number | undefined;
+  /** The rows below have risen over it. */
+  closed: boolean;
 };
 
 /**
@@ -68,10 +81,60 @@ const leavingUnder = <T, K>(
         {
           arriving: false,
           item: row.item,
-          leaving: row.leaving ?? starting.indexOf(row),
+          leaving: row.leaving ?? {
+            closed: false,
+            order: starting.indexOf(row),
+            room: undefined,
+          },
         },
       ]);
     }
   }
   return under;
 };
+
+/** `rows`, with the row of `key` slid out and taking `room`. */
+export const slidOut = <T, K>(
+  rows: readonly Row<T>[],
+  key: K,
+  keyOf: (item: T) => K,
+  room: number,
+): Row<T>[] =>
+  rows.map((row) =>
+    keyOf(row.item) === key && row.leaving !== undefined
+      ? { ...row, leaving: { ...row.leaving, room } }
+      : row,
+  );
+
+/**
+ * `rows`, with the row of `key` closed over. The leaving rows go together once
+ * all are: dropping one sooner moves the rows below it, mid-rise.
+ */
+export const closedOver = <T, K>(
+  rows: readonly Row<T>[],
+  key: K,
+  keyOf: (item: T) => K,
+): Row<T>[] => {
+  const marked = rows.map((row) =>
+    keyOf(row.item) === key && row.leaving !== undefined
+      ? { ...row, leaving: { ...row.leaving, closed: true } }
+      : row,
+  );
+  return marked.every(({ leaving }) => leaving === undefined || leaving.closed)
+    ? marked.filter(({ leaving }) => leaving === undefined)
+    : marked;
+};
+
+/**
+ * Each row with how far it rises, in pixels: the room of the slid out rows
+ * above it, which it closes over.
+ */
+export const withRises = <T>(
+  rows: readonly Row<T>[],
+): (Row<T> & { rise: number })[] =>
+  rows.map((row, index) => ({
+    ...row,
+    rise: rows
+      .slice(0, index)
+      .reduce((rise, { leaving }) => rise + (leaving?.room ?? 0), 0),
+  }));

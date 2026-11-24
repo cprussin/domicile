@@ -1,17 +1,24 @@
 import { useCallback, useState } from "react";
 
+import type { RowMotion } from "./LeavingRow";
 import type { Row } from "./leaving-rows";
-import { nextRows } from "./leaving-rows";
+import { closedOver, nextRows, slidOut, withRises } from "./leaving-rows";
+
+/** A row to draw, and how its `LeavingRow` moves. */
+export type MovingRow<T> = Row<T> & { motion: RowMotion };
 
 /**
  * A list's rows for `items`, removed ones kept until they have animated out,
- * and `onLeft` to drop one once it has. See `nextRows`.
+ * each with the motion its `LeavingRow` takes. See `nextRows`.
+ *
+ * `onLeft` drops a row at once, for a list whose rows animate out on their
+ * own, as dialogs do.
  */
 export const useLeavingRows = <T, K>(
   items: readonly T[],
   keyOf: (item: T) => K,
   animate: boolean,
-): { rows: readonly Row<T>[]; onLeft: (key: K) => void } => {
+): { rows: readonly MovingRow<T>[]; onLeft: (key: K) => void } => {
   const [drawn, setDrawn] = useState(() => ({
     animate,
     items,
@@ -35,5 +42,39 @@ export const useLeavingRows = <T, K>(
     },
     [keyOf],
   );
-  return { onLeft, rows };
+  const onSlid = useCallback(
+    (key: K, room: number) => {
+      setDrawn((current) => ({
+        ...current,
+        rows: slidOut(current.rows, key, keyOf, room),
+      }));
+    },
+    [keyOf],
+  );
+  const onClosed = useCallback(
+    (key: K) => {
+      setDrawn((current) => ({
+        ...current,
+        rows: closedOver(current.rows, key, keyOf),
+      }));
+    },
+    [keyOf],
+  );
+  return {
+    onLeft,
+    rows: withRises(rows).map(({ rise, ...row }) => ({
+      ...row,
+      motion: {
+        arriving: row.arriving,
+        leaving: row.leaving,
+        onClosed: () => {
+          onClosed(keyOf(row.item));
+        },
+        onSlid: (room) => {
+          onSlid(keyOf(row.item), room);
+        },
+        rise,
+      },
+    })),
+  };
 };

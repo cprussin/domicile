@@ -238,7 +238,7 @@ Shell surfaces:
 - [x] `ModalDialog`, `PageModal`, file picker and launcher spring from their
       origin
 - [x] slide-overs, toasts, level toasts on springs; swipe velocity
-- [ ] notification drawer close as a transform
+- [x] notification drawer close as a transform
 - [x] region picker and recording toolbar
 - [x] context menus, selects, tooltips
 - [x] lock entrance; workspace switcher highlight

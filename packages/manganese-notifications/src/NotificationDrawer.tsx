@@ -2,11 +2,11 @@ import { Button } from "@domicile-desktop/component-library/Button";
 import { EmptyState } from "@domicile-desktop/component-library/EmptyState";
 import { LeavingRow } from "@domicile-desktop/component-library/LeavingRow";
 import { List } from "@domicile-desktop/component-library/ListRow";
-import type { Row } from "@domicile-desktop/component-library/leaving-rows";
 import { Menu } from "@domicile-desktop/component-library/Menu";
 import { PanelHeader } from "@domicile-desktop/component-library/PanelHeader";
 import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import { Popover } from "@domicile-desktop/component-library/Popover";
+import type { MovingRow } from "@domicile-desktop/component-library/useLeavingRows";
 import { useLeavingRows } from "@domicile-desktop/component-library/useLeavingRows";
 import type { Notification } from "@domicile-desktop/sdk/notification";
 import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
@@ -77,7 +77,7 @@ type Props = {
  * window, and closes the drawer.
  *
  * A notification cleared while the list shows slides out, then the rows below
- * close up. Several cleared at once leave in turn, top to bottom.
+ * rise over it. Several cleared at once leave in turn, top to bottom.
  */
 export const NotificationDrawer = memo(
   ({
@@ -96,14 +96,13 @@ export const NotificationDrawer = memo(
     pause,
     screen,
   }: Props) => {
-    const { onLeft, rows } = useLeavingRows(items, idOf, open);
+    const { rows } = useLeavingRows(items, idOf, open);
     const notifications = (
       <Notifications
         now={now}
         onAction={onAction}
         onClose={onClose}
         onDismiss={onDismiss}
-        onLeft={onLeft}
         onReply={onReply}
         rows={rows}
       />
@@ -230,9 +229,7 @@ type NotificationsProps = Pick<
   Props,
   "now" | "onAction" | "onClose" | "onDismiss" | "onReply"
 > & {
-  rows: readonly Row<Notification>[];
-  /** The row of notification `id` has finished leaving. */
-  onLeft: (id: number) => void;
+  rows: readonly MovingRow<Notification>[];
 };
 
 /** The notifications, or that there are none once the last has left. */
@@ -241,7 +238,6 @@ const Notifications = ({
   onAction,
   onClose,
   onDismiss,
-  onLeft,
   onReply,
   rows,
 }: NotificationsProps) =>
@@ -250,23 +246,9 @@ const Notifications = ({
       <EmptyState icon={BellSimpleIcon} title="You're all caught up" />
     </div>
   ) : (
-    <ul
-      className={listStyles}
-      data-emptying={
-        rows.every(({ leaving }) => leaving !== undefined) ? "" : undefined
-      }
-    >
-      {rows.map(({ arriving, item: notification, leaving }) => (
-        <LeavingRow
-          key={notification.id}
-          motion={{
-            arriving,
-            leaving,
-            onLeft: () => {
-              onLeft(notification.id);
-            },
-          }}
-        >
+    <ul className={listStyles}>
+      {rows.map(({ item: notification, motion }) => (
+        <LeavingRow key={notification.id} motion={motion}>
           <div className={cardBoxStyles}>
             <NotificationCard
               closeLabel="Clear"
@@ -312,16 +294,9 @@ const paneStyles = flex({
   overflowY: "auto",
 });
 
-// Clips the rows sliding in and out sideways, and a closing last row, which
-// sits below the list's end as its gap closes. Either would otherwise scroll
-// the pane and flash its scrollbars.
-//
-// As the last rows leave, it eases to the caught-up note's height while they
-// slide out, before they close. So the drawer goes straight to the note's
-// height, rather than shrinking to nothing and growing back for it.
+// Clips the rows sliding in and out sideways, which would otherwise scroll the
+// pane and flash its scrollbars.
 const listStyles = flex({
-  // `EmptyState`'s height.
-  "&[data-emptying]": { minBlockSize: 40 },
   direction: "column",
   gap: 1,
   listStyle: "none",
@@ -330,14 +305,11 @@ const listStyles = flex({
   overflowX: "clip",
   overflowY: "clip",
   paddingInline: 0,
-  // main-thread animation: holds the drawer's height once, as its last row
-  // leaves.
-  transition: "min-block-size {durations.normal} {easings.in-out}",
 });
 
 // Each card on its own tile, lit on hover, as a list's filled rows. Its row
 // slides in and out as `LeavingRow` moves it, so the tile, not the row, takes
-// the hover and the ring, and closes with it.
+// the hover and the ring, and slides with it.
 const cardBoxStyles = css({
   _hover: { backgroundColor: "fillHover" },
   // Critical notifications get a danger ring, as their toasts do. A ring
