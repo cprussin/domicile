@@ -111,9 +111,8 @@ pub fn through_rtkit(bus: &Connection, tid: Tid, nice: i32) -> zbus::Result<()> 
 ///
 /// The kernel keeps 15 bytes of a name, so `name` must fit in them.
 pub fn thread_named(name: &str) -> io::Result<Option<Tid>> {
-    for task in fs::read_dir("/proc/self/task")? {
-        let task = task?;
-        let comm = match fs::read_to_string(task.path().join("comm")) {
+    for tid in settled(threads)? {
+        let comm = match fs::read_to_string(format!("/proc/self/task/{tid}/comm")) {
             Ok(comm) => comm,
             // The thread ended after it was listed, so it is not the one.
             Err(gone)
@@ -125,15 +124,39 @@ pub fn thread_named(name: &str) -> io::Result<Option<Tid>> {
             Err(error) => return Err(error),
         };
         if comm.trim_end_matches('\n') == name {
-            let tid = task
-                .file_name()
-                .to_str()
-                .and_then(|tid| tid.parse().ok())
-                .expect("a task directory is named by its thread id");
             return Ok(Some(tid));
         }
     }
     Ok(None)
+}
+
+/// What `list` answers once two answers in a row agree.
+///
+/// The kernel lists `/proc/self/task` by walking the thread list one thread
+/// at a time, so a thread that ends during the walk can make it skip one that
+/// is still running. The listing that skips differs from the next one.
+fn settled(mut list: impl FnMut() -> io::Result<Vec<Tid>>) -> io::Result<Vec<Tid>> {
+    let mut last = list()?;
+    loop {
+        let next = list()?;
+        if next == last {
+            return Ok(next);
+        }
+        last = next;
+    }
+}
+
+/// This process's threads, as `/proc/self/task` lists them.
+fn threads() -> io::Result<Vec<Tid>> {
+    fs::read_dir("/proc/self/task")?
+        .map(|task| {
+            Ok(task?
+                .file_name()
+                .to_str()
+                .and_then(|tid| tid.parse().ok())
+                .expect("a task directory is named by its thread id"))
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -234,6 +257,16 @@ mod tests {
         through_rtkit(&client, 4321, LATENCY_CRITICAL).unwrap();
 
         assert_eq!(heard.recv().unwrap(), (4321, LATENCY_CRITICAL));
+    }
+
+    #[test]
+    fn a_listing_is_taken_once_the_next_one_agrees_with_it() {
+        // Popped from the back: the first listing skipped thread 2.
+        let mut listings = vec![vec![1, 2, 3], vec![1, 2, 3], vec![1, 3]];
+
+        let settled = settled(|| Ok(listings.pop().unwrap())).unwrap();
+
+        assert_eq!(settled, vec![1, 2, 3]);
     }
 
     #[test]
