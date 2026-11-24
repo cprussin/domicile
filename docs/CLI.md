@@ -571,7 +571,10 @@ been none. Idle inhibitors don't reset it. Electron apps read it for
 42
 ```
 
-`--json` prints `{"seconds": 42}` instead.
+`--json` prints `{"seconds": 42, "local_seconds": 90}` instead.
+`local_seconds` counts only this computer's own keyboard, pointer and touch,
+leaving out emulated input such as an agent's. Agents wait on it before they
+move the pointer or focus.
 
 ## `domicile disable-while-typing [on|off|toggle]`
 

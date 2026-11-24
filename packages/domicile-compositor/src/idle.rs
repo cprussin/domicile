@@ -357,6 +357,13 @@ fn holds<S: StillThere + PartialEq>(inhibitor: &S, on_the_desktop: &[S]) -> bool
     inhibitor.still_there() && on_the_desktop.contains(inhibitor)
 }
 
+/// Whether `request` is input the engine read from this computer's own
+/// devices. Emulated input takes other requests, except on a headless desk,
+/// where the engine reads it too.
+pub fn from_this_computer(request: &ClientRequest, engine_takes_input: bool) -> bool {
+    matches!(request, ClientRequest::Activity { .. }) && !engine_takes_input
+}
+
 /// The input this request is, named for the log, or `None` for a request
 /// that is not user input. Input resets the idle timer.
 ///
@@ -507,7 +514,9 @@ mod tests {
     use domicile_host::system::DisplayPower;
     use domicile_protocol::{HostMessage, PortalAnswer, TrayAction};
 
-    use super::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
+    use super::{
+        announced, darkened, from_this_computer, somebody_is_here, Blanking, Idle, StillThere,
+    };
     use crate::client_requests::ClientRequest;
     use crate::engine::{AdaptiveSync, Clipboard, Connector, Display};
     use crate::lock::LOCK_SCREEN_DRAWS_WITHIN;
@@ -943,6 +952,19 @@ mod tests {
             Some(Blanking::GoDark)
         );
         assert!(idle.dark());
+    }
+
+    #[test]
+    fn only_what_the_engine_read_from_this_computers_devices_is_local() {
+        let read = ClientRequest::Activity { input: None };
+        assert!(from_this_computer(&read, false));
+        // A headless desk's engine reads emulated input too.
+        assert!(!from_this_computer(&read, true));
+        let emulated = ClientRequest::Key {
+            keycode: 30,
+            pressed: true,
+        };
+        assert!(!from_this_computer(&emulated, false));
     }
 
     #[test]

@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
 use domicile_launch::control::{
-    answer, parse_response, AppReuse, Desktop, LoadShell, OpenUrl, Response, Screenshot, SendShell,
-    SettingsFiles, Shot,
+    answer, parse_response, AppReuse, Desktop, IdleTimes, LoadShell, OpenUrl, Response, Screenshot,
+    SendShell, SettingsFiles, Shot,
 };
 use domicile_launch::extensions::{
     ExtensionSettings, InstalledExtension, SiteAccess, SiteAccessMode,
@@ -676,11 +676,19 @@ fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
         reply_to(
             "{\"type\":\"idle_time\"}",
             &Desktop {
-                idle_time: &|| Ok(42),
+                idle_time: &|| {
+                    Ok(IdleTimes {
+                        seconds: 42,
+                        local_seconds: 90,
+                    })
+                },
                 ..nothing_dialed()
             },
         ),
-        Response::IdleTime { seconds: 42 }
+        Response::IdleTime {
+            seconds: 42,
+            local_seconds: 90
+        }
     );
     let status = DesktopStatus {
         theme: Theme::Light,

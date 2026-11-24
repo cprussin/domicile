@@ -39,6 +39,13 @@ The user guide's [Agents](use/AGENTS.md) page is the short version of this.
 
 Agents are refused while the desktop is locked.
 
+The desk has one seat, so `click`, `move_pointer`, `drag`, `scroll`, `key`,
+`type_text`, `focus_window` and `send_shell` move the user's own pointer and
+focus. They are refused until the user has left this computer's keyboard,
+pointer and touch alone for 30 seconds (`local_seconds` of
+[`domicile idle-time`](CLI.md#domicile-idle-time---json)). The `browser_` and
+`app_` tools act by ref, without the seat, and run any time.
+
 ### Agents that sign in
 
 An agent that connects to a URL, rather than running `domicile mcp` itself,

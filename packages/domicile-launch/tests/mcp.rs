@@ -42,6 +42,16 @@ fn printed(stdout: &str) -> io::Result<Ran> {
     })
 }
 
+/// What `domicile idle-time --json` prints when the user last used this
+/// computer's own keyboard or pointer `seconds` ago.
+fn idle_for(seconds: u64) -> io::Result<Ran> {
+    printed(&format!("{{\"seconds\":0,\"local_seconds\":{seconds}}}\n"))
+}
+
+/// Long enough away that the tools that move the user's pointer and focus
+/// run.
+const AWAY: u64 = 3600;
+
 fn never_run(args: &[String]) -> io::Result<Ran> {
     panic!("ran domicile {args:?}")
 }
@@ -59,6 +69,9 @@ fn call(name: &str, arguments: Value) -> Value {
 fn ran_for(name: &str, arguments: Value) -> Vec<String> {
     let mut ran = Vec::new();
     served(&[call(name, arguments)], |args| {
+        if args[0] == "idle-time" {
+            return idle_for(AWAY);
+        }
         if ran.is_empty() {
             ran = args.to_vec();
         }
@@ -196,7 +209,10 @@ fn a_listing_runs_its_verb_for_json_and_answers_what_it_printed() {
 
 #[test]
 fn a_failed_command_is_a_tool_error_saying_why() {
-    let replies = served(&[call("focus_window", json!({"id": "abc"}))], |_| {
+    let replies = served(&[call("focus_window", json!({"id": "abc"}))], |args| {
+        if args[0] == "idle-time" {
+            return idle_for(AWAY);
+        }
         Ok(Ran {
             success: false,
             stdout: String::new(),
@@ -272,7 +288,9 @@ const ZOOMED: &str =
 /// other run in `ran`, and each `--area` asked for.
 fn desk<'a>(ran: &'a mut Vec<Vec<String>>) -> impl FnMut(&[String]) -> io::Result<Ran> + 'a {
     move |args| {
-        if args[0] == "screenshot" {
+        if args[0] == "idle-time" {
+            idle_for(AWAY)
+        } else if args[0] == "screenshot" {
             assert_eq!(args[1..3], ["--fit", "1280"]);
             std::fs::write(args.last().unwrap(), b"\x89PNG").unwrap();
             match &args[3..] {
@@ -390,6 +408,55 @@ fn keys_and_text_go_to_key_and_type() {
         ran_for("type_text", json!({"text": "Hi there"})),
         ["type", "Hi there"]
     );
+}
+
+/// Each tool that moves the user's pointer, keyboard focus or windows, with
+/// arguments it takes after a screenshot.
+fn moving_the_users_hands() -> [(&'static str, Value); 8] {
+    [
+        ("click", json!({"x": 1, "y": 1})),
+        ("move_pointer", json!({"x": 1, "y": 1})),
+        ("drag", json!({"from": [1, 1], "to": [2, 2]})),
+        ("scroll", json!({"x": 1, "y": 1, "dx": 0, "dy": 1})),
+        ("key", json!({"chord": "ctrl+l"})),
+        ("type_text", json!({"text": "hi"})),
+        ("focus_window", json!({"id": "n1"})),
+        ("send_shell", json!({"words": ["focus", "left"]})),
+    ]
+}
+
+#[test]
+fn tools_that_move_the_users_pointer_or_focus_wait_while_they_use_the_desktop() {
+    for (name, arguments) in moving_the_users_hands() {
+        let mut ran = Vec::new();
+        let replies = served(
+            &[call("screenshot", json!({})), call(name, arguments)],
+            |args: &[String]| match args[0].as_str() {
+                "idle-time" => idle_for(29),
+                _ => desk(&mut ran)(args),
+            },
+        );
+        assert_eq!(replies[1]["result"]["isError"], true, "{name}");
+        let text = replies[1]["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("browser_ and app_"), "{name}: {text}");
+        assert!(ran.is_empty(), "{name} ran {ran:?}");
+    }
+}
+
+#[test]
+fn tools_that_move_the_users_pointer_or_focus_run_once_they_step_away() {
+    for (name, arguments) in moving_the_users_hands() {
+        let mut ran = Vec::new();
+        let replies = served(
+            &[call("screenshot", json!({})), call(name, arguments)],
+            |args: &[String]| match args[0].as_str() {
+                "idle-time" => idle_for(30),
+                _ => desk(&mut ran)(args),
+            },
+        );
+        assert_eq!(replies[1]["result"]["isError"], false, "{name}");
+        assert!(!ran.is_empty(), "{name}");
+    }
 }
 
 #[test]

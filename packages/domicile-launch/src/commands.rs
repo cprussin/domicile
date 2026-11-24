@@ -647,6 +647,9 @@ pub const COMMANDS: &[Command] = &[
         about: &[
             "Prints how many whole seconds nobody has used the desktop. Idle \
              inhibitors don't reset it.",
+            "`--json` adds `local_seconds`, which counts only this computer's \
+             own keyboard, pointer and touch, leaving out emulated input such \
+             as an agent's.",
         ],
         sections: &[JSON],
         examples: &[],

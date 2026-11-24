@@ -27,7 +27,9 @@ use domicile_host::system::DisplayPower;
 use crate::client_requests::ClientRequest;
 use crate::display_sleep::asleep_in;
 use crate::held_frames::HeldFrames;
-use crate::idle::{announced, darkened, somebody_is_here, Blanking, StillThere};
+use crate::idle::{
+    announced, darkened, from_this_computer, somebody_is_here, Blanking, StillThere,
+};
 use crate::screen_saver::{self, Change, Hold, BROWSER};
 use crate::screens::name_of;
 use crate::{CalloopData, DomicileCompositor};
@@ -92,7 +94,8 @@ impl DomicileCompositor {
                 "input restarts the idle clock"
             );
         }
-        self.hub.stirred(now);
+        self.hub
+            .stirred(now, from_this_computer(request, self.engine_takes_input));
         match idle.stirred(now) {
             Some(Blanking::ComeBack) => {
                 info!("somebody is at this desktop again; its screens come back on");

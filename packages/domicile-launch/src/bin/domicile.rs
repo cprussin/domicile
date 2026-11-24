@@ -1577,10 +1577,14 @@ fn listed(listing: Listing, json: bool) -> Result<ExitCode, String> {
         (Response::ShellBindings { bindings }, true) => as_json(&bindings),
         (Response::Inputs { inputs }, false) => inputs_table(out(), &inputs),
         (Response::Inputs { inputs }, true) => as_json(&inputs),
-        (Response::IdleTime { seconds }, false) => format!("{seconds}\n"),
-        (Response::IdleTime { seconds }, true) => {
-            as_json(&serde_json::json!({ "seconds": seconds }))
-        }
+        (Response::IdleTime { seconds, .. }, false) => format!("{seconds}\n"),
+        (
+            Response::IdleTime {
+                seconds,
+                local_seconds,
+            },
+            true,
+        ) => as_json(&serde_json::json!({ "seconds": seconds, "local_seconds": local_seconds })),
         (Response::Agents { agents }, false) => agents_table(out(), &agents),
         (Response::Agents { agents }, true) => as_json(&agents),
         (Response::Refused { why }, _) => return Ok(fail(&why)),

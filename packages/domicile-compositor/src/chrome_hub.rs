@@ -122,6 +122,8 @@ pub struct ChromeHub {
     /// Wayland thread sets it with [`ChromeHub::stirred`]; see
     /// [`ChromeHub::idle_time`].
     stirred_at: Mutex<Instant>,
+    /// [`ChromeHub::stirred_at`], for input from this computer's own devices.
+    touched_at: Mutex<Instant>,
 }
 
 impl ChromeHub {
@@ -165,6 +167,7 @@ impl ChromeHub {
             keymaps: Keymaps::default(),
             watchers: Watchers::default(),
             stirred_at: Mutex::new(Instant::now()),
+            touched_at: Mutex::new(Instant::now()),
         });
         (hub, outbound_rx)
     }
@@ -239,18 +242,23 @@ impl ChromeHub {
         )
     }
 
-    /// Records input at `now`, for [`ChromeHub::idle_time`].
-    pub fn stirred(&self, now: Instant) {
+    /// Records input at `now`, for [`ChromeHub::idle_time`]. `local` when
+    /// it came from this computer's own devices; see
+    /// [`crate::idle::from_this_computer`].
+    pub fn stirred(&self, now: Instant, local: bool) {
         *self.stirred_at.lock().unwrap() = now;
+        if local {
+            *self.touched_at.lock().unwrap() = now;
+        }
     }
 
     /// How long nobody has used the desktop as of `now`, answering
     /// `which_idle_time`.
     pub fn idle_time(&self, now: Instant) -> HostMessage {
+        let since = |at: &Mutex<Instant>| now.duration_since(*at.lock().unwrap()).as_secs();
         HostMessage::IdleTime {
-            seconds: now
-                .duration_since(*self.stirred_at.lock().unwrap())
-                .as_secs(),
+            seconds: since(&self.stirred_at),
+            local_seconds: since(&self.touched_at),
         }
     }
 
@@ -663,12 +671,38 @@ mod tests {
         let (hub, _outbound, _) = hub_with_an_app();
         let input = std::time::Instant::now();
 
-        hub.stirred(input);
+        hub.stirred(input, true);
 
         assert_eq!(
             hub.idle_time(input + Duration::from_millis(90_700)),
-            HostMessage::IdleTime { seconds: 90 }
+            HostMessage::IdleTime {
+                seconds: 90,
+                local_seconds: 90
+            }
         );
-        assert_eq!(hub.idle_time(input), HostMessage::IdleTime { seconds: 0 });
+        assert_eq!(
+            hub.idle_time(input),
+            HostMessage::IdleTime {
+                seconds: 0,
+                local_seconds: 0
+            }
+        );
+    }
+
+    #[test]
+    fn emulated_input_leaves_the_local_idle_time_alone() {
+        let (hub, _outbound, _) = hub_with_an_app();
+        let input = std::time::Instant::now();
+
+        hub.stirred(input, true);
+        hub.stirred(input + Duration::from_secs(60), false);
+
+        assert_eq!(
+            hub.idle_time(input + Duration::from_secs(90)),
+            HostMessage::IdleTime {
+                seconds: 30,
+                local_seconds: 90
+            }
+        );
     }
 }

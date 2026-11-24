@@ -4,6 +4,16 @@ What's new for shells and apps built on Domicile, in each release. What's new
 in the manganese desktop is in
 [manganese's release notes](use/RELEASE-NOTES.md).
 
+## 1.4.0
+
+_Unreleased_
+
+### Agents leave the user's pointer alone
+
+While the user is at the computer, agents can't click, type, scroll, focus windows or run shell commands, since those move the user's pointer and focus. They work through windows' accessibility trees instead, and the rest waits until the user has been away for 30 seconds. `domicile idle-time --json` adds `local_seconds`, which counts only the computer's own keyboard, pointer and touch.
+
+[Agents](AGENTS.md) · [`domicile idle-time`](CLI.md#domicile-idle-time---json)
+
 ## 1.3.0
 
 _November 24, 2026_

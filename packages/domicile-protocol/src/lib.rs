@@ -937,7 +937,14 @@ pub enum HostMessage {
     /// tablet, or since the compositor started when there has been none. Idle
     /// inhibitors don't reset it, as they don't reset Electron's
     /// `powerMonitor.getSystemIdleTime`.
-    IdleTime { seconds: u64 },
+    IdleTime {
+        seconds: u64,
+        /// The same, counting only this computer's own devices and leaving
+        /// out emulated input, such as an agent's. Agents wait on it so they
+        /// don't move the pointer or focus out from under the user. Always
+        /// since the compositor started on a headless desk.
+        local_seconds: u64,
+    },
 
     /// Answers [`ChromeMessage::ActOnWindow`] on the asking connection only:
     /// why it was not done, or nothing when it was.

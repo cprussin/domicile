@@ -3,6 +3,14 @@
 What's new in manganese, the desktop, in each release. What's new for people
 building shells is in [Domicile's release notes](../RELEASE-NOTES.md).
 
+## 1.4.0
+
+_Unreleased_
+
+### Agents leave your pointer alone
+
+An agent no longer moves your pointer, types into your window or changes what's focused while you're using the computer. It waits until you've stepped away for 30 seconds.
+
 ## 1.3.0
 
 _November 24, 2026_

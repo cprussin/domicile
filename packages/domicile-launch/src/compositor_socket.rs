@@ -22,7 +22,7 @@ use domicile_protocol::{
 };
 
 use crate::cli::MonitorMode;
-use crate::control::Shot;
+use crate::control::{IdleTimes, Shot};
 
 /// The id the one call goes under.
 const CALL: u32 = 1;
@@ -456,10 +456,16 @@ pub fn inputs(
 
 /// Asks the compositor at `socket` how many whole seconds nobody has used the
 /// desktop.
-pub fn idle_time(socket: &Path, patience: Option<Duration>) -> Result<u64, CompositorError> {
+pub fn idle_time(socket: &Path, patience: Option<Duration>) -> Result<IdleTimes, CompositorError> {
     let said = exchanged(socket, &[ChromeMessage::WhichIdleTime], patience)?;
     match serde_json::from_str::<HostMessage>(&said) {
-        Ok(HostMessage::IdleTime { seconds }) => Ok(seconds),
+        Ok(HostMessage::IdleTime {
+            seconds,
+            local_seconds,
+        }) => Ok(IdleTimes {
+            seconds,
+            local_seconds,
+        }),
         _ => Err(CompositorError::Unreadable {
             path: socket.display().to_string(),
             said,

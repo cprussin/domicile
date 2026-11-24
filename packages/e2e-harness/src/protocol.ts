@@ -678,6 +678,7 @@ const shellBindingListSchema = z.looseObject({
 // Answers `which_idle_time` on the asking connection only, for
 // `domicile idle-time`.
 const idleTimeSchema = z.looseObject({
+  local_seconds: z.number(),
   seconds: z.number(),
   type: z.literal("idle_time"),
 });

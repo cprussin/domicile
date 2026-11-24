@@ -207,7 +207,9 @@ const INSTRUCTIONS: &str = "Read and act on windows as text first: list_windows,
     Each act answers what it changed in the window, so there is no need to look again. \
     Use screenshot only for what a tree can't show: images, layout, or an app that \
     doesn't support accessibility. Zoom into an area rather than taking the whole desk \
-    again. When you are done with the desktop, call stop_using_desktop.";
+    again. The user may be using the desktop as you work, so the tools that move the \
+    pointer, keyboard focus or windows are refused until they step away. When you are \
+    done with the desktop, call stop_using_desktop.";
 
 /// What the client calls itself in `initialize`: its title, else its name.
 fn named(params: &Value) -> String {
@@ -715,6 +717,55 @@ fn what_it_did(
     }
 }
 
+/// How long the user must leave this computer's own keyboard and pointer
+/// before an agent may move them. Shorter would let an agent take the pointer
+/// while the user reads.
+const AWAY: u64 = 30;
+
+/// Whether `tool` moves the pointer, keyboard focus or windows the user is
+/// using. The desk has one seat, shared with the user.
+fn moves_the_users_hands(tool: Tool) -> bool {
+    matches!(
+        tool,
+        Tool::Click
+            | Tool::MovePointer
+            | Tool::Drag
+            | Tool::Scroll
+            | Tool::Key
+            | Tool::TypeText
+            | Tool::SendShell
+            | Tool::WindowAct("focus-window")
+    )
+}
+
+/// Why an agent may not move the user's pointer or focus now, or `None` once
+/// the user has been away from this computer for [`AWAY`] seconds.
+fn in_use(domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>) -> io::Result<Option<String>> {
+    let ran = domicile(&["idle-time".to_string(), "--json".to_string()])?;
+    if !ran.success {
+        return Ok(Some(ran.stderr));
+    }
+    let local_seconds = serde_json::from_str::<Value>(&ran.stdout)?["local_seconds"]
+        .as_u64()
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "domicile idle-time printed no local_seconds: {}",
+                    ran.stdout
+                ),
+            )
+        })?;
+    Ok((local_seconds < AWAY).then(|| {
+        format!(
+            "The user is using this computer, and this tool would move their pointer, \
+             keyboard focus or windows. Use the browser_ and app_ tools by ref, which \
+             don't, or try again once the user has left the keyboard and mouse alone \
+             for {AWAY} seconds."
+        )
+    }))
+}
+
 /// `tools/call`'s result for `tool` with `arguments`.
 fn called(
     tool: Tool,
@@ -732,6 +783,11 @@ fn called(
         Ok(runs) => runs,
         Err(why) => return Ok(said(false, why)),
     };
+    if moves_the_users_hands(tool) {
+        if let Some(why) = in_use(domicile)? {
+            return Ok(said(false, why));
+        }
+    }
     // Each run in turn, up to the first that fails.
     let mut printed = String::new();
     for args in runs {
