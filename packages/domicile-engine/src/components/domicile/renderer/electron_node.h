@@ -48,7 +48,7 @@ class ElectronNodeEnvironment final {
   // Starts Node in `context`, the preload's world, and loads `node`'s
   // preload. Its process has what `app` says, and an argv of the renderer's
   // program and `arguments`, the window's additionalArguments. `electron` is what `require("electron")`
-  // gives. Node failing to
+  // gives, and `preload_failed` hears what the preload threw. Node failing to
   // start is the engine's bug, so it ends the renderer.
   static std::unique_ptr<ElectronNodeEnvironment> Start(
       v8::Isolate* isolate,
@@ -56,7 +56,8 @@ class ElectronNodeEnvironment final {
       const mojom::ElectronAppFacts& app,
       const mojom::ElectronNode& node,
       const std::vector<std::string>& arguments,
-      v8::Local<v8::Object> electron);
+      v8::Local<v8::Object> electron,
+      v8::Local<v8::Function> preload_failed);
 
   ElectronNodeEnvironment(const ElectronNodeEnvironment&) = delete;
   ElectronNodeEnvironment& operator=(const ElectronNodeEnvironment&) = delete;

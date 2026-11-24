@@ -15,6 +15,8 @@ import type { MenuEntry } from "./electron/menu";
 import type { ShowMessageBoxMessage } from "./electron/message-boxes";
 import type { PortRequest } from "./electron/message-port-main";
 import type { PageMethod } from "./electron/page-control";
+import type { PageEventRequest } from "./electron/page-events";
+import { pageEventSchemas } from "./electron/page-events";
 import type {
   IncomingPermissionRequest,
   PermissionMessage,
@@ -70,6 +72,8 @@ export type OpenKeys = {
   readonly title?: string;
   /** A window that opens hidden, as `show: false`. */
   readonly hidden?: true;
+  /** webContents.setUserAgent's, over its session's, from its first load. */
+  readonly user_agent?: string;
   /**
    * Node.js in the page of a window that isn't sandboxed. Its preload is
    * a file Node loads, so `preload` is left out.
@@ -299,7 +303,8 @@ export type EngineRequest =
   | WebRequestMessage
   | SessionCallMessage
   | PermissionMessage
-  | DownloadMessage;
+  | DownloadMessage
+  | PageEventRequest;
 
 /** A frame of a page, by the engine's ids for it. */
 const wireFrame = z.object({ process: z.number(), routing: z.number() });
@@ -690,6 +695,7 @@ const engineEvent = z.discriminatedUnion("type", [
     total_bytes: z.number(),
     type: z.literal("download_updated"),
   }),
+  ...pageEventSchemas,
 ]);
 
 export type EngineEvent = z.infer<typeof engineEvent>;

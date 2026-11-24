@@ -57,14 +57,16 @@ class FakeDesk final : public ElectronDesk {
                                    ElectronPageCalls page_calls,
                                    base::WeakPtr<ElectronSession> session,
                                    const std::string& title,
-                                   bool hidden) override {
+                                   bool hidden,
+                                   const std::string& user_agent) override {
     if (!has_shell) {
       return std::nullopt;
     }
     calls.push_back(
         "adopt " + static_cast<FakeHeldPage&>(*page).name() + " as " + app_id +
         (preload.empty() ? "" : " with " + preload) +
-        (title.empty() ? "" : " titled " + title) + (hidden ? " hidden" : ""));
+        (title.empty() ? "" : " titled " + title) + (hidden ? " hidden" : "") +
+        (user_agent.empty() ? "" : " as agent " + user_agent));
     adopted.push_back(std::move(page));
     const std::string id = base::NumberToString(next_id++);
     pages.emplace(id, std::move(page_calls));
@@ -82,7 +84,8 @@ class FakeDesk final : public ElectronDesk {
                                   base::WeakPtr<ElectronSession> session,
                                   bool view,
                                   const std::string& title,
-                                  bool hidden) override {
+                                  bool hidden,
+                                  const std::string& user_agent) override {
     if (!has_shell) {
       return std::nullopt;
     }
@@ -97,7 +100,8 @@ class FakeDesk final : public ElectronDesk {
         (history.has_value()
              ? " restoring " + base::NumberToString(history->entries.size()) +
                    " entries at " + base::NumberToString(history->index)
-             : ""));
+             : "") +
+        (user_agent.empty() ? "" : " as agent " + user_agent));
     const std::string id = base::NumberToString(next_id++);
     pages.emplace(id, std::move(page_calls));
     partitions.emplace(id, partition);
@@ -226,6 +230,11 @@ class FakeDesk final : public ElectronDesk {
     page_methods.push_back(std::move(method));
     page_answers.push_back(std::move(done));
   }
+  std::optional<std::string> AskPage(const std::string& id,
+                                     ElectronPageAction action) override {
+    asked.emplace_back(id, std::move(action));
+    return page_refusal;
+  }
   void GetCookies(
       const WebViewPartition& partition,
       const std::optional<GURL>& url,
@@ -274,6 +283,9 @@ class FakeDesk final : public ElectronDesk {
   }
 
   bool has_shell = true;
+  // What AskPage was asked, by window id, oldest first, and why it refuses.
+  std::vector<std::pair<std::string, ElectronPageAction>> asked;
+  std::optional<std::string> page_refusal;
   // What each window's page may call, by id.
   std::map<std::string, ElectronPageCalls> pages;
   // What the last WatchCookies was told to call.
@@ -2161,6 +2173,78 @@ TEST_F(ElectronAppTest, AnAppThatGoesClosesTheWindowsItWasAskedAbout) {
   app_.reset();
 
   EXPECT_EQ(desk_.calls, (Lines{"close 10", "destroy held popup"}));
+}
+
+
+TEST_F(ElectronAppTest, APageRequestReachesItsWindowsPage) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  sent_.clear();
+
+  app_->Take(R"({"type":"set_audio_muted","window":1,"muted":true})");
+
+  ASSERT_EQ(desk_.asked.size(), 1u);
+  EXPECT_EQ(desk_.asked[0].first, "10");
+  EXPECT_EQ(desk_.asked[0].second,
+            ElectronPageAction(ElectronSetAudioMuted{.muted = true}));
+  EXPECT_EQ(sent_, Lines{});
+}
+
+TEST_F(ElectronAppTest, APageThatRefusesARequestSaysWhy) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  sent_.clear();
+  desk_.page_refusal = "no key waits for answer 3";
+
+  app_->Take(R"({"type":"input_answer","window":1,"ask":3,"prevent":false})");
+
+  EXPECT_EQ(sent_, Lines{"{\"type\":\"window_refused\",\"why\":\"no key "
+                         "waits for answer 3\",\"window\":1}\n"});
+}
+
+TEST_F(ElectronAppTest, APageReportReachesTheApp) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  sent_.clear();
+
+  desk_.pages.at("10").reported.Run(ElectronAudible{.audible = true});
+
+  EXPECT_EQ(sent_, Lines{"{\"audible\":true,\"type\":\"audible\","
+                         "\"window\":1}\n"});
+}
+
+TEST_F(ElectronAppTest, APagesOwnUserAgentOutlastsItsSessionsAndTheFallback) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/",)"
+             R"("user_agent":"Mine/1"})");
+  app_->Take(R"({"type":"open_window","window":2,"url":"https://a.test/"})");
+  EXPECT_EQ(desk_.calls,
+            (Lines{"open https://a.test/ as com.anthropic.Claude as agent Mine/1",
+                   "open https://a.test/ as com.anthropic.Claude"}));
+  desk_.calls.clear();
+
+  app_->Take(R"({"type":"session_call","call":5,"session":"",)"
+             R"("method":"set_user_agent","user_agent":"Claude/1"})");
+  app_->Take(
+      R"({"type":"set_user_agent_fallback","user_agent":"Slack/4 Electron/45"})");
+
+  EXPECT_EQ(desk_.calls, Lines{"user agent 11 Claude/1"});
+}
+
+TEST_F(ElectronAppTest, APagesUserAgentGoesBackToItsSessionsWhenEmptied) {
+  Hello();
+  app_->Take(R"({"type":"session_call","call":5,"session":"",)"
+             R"("method":"set_user_agent","user_agent":"Claude/1"})");
+  app_->Take(R"({"type":"open_window","window":1,"url":"https://a.test/"})");
+  desk_.calls.clear();
+
+  app_->Take(
+      R"({"type":"set_page_user_agent","window":1,"user_agent":"Mine/1"})");
+  app_->Take(R"({"type":"set_page_user_agent","window":1,"user_agent":""})");
+
+  EXPECT_EQ(desk_.calls,
+            (Lines{"user agent 10 Mine/1", "user agent 10 Claude/1"}));
+  EXPECT_TRUE(desk_.asked.empty());
 }
 
 }  // namespace

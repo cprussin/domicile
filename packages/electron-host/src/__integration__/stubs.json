@@ -68,12 +68,6 @@
     "ServiceWorkers.getAllRunning": "always none, though the engine runs the app's service workers",
     "ServiceWorkers.getFromVersionID": "always null, as getAllRunning",
     "ServiceWorkers.getInfoFromVersionID": "always null, as getAllRunning",
-    "ServiceWorkers.getWorkerFromVersionID": "always nothing, as getAllRunning",
-    "WebContents.getUserAgent": "empty, where the session's agent applies",
-    "WebContents.isAudioMuted": "always false, as setAudioMuted",
-    "WebContents.isCurrentlyAudible": "always false, as setAudioMuted",
-    "WebContents.setAudioMuted": "does nothing: the engine has no mute for a page",
-    "WebContents.setIgnoreMenuShortcuts": "ignored, so the menu bar's shortcuts still fire",
-    "WebContents.setUserAgent": "does nothing: the engine sets agents per session"
+    "ServiceWorkers.getWorkerFromVersionID": "always nothing, as getAllRunning"
   }
 }

@@ -38,6 +38,7 @@
 #include "base/types/expected.h"
 #include "chrome/browser/domicile/domicile_browser_profiles.h"
 #include "chrome/browser/domicile/domicile_electron_page.h"
+#include "chrome/browser/domicile/domicile_electron_page_events.h"
 #include "chrome/browser/domicile/domicile_tab_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
@@ -193,6 +194,18 @@ void UseUserAgent(content::WebContents& contents,
   }
 }
 
+// Makes `guest` an Electron app's page, which reports to its app with
+// `reported` and loads as `user_agent`, its own (webContents.setUserAgent),
+// when it has one. After its session's user agent, which its own is over.
+void HearTheApp(WebViewGuest& guest,
+                const std::string& user_agent,
+                ElectronPageEvents::Reported reported) {
+  if (!user_agent.empty()) {
+    UseUserAgent(guest.contents(), user_agent);
+  }
+  ElectronPageEvents::Attach(guest, std::move(reported));
+}
+
 constexpr char kWindowsUserDataKey[] = "domicile_browser_windows";
 
 // Each browser window's page that finished loading, by the window's id. See
@@ -344,7 +357,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
       base::WeakPtr<ElectronSession> session,
       bool view,
       const std::string& title,
-      bool hidden) {
+      bool hidden,
+      const std::string& user_agent) {
     WebViewGuest* made = Make(
         [&](WebViewGuest& guest) {
           // An app, not a page: Energy Saver leaves it at full rate.
@@ -358,6 +372,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
           if (session && !session->user_agent().empty()) {
             UseUserAgent(guest.contents(), session->user_agent());
           }
+          HearTheApp(guest, user_agent, calls.reported);
           ElectronPage::Attach(guest.contents(), preload, arguments, node,
                                std::move(calls), std::move(session));
           // Its navigations and beforeunloads are the app's to decide on.
@@ -387,7 +402,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
                             ElectronPageCalls calls,
                             base::WeakPtr<ElectronSession> session,
                             const std::string& title,
-                            bool hidden) {
+                            bool hidden,
+                            const std::string& user_agent) {
     std::unique_ptr<WebViewGuest> guest =
         WebViewGuest::AdoptOpenedWindow(std::move(contents));
     guest->KeepFullFrameRate();
@@ -399,6 +415,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
     if (session && !session->user_agent().empty()) {
       UseUserAgent(guest->contents(), session->user_agent());
     }
+    HearTheApp(*guest, user_agent, calls.reported);
     ElectronPage::Attach(guest->contents(), preload, arguments, node,
                          std::move(calls), std::move(session));
     ElectronPage::FromWebContents(&guest->contents())->DecideFor(*guest);
@@ -1796,7 +1813,8 @@ std::optional<std::string> AdoptElectronWindow(
     ElectronPageCalls calls,
     base::WeakPtr<ElectronSession> session,
     const std::string& title,
-    bool hidden) {
+    bool hidden,
+    const std::string& user_agent) {
   DeskWindows* windows = ShellDeskWindows();
   if (windows == nullptr) {
     return std::nullopt;
@@ -1804,7 +1822,8 @@ std::optional<std::string> AdoptElectronWindow(
   // Every held page is one AskTheApp made.
   return windows->AdoptElectron(static_cast<HeldPage&>(*page).Take(), app_id,
                                 preload, arguments, node, std::move(calls),
-                                std::move(session), title, hidden);
+                                std::move(session), title, hidden,
+                                user_agent);
 }
 
 std::optional<std::string> OpenElectronWindow(
@@ -1819,14 +1838,16 @@ std::optional<std::string> OpenElectronWindow(
     base::WeakPtr<ElectronSession> session,
     bool view,
     const std::string& title,
-    bool hidden) {
+    bool hidden,
+    const std::string& user_agent) {
   DeskWindows* windows = ShellDeskWindows();
   if (windows == nullptr) {
     return std::nullopt;
   }
   return windows->OpenElectron(url, history, app_id, partition, preload,
                                arguments, node, std::move(calls),
-                               std::move(session), view, title, hidden);
+                               std::move(session), view, title, hidden,
+                               user_agent);
 }
 
 void SetElectronTitle(const std::string& id, const std::string& title) {

@@ -142,6 +142,7 @@ constexpr char kNodeInit[] = R"JS(
     try {
       Module._load(options.preload, null, false);
     } catch (error) {
+      options.preloadFailed(error);
       console.error(`Unable to load preload script: ${options.preload}`);
       console.error(error);
     }
@@ -249,7 +250,8 @@ std::unique_ptr<ElectronNodeEnvironment> ElectronNodeEnvironment::Start(
     const mojom::ElectronAppFacts& app,
     const mojom::ElectronNode& node,
     const std::vector<std::string>& arguments,
-    v8::Local<v8::Object> electron) {
+    v8::Local<v8::Object> electron,
+    v8::Local<v8::Function> preload_failed) {
   // The browser sends a Node page only to a renderer it started for one:
   // anything else is the engine's bug, and this one is sandboxed.
   CHECK(IsElectronNodeRenderer())
@@ -314,6 +316,7 @@ std::unique_ptr<ElectronNodeEnvironment> ElectronNodeEnvironment::Start(
   set("chromeVersion",
       gin::StringToV8(isolate, std::string(version_info::GetVersionNumber())));
   set("env", env);
+  set("preloadFailed", preload_failed);
   set("activate", v8::Function::New(context, &ElectronNodeEnvironment::Activate)
                       .ToLocalChecked());
 

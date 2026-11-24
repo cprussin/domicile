@@ -303,6 +303,8 @@ void ElectronApp::Take(std::string_view line) {
   } else if (const auto* fallback =
                  std::get_if<ElectronSetUserAgentFallback>(&*request)) {
     SetUserAgentFallback(*fallback);
+  } else if (auto* page = std::get_if<ElectronPageRequest>(&*request)) {
+    AskPage(std::move(*page));
   } else if (const auto* close = std::get_if<ElectronCloseWindow>(&*request)) {
     if (const std::optional<std::string> id = IdOf(close->window)) {
       desk_->AskToClose(*id);
@@ -455,11 +457,11 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
     return;
   }
   ElectronPageCalls calls = CallsFor(open.window);
-  const std::optional<std::string> id =
-      desk_->Open(open.url, open.history, hello_->app_id, *partition,
-                  open.preload, open.arguments, open.node, std::move(calls),
-                  SessionNamed(open.session).GetWeakPtr(), open.view,
-                  open.title, open.hidden);
+  const std::optional<std::string> id = desk_->Open(
+      open.url, open.history, hello_->app_id, *partition, open.preload,
+      open.arguments, open.node, std::move(calls),
+      SessionNamed(open.session).GetWeakPtr(), open.view, open.title,
+      open.hidden, open.user_agent);
   if (!id.has_value()) {
     send_.Run(
         ElectronWindowRefused(open.window, "there is no shell to open it in"));
@@ -469,7 +471,8 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
     windows_.emplace(open.window, Window{.id = *id,
                                          .title = std::string(),
                                          .session = open.session,
-                                         .view = open.view});
+                                         .view = open.view,
+                                         .user_agent = open.user_agent});
     send_.Run(ElectronWindowOpened(open.window));
   }
 }
@@ -528,7 +531,35 @@ ElectronPageCalls ElectronApp::CallsFor(ElectronWindow number) {
       .will_prevent_unload =
           base::BindRepeating(&ElectronApp::PageWillPreventUnload,
                               weak_factory_.GetWeakPtr(), number),
+      .reported = base::BindRepeating(&ElectronApp::PageReported,
+                                      weak_factory_.GetWeakPtr(), number),
   };
+}
+
+void ElectronApp::PageReported(ElectronWindow number,
+                               ElectronPageReport report) {
+  send_.Run(ElectronPageReported(number, report));
+}
+
+void ElectronApp::AskPage(ElectronPageRequest request) {
+  const std::optional<std::string> id = IdOf(request.window);
+  if (!id.has_value()) {
+    return;
+  }
+  if (const auto* agent =
+          std::get_if<ElectronSetPageUserAgent>(&request.action)) {
+    Window& window = windows_.at(request.window);
+    window.user_agent = agent->user_agent;
+    // None of its own is its session's again.
+    desk_->SetUserAgent(*id, window.user_agent.empty()
+                                 ? SessionNamed(window.session).user_agent()
+                                 : window.user_agent);
+    return;
+  }
+  if (const std::optional<std::string> why =
+          desk_->AskPage(*id, std::move(request.action))) {
+    send_.Run(ElectronWindowRefused(request.window, *why));
+  }
 }
 
 void ElectronApp::CallPage(ElectronPageCall call) {
@@ -622,7 +653,7 @@ void ElectronApp::AnswerWindowOpen(ElectronWindowOpenAnswer answer) {
   const std::optional<std::string> id = desk_->Adopt(
       std::move(asked.held), hello_->app_id, open.preload, open.arguments,
       open.node, CallsFor(open.window), SessionNamed(open.session).GetWeakPtr(),
-      open.title, open.hidden);
+      open.title, open.hidden, open.user_agent);
   if (!id.has_value()) {
     send_.Run(
         ElectronWindowRefused(open.window, "there is no shell to show it in"));
@@ -631,7 +662,8 @@ void ElectronApp::AnswerWindowOpen(ElectronWindowOpenAnswer answer) {
   windows_.emplace(open.window, Window{.id = *id,
                                        .title = std::string(),
                                        .session = open.session,
-                                       .view = false});
+                                       .view = false,
+                                       .user_agent = open.user_agent});
   send_.Run(ElectronWindowOpened(open.window));
 }
 
@@ -639,7 +671,9 @@ void ElectronApp::SetUserAgentFallback(
     const ElectronSetUserAgentFallback& fallback) {
   user_agent_fallback_ = fallback.user_agent;
   for (const auto& [number, window] : windows_) {
-    if (SessionNamed(window.session).user_agent_.empty()) {
+    // A page with its own keeps it, as in Electron.
+    if (window.user_agent.empty() &&
+        SessionNamed(window.session).user_agent_.empty()) {
       desk_->SetUserAgent(window.id, fallback.user_agent);
     }
   }
@@ -722,8 +756,9 @@ void ElectronApp::RunSessionCall(ElectronSessionCall call) {
     ElectronSession& session = SessionNamed(call.session);
     session.user_agent_ = user_agent;
     for (const auto& [number_of_window, window] : windows_) {
-      if (window.session == call.session) {
-        // Its own, or the app's when it has none, as a new window gets.
+      if (window.session == call.session && window.user_agent.empty()) {
+        // Its own, or the app's when it has none, as a new window gets. A
+        // page with its own keeps it, as in Electron.
         desk_->SetUserAgent(window.id, session.user_agent());
       }
     }

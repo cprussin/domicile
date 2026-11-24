@@ -414,6 +414,21 @@ describe("the engine's word on whether the app listens", () => {
     ]);
   });
 
+  it("still hears of will-navigate listeners after the app removes its newListener ones", () => {
+    const { sent, window } = opened();
+    const listener = () => undefined;
+
+    window.webContents.removeAllListeners("newListener");
+    window.webContents.on("will-navigate", listener);
+    window.webContents.removeAllListeners("removeListener");
+    window.webContents.off("will-navigate", listener);
+
+    expect(sent).toEqual([
+      { listening: true, type: "navigation_listen", window: 1 },
+      { listening: false, type: "navigation_listen", window: 1 },
+    ]);
+  });
+
   it("tells it as the page opens of a listener from before", () => {
     const { BrowserWindow, sent } = setUp();
     const window = new BrowserWindow();

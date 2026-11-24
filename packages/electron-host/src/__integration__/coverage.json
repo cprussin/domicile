@@ -66,7 +66,6 @@
   "WebContents.saveVideoFrameAs missing",
   "WebContents.scrollToBottom missing",
   "WebContents.scrollToTop missing",
-  "WebContents.sendInputEvent missing",
   "WebContents.setDevToolsTitle missing",
   "WebContents.setDevToolsWebContents missing",
   "WebContents.setFrameRate missing",

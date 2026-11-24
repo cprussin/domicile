@@ -1849,6 +1849,9 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
 bool WebViewGuest::HandleKeyboardEvent(
     content::WebContents* source,
     const input::NativeWebKeyboardEvent& event) {
+  if (app_page_ && app_page_->IgnoresMenuShortcuts()) {
+    return false;
+  }
   const int modifiers = event.GetModifiers();
 
   // Includes auto-repeats (e.g. holding Ctrl+Plus zooms repeatedly); the event
@@ -1883,7 +1886,40 @@ bool WebViewGuest::HandleKeyboardEvent(
 }
 
 void WebViewGuest::ContentsZoomChange(bool zoom_in) {
-  client_->ZoomRequested(zoom_in);
+  if (app_page_) {
+    app_page_->ZoomAsked(zoom_in);
+  } else {
+    client_->ZoomRequested(zoom_in);
+  }
+}
+
+bool WebViewGuest::DomicileHoldKeyboardEvent(
+    content::WebContents* source,
+    content::RenderWidgetHost* widget,
+    const input::NativeWebKeyboardEvent& event) {
+  return app_page_ && app_page_->HoldsKeyboardEvent(widget, event);
+}
+
+void WebViewGuest::DomicileCursorChanged(content::WebContents* source,
+                                         content::RenderWidgetHost* widget,
+                                         const ui::Cursor& cursor) {
+  if (app_page_) {
+    app_page_->CursorChanged(widget, cursor);
+  }
+}
+
+void WebViewGuest::UpdatePreferredSize(content::WebContents* source,
+                                       const gfx::Size& pref_size) {
+  if (app_page_) {
+    app_page_->PreferredSizeChanged(pref_size);
+  }
+}
+
+void WebViewGuest::SetContentsBounds(content::WebContents* source,
+                                     const gfx::Rect& bounds) {
+  if (app_page_) {
+    app_page_->ContentsBoundsAsked(bounds);
+  }
 }
 
 bool WebViewGuest::HandleContextMenu(
@@ -2408,6 +2444,9 @@ void WebViewGuest::ReportTargetUrl(const GURL& url) {
   if (url != reported_target_url_) {
     reported_target_url_ = url;
     client_->TargetUrlChanged(url);
+    if (app_page_) {
+      app_page_->TargetUrlChanged(url);
+    }
   }
 }
 
@@ -3418,6 +3457,10 @@ void WebViewGuest::DecideNavigationsWith(NavigationDeciding deciding) {
 
 void WebViewGuest::DecideUnloadsWith(UnloadDeciding deciding) {
   unload_deciding_ = std::move(deciding);
+}
+
+void WebViewGuest::ReportToApp(base::WeakPtr<AppPage> page) {
+  app_page_ = std::move(page);
 }
 
 void WebViewGuest::KeepFullFrameRate() {

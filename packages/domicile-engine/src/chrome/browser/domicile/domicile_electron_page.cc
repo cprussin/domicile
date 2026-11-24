@@ -875,6 +875,13 @@ void ElectronPage::PortClosed(const std::string& port) {
   }
 }
 
+void ElectronPage::PreloadFailed(const std::string& name,
+                                 const std::string& message,
+                                 const std::string& stack) {
+  calls_.reported.Run(
+      ElectronPreloadError{.name = name, .message = message, .stack = stack});
+}
+
 std::optional<base::Value> ElectronPage::JsonFrom(const std::string& json) {
   std::optional<base::Value> value =
       base::JSONReader::Read(json, base::JSON_PARSE_RFC);

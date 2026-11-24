@@ -119,4 +119,9 @@ interface ElectronFrameHost {
 
   // The page closed port `port`.
   PortClosed(string port);
+
+  // The window's preload threw `name`'s error, or did not compile (a
+  // SyntaxError): webContents' preload-error. `stack` is empty when the
+  // thrown value had none.
+  PreloadFailed(string name, string message, string stack);
 };

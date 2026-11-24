@@ -283,6 +283,34 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
     window if allowed (`ElectronDesk::Adopt`), in the opener's session.
     Content has started its first navigation by then, so its preload and
     its session's user agent apply from its next document.
+- **What a page reports** reaches its `webContents`
+  ([`electron_page_reports.h`](../../packages/domicile-engine/src/components/domicile/browser/electron_page_reports.h),
+  `ElectronPageEvents` in
+  [`domicile_electron_page_events.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_electron_page_events.h),
+  `page-events.ts` in the host):
+  - `console-message`, `preload-error`, `media-started-playing`,
+    `media-paused`, `audio-state-changed` (and `isCurrentlyAudible`),
+    `page-favicon-updated`, `update-target-url`, `zoom-changed`,
+    `did-change-theme-color`, `cursor-changed`, `preferred-size-changed`
+    (with `webPreferences.enablePreferredSizeMode`) and
+    `content-bounds-updated`, whose window the desktop still places.
+  - `unresponsive`, `responsive`, `enter-html-full-screen` and
+    `leave-html-full-screen` on its `BrowserWindow` too.
+  - A Ctrl+wheel the page leaves is `zoom-changed` for the app, and the
+    shell zooms nothing, as in Electron.
+- **Input:** while the app listens for `before-input-event`, each key-down
+  and key-up waits in its widget for the app's answer (`before_input`,
+  `input_answer`), after the desktop's chords, which never reach the app.
+  A prevented key-down takes its characters with it (patch 0267,
+  `WebContentsDelegate::DomicileHoldKeyboardEvent`). `before-mouse-event`
+  holds the main frame's mouse events the same way, and `input-event`
+  hears what reached the page. `sendInputEvent` sends a key, mouse event
+  or wheel to the main frame; a key it sends reaches the page only, not
+  the desktop's chords or the menu bar.
+- **A page's own settings:** `setAudioMuted`, `setUserAgent` (over its
+  session's, from the first load when set before it), and
+  `setIgnoreMenuShortcuts`, which keeps every unhandled key from the shell:
+  the menu bar's accelerators and the shell's page-first bindings alike.
 
 ### Page calls
 
@@ -765,6 +793,7 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] engine: page calls (`page_call`, `page_result`, `devtools_event`): `insertCSS`, `executeJavaScriptInIsolatedWorld`, `capturePage`, `printToPDF`, device emulation, frame subscription and the rest of "Page calls", and `win.setEnabled` and modal windows (`set_ignore_input`)
 - [x] engine: the Edit menu's commands and `replace` at the page's focus (`edit`, `replace`), and find in page (`find_in_page`, `found_in_page`, `stop_find_in_page`), with the Edit menu's roles (`guard-electron-socket.sh`)
 - [x] engine: a page's context menus reach its app as `context-menu` (`context_menu`), and the shell draws none for it
+- [x] engine and `electron-host`: a page's console, preload errors, hangs, fullscreen, media, sound, icons, link, zoom, theme color, cursor and sizes reach its `webContents`; `before-input-event` and `before-mouse-event` hold input for the app, `input-event` and `sendInputEvent`; a page's own mute, user agent and menu shortcuts (`electron_page_reports.h`, patch 0267)
 - [ ] engine: a message box before any window has a page, which Element shows when there's no keyring and hands itself back on
 - [ ] phase 2, engine: Electron's Node built into the engine, and the engine run as Node
 - [x] phase 2, engine: Node in the pages of windows that ask for it (`guard-electron-node.sh`)

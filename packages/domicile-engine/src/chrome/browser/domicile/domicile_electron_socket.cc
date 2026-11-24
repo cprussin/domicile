@@ -33,6 +33,7 @@
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_electron_page.h"
 #include "chrome/browser/domicile/domicile_electron_page_control.h"
+#include "chrome/browser/domicile/domicile_electron_page_events.h"
 #include "chrome/browser/domicile/domicile_electron_storage.h"
 #include "components/domicile/browser/browser_window_listing.h"
 #include "components/domicile/browser/electron_app.h"
@@ -93,10 +94,12 @@ class ChromeElectronDesk final : public ElectronDesk {
                                   base::WeakPtr<ElectronSession> session,
                                   bool view,
                                   const std::string& title,
-                                  bool hidden) override {
+                                  bool hidden,
+                                  const std::string& user_agent) override {
     return OpenElectronWindow(url, history, app_id, partition, preload,
                               arguments, node, std::move(calls),
-                              std::move(session), view, title, hidden);
+                              std::move(session), view, title, hidden,
+                              user_agent);
   }
   std::optional<std::string> Adopt(std::unique_ptr<ElectronHeldPage> page,
                                    const std::string& app_id,
@@ -106,10 +109,11 @@ class ChromeElectronDesk final : public ElectronDesk {
                                    ElectronPageCalls calls,
                                    base::WeakPtr<ElectronSession> session,
                                    const std::string& title,
-                                   bool hidden) override {
+                                   bool hidden,
+                                   const std::string& user_agent) override {
     return AdoptElectronWindow(std::move(page), app_id, preload, arguments,
                                node, std::move(calls), std::move(session),
-                               title, hidden);
+                               title, hidden, user_agent);
   }
   void SetViews(const std::string& id,
                 std::vector<ElectronDeskView> views) override {
@@ -239,6 +243,17 @@ class ChromeElectronDesk final : public ElectronDesk {
     } else {
       std::move(done).Run(base::unexpected("the window's page is gone"));
     }
+  }
+  std::optional<std::string> AskPage(const std::string& id,
+                                     ElectronPageAction action) override {
+    content::WebContents* contents = BrowserWindowContents(id);
+    if (contents == nullptr) {
+      return "the window's page is gone";
+    }
+    // Every Electron window's page has them; see OpenElectronWindow.
+    ElectronPageEvents* events = ElectronPageEvents::FromWebContents(contents);
+    CHECK(events) << "browser window " << id << " is no Electron app's";
+    return events->Ask(std::move(action));
   }
   void GetCookies(
       const WebViewPartition& partition,

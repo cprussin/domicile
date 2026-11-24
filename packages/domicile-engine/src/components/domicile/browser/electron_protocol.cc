@@ -1268,6 +1268,7 @@ base::expected<ElectronRequest, ElectronRefusal> ParseOpenWindow(
   const base::Value* hidden = request.Find("hidden");
   const base::Value* node = request.Find("node");
   const base::Value* arguments = request.Find("arguments");
+  const base::Value* user_agent = request.Find("user_agent");
   base::expected<std::string, std::string> session =
       SessionIn(request, /*optional=*/true);
   std::optional<base::expected<ElectronNode, std::string>> node_in;
@@ -1305,6 +1306,8 @@ base::expected<ElectronRequest, ElectronRefusal> ParseOpenWindow(
     return Refuse(
         "a view has no title or hidden of its own: its window has them",
         window);
+  } else if (user_agent != nullptr && !user_agent->is_string()) {
+    return Refuse("\"user_agent\" must be a string", window);
   } else if (!session.has_value()) {
     return Refuse(std::move(session.error()), window);
   }
@@ -1319,7 +1322,24 @@ base::expected<ElectronRequest, ElectronRefusal> ParseOpenWindow(
       .session = std::move(*session),
       .view = view != nullptr && view->GetBool(),
       .title = title ? title->GetString() : std::string(),
-      .hidden = hidden != nullptr && hidden->GetBool()};
+      .hidden = hidden != nullptr && hidden->GetBool(),
+      .user_agent = user_agent ? user_agent->GetString() : std::string()};
+}
+
+// One of electron_page_reports.h's requests of a window's page.
+base::expected<ElectronRequest, ElectronRefusal> ParsePageRequest(
+    std::string_view type,
+    const base::DictValue& request) {
+  const base::expected<ElectronWindow, std::string> window = WindowIn(request);
+  if (!window.has_value()) {
+    return Refuse(window.error());
+  }
+  base::expected<ElectronPageAction, std::string> action =
+      ParseElectronPageAction(type, request);
+  if (!action.has_value()) {
+    return Refuse(std::move(action.error()), *window);
+  }
+  return ElectronPageRequest{.window = *window, .action = std::move(*action)};
 }
 
 // An open_window's "history", in which the page shows `url`.
@@ -1468,6 +1488,8 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
       return Refuse("\"user_agent\" must be a string");
     }
     return ElectronSetUserAgentFallback{.user_agent = *user_agent};
+  } else if (IsElectronPageRequest(*type)) {
+    return ParsePageRequest(*type, *request);
   } else if (!IsWindowRequest(*type)) {
     return Refuse(base::StrCat({"no request is named ", *type}));
   }

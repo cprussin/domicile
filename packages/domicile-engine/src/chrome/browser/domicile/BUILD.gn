@@ -62,6 +62,8 @@ source_set("domicile") {
     "domicile_electron_page.h",
     "domicile_electron_page_control.cc",
     "domicile_electron_page_control.h",
+    "domicile_electron_page_events.cc",
+    "domicile_electron_page_events.h",
     "domicile_electron_storage.cc",
     "domicile_electron_storage.h",
     "domicile_electron_web_request.cc",
@@ -151,6 +153,8 @@ source_set("domicile") {
     "//components/domicile:electron_app",
     # Marks the downloads an Electron app's pages start as the app's.
     "//components/domicile:electron_downloads",
+    # An Electron app's page's input, as its webContents hears it.
+    "//components/domicile:electron_input",
     # The engine's user agent and version, which Electron's user agent names.
     "//components/embedder_support:user_agent",
     "//components/version_info",

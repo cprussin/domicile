@@ -235,6 +235,9 @@ class ElectronPage final : public content::WebContentsObserver,
   void PostToPort(const std::string& port,
                   const std::string& data_json) override;
   void PortClosed(const std::string& port) override;
+  void PreloadFailed(const std::string& name,
+                     const std::string& message,
+                     const std::string& stack) override;
 
  private:
   friend class content::WebContentsUserData<ElectronPage>;

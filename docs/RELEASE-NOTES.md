@@ -76,6 +76,7 @@ Grouped `--help`, `domicile help <command>` for usage and examples, and man page
 - A shell's `console.error` is an error in the desktop's logs, shown by default, and `console.debug` shows at `domicile set-log-level debug shell`. `logger("notifications")` from `@domicile-desktop/sdk/logger` names the part of the shell that said each line, as `DOMICILE_SUBSYSTEM` in the journal. [A shell's logs](LOGGING.md#a-shells-logs)
 - `domicile set-log-level trace` logs enough to debug from: every message between the desktop and the shell, each commit and frame, each configure, popups, monitors and each control command, each naming its window, surface or display. [Levels](LOGGING.md#levels)
 - `domicile logs` prints every part's logs, wherever they went, and `domicile export-logs` saves them to one file to attach to a bug, with web addresses and window titles hidden. [Reading them](LOGGING.md#reading-them) · [`domicile export-logs`](CLI.md#domicile-export-logs---show-everything-file)
+- An Electron app hears its pages' console, preload errors, hangs, fullscreen, sound, icons, cursor and sizes, can cancel their keys and mouse events with `before-input-event` and `before-mouse-event`, sends them input with `sendInputEvent`, and mutes them, sets their user agent and turns off their menu shortcuts. [Design](architecture/ELECTRON-APPS.md#windows)
 - Chromium 160. [#2023](https://github.com/cprussin/domicile/pull/2023)
 
 ### Breaking changes
