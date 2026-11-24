@@ -129,9 +129,11 @@ const toastStyles = css({
   pointerEvents: "none",
 });
 
-// Rises in once per showing. A frosted card like `Toaster`'s.
+// Rises in once per showing, never interrupted, so a keyframe on the spring.
+// A frosted card like `Toaster`'s.
 const panelStyles = hstack({
-  animation: "levelToastEnter {durations.normal} {easings.outQuart}",
+  animation:
+    "levelToastEnter {durations.springs.smooth} {easings.springs.smooth}",
   backdropFilter: "blur({spacing.4}) saturate(160%)",
   backgroundColor: "color-mix(in oklab, {colors.card} 85%, transparent)",
   border: "1px solid color-mix(in oklab, {colors.foreground} 12%, transparent)",

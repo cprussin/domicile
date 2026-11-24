@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import {
   act,
   fireEvent,
@@ -7,6 +8,7 @@ import {
   waitForElementToBeRemoved,
 } from "@testing-library/react";
 
+import { springTransition } from "../__test__/spring-transition";
 import { createToastManager, Toaster } from "./Toaster";
 
 /** A toaster over `manager`, each toast drawn as its title and description. */
@@ -120,6 +122,58 @@ describe(Toaster, () => {
       });
 
       await waitForElementToBeRemoved(() => screen.queryByText("Downloaded"));
+    });
+  });
+
+  describe("motion", () => {
+    loadEmittedStylesheet(
+      document,
+      new URL("../../styled-system/styles.css", import.meta.url),
+    );
+
+    /** The root of a toast titled "Saved", once it is drawn. */
+    const shown = async (): Promise<HTMLElement> => {
+      const manager = createToastManager();
+      toaster(manager);
+      act(() => {
+        manager.add({ title: "Saved" });
+      });
+      const root = (await screen.findByText("Saved")).closest("[data-toast]");
+      if (root instanceof HTMLElement) {
+        return root;
+      } else {
+        throw new Error("the toast has no root");
+      }
+    };
+
+    it("arrives and restacks on the smooth spring", async () => {
+      expect(globalThis.getComputedStyle(await shown()).transition).toContain(
+        springTransition("transform", "smooth"),
+      );
+    });
+
+    it("leaves on the snappy spring when it times out or is closed", async () => {
+      const root = await shown();
+      root.setAttribute("data-ending-style", "");
+      expect(globalThis.getComputedStyle(root).transition).toContain(
+        springTransition("transform", "snappy"),
+      );
+    });
+
+    it("keeps the speed it was swiped at as it leaves", async () => {
+      const root = await shown();
+      fireEvent.pointerDown(root, { button: 0, clientX: 10, clientY: 10 });
+      fireEvent.pointerMove(root, { clientX: 40, clientY: 10 });
+      fireEvent.pointerMove(root, { clientX: 90, clientY: 10 });
+      fireEvent.pointerUp(root, { clientX: 90, clientY: 10 });
+      expect(root.style.getPropertyValue("--toast-fling")).toMatch(/^\d+ms$/);
+
+      root.style.setProperty("--toast-fling", "120ms");
+      root.setAttribute("data-ending-style", "");
+      root.setAttribute("data-swipe-direction", "right");
+      expect(globalThis.getComputedStyle(root).transition).toContain(
+        "transform 120ms linear",
+      );
     });
   });
 

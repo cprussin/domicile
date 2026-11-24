@@ -3,6 +3,7 @@ import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-st
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { springTransition } from "../__test__/spring-transition";
 import { Button } from "../Button/Button";
 import { PanelFooter } from "../PanelFooter/PanelFooter";
 import { List, ListRow } from "./ListRow";
@@ -79,6 +80,24 @@ describe(ListRow, () => {
 
       expect(toggle).toHaveAttribute("aria-expanded", "true");
       expect(screen.getByText("10.42.0.17")).toBeVisible();
+    });
+
+    // Its height opens at once; the reveal and fade run on the compositor.
+    it("reveals its drawer with a clip on the smooth spring, not its height", async () => {
+      render(
+        <List>
+          <ListRow disclosure="Details" label="Centar">
+            <span>10.42.0.17</span>
+          </ListRow>
+        </List>,
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Details" }));
+
+      // The collapsible panel, around the drawer's padded box.
+      const panel = screen.getByText("10.42.0.17").parentElement
+        ?.parentElement as Element;
+      const { transition } = globalThis.getComputedStyle(panel);
+      expect(transition).toBe(springTransition("clip-path", "smooth"));
     });
 
     it("pads its drawer tightly, centering a footer between its rule and the tile's edge, inset from its side", async () => {

@@ -6,11 +6,13 @@ import { css } from "../styled-system/css";
 import { LauncherButton } from "./LauncherButton";
 
 describe("LauncherButton", () => {
-  it("opens the launcher", async () => {
-    await new Promise<void>((resolve) => {
+  // The launcher springs from the button that opened it.
+  it("opens the launcher from itself", async () => {
+    const from = await new Promise<Element>((resolve) => {
       render(<LauncherButton onOpen={resolve} />);
       fireEvent.click(screen.getByRole("button", { name: "Launcher" }));
     });
+    expect(from).toBe(screen.getByRole("button", { name: "Launcher" }));
   });
 
   // Four squares are the workspace switcher's overview button.

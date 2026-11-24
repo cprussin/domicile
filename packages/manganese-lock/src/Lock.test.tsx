@@ -10,6 +10,7 @@ import { UnlockRefusal } from "@domicile-desktop/sdk/system";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { PropsWithChildren } from "react";
+import { css } from "../styled-system/css";
 import { Lock } from "./Lock";
 import type { Refused } from "./useLocked";
 
@@ -79,6 +80,28 @@ describe("Lock", () => {
     expect(
       document.querySelector("img[data-lock-picture]")?.getAttribute("src"),
     ).toBe("blob:moon");
+  });
+
+  it("springs the clock and field up as the desk shuts, and back as it opens", () => {
+    lock();
+
+    const content = screen
+      .getByLabelText("Passphrase")
+      .closest("[data-lock-content]");
+    expect(content?.className).toContain(
+      css({
+        transition:
+          "opacity {durations.slowest} {easings.out}, transform {durations.springs.smooth} {easings.springs.smooth}",
+      }),
+    );
+    expect(content?.className).toContain(
+      css({
+        "[inert] > &": {
+          transition:
+            "opacity {durations.slow} {easings.in}, transform {durations.springs.snappy} {easings.springs.snappy}",
+        },
+      }),
+    );
   });
 
   it("covers the desktop and asks for the passphrase", () => {

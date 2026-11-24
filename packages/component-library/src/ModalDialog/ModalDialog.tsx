@@ -6,15 +6,22 @@ import type {
   ReactElement,
   ReactNode,
 } from "react";
-import { Fragment, useState } from "react";
+import { createContext, Fragment, useContext, useState } from "react";
 import { css, cva } from "../../styled-system/css";
 import { center, flex, hstack } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
 import type { ExtendProps } from "../extend-props";
 import { useScreenRegion } from "../Screen/DisplayProvider";
+import { useSpringFrom } from "./useSpringFrom";
 import "../stylesheet";
 
 export const { createHandle } = BaseDialog;
+
+/**
+ * What dialogs inside spring from when they name no `origin`, such as the
+ * window that asked for them.
+ */
+export const DialogOrigin = createContext<Element | undefined>(undefined);
 
 /**
  * Where in the viewport the popup sits. Use `top` for launchers, command
@@ -50,6 +57,12 @@ type Props = ExtendProps<
     /** Whether to draw the corner close button. */
     closeButton?: boolean | undefined;
     footer?: ReactNode | undefined;
+    /**
+     * What the popup springs from and back into, such as the window that
+     * asked or the button that opened it. Without one, `DialogOrigin`'s;
+     * without that, it grows in place.
+     */
+    origin?: Element | undefined;
     placement?: Placement | undefined;
     /**
      * Whether to draw the popup. Turn it off to draw only the backdrop, e.g.
@@ -83,6 +96,7 @@ const ModalDialogComponent = ({
   children,
   closeButton = true,
   footer,
+  origin: ownOrigin,
   placement = "center",
   popup = true,
   returnFocus = true,
@@ -96,6 +110,9 @@ const ModalDialogComponent = ({
 }: Props) => {
   const region = useScreenRegion(screen);
   const openings = useOpenings(rootProps.open);
+  const contextOrigin = useContext(DialogOrigin);
+  const origin = ownOrigin ?? contextOrigin;
+  const springFrom = useSpringFrom(origin);
   return (
     <BaseDialog.Root {...rootProps}>
       {trigger !== undefined && <BaseDialog.Trigger render={trigger} />}
@@ -122,11 +139,13 @@ const ModalDialogComponent = ({
             to tests. */}
             <BaseDialog.Popup
               className={popupStyles}
+              data-origin={origin === undefined ? undefined : ""}
               data-placement={placement}
               data-size={size}
               data-surface={surface}
               finalFocus={returnFocus}
               onKeyDown={moveFooterFocus}
+              ref={springFrom}
             >
               {title !== undefined && titleHidden && (
                 <BaseDialog.Title className={hiddenTitleStyles}>
@@ -248,16 +267,18 @@ const viewportStyles = center({
   zIndex: "modal",
 });
 
+// base-ui's attributes rather than `_starting`: the origin is measured as the
+// popup mounts, which would spend `@starting-style` before it is known. No
+// transition while starting, so setting the origin jumps there.
 const popupStyles = flex({
-  _starting: {
-    opacity: 0,
-    transform: "translateY({spacing.3}) scale(0.96)",
-  },
   "&[data-ending-style]": {
     opacity: 0,
     transform: "translateY({spacing.2}) scale(0.98)",
     transition:
-      "opacity {durations.fast} {easings.in}, transform {durations.fast} {easings.in}",
+      "opacity {durations.fast} {easings.in}, transform {durations.springs.snappy} {easings.springs.snappy}",
+  },
+  "&[data-origin]:is([data-starting-style], [data-ending-style])": {
+    transform: "translate(var(--origin-x), var(--origin-y)) scale(0.5)",
   },
   // Replaces the start auto margin with an offset relative to the screen.
   "&[data-placement=top]": {
@@ -269,6 +290,11 @@ const popupStyles = flex({
   },
   "&[data-size=xl]": {
     inlineSize: "min({spacing.320}, 92cqw)",
+  },
+  "&[data-starting-style]": {
+    opacity: 0,
+    transform: "translateY({spacing.3}) scale(0.96)",
+    transition: "none",
   },
   "&[data-surface=glass]": {
     _before: {
@@ -308,7 +334,7 @@ const popupStyles = flex({
   position: "relative",
   transform: "translateY(0) scale(1)",
   transition:
-    "opacity {durations.normal} {easings.out}, transform {durations.normal} {easings.out}",
+    "opacity {durations.normal} {easings.out}, transform {durations.springs.smooth} {easings.springs.smooth}",
 });
 
 // The inline end clears the close button when there is one. Values are

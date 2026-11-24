@@ -1,9 +1,11 @@
 import { describe, expect, it, mock } from "bun:test";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useMemo } from "react";
 import { flushSync } from "react-dom";
 
+import { springTransition } from "../__test__/spring-transition";
 import { Button } from "../Button/Button";
 import { Input } from "../Input/Input";
 import { DisplayProvider } from "../Screen/DisplayProvider";
@@ -92,6 +94,41 @@ describe(ModalDialog, () => {
         </ModalDialog>,
       );
       expect(screen.getByRole("dialog")).toHaveAttribute("data-size", "lg");
+    });
+
+    describe("motion", () => {
+      loadEmittedStylesheet(
+        document,
+        new URL("../../styled-system/styles.css", import.meta.url),
+      );
+
+      it("springs in on the smooth spring", () => {
+        render(<ModalDialog open>Body</ModalDialog>);
+        expect(
+          globalThis.getComputedStyle(screen.getByRole("dialog")).transition,
+        ).toContain(springTransition("transform", "smooth"));
+      });
+
+      it("springs from the middle of the origin it is given", () => {
+        const origin = document.createElement("button");
+        origin.getBoundingClientRect = () =>
+          DOMRect.fromRect({ height: 20, width: 40, x: 100, y: 10 });
+        render(
+          <ModalDialog open origin={origin}>
+            Body
+          </ModalDialog>,
+        );
+        // happy-dom lays the popup out at (0, 0) with no size.
+        const popup = screen.getByRole("dialog");
+        expect(popup).toHaveAttribute("data-origin");
+        expect(popup.style.getPropertyValue("--origin-x")).toBe("120px");
+        expect(popup.style.getPropertyValue("--origin-y")).toBe("20px");
+      });
+
+      it("grows from its own middle without an origin", () => {
+        render(<ModalDialog open>Body</ModalDialog>);
+        expect(screen.getByRole("dialog")).not.toHaveAttribute("data-origin");
+      });
     });
 
     it("renders the footer when provided", () => {

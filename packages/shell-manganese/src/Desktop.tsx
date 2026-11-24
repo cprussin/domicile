@@ -257,6 +257,9 @@ export const Desktop = ({
   // The launcher's pick, held until it has closed and the screen shows it
   // gone, so nothing it opens sees it. A screenshot app would shoot it.
   const [picked, setPicked] = useState<Launch | undefined>();
+  // The bar button that opened the launcher, for it to spring from; none
+  // from a key.
+  const [launcherOrigin, setLauncherOrigin] = useState<Element | undefined>();
   // Whether an app opens a file, asked before the launcher opens one.
   const opensFile = useCallback(
     async (path: string) =>
@@ -597,6 +600,7 @@ export const Desktop = ({
   // The panels' callbacks and the lock screen's bar, memoized so a panel
   // redraws only when what it shows changes.
   const launcherClosed = useCallback(() => {
+    setLauncherOrigin(undefined);
     if (picked !== undefined) {
       setPicked(undefined);
       afterAFramePainted(() => {
@@ -686,7 +690,8 @@ export const Desktop = ({
   // only when what it reads changes.
   const launcherControl = useMemo(
     () => ({
-      toggle: () => {
+      toggle: (from?: Element) => {
+        setLauncherOrigin(from);
         act(WindowAction.LauncherToggled());
       },
     }),
@@ -906,6 +911,7 @@ export const Desktop = ({
           open={windows.launcherOpen}
           opening={opening}
           opens={opensFile}
+          origin={launcherOrigin}
           preview={preview}
           screen={windows.focused}
           search={search}

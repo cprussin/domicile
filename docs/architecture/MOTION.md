@@ -198,7 +198,7 @@ a shell can build each.
 | Slide-overs | slide from the edge | spring | none |
 | File picker | fade, rise, scale 0.96 | spring from the asking window | none |
 | Screenshot / screencast region picker | fade | dim fades in, selection snaps with a spring | none |
-| Recording toolbar | ping ring | spring in from the top edge | none |
+| Recording toolbar | ping ring | spring in from the screen edge it sits at | none |
 | Toasts and level toasts | slide in, swipe out | spring, swipe follows velocity | none |
 | Notification drawer | rows slide out, `min-block-size` closes (main thread) | spring, closing height as a transform | none |
 | Context menus, selects, tooltips | fade | fade plus a 2px rise from the anchor | none |
@@ -234,14 +234,14 @@ Overview:
 
 Shell surfaces:
 
-- [ ] `Popover` and bar panels grow from their trigger
-- [ ] `ModalDialog`, `PageModal`, file picker and launcher spring from their
+- [x] `Popover` and bar panels grow from their trigger
+- [x] `ModalDialog`, `PageModal`, file picker and launcher spring from their
       origin
-- [ ] slide-overs, toasts, level toasts on springs; swipe velocity
+- [x] slide-overs, toasts, level toasts on springs; swipe velocity
 - [ ] notification drawer close as a transform
-- [ ] region picker and recording toolbar
-- [ ] context menus, selects, tooltips
-- [ ] lock entrance; workspace switcher highlight
+- [x] region picker and recording toolbar
+- [x] context menus, selects, tooltips
+- [x] lock entrance; workspace switcher highlight
 
 Shader primitive (engine):
 

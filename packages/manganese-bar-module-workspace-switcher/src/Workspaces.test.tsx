@@ -101,7 +101,7 @@ describe("Workspaces", () => {
       );
     });
 
-    it("slides with a small bounce", () => {
+    it("slides on the bouncy spring", () => {
       // The copy reaches past both ends of the row, so a bounce past the
       // first or last chip is not cut flat.
       const { highlight } = switcher();
@@ -112,7 +112,7 @@ describe("Workspaces", () => {
       expect(highlight().className).toContain(
         css({
           transition: `
-            clip-path {durations.slower} {easings.outBack},
+            clip-path {durations.springs.bouncy} {easings.springs.bouncy},
             opacity {durations.fast} {easings.out}
           `,
         }),

@@ -79,10 +79,24 @@ export const Tooltip = ({
 
 const positionerStyles = css({ zIndex: "modal" });
 
+// Fades in rising off its anchor by 2px. base-ui's attributes instead of
+// Panda's `_starting`, as in `Popover`.
 const popupStyles = css({
-  "&[data-ending-style]": { opacity: 0 },
-  // base-ui's attribute instead of Panda's `_starting`, as in `Popover`.
-  "&[data-starting-style]": { opacity: 0 },
+  "&:is([data-starting-style], [data-ending-style])": {
+    opacity: 0,
+    transform: "translateY(calc(-1 * {spacing.0.5}))",
+  },
+  "&:is([data-starting-style], [data-ending-style]):is([data-side=left], [data-side=inline-start])":
+    {
+      transform: "translateX({spacing.0.5})",
+    },
+  "&:is([data-starting-style], [data-ending-style]):is([data-side=right], [data-side=inline-end])":
+    {
+      transform: "translateX(calc(-1 * {spacing.0.5}))",
+    },
+  "&:is([data-starting-style], [data-ending-style])[data-side=top]": {
+    transform: "translateY({spacing.0.5})",
+  },
   // As `Popover`'s pill, so a bar's tooltips match its panels.
   "&[data-tone=overPhoto]": {
     backdropFilter: "blur({spacing.3})",
@@ -105,5 +119,7 @@ const popupStyles = css({
   opacity: 1,
   paddingBlock: 1.5,
   paddingInline: 2.5,
-  transition: "opacity {durations.fast} {easings.out}",
+  transform: "none",
+  transition:
+    "opacity {durations.fast} {easings.out}, transform {durations.fast} {easings.out}",
 });

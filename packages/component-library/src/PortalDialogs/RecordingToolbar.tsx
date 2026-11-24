@@ -155,8 +155,11 @@ const regionStyles = css({
 });
 
 // Its own stacking context and group, or Element Capture will not leave it
-// out.
+// out. Springs in from the edge of the screen it sits at.
 const toolbarStyles = hstack({
+  _starting: {
+    transform: "translateX(-50%) translateY(calc(100% + {spacing.10}))",
+  },
   backgroundColor: "card",
   border: "1px solid {colors.border}",
   borderRadius: "full",
@@ -174,6 +177,7 @@ const toolbarStyles = hstack({
   pointerEvents: "auto",
   position: "absolute",
   transform: "translateX(-50%)",
+  transition: "transform {durations.springs.smooth} {easings.springs.smooth}",
 });
 
 const dotStyles = css.raw({

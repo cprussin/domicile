@@ -184,6 +184,7 @@ export const RegionPicker = ({
         <div
           aria-label="Selected area"
           className={selectedStyles}
+          data-grabbing={grab === undefined ? undefined : ""}
           onPointerDown={(event) => {
             event.stopPropagation();
             setGrab(Grab.Inside(pointAt(event), selected));
@@ -307,7 +308,10 @@ const selectedStyles = css({
   position: "absolute",
 });
 
+// Small while the area is drawn or dragged, then snapping out on a spring
+// when it is let go.
 const cornerStyles = css({
+  "[data-grabbing] > &": { transform: "scale(0.5)" },
   "&[data-corner=bottom-left]": {
     cursor: "nesw-resize",
     insetBlockEnd: -1.5,
@@ -334,10 +338,16 @@ const cornerStyles = css({
   borderRadius: "xs",
   inlineSize: 3,
   position: "absolute",
+  transform: "scale(1)",
+  transition: "transform {durations.springs.bouncy} {easings.springs.bouncy}",
 });
 
-// As the recording toolbar looks.
+// As the recording toolbar looks. Springs in when the area is let go.
 const buttonsStyles = hstack({
+  _starting: {
+    opacity: 0,
+    transform: "translateX(-50%) translateY(calc(-1 * {spacing.1})) scale(0.9)",
+  },
   "&[data-inside]": { insetBlockEnd: 2, insetBlockStart: "auto" },
   backgroundColor: "card",
   border: "1px solid {colors.border}",
@@ -347,10 +357,13 @@ const buttonsStyles = hstack({
   gap: 2,
   insetBlockStart: "calc(100% + {spacing.2})",
   insetInlineStart: "50%",
+  opacity: 1,
   paddingBlock: 1,
   paddingInline: 2,
   position: "absolute",
   transform: "translateX(-50%)",
+  transition:
+    "opacity {durations.normal} {easings.out}, transform {durations.springs.snappy} {easings.springs.snappy}",
   whiteSpace: "nowrap",
 });
 

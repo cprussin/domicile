@@ -146,7 +146,7 @@ const popupStyles = flex({
   },
   "&[data-ending-style]": {
     transform: "translateX(100%)",
-    transition: "transform {durations.fast} {easings.in}",
+    transition: "transform {durations.springs.snappy} {easings.springs.snappy}",
   },
   "&[data-wide]": { inlineSize: "min({spacing.240}, 92cqw)" },
   backgroundColor: "card",
@@ -159,7 +159,7 @@ const popupStyles = flex({
   inlineSize: "min({spacing.120}, 92cqw)",
   outlineStyle: "none",
   transform: "translateX(0)",
-  transition: "transform {durations.normal} {easings.out}",
+  transition: "transform {durations.springs.smooth} {easings.springs.smooth}",
 });
 
 const headerStyles = flex({

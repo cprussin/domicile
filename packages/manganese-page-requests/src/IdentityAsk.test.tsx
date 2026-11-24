@@ -6,6 +6,7 @@ import type {
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { css } from "../styled-system/css";
 import { IdentityAsk } from "./IdentityAsk";
 import type { IdentityRequest } from "./useIdentityRequest";
 
@@ -111,6 +112,18 @@ describe("IdentityAsk", () => {
       await userEvent.click(button("Continue as Alex"));
 
       expect(answers).toStrictEqual(["choose 0"]);
+    });
+
+    it("springs its corner card in over the page", () => {
+      ask(requestFor([], { button: false }));
+
+      const card = screen.getByRole("dialog").firstElementChild;
+      expect(card?.className).toContain(
+        css({
+          transition:
+            "opacity {durations.normal} {easings.out}, transform {durations.springs.smooth} {easings.springs.smooth}",
+        }),
+      );
     });
 
     it("continues from the corner card", async () => {

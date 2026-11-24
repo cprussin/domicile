@@ -3,6 +3,7 @@ import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-st
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
+import { SPRINGS, springEasing } from "../springs";
 import { ChoiceToast, LevelToast } from "./LevelToast";
 
 loadEmittedStylesheet(
@@ -42,6 +43,16 @@ describe(LevelToast, () => {
       const { transition } = globalThis.getComputedStyle(fill);
       expect(transition).toContain("transform ");
       expect(transition).not.toContain("inline-size");
+    });
+
+    it("rises in on the smooth spring", () => {
+      render(<LevelToast {...volume(1, 0.4)} />);
+
+      const panel = screen.getByRole("status").firstElementChild as HTMLElement;
+      const { duration, easing } = springEasing(SPRINGS.smooth);
+      expect(globalThis.getComputedStyle(panel).animation).toBe(
+        `levelToastEnter ${duration} ${easing}`,
+      );
     });
 
     it("says muted and grays the meter", () => {

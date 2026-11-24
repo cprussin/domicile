@@ -1,13 +1,46 @@
 import { describe, expect, it } from "bun:test";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { springTransition } from "../__test__/spring-transition";
 import { Button } from "../Button/Button";
 import { DisplayProvider } from "../Screen/DisplayProvider";
 
 import { SlideOver } from "./SlideOver";
 
 describe(SlideOver, () => {
+  describe("motion", () => {
+    loadEmittedStylesheet(
+      document,
+      new URL("../../styled-system/styles.css", import.meta.url),
+    );
+
+    it("slides in on the smooth spring", () => {
+      render(
+        <SlideOver open title="Transcript">
+          Body
+        </SlideOver>,
+      );
+      expect(
+        globalThis.getComputedStyle(screen.getByRole("dialog")).transition,
+      ).toBe(springTransition("transform", "smooth"));
+    });
+
+    it("slides out on the snappy spring", () => {
+      render(
+        <SlideOver open title="Transcript">
+          Body
+        </SlideOver>,
+      );
+      const popup = screen.getByRole("dialog");
+      popup.setAttribute("data-ending-style", "");
+      expect(globalThis.getComputedStyle(popup).transition).toBe(
+        springTransition("transform", "snappy"),
+      );
+    });
+  });
+
   it("does not render the body when closed", () => {
     render(
       <SlideOver open={false} title="Transcript">

@@ -255,9 +255,9 @@ const positionerStyles = css({
 const popupStyles = flex({
   "&[data-ending-style]": {
     opacity: 0,
-    transform: "scale(0.96)",
+    transform: "scale(0.9)",
     transition:
-      "opacity {durations.fast} {easings.in}, transform {durations.fast} {easings.in}",
+      "opacity {durations.fast} {easings.in}, transform {durations.springs.snappy} {easings.springs.snappy}",
   },
   // Clips content to the panel's rounded corners.
   "&[data-flush]": {
@@ -268,9 +268,10 @@ const popupStyles = flex({
   },
   // base-ui's attribute instead of Panda's `_starting`: `@starting-style`
   // does not reliably fire for elements mounted in a portal.
+  // Grows out of its trigger: `--transform-origin` is the trigger's side.
   "&[data-starting-style]": {
     opacity: 0,
-    transform: "scale(0.96)",
+    transform: "scale(0.9)",
   },
   // The same in both themes, since the wallpaper doesn't change with them.
   // The radius is half a row's height: a pill for one row, a rounded panel
@@ -293,7 +294,7 @@ const popupStyles = flex({
   "&[data-withheld]": {
     opacity: 0,
     pointerEvents: "none",
-    transform: "scale(0.96)",
+    transform: "scale(0.9)",
   },
   backgroundColor: "card",
   border: "1px solid {colors.border}",
@@ -310,7 +311,7 @@ const popupStyles = flex({
   transform: "scale(1)",
   transformOrigin: "var(--transform-origin)",
   transition:
-    "opacity {durations.normal} {easings.out}, transform {durations.normal} {easings.out}",
+    "opacity {durations.normal} {easings.out}, transform {durations.springs.snappy} {easings.springs.snappy}",
 });
 
 const titleStyles = css({

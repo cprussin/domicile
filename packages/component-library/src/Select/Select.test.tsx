@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
+import { startsAt } from "../__test__/starts-at";
 import type { SelectOption } from "./Select";
 import { Select, SURFACES } from "./Select";
 
@@ -52,6 +54,24 @@ describe(Select, () => {
       const trigger = screen.getByRole("combobox", { name: "Font" });
       const wrapper = trigger.parentElement;
       expect(wrapper?.style.inlineSize).toBe("12rem");
+    });
+  });
+
+  describe("motion", () => {
+    loadEmittedStylesheet(
+      document,
+      new URL("../../styled-system/styles.css", import.meta.url),
+    );
+
+    it("fades its list in rising off the field", async () => {
+      const user = userEvent.setup();
+      render(<Select aria-label="Font" options={OPTIONS} />);
+      await user.click(screen.getByRole("combobox", { name: "Font" }));
+      const popup = screen.getByRole("listbox").parentElement as HTMLElement;
+      expect(startsAt(popup)).toEqual({
+        bottom: "translateY(calc(-1 * 0.125rem))",
+        top: "translateY(0.125rem)",
+      });
     });
   });
 

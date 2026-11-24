@@ -23,12 +23,14 @@ import { memo, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import type { Folders } from "../FilePicker/folders";
 import { desktopFolders } from "../FilePicker/folders";
 import { useLeavingRows } from "../LeavingRows/useLeavingRows";
+import { DialogOrigin } from "../ModalDialog/ModalDialog";
 import type { App } from "../useApps/useApps";
 import { useApps } from "../useApps/useApps";
 import { AccessDialog } from "./AccessDialog";
 import { AccountDialog } from "./AccountDialog";
 import { AgentDialog } from "./AgentDialog";
 import { AppChooserDialog } from "./AppChooserDialog";
+import { askingWindow } from "./asking-window";
 import { CapturingIndicator } from "./CapturingIndicator";
 import { FileChooserDialog } from "./FileChooserDialog";
 import { GlobalShortcutsDialog } from "./GlobalShortcutsDialog";
@@ -245,32 +247,36 @@ export const PortalDialogs = memo(
           />
         ))}
         {rows.map(({ item: shown, leaving }) => (
-          <Dialog
-            answer={(answer) => {
-              portals.answer(shown.id, answer);
-            }}
-            apps={apps}
-            asker={apps(shown.appId).name}
-            browserWindows={(domicile.browser.windows ?? []).filter(
-              ({ id }) => !closedBrowsers.includes(id),
-            )}
-            claim={claims.get(shown.id)}
-            domicile={domicile}
-            folders={folders}
+          <DialogOrigin
             key={shown.id}
-            presence={{
-              onOpenChangeComplete: (open) => {
-                if (!open) {
-                  onLeft(shown.id);
-                }
-              },
-              open: leaving === undefined,
-            }}
-            request={shown}
-            screen={screenFor(shown, screen, screenOf)}
-            shellChords={shellChords}
-            shownWindows={shownWindows}
-          />
+            value={askingWindow(document, shown.parentAppId)}
+          >
+            <Dialog
+              answer={(answer) => {
+                portals.answer(shown.id, answer);
+              }}
+              apps={apps}
+              asker={apps(shown.appId).name}
+              browserWindows={(domicile.browser.windows ?? []).filter(
+                ({ id }) => !closedBrowsers.includes(id),
+              )}
+              claim={claims.get(shown.id)}
+              domicile={domicile}
+              folders={folders}
+              presence={{
+                onOpenChangeComplete: (open) => {
+                  if (!open) {
+                    onLeft(shown.id);
+                  }
+                },
+                open: leaving === undefined,
+              }}
+              request={shown}
+              screen={screenFor(shown, screen, screenOf)}
+              shellChords={shellChords}
+              shownWindows={shownWindows}
+            />
+          </DialogOrigin>
         ))}
       </>
     );

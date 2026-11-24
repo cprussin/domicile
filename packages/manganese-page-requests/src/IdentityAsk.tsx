@@ -580,11 +580,12 @@ const cornerStyles = flex({
   position: "absolute",
 });
 
-// `PageModal`'s popup, smaller.
+// `PageModal`'s popup, smaller, springing out of the page's top corner. The
+// corner is physical: `transform-origin` has no logical keywords.
 const cornerCardStyles = vstack({
   _starting: {
     opacity: 0,
-    transform: "translateY({spacing.3}) scale(0.96)",
+    transform: "translateY(-{spacing.3}) scale(0.9)",
   },
   alignItems: "stretch",
   backgroundColor: "card",
@@ -597,8 +598,9 @@ const cornerCardStyles = vstack({
   padding: 3.5,
   pointerEvents: "auto",
   transform: "translateY(0) scale(1)",
+  transformOrigin: "top right",
   transition:
-    "opacity {durations.normal} {easings.out}, transform {durations.normal} {easings.out}",
+    "opacity {durations.normal} {easings.out}, transform {durations.springs.smooth} {easings.springs.smooth}",
 });
 
 const cornerHeadStyles = flex({ alignItems: "flex-start", gap: 2 });

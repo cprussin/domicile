@@ -306,6 +306,28 @@ describe("Launcher", () => {
     expect(document.activeElement).toBe(document.body);
   });
 
+  it("springs from the button that opened it", () => {
+    render(
+      <Launcher
+        fromPrivate={false}
+        onClosed={() => undefined}
+        onDismiss={() => undefined}
+        onLaunch={() => undefined}
+        open
+        opening={{ apps: [], bookmarks: [] }}
+        opens={opensFile}
+        origin={document.createElement("button")}
+        preview={previewing}
+        screen={SCREEN}
+        search={searching(FILES, false)}
+        searchApps={searchingApps([], [])}
+      />,
+      { wrapper: OnOneScreen },
+    );
+
+    expect(screen.getByRole("dialog")).toHaveAttribute("data-origin");
+  });
+
   it("opens wide enough for roomy rows beside a preview", () => {
     using _panel = launcher();
 

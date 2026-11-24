@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import {
   drawAt,
   drawPopups,
@@ -15,12 +16,30 @@ import {
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
+import { springTransition } from "../__test__/spring-transition";
 import { Button } from "../Button/Button";
 import { Select } from "../Select/Select";
 
 import { createHandle, Popover, PopoverContainer } from "./Popover";
 
 describe(Popover, () => {
+  describe("motion", () => {
+    loadEmittedStylesheet(
+      document,
+      new URL("../../styled-system/styles.css", import.meta.url),
+    );
+
+    // Grows from the side of the trigger base-ui names in
+    // `--transform-origin`, on a spring so a reopen picks up midway.
+    it("grows from its trigger on the snappy spring", () => {
+      render(<Popover open>Body</Popover>);
+      const popup = globalThis.getComputedStyle(screen.getByRole("dialog"));
+      expect(popup.transition).toContain(
+        springTransition("transform", "snappy"),
+      );
+    });
+  });
+
   describe("rendering", () => {
     it("does not render the body when closed", () => {
       render(

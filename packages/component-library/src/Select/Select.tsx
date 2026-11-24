@@ -497,18 +497,19 @@ const popupStyles = css({
     transition:
       "transform {durations.normal} {easings.out}, opacity {durations.normal} {easings.out}",
   },
-  "&[data-ending-style]": {
+  // Fades in rising off the field by 2px. base-ui's attributes instead of
+  // Panda's `_starting` throughout: `@starting-style` does not reliably fire
+  // for elements mounted in a portal.
+  "&:is([data-starting-style], [data-ending-style])": {
     opacity: 0,
-    transform: "scaleY(0.8)",
+    transform: "translateY(calc(-1 * {spacing.0.5}))",
+  },
+  "&:is([data-starting-style], [data-ending-style])[data-side=top]": {
+    transform: "translateY({spacing.0.5})",
+  },
+  "&[data-ending-style]": {
     transition:
       "opacity {durations.fast} {easings.in}, transform {durations.fast} {easings.in}",
-  },
-  // base-ui's attribute instead of Panda's `_starting` throughout:
-  // `@starting-style` does not reliably fire for elements mounted in a
-  // portal.
-  "&[data-starting-style]": {
-    opacity: 0,
-    transform: "scaleY(0.8)",
   },
   backgroundColor: "card",
   border: "1px solid {colors.border}",
@@ -529,10 +530,8 @@ const popupStyles = css({
   overflow: "hidden",
   paddingBlock: 1,
   transform: "translateY(0) scale(1)",
-  // Grows down from the trigger.
-  transformOrigin: "top",
   transition:
-    "opacity {durations.normal} {easings.out}, transform {durations.normal} {easings.out}",
+    "opacity {durations.fast} {easings.out}, transform {durations.fast} {easings.out}",
 });
 
 // The scroll container. `minBlockSize: 0` lets it shrink below its content

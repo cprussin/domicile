@@ -1,9 +1,12 @@
 import type { ToastObject } from "@base-ui/react/toast";
 import { Toast as BaseToast } from "@base-ui/react/toast";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, PointerEvent, ReactNode } from "react";
 import { useRef } from "react";
 import { css } from "../../styled-system/css";
 import type { ExtendProps } from "../extend-props";
+import { SPRINGS, springEasing } from "../springs";
+import type { PointerSample } from "./fling";
+import { flingMs, pointerSpeed } from "./fling";
 import "../stylesheet";
 
 export const { createToastManager, useToastManager } = BaseToast;
@@ -59,6 +62,11 @@ const CLICK_SLOP = 5;
 /** Where a press on a toast started. */
 type Press = { target: EventTarget; x: number; y: number };
 
+/** How long a toast swiped away from rest takes to leave: the snappy spring. */
+const RELEASED_AT_REST_MS = Number.parseFloat(
+  springEasing(SPRINGS.snappy).duration,
+);
+
 /**
  * One toast: its card, its content and its countdown.
  *
@@ -74,6 +82,7 @@ const ToastRoot = <Data extends object>({
   toast: ToastObject<Data>;
 }) => {
   const press = useRef<Press>(undefined);
+  const moves = useRef<readonly PointerSample[]>([]);
   return (
     <BaseToast.Root
       className={rootStyles}
@@ -104,6 +113,23 @@ const ToastRoot = <Data extends object>({
           x: event.clientX,
           y: event.clientY,
         };
+        moves.current = [sampleOf(event)];
+      }}
+      onPointerMove={(event) => {
+        moves.current = [...moves.current.slice(-1), sampleOf(event)];
+      }}
+      // Set on every release: base-ui decides on the same release whether
+      // it was a swipe.
+      onPointerUp={(event) => {
+        const flung = flingMs(
+          event.currentTarget.offsetWidth,
+          pointerSpeed(moves.current),
+          RELEASED_AT_REST_MS,
+        );
+        event.currentTarget.style.setProperty(
+          "--toast-fling",
+          `${String(Math.round(flung))}ms`,
+        );
       }}
       swipeDirection={["right", "up"]}
       toast={toast}
@@ -176,11 +202,18 @@ const rootStyles = css({
   "--shrink": "calc(1 - var(--scale))",
   "&[data-ending-style]": {
     opacity: 0,
+    transition:
+      "transform {durations.springs.snappy} {easings.springs.snappy}, opacity {durations.fast} {easings.in}",
   },
   // Exit toward the trailing edge, or in the swipe direction if swiped.
   "&[data-ending-style]:not([data-swipe-direction])": {
     transform:
       "translateX(calc(100% + {spacing.6})) translateY(var(--offset-y))",
+  },
+  // A swiped toast keeps the speed it was let go at; see `--toast-fling`.
+  "&[data-ending-style][data-swipe-direction]": {
+    transition:
+      "transform var(--toast-fling) {easings.linear}, opacity var(--toast-fling) {easings.linear}",
   },
   "&[data-ending-style][data-swipe-direction=right]": {
     transform:
@@ -226,7 +259,7 @@ const rootStyles = css({
   // main-thread animation: the stack takes the front toast's height, from base-
   // ui's `--height`, once per toast.
   transition:
-    "transform {durations.slow} {easings.outQuart}, opacity {durations.slow} {easings.outQuart}, height {durations.fast} {easings.out}",
+    "transform {durations.springs.smooth} {easings.springs.smooth}, opacity {durations.slow} {easings.outQuart}, height {durations.fast} {easings.out}",
   userSelect: "none",
   zIndex: "calc(1000 - var(--toast-index))",
 });
@@ -268,4 +301,11 @@ const countdownStyles = css({
   position: "absolute",
   transformOrigin: "left",
   transition: "opacity {durations.normal} {easings.outQuart}",
+});
+
+/** Where and when a pointer event on a toast happened. */
+const sampleOf = (event: PointerEvent): PointerSample => ({
+  time: event.timeStamp,
+  x: event.clientX,
+  y: event.clientY,
 });

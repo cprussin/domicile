@@ -372,9 +372,9 @@ const barStyles = css({
   transition: "opacity {durations.slowest} {easings.out}",
 });
 
-// The clock and field rise in as the desktop blurs, and sink as it clears.
-// Centered on one screen, narrowed by the region from `useScreenRegion`, since
-// the page's center can fall between monitors.
+// The clock and field spring up as the desktop blurs, and sink, quicker, as it
+// clears. Centered on one screen, narrowed by the region from
+// `useScreenRegion`, since the page's center can fall between monitors.
 const contentStyles = vstack({
   _starting: {
     opacity: 0,
@@ -383,6 +383,8 @@ const contentStyles = vstack({
   "[inert] > &": {
     opacity: 0,
     transform: "translateY({spacing.6}) scale(0.97)",
+    transition:
+      "opacity {durations.slow} {easings.in}, transform {durations.springs.snappy} {easings.springs.snappy}",
   },
   gap: 10,
   inset: 0,
@@ -392,7 +394,7 @@ const contentStyles = vstack({
   position: "absolute",
   transform: "none",
   transition:
-    "opacity {durations.slowest} {easings.out}, transform {durations.slowest} {easings.emphasized}",
+    "opacity {durations.slowest} {easings.out}, transform {durations.springs.smooth} {easings.springs.smooth}",
 });
 
 // Positioned under the pane, so showing a refusal does not move the clock.

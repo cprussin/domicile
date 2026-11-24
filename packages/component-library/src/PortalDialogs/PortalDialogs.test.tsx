@@ -31,6 +31,7 @@ import {
 import userEvent from "@testing-library/user-event";
 
 import { token } from "../../styled-system/tokens";
+import { springTransition } from "../__test__/spring-transition";
 import { Button } from "../Button/Button";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
 import { DisplayProvider } from "../Screen/DisplayProvider";
@@ -93,6 +94,14 @@ class FakeHost {
     });
   }
 }
+
+/** An `<app>` showing `appId`'s window, in the page until removed. */
+const askingWindow = (appId: string): Element => {
+  const app = document.createElement("app");
+  app.setAttribute("app-id", appId);
+  document.body.append(app);
+  return app;
+};
 
 const access = (id: number, body: object = {}) => ({
   app_id: "org.example.App",
@@ -544,6 +553,24 @@ describe("PortalDialogs", () => {
       expect(
         screen.queryByText("Example wants the camera"),
       ).not.toBeInTheDocument();
+    });
+
+    it("springs from the window that asked", () => {
+      const asking = askingWindow("app-3");
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([{ ...access(1), parent_app_id: "app-3" }]);
+
+      expect(screen.getByRole("dialog")).toHaveAttribute("data-origin");
+      asking.remove();
+    });
+
+    it("grows in place when no window it can see asked", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([{ ...access(1), parent_app_id: "app-3" }]);
+
+      expect(screen.getByRole("dialog")).not.toHaveAttribute("data-origin");
     });
 
     it("explains with the subtitle when there is no body", () => {
@@ -1115,6 +1142,19 @@ describe("PortalDialogs", () => {
       expect(screen.getByRole("dialog").parentElement?.style.left).toBe(
         "1920px",
       );
+    });
+
+    it("springs from the window that asked", async () => {
+      const asking = askingWindow("app-3");
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.with(home())} />);
+      host.push([{ ...fileChooser(1), parent_app_id: "app-3" }]);
+      await listed();
+
+      expect(screen.getByRole("dialog").parentElement).toHaveAttribute(
+        "data-origin",
+      );
+      asking.remove();
     });
   });
 
@@ -2850,6 +2890,25 @@ describe("screen recording", () => {
     expect(toolbar).toHaveTextContent(/^Paused/);
   });
 
+  describe("motion", () => {
+    loadEmittedStylesheet(
+      document,
+      new URL("../../styled-system/styles.css", import.meta.url),
+    );
+
+    it("springs its toolbar in from the screen's edge", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([], [recording(7, { running_since_ms: 95_000 })]);
+
+      expect(
+        globalThis.getComputedStyle(
+          screen.getByRole("toolbar", { name: "Screen recording" }),
+        ).transition,
+      ).toBe(springTransition("transform", "smooth"));
+    });
+  });
+
   it("leaves its toolbar out of captures of the desk", async () => {
     const hidden: Element[] = [];
     (globalThis as { RestrictionTarget?: unknown }).RestrictionTarget = {
@@ -3623,6 +3682,49 @@ describe("screen cast", () => {
 
       expect(screen.getByRole("dialog")).toHaveTextContent("Share a screen");
     });
+  });
+});
+
+describe("region selection motion", () => {
+  loadEmittedStylesheet(
+    document,
+    new URL("../../styled-system/styles.css", import.meta.url),
+  );
+
+  /** A screen cast asked for, on its region picker. */
+  const picking = async () => {
+    const host = new FakeHost();
+    render(<PortalDialogs domicile={host.domicile} />);
+    host.push([screenCast(false, MONITORS, true)]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Select on screen" }),
+    );
+    return screen.getByRole("application", { name: "Drag to select an area" });
+  };
+
+  it("snaps its corners into place on the bouncy spring once let go", async () => {
+    const page = await picking();
+    fireEvent.pointerDown(page, { clientX: 100, clientY: 50 });
+    fireEvent.pointerMove(page, { clientX: 300, clientY: 200 });
+    const corner = cornerOf("top-left");
+    const held = globalThis.getComputedStyle(corner).transform;
+
+    fireEvent.pointerUp(page, { clientX: 300, clientY: 200 });
+
+    const { transform, transition } = globalThis.getComputedStyle(corner);
+    expect(held).not.toBe(transform);
+    expect(transition).toBe(springTransition("transform", "bouncy"));
+  });
+
+  it("springs its buttons in once let go", async () => {
+    await picking();
+    dragOnScreen([100, 50], [300, 200]);
+
+    expect(
+      globalThis.getComputedStyle(
+        screen.getByRole("toolbar", { name: "Selected area" }),
+      ).transition,
+    ).toContain(springTransition("transform", "snappy"));
   });
 });
 

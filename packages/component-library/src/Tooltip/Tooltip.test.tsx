@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { startsAt } from "../__test__/starts-at";
 import { Button } from "../Button/Button";
 
 import { Tooltip } from "./Tooltip";
@@ -22,6 +24,23 @@ describe(Tooltip, () => {
       expect(await screen.findByRole("tooltip")).toHaveTextContent(
         "Full title",
       );
+    });
+
+    describe("motion", () => {
+      loadEmittedStylesheet(
+        document,
+        new URL("../../styled-system/styles.css", import.meta.url),
+      );
+
+      it("fades in rising off its anchor", async () => {
+        render(
+          <Tooltip content="Full title" open trigger={<Button>Tab</Button>} />,
+        );
+        expect(startsAt(await screen.findByRole("tooltip"))).toEqual({
+          bottom: "translateY(calc(-1 * 0.125rem))",
+          top: "translateY(0.125rem)",
+        });
+      });
     });
 
     it("says when it is drawn over a photograph, so the stylesheet can glass it", async () => {

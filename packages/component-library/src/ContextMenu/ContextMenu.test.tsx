@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import {
   fireEvent,
   render,
@@ -8,9 +9,29 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { startsAt } from "../__test__/starts-at";
 import { ContextMenu } from "./ContextMenu";
 
 describe(ContextMenu, () => {
+  describe("motion", () => {
+    loadEmittedStylesheet(
+      document,
+      new URL("../../styled-system/styles.css", import.meta.url),
+    );
+
+    it("fades in rising off where it was asked for", async () => {
+      render(
+        <ContextMenu at={{ x: 10, y: 20 }} label="Page" open>
+          <ContextMenu.Item>Reload</ContextMenu.Item>
+        </ContextMenu>,
+      );
+      expect(startsAt(await screen.findByRole("menu"))).toEqual({
+        bottom: "translateY(calc(-1 * 0.125rem))",
+        top: "translateY(0.125rem)",
+      });
+    });
+  });
+
   describe("rendering", () => {
     it("draws nothing while closed", () => {
       render(

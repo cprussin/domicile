@@ -124,6 +124,11 @@ type Props = {
    * the panel. See `useOpeningApps`.
    */
   opening: FoundApps;
+  /**
+   * The button that opened it, for it to spring from. Without one, as from
+   * `mod+space`, it grows in the middle of its screen.
+   */
+  origin?: Element | undefined;
   /** Reads a file's preview. */
   preview: Preview;
   /** Asks the host for files in home matching a query. */
@@ -164,6 +169,7 @@ export const Launcher = memo(
     open,
     opening,
     opens,
+    origin,
     preview,
     screen,
     search,
@@ -183,6 +189,7 @@ export const Launcher = memo(
         }
       }}
       open={open}
+      origin={origin}
       // The shell refocuses the focused window. Focusing a browser window's
       // view would read as a click in it and move the keyboard there.
       returnFocus={false}

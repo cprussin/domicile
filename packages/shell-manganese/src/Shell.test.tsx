@@ -1152,6 +1152,8 @@ describe("Shell", () => {
           name: "Open an app, a file, a URL, or search",
         }),
       ).toBeVisible();
+      // It springs from the button.
+      expect(screen.getByRole("dialog")).toHaveAttribute("data-origin");
     });
 
     it("has no button for the terminal: that is a key", async () => {

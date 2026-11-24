@@ -4,8 +4,8 @@ import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import { css } from "../styled-system/css";
 
 type Props = {
-  /** Opens the launcher. */
-  onOpen: () => void;
+  /** Opens the launcher from the button, for it to spring from. */
+  onOpen: (from: Element) => void;
 };
 
 /** The bar's launcher button, the pointer equivalent of `mod+Space`. */
@@ -17,7 +17,9 @@ export const LauncherButton = ({ onOpen }: Props) => (
       <button
         aria-label="Launcher"
         className={buttonStyles}
-        onClick={onOpen}
+        onClick={(event) => {
+          onOpen(event.currentTarget);
+        }}
         type="button"
       >
         <AnimatedSparkleIcon size={15} />

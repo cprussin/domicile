@@ -89,11 +89,12 @@ const scrimStyles = center({
   transition: "opacity {durations.normal} {easings.out}",
 });
 
-// `ModalDialog`'s popup, at the top of the page as Chrome places these.
+// `ModalDialog`'s popup, at the top of the page as Chrome places these. It
+// springs down out of the page's top edge.
 const popupStyles = flex({
   _starting: {
     opacity: 0,
-    transform: "translateY({spacing.3}) scale(0.96)",
+    transform: "translateY(-{spacing.3}) scale(0.9)",
   },
   backgroundColor: "card",
   border: "1px solid {colors.border}",
@@ -106,8 +107,9 @@ const popupStyles = flex({
   outlineStyle: "none",
   padding: 5,
   transform: "translateY(0) scale(1)",
+  transformOrigin: "top",
   transition:
-    "opacity {durations.normal} {easings.out}, transform {durations.normal} {easings.out}",
+    "opacity {durations.normal} {easings.out}, transform {durations.springs.smooth} {easings.springs.smooth}",
 });
 
 const titleStyles = css({

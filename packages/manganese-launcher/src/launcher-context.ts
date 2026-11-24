@@ -3,8 +3,11 @@ import { createContext } from "react";
 
 /** What opens the launcher, for a button outside it. */
 export type LauncherControl = {
-  /** Open the launcher, or close it if open. */
-  toggle: () => void;
+  /**
+   * Open the launcher, or close it if open. `from` is the button pressed, for
+   * the launcher to spring from.
+   */
+  toggle: (from?: Element) => void;
 };
 
 export const LauncherContext = createContext<LauncherControl | undefined>(

@@ -207,9 +207,9 @@ const workspaceStyles = cva({
   },
 });
 
-// A copy of the row over it, clipped to the current chip. `outBack` overshoots
-// the chip a little and settles back. Black needs no shadow, and one would
-// smudge it.
+// A copy of the row over it, clipped to the current chip. The bouncy spring
+// overshoots the chip a little and settles back, and a switch midway picks up
+// where the clip is. Black needs no shadow, and one would smudge it.
 const highlightStyles = css({
   "&[data-shown=false]": { opacity: 0 },
   alignItems: "center",
@@ -231,7 +231,7 @@ const highlightStyles = css({
   position: "absolute",
   textShadow: "none",
   transition: `
-    clip-path {durations.slower} {easings.outBack},
+    clip-path {durations.springs.bouncy} {easings.springs.bouncy},
     opacity {durations.fast} {easings.out}
   `,
 });

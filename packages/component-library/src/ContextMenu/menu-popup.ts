@@ -7,18 +7,31 @@ export const positionerStyles = css({
   zIndex: "modal",
 });
 
-// `&[data-starting-style]` rather than Panda's `_starting`: `@starting-style`
-// does not reliably fire for a portaled popup. See `Popover`.
+// Fades in rising off its anchor by 2px. `&[data-starting-style]` rather than
+// Panda's `_starting`: `@starting-style` does not reliably fire for a
+// portaled popup. See `Popover`.
 export const popupStyles = css({
   "&:has([data-item-icon]:not(:empty)) [data-item-icon]": {
     display: "inline-flex",
   },
-  "&[data-ending-style]": {
+  "&:is([data-starting-style], [data-ending-style])": {
     opacity: 0,
-    transition: "opacity {durations.fast} {easings.in}",
+    transform: "translateY(calc(-1 * {spacing.0.5}))",
   },
-  "&[data-starting-style]": {
-    opacity: 0,
+  "&:is([data-starting-style], [data-ending-style]):is([data-side=left], [data-side=inline-start])":
+    {
+      transform: "translateX({spacing.0.5})",
+    },
+  "&:is([data-starting-style], [data-ending-style]):is([data-side=right], [data-side=inline-end])":
+    {
+      transform: "translateX(calc(-1 * {spacing.0.5}))",
+    },
+  "&:is([data-starting-style], [data-ending-style])[data-side=top]": {
+    transform: "translateY({spacing.0.5})",
+  },
+  "&[data-ending-style]": {
+    transition:
+      "opacity {durations.fast} {easings.in}, transform {durations.fast} {easings.in}",
   },
   backgroundColor: "card",
   border: "1px solid {colors.border}",
@@ -33,5 +46,7 @@ export const popupStyles = css({
   outlineStyle: "none",
   overflowY: "auto",
   paddingBlock: 1,
-  transition: "opacity {durations.fast} {easings.out}",
+  transform: "none",
+  transition:
+    "opacity {durations.fast} {easings.out}, transform {durations.fast} {easings.out}",
 });
