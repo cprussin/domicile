@@ -16,11 +16,17 @@ import type {
 } from "./electron/permissions";
 import type { IncomingRequest, ProtocolRequest } from "./electron/protocol";
 import type { RegisteredScheme } from "./electron/schemes";
+import type { ServiceWorkerEvent } from "./electron/service-workers";
 import type {
   CookieChanged,
   SessionCallMessage,
   SessionResult,
 } from "./electron/session-calls";
+import type {
+  Certificate,
+  IncomingSignIn,
+  SignInMessage,
+} from "./electron/sign-ins";
 import type {
   IncomingWebRequest,
   WebRequestMessage,
@@ -252,7 +258,102 @@ export type EngineRequest =
   | ProtocolRequest
   | WebRequestMessage
   | SessionCallMessage
-  | PermissionMessage;
+  | PermissionMessage
+  | SignInMessage;
+
+const principal = z.object({
+  commonName: z.string(),
+  country: z.string(),
+  locality: z.string(),
+  organizations: z.array(z.string()),
+  organizationUnits: z.array(z.string()),
+  state: z.string(),
+});
+
+/** Electron's `Certificate`, with its issuer's when the engine has it. */
+const certificate: z.ZodType<Certificate> = z.lazy(() =>
+  z.object({
+    data: z.string(),
+    fingerprint: z.string(),
+    issuer: principal,
+    issuerCert: certificate.exactOptional(),
+    issuerName: z.string(),
+    serialNumber: z.string(),
+    subject: principal,
+    subjectName: z.string(),
+    validExpiry: z.number(),
+    validStart: z.number(),
+  }),
+);
+
+/** The questions of a page's connection: see electron/sign-ins.ts. */
+const signInEvents = [
+  z.object({
+    ask: z.number(),
+    auth_info: z.object({
+      host: z.string(),
+      is_proxy: z.boolean(),
+      port: z.number(),
+      realm: z.string(),
+      scheme: z.string(),
+    }),
+    type: z.literal("login"),
+    url: z.string(),
+    window: z.number().optional(),
+  }),
+  z.object({
+    ask: z.number(),
+    certificate,
+    error: z.string(),
+    is_main_frame: z.boolean(),
+    type: z.literal("certificate_error"),
+    url: z.string(),
+    window: z.number().optional(),
+  }),
+  z.object({
+    ask: z.number(),
+    certificates: z.array(certificate),
+    type: z.literal("select_client_certificate"),
+    url: z.string(),
+    window: z.number().optional(),
+  }),
+] as const;
+
+/** A change to a session's service workers: see electron/service-workers.ts. */
+const serviceWorkerEvent = z.discriminatedUnion("event", [
+  z.object({
+    event: z.literal("running_status"),
+    running_status: z.enum(["starting", "running", "stopping", "stopped"]),
+    session: z.string(),
+    type: z.literal("service_worker"),
+    version_id: z.number(),
+    worker: z
+      .object({
+        render_process_id: z.number(),
+        scope: z.string(),
+        script_url: z.string(),
+        version_id: z.number(),
+      })
+      .optional(),
+  }),
+  z.object({
+    event: z.literal("registration_completed"),
+    scope: z.string(),
+    session: z.string(),
+    type: z.literal("service_worker"),
+  }),
+  z.object({
+    event: z.literal("console_message"),
+    level: z.number(),
+    line_number: z.number(),
+    message: z.string(),
+    session: z.string(),
+    source: z.string(),
+    source_url: z.string(),
+    type: z.literal("service_worker"),
+    version_id: z.number(),
+  }),
+]);
 
 const engineEvent = z.discriminatedUnion("type", [
   z.object({
@@ -548,7 +649,11 @@ const engineEvent = z.discriminatedUnion("type", [
     type: z.literal("permission_request"),
     window: z.number().optional(),
   }),
+  ...signInEvents,
 ]);
+
+/** What the engine says, a service worker report included. */
+const engineLine = z.union([engineEvent, serviceWorkerEvent]);
 
 export type EngineEvent = z.infer<typeof engineEvent>;
 
@@ -593,6 +698,10 @@ export type Engine = {
     cookieChanged: [change: CookieChanged];
     /** A page's permission request, for its session's handler. */
     permissionRequest: [request: IncomingPermissionRequest];
+    /** A sign-in or certificate question of a page's connection. */
+    signIn: [question: IncomingSignIn];
+    /** A change to the service workers of a session the app watches. */
+    serviceWorker: [event: ServiceWorkerEvent];
   }>;
 };
 
@@ -619,7 +728,7 @@ export const connectEngine = (
     };
 
     const take = (line: string) => {
-      const parsed = engineEvent.safeParse(parseJson(line));
+      const parsed = engineLine.safeParse(parseJson(line));
       if (!parsed.success) {
         throw new Error(`the engine sent a line this host can't read: ${line}`);
       } else if (!ready) {
@@ -638,6 +747,8 @@ export const connectEngine = (
                 `the engine refused this app: ${"why" in parsed.data ? parsed.data.why : parsed.data.type}`,
               ),
         );
+      } else if (parsed.data.type === "service_worker") {
+        events.emit("serviceWorker", parsed.data);
       } else if (parsed.data.type === "refused") {
         events.emit("refused", parsed.data.why);
       } else if (parsed.data.type === "protocol_request") {
@@ -656,6 +767,12 @@ export const connectEngine = (
         events.emit("cookieChanged", parsed.data);
       } else if (parsed.data.type === "permission_request") {
         events.emit("permissionRequest", parsed.data);
+      } else if (
+        parsed.data.type === "login" ||
+        parsed.data.type === "certificate_error" ||
+        parsed.data.type === "select_client_certificate"
+      ) {
+        events.emit("signIn", parsed.data);
       } else if ("window" in parsed.data) {
         events.emit("window", parsed.data);
       } else {

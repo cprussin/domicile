@@ -14,6 +14,8 @@ _Unreleased_
 
 Electron apps run on the desktop's engine, and your shell draws their windows, menu bars and message boxes. List the apps in `electron.apps`.
 
+An Electron app answers its pages' sign-ins, certificate errors and client certificates itself, as in Electron; a sign-in it leaves alone still asks through your shell's prompt. Its sessions clear their data, resolve hosts, report their storage path and service workers, and run their own preloads.
+
 [Menu bars](SHELL-BROWSER-WINDOWS.md#menu-bars) · [Message boxes](SHELL-BROWSER-WINDOWS.md#message-boxes) · [`electron.apps`](SHELL-CONFIG.md#other-sections) · [Design](architecture/ELECTRON-APPS.md) · [#2091](https://github.com/cprussin/domicile/pull/2091) · [#2151](https://github.com/cprussin/domicile/pull/2151) · [#2161](https://github.com/cprussin/domicile/pull/2161) · [#2172](https://github.com/cprussin/domicile/pull/2172) · [#2201](https://github.com/cprussin/domicile/pull/2201) · [#2256](https://github.com/cprussin/domicile/pull/2256)
 
 ### Let agents drive the desktop

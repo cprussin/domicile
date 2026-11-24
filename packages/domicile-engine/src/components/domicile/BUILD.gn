@@ -955,6 +955,7 @@ source_set("electron_app") {
   sources = [
     "browser/electron_app.cc",
     "browser/electron_app.h",
+    "browser/electron_app_sign_ins.cc",
   ]
 
   public_deps = [
@@ -971,10 +972,14 @@ source_set("electron_app") {
 # browser, which is where its tests are.
 source_set("electron_protocol") {
   sources = [
+    "browser/electron_network_calls.cc",
+    "browser/electron_network_calls.h",
     "browser/electron_page_call.cc",
     "browser/electron_page_call.h",
     "browser/electron_protocol.cc",
     "browser/electron_protocol.h",
+    "browser/electron_sign_ins.cc",
+    "browser/electron_sign_ins.h",
   ]
 
   public_deps = [

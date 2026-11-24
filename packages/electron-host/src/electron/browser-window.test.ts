@@ -760,6 +760,41 @@ describe(createBrowserWindow, () => {
     ]);
   });
 
+  it("runs its session's frame preloads before its own, each as a preload of its own", () => {
+    const { BrowserWindow, sent, sessions } = setUp();
+    sessions.defaultSession.setPreloads(["/app/session.js"]);
+
+    void new BrowserWindow({
+      webPreferences: { preload: "/app/preload.js" },
+    }).loadURL("https://notes.test/");
+    void new BrowserWindow().loadURL("https://notes.test/");
+
+    const each = (path: string) =>
+      `try {\n(function (require, process, module, exports, global) {source of ${path}\n}).call(this, require, process, module, exports, global);\n} catch (error) {\nsetTimeout(() => {\nthrow error;\n});\n}\n`;
+    expect(sent).toMatchObject([
+      { preload: each("/app/session.js") + each("/app/preload.js") },
+      { preload: each("/app/session.js") },
+    ]);
+  });
+
+  it("hands a Node page in a session with frame preloads to its refuse", () => {
+    const refused: string[] = [];
+    const { BrowserWindow, sessions } = setUp({
+      refuse: (why) => {
+        refused.push(why);
+        throw new Error("refused");
+      },
+    });
+    sessions.defaultSession.setPreloads(["/app/session.js"]);
+
+    expect(
+      () => new BrowserWindow({ webPreferences: { sandbox: false } }),
+    ).toThrow("refused");
+    expect(refused).toEqual([
+      "this window's session has preloads, which Domicile's engine runs only in a sandboxed page",
+    ]);
+  });
+
   it("gives a window's page its additionalArguments", () => {
     const { BrowserWindow, sent } = setUp();
 

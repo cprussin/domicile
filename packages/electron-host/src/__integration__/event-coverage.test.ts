@@ -17,7 +17,11 @@ const EVENTS = join(import.meta.dir, "events.json");
 
 /** The host's sources that fire each emitter's events. */
 const SOURCES: Record<keyof typeof ELECTRON_EVENTS, readonly string[]> = {
-  App: ["electron/app.ts", "electron/browser-window.ts"],
+  App: [
+    "electron/app.ts",
+    "electron/browser-window.ts",
+    "electron/sign-ins.ts",
+  ],
   AutoUpdater: ["electron/auto-updater.ts"],
   BaseWindow: ["electron/browser-window.ts"],
   BrowserWindow: ["electron/browser-window.ts"],
@@ -33,13 +37,17 @@ const SOURCES: Record<keyof typeof ELECTRON_EVENTS, readonly string[]> = {
   Notification: ["electron/notification.ts"],
   PowerMonitor: ["electron/power.ts"],
   Screen: ["electron/screen.ts"],
-  ServiceWorkers: [],
+  ServiceWorkers: ["electron/service-workers.ts"],
   Session: ["electron/session.ts", "electron/session-calls.ts"],
   SystemPreferences: ["electron/system-preferences.ts"],
   Tray: ["electron/tray.ts"],
   UtilityProcess: ["electron/utility-process.ts"],
   View: ["electron/browser-window.ts"],
-  WebContents: ["electron/browser-window.ts", "electron/ipc-main.ts"],
+  WebContents: [
+    "electron/browser-window.ts",
+    "electron/ipc-main.ts",
+    "electron/sign-ins.ts",
+  ],
   WebContentsView: ["electron/browser-window.ts"],
   WebFrameMain: ["electron/browser-window.ts"],
 };

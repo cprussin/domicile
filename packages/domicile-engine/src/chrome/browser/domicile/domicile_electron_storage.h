@@ -15,7 +15,15 @@
 #include "components/domicile/browser/web_view_partition.h"
 #include "url/gurl.h"
 
+namespace content {
+class StoragePartition;
+}  // namespace content
+
 namespace domicile {
+
+// The storage of `partition`, as WebViewGuest makes it for a window there,
+// or none without a shell.
+content::StoragePartition* StorageOf(const WebViewPartition& partition);
 
 // An Electron app session's storage: its cookies (session.cookies), its
 // sites' data (clearStorageData) and its HTTP cache, in `partition` of the

@@ -4,6 +4,7 @@
 // so no session reaches another app's storage. See "Requests" in
 // docs/architecture/ELECTRON-APPS.md.
 
+import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { isAbsolute } from "node:path";
 
@@ -16,15 +17,47 @@ import type {
   Permissions,
 } from "./permissions";
 import type { createProtocols, Protocol } from "./protocol";
+import type { ServiceWorkerEvent } from "./service-workers";
+import { createServiceWorkers } from "./service-workers";
 import type {
+  ClearDataOptions,
   ClearStorageDataOptions,
   Cookies,
   createSessionCalls,
+  ResolveHostOptions,
   SessionCalls,
+  SharedDictionaryIsolationKey,
 } from "./session-calls";
 import type { createWebRequests, WebRequest } from "./web-request";
 
 const partitions = new WeakMap<Session, string>();
+/** What each session's calls are, for learnStoragePath. */
+const sessionCalls = new WeakMap<Session, SessionCalls>();
+/** Where each persistent session keeps its data, once the engine says. */
+const storagePaths = new WeakMap<Session, string>();
+/** Each session's service workers, from the app's first use. */
+const watchedWorkers = new WeakMap<
+  Session,
+  ReturnType<typeof createServiceWorkers>
+>();
+
+/** Electron's `PreloadScript`. */
+type PreloadScript = {
+  readonly type: "frame" | "service-worker";
+  readonly id: string;
+  readonly filePath: string;
+};
+
+/** Electron's `PreloadScriptRegistration`, the keys the host takes. */
+type PreloadScriptRegistration = {
+  readonly type: "frame" | "service-worker";
+  readonly id?: string;
+  readonly filePath: string;
+  readonly matches?: readonly string[];
+  readonly excludeMatches?: readonly string[];
+  readonly includeGlobs?: readonly string[];
+  readonly excludeGlobs?: readonly string[];
+};
 
 /** Electron's `Session`, as far as the host has it. */
 export class Session extends EventEmitter {
@@ -41,28 +74,23 @@ export class Session extends EventEmitter {
   ) {
     super();
     partitions.set(this, partition);
+    sessionCalls.set(this, calls);
     this.cookies = calls.cookies;
     this.#calls = calls;
     this.#permissions = permissions;
   }
 
-  /**
-   * The engine runs a session's service workers itself and doesn't tell the
-   * app of them yet: none are running as far as the app can see, and no
-   * worker events come.
-   */
-  readonly serviceWorkers = Object.assign(new EventEmitter(), {
-    getAllRunning: () => ({}),
-    getFromVersionID: (_versionId: number) => null,
-    getInfoFromVersionID: (_versionId: number) => null,
-    getWorkerFromVersionID: (_versionId: number) => undefined,
-    startWorkerForScope: (scope: string) =>
-      Promise.reject(
-        new Error(
-          `Domicile's engine can't start a service worker for the app yet (${scope})`,
-        ),
-      ),
-  });
+  /** Watched from the app's first use, as an app reaches for it as it starts. */
+  get serviceWorkers() {
+    const found = watchedWorkers.get(this);
+    if (found === undefined) {
+      const made = createServiceWorkers(this.#calls.watchServiceWorkers);
+      watchedWorkers.set(this, made);
+      return made.serviceWorkers;
+    } else {
+      return found.serviceWorkers;
+    }
+  }
 
   /**
    * The engine keeps no net log for the app yet: logging never starts, and
@@ -82,7 +110,9 @@ export class Session extends EventEmitter {
     languages: ["en-US"],
     words: new Set<string>(),
   };
-  #preloads: string[] = [];
+  #preloads: PreloadScript[] = [];
+  /** The ids setPreloads registered, which its next call replaces. */
+  #setPreloadIds = new Set<string>();
 
   /**
    * The engine checks spelling in its pages as the desktop's browser does,
@@ -198,9 +228,9 @@ export class Session extends EventEmitter {
     return Promise.resolve(0);
   }
 
-  /** A hint to open a connection early; the engine connects when the page asks. */
-  preconnect(_options: { url: string; numSockets?: number }): void {
-    // Nothing to do on Domicile: see above.
+  /** Opens connections to `url` early, in the session's network. */
+  preconnect(options: { url: string; numSockets?: number }) {
+    this.#calls.preconnect(options);
   }
 
   isPersistent() {
@@ -208,13 +238,141 @@ export class Session extends EventEmitter {
     return partition === "" || partition.startsWith("persist:");
   }
 
-  /** Kept for the app to read; the engine runs only each window's own preload. */
+  /**
+   * A frame preload runs in each page of the session the app opens from
+   * then on, before the page's own, as each window's preload does.
+   */
+  registerPreloadScript(script: PreloadScriptRegistration) {
+    const id = script.id ?? randomUUID();
+    if (this.#preloads.some((each) => each.id === id)) {
+      throw new Error(
+        `a preload script ${JSON.stringify(id)} is already registered`,
+      );
+    } else if (!isAbsolute(script.filePath)) {
+      throw new Error(
+        `a preload script's filePath must be absolute, not ${script.filePath}`,
+      );
+    } else if (script.type === "service-worker") {
+      throw new Error(
+        "Domicile's engine runs no preload in service workers yet",
+      );
+    } else if (
+      [
+        script.matches,
+        script.excludeMatches,
+        script.includeGlobs,
+        script.excludeGlobs,
+      ].some((patterns) => patterns !== undefined)
+    ) {
+      throw new Error(
+        "Domicile's engine runs a session's preloads in every page, so it can't match them yet",
+      );
+    }
+    this.#preloads = [
+      ...this.#preloads,
+      { filePath: script.filePath, id, type: script.type },
+    ];
+    return id;
+  }
+
+  unregisterPreloadScript(id: string) {
+    if (!this.#preloads.some((each) => each.id === id)) {
+      throw new Error(`no preload script ${JSON.stringify(id)} is registered`);
+    }
+    this.#preloads = this.#preloads.filter((each) => each.id !== id);
+    this.#setPreloadIds.delete(id);
+  }
+
+  getPreloadScripts() {
+    return this.#preloads.map((script) => ({ ...script }));
+  }
+
+  /** Electron's older form: the frame preloads it last set. */
   setPreloads(preloads: readonly string[]) {
-    this.#preloads = [...preloads];
+    for (const id of this.#setPreloadIds) {
+      this.unregisterPreloadScript(id);
+    }
+    this.#setPreloadIds = new Set(
+      preloads.map((filePath) =>
+        this.registerPreloadScript({ filePath, type: "frame" }),
+      ),
+    );
   }
 
   getPreloads() {
-    return [...this.#preloads];
+    return framePreloadsOf(this);
+  }
+
+  /** Where the engine keeps the session's data; null for one in memory. */
+  getStoragePath() {
+    if (this.isPersistent()) {
+      const path = storagePaths.get(this);
+      if (path === undefined) {
+        throw new Error(
+          `the engine hasn't named session ${JSON.stringify(sessionPartition(this))}'s storage path yet`,
+        );
+      } else {
+        return path;
+      }
+    } else {
+      return null;
+    }
+  }
+
+  get storagePath() {
+    return this.getStoragePath();
+  }
+
+  /**
+   * The engine keeps a session's code cache with the rest of its storage,
+   * where it caches the code of the session's pages.
+   */
+  setCodeCachePath(_path: string): void {
+    // Nothing to do on Domicile: see above.
+  }
+
+  clearCodeCaches(options: { urls?: readonly string[] }) {
+    return this.#calls.clearCodeCaches(options);
+  }
+
+  clearData(options?: ClearDataOptions) {
+    return this.#calls.clearData(options);
+  }
+
+  clearAuthCache() {
+    return this.#calls.clearAuthCache();
+  }
+
+  resolveHost(host: string, options?: ResolveHostOptions) {
+    return this.#calls.resolveHost(host, options);
+  }
+
+  clearSharedDictionaryCache() {
+    return this.#calls.clearSharedDictionaryCache();
+  }
+
+  clearSharedDictionaryCacheForIsolationKey(key: SharedDictionaryIsolationKey) {
+    return this.#calls.clearSharedDictionaryCacheForIsolationKey(key);
+  }
+
+  getSharedDictionaryInfo(key: SharedDictionaryIsolationKey) {
+    return this.#calls.getSharedDictionaryInfo(key);
+  }
+
+  getSharedDictionaryUsageInfo() {
+    return this.#calls.getSharedDictionaryUsageInfo();
+  }
+
+  /**
+   * A blob's data, by the UUID a request's uploadData names. The engine's
+   * webRequest names no blob, so there is none the app could ask for.
+   */
+  getBlobData(identifier: string): Promise<Buffer> {
+    return Promise.reject(
+      new Error(
+        `no blob ${identifier}: Domicile's engine names no blob to the app`,
+      ),
+    );
   }
 
   // The engine's own checks stand: an app's handlers for certificates and
@@ -317,7 +475,41 @@ export const createSessions = (
       throw new Error("An absolute path is required");
     }
   };
-  return { defaultSession: fromPartition(""), fromPartition, fromPath };
+  /** Passes `event` to the service workers of the session it names. */
+  const heardServiceWorker = (event: ServiceWorkerEvent) => {
+    const session = made.get(event.session);
+    const watching =
+      session === undefined ? undefined : watchedWorkers.get(session);
+    if (watching === undefined) {
+      throw new Error(
+        `the engine reported a service worker of session ${JSON.stringify(event.session)}, which watches none`,
+      );
+    }
+    watching.heard(event);
+  };
+  return {
+    defaultSession: fromPartition(""),
+    fromPartition,
+    fromPath,
+    heardServiceWorker,
+  };
+};
+
+/** The frame preloads `session` runs in each page, in order. */
+export const framePreloadsOf = (session: Session) =>
+  session
+    .getPreloadScripts()
+    .filter(({ type }) => type === "frame")
+    .map(({ filePath }) => filePath);
+
+/** Asks the engine where `session` keeps its data, for getStoragePath. */
+export const learnStoragePath = async (session: Session) => {
+  const calls = sessionCalls.get(session);
+  if (calls === undefined) {
+    throw new Error("every Session is made by createSessions");
+  } else if (session.isPersistent()) {
+    storagePaths.set(session, await calls.storagePath());
+  }
 };
 
 /** The `cookies.set` details for a `Set-Cookie` line a response to `url` had. */

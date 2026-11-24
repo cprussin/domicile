@@ -43,9 +43,10 @@ import { createSafeStorage, selectBackend } from "./electron/safe-storage";
 import { createSchemeRegistration } from "./electron/schemes";
 import type { ListedDisplay } from "./electron/screen";
 import { createScreen } from "./electron/screen";
-import { createSessions } from "./electron/session";
+import { createSessions, learnStoragePath } from "./electron/session";
 import { createSessionCalls } from "./electron/session-calls";
 import { createShell } from "./electron/shell";
+import { createSignIns } from "./electron/sign-ins";
 import { createSystemPreferences } from "./electron/system-preferences";
 import { TouchBar } from "./electron/touch-bar";
 import { createContentTracing, createNetLog } from "./electron/tracing";
@@ -195,13 +196,29 @@ const main = async ([resources, ...args]: string[]) => {
       },
     );
     engine.events.on("permissionRequest", permissions.hear);
+    // Each session's storage path, which getStoragePath gives at once. The
+    // app's own is known before its main runs.
+    const storagePathsLearned: Promise<void>[] = [];
     const session = createSessions(
       protocols,
       webRequests,
       sessionCalls,
       permissions,
-      appEvents.sessionCreated,
+      (made) => {
+        appEvents.sessionCreated(made);
+        storagePathsLearned.push(
+          // getStoragePath says so too, when the app asks.
+          learnStoragePath(made).catch((error: unknown) => {
+            say(
+              Priority.Error,
+              `electron-host: the engine named no storage path for a session: ${String(error)}`,
+            );
+          }),
+        );
+      },
     );
+    engine.events.on("serviceWorker", session.heardServiceWorker);
+    await Promise.all(storagePathsLearned);
     // Read before the app's main runs, as an app reads its theme as it starts.
     const desktop = await reachDesktop(env);
     const theme: { changed?: (next: Appearance) => void } = {};
@@ -258,6 +275,12 @@ const main = async ([resources, ...args]: string[]) => {
       undefined,
       unsupported,
     );
+    const signIns = createSignIns(
+      engine.send,
+      (window) => webContentsOf(window),
+      app,
+    );
+    engine.events.on("signIn", signIns.hear);
     const messageBoxes = createMessageBoxes(engine.send);
     engine.events.on("window", (event) => {
       if (event.type === "message_box_answered") {

@@ -23,6 +23,25 @@ const server = Bun.serve({
 });
 afterAll(() => server.stop());
 
+/** Answers 401 with a Basic challenge until it is given me:secret. */
+const guarded = Bun.serve({
+  fetch: (request) =>
+    request.headers.get("authorization") ===
+    `Basic ${Buffer.from("me:secret").toString("base64")}`
+      ? new Response("in")
+      : new Response("out", {
+          headers: { "www-authenticate": 'Basic realm="office"' },
+          status: 401,
+        }),
+  port: 0,
+});
+afterAll(() => guarded.stop());
+
+const statusOf = (request: ReturnType<typeof net.request>) =>
+  new Promise<number>((resolve) => {
+    request.on("response", (response) => resolve(response.statusCode));
+  });
+
 describe("net.request", () => {
   it("sends what was written and gives the response as Electron's", async () => {
     const request = net.request({
@@ -111,5 +130,39 @@ describe("net.request", () => {
     const failed = new Promise((resolve) => request.on("error", resolve));
     request.end();
     expect(await failed).toBeInstanceOf(Error);
+  });
+});
+
+describe("ClientRequest's login", () => {
+  it("asks for a sign-in and sends again with what the callback gives", async () => {
+    const request = net.request(`http://localhost:${guarded.port}/`);
+    const asked = new Promise((resolve) => {
+      request.on("login", (authInfo, callback) => {
+        resolve(authInfo);
+        callback("me", "secret");
+      });
+    });
+    const status = statusOf(request);
+    request.end();
+
+    expect(await asked).toEqual({
+      host: "localhost",
+      isProxy: false,
+      port: guarded.port,
+      realm: "office",
+      scheme: "basic",
+    });
+    expect(await status).toBe(200);
+  });
+
+  it("gives the 401 when the callback gives nothing, or nothing listens", async () => {
+    const canceled = net.request(`http://localhost:${guarded.port}/`);
+    canceled.on("login", (_authInfo, callback) => callback());
+    const unheard = net.request(`http://localhost:${guarded.port}/`);
+    const statuses = Promise.all([statusOf(canceled), statusOf(unheard)]);
+    canceled.end();
+    unheard.end();
+
+    expect(await statuses).toEqual([401, 401]);
   });
 });

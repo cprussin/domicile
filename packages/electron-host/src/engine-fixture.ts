@@ -30,12 +30,36 @@ export type FakeEngine = {
 };
 
 /**
- * Listens on a fresh socket. `answer` gives the events a request gets back;
- * by default `hello` gets `ready` and nothing else gets anything.
+ * The fake engine's answers by default: `hello` gets `ready`, a session's
+ * storage path is under /fake-storage, and nothing else gets anything.
  */
+export const answerAsDefault = (request: {
+  type: string;
+  call?: unknown;
+  method?: unknown;
+  session?: unknown;
+}): unknown[] => {
+  if (request.type === "hello") {
+    return [READY];
+  } else if (
+    request.type === "session_call" &&
+    request.method === "storage_path"
+  ) {
+    return [
+      {
+        call: request.call,
+        result: `/fake-storage/${String(request.session)}`,
+        type: "session_result",
+      },
+    ];
+  } else {
+    return [];
+  }
+};
+
+/** Listens on a fresh socket. `answer` gives the events a request gets back. */
 export const startFakeEngine = async (
-  answer: (request: { type: string }) => unknown[] = (request) =>
-    request.type === "hello" ? [READY] : [],
+  answer: (request: { type: string }) => unknown[] = answerAsDefault,
 ): Promise<FakeEngine> => {
   const dir = await mkdtemp(join(tmpdir(), "electron-host-engine-"));
   const path = join(dir, "electron.sock");
