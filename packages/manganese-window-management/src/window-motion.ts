@@ -26,10 +26,26 @@ export type WindowMotion =
   | "opening-tab"
   | Shuffle
   | "resting"
+  | Reversal
   | "sending"
   | "sending-tab"
   | "stowing"
   | TabFade;
+
+/**
+ * A workspace switch played backwards, when switched back before it ends.
+ *
+ * - `retreating-*`: a window that was arriving goes back the way it came.
+ * - `returning-*`: a window that was leaving comes back.
+ *
+ * Each plays the motion it cuts short in reverse, starting as far in as that
+ * one had left (`DrawnWindow.rewound`), so every window starts where it is.
+ */
+export type Reversal =
+  | "retreating-to-end"
+  | "retreating-to-start"
+  | "returning-from-end"
+  | "returning-from-start";
 
 /**
  * A tab being shown or hidden. See `tab-switch.ts`.
@@ -47,16 +63,35 @@ export type TabFade = "concealing" | "revealing" | "uncovering";
  */
 export type Shuffle = "restacking" | "restacking-again";
 
-/** The motion of a window on the workspace being switched to. */
-export const arrivalFrom = (towards: Towards): WindowMotion =>
-  towards === "end" ? "arriving-from-end" : "arriving-from-start";
+/**
+ * The motion of a window on the workspace being switched to, or `reversed`
+ * when the switch turns back one still playing. See {@link Reversal}.
+ */
+export const arrivalFrom = (
+  towards: Towards,
+  reversed: boolean,
+): WindowMotion => {
+  if (towards === "end") {
+    return reversed ? "returning-from-end" : "arriving-from-end";
+  } else {
+    return reversed ? "returning-from-start" : "arriving-from-start";
+  }
+};
 
 /**
  * The motion of a window on the workspace being switched from. It leaves the
  * opposite way, so the two workspaces pass each other.
  */
-export const departureFor = (towards: Towards): WindowMotion =>
-  towards === "end" ? "leaving-to-start" : "leaving-to-end";
+export const departureFor = (
+  towards: Towards,
+  reversed: boolean,
+): WindowMotion => {
+  if (towards === "end") {
+    return reversed ? "retreating-to-start" : "leaving-to-start";
+  } else {
+    return reversed ? "retreating-to-end" : "leaving-to-end";
+  }
+};
 
 /**
  * Whether the window is leaving the screen.
@@ -70,6 +105,8 @@ export const isLeaving = (motion: WindowMotion): boolean => {
     case "closing-tab":
     case "leaving-to-end":
     case "leaving-to-start":
+    case "retreating-to-end":
+    case "retreating-to-start":
     case "sending":
     case "sending-tab":
     case "stowing": {
@@ -84,6 +121,8 @@ export const isLeaving = (motion: WindowMotion): boolean => {
     case "restacking":
     case "restacking-again":
     case "resting":
+    case "returning-from-end":
+    case "returning-from-start":
     case "revealing":
     case "uncovering": {
       return false;
@@ -97,7 +136,11 @@ export const isSwitching = (motion: WindowMotion): boolean => {
     case "arriving-from-end":
     case "arriving-from-start":
     case "leaving-to-end":
-    case "leaving-to-start": {
+    case "leaving-to-start":
+    case "retreating-to-end":
+    case "retreating-to-start":
+    case "returning-from-end":
+    case "returning-from-start": {
       return true;
     }
     case "closing":
@@ -130,7 +173,9 @@ export const isSlidingIn = (motion: WindowMotion): boolean => {
   switch (motion) {
     case "arriving-from-end":
     case "arriving-from-start":
-    case "dropping": {
+    case "dropping":
+    case "returning-from-end":
+    case "returning-from-start": {
       return true;
     }
     case "closing":
@@ -143,6 +188,8 @@ export const isSlidingIn = (motion: WindowMotion): boolean => {
     case "restacking":
     case "restacking-again":
     case "resting":
+    case "retreating-to-end":
+    case "retreating-to-start":
     case "revealing":
     case "sending":
     case "sending-tab":
@@ -172,6 +219,10 @@ export const isScratchpadSlide = (motion: WindowMotion): boolean => {
     case "restacking":
     case "restacking-again":
     case "resting":
+    case "retreating-to-end":
+    case "retreating-to-start":
+    case "returning-from-end":
+    case "returning-from-start":
     case "revealing":
     case "sending":
     case "sending-tab":
@@ -206,6 +257,10 @@ export const barMotion = (motion: WindowMotion): WindowMotion => {
     case "restacking":
     case "restacking-again":
     case "resting":
+    case "retreating-to-end":
+    case "retreating-to-start":
+    case "returning-from-end":
+    case "returning-from-start":
     case "sending":
     case "sending-tab":
     case "stowing": {

@@ -223,6 +223,18 @@ export const slidAcross = (
 });
 
 /**
+ * Custom properties for the `windowRevealing` keyframes: the side of the tab
+ * it hid that a revealed tab slides in from (see `Revealed`). None when it is
+ * not revealed, so it only fades.
+ */
+export const tabSlidFrom = (
+  from: Point | undefined,
+): Record<`--${string}`, number> =>
+  from === undefined
+    ? {}
+    : { "--tab-slide-x": from.x, "--tab-slide-y": from.y };
+
+/**
  * Custom property taking the ring and shadow off a moving tab's contents (see
  * `movingStyles`) when its window fills its screen, where the shadow would
  * spill onto the next display. None otherwise, so the keyframes' own applies.
@@ -306,16 +318,14 @@ export const clippedAlong = (
 
 /**
  * A window's animation, keyed by `WindowMotion`. Keyframes are in
- * `panda.config.ts`.
+ * `panda-preset.ts`.
  *
  * All are transforms and opacity, so the client never redraws. A motion that
  * also holds or swaps depth does so in a second animation, so the compositor
- * thread can still run the first. Opening and
- * closing use `durations.fast` to match {@link settlingStyles}, so a window
- * and its neighbors move together. Both use `outQuart`, front-loading the
- * motion; an ease-in close at this length looks like the window sits still,
- * then vanishes. Departures use `forwards` so the window does not snap back
- * before it is removed.
+ * thread can still run the first. Moves run on springs (see
+ * docs/architecture/MOTION.md): `springs.smooth` for what arrives,
+ * `springs.snappy` for what leaves. Departures use `forwards` so the window
+ * does not snap back before it is removed.
  */
 export const movingStyles = cva({
   compoundVariants: [
@@ -330,27 +340,23 @@ export const movingStyles = cva({
     // A closing tab's contents shrink into its tab and fade, over the tab
     // they uncover; a new tab's grow out of it over the tab they hide (see
     // `contentsScaledAbout`). A fade alone, over the same box, reads as a tab
-    // switch. Slower than a window's, so the move to the strip is seen.
-    //
-    // Their edge scales with them, too thin to show them over a like tab (a
-    // terminal over a terminal), so they also carry a ring and shadow
-    // (`windowOpeningTabEdge`, `windowClosingTabEdge`). A second animation,
-    // since `box-shadow` cannot run on the compositor thread.
+    // switch. Slower than the bar, so the move to the strip is seen. Their
+    // ring and shadow are a layer of their own; see `TabEdge`.
     {
       contents: true,
       css: {
-        animationDuration: "token(durations.slow)",
-        animationName: "windowClosingIntoTab, windowClosingTabEdge",
-        animationTimingFunction: "token(easings.outQuart)",
+        animationDuration: "token(durations.springs.snappy)",
+        animationName: "windowClosingIntoTab",
+        animationTimingFunction: "token(easings.springs.snappy)",
       },
       motion: "closing-tab",
     },
     {
       contents: true,
       css: {
-        animationDuration: "token(durations.slow)",
-        animationName: "windowOpeningFromTab, windowOpeningTabEdge",
-        animationTimingFunction: "token(easings.outQuart)",
+        animationDuration: "token(durations.springs.smooth)",
+        animationName: "windowOpeningFromTab",
+        animationTimingFunction: "token(easings.springs.smooth)",
       },
       motion: "opening-tab",
     },
@@ -368,70 +374,91 @@ export const movingStyles = cva({
      */
     contents: { false: {}, true: {} },
     motion: {
-      // Both workspaces share timing so they stay side by side. `emphasized`,
-      // not `outQuart`: a full-screen slide that starts at full speed jumps.
-      // A part first drawn partway through starts where the others have got
-      // to (`--motion-delay`, see `DrawnWindow.shownRewound`).
+      // Both workspaces share timing so they stay side by side. A part first
+      // drawn partway through starts where the others have got to
+      // (`--motion-delay`, see `DrawnWindow.shownRewound`).
       "arriving-from-end": {
         animation:
-          "windowArrivingFromEnd {durations.slower} {easings.emphasized} var(--motion-delay, 0ms)",
+          "windowArrivingFromEnd {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms)",
       },
       "arriving-from-start": {
         animation:
-          "windowArrivingFromStart {durations.slower} {easings.emphasized} var(--motion-delay, 0ms)",
+          "windowArrivingFromStart {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms)",
       },
       closing: {
-        animation: "windowClosing {durations.fast} {easings.outQuart} forwards",
+        animation:
+          "windowClosing {durations.springs.snappy} {easings.springs.snappy} forwards",
       },
-      // Same curve as {@link settlingStyles}, so neighboring tabs move with it.
+      // Same curve as `useSettling`, so neighboring tabs move with it.
       "closing-tab": {
         animation: "windowClosingTab {durations.fast} {easings.out} forwards",
       },
       // The tab being hidden. Lasts as long as a new tab's contents, the
       // longest that draws over it, so it stays under them.
       concealing: {
-        animation: "windowConcealing {durations.slow} {easings.in-out}",
+        animation:
+          "windowConcealing {durations.springs.smooth} {easings.springs.smooth}",
       },
-      // The scratchpad's slides avoid front-loaded curves, so a slide of up
-      // to a screen's height is seen: `out` settles the window into place.
-      // Stowing plays the drop backwards, so its exit starts where it can be
-      // seen, and either can take over from the other where it was cut short
-      // (`--motion-delay`, see `slidAcross`).
+      // Stowing plays the drop backwards, so either can take over from the
+      // other where it was cut short (`--motion-delay`, see `slidAcross`).
       dropping: {
         animation:
-          "windowDropping {durations.slow} {easings.out} var(--motion-delay, 0ms)",
+          "windowDropping {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms)",
       },
       "leaving-to-end": {
         animation:
-          "windowLeavingToEnd {durations.slower} {easings.emphasized} forwards",
+          "windowLeavingToEnd {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) forwards",
       },
       "leaving-to-start": {
         animation:
-          "windowLeavingToStart {durations.slower} {easings.emphasized} forwards",
+          "windowLeavingToStart {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) forwards",
       },
       opening: {
-        animation: "windowOpening {durations.fast} {easings.outQuart}",
+        animation:
+          "windowOpening {durations.springs.smooth} {easings.springs.smooth}",
       },
       // The reverse of `closing-tab`, on the same curve as its neighbors.
       "opening-tab": {
         animation: "windowOpeningTab {durations.fast} {easings.out}",
       },
       // Overlapping floats separate, swap depths, and rejoin. Parameters come
-      // from {@link shuffledBy}. `in-out` pauses them where they swap.
+      // from {@link shuffledBy}. The spring plays once per leg: an easing
+      // applies to each keyframe interval.
       restacking: {
         animation:
-          "windowRestacking {durations.slower} {easings.in-out}, windowRestackingDepth {durations.slower} {easings.in-out}",
+          "windowRestacking {durations.springs.smooth} {easings.springs.smooth}, windowRestackingDepth {durations.springs.smooth} {easings.springs.smooth}",
       },
       // A second name so an immediate repeat restarts the animation.
       "restacking-again": {
         animation:
-          "windowRestackingAgain {durations.slower} {easings.in-out}, windowRestackingDepthAgain {durations.slower} {easings.in-out}",
+          "windowRestackingAgain {durations.springs.smooth} {easings.springs.smooth}, windowRestackingDepthAgain {durations.springs.smooth} {easings.springs.smooth}",
       },
       resting: {},
-      // Fades in over the hidden tab in the same box, giving a crossfade.
+      // A switch turned back plays each slide it cuts short backwards (see
+      // `Reversal`). The spring runs backwards too, which keeps the two
+      // workspaces side by side.
+      "retreating-to-end": {
+        animation:
+          "windowRetreatingToEnd {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
+      },
+      "retreating-to-start": {
+        animation:
+          "windowRetreatingToStart {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
+      },
+      "returning-from-end": {
+        animation:
+          "windowReturningFromEnd {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
+      },
+      "returning-from-start": {
+        animation:
+          "windowReturningFromStart {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
+      },
+      // Slides a short way in from the side of the tab it was switched to
+      // from, fading in over the hidden tab in the same box. See
+      // `tabSlidFrom`.
       revealing: {
         animation:
-          "windowRevealing {durations.fast} {easings.in-out}, windowHeldTiled {durations.fast} {easings.in-out}",
+          "windowRevealing {durations.springs.snappy} {easings.springs.snappy}, windowHeldTiled {durations.springs.snappy} {easings.springs.snappy}",
       },
       // Slower than `closing` and on an even curve, so the window is seen
       // leaving rather than vanishing. It draws over the windows moving into
@@ -448,11 +475,12 @@ export const movingStyles = cva({
       },
       stowing: {
         animation:
-          "windowStowing {durations.slow} {easings.out} var(--motion-delay, 0ms) reverse forwards",
+          "windowStowing {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
       },
       // Lasts as long as a closing tab's contents, which it is drawn under.
       uncovering: {
-        animation: "windowHeldTiled {durations.slow} {easings.out}",
+        animation:
+          "windowHeldTiled {durations.springs.snappy} {easings.springs.snappy}",
       },
     },
   },

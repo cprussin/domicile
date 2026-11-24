@@ -7,6 +7,7 @@
 import type { Placement } from "./placement";
 import { TILED } from "./placement";
 import type { Rect } from "./rect";
+import type { Point } from "./settle";
 import type { Shown } from "./shown";
 
 /** The windows a tab switch has swapped, by id. */
@@ -17,13 +18,19 @@ export type TabSwitch = {
    */
   concealed: readonly string[];
   /** Hidden before, shown now. */
-  revealed: readonly string[];
+  revealed: readonly Revealed[];
   /**
    * Hidden before, shown now with no window hidden in its place, as after a
    * close.
    */
   uncovered: readonly string[];
 };
+
+/**
+ * A window a tab switch revealed, and which side of the tab it hid its own tab
+ * is on: `-1`, `0` or `1` along each axis. Its contents slide in from there.
+ */
+export type Revealed = { from: Point; id: string };
 
 /**
  * The windows tabs swapped since `before`.
@@ -53,11 +60,14 @@ export const tabSwitched = (before: Shown, shown: Shown): TabSwitch => {
             arrived.some(({ surface }) => sameBox(surface, hidden.behind)),
           )
           .map(({ id }) => id),
-        revealed: revealed
-          .filter((showing) => paired(concealed, showing))
-          .map(({ id }) => id),
+        revealed: revealed.flatMap((showing) => {
+          const hid = pairOf(concealed, showing);
+          return hid === undefined
+            ? []
+            : [{ from: sideOf(hid.bar, showing.bar), id: showing.id }];
+        }),
         uncovered: revealed
-          .filter((showing) => !paired(concealed, showing))
+          .filter((showing) => pairOf(concealed, showing) === undefined)
           .map(({ id }) => id),
       }
     : { concealed: [], revealed: [], uncovered: [] };
@@ -75,9 +85,18 @@ const swapped = (
     return then !== undefined && was(then) && now(placement);
   });
 
-/** Whether a window was hidden in the box `showing` is now shown in. */
-const paired = (concealed: readonly Placement[], showing: Placement): boolean =>
-  concealed.some(({ behind }) => sameBox(behind, showing.surface));
+/** The window hidden in the box `showing` is now shown in, if any. */
+const pairOf = (
+  concealed: readonly Placement[],
+  showing: Placement,
+): Placement | undefined =>
+  concealed.find(({ behind }) => sameBox(behind, showing.surface));
+
+/** Which side of `from` `to` lies on, along each axis. */
+const sideOf = (from: Rect, to: Rect): Point => ({
+  x: Math.sign(to.x - from.x),
+  y: Math.sign(to.y - from.y),
+});
 
 /** Whether two boxes are the same, neither missing. */
 export const sameBox = (

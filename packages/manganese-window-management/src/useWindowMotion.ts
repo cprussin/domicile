@@ -16,6 +16,7 @@ import type { PlacedTab, Placement } from "./placement";
 import { contentsOf } from "./placement";
 import type { Restack } from "./restacking";
 import { restacked } from "./restacking";
+import type { Point } from "./settle";
 import type { Shown } from "./shown";
 import { sameBox, tabSwitched } from "./tab-switch";
 import type { StripPlace } from "./tree/frames";
@@ -45,6 +46,11 @@ export type DrawnWindow = {
   /** The shuffle the window is playing, or `undefined` when not shuffling. */
   restack: Restack | undefined;
   /**
+   * The side a `revealing` window's contents slide in from, or `undefined`.
+   * See `Revealed`.
+   */
+  revealedFrom: Point | undefined;
+  /**
    * How far into its motion the window starts, in milliseconds. A scratchpad
    * slide that cuts the other short starts where that one had got to, and a
    * window placed partway through a workspace switch starts where the switch
@@ -69,6 +75,8 @@ export type DrawnTab = {
   motion: WindowMotion;
   /** Its window's shuffle, or `undefined` when not shuffling. */
   restack: Restack | undefined;
+  /** How far into its motion it starts. See `DrawnWindow.rewound`. */
+  rewound: number;
   /** The screen it is drawn on. */
   screen: string;
   tab: PlacedTab;
@@ -123,7 +131,16 @@ type SendingOn = Leaving &
  * A workspace switch playing on a screen: when it began, and the windows on the
  * arriving workspace whose parts were first drawn after that.
  */
-type Switching = WorkspaceSwitch & { at: number; late: readonly Late[] };
+type Switching = WorkspaceSwitch & {
+  at: number;
+  /** The workspace it left. Switching back to it reverses the switch. */
+  from: string;
+  late: readonly Late[];
+  /** Whether it plays the switch it turned back backwards. See `Reversal`. */
+  reversed: boolean;
+  /** How far into its slides every part starts, in milliseconds. */
+  rewound: number;
+};
 
 /**
  * How far into a workspace switch a window's parts were first drawn, in
@@ -132,6 +149,9 @@ type Switching = WorkspaceSwitch & { at: number; late: readonly Late[] };
  * its slide must start where the others have got to.
  */
 type Late = { id: string; placed: number; shown: number };
+
+/** A window in a tab switch, and the side it slides in from if revealed. */
+type Fade = { from: Point | undefined; id: string; motion: TabFade };
 
 /** Animations still playing. */
 type Playing = {
@@ -157,7 +177,7 @@ type Playing = {
   /** The workspace each screen is switching away from, by screen. */
   switching: Readonly<Record<string, Switching>>;
   /** The windows in a tab switch crossfade. */
-  tabbing: readonly { id: string; motion: TabFade }[];
+  tabbing: readonly Fade[];
 };
 
 const NOTHING_PLAYING: Playing = {
@@ -182,8 +202,9 @@ const NOTHING_PLAYING: Playing = {
  * `<webview>`, blanking the page during the close animation.
  *
  * Animations end when the element reports it, so durations live in the
- * stylesheet (see `movingStyles`). Only the scratchpad slides' is read here, to
- * start one where the other was cut short.
+ * stylesheet (see `movingStyles`). Only the scratchpad slides' and the
+ * workspace switch's are read here, to start a slide where the one it reverses
+ * was cut short.
  *
  * One list covers the whole desk, so a float dragged to another screen keeps
  * its element and its `<webview>` does not reload.
@@ -293,15 +314,27 @@ const advanced = (
       .filter((id) => !wasShut.has(id)),
   );
   const shownIds = placedIds(shown);
-  const fades = [
+  const fades: readonly Fade[] = [
     ...switched.flatMap(({ concealed }) =>
-      concealed.map((id) => ({ id, motion: "concealing" as const })),
+      concealed.map((id) => ({
+        from: undefined,
+        id,
+        motion: "concealing" as const,
+      })),
     ),
     ...switched.flatMap(({ revealed }) =>
-      revealed.map((id) => ({ id, motion: "revealing" as const })),
+      revealed.map(({ from, id }) => ({
+        from,
+        id,
+        motion: "revealing" as const,
+      })),
     ),
     ...switched.flatMap(({ uncovered }) =>
-      uncovered.map((id) => ({ id, motion: "uncovering" as const })),
+      uncovered.map((id) => ({
+        from: undefined,
+        id,
+        motion: "uncovering" as const,
+      })),
     ),
   ];
   const fading = new Set(fades.map(({ id }) => id));
@@ -345,6 +378,7 @@ const advanced = (
                 sending.window.id === id && sending.motion === "stowing",
             ),
             time,
+            SLIDE,
           ),
         })),
     ],
@@ -397,6 +431,7 @@ const advanced = (
                 ? rewoundAfter(
                     playing.dropping.find(({ id }) => id === sending.window.id),
                     time,
+                    SLIDE,
                   )
                 : 0,
             screen: name,
@@ -457,6 +492,10 @@ const reconcealed = (
  * The workspace switch playing on a screen after it changes from `was` to
  * `now` at `time`: a new one, `playing` with the windows drawn since it began,
  * or `undefined` for none.
+ *
+ * A switch back to the workspace `playing` left turns it back: it plays
+ * `playing` backwards from as far in as it had left, each slide being the
+ * other played backwards (see {@link rewoundAfter}).
  */
 const switchingAfter = (
   playing: Switching | undefined,
@@ -468,7 +507,15 @@ const switchingAfter = (
   if (overviewing(was, now)) {
     return undefined;
   } else if (started !== undefined) {
-    return { ...started, at: time, late: [] };
+    const turned = playing?.from === now.current ? playing : undefined;
+    return {
+      ...started,
+      at: time,
+      from: was.current,
+      late: [],
+      reversed: turned === undefined ? false : !turned.reversed,
+      rewound: rewoundAfter(turned, time, SWITCH),
+    };
   } else if (playing === undefined) {
     return undefined;
   } else {
@@ -511,17 +558,27 @@ const lateIn = (
  * How long a scratchpad slide takes, in milliseconds. Matches `dropping` and
  * `stowing` in `movingStyles`.
  */
-const SLIDE = Number.parseFloat(token("durations.slow"));
+const SLIDE = Number.parseFloat(token("durations.springs.smooth"));
 
 /**
- * How far into a scratchpad slide starting at `time` to begin, given the
+ * How long a workspace switch takes, in milliseconds. Matches the switch's
+ * motions in `movingStyles`.
+ */
+const SWITCH = Number.parseFloat(token("durations.springs.smooth"));
+
+/**
+ * How far into a slide of `length` ms starting at `time` to begin, given the
  * opposite slide it cuts short, if any.
  *
  * Each slide is the other played backwards, so starting at the time the cut
  * slide has left puts the window where that slide had moved it.
  */
-const rewoundAfter = (cut: Slid | undefined, time: number): number =>
-  cut === undefined ? 0 : Math.max(0, SLIDE - (cut.rewound + time - cut.at));
+const rewoundAfter = (
+  cut: Slid | undefined,
+  time: number,
+  length: number,
+): number =>
+  cut === undefined ? 0 : Math.max(0, length - (cut.rewound + time - cut.at));
 
 /** Whether the desk has the window `id` in the scratchpad. */
 const stowed = (desk: Desk, id: string): boolean =>
@@ -592,9 +649,13 @@ const played = (
     case "arriving-from-end":
     case "arriving-from-start":
     case "leaving-to-end":
-    case "leaving-to-start": {
+    case "leaving-to-start":
+    case "retreating-to-end":
+    case "retreating-to-start":
+    case "returning-from-end":
+    case "returning-from-start": {
       // The first report ends the switch on its screen: all its animations
-      // start together and run equally long.
+      // end together.
       return screen === undefined || playing.switching[screen] === undefined
         ? playing
         : {
@@ -693,7 +754,7 @@ type Index = {
   /** The departing workspace's placement of each window sliding off. */
   leaving: ReadonlyMap<
     string,
-    { left: WorkspaceSwitch; placement: Placement; screen: string }
+    { left: Switching; placement: Placement; screen: string }
   >;
   /**
    * Each shown window's placement. At most one screen shows it: a workspace
@@ -751,6 +812,7 @@ const drawnWindow = (
       motion: movesAsTab(closing.placement) ? "closing-tab" : "closing",
       placement: closing.placement,
       restack: undefined,
+      revealedFrom: undefined,
       rewound: 0,
       screen: closing.screen,
       shownRewound: 0,
@@ -766,6 +828,7 @@ const drawnWindow = (
           motion: sending.motion,
           placement: sending.placement,
           restack: undefined,
+          revealedFrom: undefined,
           rewound: sending.rewound,
           screen: sending.screen,
           shownRewound: sending.rewound,
@@ -782,6 +845,9 @@ const drawnWindow = (
         (shuffle) =>
           shuffle.restack.id === window.id && shuffle.motion === motion,
       )?.restack,
+      revealedFrom: playing.tabbing.find(
+        (fade) => fade.id === window.id && fade.motion === motion,
+      )?.from,
       ...rewoundIn(playing, placed.screen, window.id),
       screen: placed.screen,
       window,
@@ -808,7 +874,10 @@ const rewoundIn = (
     return { rewound, shownRewound: rewound };
   } else {
     const late = switching.late.find((window) => window.id === id);
-    return { rewound: late?.placed ?? 0, shownRewound: late?.shown ?? 0 };
+    return {
+      rewound: switching.rewound + (late?.placed ?? 0),
+      shownRewound: switching.rewound + (late?.shown ?? 0),
+    };
   }
 };
 
@@ -825,7 +894,7 @@ const arriving = (
   const { id } = placement;
   const switching = playing.switching[screen];
   if (switching !== undefined) {
-    return arrivalFrom(switching.towards);
+    return arrivalFrom(switching.towards, switching.reversed);
   } else if (playing.opening.includes(id)) {
     return movesAsTab(placement) ? "opening-tab" : "opening";
   } else if (playing.dropping.some((dropping) => dropping.id === id)) {
@@ -855,6 +924,7 @@ const leavingWindow = (index: Index, window: ShellWindow): DrawnWindow => {
       motion: "resting",
       placement: undefined,
       restack: undefined,
+      revealedFrom: undefined,
       rewound: 0,
       screen: undefined,
       shownRewound: 0,
@@ -864,12 +934,13 @@ const leavingWindow = (index: Index, window: ShellWindow): DrawnWindow => {
     return {
       crossing: false,
       focused: leaving.left.activeId === window.id,
-      motion: departureFor(leaving.left.towards),
+      motion: departureFor(leaving.left.towards, leaving.left.reversed),
       placement: leaving.placement,
       restack: undefined,
-      rewound: 0,
+      revealedFrom: undefined,
+      rewound: leaving.left.rewound,
       screen: leaving.screen,
-      shownRewound: 0,
+      shownRewound: leaving.left.rewound,
       window,
     };
   }
@@ -895,8 +966,9 @@ const drawnTabs = (shown: Desk, playing: Playing): readonly DrawnTab[] =>
           motion:
             left === undefined
               ? (shuffle?.motion ?? "resting")
-              : arrivalFrom(left.towards),
+              : arrivalFrom(left.towards, left.reversed),
           restack: shuffle?.restack,
+          rewound: left?.rewound ?? 0,
           screen,
           tab,
         };
@@ -905,8 +977,9 @@ const drawnTabs = (shown: Desk, playing: Playing): readonly DrawnTab[] =>
         ? []
         : left.tabs.map((tab) => ({
             focused: left.activeId === tab.id,
-            motion: departureFor(left.towards),
+            motion: departureFor(left.towards, left.reversed),
             restack: undefined,
+            rewound: left.rewound,
             screen,
             tab,
           }))),

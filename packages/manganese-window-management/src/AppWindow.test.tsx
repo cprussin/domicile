@@ -49,19 +49,6 @@ const nothingEnded = () => {
   // No test here needs the callback.
 };
 
-/**
- * The first duration in a `transition` or `animation` shorthand. Lets tests
- * compare durations without hard-coding them.
- */
-const lengthOf = (shorthand: string): string => {
-  const found = /\d+m?s/.exec(shorthand);
-  if (found === null) {
-    throw new Error(`test: no length in ${shorthand}`);
-  } else {
-    return found[0];
-  }
-};
-
 /** Default props; each test overrides what it checks. */
 const windowProps = {
   appId: "term",
@@ -361,22 +348,6 @@ describe("AppWindow", () => {
       ).toContain("windowOpening");
     });
 
-    // Its scaled edge alone is too faint to show it over a like tab, such as
-    // a terminal opened over a terminal. The edge fades, so it never comes or
-    // goes in one frame.
-    it.each([
-      ["opening-tab", "windowOpeningTabEdge"],
-      ["closing-tab", "windowClosingTabEdge"],
-    ] as const)("carries a fading edge and shadow while %s", (motion, edge) => {
-      const { container } = render(
-        <AppWindow {...windowProps} focused={false} motion={motion} />,
-      );
-
-      expect(
-        globalThis.getComputedStyle(windowBox(container)).animationName,
-      ).toContain(edge);
-    });
-
     // The contents and title bar are separate elements. Each must scale about
     // the same point or they would separate.
     it("turns about the middle of its whole frame rather than its own", () => {
@@ -389,17 +360,6 @@ describe("AppWindow", () => {
       expect(windowBox(container)).toHaveStyle({
         transformOrigin: "600px 385px",
       });
-    });
-
-    // Neighbors ease into the closing window's box, so the close animation
-    // must not outlast that transition.
-    it("leaves in the time the layout takes to close over it", () => {
-      const { container } = render(
-        <AppWindow {...windowProps} focused={false} motion="closing" />,
-      );
-      const style = globalThis.getComputedStyle(windowBox(container));
-
-      expect(lengthOf(style.animation)).toBe(lengthOf(style.transition));
     });
 
     // Resizing the box every frame would have the client draw at every size

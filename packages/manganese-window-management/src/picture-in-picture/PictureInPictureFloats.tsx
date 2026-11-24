@@ -665,14 +665,15 @@ const Progress = ({
 //
 // Hidden until its video is drawn. It grows out of its place in its page and
 // shrinks back into it, about its top left, by the offset `motionStyle` sets.
-// Long moves, so `emphasized`. Returning holds its last frame until the page
+// It grows on `springs.smooth` and returns on `springs.snappy`, as a window
+// opens and closes. Returning holds its last frame until the page
 // takes the video back; then it fades there over the page's own video, which
 // can take a frame or two to draw again.
 const floatStyles = css({
   "&[data-motion=growing]": {
-    animationDuration: "token(durations.slow)",
+    animationDuration: "token(durations.springs.smooth)",
     animationName: "pictureInPictureGrowing",
-    animationTimingFunction: "token(easings.emphasized)",
+    animationTimingFunction: "token(easings.springs.smooth)",
   },
   "&[data-motion=leaving], &[data-motion=leaving-page]": {
     animationDuration: "token(durations.fast)",
@@ -682,10 +683,10 @@ const floatStyles = css({
     pointerEvents: "none",
   },
   "&[data-motion=returning]": {
-    animationDuration: "token(durations.slow)",
+    animationDuration: "token(durations.springs.snappy)",
     animationFillMode: "forwards",
     animationName: "pictureInPictureReturning",
-    animationTimingFunction: "token(easings.emphasized)",
+    animationTimingFunction: "token(easings.springs.snappy)",
   },
   "&[data-motion=waiting]": { opacity: 0 },
   position: "fixed",
@@ -697,17 +698,17 @@ const floatStyles = css({
 // of its page and out as it shrinks back.
 const shadowStyles = css({
   "[data-motion=growing] > &": {
-    animationDuration: "token(durations.slow)",
+    animationDuration: "token(durations.springs.smooth)",
     animationName: "pictureInPictureShadowIn",
-    animationTimingFunction: "token(easings.emphasized)",
+    animationTimingFunction: "token(easings.springs.smooth)",
   },
   // Faded out as it shrank back into its page.
   "[data-motion=leaving-page] > &": { opacity: 0 },
   "[data-motion=returning] > &": {
-    animationDuration: "token(durations.slow)",
+    animationDuration: "token(durations.springs.snappy)",
     animationFillMode: "forwards",
     animationName: "pictureInPictureShadowOut",
-    animationTimingFunction: "token(easings.emphasized)",
+    animationTimingFunction: "token(easings.springs.snappy)",
   },
   borderRadius: "lg",
   boxShadow: "lifted",

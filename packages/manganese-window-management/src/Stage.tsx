@@ -39,7 +39,9 @@ import { SelectionTint } from "./SelectionTint";
 import { SettleHandoffs } from "./SettleHandoffs";
 import type { StageScreen } from "./screens/stage-screens";
 import { useShared } from "./screens/useShared";
+import type { Point } from "./settle";
 import { SlidingScreen } from "./sliding-screen";
+import { TabEdge } from "./TabEdge";
 import { TabStrip } from "./TabStrip";
 import type { Aim, DropTargets, TabTarget, Target } from "./tiled/aim";
 import { bordersOf } from "./tiled/borders";
@@ -353,7 +355,7 @@ export const Stage = memo(
           Before every window and glow, so the windows of each group shown in
           a tab, and their glows, lie on its well.
         */}
-          {motions.tabs.map(({ motion, restack, screen, tab }) =>
+          {motions.tabs.map(({ motion, restack, rewound, screen, tab }) =>
             tab.well === undefined ? undefined : (
               <Sliding
                 depth={wellDepthOf(tab.depth)}
@@ -361,7 +363,7 @@ export const Stage = memo(
                 key={`well-${tabKeyOf(tab)}`}
                 motion={motion}
                 on={screenNamed(desk, screen)}
-                rewound={0}
+                rewound={rewound}
                 seen={overview?.shown.get(screen)}
               >
                 <GroupWell
@@ -428,6 +430,7 @@ export const Stage = memo(
               motion,
               placement,
               restack,
+              revealedFrom,
               screen,
               seen,
               shownRewound,
@@ -476,6 +479,7 @@ export const Stage = memo(
                 // both sides of it. A window whose box stays put is unaffected.
                 resizing={stretching}
                 restack={restack}
+                revealedFrom={revealedFrom}
                 rewound={shownRewound}
                 screen={screen}
                 screenBox={screenNamed(desk, screen)?.geometry.screen}
@@ -534,7 +538,7 @@ export const Stage = memo(
                 />
               ) : undefined,
           )}
-          {motions.tabs.map(({ motion, restack, screen, tab }) =>
+          {motions.tabs.map(({ motion, restack, rewound, screen, tab }) =>
             tab.active && tab.strip.open ? (
               <GroupStrip
                 depth={tab.depth}
@@ -558,7 +562,7 @@ export const Stage = memo(
                 onNewTab={onNewTab}
                 onPull={pull}
                 restack={restack}
-                rewound={0}
+                rewound={rewound}
                 seen={overview?.shown.get(screen)}
                 strip={tab.strip}
                 targets={targets}
@@ -797,40 +801,43 @@ export const Stage = memo(
           Tabs of tabbed and stacking containers. Each tab is titled after, and
           selects, the window its container last focused.
         */}
-          {motions.tabs.map(({ focused, motion, restack, screen, tab }) => {
-            const tabbed = windowNamed(named, tab.id);
-            return (
-              <ContainerTab
-                description={descriptionOf(tabbed)}
-                dragging={stretching || held.has(tab.id)}
-                floating={desk.floats.has(tab.id)}
-                focused={focused}
-                // Always false: a fullscreen workspace draws no tabs. See
-                // `placement.ts`.
-                fullscreen={desk.fullscreen.get(tab.id) === false}
-                icon={iconOf(tabbed, clientIcons)}
-                key={tabKeyOf(tab)}
-                motion={motion}
-                on={screenNamed(desk, screen)}
-                onAim={setAim}
-                onClose={onGroupClose}
-                onDrop={onDrop}
-                onDropOn={onGroupDropOn}
-                onFloat={onFloat}
-                onFullscreen={onFullscreen}
-                onGrab={groupGrabbed}
-                onPlayedOut={onPlayedOut}
-                onPull={pull}
-                onSelect={onSelect}
-                restack={restack}
-                screen={screen}
-                seen={overview?.shown.get(screen)}
-                tab={tab}
-                targets={targets}
-                title={tabbed.title}
-              />
-            );
-          })}
+          {motions.tabs.map(
+            ({ focused, motion, restack, rewound, screen, tab }) => {
+              const tabbed = windowNamed(named, tab.id);
+              return (
+                <ContainerTab
+                  description={descriptionOf(tabbed)}
+                  dragging={stretching || held.has(tab.id)}
+                  floating={desk.floats.has(tab.id)}
+                  focused={focused}
+                  // Always false: a fullscreen workspace draws no tabs. See
+                  // `placement.ts`.
+                  fullscreen={desk.fullscreen.get(tab.id) === false}
+                  icon={iconOf(tabbed, clientIcons)}
+                  key={tabKeyOf(tab)}
+                  motion={motion}
+                  on={screenNamed(desk, screen)}
+                  onAim={setAim}
+                  onClose={onGroupClose}
+                  onDrop={onDrop}
+                  onDropOn={onGroupDropOn}
+                  onFloat={onFloat}
+                  onFullscreen={onFullscreen}
+                  onGrab={groupGrabbed}
+                  onPlayedOut={onPlayedOut}
+                  onPull={pull}
+                  onSelect={onSelect}
+                  restack={restack}
+                  rewound={rewound}
+                  screen={screen}
+                  seen={overview?.shown.get(screen)}
+                  tab={tab}
+                  targets={targets}
+                  title={tabbed.title}
+                />
+              );
+            },
+          )}
           {/*
           After every window and tab, at the open tab's raised depth, so it
           covers the selected container's windows and every tab. It follows
@@ -945,6 +952,8 @@ type WindowContentsProps = {
   /** See `AppWindow`. */
   resizing: boolean;
   restack: Restack | undefined;
+  /** See `DrawnWindow.revealedFrom`. */
+  revealedFrom: Point | undefined;
   /** How far into its motion it starts. See `DrawnWindow.rewound`. */
   rewound: number;
   screen: string | undefined;
@@ -983,6 +992,7 @@ const WindowContents = memo(
     popups,
     resizing,
     restack,
+    revealedFrom,
     rewound,
     screen,
     screenBox,
@@ -1028,10 +1038,22 @@ const WindowContents = memo(
         motion={motion}
         onHover={hovered}
         onReach={reached}
+        revealedFrom={revealedFrom}
         rewound={rewound}
         screen={screenBox}
         seen={seen}
       >
+        {(motion === "opening-tab" || motion === "closing-tab") &&
+          contents !== undefined &&
+          placement !== undefined && (
+            <TabEdge
+              depth={contents.depth}
+              frame={placement.frame}
+              motion={motion}
+              rect={contents.rect}
+              tab={placement.bar}
+            />
+          )}
         {window.kind === WindowKind.App ? (
           <AppWindow
             appId={window.appId}
@@ -1210,6 +1232,7 @@ const WindowBar = memo(
         motion={motion}
         onHover={hovered}
         onReach={reached}
+        revealedFrom={undefined}
         rewound={rewound}
         screen={screenBox}
         seen={seen}
@@ -1281,6 +1304,8 @@ type ContainerTabProps = {
   onPull: () => void;
   onSelect: (id: string) => void;
   restack: Restack | undefined;
+  /** How far into its motion it starts. See `DrawnWindow.rewound`. */
+  rewound: number;
   screen: string;
   /** How the overview shows it, if open. */
   seen: Seen | undefined;
@@ -1312,6 +1337,7 @@ const ContainerTab = memo(
     onPull,
     onSelect,
     restack,
+    rewound,
     screen,
     seen,
     tab,
@@ -1349,7 +1375,7 @@ const ContainerTab = memo(
         frame={undefined}
         motion={motion}
         on={on}
-        rewound={0}
+        rewound={rewound}
         seen={seen}
       >
         <GroupTitleBar

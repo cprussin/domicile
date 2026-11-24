@@ -55,7 +55,27 @@ describe("tabSwitched", () => {
         desktop([shownIn("a"), hiddenIn("b")]),
         desktop([hiddenIn("a"), shownIn("b")]),
       ),
-    ).toStrictEqual({ concealed: ["a"], revealed: ["b"], uncovered: [] });
+    ).toStrictEqual({
+      concealed: ["a"],
+      revealed: [{ from: { x: 0, y: 0 }, id: "b" }],
+      uncovered: [],
+    });
+  });
+
+  // Its contents slide in from that side, so the switch reads as a move
+  // along the strip.
+  it("says which side of the hidden tab the revealed one is on", () => {
+    const at = (placement: Placement, x: number): Placement => ({
+      ...placement,
+      bar: { ...BAR, x },
+    });
+
+    expect(
+      tabSwitched(
+        desktop([at(shownIn("a"), 600), at(hiddenIn("b"), 0)]),
+        desktop([at(hiddenIn("a"), 600), at(shownIn("b"), 0)]),
+      ).revealed,
+    ).toStrictEqual([{ from: { x: -1, y: 0 }, id: "b" }]);
   });
 
   // A window opened as a tab, or brought from another workspace, is not

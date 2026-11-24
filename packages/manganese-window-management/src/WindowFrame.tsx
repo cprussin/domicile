@@ -8,6 +8,7 @@ import { seenAt, seenClip, seenStyles } from "./overview/seen-styles";
 import type { Seen } from "./overview/sight";
 import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
+import type { Point } from "./settle";
 import { SlidingScreen } from "./sliding-screen";
 import type { WindowMotion } from "./window-motion";
 import {
@@ -15,6 +16,7 @@ import {
   screenClipStyles,
   slidAcross,
   slidingAcross,
+  tabSlidFrom,
   unedgedOn,
 } from "./window-styles";
 
@@ -48,6 +50,8 @@ type Props = {
    * selection around it as a click does.
    */
   onReach: () => void;
+  /** The side a revealed tab slides in from. See `tabSlidFrom`. */
+  revealedFrom: Point | undefined;
   /** How far into its motion the window starts. See `slidAcross`. */
   rewound: number;
   /** Its screen, which the window's slides move it off. See `slidAcross`. */
@@ -91,6 +95,7 @@ export const WindowFrame = ({
   motion,
   onHover,
   onReach,
+  revealedFrom,
   rewound,
   screen,
   seen,
@@ -130,6 +135,7 @@ export const WindowFrame = ({
       }}
       style={{
         ...unedgedOn(fillsScreen),
+        ...tabSlidFrom(revealedFrom),
         ...(screen === undefined
           ? {}
           : {

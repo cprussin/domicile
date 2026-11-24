@@ -414,10 +414,15 @@ with windows, and the shown one.
 
 ## Animations
 
+Moves run on the preset's springs (`springs.smooth` for what arrives,
+`springs.snappy` for what leaves; see
+[MOTION.md](/docs/architecture/MOTION.md)). Fades and settles keep fixed
+curves.
+
 - Opening: fade in and grow from the center.
 - Opening a tab: the tab opens out from its start as the tabs after it slide
   along; the contents grow out of the tab and fade in over the tab they
-  hide, a little slower than a window opens so the move is seen.
+  hide, slower than the tab so the move is seen.
 - Rearranging: windows ease to their new boxes.
 - Moving a tab along its strip, by keys or by dragging: the tabs slide to
   their new places, the moved one included.
@@ -428,9 +433,10 @@ with windows, and the shown one.
   back. Its contents shrink into the tab and fade out over the tab it
   uncovers, as slowly as a new tab's grow out.
 - An opening or closing tab's contents carry a ring and shadow while they
-  move, so they show over a tab that looks like them. Both fade, so neither
-  comes or goes in one frame. None in a group filling its screen, where the
-  shadow would spill onto the next display.
+  move, so they show over a tab that looks like them. They are a layer of
+  their own under the contents (`TabEdge`) that scales with them and fades,
+  so neither comes or goes in one frame and nothing repaints. None in a group
+  filling its screen, where the shadow would spill onto the next display.
 - Sending away a tab: it shrinks and fades with its contents, as a sent
   window does, while the tabs after it slide back.
 - Sending to the scratchpad: slide up off the top of the screen. Showing it
@@ -440,9 +446,11 @@ with windows, and the shown one.
 - Workspace switch: the new workspace slides in; the old one slides out.
   Each window is clipped to its screen meanwhile, so it never shows on the
   next one, and to its workspace, so a float hanging off the screen never
-  slides into view.
-- Tab switch: crossfade. On a workspace sliding in, the tab switched to
-  slides with it instead. Parts first drawn partway through (a hidden tab's
+  slides into view. Switching back before it ends plays it backwards from
+  where it is (`Reversal`), as the scratchpad's slides do.
+- Tab switch: the revealed tab slides a short way in from its tab's side of
+  the hidden one and fades in over it. On a workspace sliding in, the tab
+  switched to slides with it instead. Parts first drawn partway through (a hidden tab's
   contents, the strip it opens) start where the slide has got to
   (`DrawnWindow.shownRewound`).
 

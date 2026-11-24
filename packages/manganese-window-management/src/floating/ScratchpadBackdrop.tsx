@@ -64,6 +64,10 @@ const fadeOf = (motion: WindowMotion): "dropping" | "resting" | "stowing" => {
     case "restacking":
     case "restacking-again":
     case "resting":
+    case "retreating-to-end":
+    case "retreating-to-start":
+    case "returning-from-end":
+    case "returning-from-start":
     case "revealing":
     case "sending":
     case "sending-tab":
@@ -87,12 +91,12 @@ const backdropStyles = cva({
     motion: {
       dropping: {
         animation:
-          "backdropShowing {durations.slow} {easings.out} var(--motion-delay, 0ms)",
+          "backdropShowing {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms)",
       },
       resting: {},
       stowing: {
         animation:
-          "backdropHiding {durations.slow} {easings.out} var(--motion-delay, 0ms) reverse forwards",
+          "backdropHiding {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
         pointerEvents: "none",
       },
     },

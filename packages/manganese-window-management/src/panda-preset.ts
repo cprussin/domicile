@@ -36,12 +36,29 @@ const SCRATCHPAD_SLIDE = {
   "100%": { opacity: "1", transform: "translateY(0)" },
 };
 
-/**
- * The ring and shadow an opening or closing tab's contents carry, or
- * `--tab-edge` where they would spill off the screen (see `unedgedOn`).
- */
-const TAB_EDGE =
-  "var(--tab-edge, 0 0 0 1px {colors.borderStrong}, {shadows.lifted})";
+// A workspace switch slides every window on the workspace by one screen width
+// (`--workspace-width`; see `slidAcross`). The arriving workspace starts where
+// the leaving one ends, so they never overlap and nothing needs to fade.
+//
+// A switch turned back plays these backwards (see `Reversal`). Each is
+// registered under a second name for that: the browser restarts an animation
+// only when its name changes.
+const ARRIVING_FROM_END = {
+  "0%": { transform: "translateX(var(--workspace-width))" },
+  "100%": { transform: "translateX(0)" },
+};
+const ARRIVING_FROM_START = {
+  "0%": { transform: "translateX(calc(-1 * var(--workspace-width)))" },
+  "100%": { transform: "translateX(0)" },
+};
+const LEAVING_TO_END = {
+  "0%": { transform: "translateX(0)" },
+  "100%": { transform: "translateX(var(--workspace-width))" },
+};
+const LEAVING_TO_START = {
+  "0%": { transform: "translateX(0)" },
+  "100%": { transform: "translateX(calc(-1 * var(--workspace-width)))" },
+};
 
 // The scratchpad backdrop fades in with a window's drop, and out with its
 // stow by playing this backwards. Two names for the same reason as
@@ -109,20 +126,22 @@ export const windowManagementPreset = definePreset({
           "0%": { opacity: "1" },
           "100%": { opacity: "0" },
         },
-        // A workspace switch slides every window on the workspace by one
-        // screen width (`--workspace-width`; see `slidAcross`). The arriving
-        // workspace starts where the leaving one ends, so they never overlap
-        // and nothing needs to fade.
-        windowArrivingFromEnd: {
-          "0%": { transform: "translateX(var(--workspace-width))" },
-          "100%": { transform: "translateX(0)" },
+        // The ring and shadow around a tab's contents (see `TabEdge`). They
+        // scale with the contents, and fade in as the contents start to
+        // shrink or out as they finish growing, so the shadow never comes or
+        // goes in one frame.
+        tabEdgeClosing: {
+          "0%": { opacity: "0", transform: "scale(1)" },
+          "30%": { opacity: "1" },
+          "100%": { opacity: "0", transform: "scale(0.15)" },
         },
-        windowArrivingFromStart: {
-          "0%": {
-            transform: "translateX(calc(-1 * var(--workspace-width)))",
-          },
-          "100%": { transform: "translateX(0)" },
+        tabEdgeOpening: {
+          "0%": { opacity: "0", transform: "scale(0.15)" },
+          "70%": { opacity: "1" },
+          "100%": { opacity: "0", transform: "scale(1)" },
         },
+        windowArrivingFromEnd: ARRIVING_FROM_END,
+        windowArrivingFromStart: ARRIVING_FROM_START,
         // The reverse of `windowOpening`. It shrinks only to 0.85 rather than
         // to nothing; the fade does most of the work.
         windowClosing: {
@@ -148,16 +167,6 @@ export const windowManagementPreset = definePreset({
             transform: "scale(var(--collapse-x, 1), var(--collapse-y, 1))",
           },
         },
-        // Fades in as the contents start to shrink, so the shadow does not
-        // appear in one frame.
-        // main-thread animation: the tab edge is drawn on the window element
-        // itself, which holds no layer to fade instead; it runs only while a
-        // tab opens or closes.
-        windowClosingTabEdge: {
-          "0%": { boxShadow: "none" },
-          "30%": { boxShadow: TAB_EDGE },
-          "100%": { boxShadow: TAB_EDGE },
-        },
         // A tab switch: the revealed tab fades in over the hidden one; see
         // `tab-switch.ts`.
         //
@@ -181,17 +190,8 @@ export const windowManagementPreset = definePreset({
           "0%": { zIndex: "0" },
           "100%": { zIndex: "0" },
         },
-        // The workspace being left slides out by one screen width.
-        windowLeavingToEnd: {
-          "0%": { transform: "translateX(0)" },
-          "100%": { transform: "translateX(var(--workspace-width))" },
-        },
-        windowLeavingToStart: {
-          "0%": { transform: "translateX(0)" },
-          "100%": {
-            transform: "translateX(calc(-1 * var(--workspace-width)))",
-          },
-        },
+        windowLeavingToEnd: LEAVING_TO_END,
+        windowLeavingToStart: LEAVING_TO_START,
         // A window opening fades and scales up to its laid-out box.
         //
         // Uses a transform, not the box size: an `<app>`'s box sets its
@@ -219,23 +219,24 @@ export const windowManagementPreset = definePreset({
           },
           "100%": { opacity: "1", transform: "scale(1, 1)" },
         },
-        // Fades out as the contents settle, so the shadow does not vanish in
-        // one frame.
-        // main-thread animation: the tab edge is drawn on the window element
-        // itself, which holds no layer to fade instead; it runs only while a
-        // tab opens or closes.
-        windowOpeningTabEdge: {
-          "0%": { boxShadow: TAB_EDGE },
-          "70%": { boxShadow: TAB_EDGE },
-          "100%": { boxShadow: "none" },
-        },
         windowRestacking: RESTACKING,
         windowRestackingAgain: RESTACKING,
         windowRestackingDepth: RESTACKING_DEPTH,
         windowRestackingDepthAgain: RESTACKING_DEPTH,
+        windowRetreatingToEnd: ARRIVING_FROM_END,
+        windowRetreatingToStart: ARRIVING_FROM_START,
+        windowReturningFromEnd: LEAVING_TO_END,
+        windowReturningFromStart: LEAVING_TO_START,
+        // A tab switch: the revealed tab slides a short way in from its tab's
+        // side of the hidden one, `--tab-slide-x` and `--tab-slide-y` (see
+        // `tabSlidFrom`), as it fades in over it.
         windowRevealing: {
-          "0%": { opacity: "0" },
-          "100%": { opacity: "1" },
+          "0%": {
+            opacity: "0",
+            transform:
+              "translate(calc(var(--tab-slide-x, 0) * {spacing.6}), calc(var(--tab-slide-y, 0) * {spacing.6}))",
+          },
+          "100%": { opacity: "1", transform: "none" },
         },
         // A window sent to a workspace no screen shows. It shrinks further
         // than `windowClosing`, so it does not look closed.

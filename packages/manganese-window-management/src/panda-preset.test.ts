@@ -27,4 +27,27 @@ describe("window keyframes", () => {
 
     expect(mixed).toStrictEqual([]);
   });
+
+  // A reversed switch plays the frames of the slide it cuts short backwards,
+  // under another name so the browser starts it anew.
+  it.each([
+    ["windowRetreatingToEnd", "windowArrivingFromEnd"],
+    ["windowRetreatingToStart", "windowArrivingFromStart"],
+    ["windowReturningFromEnd", "windowLeavingToEnd"],
+    ["windowReturningFromStart", "windowLeavingToStart"],
+  ] as const)("plays %s on the frames of %s", (reversal, slide) => {
+    expect(keyframes[reversal]).toStrictEqual(keyframes[slide]);
+  });
+
+  // `--tab-slide-x` and `--tab-slide-y` are the side, set by `tabSlidFrom`.
+  it("slides a revealed tab in from its side as it fades in", () => {
+    expect(keyframes.windowRevealing).toStrictEqual({
+      "0%": {
+        opacity: "0",
+        transform:
+          "translate(calc(var(--tab-slide-x, 0) * {spacing.6}), calc(var(--tab-slide-y, 0) * {spacing.6}))",
+      },
+      "100%": { opacity: "1", transform: "none" },
+    });
+  });
 });

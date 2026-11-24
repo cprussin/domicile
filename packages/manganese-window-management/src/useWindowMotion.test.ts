@@ -508,7 +508,7 @@ describe("useWindowMotion", () => {
     // Each slide is the other played backwards, so the new one starts where
     // the one it cuts short had got to.
     describe("a slide cut short by the other", () => {
-      const SLIDE = Number.parseFloat(token("durations.slow"));
+      const SLIDE = Number.parseFloat(token("durations.springs.smooth"));
 
       it("slides a window hidden partway down back up from where it is", () => {
         const { clock, rerender, result } = clocked(stowed);
@@ -916,6 +916,30 @@ describe("useWindowMotion", () => {
       expect(motionOf(result, TERMINAL.id)).toBe("concealing");
     });
 
+    it("slides the revealed window in from its tab's side", () => {
+      const along = (shown: Shown): Shown => ({
+        ...shown,
+        placements: shown.placements.map((placement) => ({
+          ...placement,
+          bar: {
+            ...placement.bar,
+            x: placement.id === EDITOR.id ? placement.bar.width : 0,
+          },
+        })),
+      });
+      const { rerender, result } = showing(along(tabbed(TERMINAL, EDITOR)));
+
+      act(() => {
+        rerender(along(tabbed(EDITOR, TERMINAL)));
+      });
+
+      expect(drawnOf(result, EDITOR.id)?.revealedFrom).toStrictEqual({
+        x: 1,
+        y: 0,
+      });
+      expect(drawnOf(result, TERMINAL.id)?.revealedFrom).toBeUndefined();
+    });
+
     it("is done with each window when it says it has finished", () => {
       const { rerender, result } = showing(tabbed(TERMINAL, EDITOR));
       act(() => {
@@ -1201,6 +1225,153 @@ describe("useWindowMotion", () => {
 
       expect(motionOf(result, EDITOR.id)).toBe("resting");
       expect(motionOf(result, TERMINAL.id)).toBe("resting");
+    });
+
+    // Each half plays the other's slide backwards, so starting it as far in
+    // as the cut slide had left puts every window where it is on screen.
+    describe("switched back before it has finished", () => {
+      const SWITCH = Number.parseFloat(token("durations.springs.smooth"));
+      const ON_ONE = desktop("1", [TERMINAL, EDITOR], [TERMINAL]);
+      const ON_TWO = desktop("2", [TERMINAL, EDITOR], [EDITOR]);
+
+      /** Switches to 2, and back to 1 200ms in. */
+      const switchedBack = () => {
+        const hook = clocked(ON_ONE);
+        act(() => {
+          hook.rerender(ON_TWO);
+        });
+        hook.clock.now = 200;
+        act(() => {
+          hook.rerender(ON_ONE);
+        });
+        return hook;
+      };
+
+      it("slides the workspace it was going to back out from where it is", () => {
+        const { result } = switchedBack();
+
+        expect(drawnOf(result, EDITOR.id)).toMatchObject({
+          motion: "retreating-to-end",
+          rewound: SWITCH - 200,
+        });
+      });
+
+      it("slides the workspace it was leaving back in from where it is", () => {
+        const { result } = switchedBack();
+
+        expect(drawnOf(result, TERMINAL.id)).toMatchObject({
+          motion: "returning-from-start",
+          rewound: SWITCH - 200,
+          shownRewound: SWITCH - 200,
+        });
+      });
+
+      it("turns forward again from where it is when switched once more", () => {
+        const { clock, rerender, result } = switchedBack();
+        clock.now = 300;
+
+        act(() => {
+          rerender(ON_TWO);
+        });
+
+        expect(drawnOf(result, EDITOR.id)).toMatchObject({
+          motion: "arriving-from-end",
+          rewound: 100,
+        });
+        expect(drawnOf(result, TERMINAL.id)).toMatchObject({
+          motion: "leaving-to-start",
+          rewound: 100,
+        });
+      });
+
+      it("slides the tabs back with their windows", () => {
+        const tabbed = (shown: Shown): Shown => ({
+          ...shown,
+          tabs: [
+            {
+              active: true,
+              depth: 0,
+              group: Layout.SplitH,
+              id: shown.activeId ?? "",
+              node: { id: shown.activeId ?? "", up: 1 },
+              rect: placementOf(TERMINAL.id).bar,
+              selected: false,
+              strip: {
+                area: placementOf(TERMINAL.id).bar,
+                at: 0,
+                box: placementOf(TERMINAL.id).bar,
+                divided: false,
+                end: undefined,
+                endDivided: false,
+                group: { node: { id: "", up: 2 }, wells: 0, windows: [] },
+                nested: false,
+                open: true,
+                tabs: 1,
+              },
+              tabbed: Layout.Tabbed,
+              well: undefined,
+              windows: [shown.activeId ?? ""],
+            },
+          ],
+        });
+        const { clock, rerender, result } = clocked(tabbed(ON_ONE));
+        act(() => {
+          rerender(tabbed(ON_TWO));
+        });
+        clock.now = 200;
+
+        act(() => {
+          rerender(tabbed(ON_ONE));
+        });
+
+        expect(
+          result.current.tabs.map(({ motion, rewound, tab }) => [
+            tab.id,
+            motion,
+            rewound,
+          ]),
+        ).toStrictEqual([
+          [TERMINAL.id, "returning-from-start", SWITCH - 200],
+          [EDITOR.id, "retreating-to-end", SWITCH - 200],
+        ]);
+      });
+
+      it("is over when one of the windows says it has finished sliding", () => {
+        const { result } = switchedBack();
+
+        act(() => {
+          result.current.onPlayedOut(
+            EDITOR.id,
+            "retreating-to-end",
+            SCREEN,
+            "contents",
+          );
+        });
+
+        expect(motionOf(result, EDITOR.id)).toBe("resting");
+        expect(motionOf(result, TERMINAL.id)).toBe("resting");
+      });
+
+      it("starts a switch after it from the beginning", () => {
+        const { rerender, result } = switchedBack();
+        act(() => {
+          result.current.onPlayedOut(
+            EDITOR.id,
+            "retreating-to-end",
+            SCREEN,
+            "contents",
+          );
+        });
+
+        act(() => {
+          rerender(ON_TWO);
+        });
+
+        expect(drawnOf(result, EDITOR.id)).toMatchObject({
+          motion: "arriving-from-end",
+          rewound: 0,
+        });
+      });
     });
   });
 

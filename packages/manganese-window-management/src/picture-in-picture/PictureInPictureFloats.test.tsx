@@ -2,11 +2,19 @@ import { describe, expect, it } from "bun:test";
 import { PICTURE_IN_PICTURE_SHOWN_EVENT } from "@domicile-desktop/sdk/desktop/picture-in-picture";
 import type { DomicilePictureInPictureVideo } from "@domicile-desktop/sdk/domicile-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { token } from "../../styled-system/tokens";
 import type { Rect } from "../rect";
 import { PictureInPictureFloats } from "./PictureInPictureFloats";
+
+// Loads the real stylesheet so motion styles resolve.
+loadEmittedStylesheet(
+  document,
+  new URL("../../styled-system/styles.css", import.meta.url),
+);
 
 const WORKSPACE = { height: 1040, width: 1920, x: 0, y: 40 };
 
@@ -326,6 +334,48 @@ describe("PictureInPictureFloats", () => {
       (640 / 480).toString(),
     );
     expect(float?.getAttribute("data-motion")).toBe("growing");
+  });
+
+  // Its shadow is a layer of its own, which must keep time with it.
+  describe("on springs", () => {
+    const timingOf = (element: Element): readonly string[] => {
+      const style = globalThis.getComputedStyle(element);
+      return [style.animationDuration, style.animationTimingFunction];
+    };
+    const shadowOf = (float: HTMLElement): Element => {
+      const shadow = float.querySelector(":scope > [aria-hidden]");
+      if (shadow === null) {
+        throw new Error("test: the float has no shadow");
+      }
+      return shadow;
+    };
+
+    it("grows out of its page on the smooth spring", () => {
+      const { container } = floating({ ...VIDEO, source: SOURCE });
+      drawn(container);
+      const float = floatOf(container);
+
+      expect(timingOf(float)).toStrictEqual([
+        token("durations.springs.smooth"),
+        token("easings.springs.smooth"),
+      ]);
+      expect(timingOf(shadowOf(float))).toStrictEqual(timingOf(float));
+    });
+
+    it("shrinks back into its page on the snappy spring", () => {
+      const { container } = floating({ ...VIDEO, source: SOURCE });
+      drawn(container);
+      const float = floatOf(container);
+      fireEvent.animationEnd(float);
+
+      fireEvent.click(screen.getByRole("button", { name: "Back to tab" }));
+
+      expect(timingOf(float)).toStrictEqual([
+        token("durations.springs.snappy"),
+        token("easings.springs.snappy"),
+      ]);
+      expect(timingOf(shadowOf(float))).toStrictEqual(timingOf(float));
+    });
   });
 
   it("appears in place when its page is drawn nowhere", () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { Layout } from "./tree/node";
+import type { WindowMotion } from "./window-motion";
 import {
   clippedAlong,
   clippedTo,
@@ -146,6 +147,66 @@ describe("movingStyles", () => {
   it("starts other motions at once", () => {
     expect(movingStyles({ contents: true, motion: "closing" })).toBe(
       movingStyles({ motion: "closing" }),
+    );
+  });
+
+  describe("springs", () => {
+    /** The motion's styles as one string, to look for its timing in. */
+    const styled = (motion: WindowMotion, contents = false): string =>
+      JSON.stringify(movingStyles.raw({ contents, motion }));
+    const SMOOTH =
+      /durations\.springs\.smooth\).*easings\.springs\.smooth|durations\.springs\.smooth\} \{easings\.springs\.smooth/;
+    const SNAPPY =
+      /durations\.springs\.snappy\).*easings\.springs\.snappy|durations\.springs\.snappy\} \{easings\.springs\.snappy/;
+
+    it.each([
+      ["opening", false, SMOOTH],
+      ["closing", false, SNAPPY],
+      ["opening-tab", true, SMOOTH],
+      ["closing-tab", true, SNAPPY],
+      ["restacking", false, SMOOTH],
+      ["restacking-again", false, SMOOTH],
+      ["dropping", false, SMOOTH],
+      ["stowing", false, SMOOTH],
+      ["arriving-from-end", false, SMOOTH],
+      ["leaving-to-start", false, SMOOTH],
+      ["revealing", true, SNAPPY],
+    ] as const)("plays %s on its spring", (motion, contents, spring) => {
+      expect(styled(motion, contents)).toMatch(spring);
+    });
+
+    // A reversal plays the slide it cuts short backwards, from as far in as
+    // that one had left (`--motion-delay`). Under a name of its own: the
+    // browser restarts an animation only when its name changes. See
+    // `panda-preset.ts` for the frames each shares.
+    it.each([
+      ["retreating-to-end", "windowRetreatingToEnd"],
+      ["retreating-to-start", "windowRetreatingToStart"],
+      ["returning-from-end", "windowReturningFromEnd"],
+      ["returning-from-start", "windowReturningFromStart"],
+    ] as const)("plays %s as %s backwards", (motion, keyframes) => {
+      expect(movingStyles.raw({ motion }).animation).toBe(
+        `${keyframes} {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards`,
+      );
+    });
+
+    // The tab under a moving tab's contents holds its depth as long as they
+    // move over it.
+    it("holds the uncovered tab as long as the closing tab's contents shrink", () => {
+      expect(styled("uncovering", true)).toMatch(SNAPPY);
+    });
+
+    it("holds the concealed tab as long as the slowest motion over it", () => {
+      expect(styled("concealing", true)).toMatch(SMOOTH);
+    });
+
+    // The ring and shadow are a layer of their own (`TabEdge`); a
+    // `box-shadow` animation would repaint every frame on the main thread.
+    it.each(["opening-tab", "closing-tab"] as const)(
+      "animates no edge on a %s tab's contents",
+      (motion) => {
+        expect(styled(motion, true)).not.toContain("Edge");
+      },
     );
   });
 });

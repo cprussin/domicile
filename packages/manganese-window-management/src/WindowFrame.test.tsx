@@ -13,6 +13,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useContext } from "react";
 import type { Seen } from "./overview/sight";
+import type { Point } from "./settle";
 import { SlidingScreen } from "./sliding-screen";
 import { WindowFrame } from "./WindowFrame";
 import type { WindowMotion } from "./window-motion";
@@ -53,6 +54,7 @@ describe("WindowFrame", () => {
         motion="resting"
         onHover={noHover}
         onReach={noReach}
+        revealedFrom={undefined}
         rewound={0}
         screen={undefined}
         seen={undefined}
@@ -85,6 +87,7 @@ describe("WindowFrame", () => {
           crossed.push(at);
         }}
         onReach={noReach}
+        revealedFrom={undefined}
         rewound={0}
         screen={undefined}
         seen={undefined}
@@ -115,6 +118,7 @@ describe("WindowFrame", () => {
         onReach={() => {
           reached.push("reach");
         }}
+        revealedFrom={undefined}
         rewound={0}
         screen={undefined}
         seen={undefined}
@@ -134,6 +138,7 @@ describe("WindowFrame", () => {
       motion: WindowMotion = "resting",
       seen: Seen | undefined = undefined,
       fillsScreen = false,
+      revealedFrom: Point | undefined = undefined,
     ) => {
       render(
         <WindowFrame
@@ -143,6 +148,7 @@ describe("WindowFrame", () => {
           motion={motion}
           onHover={noHover}
           onReach={noReach}
+          revealedFrom={revealedFrom}
           rewound={0}
           screen={SCREEN}
           seen={seen}
@@ -162,6 +168,20 @@ describe("WindowFrame", () => {
           "--tab-edge",
         ),
       ).toBe("none");
+    });
+
+    // A tab switch slides the revealed tab's contents a short way in from
+    // its tab's side of the tab it hid.
+    it("slides a revealed tab in from its tab's side", () => {
+      const { wrapper } = styleOf("revealing", undefined, false, {
+        x: -1,
+        y: 0,
+      });
+
+      expect([
+        wrapper?.getPropertyValue("--tab-slide-x"),
+        wrapper?.getPropertyValue("--tab-slide-y"),
+      ]).toStrictEqual(["-1", "0"]);
     });
 
     it("slides its parts the width of the screen", () => {
@@ -215,6 +235,7 @@ describe("WindowFrame", () => {
           motion={motion}
           onHover={noHover}
           onReach={noReach}
+          revealedFrom={undefined}
           rewound={0}
           screen={{ height: 800, width: 1280, x: 0, y: 100 }}
           seen={undefined}
@@ -251,6 +272,7 @@ describe("WindowFrame", () => {
         onReach={() => {
           reaches += 1;
         }}
+        revealedFrom={undefined}
         rewound={0}
         screen={undefined}
         seen={undefined}

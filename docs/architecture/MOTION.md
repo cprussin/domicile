@@ -221,11 +221,14 @@ Tooling:
 
 Windows (no engine change):
 
-- [ ] open, close, tab open / close, restack on springs; tab edge as a layer
-- [ ] workspace switch and scratchpad as reversible transitions
+- [x] open, close, tab open / close, restack on springs; tab edge as a layer
+- [ ] open from the launcher or the window that opened it (needs the opener
+      in the window model)
+- [x] workspace switch and scratchpad as reversible transitions
 - [ ] send to workspace flies to its switcher chip
-- [ ] tab switch directional slide
-- [ ] picture-in-picture and drag release on springs
+- [x] tab switch directional slide
+- [x] picture-in-picture on springs
+- [ ] drag release on springs
 
 Overview:
 

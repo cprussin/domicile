@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import { render } from "@testing-library/react";
+import { token } from "../../styled-system/tokens";
 import { ScratchpadBackdrop } from "./ScratchpadBackdrop";
 
 loadEmittedStylesheet(
@@ -40,6 +41,27 @@ describe("ScratchpadBackdrop", () => {
       "none",
     );
   });
+
+  // `rewound` is a time into the window's slide, so the fade must last as
+  // long to stay with it.
+  it.each(["dropping", "stowing"] as const)(
+    "fades as long as the window's %s slide",
+    (motion) => {
+      const { container } = render(
+        <ScratchpadBackdrop
+          depth={1}
+          motion={motion}
+          onDismiss={nothing}
+          rewound={0}
+          screen={SCREEN}
+        />,
+      );
+
+      expect(
+        globalThis.getComputedStyle(backdrop(container)).animation,
+      ).toContain(token("durations.springs.smooth"));
+    },
+  );
 
   // A slide that cuts the other short starts partway in, like the window's.
   it("starts its fade as far in as the window's slide", () => {
