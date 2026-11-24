@@ -4,6 +4,7 @@
 // docs/architecture/ELECTRON-APPS.md.
 
 import { EventEmitter } from "node:events";
+import { z } from "zod";
 
 /** The calls the host makes on a session, by their names on the wire. */
 export type SessionCallMessage = {
@@ -18,7 +19,18 @@ export type SessionCallMessage = {
     | "cookies_watch"
     | "clear_storage_data"
     | "clear_cache"
-    | "set_user_agent";
+    | "set_user_agent"
+    | "clear_data"
+    | "clear_auth_cache"
+    | "clear_code_caches"
+    | "resolve_host"
+    | "preconnect_sockets"
+    | "storage_path"
+    | "clear_shared_dictionary_cache"
+    | "clear_shared_dictionary_cache_for_isolation_key"
+    | "get_shared_dictionary_info"
+    | "get_shared_dictionary_usage_info"
+    | "service_workers_watch";
   readonly [argument: string]: unknown;
 };
 
@@ -97,6 +109,67 @@ export type ClearStorageDataOptions = {
   readonly quotas?: readonly string[];
 };
 
+/** Electron's `ClearDataOptions`. */
+export type ClearDataOptions = {
+  readonly dataTypes?: readonly string[];
+  readonly origins?: readonly string[];
+  readonly excludeOrigins?: readonly string[];
+  readonly avoidClosingConnections?: boolean;
+  readonly originMatchingMode?:
+    | "third-parties-included"
+    | "origin-in-all-contexts";
+};
+
+/** Electron's `ResolveHostOptions`. */
+export type ResolveHostOptions = {
+  readonly queryType?: "A" | "AAAA";
+  readonly source?: "any" | "system" | "dns" | "mdns" | "localOnly";
+  readonly cacheUsage?: "allowed" | "staleAllowed" | "disallowed";
+  readonly secureDnsPolicy?: "allow" | "disable";
+};
+
+/** Electron's `ResolvedHost`. */
+export type ResolvedHost = {
+  readonly endpoints: readonly {
+    readonly address: string;
+    readonly family: "ipv4" | "ipv6" | "unspec";
+  }[];
+};
+
+/** The key a shared dictionary is kept under, Electron's names. */
+export type SharedDictionaryIsolationKey = {
+  readonly frameOrigin: string;
+  readonly topFrameSite: string;
+};
+
+/** Electron's `SharedDictionaryInfo`. */
+export type SharedDictionaryInfo = {
+  readonly match: string;
+  readonly matchDestinations: readonly string[];
+  readonly id: string;
+  readonly dictionaryUrl: string;
+  readonly lastFetchTime: Date;
+  readonly responseTime: Date;
+  /** Milliseconds. */
+  readonly expirationDuration: number;
+  readonly lastUsedTime: Date;
+  readonly size: number;
+  readonly hash: string;
+};
+
+/** Electron's `SharedDictionaryUsageInfo`. */
+export type SharedDictionaryUsageInfo = SharedDictionaryIsolationKey & {
+  readonly totalSizeBytes: number;
+};
+
+/** A running service worker, as the engine says it. */
+export type RunningServiceWorker = {
+  readonly version_id: number;
+  readonly scope: string;
+  readonly script_url: string;
+  readonly render_process_id: number;
+};
+
 /** What one session has of these calls. */
 export type SessionCalls = {
   /** An EventEmitter as well, for `changed`. */
@@ -108,7 +181,84 @@ export type SessionCalls = {
   readonly setUserAgent: (userAgent: string, acceptLanguages?: string) => void;
   /** The user agent the app set; "" until it sets one. */
   readonly getUserAgent: () => string;
+  readonly clearData: (options?: ClearDataOptions) => Promise<void>;
+  readonly clearAuthCache: () => Promise<void>;
+  readonly clearCodeCaches: (options: {
+    readonly urls?: readonly string[];
+  }) => Promise<void>;
+  readonly resolveHost: (
+    host: string,
+    options?: ResolveHostOptions,
+  ) => Promise<ResolvedHost>;
+  readonly preconnect: (options: {
+    readonly url: string;
+    readonly numSockets?: number;
+  }) => void;
+  /** Where the engine keeps the session's data on disk. */
+  readonly storagePath: () => Promise<string>;
+  readonly clearSharedDictionaryCache: () => Promise<void>;
+  readonly clearSharedDictionaryCacheForIsolationKey: (
+    key: SharedDictionaryIsolationKey,
+  ) => Promise<void>;
+  readonly getSharedDictionaryInfo: (
+    key: SharedDictionaryIsolationKey,
+  ) => Promise<SharedDictionaryInfo[]>;
+  readonly getSharedDictionaryUsageInfo: () => Promise<
+    SharedDictionaryUsageInfo[]
+  >;
+  /**
+   * Has the engine say each change to the session's service workers, as
+   * `service_worker` events; gives the ones running now.
+   */
+  readonly watchServiceWorkers: () => Promise<RunningServiceWorker[]>;
 };
+
+/** A shared dictionary as the engine gives it: its times in milliseconds. */
+const wireDictionaries = z.array(
+  z.object({
+    dictionaryUrl: z.string(),
+    expirationDuration: z.number(),
+    hash: z.string(),
+    id: z.string(),
+    lastFetchTime: z.number().transform((time) => new Date(time)),
+    lastUsedTime: z.number().transform((time) => new Date(time)),
+    match: z.string(),
+    matchDestinations: z.array(z.string()),
+    responseTime: z.number().transform((time) => new Date(time)),
+    size: z.number(),
+  }),
+);
+
+const wireUsage = z.array(
+  z.object({
+    frameOrigin: z.string(),
+    topFrameSite: z.string(),
+    totalSizeBytes: z.number(),
+  }),
+);
+
+const wireResolvedHost = z.object({
+  endpoints: z.array(
+    z.object({
+      address: z.string(),
+      family: z.enum(["ipv4", "ipv6", "unspec"]),
+    }),
+  ),
+});
+
+const wireRunningWorkers = z.array(
+  z.object({
+    render_process_id: z.number(),
+    scope: z.string(),
+    script_url: z.string(),
+    version_id: z.number(),
+  }),
+);
+
+const isolationKey = (key: SharedDictionaryIsolationKey) => ({
+  frame_origin: key.frameOrigin,
+  top_frame_site: key.topFrameSite,
+});
 
 /** Drops the keys whose value is undefined, so the line leaves them out. */
 const defined = (fields: Record<string, unknown>) =>
@@ -173,7 +323,36 @@ export const createSessionCalls = (
   const forSession = (session: string): SessionCalls => {
     let userAgent: string | undefined;
     return {
+      clearAuthCache: () => nothing(call(session, "clear_auth_cache")),
       clearCache: () => nothing(call(session, "clear_cache")),
+      clearCodeCaches: (options) =>
+        nothing(
+          call(session, "clear_code_caches", defined({ urls: options.urls })),
+        ),
+      clearData: (options = {}) =>
+        nothing(
+          call(
+            session,
+            "clear_data",
+            defined({
+              avoid_closing_connections: options.avoidClosingConnections,
+              data_types: options.dataTypes,
+              exclude_origins: options.excludeOrigins,
+              origin_matching_mode: options.originMatchingMode,
+              origins: options.origins,
+            }),
+          ),
+        ),
+      clearSharedDictionaryCache: () =>
+        nothing(call(session, "clear_shared_dictionary_cache")),
+      clearSharedDictionaryCacheForIsolationKey: (key) =>
+        nothing(
+          call(
+            session,
+            "clear_shared_dictionary_cache_for_isolation_key",
+            isolationKey(key),
+          ),
+        ),
       clearStorageData: (options = {}) =>
         nothing(
           call(
@@ -215,13 +394,53 @@ export const createSessionCalls = (
             }),
           ),
       }),
+      getSharedDictionaryInfo: async (key) =>
+        wireDictionaries.parse(
+          await call(session, "get_shared_dictionary_info", isolationKey(key)),
+        ),
+      getSharedDictionaryUsageInfo: async () =>
+        wireUsage.parse(
+          await call(session, "get_shared_dictionary_usage_info"),
+        ),
       getUserAgent: () => userAgent ?? userAgentFallback(),
+      preconnect: ({ numSockets = 1, url }) => {
+        if (!Number.isInteger(numSockets) || numSockets < 1 || numSockets > 6) {
+          throw new Error(
+            `preconnect's numSockets is 1 to 6, not ${numSockets}`,
+          );
+        }
+        // Electron's is synchronous and says nothing back.
+        call(session, "preconnect_sockets", { sockets: numSockets, url }).catch(
+          (error: unknown) => {
+            // biome-ignore lint/suspicious/noConsole: a refusal is the engine's bug
+            console.error(`the engine refused to preconnect to ${url}`, error);
+          },
+        );
+      },
+      resolveHost: async (host, options = {}) =>
+        wireResolvedHost.parse(
+          await call(
+            session,
+            "resolve_host",
+            defined({
+              cache_usage: options.cacheUsage,
+              host,
+              query_type: options.queryType,
+              secure_dns_policy: options.secureDnsPolicy,
+              source: options.source,
+            }),
+          ),
+        ),
       setUserAgent: (agent) => {
         userAgent = agent;
         // Electron's is synchronous; a refusal is the engine's bug, and its
         // rejection goes unhandled, loudly.
         void call(session, "set_user_agent", { user_agent: agent });
       },
+      storagePath: async () =>
+        z.string().parse(await call(session, "storage_path")),
+      watchServiceWorkers: async () =>
+        wireRunningWorkers.parse(await call(session, "service_workers_watch")),
     };
   };
 

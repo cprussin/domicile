@@ -16,8 +16,10 @@
 #include "base/files/file_path.h"
 #include "base/types/expected.h"
 #include "base/values.h"
+#include "components/domicile/browser/electron_network_calls.h"
 #include "components/domicile/browser/electron_page_call.h"
 #include "components/domicile/browser/electron_page_reports.h"
+#include "components/domicile/browser/electron_sign_ins.h"
 #include "components/domicile/browser/web_view_partition.h"
 #include "components/domicile/common/electron_schemes.h"
 #include "url/gurl.h"
@@ -1233,7 +1235,9 @@ using ElectronSessionMethod = std::variant<ElectronGetCookies,
                                            ElectronWatchCookies,
                                            ElectronClearStorage,
                                            ElectronClearCache,
-                                           ElectronSetUserAgent>;
+                                           ElectronSetUserAgent,
+                                           ElectronNetworkCall,
+                                           ElectronWatchServiceWorkers>;
 
 // A call on session `session`, which the engine answers with
 // ElectronSessionResult under `call`.
@@ -1293,7 +1297,8 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronSetWindowState,
                                      ElectronSetUserAgentFallback,
                                      ElectronPageCall,
-                                     ElectronPageRequest>;
+                                     ElectronPageRequest,
+                                     ElectronSignInReply>;
 
 // Why a line is not a request, and which window or protocol request it was
 // for when it names one, so the app hears of it as that window's and the

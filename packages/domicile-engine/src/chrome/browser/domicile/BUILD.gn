@@ -56,8 +56,12 @@ source_set("domicile") {
     "domicile_devtools.h",
     "domicile_downloads.cc",
     "domicile_downloads.h",
+    "domicile_electron_certificates.cc",
+    "domicile_electron_certificates.h",
     "domicile_electron_loader.cc",
     "domicile_electron_loader.h",
+    "domicile_electron_network.cc",
+    "domicile_electron_network.h",
     "domicile_electron_page.cc",
     "domicile_electron_page.h",
     "domicile_electron_page_control.cc",
@@ -184,7 +188,11 @@ source_set("domicile") {
     "//components/domicile:shortcut_registry",
     "//components/tabs:public",
     "//content/public/browser",
+    # Electron sessions' clearData removes their downloads.
+    "//components/download/public/common:public",
     "//net",
+    # The certificates an Electron app is asked about, and their chains.
+    "//third_party/boringssl",
     # `screenshot`: reads the shell page's surface back as a PNG.
     "//components/viz/common",
     # Installs the extensions the desk's config names into the profile.

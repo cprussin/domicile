@@ -46,6 +46,20 @@ class FakeHeldPage final : public ElectronHeldPage {
   const raw_ref<std::vector<std::string>> calls_;
 };
 
+// A watch whose workers are the ones it was made with.
+class FakeServiceWorkerWatch final : public ElectronServiceWorkerWatch {
+ public:
+  explicit FakeServiceWorkerWatch(
+      std::vector<ElectronRunningServiceWorker> running)
+      : running_(std::move(running)) {}
+  std::vector<ElectronRunningServiceWorker> Running() const override {
+    return running_;
+  }
+
+ private:
+  const std::vector<ElectronRunningServiceWorker> running_;
+};
+
 // A desk that numbers its windows from 10 and writes down each call.
 class FakeDesk final : public ElectronDesk {
  public:
@@ -281,6 +295,23 @@ class FakeDesk final : public ElectronDesk {
     calls.push_back("clear cache in " + partition.name);
     std::move(done).Run();
   }
+  void RunNetworkCall(
+      const WebViewPartition& partition,
+      const ElectronNetworkCall& call,
+      base::OnceCallback<void(base::expected<base::Value, std::string>)> done)
+      override {
+    calls.push_back("network call " + base::NumberToString(call.index()) +
+                    " in " + partition.name);
+    std::move(done).Run(base::Value("done"));
+  }
+  std::unique_ptr<ElectronServiceWorkerWatch> WatchServiceWorkers(
+      const WebViewPartition& partition,
+      base::RepeatingCallback<void(const ElectronServiceWorkerChange& change)>
+          changed) override {
+    calls.push_back("watch service workers in " + partition.name);
+    service_worker_changed = std::move(changed);
+    return std::make_unique<FakeServiceWorkerWatch>(running_workers);
+  }
 
   bool has_shell = true;
   // What AskPage was asked, by window id, oldest first, and why it refuses.
@@ -291,6 +322,11 @@ class FakeDesk final : public ElectronDesk {
   // What the last WatchCookies was told to call.
   base::RepeatingCallback<void(const ElectronCookieChange& change)>
       cookie_changed;
+  // What the last WatchServiceWorkers was told to call, and the workers its
+  // watches say are running.
+  base::RepeatingCallback<void(const ElectronServiceWorkerChange& change)>
+      service_worker_changed;
+  std::vector<ElectronRunningServiceWorker> running_workers;
   // Each window's partition and session, by id.
   std::map<std::string, WebViewPartition> partitions;
   std::map<std::string, base::WeakPtr<ElectronSession>> sessions;
@@ -2245,6 +2281,152 @@ TEST_F(ElectronAppTest, APagesUserAgentGoesBackToItsSessionsWhenEmptied) {
   EXPECT_EQ(desk_.calls,
             (Lines{"user agent 10 Mine/1", "user agent 10 Claude/1"}));
   EXPECT_TRUE(desk_.asked.empty());
+}
+
+template <typename T>
+base::OnceCallback<void(T)> IntoAny(std::optional<T>& got) {
+  return base::BindOnce([](std::optional<T>* into, T value) { *into = value; },
+                        &got);
+}
+
+TEST_F(ElectronAppTest, ASignInIsAnsweredByTheAppsListeners) {
+  Hello();
+  app_->Take(kOpenOwn);
+  sent_.clear();
+  std::optional<ElectronLoginAnswer> page;
+  std::optional<ElectronLoginAnswer> proxy;
+
+  desk_.sessions.at("10")->AskToSignIn(
+      "10",
+      {.url = GURL("https://a.test/"),
+       .scheme = "basic",
+       .host = "a.test",
+       .port = 443,
+       .realm = "r"},
+      IntoAny(page));
+  desk_.sessions.at("10")->AskToSignIn(
+      std::nullopt,
+      {.url = GURL("https://b.test/"),
+       .is_proxy = true,
+       .scheme = "basic",
+       .host = "proxy.test",
+       .port = 3128},
+      IntoAny(proxy));
+  app_->Take(R"({"type":"login_answer","ask":2,"action":"default"})");
+  app_->Take(R"({"type":"login_answer","ask":1,"action":"sign_in",)"
+             R"("username":"me","password":"pw"})");
+
+  ASSERT_EQ(sent_.size(), 2u);
+  EXPECT_TRUE(sent_[0].contains(R"("window":1)")) << sent_[0];
+  EXPECT_FALSE(sent_[1].contains(R"("window")")) << sent_[1];
+  EXPECT_EQ(page, (ElectronLoginAnswer{.action = ElectronLoginAction::kSignIn,
+                                       .username = u"me",
+                                       .password = u"pw"}));
+  EXPECT_EQ(proxy,
+            (ElectronLoginAnswer{.action = ElectronLoginAction::kDefault}));
+}
+
+TEST_F(ElectronAppTest, AnAnswerOfTheWrongKindOrForNothingIsRefused) {
+  Hello();
+  app_->Take(kOpenOwn);
+  std::optional<bool> allowed;
+  desk_.sessions.at("10")->AskAboutCertificateError(
+      "10", {.url = GURL("https://a.test/"), .error = "net::ERR_CERT_DATE_INVALID"},
+      IntoAny(allowed));
+  sent_.clear();
+
+  app_->Take(R"({"type":"login_answer","ask":1,"action":"cancel"})");
+  app_->Take(R"({"type":"certificate_answer","ask":9,"allow":true})");
+  app_->Take(R"({"type":"certificate_answer","ask":1,"allow":true})");
+
+  EXPECT_EQ(sent_, (Lines{R"({"type":"refused","why":"answer 1 is for )"
+                          R"(another kind of question"})"
+                          "\n",
+                          R"({"type":"refused","why":"no sign-in or )"
+                          R"(certificate question is waiting for answer 9"})"
+                          "\n"}));
+  EXPECT_EQ(allowed, true);
+}
+
+TEST_F(ElectronAppTest, AClientCertificateNeverOfferedGoesOnWithNone) {
+  Hello();
+  app_->Take(kOpenOwn);
+  std::optional<std::optional<int>> chosen;
+  base::ListValue offered;
+  offered.Append(base::DictValue().Set("subjectName", "one"));
+  desk_.sessions.at("10")->AskForClientCertificate(
+      "10", {.host_and_port = "a.test:443", .certificates = std::move(offered)},
+      IntoAny(chosen));
+  sent_.clear();
+
+  app_->Take(R"({"type":"client_certificate_answer","ask":1,"certificate":1})");
+
+  EXPECT_EQ(sent_, Lines{R"({"type":"refused","why":"answer 1 chose )"
+                         R"(certificate 1 of 1 offered"})"
+                         "\n"});
+  EXPECT_EQ(chosen, std::optional<std::optional<int>>(std::in_place, std::nullopt));
+}
+
+TEST_F(ElectronAppTest, AnAppThatGoesCancelsItsSignInsAndRefusesCertificates) {
+  Hello();
+  app_->Take(kOpenOwn);
+  ElectronSession& session = *desk_.sessions.at("10");
+  std::optional<ElectronLoginAnswer> login;
+  std::optional<bool> allowed;
+  std::optional<std::optional<int>> chosen;
+  session.AskToSignIn("10", {.url = GURL("https://a.test/")}, IntoAny(login));
+  session.AskAboutCertificateError("10", {.url = GURL("https://a.test/")},
+                                   IntoAny(allowed));
+  session.AskForClientCertificate("10", {.host_and_port = "a.test:443"},
+                                  IntoAny(chosen));
+
+  app_.reset();
+
+  EXPECT_EQ(login,
+            (ElectronLoginAnswer{.action = ElectronLoginAction::kCancel}));
+  EXPECT_EQ(allowed, false);
+  EXPECT_EQ(chosen, std::optional<std::optional<int>>(std::in_place, std::nullopt));
+}
+
+TEST_F(ElectronAppTest, ANetworkSessionCallIsTheDesksToAnswer) {
+  Hello();
+
+  app_->Take(R"({"type":"session_call","call":3,"session":"persist:work",)"
+             R"("method":"clear_auth_cache"})");
+
+  EXPECT_EQ(desk_.calls, Lines{"network call 1 in electron-claude:work"});
+  EXPECT_EQ(sent_, Lines{R"({"call":3,"result":"done",)"
+                         R"("type":"session_result"})"
+                         "\n"});
+}
+
+TEST_F(ElectronAppTest, AWatchOnServiceWorkersGivesTheRunningOnesThenEachChange) {
+  Hello();
+  desk_.running_workers = {{.version_id = 2,
+                            .scope = GURL("https://a.test/"),
+                            .script_url = GURL("https://a.test/sw.js"),
+                            .render_process_id = 7}};
+
+  app_->Take(R"({"type":"session_call","call":1,"session":"",)"
+             R"("method":"service_workers_watch"})");
+  app_->Take(R"({"type":"session_call","call":2,"session":"",)"
+             R"("method":"service_workers_watch"})");
+  desk_.service_worker_changed.Run(
+      ElectronServiceWorkerRegistered{.scope = GURL("https://a.test/")});
+
+  EXPECT_EQ(desk_.calls, Lines{"watch service workers in electron-claude"});
+  const std::string running =
+      R"([{"render_process_id":7,"scope":"https://a.test/",)"
+      R"("script_url":"https://a.test/sw.js","version_id":2.0}])";
+  EXPECT_EQ(sent_,
+            (Lines{base::StrCat({R"({"call":1,"result":)", running,
+                                 R"(,"type":"session_result"})", "\n"}),
+                   base::StrCat({R"({"call":2,"result":)", running,
+                                 R"(,"type":"session_result"})", "\n"}),
+                   R"({"event":"registration_completed",)"
+                   R"("scope":"https://a.test/","session":"",)"
+                   R"("type":"service_worker"})"
+                   "\n"}));
 }
 
 }  // namespace

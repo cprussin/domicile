@@ -1767,5 +1767,150 @@ TEST(ElectronProtocolTest, ACookieFilterMatchesAsElectronsDoes) {
   EXPECT_FALSE(ElectronCookieMatches(cookie, {.http_only = false}));
 }
 
+TEST(ElectronProtocolTest, ASignInAnswerSignsInCancelsOrLeavesItToTheShell) {
+  const auto sign_in = ParseElectronRequest(
+      R"({"type":"login_answer","ask":1,"action":"sign_in",)"
+      R"("username":"me","password":"secret"})");
+  ASSERT_TRUE(sign_in.has_value()) << sign_in.error().why;
+  EXPECT_EQ(std::get<ElectronSignInReply>(*sign_in),
+            ElectronSignInReply(ElectronLoginReply{
+                .ask = 1,
+                .answer = {.action = ElectronLoginAction::kSignIn,
+                           .username = u"me",
+                           .password = u"secret"}}));
+  const auto by_default = ParseElectronRequest(
+      R"({"type":"login_answer","ask":2,"action":"default"})");
+  ASSERT_TRUE(by_default.has_value()) << by_default.error().why;
+  EXPECT_EQ(std::get<ElectronSignInReply>(*by_default),
+            ElectronSignInReply(ElectronLoginReply{
+                .ask = 2, .answer = {.action = ElectronLoginAction::kDefault}}));
+
+  EXPECT_EQ(WhyRefused(R"({"type":"login_answer","ask":1,"action":"sign_in"})"),
+            "a sign-in's \"username\" and \"password\" must be strings");
+  EXPECT_EQ(WhyRefused(R"({"type":"login_answer","action":"cancel"})"),
+            "\"ask\" must be a whole number from 1");
+}
+
+TEST(ElectronProtocolTest, ACertificateAnswerAllowsOrPicksOneOrNone) {
+  const auto allow = ParseElectronRequest(
+      R"({"type":"certificate_answer","ask":3,"allow":true})");
+  ASSERT_TRUE(allow.has_value()) << allow.error().why;
+  EXPECT_EQ(std::get<ElectronSignInReply>(*allow),
+            ElectronSignInReply(ElectronCertificateReply{.ask = 3, .allow = true}));
+  const auto picked = ParseElectronRequest(
+      R"({"type":"client_certificate_answer","ask":4,"certificate":1})");
+  ASSERT_TRUE(picked.has_value()) << picked.error().why;
+  EXPECT_EQ(std::get<ElectronSignInReply>(*picked),
+            ElectronSignInReply(
+                ElectronClientCertificateReply{.ask = 4, .certificate = 1}));
+  const auto none = ParseElectronRequest(
+      R"({"type":"client_certificate_answer","ask":5})");
+  ASSERT_TRUE(none.has_value()) << none.error().why;
+  EXPECT_EQ(std::get<ElectronSignInReply>(*none),
+            ElectronSignInReply(ElectronClientCertificateReply{.ask = 5}));
+
+  EXPECT_EQ(WhyRefused(R"({"type":"certificate_answer","ask":3})"),
+            "\"allow\" must be true or false");
+  EXPECT_EQ(WhyRefused(
+                R"({"type":"client_certificate_answer","ask":5,"certificate":-1})"),
+            "\"certificate\" must be the index of one the engine offered");
+}
+
+TEST(ElectronProtocolTest, ALoginAskNamesItsChallenge) {
+  EXPECT_EQ(
+      ElectronLoginAsked(1, 2, "persist:a",
+                         {.url = GURL("https://a.test/"),
+                          .is_proxy = true,
+                          .scheme = "basic",
+                          .host = "proxy.test",
+                          .port = 3128,
+                          .realm = "office"}),
+      R"({"ask":1,"auth_info":{"host":"proxy.test","is_proxy":true,)"
+      R"("port":3128,"realm":"office","scheme":"basic"},)"
+      R"("session":"persist:a","type":"login","url":"https://a.test/",)"
+      R"("window":2})"
+      "\n");
+}
+
+TEST(ElectronProtocolTest, ANetworkSessionCallCarriesElectronsOptions) {
+  const auto clear = ParseElectronRequest(
+      R"({"type":"session_call","call":1,"session":"","method":"clear_data",)"
+      R"("data_types":["cookies","cache"],"exclude_origins":["https://b.test"],)"
+      R"("avoid_closing_connections":true,)"
+      R"("origin_matching_mode":"origin-in-all-contexts"})");
+  ASSERT_TRUE(clear.has_value()) << clear.error().why;
+  EXPECT_EQ(std::get<ElectronSessionCall>(*clear).method,
+            ElectronSessionMethod(ElectronNetworkCall(ElectronClearData{
+                .data_types = {"cookies", "cache"},
+                .exclude_origins = {GURL("https://b.test")},
+                .avoid_closing_connections = true,
+                .origin_in_all_contexts = true})));
+
+  const auto resolve = ParseElectronRequest(
+      R"({"type":"session_call","call":2,"session":"","method":"resolve_host",)"
+      R"("host":"a.test","query_type":"AAAA"})");
+  ASSERT_TRUE(resolve.has_value()) << resolve.error().why;
+  EXPECT_EQ(std::get<ElectronSessionCall>(*resolve).method,
+            ElectronSessionMethod(ElectronNetworkCall(
+                ElectronResolveHost{.host = "a.test", .query_type = "AAAA"})));
+
+  const auto key = ParseElectronRequest(
+      R"({"type":"session_call","call":3,"session":"",)"
+      R"("method":"get_shared_dictionary_info",)"
+      R"("frame_origin":"https://a.test","top_frame_site":"https://a.test"})");
+  ASSERT_TRUE(key.has_value()) << key.error().why;
+  EXPECT_EQ(std::get<ElectronSessionCall>(*key).method,
+            ElectronSessionMethod(ElectronNetworkCall(
+                ElectronGetSharedDictionaryInfo{
+                    .key = {.frame_origin = GURL("https://a.test"),
+                            .top_frame_site = GURL("https://a.test")}})));
+
+  const auto watch = ParseElectronRequest(
+      R"({"type":"session_call","call":4,"session":"",)"
+      R"("method":"service_workers_watch"})");
+  ASSERT_TRUE(watch.has_value()) << watch.error().why;
+  EXPECT_EQ(std::get<ElectronSessionCall>(*watch).method,
+            ElectronSessionMethod(ElectronWatchServiceWorkers{}));
+}
+
+TEST(ElectronProtocolTest, ABadNetworkSessionCallIsRefusedAsTheCalls) {
+  const auto both = ParseElectronRequest(
+      R"({"type":"session_call","call":1,"session":"","method":"clear_data",)"
+      R"("origins":["https://a.test"],"exclude_origins":["https://b.test"]})");
+  ASSERT_FALSE(both.has_value());
+  EXPECT_EQ(both.error(),
+            (ElectronRefusal{
+                .why = "clearData takes \"origins\" or \"exclude_origins\", "
+                       "not both",
+                .call = 1}));
+  EXPECT_EQ(
+      WhyRefused(R"({"type":"session_call","call":2,"session":"",)"
+                 R"("method":"preconnect_sockets","url":"https://a.test/",)"
+                 R"("sockets":7})"),
+      "\"sockets\" must be a whole number from 1 to 6");
+  EXPECT_EQ(
+      WhyRefused(R"({"type":"session_call","call":3,"session":"",)"
+                 R"("method":"clear_data","data_types":["everything"]})"),
+      "\"everything\" is not a type clearData knows");
+}
+
+TEST(ElectronProtocolTest, AServiceWorkerChangeIsOneLine) {
+  EXPECT_EQ(
+      ElectronServiceWorkerChanged(
+          "", ElectronServiceWorkerStatus{
+                  .version_id = 2,
+                  .running_status = "running",
+                  .worker = ElectronRunningServiceWorker{
+                      .version_id = 2,
+                      .scope = GURL("https://a.test/"),
+                      .script_url = GURL("https://a.test/sw.js"),
+                      .render_process_id = 7}}),
+      R"({"event":"running_status","running_status":"running","session":"",)"
+      R"("type":"service_worker","version_id":2.0,"worker":{)"
+      R"("render_process_id":7,"scope":"https://a.test/",)"
+      R"("script_url":"https://a.test/sw.js","version_id":2.0}})"
+      "\n");
+}
+
 }  // namespace
 }  // namespace domicile

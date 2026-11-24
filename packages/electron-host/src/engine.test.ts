@@ -205,6 +205,69 @@ describe(connectEngine, () => {
     expect(await updated).toEqual(update);
   });
 
+  it("passes on each sign-in question, a certificate and its issuer's included", async () => {
+    fake = await startFakeEngine();
+    const engine = await connected(fake);
+    const heard = new Promise((resolve) => engine.events.on("signIn", resolve));
+    const principal = {
+      commonName: "Test CA",
+      country: "US",
+      locality: "",
+      organizations: ["Test"],
+      organizationUnits: [],
+      state: "",
+    };
+    const issuer = {
+      data: "-----BEGIN CERTIFICATE-----",
+      fingerprint: "sha256/b",
+      issuer: principal,
+      issuerName: "Test CA",
+      serialNumber: "02",
+      subject: principal,
+      subjectName: "Test CA",
+      validExpiry: 2,
+      validStart: 1,
+    };
+    const event = {
+      ask: 4,
+      certificate: { ...issuer, fingerprint: "sha256/a", issuerCert: issuer },
+      error: "net::ERR_CERT_AUTHORITY_INVALID",
+      is_main_frame: true,
+      type: "certificate_error",
+      url: "https://a.test/",
+      window: 1,
+    };
+
+    fake.say(event);
+
+    expect(await heard).toEqual(event);
+  });
+
+  it("passes on each service worker report", async () => {
+    fake = await startFakeEngine();
+    const engine = await connected(fake);
+    const heard = new Promise((resolve) =>
+      engine.events.on("serviceWorker", resolve),
+    );
+    const event = {
+      event: "running_status",
+      running_status: "running",
+      session: "",
+      type: "service_worker",
+      version_id: 2,
+      worker: {
+        render_process_id: 7,
+        scope: "https://a.test/",
+        script_url: "https://a.test/sw.js",
+        version_id: 2,
+      },
+    };
+
+    fake.say(event);
+
+    expect(await heard).toEqual(event);
+  });
+
   it("passes on each session result, with its result or its error", async () => {
     fake = await startFakeEngine();
     const engine = await connected(fake);

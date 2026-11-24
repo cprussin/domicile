@@ -31,6 +31,7 @@
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
+#include "chrome/browser/domicile/domicile_electron_network.h"
 #include "chrome/browser/domicile/domicile_electron_page.h"
 #include "chrome/browser/domicile/domicile_electron_page_control.h"
 #include "chrome/browser/domicile/domicile_electron_page_events.h"
@@ -291,6 +292,19 @@ class ChromeElectronDesk final : public ElectronDesk {
   void ClearCache(const WebViewPartition& partition,
                   base::OnceClosure done) override {
     ClearElectronCache(partition, std::move(done));
+  }
+  void RunNetworkCall(
+      const WebViewPartition& partition,
+      const ElectronNetworkCall& call,
+      base::OnceCallback<void(base::expected<base::Value, std::string>)> done)
+      override {
+    RunElectronNetworkCall(partition, call, std::move(done));
+  }
+  std::unique_ptr<ElectronServiceWorkerWatch> WatchServiceWorkers(
+      const WebViewPartition& partition,
+      base::RepeatingCallback<void(const ElectronServiceWorkerChange&)> changed)
+      override {
+    return WatchElectronServiceWorkers(partition, std::move(changed));
   }
 };
 

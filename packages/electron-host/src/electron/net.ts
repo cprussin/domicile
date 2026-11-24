@@ -92,13 +92,20 @@ export const clientRequest = (options: string | RequestOptions) => {
   const send = async () => {
     try {
       const method = opts.method ?? "GET";
-      const response = await fetch(url, {
-        body: chunks.length === 0 ? undefined : Buffer.concat(chunks),
-        headers,
-        method,
-        redirect: redirect === "manual" ? "manual" : redirect,
-        signal: abort.signal,
-      });
+      const go = () =>
+        fetch(url, {
+          body: chunks.length === 0 ? undefined : Buffer.concat(chunks),
+          headers,
+          method,
+          redirect: redirect === "manual" ? "manual" : redirect,
+          signal: abort.signal,
+        });
+      const first = await go();
+      const signIn = await askToSignIn(request, url, first);
+      if (signIn !== undefined) {
+        headers.set("authorization", signIn);
+      }
+      const response = signIn === undefined ? first : await go();
       if (
         redirect === "manual" &&
         response.status >= 300 &&
@@ -189,6 +196,59 @@ export const clientRequest = (options: string | RequestOptions) => {
     },
   });
 };
+
+/**
+ * The `Authorization` a `login` listener's callback signs in with, for a
+ * response that asks for one; nothing when it doesn't ask, nothing listens
+ * or the callback gives no user name, and the response stands, as in
+ * Electron.
+ */
+const askToSignIn = async (
+  request: EventEmitter,
+  url: string,
+  response: Response,
+): Promise<string | undefined> => {
+  const challenge = response.headers.get("www-authenticate");
+  if (
+    response.status !== 401 ||
+    challenge === null ||
+    request.listenerCount("login") === 0
+  ) {
+    return undefined;
+  }
+  const scheme = (challenge.split(/\s/, 1)[0] ?? "").toLowerCase();
+  const { hostname, port, protocol } = new URL(url);
+  const credentials = await new Promise<[string, string] | undefined>(
+    (resolve) => {
+      request.emit(
+        "login",
+        {
+          host: hostname,
+          isProxy: false,
+          port: port === "" ? defaultPort(protocol) : Number(port),
+          realm: /realm="([^"]*)"/i.exec(challenge)?.[1] ?? "",
+          scheme,
+        },
+        (username?: string, password?: string) => {
+          resolve(
+            username === undefined ? undefined : [username, password ?? ""],
+          );
+        },
+      );
+    },
+  );
+  if (credentials === undefined) {
+    return undefined;
+  } else if (scheme === "basic") {
+    return `Basic ${Buffer.from(credentials.join(":")).toString("base64")}`;
+  } else {
+    throw new Error(
+      `net.request signs in with Basic only on Domicile, and ${url} asks for ${scheme}`,
+    );
+  }
+};
+
+const defaultPort = (protocol: string) => (protocol === "https:" ? 443 : 80);
 
 export const net = {
   fetch: (input: string | Request, init?: RequestInit) => fetch(input, init),

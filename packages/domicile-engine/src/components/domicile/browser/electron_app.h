@@ -18,7 +18,9 @@
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "components/domicile/browser/browser_window_listing.h"
+#include "components/domicile/browser/electron_network_calls.h"
 #include "components/domicile/browser/electron_protocol.h"
+#include "components/domicile/browser/electron_sign_ins.h"
 #include "components/domicile/browser/web_view_partition.h"
 #include "components/domicile/mojom/web_view_guest.mojom-shared.h"
 #include "url/gurl.h"
@@ -255,6 +257,23 @@ class ElectronSession {
   // Tells the app how download `download` goes: from its answer until the
   // download is done.
   void DownloadUpdated(int download, const ElectronDownloadProgress& progress);
+  // Asks the app's `login` listeners about a sign-in a request in this
+  // session needs, made by desk window `window`'s page (nothing when none
+  // made it). `answered` runs once, with a cancel when the app goes first.
+  void AskToSignIn(const std::optional<std::string>& window,
+                   const ElectronLoginAsk& login,
+                   ElectronSignInAsks::LoginAnswered answered);
+  // Asks its `certificate-error` listeners whether to trust a certificate the
+  // engine could not verify; a refusal when the app goes first.
+  void AskAboutCertificateError(const std::string& window,
+                                const ElectronCertificateErrorAsk& error,
+                                ElectronSignInAsks::CertificateAnswered answered);
+  // Asks its `select-client-certificate` listeners which of the offered
+  // certificates to sign in with; none when the app goes first.
+  void AskForClientCertificate(
+      const std::optional<std::string>& window,
+      const ElectronClientCertificateAsk& select,
+      ElectronSignInAsks::ClientCertificateAnswered answered);
 
   // The user agent of the session's pages: session.setUserAgent's, else the
   // app's fallback; empty for the engine's.
@@ -464,6 +483,19 @@ class ElectronDesk {
   // The HTTP cache.
   virtual void ClearCache(const WebViewPartition& partition,
                           base::OnceClosure done) = 0;
+  // A call on the session's network or the rest of its storage
+  // (electron_network_calls.h): its result, or why it failed.
+  virtual void RunNetworkCall(
+      const WebViewPartition& partition,
+      const ElectronNetworkCall& call,
+      base::OnceCallback<void(base::expected<base::Value, std::string>)>
+          done) = 0;
+  // Calls `changed` with each change to the session's service workers until
+  // the watch is destroyed.
+  virtual std::unique_ptr<ElectronServiceWorkerWatch> WatchServiceWorkers(
+      const WebViewPartition& partition,
+      base::RepeatingCallback<void(const ElectronServiceWorkerChange& change)>
+          changed) = 0;
 };
 
 // One connection to the Electron socket: one running app. Turns its request
@@ -665,6 +697,16 @@ class ElectronApp {
 
   // Applies app.userAgentFallback to the sessions without their own.
   void SetUserAgentFallback(const ElectronSetUserAgentFallback& fallback);
+  // service_workers_watch on `session`, in `partition`: answers `done` with
+  // the workers running now. See electron_app_sign_ins.cc.
+  void WatchServiceWorkers(
+      const std::string& session,
+      const WebViewPartition& partition,
+      base::OnceCallback<void(base::expected<base::Value, std::string>)> done);
+  void ServiceWorkerChanged(const std::string& session,
+                            const ElectronServiceWorkerChange& change);
+  // An answer to one of sign_ins_'s questions.
+  void AnswerSignIn(const ElectronSignInReply& reply);
 
   const raw_ref<ElectronDesk> desk_;
   const Send send_;
@@ -720,6 +762,11 @@ class ElectronApp {
   int next_navigation_ask_ = 1;
   std::map<int, base::OnceCallback<void(bool unload)>> unload_asks_;
   int next_unload_ask_ = 1;
+  // The sessions whose service workers the app watches, by partition.
+  std::map<std::string, std::unique_ptr<ElectronServiceWorkerWatch>>
+      service_worker_watches_;
+  // The pages' sign-in and certificate questions waiting on the app.
+  ElectronSignInAsks sign_ins_;
   base::WeakPtrFactory<ElectronApp> weak_factory_{this};
 };
 

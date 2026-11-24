@@ -1198,6 +1198,14 @@ base::expected<ElectronSessionMethod, std::string> SessionMethodIn(
       return base::unexpected("\"user_agent\" must be a string");
     }
     return ElectronSetUserAgent{.user_agent = *agent};
+  } else if (method == "service_workers_watch") {
+    return ElectronWatchServiceWorkers{};
+  } else if (std::optional<base::expected<ElectronNetworkCall, std::string>>
+                 network = ParseElectronNetworkCall(method, request)) {
+    return std::move(*network).transform(
+        [](ElectronNetworkCall call) -> ElectronSessionMethod {
+          return call;
+        });
   }
   return base::unexpected(base::StrCat({"no session call is named ", method}));
 }
@@ -1482,6 +1490,13 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ParseNavigationAnswer(*request);
   } else if (*type == "unload_answer") {
     return ParseUnloadAnswer(*request);
+  } else if (IsElectronSignInReply(*type)) {
+    base::expected<ElectronSignInReply, std::string> reply =
+        ParseElectronSignInReply(*type, *request);
+    if (!reply.has_value()) {
+      return Refuse(std::move(reply.error()));
+    }
+    return std::move(*reply);
   } else if (*type == "set_user_agent_fallback") {
     const std::string* user_agent = request->FindString("user_agent");
     if (user_agent == nullptr) {

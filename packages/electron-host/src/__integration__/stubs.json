@@ -61,13 +61,10 @@
     "WebContentsView.setBorderRadius": "the shell draws views"
   },
   "lies": {
-    "app.setClientCertRequestPasswordHandler": "the handler is never called",
+    "app.setClientCertRequestPasswordHandler": "the handler is never called: the engine asks no one for a smart card's PIN",
     "BaseWindow.flashFrame": "does nothing, where it should ask for the user's attention",
     "BaseWindow.getMediaSourceId": "always empty, so the app can't name its own window to desktopCapturer",
     "BaseWindow.setIgnoreMouseEvents": "does nothing, so a click-through overlay takes the clicks",
-    "ServiceWorkers.getAllRunning": "always none, though the engine runs the app's service workers",
-    "ServiceWorkers.getFromVersionID": "always null, as getAllRunning",
-    "ServiceWorkers.getInfoFromVersionID": "always null, as getAllRunning",
-    "ServiceWorkers.getWorkerFromVersionID": "always nothing, as getAllRunning"
+    "ServiceWorkers.getWorkerFromVersionID": "always nothing: the engine gives the app no handle on a running worker"
   }
 }

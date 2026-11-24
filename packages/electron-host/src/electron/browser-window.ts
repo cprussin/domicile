@@ -42,7 +42,7 @@ import type {
 import { createPageControl } from "./page-control";
 import { isPageEvent, PageEvents } from "./page-events";
 import type { createSessions, Session } from "./session";
-import { sessionPartition } from "./session";
+import { framePreloadsOf, sessionPartition } from "./session";
 
 type PageControl = ReturnType<typeof createPageControl>;
 
@@ -1039,10 +1039,18 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           "this window's sandboxed preload runs in its page's own world, which Domicile's engine doesn't give a preload",
         );
       }
-      this.#preload =
-        sandboxed && preferences.preload !== undefined
-          ? readPreload(preferences.preload)
-          : undefined;
+      const session =
+        preferences.session ??
+        sessions.fromPartition(preferences.partition ?? "");
+      const sessionPreloads = framePreloadsOf(session);
+      if (!sandboxed && sessionPreloads.length > 0) {
+        refuse(
+          "this window's session has preloads, which Domicile's engine runs only in a sandboxed page",
+        );
+      }
+      this.#preload = sandboxed
+        ? preloadSource(readPreload, sessionPreloads, preferences.preload)
+        : undefined;
       this.#arguments = preferences.additionalArguments ?? [];
       // Node in the page loads the preload from its file.
       this.#node = sandboxed
@@ -1056,9 +1064,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
               ? {}
               : { preload: resolve(preferences.preload) }),
           };
-      this.session =
-        preferences.session ??
-        sessions.fromPartition(preferences.partition ?? "");
+      this.session = session;
       this.title = title;
       this.#view = view;
       if (preferences.enablePreferredSizeMode === true) {
@@ -2614,3 +2620,26 @@ type Windows = ReturnType<typeof createBrowserWindow>;
 export type BrowserWindow = InstanceType<Windows["BrowserWindow"]>;
 export type WebContentsView = InstanceType<Windows["WebContentsView"]>;
 export type BrowserView = InstanceType<Windows["BrowserView"]>;
+
+/**
+ * A sandboxed page's preload: its own, or with its session's frame preloads
+ * first, each in a function of its own as the engine runs one preload, and
+ * each one's throw reported without stopping the next, as in Electron.
+ */
+const preloadSource = (
+  readPreload: (path: string) => string,
+  sessionPreloads: readonly string[],
+  own: string | undefined,
+) => {
+  const paths = [...sessionPreloads, ...(own === undefined ? [] : [own])];
+  if (sessionPreloads.length === 0) {
+    return own === undefined ? undefined : readPreload(own);
+  } else {
+    return paths
+      .map(
+        (path) =>
+          `try {\n(function (require, process, module, exports, global) {${readPreload(path)}\n}).call(this, require, process, module, exports, global);\n} catch (error) {\nsetTimeout(() => {\nthrow error;\n});\n}\n`,
+      )
+      .join("");
+  }
+};

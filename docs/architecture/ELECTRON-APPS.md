@@ -522,6 +522,42 @@ The host carries out the webContents members that act on the page with
   ([`electron_downloads.h`](../../packages/domicile-engine/src/components/domicile/browser/electron_downloads.h),
   `src/electron/downloads.ts`). Not yet: `session.downloadURL`,
   `webContents.downloadURL`, `setDownloadPath`, `createInterruptedDownload`.
+- **Sign-ins and certificates**: a page's HTTP or proxy sign-in asks its
+  app as `login` (answered by `login_answer`: `sign_in` with a user name and
+  password, `cancel`, or `default` when no listener took it, and then the
+  shell's prompt asks the user, where Electron would cancel). A certificate
+  error asks as `certificate_error`, every frame's, with Electron's
+  `Certificate` and its issuer's (`certificate_answer`; no listener denies
+  it, as in Electron). A site's request for a client certificate asks as
+  `select_client_certificate`, with the ones the system has
+  (`client_certificate_answer` names the one chosen by index; no listener
+  takes the first, and none offered goes on with none at once). Each ask is
+  numbered per app, and an app that goes cancels its sign-ins, refuses its
+  certificates and chooses no certificate
+  ([`electron_sign_ins.h`](../../packages/domicile-engine/src/components/domicile/browser/electron_sign_ins.h),
+  [`domicile_electron_certificates.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_electron_certificates.h)).
+  A `ClientRequest`'s `login` is the host's own: a 401 its listeners answer
+  is sent again with Basic credentials.
+- **The session's network and storage** (more session calls):
+  `clearData` (Electron's data types, origins to clear or to keep, cookies
+  by their sites), `clearAuthCache`, `clearCodeCaches`, `resolveHost`,
+  `preconnect`, the shared dictionary calls, and `storage_path`, which the
+  host asks for each session as it is made so `getStoragePath()` and
+  `storagePath` answer at once (`null` in memory). The first use of
+  `session.serviceWorkers` sends `service_workers_watch`, answered by the
+  workers running then; from then on each start, stop, registration and
+  console message comes back as `service_worker`
+  ([`electron_network_calls.h`](../../packages/domicile-engine/src/components/domicile/browser/electron_network_calls.h),
+  [`domicile_electron_network.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_electron_network.h)).
+  A session's own preloads (`registerPreloadScript` with type `frame`, and
+  `setPreloads`) run before the window's in a sandboxed page, each in turn,
+  one's error thrown apart so the next still runs; a Node page refuses
+  them for now. The engine keeps a session's code cache with its partition,
+  so `setCodeCachePath` moves nothing. Not yet: `setSSLConfig` and
+  network emulation (both profile-wide in the engine), the
+  `spellcheck-dictionary-*` events, `preconnect`'s event,
+  `file-system-access-restricted`, a utility process's `login`, and
+  `setClientCertRequestPasswordHandler`.
 
 ### Desktop pieces
 

@@ -9,7 +9,7 @@ import { writeAsar } from "../asar-fixture";
 import { startFakeDesktopBus } from "../desktop-bus-fixture";
 import { ELECTRON_VERSION } from "../electron/version";
 import type { FakeEngine } from "../engine-fixture";
-import { READY, startFakeEngine } from "../engine-fixture";
+import { answerAsDefault, startFakeEngine } from "../engine-fixture";
 
 const MAIN = join(import.meta.dir, "../main.ts");
 
@@ -211,9 +211,7 @@ describe("electron-host", () => {
       },
     });
     engine = await startFakeEngine((request) => {
-      if (request.type === "hello") {
-        return [READY];
-      } else if (request.type === "open_window") {
+      if (request.type === "open_window") {
         return [
           { type: "window_opened", window: 1 },
           // The page asks for itself, as a file: navigation does.
@@ -229,7 +227,7 @@ describe("electron-host", () => {
           { type: "window_loaded", window: 1 },
         ];
       } else {
-        return [];
+        return answerAsDefault(request);
       }
     });
 
@@ -257,10 +255,17 @@ describe("electron-host", () => {
       session: "",
       type: "handle_protocol",
     });
+    // Where the app's own session keeps its data, before its main runs.
+    expect(engine.heard[2]).toEqual({
+      call: 1,
+      method: "storage_path",
+      session: "",
+      type: "session_call",
+    });
     // The app's fallback user agent, before its first window.
-    expect(engine.heard[2]).toMatchObject({ type: "set_user_agent_fallback" });
-    expect(engine.heard[3]).toMatchObject({ type: "open_window", window: 1 });
-    const { url } = engine.heard[3] as { url: string };
+    expect(engine.heard[3]).toMatchObject({ type: "set_user_agent_fallback" });
+    expect(engine.heard[4]).toMatchObject({ type: "open_window", window: 1 });
+    const { url } = engine.heard[4] as { url: string };
     expect(url).toEndWith("/app.asar/index.html");
     // loadFile's page comes from the app's mirror, read by the engine.
     expect(engine.heard).toContainEqual({
@@ -282,9 +287,7 @@ describe("electron-host", () => {
       },
     });
     engine = await startFakeEngine((request) => {
-      if (request.type === "hello") {
-        return [READY];
-      } else if (request.type === "open_window") {
+      if (request.type === "open_window") {
         return [
           { type: "window_opened", window: 1 },
           {
@@ -324,7 +327,7 @@ describe("electron-host", () => {
           },
         ];
       } else {
-        return [];
+        return answerAsDefault(request);
       }
     });
 

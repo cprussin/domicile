@@ -4,7 +4,12 @@ import type { PermissionMessage } from "./permissions";
 import { createPermissions } from "./permissions";
 import type { ProtocolRequest } from "./protocol";
 import { createProtocols } from "./protocol";
-import { createSessions, sessionPartition } from "./session";
+import {
+  createSessions,
+  framePreloadsOf,
+  learnStoragePath,
+  sessionPartition,
+} from "./session";
 import type { SessionCallMessage } from "./session-calls";
 import { createSessionCalls } from "./session-calls";
 import type { WebRequestMessage } from "./web-request";
@@ -85,15 +90,190 @@ describe(createSessions, () => {
     expect(session.spellCheckerEnabled).toBe(true);
   });
 
-  it("has service workers and a net log for Slack to read, which say what the engine doesn't do", async () => {
-    const { sessions } = setUp();
-    const { netLog, serviceWorkers } = sessions.defaultSession;
+  it("has a net log for Slack to read, which says what the engine doesn't do", async () => {
+    const { netLog } = setUp().sessions.defaultSession;
 
-    expect(serviceWorkers.getAllRunning()).toEqual({});
-    serviceWorkers.on("running-status-changed", () => undefined);
     expect(netLog.currentlyLogging).toBe(false);
     await expect(netLog.startLogging("/tmp/net.log")).rejects.toThrow(
       "net log",
+    );
+  });
+
+  it("watches its service workers once the app reaches for them", () => {
+    const { sent, sessions } = setUp();
+    sent.length = 0;
+    const { serviceWorkers } = sessions.defaultSession;
+
+    expect(sessions.defaultSession.serviceWorkers).toBe(serviceWorkers);
+    expect(serviceWorkers.getAllRunning()).toEqual({});
+    expect(sent).toEqual([
+      {
+        call: 1,
+        method: "service_workers_watch",
+        session: "",
+        type: "session_call",
+      },
+    ]);
+  });
+
+  it("passes each service worker report to its session", () => {
+    const { sessions } = setUp();
+    const { serviceWorkers } = sessions.fromPartition("persist:a");
+    const scopes: unknown[] = [];
+    serviceWorkers.on("registration-completed", (_event, details) =>
+      scopes.push(details),
+    );
+
+    sessions.heardServiceWorker({
+      event: "registration_completed",
+      scope: "https://a.test/",
+      session: "persist:a",
+      type: "service_worker",
+    });
+
+    expect(scopes).toEqual([{ scope: "https://a.test/" }]);
+    expect(() =>
+      sessions.heardServiceWorker({
+        event: "registration_completed",
+        scope: "https://a.test/",
+        session: "persist:b",
+        type: "service_worker",
+      }),
+    ).toThrow(
+      'the engine reported a service worker of session "persist:b", which watches none',
+    );
+  });
+
+  it("has a net log for Slack to read, which says the engine keeps none", async () => {
+    const { sessions } = setUp();
+    const { netLog } = sessions.defaultSession;
+
+    expect(netLog.currentlyLogging).toBe(false);
+    await expect(netLog.startLogging("/tmp/net.log")).rejects.toThrow(
+      "net log",
+    );
+  });
+
+  it("gives its storage path once the engine names it, and none in memory", async () => {
+    const { calls, sessions } = setUp();
+    const kept = sessions.fromPartition("persist:a");
+    const memory = sessions.fromPartition("a");
+
+    expect(() => kept.getStoragePath()).toThrow(
+      "the engine hasn't named session \"persist:a\"'s storage path yet",
+    );
+    const learned = learnStoragePath(kept);
+    calls.hear({ call: 1, result: "/data/a", type: "session_result" });
+    await learned;
+
+    expect(kept.getStoragePath()).toBe("/data/a");
+    expect(kept.storagePath).toBe("/data/a");
+    expect(memory.getStoragePath()).toBeNull();
+    expect(await learnStoragePath(memory)).toBeUndefined();
+  });
+
+  it("tells its caller of each session it makes, once", () => {
+    const seen: string[] = [];
+    const calls = createSessionCalls(
+      () => undefined,
+      () => "",
+    );
+    const sessions = createSessions(
+      createProtocols(() => undefined),
+      createWebRequests(
+        () => undefined,
+        () => undefined,
+      ),
+      calls,
+      createPermissions(
+        () => undefined,
+        () => undefined,
+        () => undefined,
+      ),
+      (session) => seen.push(sessionPartition(session)),
+    );
+
+    sessions.fromPartition("persist:a");
+    sessions.fromPartition("persist:a");
+
+    expect(seen).toEqual(["", "persist:a"]);
+  });
+
+  it("keeps frame preloads it registers, and setPreloads replaces the ones it set", () => {
+    const { sessions } = setUp();
+    const session = sessions.defaultSession;
+
+    const id = session.registerPreloadScript({
+      filePath: "/app/a.js",
+      type: "frame",
+    });
+    session.setPreloads(["/app/b.js", "/app/c.js"]);
+    session.setPreloads(["/app/c.js"]);
+
+    expect(session.getPreloads()).toEqual(["/app/a.js", "/app/c.js"]);
+    expect(framePreloadsOf(session)).toEqual(["/app/a.js", "/app/c.js"]);
+    expect(session.getPreloadScripts()).toMatchObject([
+      { filePath: "/app/a.js", id, type: "frame" },
+      { filePath: "/app/c.js", type: "frame" },
+    ]);
+    session.unregisterPreloadScript(id);
+    expect(session.getPreloads()).toEqual(["/app/c.js"]);
+  });
+
+  it("refuses a preload it can't run as Electron would", () => {
+    const { sessions } = setUp();
+    const session = sessions.defaultSession;
+    session.registerPreloadScript({
+      filePath: "/app/a.js",
+      id: "a",
+      type: "frame",
+    });
+
+    expect(() =>
+      session.registerPreloadScript({
+        filePath: "/app/a.js",
+        id: "a",
+        type: "frame",
+      }),
+    ).toThrow('a preload script "a" is already registered');
+    expect(() =>
+      session.registerPreloadScript({ filePath: "a.js", type: "frame" }),
+    ).toThrow("a preload script's filePath must be absolute, not a.js");
+    expect(() =>
+      session.registerPreloadScript({
+        filePath: "/app/sw.js",
+        type: "service-worker",
+      }),
+    ).toThrow("Domicile's engine runs no preload in service workers yet");
+    expect(() =>
+      session.registerPreloadScript({
+        filePath: "/app/b.js",
+        matches: ["https://a.test/*"],
+        type: "frame",
+      }),
+    ).toThrow(
+      "Domicile's engine runs a session's preloads in every page, so it can't match them yet",
+    );
+    expect(() => session.unregisterPreloadScript("b")).toThrow(
+      'no preload script "b" is registered',
+    );
+  });
+
+  it("reads its spell checker's enabling as a property too", () => {
+    const { sessions } = setUp();
+    const session = sessions.defaultSession;
+
+    session.spellCheckerEnabled = false;
+
+    expect(session.isSpellCheckerEnabled()).toBe(false);
+    expect(session.spellCheckerEnabled).toBe(false);
+  });
+
+  it("finds no blob, since the engine names none to the app", async () => {
+    const { sessions } = setUp();
+
+    await expect(sessions.defaultSession.getBlobData("b1")).rejects.toThrow(
+      "no blob b1: Domicile's engine names no blob to the app",
     );
   });
 

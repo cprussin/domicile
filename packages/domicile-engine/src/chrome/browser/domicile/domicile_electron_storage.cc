@@ -33,10 +33,7 @@
 #include "services/network/public/mojom/network_context.mojom.h"
 
 namespace domicile {
-namespace {
 
-// The storage of `partition`, as WebViewGuest makes it for a window there,
-// or none without a shell.
 content::StoragePartition* StorageOf(const WebViewPartition& partition) {
   content::WebContents* shell = DeskShellContents();
   if (shell == nullptr) {
@@ -46,6 +43,8 @@ content::StoragePartition* StorageOf(const WebViewPartition& partition) {
   return context->GetStoragePartition(content::StoragePartitionConfig::Create(
       context, kWebViewPartitionDomain, partition.name, !partition.persist));
 }
+
+namespace {
 
 std::string SameSiteName(net::CookieSameSite same_site) {
   switch (same_site) {

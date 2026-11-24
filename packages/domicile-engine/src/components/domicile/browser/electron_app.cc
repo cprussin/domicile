@@ -390,6 +390,8 @@ void ElectronApp::Take(std::string_view line) {
     ClosePopupMenu(*close_popup);
   } else if (auto* page_call = std::get_if<ElectronPageCall>(&*request)) {
     CallPage(std::move(*page_call));
+  } else if (auto* sign_in = std::get_if<ElectronSignInReply>(&*request)) {
+    AnswerSignIn(*sign_in);
   } else {
     const auto& destroy = std::get<ElectronDestroyWindow>(*request);
     if (const std::optional<std::string> id = IdOf(destroy.window)) {
@@ -750,6 +752,11 @@ void ElectronApp::RunSessionCall(ElectronSessionCall call) {
     desk_->ClearStorage(*partition, *clear, done_with_nothing(std::move(done)));
   } else if (std::holds_alternative<ElectronClearCache>(call.method)) {
     desk_->ClearCache(*partition, done_with_nothing(std::move(done)));
+  } else if (auto* network = std::get_if<ElectronNetworkCall>(&call.method)) {
+    desk_->RunNetworkCall(*partition, *network, std::move(done));
+  } else if (std::holds_alternative<ElectronWatchServiceWorkers>(
+                 call.method)) {
+    WatchServiceWorkers(call.session, *partition, std::move(done));
   } else {
     const std::string& user_agent =
         std::get<ElectronSetUserAgent>(call.method).user_agent;

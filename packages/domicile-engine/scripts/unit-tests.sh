@@ -42,7 +42,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 14,
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8,
 # InputMethodLines 7, DeskModifierTaps 13, TapModifierOf 1, IdentityDialog 11,
-# PictureInPictureVideos 15, ElectronProtocol 63, ElectronApp 81,
+# PictureInPictureVideos 15, ElectronProtocol 69, ElectronApp 87,
 # ElectronPageCall 3, ElectronPageReports 12, ElectronInput 12,
 # ElectronPermissionFor 2, ElectronSchemes 8,
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4,
@@ -51,6 +51,9 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # DomicileMonitorTwinActivation 1, CursorDisplay 7, DomicileHiddenPageTiles 4,
 # ChannelDisconnectOrder 2.
 #
+# 1006, and it was 994 — an Electron app's sign-ins, certificates, network
+# session calls and service workers are six more ElectronProtocol and six
+# more ElectronApp cases. Before that
 # 994, and it was 965 — what an Electron app's webContents hears of its page
 # and asks of its input is twelve ElectronPageReports cases, twelve ElectronInput
 # ones and five more ElectronApp ones. Before that
@@ -350,7 +353,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=994
+FLOOR=1006
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
