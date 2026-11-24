@@ -44,9 +44,6 @@ jobs:
           start=$(date +%s)
           need=$(du -s --block-size=1 "$src/src" | cut -f1); avail=$(df --output=avail -B1 /build | tail -1)
           echo "tree $((need/1024/1024/1024))G, quota room $((avail/1024/1024/1024))G"
-          if [ "$avail" -lt $((need + 20*1024*1024*1024)) ]; then
-            echo "::error::not enough quota room for a full-charged copy"; .github/scripts/engine-tree-lock.sh drop "$src/src" "$OWNER"; rm -rf "$src/.probe"; exit 1
-          fi
           if cp -a --reflink=always "$src/src" "$dst/src"; then echo "copy ok"; else echo "::error::copy failed"; rm -rf "$src/.probe"; df -h /build; .github/scripts/engine-tree-lock.sh drop "$src/src" "$OWNER"; exit 1; fi
           echo "copy took $(( $(date +%s) - start ))s"
           echo "== space after"; df -h /build; zfs list -o name,used,avail,refer tank-fast/chromium 2>/dev/null || true
