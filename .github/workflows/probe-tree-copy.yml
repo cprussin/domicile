@@ -3,6 +3,7 @@ name: probe tree copy
 on:
   push:
     branches: [claude/project-thread-04t7b9]
+    paths: [.github/workflows/probe-tree-copy.yml]
 permissions:
   contents: read
 jobs:

@@ -1,0 +1,25 @@
+# Temporary: what siso offers for its saved state.
+name: probe siso help
+on:
+  push:
+    branches: [claude/project-thread-04t7b9]
+    paths: [.github/workflows/probe-siso-help.yml]
+permissions:
+  contents: read
+jobs:
+  help:
+    runs-on: [self-hosted, crux]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          set -u
+          tools="$(.github/scripts/engine-depot-tools.sh /build/trees/tree-0/src)"; echo "depot_tools $tools"
+          export PATH="$tools:$PATH"
+          cd /build/trees/tree-0/src
+          s="$(ls third_party/siso/cipd/siso 2>/dev/null || command -v siso)"; echo "siso: $s"
+          "$s" version 2>&1 | head; echo ---; "$s" help 2>&1 | head -60; echo ---
+          for c in fs "fs export" "fs import" query; do echo "== $c"; "$s" $c -help 2>&1 | head -60; done
+          ls -la out/Official/.siso_fs_state; file out/Official/.siso_fs_state; head -c 64 out/Official/.siso_fs_state | od -c | head -5
+          gzip -t out/Official/.siso_fs_state 2>&1 | head -2; zstd -t out/Official/.siso_fs_state 2>&1 | head -2
+          grep -c "" out/Official/siso_explain || true; head -30 out/Official/siso_explain
