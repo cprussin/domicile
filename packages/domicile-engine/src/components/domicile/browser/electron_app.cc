@@ -534,6 +534,9 @@ ElectronPageCalls ElectronApp::CallsFor(ElectronWindow number) {
                                           weak_factory_.GetWeakPtr(), number),
       .devtools_event = base::BindRepeating(&ElectronApp::PageDevToolsEvent,
                                             weak_factory_.GetWeakPtr(), number),
+      .debugger_detached =
+          base::BindRepeating(&ElectronApp::PageDebuggerDetached,
+                              weak_factory_.GetWeakPtr(), number),
       .navigation_started =
           base::BindRepeating(&ElectronApp::PageNavigationStarted,
                               weak_factory_.GetWeakPtr(), number),
@@ -607,10 +610,16 @@ void ElectronApp::CallPage(ElectronPageCall call) {
 }
 
 void ElectronApp::PageDevToolsEvent(ElectronWindow number,
-                                    std::string method,
-                                    base::DictValue params) {
+                                    ElectronDevToolsMessage event) {
   if (windows_.contains(number)) {
-    send_.Run(ElectronDevToolsEvent(number, method, std::move(params)));
+    send_.Run(ElectronDevToolsEvent(number, std::move(event)));
+  }
+}
+
+void ElectronApp::PageDebuggerDetached(ElectronWindow number,
+                                       std::string reason) {
+  if (windows_.contains(number)) {
+    send_.Run(ElectronDebuggerDetached(number, reason));
   }
 }
 

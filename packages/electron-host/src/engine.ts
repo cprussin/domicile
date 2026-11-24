@@ -652,11 +652,22 @@ const engineEvent = z.discriminatedUnion("type", [
     type: z.literal("page_result"),
     window: z.number(),
   }),
-  /** An event of the page's DevTools client, which page calls drive. */
+  /**
+   * An event of one of the page's DevTools clients, which page calls drive:
+   * webContents.debugger's with `debugger`, the host members' without.
+   */
   z.object({
+    debugger: z.literal(true).optional(),
     method: z.string(),
     params: z.record(z.string(), z.unknown()),
+    session_id: z.string().optional(),
     type: z.literal("devtools_event"),
+    window: z.number(),
+  }),
+  /** webContents.debugger's client went, with its page or for `reason`. */
+  z.object({
+    reason: z.string(),
+    type: z.literal("debugger_detached"),
     window: z.number(),
   }),
   /** The size the shell gives a page, a window's or a view's. */

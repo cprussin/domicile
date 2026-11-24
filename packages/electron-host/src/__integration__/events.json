@@ -2,8 +2,6 @@
   "gaps": {
     "BaseWindow.app-command": "not fired yet",
     "BrowserWindow.app-command": "not fired yet",
-    "Debugger.detach": "no webContents.debugger",
-    "Debugger.message": "no webContents.debugger",
     "Extensions.extension-loaded": "extensions belong to a Chrome profile, and an app's sessions are partitions of the shell's, which holds the user's own extensions: one an app loaded would reach the user's browsing",
     "Extensions.extension-ready": "extensions belong to a Chrome profile, and an app's sessions are partitions of the shell's, which holds the user's own extensions: one an app loaded would reach the user's browsing",
     "Extensions.extension-unloaded": "extensions belong to a Chrome profile, and an app's sessions are partitions of the shell's, which holds the user's own extensions: one an app loaded would reach the user's browsing",
@@ -25,16 +23,9 @@
     "Session.usb-device-removed": "the engine asks the shell's device chooser for an app's page, not the app yet",
     "Session.usb-device-revoked": "the engine asks the shell's device chooser for an app's page, not the app yet",
     "UtilityProcess.login": "the engine asks no sign-in or certificate question",
-    "WebContents.devtools-closed": "no devtools for apps",
-    "WebContents.devtools-focused": "no devtools for apps",
-    "WebContents.devtools-open-url": "no devtools for apps",
-    "WebContents.devtools-opened": "no devtools for apps",
-    "WebContents.devtools-reload-page": "no devtools for apps",
-    "WebContents.devtools-search-query": "no devtools for apps",
-    "WebContents.did-attach-webview": "not fired yet",
-    "WebContents.paint": "not fired yet",
+    "WebContents.did-attach-webview": "Electron pages have no <webview> yet",
     "WebContents.select-bluetooth-device": "no device chooser for apps",
-    "WebContents.will-attach-webview": "not fired yet"
+    "WebContents.will-attach-webview": "Electron pages have no <webview> yet"
   },
   "honest": {
     "AutoUpdater.before-quit-for-update": "Electron has no autoUpdater on Linux",
@@ -54,6 +45,13 @@
     "Session.spellcheck-dictionary-download-begin": "the engine's dictionaries ship beside it and are never downloaded (patch 0246)",
     "Session.spellcheck-dictionary-download-failure": "the engine's dictionaries ship beside it and are never downloaded (patch 0246)",
     "Session.spellcheck-dictionary-download-success": "the engine's dictionaries ship beside it and are never downloaded (patch 0246)",
+    "WebContents.devtools-closed": "the desktop has no devtools for apps: openDevTools opens none",
+    "WebContents.devtools-focused": "the desktop has no devtools for apps: openDevTools opens none",
+    "WebContents.devtools-open-url": "the desktop has no devtools for apps: openDevTools opens none",
+    "WebContents.devtools-opened": "the desktop has no devtools for apps: openDevTools opens none",
+    "WebContents.devtools-reload-page": "the desktop has no devtools for apps: openDevTools opens none",
+    "WebContents.devtools-search-query": "the desktop has no devtools for apps: openDevTools opens none",
+    "WebContents.paint": "no window is offscreen: one that asks is refused",
     "WebContents.plugin-crashed": "Chromium runs no plugins, so none crashes"
   }
 }

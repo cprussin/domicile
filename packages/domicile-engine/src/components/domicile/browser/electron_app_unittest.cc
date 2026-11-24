@@ -2517,15 +2517,19 @@ TEST_F(ElectronAppTest, APagesDevToolsEventsReachTheApp) {
   ElectronPageCalls page = desk_.pages.at("10");
   sent_.clear();
 
-  page.devtools_event.Run("Page.screencastFrame",
-                          base::DictValue().Set("sessionId", 1));
-  EXPECT_EQ(sent_, Lines{"{\"method\":\"Page.screencastFrame\",\"params\":"
-                         "{\"sessionId\":1},\"type\":\"devtools_event\","
-                         "\"window\":3}\n"});
+  page.devtools_event.Run({.method = "Page.screencastFrame",
+                           .params = base::DictValue().Set("sessionId", 1)});
+  page.debugger_detached.Run("target closed");
+  EXPECT_EQ(sent_, (Lines{"{\"method\":\"Page.screencastFrame\",\"params\":"
+                          "{\"sessionId\":1},\"type\":\"devtools_event\","
+                          "\"window\":3}\n",
+                          "{\"reason\":\"target closed\",\"type\":"
+                          "\"debugger_detached\",\"window\":3}\n"}));
   // A window that closed says nothing more.
   app_->Listed({});
   sent_.clear();
-  page.devtools_event.Run("Page.screencastFrame", base::DictValue());
+  page.devtools_event.Run({.method = "Page.screencastFrame"});
+  page.debugger_detached.Run("target closed");
 
   EXPECT_TRUE(sent_.empty());
 }

@@ -205,23 +205,111 @@ describe(createPageControl, () => {
     });
   });
 
-  it("copies the image or the video frame at a point, and adjusts the selection", () => {
+  it("copies or saves the image or the video frame at a point, adjusts the selection, stops and crashes", () => {
     const { called, control } = fakePage();
 
     control.copyImageAt(1, 2);
     // The engine takes whole pixels.
     control.copyVideoFrameAt(3.4, 3.6);
+    control.saveVideoFrameAs(5, 6.2);
     control.adjustSelection({ end: -1, start: 2 });
     control.adjustSelection({});
     control.reloadIgnoringCache();
+    control.stop();
+    control.forcefullyCrashRenderer();
 
     expect(called).toEqual([
       { method: "copy_image_at", x: 1, y: 2 },
       { method: "copy_video_frame_at", x: 3, y: 4 },
+      { method: "save_video_frame_at", x: 5, y: 6 },
       { end: -1, method: "adjust_selection", start: 2 },
       { end: 0, method: "adjust_selection", start: 0 },
       { method: "reload_ignoring_cache" },
+      {
+        devtools_method: "Page.stopLoading",
+        method: "devtools",
+        params: {},
+      },
+      { method: "crash_renderer" },
     ]);
+  });
+
+  it("inserts text at the page's focus", async () => {
+    const { called, control } = fakePage();
+
+    expect(await control.insertText("hi")).toBeUndefined();
+
+    expect(called).toEqual([
+      {
+        devtools_method: "Input.insertText",
+        method: "devtools",
+        params: { text: "hi" },
+      },
+    ]);
+  });
+
+  it("scrolls the document to its top or its bottom, from a world of the host's own", async () => {
+    const { called, control } = fakePage((method) => {
+      if (method.method !== "devtools") {
+        return null;
+      }
+      switch (method.devtools_method) {
+        case "Page.getFrameTree":
+          return { frameTree: { frame: { id: "F" } } };
+        case "Page.createIsolatedWorld":
+          return { executionContextId: 9 };
+        default:
+          return {};
+      }
+    });
+
+    control.scrollToTop();
+    control.scrollToBottom();
+    await Bun.sleep(0);
+
+    const evaluated = called.flatMap((method) =>
+      method.method === "devtools" &&
+      method.devtools_method === "Runtime.evaluate"
+        ? [method.params]
+        : [],
+    );
+    expect(evaluated).toEqual([
+      {
+        contextId: 9,
+        expression: "document.scrollingElement?.scrollTo(0, 0)",
+      },
+      {
+        contextId: 9,
+        expression:
+          "document.scrollingElement?.scrollTo(0, document.scrollingElement.scrollHeight)",
+      },
+    ]);
+    expect(called).toContainEqual({
+      devtools_method: "Page.createIsolatedWorld",
+      method: "devtools",
+      params: { frameId: "F", worldName: "electron-host" },
+    });
+  });
+
+  it("lists the system's printers as Electron names their facts", async () => {
+    const { called, control } = fakePage(() => [
+      {
+        description: "Hall",
+        display_name: "Laser",
+        name: "laser",
+        options: { "printer-location": "hall" },
+      },
+    ]);
+
+    expect(await control.getPrintersAsync()).toEqual([
+      {
+        description: "Hall",
+        displayName: "Laser",
+        name: "laser",
+        options: { "printer-location": "hall" },
+      },
+    ]);
+    expect(called).toEqual([{ method: "printers" }]);
   });
 
   describe("settings", () => {
@@ -241,6 +329,40 @@ describe(createPageControl, () => {
         { enabled: true, method: "set_caret_browsing" },
         { method: "set_webrtc_ip_policy", policy: "disable_non_proxied_udp" },
       ]);
+    });
+
+    it("sets the WebRTC UDP port range and the image animation policy, and reads the range back", () => {
+      const { control, set } = fakePage();
+
+      expect(control.getWebRTCUDPPortRange()).toEqual({ max: 0, min: 0 });
+      control.setWebRTCUDPPortRange({ max: 5010, min: 5000 });
+      control.setImageAnimationPolicy("animateOnce");
+      control.setImageAnimationPolicy("noAnimation");
+
+      expect(control.getWebRTCUDPPortRange()).toEqual({ max: 5010, min: 5000 });
+      expect(set).toEqual([
+        { max: 5010, method: "set_webrtc_udp_port_range", min: 5000 },
+        { method: "set_image_animation_policy", policy: "animate_once" },
+        { method: "set_image_animation_policy", policy: "no_animation" },
+      ]);
+    });
+
+    it("refuses a port range or an animation policy Electron refuses", () => {
+      const { control, set } = fakePage();
+
+      for (const range of [
+        { max: 5, min: 0 },
+        { max: 5, min: 9 },
+        { max: 65_536, min: 1 },
+      ]) {
+        expect(() => control.setWebRTCUDPPortRange(range)).toThrow(
+          "'min' and 'max' must be in the (0, 65535] range or [0, 0]",
+        );
+      }
+      expect(() => control.setImageAnimationPolicy("spin")).toThrow(
+        "Invalid image animation policy: spin",
+      );
+      expect(set).toEqual([]);
     });
 
     it("refuses a WebRTC IP policy Electron doesn't know", () => {

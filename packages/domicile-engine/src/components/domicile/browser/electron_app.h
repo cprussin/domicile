@@ -83,9 +83,10 @@ struct ElectronPageCalls {
   base::RepeatingCallback<void(ElectronContextMenu menu)> context_menu;
   // The shell made the window `state`; called only when that changes.
   base::RepeatingCallback<void(ElectronWindowState state)> window_state;
-  // An event of the page's DevTools client, which page calls drive.
-  base::RepeatingCallback<void(std::string method, base::DictValue params)>
-      devtools_event;
+  // An event of one of the page's DevTools clients, which page calls drive.
+  base::RepeatingCallback<void(ElectronDevToolsMessage event)> devtools_event;
+  // webContents.debugger's client detached from the page, for `reason`.
+  base::RepeatingCallback<void(std::string reason)> debugger_detached;
   // What the page's frames did, which the app hears of as Electron's
   // navigation events: a navigation starting, redirected and committing, a
   // frame failing to load, a frame but the main frame finishing loading, and
@@ -684,9 +685,8 @@ class ElectronApp {
   void AnswerUnload(const ElectronUnloadAnswer& answer);
   void PageContextMenu(ElectronWindow number, ElectronContextMenu menu);
   void CallPage(ElectronPageCall call);
-  void PageDevToolsEvent(ElectronWindow number,
-                         std::string method,
-                         base::DictValue params);
+  void PageDevToolsEvent(ElectronWindow number, ElectronDevToolsMessage event);
+  void PageDebuggerDetached(ElectronWindow number, std::string reason);
   void PageReported(ElectronWindow number, ElectronPageReport report);
   // One of electron_page_reports.h's requests of a window's page.
   void AskPage(ElectronPageRequest request);

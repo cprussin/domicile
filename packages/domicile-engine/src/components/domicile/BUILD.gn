@@ -1041,7 +1041,10 @@ source_set("electron_protocol") {
     "//url",
   ]
 
-  deps = [ "//net" ]
+  deps = [
+    ":common",
+    "//net",
+  ]
 }
 
 # Which of a <webview>'s navigations ask the shell first. Its own target beside

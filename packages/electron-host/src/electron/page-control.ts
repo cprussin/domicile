@@ -44,10 +44,32 @@ export type PageMethod =
   | { readonly method: "set_webrtc_ip_policy"; readonly policy: string }
   | { readonly method: "set_ignore_input"; readonly ignore: boolean }
   | {
+      readonly method: "save_video_frame_at";
+      readonly x: number;
+      readonly y: number;
+    }
+  | {
+      readonly method: "set_image_animation_policy";
+      readonly policy: "animate" | "animate_once" | "no_animation";
+    }
+  | {
+      readonly method: "set_webrtc_udp_port_range";
+      readonly min: number;
+      readonly max: number;
+    }
+  | { readonly method: "crash_renderer" }
+  | { readonly method: "printers" }
+  | {
       readonly method: "devtools";
       readonly devtools_method: string;
       readonly params: Readonly<Record<string, unknown>>;
-    };
+      /** For webContents.debugger's client, not the host members'. */
+      readonly debugger?: true;
+      /** A target the client attached to; the page when left out. */
+      readonly session_id?: string;
+    }
+  | { readonly method: "debugger_attach" }
+  | { readonly method: "debugger_detach" };
 
 /** The page's DevTools events, by DevTools method. */
 export type DevToolsEvents = EventEmitter<
@@ -132,12 +154,34 @@ const WEBRTC_IP_POLICIES = new Set([
   "disable_non_proxied_udp",
 ]);
 
+/** setImageAnimationPolicy's policies, by Electron's names. */
+const IMAGE_ANIMATION_POLICIES = new Map<
+  string,
+  "animate" | "animate_once" | "no_animation"
+>([
+  ["animate", "animate"],
+  ["animateOnce", "animate_once"],
+  ["noAnimation", "no_animation"],
+]);
+
+/** The highest UDP port. */
+const MOST_PORT = 65_535;
+
+/** Electron's `PrinterInfo`. */
+export type PrinterInfo = {
+  name: string;
+  displayName: string;
+  description: string;
+  options: Record<string, string>;
+};
+
 /** A page's members that a page call carries out. */
 export const createPageControl = (page: PageCaller) => {
   /** Whether each inserted style sheet's key is the user's, by key. */
   const userSheets = new Map<string, boolean>();
   let caretBrowsing = false;
   let webRtcIpPolicy = "default";
+  let webRtcUdpPortRange = { max: 0, min: 0 };
   let frameSubscriber: FrameSubscriber | undefined;
 
   const devtools = (method: string, params: Record<string, unknown> = {}) =>
@@ -147,6 +191,26 @@ export const createPageControl = (page: PageCaller) => {
     params: Record<string, unknown> = {},
   ) => {
     page.set({ devtools_method: method, method: "devtools", params });
+  };
+
+  /**
+   * Runs `expression` in the main frame's document from a world of the
+   * host's own, which the page's scripts can't change.
+   */
+  const evaluateInHostWorld = async (expression: string) => {
+    const { frameTree } = frameTreeAnswer.parse(
+      await devtools("Page.getFrameTree"),
+    );
+    const { executionContextId } = isolatedWorld.parse(
+      await devtools("Page.createIsolatedWorld", {
+        frameId: frameTree.frame.id,
+        worldName: HOST_WORLD,
+      }),
+    );
+    await devtools("Runtime.evaluate", {
+      contextId: executionContextId,
+      expression,
+    });
   };
 
   /** The page as it shows, or the part of it in `rect`. */
@@ -273,7 +337,25 @@ export const createPageControl = (page: PageCaller) => {
         user_gesture: userGesture,
         world: worldId,
       }),
+    forcefullyCrashRenderer: () => {
+      fireAndLog(
+        page.call({ method: "crash_renderer" }),
+        "crash the page's renderer",
+      );
+    },
+
+    /** The system's printers. */
+    getPrintersAsync: async (): Promise<PrinterInfo[]> =>
+      printers
+        .parse(await page.call({ method: "printers" }))
+        .map(({ description, display_name, name, options }) => ({
+          description,
+          displayName: display_name,
+          name,
+          options,
+        })),
     getWebRTCIPHandlingPolicy: () => webRtcIpPolicy,
+    getWebRTCUDPPortRange: () => ({ ...webRtcUdpPortRange }),
 
     /** Resolves with the sheet's key, for removeInsertedCSS. */
     insertCSS: async (
@@ -286,6 +368,10 @@ export const createPageControl = (page: PageCaller) => {
         .parse(await page.callAfterLoad({ css, method: "insert_css", user }));
       userSheets.set(key, user);
       return key;
+    },
+    /** Types `text` at the page's focus, as an input method would. */
+    insertText: async (text: string) => {
+      await devtools("Input.insertText", { text });
     },
     isCaretBrowsingEnabled: () => caretBrowsing,
 
@@ -309,9 +395,40 @@ export const createPageControl = (page: PageCaller) => {
       await page.call({ key, method: "remove_inserted_css", user });
     },
 
+    /** Saves the video frame at a point, as a download of the page's. */
+    saveVideoFrameAs: (x: number, y: number) => {
+      fireAndLog(
+        page.call({ method: "save_video_frame_at", ...wholePoint(x, y) }),
+        "save a video frame",
+      );
+    },
+    scrollToBottom: () => {
+      fireAndLog(
+        evaluateInHostWorld(
+          "document.scrollingElement?.scrollTo(0, document.scrollingElement.scrollHeight)",
+        ),
+        "scroll to the bottom",
+      );
+    },
+    scrollToTop: () => {
+      fireAndLog(
+        evaluateInHostWorld("document.scrollingElement?.scrollTo(0, 0)"),
+        "scroll to the top",
+      );
+    },
+
     setCaretBrowsingEnabled: (enabled: boolean) => {
       caretBrowsing = enabled;
       page.set({ enabled, method: "set_caret_browsing" });
+    },
+
+    setImageAnimationPolicy: (policy: string) => {
+      const engine = IMAGE_ANIMATION_POLICIES.get(policy);
+      if (engine === undefined) {
+        throw new TypeError(`Invalid image animation policy: ${policy}`);
+      } else {
+        page.set({ method: "set_image_animation_policy", policy: engine });
+      }
     },
 
     setWebRTCIPHandlingPolicy: (policy: string) => {
@@ -322,8 +439,27 @@ export const createPageControl = (page: PageCaller) => {
         throw new TypeError(`Invalid WebRTC IP handling policy: ${policy}`);
       }
     },
+
+    /** Limits WebRTC to UDP ports from `min` to `max`, or any for both 0. */
+    setWebRTCUDPPortRange: ({ max, min }: { min: number; max: number }) => {
+      if (min < 0 || max > MOST_PORT || min > max || (min === 0 && max !== 0)) {
+        throw new Error(
+          "'min' and 'max' must be in the (0, 65535] range or [0, 0]",
+        );
+      } else {
+        webRtcUdpPortRange = { max, min };
+        page.set({ max, method: "set_webrtc_udp_port_range", min });
+      }
+    },
+
+    stop: () => {
+      fireAndLog(devtools("Page.stopLoading"), "stop loading");
+    },
   };
 };
+
+/** The world the host's own scripts in a page run in. */
+const HOST_WORLD = "electron-host";
 
 /** DevTools' Page.printToPDF parameters for Electron's options. */
 const printToPdfParams = (options: PrintToPdfOptions) => {
@@ -404,6 +540,24 @@ const withData = z.object({ data: z.string() });
 const layoutMetrics = z.object({
   cssVisualViewport: z.object({ pageX: z.number(), pageY: z.number() }),
 });
+
+/** The main frame's id, from a Page.getFrameTree answer. */
+const frameTreeAnswer = z.object({
+  frameTree: z.object({ frame: z.object({ id: z.string() }) }),
+});
+
+/** A Page.createIsolatedWorld answer. */
+const isolatedWorld = z.object({ executionContextId: z.number() });
+
+/** The engine's answer to `printers`. */
+const printers = z.array(
+  z.object({
+    description: z.string(),
+    display_name: z.string(),
+    name: z.string(),
+    options: z.record(z.string(), z.string()),
+  }),
+);
 
 /** A Page.screencastFrame event's parameters that a subscriber needs. */
 const screencastFrame = z.object({ data: z.string(), sessionId: z.number() });

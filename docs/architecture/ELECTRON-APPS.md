@@ -328,13 +328,26 @@ The host carries out the webContents members that act on the page with
 | `copyImageAt`, `copyVideoFrameAt`, `adjustSelection` | `copy_image_at`, `copy_video_frame_at`, `adjust_selection` |
 | `caretBrowsingEnabled`, `setWebRTCIPHandlingPolicy` | `set_caret_browsing`, `set_webrtc_ip_policy` (renderer prefs) |
 | `win.setEnabled`, a modal's parent | `set_ignore_input` |
+| `saveVideoFrameAs` (webContents and webFrameMain) | `save_video_frame_at`: the frame goes to the app's `will-download` |
+| `setImageAnimationPolicy`, `setWebRTCUDPPortRange` | `set_image_animation_policy` (web prefs), `set_webrtc_udp_port_range` (renderer prefs) |
+| `forcefullyCrashRenderer`, `getPrintersAsync` | `crash_renderer`, `printers` (CUPS) |
 | `capturePage`, `printToPDF`, `enableDeviceEmulation`, `beginFrameSubscription`, the session's `enableNetworkEmulation` | `devtools`: `Page.captureScreenshot` (with `Page.getLayoutMetrics` for a rect), `Page.printToPDF`, `Emulation.setDeviceMetricsOverride`, `Page.startScreencast`, `Network.emulateNetworkConditions` |
+| `stop`, `insertText`, `scrollToTop`, `scrollToBottom` | `devtools`: `Page.stopLoading`, `Input.insertText`, `Runtime.evaluate` in an isolated world of the host's |
+| `takeHeapSnapshot`, `savePage` as MHTML, `webFrameMain.collectJavaScriptCallStack` | `devtools`: `HeapProfiler.takeHeapSnapshot`, `Page.captureSnapshot`, `Debugger.pause` ([`page-saves.ts`](../../packages/electron-host/src/electron/page-saves.ts)) |
+| `webContents.debugger` | `debugger_attach`, `debugger_detach`, and `devtools` with `debugger` ([`debugger.ts`](../../packages/electron-host/src/electron/debugger.ts)) |
 
-- **DevTools:** each page has one DevTools client, untrusted and with no
-  local files, attached at its first `devtools` call and kept while the page
-  lives, as an emulation or a screencast lasts only while its client does.
-  It takes only the methods in the table, and its events come as
-  `devtools_event {window, method, params}`.
+- **DevTools:** each page has two DevTools clients. The host members' is
+  attached at its first `devtools` call and kept while the page lives, as an
+  emulation or a screencast lasts only while its client does.
+  `webContents.debugger`'s is attached and detached by the app, so its
+  domains and the host's don't meet. Both are untrusted, with no local
+  files, and follow the page only to a URL that isn't Chrome's, DevTools' or
+  the shell's (`ElectronDevToolsMayAttachTo`), so a method takes the page
+  nowhere `loadURL` couldn't. A method may name a target the client attached
+  to by `session_id`. Events come as
+  `devtools_event {window, method, params, debugger?, session_id?}`, and the
+  debugger's client going with its page as `debugger_detached {window,
+  reason}`.
 - **Settings** (caret browsing, the WebRTC policy, ignoring input) set
   before the page opens wait for it; the other calls reject. The engine
   puts caret browsing and the WebRTC policy back before each document, over
@@ -342,8 +355,15 @@ The host carries out the webContents members that act on the page with
   changes while a document shows can reset them until the next one.
 - **Captures** of a page that doesn't show (a hidden window, or a view no
   showing window holds) are empty, as such a page draws no frame.
+- **Offscreen:** a window with `webPreferences.offscreen` is
+  [unsupported](#unsupported-apps), as the engine draws a page only while the
+  shell shows it. Every page is on screen, so `isOffscreen`, `isPainting`
+  and the frame rate answer as Electron's do for one that is.
 - **Not yet:** `print` (Chrome says nothing when its dialog is done),
-  `savePage` (a download), `clone`, and `getMediaSourceId`, which no
+  `savePage` as HTML (a download), `clone`, `startDrag`, `opener` (the engine
+  doesn't say which new windows keep theirs), the synchronous
+  `isBeingCaptured`, `getAllSharedWorkers` and DevTools target ids, which
+  the engine doesn't report to the host, and `getMediaSourceId`, which no
   capture source in the engine answers to.
 
 ### Preload and IPC
@@ -638,7 +658,8 @@ waits on every one. Only a window shows a message box; a view's is refused.
 
 An app the engine can't run yet falls back to its own Electron. When a
 sandboxed window asks for `contextIsolation: false`, whose preload would run
-in the page's own world without Node, `electron-host` exits with status 3,
+in the page's own world without Node, or any window asks for
+`webPreferences.offscreen`, `electron-host` exits with status 3,
 whatever the app catches; a window with Node in its page runs on the engine
 (see [Preload and IPC](#preload-and-ipc)). `domicile open --electron` then
 shows a notification naming the app and runs its own command: the one given

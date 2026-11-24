@@ -23,6 +23,7 @@ import { Priority, say } from "../journal";
 import type { ElectronApp } from "./app";
 import type { ContextMenuAsked } from "./context-menu";
 import { contextMenuParams } from "./context-menu";
+import { Debugger } from "./debugger";
 import { createFrames, SubFrame } from "./frames";
 import type { createIpcMain } from "./ipc-main";
 import { IpcMain } from "./ipc-main";
@@ -41,6 +42,7 @@ import type {
 } from "./page-control";
 import { createPageControl } from "./page-control";
 import { isPageEvent, PageEvents } from "./page-events";
+import { createPageSaves } from "./page-saves";
 import type { createSessions, Session } from "./session";
 import {
   followNetworkEmulation,
@@ -49,6 +51,7 @@ import {
 } from "./session";
 
 type PageControl = ReturnType<typeof createPageControl>;
+type PageSaves = ReturnType<typeof createPageSaves>;
 
 export type WebPreferences = {
   readonly preload?: string | undefined;
@@ -63,6 +66,8 @@ export type WebPreferences = {
   readonly additionalArguments?: readonly string[] | undefined;
   /** Whether the webContents hears preferred-size-changed. */
   readonly enablePreferredSizeMode?: boolean | undefined;
+  /** Drawn to the app's `paint` listeners instead of the desk. */
+  readonly offscreen?: boolean | undefined;
 };
 
 /** The requests about a page's contents, which its window's number completes. */
@@ -425,6 +430,11 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly copyVideoFrameAt = (x: number, y: number) => {
       this.page.webContents.copyVideoFrameAt(x, y);
     };
+    readonly saveVideoFrameAs = (x: number, y: number) => {
+      this.page.webContents.saveVideoFrameAs(x, y);
+    };
+    readonly collectJavaScriptCallStack = () =>
+      this.page.webContents.collectJavaScriptCallStack();
     readonly reload = () => {
       // Electron's answers only whether the reload started.
       void this.page.webContents.reload().catch(() => undefined);
@@ -459,10 +469,28 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     declare readonly disableDeviceEmulation: PageControl["disableDeviceEmulation"];
     declare readonly beginFrameSubscription: PageControl["beginFrameSubscription"];
     declare readonly endFrameSubscription: PageControl["endFrameSubscription"];
+    declare readonly stop: PageControl["stop"];
+    declare readonly insertText: PageControl["insertText"];
+    declare readonly scrollToTop: PageControl["scrollToTop"];
+    declare readonly scrollToBottom: PageControl["scrollToBottom"];
+    declare readonly saveVideoFrameAs: PageControl["saveVideoFrameAs"];
+    declare readonly forcefullyCrashRenderer: PageControl["forcefullyCrashRenderer"];
+    declare readonly getPrintersAsync: PageControl["getPrintersAsync"];
+    declare readonly setImageAnimationPolicy: PageControl["setImageAnimationPolicy"];
+    declare readonly setWebRTCUDPPortRange: PageControl["setWebRTCUDPPortRange"];
+    declare readonly getWebRTCUDPPortRange: PageControl["getWebRTCUDPPortRange"];
+    // What it reads out of the page through DevTools (page-saves.ts).
+    declare readonly takeHeapSnapshot: PageSaves["takeHeapSnapshot"];
+    declare readonly savePage: PageSaves["savePage"];
+    declare readonly collectJavaScriptCallStack: PageSaves["collectJavaScriptCallStack"];
+    /** The app's own DevTools client on the page. */
+    readonly debugger: Debugger;
 
     constructor(readonly owner: Page) {
       super();
-      Object.assign(this, createPageControl(owner));
+      Object.assign(this, createPageControl(owner), createPageSaves(owner));
+      // The page's own members are made after its webContents.
+      this.debugger = new Debugger((method) => owner.call(method));
       this.pageEvents = new PageEvents({
         contents: this,
         eventObject,
@@ -890,6 +918,37 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly isDevToolsOpened = () => false;
     readonly isDevToolsFocused = () => false;
     readonly toggleDevTools = () => undefined;
+    readonly inspectElement = (_x: number, _y: number) => undefined;
+    readonly inspectServiceWorker = () => undefined;
+    readonly inspectSharedWorker = () => undefined;
+    readonly inspectSharedWorkerById = (_workerId: string) => undefined;
+    readonly setDevToolsWebContents = (_devToolsWebContents: unknown) =>
+      undefined;
+    readonly setDevToolsTitle = (_title: string) => undefined;
+    readonly getDevToolsTitle = () => "";
+    get devToolsWebContents() {
+      return null;
+    }
+    // No page here is a <webview>'s: Electron pages have none yet.
+    get hostWebContents() {
+      return null;
+    }
+    // The shell draws the window, and redraws it as its pages draw.
+    readonly invalidate = () => undefined;
+    // An offscreen window is refused, so no page is offscreen, and these
+    // answer as Electron's do for one that isn't.
+    readonly isOffscreen = () => false;
+    readonly isPainting = () => false;
+    readonly startPainting = () => undefined;
+    readonly stopPainting = () => undefined;
+    readonly getFrameRate = () => 0;
+    readonly setFrameRate = (_fps: number) => undefined;
+    get frameRate() {
+      return this.getFrameRate();
+    }
+    set frameRate(fps: number) {
+      this.setFrameRate(fps);
+    }
     // The engine's settings for every page, not each app's.
     readonly setBackgroundThrottling = (_allowed: boolean) => undefined;
     readonly getBackgroundThrottling = () => true;
@@ -1041,6 +1100,11 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       if (sandboxed && !isolated) {
         refuse(
           "this window's sandboxed preload runs in its page's own world, which Domicile's engine doesn't give a preload",
+        );
+      }
+      if (preferences.offscreen === true) {
+        refuse(
+          "this window asks to be drawn offscreen, which Domicile's engine doesn't do",
         );
       }
       const session =
@@ -1495,7 +1559,19 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           break;
         }
         case "devtools_event": {
-          this.devtools.emit(event.method, event.params);
+          if (event.debugger === true) {
+            this.webContents.debugger.receive(
+              event.method,
+              event.params,
+              event.session_id,
+            );
+          } else {
+            this.devtools.emit(event.method, event.params);
+          }
+          break;
+        }
+        case "debugger_detached": {
+          this.webContents.debugger.detached(event.reason);
           break;
         }
         case "page_result":
@@ -1652,6 +1728,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           );
         }
         this.#running.clear();
+        this.webContents.debugger.detached("target closed");
         this.wasClosed();
         this.webContents.emit("destroyed");
       }

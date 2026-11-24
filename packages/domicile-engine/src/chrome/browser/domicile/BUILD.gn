@@ -294,6 +294,9 @@ source_set("domicile") {
     # Printing a guest's page: Chrome's PrintViewManager and its system
     # dialog.
     "//chrome/browser/printing",
+    # An Electron app's getPrintersAsync: the system's printers, from CUPS.
+    "//printing/backend",
+    "//printing/mojom",
     # Tab zoom factors and range.
     "//third_party/blink/public/common",
     # Tab zoom modes, which the guest's ZoomController keeps.
