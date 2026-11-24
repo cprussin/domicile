@@ -119,6 +119,15 @@ constexpr char kBootstrap[] = R"JS(
   // An error in a listener or the preload reaches the console, as an uncaught
   // one, and stops nothing else.
   const report = (error) => queueMicrotask(() => { throw error; });
+  // Tells the app's webContents what its preload threw, as preload-error.
+  const preloadFailed = (error) => {
+    if (error instanceof Error) {
+      native.preloadFailed(String(error.name), String(error.message),
+                           String(error.stack ?? ''));
+    } else {
+      native.preloadFailed('Error', String(error), '');
+    }
+  };
   // Gives `self` Node's EventEmitter, as Electron's ipcRenderer and a
   // sandboxed preload's process have: listeners by event name, run with the
   // arguments as given.
@@ -404,6 +413,7 @@ constexpr char kBootstrap[] = R"JS(
       preload.call(globalThis, require, process, module, module.exports,
                    globalThis);
     } catch (error) {
+      preloadFailed(error);
       report(error);
     }
   }
@@ -416,6 +426,8 @@ constexpr char kBootstrap[] = R"JS(
   };
   return {
     electron,
+    // For Node's require of the preload, which runs it after this.
+    preloadFailed,
     // The document's DOMContentLoaded has been dispatched.
     documentEnd() {
       process.emit('document-end');
@@ -719,6 +731,11 @@ bool ElectronPreload::Run(ToRun to_run) {
         blink::mojom::ConsoleMessageLevel::kError,
         blink::WebString::FromUtf8(
             "Unable to load preload script: it did not compile.")));
+    if (host_.is_bound()) {
+      host_->PreloadFailed("SyntaxError",
+                           "Unable to load preload script: it did not compile.",
+                           std::string());
+    }
     return true;
   }
   v8::Local<v8::Context> world = WorldContext(isolate);
@@ -738,6 +755,7 @@ bool ElectronPreload::Run(ToRun to_run) {
   add("post", &ElectronPreload::Post);
   add("portPost", &ElectronPreload::PortPost);
   add("portClose", &ElectronPreload::PortClose);
+  add("preloadFailed", &ElectronPreload::PreloadFailed);
   add("insertCSS", &ElectronPreload::InsertCss);
   add("removeInsertedCSS", &ElectronPreload::RemoveInsertedCss);
   add("deviceScale", &ElectronPreload::DeviceScale);
@@ -787,7 +805,7 @@ bool ElectronPreload::Run(ToRun to_run) {
   v8::Local<v8::Object> calls = made.As<v8::Object>();
   // The bootstrap is ours, so a call missing from it is the engine's bug.
   for (const char* name : {"deliver", "deliverPost", "toPort", "closePort",
-                           "settle", "documentEnd"}) {
+                           "settle", "documentEnd", "preloadFailed"}) {
     v8::Local<v8::Value> call;
     CHECK(
         calls->Get(world, gin::StringToSymbol(isolate, name)).ToLocal(&call) &&
@@ -801,11 +819,15 @@ bool ElectronPreload::Run(ToRun to_run) {
               .ToLocal(&electron) &&
           electron->IsObject())
         << "domicile: the Electron preload's bootstrap has no electron";
+    v8::Local<v8::Value> preload_failed =
+        calls->Get(world, gin::StringToSymbol(isolate, "preloadFailed"))
+            .ToLocalChecked();
     // Node runs the app's preload, which may end the frame, this with it.
     std::unique_ptr<ElectronNodeEnvironment> node =
         ElectronNodeEnvironment::Start(isolate, world, *to_run.app,
                                        *to_run.node, to_run.arguments,
-                                       electron.As<v8::Object>());
+                                       electron.As<v8::Object>(),
+                                       preload_failed.As<v8::Function>());
     if (!alive) {
       return false;
     }
@@ -960,6 +982,24 @@ void ElectronPreload::PortClose(
   CHECK(gin::ConvertFromV8(isolate, info[0], &port));
   if (self != nullptr && self->host_.is_bound()) {
     self->host_->PortClosed(port);
+  }
+}
+
+// static
+void ElectronPreload::PreloadFailed(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  ElectronPreload* self = Of(isolate);
+  std::string name;
+  std::string message;
+  std::string stack;
+  // The bootstrap is the only caller, and it passes three strings.
+  CHECK(gin::ConvertFromV8(isolate, info[0], &name) &&
+        gin::ConvertFromV8(isolate, info[1], &message) &&
+        gin::ConvertFromV8(isolate, info[2], &stack));
+  // With the app gone, nobody hears it; the console still does.
+  if (self != nullptr && self->host_.is_bound()) {
+    self->host_->PreloadFailed(name, message, stack);
   }
 }
 

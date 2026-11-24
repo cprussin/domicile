@@ -76,7 +76,8 @@ bool OpenAppModuleWindow(const GURL& url, const std::string& app_host);
 // A `node` page has Node.js, in a renderer of its own that isn't sandboxed.
 // A `view` is a WebContentsView's page, listed only while a window holds it.
 // A window shows `title` instead of its page's when it isn't empty, and opens
-// `hidden` when asked.
+// `hidden` when asked, and loads as `user_agent` when it isn't empty, over
+// `session`'s.
 // Returns the window's id. Nothing when there is no shell to own it. See
 // docs/architecture/ELECTRON-APPS.md.
 std::optional<std::string> OpenElectronWindow(
@@ -90,7 +91,8 @@ std::optional<std::string> OpenElectronWindow(
     base::WeakPtr<ElectronSession> session,
     bool view,
     const std::string& title,
-    bool hidden);
+    bool hidden,
+    const std::string& user_agent);
 
 // Makes `page`, a page's new window its Electron app allowed, a window of app
 // `app_id`: see ElectronDesk::Adopt. Returns the window's id. Nothing when
@@ -104,7 +106,8 @@ std::optional<std::string> AdoptElectronWindow(
     ElectronPageCalls calls,
     base::WeakPtr<ElectronSession> session,
     const std::string& title,
-    bool hidden);
+    bool hidden,
+    const std::string& user_agent);
 
 // Electron window `id`'s own title, listed with it over its page's.
 void SetElectronTitle(const std::string& id, const std::string& title);

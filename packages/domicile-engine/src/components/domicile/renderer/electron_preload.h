@@ -135,6 +135,7 @@ class ElectronPreload final
   static void Post(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void PortPost(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void PortClose(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void PreloadFailed(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void InsertCss(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void RemoveInsertedCss(
       const v8::FunctionCallbackInfo<v8::Value>& info);

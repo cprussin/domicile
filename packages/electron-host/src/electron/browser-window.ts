@@ -32,6 +32,7 @@ import type {
   PrintToPdfOptions,
 } from "./page-control";
 import { createPageControl } from "./page-control";
+import { isPageEvent, PageEvents } from "./page-events";
 import type { createSessions, Session } from "./session";
 import { sessionPartition } from "./session";
 
@@ -48,6 +49,8 @@ export type WebPreferences = {
   readonly sandbox?: boolean | undefined;
   /** Added to the page's renderer's command line: its process.argv. */
   readonly additionalArguments?: readonly string[] | undefined;
+  /** Whether the webContents hears preferred-size-changed. */
+  readonly enablePreferredSizeMode?: boolean | undefined;
 };
 
 /** The requests about a page's contents, which its window's number completes. */
@@ -411,6 +414,8 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     /** What this page alone sends, heard before `ipcMain`. */
     readonly ipc = new IpcMain();
     #mainFrame: WebFrameMain | undefined;
+    /** What it hears of its page's console, sound, cursor and input. */
+    readonly pageEvents: PageEvents;
 
     // What the engine carries out on the page with a page call
     // (page-control.ts), set as it is made.
@@ -435,6 +440,27 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     constructor(readonly owner: Page) {
       super();
       Object.assign(this, createPageControl(owner));
+      this.pageEvents = new PageEvents({
+        contents: this,
+        eventObject,
+        isOpen: () => owner.isOpen(),
+        preloadPath: () => owner.preferences.preload,
+        send: (action) => toEngine({ ...action, window: owner.id }),
+        sessionUserAgent: () => owner.session.getUserAgent(),
+        window: () => (owner instanceof BrowserWindow ? owner : undefined),
+      });
+    }
+
+    /** Removes the app's listeners, and goes on hearing which it adds. */
+    override removeAllListeners(name?: string | symbol) {
+      // EventEmitter removes every event's only when given no name at all.
+      if (name === undefined) {
+        super.removeAllListeners();
+      } else {
+        super.removeAllListeners(name);
+      }
+      this.pageEvents.watch();
+      return this;
     }
 
     get caretBrowsingEnabled() {
@@ -732,10 +758,12 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     // The engine's settings for every page, not each app's.
     readonly setBackgroundThrottling = (_allowed: boolean) => undefined;
     readonly getBackgroundThrottling = () => true;
-    readonly setUserAgent = (_userAgent: string) => undefined;
-    readonly getUserAgent = () => "";
-    readonly setAudioMuted = (_muted: boolean) => undefined;
-    readonly isAudioMuted = () => false;
+    readonly setUserAgent = (userAgent: string) =>
+      this.pageEvents.setUserAgent(userAgent);
+    readonly getUserAgent = () => this.pageEvents.getUserAgent();
+    readonly setAudioMuted = (muted: boolean) =>
+      this.pageEvents.setAudioMuted(muted);
+    readonly isAudioMuted = () => this.pageEvents.isAudioMuted();
     get audioMuted() {
       return this.isAudioMuted();
     }
@@ -754,7 +782,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     set userAgent(userAgent: string) {
       this.setUserAgent(userAgent);
     }
-    readonly isCurrentlyAudible = () => false;
+    readonly isCurrentlyAudible = () => this.pageEvents.isCurrentlyAudible();
     // The shell zooms pages: the app's zoom is kept, not applied.
     readonly getZoomFactor = () => this.zoomFactor;
     readonly getZoomMode = () => this.zoomMode;
@@ -774,7 +802,11 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     };
     readonly setVisualZoomLevelLimits = async (_min: number, _max: number) =>
       undefined;
-    readonly setIgnoreMenuShortcuts = (_ignore: boolean) => undefined;
+    readonly setIgnoreMenuShortcuts = (ignore: boolean) =>
+      this.pageEvents.setIgnoreMenuShortcuts(ignore);
+    /** Sends Electron's input event `event` to the page, as though the user did. */
+    readonly sendInputEvent = (event: unknown) =>
+      this.pageEvents.sendInputEvent(event);
     readonly getURL = () => this.owner.url;
     readonly isDestroyed = () => this.owner.isDestroyed();
     readonly loadFile = (path: string) => this.owner.loadFile(path);
@@ -898,6 +930,9 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         sessions.fromPartition(preferences.partition ?? "");
       this.title = title;
       this.#view = view;
+      if (preferences.enablePreferredSizeMode === true) {
+        this.webContents.pageEvents.enablePreferredSizeMode();
+      }
       pages.set(this.id, this);
     }
 
@@ -998,6 +1033,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         this.opened = true;
         toEngine({ type: "open_window", url, ...this.#openKeys() });
         this.#sendSettings();
+        this.webContents.pageEvents.opened();
         this.wasOpened();
       }
       return loaded;
@@ -1013,6 +1049,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         ...(this.#node === undefined ? {} : { node: this.#node }),
         ...(session === "" ? {} : { session }),
         ...(this.#view ? { view: true } : {}),
+        ...this.webContents.pageEvents.openKeys(),
         ...this.opening(),
       };
     };
@@ -1038,6 +1075,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         ...this.#openKeys(),
       });
       this.#sendSettings();
+      this.webContents.pageEvents.opened();
       this.wasOpened();
     };
 
@@ -1129,6 +1167,10 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
 
     /** Takes what the engine said of this page. */
     readonly take = (event: WindowEvent) => {
+      if (isPageEvent(event)) {
+        this.webContents.pageEvents.take(event);
+        return;
+      }
       switch (event.type) {
         case "window_open": {
           this.#windowOpen(event);

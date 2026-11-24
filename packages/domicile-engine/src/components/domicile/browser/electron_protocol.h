@@ -16,6 +16,7 @@
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "components/domicile/browser/electron_page_call.h"
+#include "components/domicile/browser/electron_page_reports.h"
 #include "components/domicile/browser/web_view_partition.h"
 #include "components/domicile/common/electron_schemes.h"
 #include "url/gurl.h"
@@ -48,6 +49,9 @@ namespace domicile {
 //                                           the desktop shows over its
 //                                           page's; left out for none)
 //    "hidden":true,                        (show: false; left out is shown)
+//    "user_agent":"...",                   (webContents.setUserAgent before
+//                                           its first load; left out for
+//                                           its session's)
 //    "arguments":["--a=1"],                (additionalArguments, in the
 //                                           page's process.argv; left out
 //                                           for none)
@@ -351,6 +355,8 @@ struct ElectronOpenWindow {
   std::string title;
   // Whether the window opens hidden, as `show: false`. Never a view.
   bool hidden = false;
+  // The page's own user agent, over its session's; empty for its session's.
+  std::string user_agent;
 };
 
 // Where a window holds one of its views, in CSS pixels from the top left of
@@ -1039,7 +1045,8 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronSetHidden,
                                      ElectronSetWindowState,
                                      ElectronSetUserAgentFallback,
-                                     ElectronPageCall>;
+                                     ElectronPageCall,
+                                     ElectronPageRequest>;
 
 // Why a line is not a request, and which window or protocol request it was
 // for when it names one, so the app hears of it as that window's and the

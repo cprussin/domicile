@@ -84,6 +84,9 @@ struct ElectronPageCalls {
   // An event of the page's DevTools client, which page calls drive.
   base::RepeatingCallback<void(std::string method, base::DictValue params)>
       devtools_event;
+  // What else the app's webContents hears of its page: its console, its
+  // sound, its input, and the rest of electron_page_reports.h.
+  base::RepeatingCallback<void(ElectronPageReport report)> reported;
 };
 
 // A window's menu bar, as the desk lists it: the menu's entries as JSON
@@ -246,7 +249,8 @@ class ElectronDesk {
   // make `calls` and load through
   // `session`. A `view` is a WebContentsView's page, listed only while a
   // window holds it. A window shows `title` instead of its page's when it
-  // isn't empty, and opens `hidden` when asked. Returns its id, or nothing
+  // isn't empty, and opens `hidden` when asked. It loads as `user_agent`,
+  // or as its session's when that is empty. Returns its id, or nothing
   // when there is no shell to open it in.
   virtual std::optional<std::string> Open(
       const GURL& url,
@@ -259,7 +263,8 @@ class ElectronDesk {
       base::WeakPtr<ElectronSession> session,
       bool view,
       const std::string& title,
-      bool hidden) = 0;
+      bool hidden,
+      const std::string& user_agent) = 0;
   // Makes `page`, a page's new window the app allowed, a window of app
   // `app_id`, as Open does with the rest. It stays in its opener's partition
   // and session. Returns its id, or nothing when there is no shell to show
@@ -273,7 +278,8 @@ class ElectronDesk {
       ElectronPageCalls calls,
       base::WeakPtr<ElectronSession> session,
       const std::string& title,
-      bool hidden) = 0;
+      bool hidden,
+      const std::string& user_agent) = 0;
   // Window `id` holds `views`, bottom first, and no others. A view another
   // window held moves here.
   virtual void SetViews(const std::string& id,
@@ -366,6 +372,11 @@ class ElectronDesk {
   virtual void CallPage(const std::string& id,
                         ElectronPageMethod method,
                         ElectronAnswer done) = 0;
+  // Does `action` to window `id`'s page; see electron_page_reports.h. Returns
+  // why the page refuses it, as for an answer to a question it never asked.
+  // ElectronApp does set_page_user_agent itself, with SetUserAgent.
+  virtual std::optional<std::string> AskPage(const std::string& id,
+                                             ElectronPageAction action) = 0;
 
   // An app session's storage, in `partition`. Each runs `done` once, which
   // may be after the app has gone.
@@ -445,6 +456,8 @@ class ElectronApp {
     std::string session;
     // A WebContentsView's page rather than a BrowserWindow.
     bool view = false;
+    // webContents.setUserAgent's, over its session's; empty for none.
+    std::string user_agent;
   };
 
   // A page's protocol request, waiting on the app's handler.
@@ -543,6 +556,9 @@ class ElectronApp {
   void PageDevToolsEvent(ElectronWindow number,
                          std::string method,
                          base::DictValue params);
+  void PageReported(ElectronWindow number, ElectronPageReport report);
+  // One of electron_page_reports.h's requests of a window's page.
+  void AskPage(ElectronPageRequest request);
   void SetMenuBar(const ElectronSetMenuBar& bar);
   // The desk id of window `number` when it is a window, not a view, or
   // nothing after refusing `what` of a view.

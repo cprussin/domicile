@@ -56,6 +56,7 @@
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom-forward.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-forward.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
+#include "ui/base/cursor/cursor.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/point.h"
@@ -66,6 +67,7 @@
 
 namespace content {
 class BrowserContext;
+class RenderWidgetHost;
 }  // namespace content
 
 namespace domicile {
@@ -659,6 +661,35 @@ class WebViewGuest : public mojom::WebViewGuest,
                                    const gfx::Point& in_page)>;
   void TakeContextMenusWith(ContextMenuTaking taking);
 
+  // An Electron app's page, which hears what its webContents reports and
+  // decides what the app may: //chrome/browser/domicile's ElectronPageEvents.
+  class AppPage {
+   public:
+    virtual ~AppPage() = default;
+    // update-target-url, each change of the link under the pointer.
+    virtual void TargetUrlChanged(const GURL& url) = 0;
+    // zoom-changed: a Ctrl+wheel the page did not handle. The app zooms, if
+    // anyone does, as on Electron.
+    virtual void ZoomAsked(bool zoom_in) = 0;
+    // preferred-size-changed, in preferred size mode.
+    virtual void PreferredSizeChanged(const gfx::Size& size) = 0;
+    // content-bounds-updated: the page asked to move or resize its window.
+    virtual void ContentsBoundsAsked(const gfx::Rect& bounds) = 0;
+    // cursor-changed, over `widget`.
+    virtual void CursorChanged(content::RenderWidgetHost* widget,
+                               const ui::Cursor& cursor) = 0;
+    // Whether `widget` holds `event` for before-input-event, until the page
+    // releases it with RenderWidgetHost::DomicileReleaseHeldKeyboardEvent.
+    virtual bool HoldsKeyboardEvent(
+        content::RenderWidgetHost* widget,
+        const input::NativeWebKeyboardEvent& event) = 0;
+    // setIgnoreMenuShortcuts: the shell hears none of the page's unhandled
+    // keys, so no menu accelerator (and no other binding) answers them.
+    virtual bool IgnoresMenuShortcuts() const = 0;
+  };
+  // Reports to `page`, an Electron window's, as well as to the element.
+  void ReportToApp(base::WeakPtr<AppPage> page);
+
   // The page's zoom factor, for chrome.tabs. In manual mode, the factor the
   // page's own code zooms to, with the page itself at the default zoom.
   double GetZoomFactor() const;
@@ -823,6 +854,20 @@ class WebViewGuest : public mojom::WebViewGuest,
   bool DomicileTooltip(content::WebContents* source,
                        content::RenderWidgetHost* widget,
                        const std::u16string& text) override;
+
+  // An Electron app's page hears these; see AppPage. A browser's page
+  // holds no key, and its cursor is its view's alone.
+  bool DomicileHoldKeyboardEvent(
+      content::WebContents* source,
+      content::RenderWidgetHost* widget,
+      const input::NativeWebKeyboardEvent& event) override;
+  void DomicileCursorChanged(content::WebContents* source,
+                             content::RenderWidgetHost* widget,
+                             const ui::Cursor& cursor) override;
+  void UpdatePreferredSize(content::WebContents* source,
+                           const gfx::Size& pref_size) override;
+  void SetContentsBounds(content::WebContents* source,
+                         const gfx::Rect& bounds) override;
 
   // Asks the shell whether to send the page's form again. See kResendForm in
   // the mojom. Content's default does nothing, so the reload never happens.
@@ -1411,6 +1456,8 @@ class WebViewGuest : public mojom::WebViewGuest,
   WindowOpening window_opening_;
   // See TakeContextMenusWith.
   ContextMenuTaking context_menu_taking_;
+  // See ReportToApp; null for a browser's page.
+  base::WeakPtr<AppPage> app_page_;
 
   // See AddZoomChangedCallback.
   base::RepeatingCallbackList<void(double, double)> zoom_callbacks_;
