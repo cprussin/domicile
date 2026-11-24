@@ -171,6 +171,9 @@ two frame sinks, so the page needs a new token for it.
 - The engine listens on the broker socket again when the producer
   disconnects (`FrameSinkBroker::SetProducerGoneCallback`), since an
   invitation is accepted once.
+- The producer's end of the broker socket is close-on-exec
+  (`broker_socket.cc`). A child the compositor starts would otherwise hold it,
+  and the engine would never see the compositor go.
 - The page's control channel dials the new compositor
   (`control_channel.cc`). Before it does, the page hears every window of the
   old one close and every open system call end with `compositor_gone`. Then

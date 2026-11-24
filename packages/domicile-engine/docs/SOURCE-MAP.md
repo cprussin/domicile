@@ -33,6 +33,7 @@ under `src/`. Design: [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md).
 | File | Role |
 |---|---|
 | `components/domicile/engine/domicile_engine.{h,cc}` | `libdomicile_engine.so`: the C ABI, the broker pipe and the pollable fd |
+| `components/domicile/engine/broker_socket.{h,cc}` | connects to the browser's broker socket: non-blocking, as mojo needs, and close-on-exec so the compositor's children don't hold it |
 | `components/domicile/engine/engine_event_queue.{h,cc}` | queue from mojo's thread to the compositor's thread; an eventfd tells the compositor when to drain it |
 | `components/domicile/engine/surface_frames.{h,cc}` | numbers a window's frames and matches viz's acks and presentation feedback to them, for `frame_done` and `presented` |
 | `components/domicile/engine/surface_holds.{h,cc}` | counts viz's holds on a window's buffers, so a buffer its client destroys stays imported until viz returns it |
@@ -89,7 +90,7 @@ Test-only. `spike.sh` runs it, and `guard-css-and-resize.sh` runs `spike.sh`.
   capturer), `display_capture_target_unittest.cc`,
   `browser_window_capture_target_unittest.cc`, `window_diff_unittest.cc`,
   `engine_event_queue_unittest.cc`, `surface_frames_unittest.cc`,
-  `surface_holds_unittest.cc`,
+  `surface_holds_unittest.cc`, `broker_socket_unittest.cc`,
   `surface_submits_unittest.cc`, `synced_frame_unittest.cc`,
   `probe_wait_unittest.cc`, `hidden_from_captures_unittest.cc`.
 - The Blink side and the probe have no unit tests. They need a display
