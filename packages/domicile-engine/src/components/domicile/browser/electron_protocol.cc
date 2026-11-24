@@ -538,7 +538,8 @@ bool IsWindowRequest(std::string_view type) {
          type == "set_menu_bar" || type == "show_message_box" ||
          type == "popup_menu" || type == "close_popup_menu" ||
          type == "execute_javascript" || type == "set_title" ||
-         type == "set_hidden" || type == "set_window_state";
+         type == "set_hidden" || type == "set_window_state" ||
+         type == "remove_history_entry" || type == "navigation_listen";
 }
 
 // Entry `entry` of a menu, with only the keys the shell reads, or why it is
@@ -1321,6 +1322,66 @@ base::expected<ElectronRequest, ElectronRefusal> ParseOpenWindow(
       .hidden = hidden != nullptr && hidden->GetBool()};
 }
 
+// An open_window's "history", in which the page shows `url`.
+base::expected<ElectronHistory, std::string> HistoryIn(
+    const base::Value& history,
+    const GURL& url) {
+  constexpr char kShape[] =
+      "\"history\" must be an object with \"entries\", a list of "
+      "{\"url\", \"title\"}, and \"index\", the entry shown";
+  if (!history.is_dict()) {
+    return base::unexpected(std::string(kShape));
+  }
+  const base::ListValue* entries = history.GetDict().FindList("entries");
+  const std::optional<int> index = history.GetDict().FindInt("index");
+  if (entries == nullptr || entries->empty() || !index.has_value()) {
+    return base::unexpected(std::string(kShape));
+  }
+  ElectronHistory made{.index = *index};
+  for (const base::Value& entry : *entries) {
+    if (!entry.is_dict() || entry.GetDict().FindString("title") == nullptr) {
+      return base::unexpected(std::string(kShape));
+    }
+    ASSIGN_OR_RETURN(GURL entry_url, UrlIn(entry.GetDict()));
+    made.entries.push_back({.url = std::move(entry_url),
+                            .title = *entry.GetDict().FindString("title")});
+  }
+  if (made.index < 0 || made.index >= static_cast<int>(made.entries.size())) {
+    return base::unexpected(
+        "\"history\"'s \"index\" must be one of its entries");
+  } else if (made.entries[made.index].url != url) {
+    return base::unexpected(
+        "\"url\" must be the address of the history's entry \"index\"");
+  }
+  return made;
+}
+
+// The app's answer to will_navigate `ask`.
+base::expected<ElectronRequest, ElectronRefusal> ParseNavigationAnswer(
+    const base::DictValue& request) {
+  const std::optional<int> ask = request.FindInt("ask");
+  const std::optional<bool> proceed = request.FindBool("proceed");
+  if (!ask.has_value() || *ask < 1) {
+    return Refuse("\"ask\" must be a whole number from 1");
+  } else if (!proceed.has_value()) {
+    return Refuse("\"proceed\" must be true or false");
+  }
+  return ElectronNavigationAnswer{.ask = *ask, .proceed = *proceed};
+}
+
+// The app's answer to will_prevent_unload `ask`.
+base::expected<ElectronRequest, ElectronRefusal> ParseUnloadAnswer(
+    const base::DictValue& request) {
+  const std::optional<int> ask = request.FindInt("ask");
+  const std::optional<bool> unload = request.FindBool("unload");
+  if (!ask.has_value() || *ask < 1) {
+    return Refuse("\"ask\" must be a whole number from 1");
+  } else if (!unload.has_value()) {
+    return Refuse("\"unload\" must be true or false");
+  }
+  return ElectronUnloadAnswer{.ask = *ask, .unload = *unload};
+}
+
 // The app's answer to window_open `ask`: "deny", or "allow" with the window's
 // number and open_window's other keys. The window opens at the address the
 // page asked for, so the answer names none.
@@ -1334,10 +1395,11 @@ base::expected<ElectronRequest, ElectronRefusal> ParseWindowOpenAnswer(
     return Refuse("\"action\" must be \"allow\" or \"deny\"");
   } else if (*action == "deny") {
     return ElectronWindowOpenAnswer{.ask = *ask};
-  } else if (request.Find("url") != nullptr) {
+  } else if (request.Find("url") != nullptr ||
+             request.Find("history") != nullptr) {
     return Refuse(
-        "a window_open_answer names no \"url\": the window opens where its "
-        "page asked");
+        "a window_open_answer names no \"url\" or \"history\": the window "
+        "opens where its page asked");
   }
   const base::expected<ElectronWindow, std::string> window = WindowIn(request);
   if (!window.has_value()) {
@@ -1396,6 +1458,10 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ParseDownloadControl(*request);
   } else if (*type == "window_open_answer") {
     return ParseWindowOpenAnswer(*request);
+  } else if (*type == "navigation_answer") {
+    return ParseNavigationAnswer(*request);
+  } else if (*type == "unload_answer") {
+    return ParseUnloadAnswer(*request);
   } else if (*type == "set_user_agent_fallback") {
     const std::string* user_agent = request->FindString("user_agent");
     if (user_agent == nullptr) {
@@ -1413,7 +1479,21 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     if (!url.has_value()) {
       return Refuse(std::move(url.error()), *window);
     } else if (*type == "open_window") {
-      return ParseOpenWindow(*request, *window, std::move(*url));
+      const base::Value* history = request->Find("history");
+      if (history == nullptr) {
+        return ParseOpenWindow(*request, *window, std::move(*url));
+      }
+      base::expected<ElectronHistory, std::string> history_in =
+          HistoryIn(*history, *url);
+      if (!history_in.has_value()) {
+        return Refuse(std::move(history_in.error()), *window);
+      }
+      base::expected<ElectronRequest, ElectronRefusal> open =
+          ParseOpenWindow(*request, *window, std::move(*url));
+      if (open.has_value()) {
+        std::get<ElectronOpenWindow>(*open).history = std::move(*history_in);
+      }
+      return open;
     } else {
       return ElectronLoadUrl{.window = *window, .url = std::move(*url)};
     }
@@ -1441,6 +1521,18 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
     return ElectronGoToIndex{.window = *window, .index = *index};
   } else if (*type == "clear_history") {
     return ElectronClearHistory{.window = *window};
+  } else if (*type == "remove_history_entry") {
+    const std::optional<int> index = request->FindInt("index");
+    if (!index.has_value() || *index < 0) {
+      return Refuse("\"index\" must be a whole number from 0", *window);
+    }
+    return ElectronRemoveHistoryEntry{.window = *window, .index = *index};
+  } else if (*type == "navigation_listen") {
+    const std::optional<bool> listening = request->FindBool("listening");
+    if (!listening.has_value()) {
+      return Refuse("\"listening\" must be true or false", *window);
+    }
+    return ElectronNavigationListen{.window = *window, .listening = *listening};
   } else if (*type == "edit") {
     return ParseEdit(*request, *window);
   } else if (*type == "replace") {
@@ -1581,6 +1673,99 @@ std::string ElectronWindowOpen(int ask,
   line.Set("disposition", details.disposition);
   line.Set("referrer", details.referrer.possibly_invalid_spec());
   return Line(std::move(line));
+}
+
+namespace {
+
+base::DictValue FrameValue(const ElectronFrame& frame) {
+  return base::DictValue()
+      .Set("process", frame.process)
+      .Set("routing", frame.routing);
+}
+
+// `navigation`'s keys, on `event`.
+base::DictValue WithNavigation(base::DictValue event,
+                               const ElectronNavigation& navigation) {
+  event.Set("url", navigation.url.possibly_invalid_spec());
+  event.Set("same_document", navigation.same_document);
+  event.Set("main_frame", navigation.main_frame);
+  if (navigation.frame.has_value()) {
+    event.Set("frame", FrameValue(*navigation.frame));
+  }
+  if (navigation.initiator.has_value()) {
+    event.Set("initiator", FrameValue(*navigation.initiator));
+  }
+  return event;
+}
+
+}  // namespace
+
+std::string ElectronNavigationStarted(ElectronWindow window,
+                                      const ElectronNavigation& navigation) {
+  return Line(WithNavigation(Event("navigation_started", window), navigation));
+}
+
+std::string ElectronNavigationRedirected(ElectronWindow window,
+                                         const ElectronNavigation& navigation) {
+  return Line(
+      WithNavigation(Event("navigation_redirected", window), navigation));
+}
+
+std::string ElectronNavigationCommitted(
+    ElectronWindow window,
+    const ElectronNavigationCommit& commit) {
+  base::DictValue event =
+      WithNavigation(Event("navigation_committed", window), commit.navigation);
+  event.Set("http_response_code", commit.http_response_code);
+  event.Set("http_status_text", commit.http_status_text);
+  return Line(std::move(event));
+}
+
+std::string ElectronLoadFailed(ElectronWindow window,
+                               const ElectronLoadFailure& failure) {
+  base::DictValue event = Event("load_failed", window);
+  event.Set("url", failure.url.possibly_invalid_spec());
+  event.Set("main_frame", failure.main_frame);
+  if (failure.frame.has_value()) {
+    event.Set("frame", FrameValue(*failure.frame));
+  }
+  event.Set("error_code", failure.error_code);
+  event.Set("error_description", failure.error_description);
+  event.Set("provisional", failure.provisional);
+  return Line(std::move(event));
+}
+
+std::string ElectronFrameLoaded(ElectronWindow window,
+                                const ElectronFrame& frame) {
+  base::DictValue event = Event("frame_loaded", window);
+  event.Set("frame", FrameValue(frame));
+  return Line(std::move(event));
+}
+
+std::string ElectronFrameCreated(ElectronWindow window,
+                                 const ElectronFrame& frame,
+                                 bool main_frame) {
+  base::DictValue event = Event("frame_created", window);
+  event.Set("frame", FrameValue(frame));
+  event.Set("main_frame", main_frame);
+  return Line(std::move(event));
+}
+
+std::string ElectronWillNavigate(int ask,
+                                 ElectronWindow window,
+                                 const ElectronNavigation& navigation,
+                                 bool redirect) {
+  base::DictValue event =
+      WithNavigation(Event("will_navigate", window), navigation);
+  event.Set("ask", ask);
+  event.Set("redirect", redirect);
+  return Line(std::move(event));
+}
+
+std::string ElectronWillPreventUnload(int ask, ElectronWindow window) {
+  base::DictValue event = Event("will_prevent_unload", window);
+  event.Set("ask", ask);
+  return Line(std::move(event));
 }
 
 std::string ElectronPermissionRequest(

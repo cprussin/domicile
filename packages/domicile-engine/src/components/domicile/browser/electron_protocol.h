@@ -62,6 +62,14 @@ namespace domicile {
 //   -> {"type":"window_opened","window":1}
 //   -> {"type":"window_refused","window":1,"why":"..."}
 //
+//   {"type":"open_window","window":1,"url":"https://a/2",
+//    "history":{"entries":[{"url":"https://a/1","title":"1"},
+//                          {"url":"https://a/2","title":"2"}],
+//               "index":1}}             (navigationHistory.restore: the
+//                                           page opens with this history,
+//                                           showing entry "index", whose
+//                                           address "url" is)
+//
 //   {"type":"load_url","window":1,"url":"https://claude.ai/new"}
 //   {"type":"focus_window","window":1}
 //   {"type":"go_to_index","window":1,"index":0}
@@ -70,6 +78,18 @@ namespace domicile {
 //                                           index page_state listed)
 //   {"type":"clear_history","window":1}    (navigationHistory.clear: all
 //                                           but the page shown)
+//   {"type":"remove_history_entry","window":1,"index":0}
+//                                          (navigationHistory
+//                                           .removeEntryAtIndex: an index
+//                                           page_state listed, not the one
+//                                           shown)
+//   {"type":"navigation_listen","window":1,"listening":true}
+//                                          (whether its webContents has a
+//                                           will-navigate,
+//                                           will-frame-navigate or
+//                                           will-redirect listener: only
+//                                           then do its navigations wait
+//                                           on a will_navigate answer)
 //   {"type":"edit","window":1,"command":"undo"}
 //                                          (webContents.undo and the rest
 //                                           of the Edit menu: undo, redo,
@@ -257,6 +277,46 @@ namespace domicile {
 //                                           window_refused, as for
 //                                           open_window)
 //
+// A window's page's navigations, frames and loads, as Electron's
+// webContents events name them. "frame" is the frame's {"process","routing"}
+// ids, left out when Chromium has no frame for it; "initiator" is the frame
+// that started the navigation, left out for none:
+//
+//   -> {"type":"navigation_started","window":1,"url":"https://a/",
+//       "same_document":false,"main_frame":true,
+//       "frame":{"process":4,"routing":1},"initiator":{...}}
+//                                          (did-start-navigation)
+//   -> {"type":"navigation_redirected",...} (did-redirect-navigation, with
+//                                           navigation_started's keys)
+//   -> {"type":"navigation_committed",...,"http_response_code":200,
+//       "http_status_text":"OK"}         (a document committed:
+//                                           did-navigate, did-frame-navigate
+//                                           or did-navigate-in-page)
+//   -> {"type":"load_failed","window":1,"url":"https://a/",
+//       "main_frame":true,"frame":{...},"error_code":-105,
+//       "error_description":"ERR_NAME_NOT_RESOLVED","provisional":true}
+//                                          (an error page committed, or,
+//                                           not provisional, a committed
+//                                           document failed: did-fail-load)
+//   -> {"type":"frame_loaded","window":1,"frame":{...}}
+//                                          (a frame other than the main
+//                                           frame finished loading)
+//   -> {"type":"frame_created","window":1,"main_frame":false,"frame":{...}}
+//
+// The page navigating a frame itself (a link, a form, a script), and a
+// server redirect, wait for the app, as will-navigate, will-frame-navigate
+// and will-redirect can prevent them:
+//
+//   -> {"type":"will_navigate","ask":3,"window":1,"redirect":false,...}
+//                                          (navigation_started's keys)
+//   {"type":"navigation_answer","ask":3,"proceed":false}
+//
+// A `beforeunload` that asks to stay asks the app, not the user, as
+// will-prevent-unload:
+//
+//   -> {"type":"will_prevent_unload","ask":4,"window":1}
+//   {"type":"unload_answer","ask":4,"unload":true}   (leaves anyway)
+//
 // The host picks window numbers. A window opens http and https URLs, and
 // file: and the app's own schemes once its session handles them: the app
 // serves those, file: included, as Electron's protocol.handle does. An
@@ -332,9 +392,28 @@ struct ElectronNode {
   friend bool operator==(const ElectronNode&, const ElectronNode&) = default;
 };
 
+// navigationHistory.restore: the history a window's page opens with, oldest
+// first, and the entry it shows. Each entry is an address and its title.
+struct ElectronHistory {
+  struct Entry {
+    GURL url;
+    std::string title;
+
+    friend bool operator==(const Entry&, const Entry&) = default;
+  };
+  std::vector<Entry> entries;
+  int index = 0;
+
+  friend bool operator==(const ElectronHistory&,
+                         const ElectronHistory&) = default;
+};
+
 struct ElectronOpenWindow {
   ElectronWindow window;
   GURL url;
+  // The history the page opens with instead of loading `url`, which is the
+  // entry it shows; none for a page that loads `url`.
+  std::optional<ElectronHistory> history;
   // The preload's source, for a sandboxed page; empty for none.
   std::string preload;
   // Node.js in the page, for a window that isn't sandboxed; none when it is.
@@ -441,6 +520,19 @@ struct ElectronGoToIndex {
 // navigationHistory.clear: forgets every entry but the one shown.
 struct ElectronClearHistory {
   ElectronWindow window;
+};
+
+// navigationHistory.removeEntryAtIndex: forgets entry `index` of the history
+// the last page_state listed, which is not the one shown.
+struct ElectronRemoveHistoryEntry {
+  ElectronWindow window;
+  int index = 0;
+};
+
+// Whether the window's webContents has a listener a navigation waits on.
+struct ElectronNavigationListen {
+  ElectronWindow window;
+  bool listening = false;
 };
 
 // What webContents.undo and the rest of the Edit menu do at the page's focus.
@@ -939,6 +1031,79 @@ struct ElectronWindowOpenAnswer {
   std::optional<ElectronOpenWindow> open;
 };
 
+// A frame of a window's page, by Chromium's ids, as Electron's events name
+// one: its renderer's process id and its routing id.
+struct ElectronFrame {
+  int process = 0;
+  int routing = 0;
+
+  friend bool operator==(const ElectronFrame&, const ElectronFrame&) = default;
+};
+
+// A navigation in a frame of a window's page, as Electron's navigation events
+// describe it.
+struct ElectronNavigation {
+  GURL url;
+  // A fragment or history.pushState: no new document.
+  bool same_document = false;
+  bool main_frame = false;
+  // The frame navigating; none when Chromium has none for it.
+  std::optional<ElectronFrame> frame;
+  // The frame that started it; none for the app's own, the user's, or one
+  // whose frame is gone.
+  std::optional<ElectronFrame> initiator;
+
+  friend bool operator==(const ElectronNavigation&,
+                         const ElectronNavigation&) = default;
+};
+
+// A navigation that committed a document: Electron's did-navigate and kin.
+struct ElectronNavigationCommit {
+  ElectronNavigation navigation;
+  // The response's status; -1 and empty when there was none, as for a
+  // same-document navigation or a page the app serves without headers.
+  int http_response_code = -1;
+  std::string http_status_text;
+
+  friend bool operator==(const ElectronNavigationCommit&,
+                         const ElectronNavigationCommit&) = default;
+};
+
+// A frame that failed to load `url`: a navigation that committed an error
+// page (`provisional`, Electron's did-fail-provisional-load), or a document
+// that failed after committing (did-fail-load).
+struct ElectronLoadFailure {
+  GURL url;
+  bool main_frame = false;
+  std::optional<ElectronFrame> frame;
+  // Chromium's net error, such as -105, and its name, ERR_NAME_NOT_RESOLVED.
+  int error_code = 0;
+  std::string error_description;
+  bool provisional = false;
+
+  friend bool operator==(const ElectronLoadFailure&,
+                         const ElectronLoadFailure&) = default;
+};
+
+// The app's answer to will_navigate `ask`: whether the navigation goes on.
+struct ElectronNavigationAnswer {
+  int ask = 0;
+  bool proceed = true;
+
+  friend bool operator==(const ElectronNavigationAnswer&,
+                         const ElectronNavigationAnswer&) = default;
+};
+
+// The app's answer to will_prevent_unload `ask`: whether the page leaves
+// though its `beforeunload` asked to stay.
+struct ElectronUnloadAnswer {
+  int ask = 0;
+  bool unload = false;
+
+  friend bool operator==(const ElectronUnloadAnswer&,
+                         const ElectronUnloadAnswer&) = default;
+};
+
 // A page's permission request as setPermissionRequestHandler sees it.
 struct ElectronPermissionDetails {
   // Electron's name for it: "media", "geolocation", "notifications"...
@@ -1084,6 +1249,8 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronFocusWindow,
                                      ElectronGoToIndex,
                                      ElectronClearHistory,
+                                     ElectronRemoveHistoryEntry,
+                                     ElectronNavigationListen,
                                      ElectronEdit,
                                      ElectronReplace,
                                      ElectronFindInPage,
@@ -1107,6 +1274,8 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronDownloadAnswer,
                                      ElectronDownloadControlCall,
                                      ElectronWindowOpenAnswer,
+                                     ElectronNavigationAnswer,
+                                     ElectronUnloadAnswer,
                                      ElectronSetViews,
                                      ElectronSetMenuBar,
                                      ElectronShowMessageBox,
@@ -1254,6 +1423,36 @@ std::string ElectronWebRequest(ElectronWebRequestEvent event,
 std::string ElectronWindowOpen(int ask,
                                ElectronWindow window,
                                const ElectronWindowOpenDetails& details);
+// A navigation started in a frame of `window`'s page: did-start-navigation.
+std::string ElectronNavigationStarted(ElectronWindow window,
+                                      const ElectronNavigation& navigation);
+// A server redirected one: did-redirect-navigation.
+std::string ElectronNavigationRedirected(ElectronWindow window,
+                                         const ElectronNavigation& navigation);
+// One committed a document: did-navigate, did-frame-navigate and
+// did-navigate-in-page.
+std::string ElectronNavigationCommitted(ElectronWindow window,
+                                        const ElectronNavigationCommit& commit);
+// A frame of `window`'s page failed to load.
+std::string ElectronLoadFailed(ElectronWindow window,
+                               const ElectronLoadFailure& failure);
+// A frame of `window`'s page other than its main frame finished loading:
+// did-frame-finish-load. The main frame's is window_loaded.
+std::string ElectronFrameLoaded(ElectronWindow window,
+                                const ElectronFrame& frame);
+// A frame was made in `window`'s page: frame-created.
+std::string ElectronFrameCreated(ElectronWindow window,
+                                 const ElectronFrame& frame,
+                                 bool main_frame);
+// `window`'s page navigates a frame itself, or a server redirects a
+// navigation: ask `ask` waits for navigation_answer.
+std::string ElectronWillNavigate(int ask,
+                                 ElectronWindow window,
+                                 const ElectronNavigation& navigation,
+                                 bool redirect);
+// `window`'s page's `beforeunload` asked to stay: ask `ask` waits for
+// unload_answer.
+std::string ElectronWillPreventUnload(int ask, ElectronWindow window);
 // Permission request `ask` in session `session`, made by window `window`'s
 // page when it was one; it waits for permission_answer.
 std::string ElectronPermissionRequest(int ask,

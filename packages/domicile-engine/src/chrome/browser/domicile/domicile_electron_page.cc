@@ -29,9 +29,11 @@
 #include "components/download/public/common/download_item.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/download_item_utils.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/page.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -42,12 +44,15 @@
 #include "content/public/common/result_codes.h"
 #include "content/public/common/stop_find_action.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
+#include "net/base/net_errors.h"
+#include "net/http/http_response_headers.h"
 #include "sandbox/policy/switches.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/common/switches.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "url/gurl.h"
@@ -96,6 +101,49 @@ void MarkForNode(content::RenderProcessHost& host);
 const char kForNodeKey[] = "domicile-electron-node-pending";
 // Marks a renderer started for a Node page.
 const char kNodeRendererKey[] = "domicile-electron-node-renderer";
+
+// `frame` as Electron's events name a frame.
+ElectronFrame FrameOf(content::RenderFrameHost& frame) {
+  return ElectronFrame{.process = frame.GetProcess()->GetDeprecatedID(),
+                       .routing = frame.GetRoutingID()};
+}
+
+std::optional<ElectronFrame> FrameOf(content::RenderFrameHost* frame) {
+  return frame != nullptr ? std::optional<ElectronFrame>(FrameOf(*frame))
+                          : std::nullopt;
+}
+
+// Whether `navigation` is in the page the window shows, rather than one
+// prerendering or a fenced frame's.
+bool InShownPage(content::NavigationHandle& navigation) {
+  return navigation.IsInMainFrame()
+             ? navigation.IsInPrimaryMainFrame()
+             : navigation.GetParentFrame()->GetPage().IsPrimary();
+}
+
+// `navigation` as Electron's navigation events describe it. Its frame is the
+// one it commits in once it has, and the frame's document before.
+ElectronNavigation NavigationOf(content::NavigationHandle& navigation) {
+  content::RenderFrameHost* frame =
+      navigation.HasCommitted()
+          ? navigation.GetRenderFrameHost()
+          : content::RenderFrameHost::FromID(
+                navigation.GetPreviousRenderFrameHostId());
+  const std::optional<blink::LocalFrameToken>& initiator =
+      navigation.GetInitiatorFrameToken();
+  return ElectronNavigation{
+      .url = navigation.GetURL(),
+      .same_document = navigation.IsSameDocument(),
+      .main_frame = navigation.IsInMainFrame(),
+      .frame = FrameOf(frame),
+      .initiator =
+          initiator.has_value()
+              ? FrameOf(content::RenderFrameHost::FromFrameToken(
+                    content::GlobalRenderFrameHostToken(
+                        navigation.GetInitiatorProcessId(), *initiator)))
+              : std::nullopt,
+  };
+}
 
 mojom::ElectronNodePtr ToMojom(const ElectronNode& node) {
   return mojom::ElectronNode::New(node.preload, node.integration,
@@ -330,6 +378,104 @@ void ElectronPage::ClearHistory() {
   }
 }
 
+void ElectronPage::RemoveHistoryEntry(int index) {
+  content::NavigationController& controller = web_contents()->GetController();
+  const bool removed = index < controller.GetEntryCount() &&
+                       controller.RemoveEntryAtIndex(index);
+  if (!removed) {
+    // The history changed after the app last heard it.
+    LOG(WARNING) << "domicile: an Electron page's history has no entry "
+                 << index << " to remove, or shows it; it stays.";
+  }
+}
+
+void ElectronPage::DecideFor(WebViewGuest& guest) {
+  guest.DecideNavigationsWith(base::BindRepeating(&ElectronPage::AskToNavigate,
+                                                  weak_factory_.GetWeakPtr()));
+  guest.DecideUnloadsWith(base::BindRepeating(&ElectronPage::AskToUnload,
+                                              weak_factory_.GetWeakPtr()));
+}
+
+void ElectronPage::AskToNavigate(
+    content::NavigationHandle& navigation,
+    bool redirect,
+    base::OnceCallback<void(bool proceed)> answered) {
+  if (!InShownPage(navigation)) {
+    std::move(answered).Run(true);
+    return;
+  }
+  // An app that went drops the call: its window closes, and the navigation
+  // goes nowhere.
+  calls_.will_navigate.Run(
+      NavigationOf(navigation), redirect,
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(std::move(answered), false));
+}
+
+void ElectronPage::AskToUnload(base::OnceCallback<void(bool unload)> answered) {
+  // An app that went drops the call: its window closes, and the page with it.
+  calls_.will_prevent_unload.Run(
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(std::move(answered), true));
+}
+
+void ElectronPage::DidStartNavigation(content::NavigationHandle* navigation) {
+  if (InShownPage(*navigation)) {
+    calls_.navigation_started.Run(NavigationOf(*navigation));
+  }
+}
+
+void ElectronPage::DidRedirectNavigation(
+    content::NavigationHandle* navigation) {
+  if (InShownPage(*navigation)) {
+    calls_.navigation_redirected.Run(NavigationOf(*navigation));
+  }
+}
+
+void ElectronPage::DidFinishNavigation(content::NavigationHandle* navigation) {
+  // As Electron: a navigation that committed nothing, as one canceled or
+  // replaced, says nothing more.
+  if (!navigation->HasCommitted() || !InShownPage(*navigation)) {
+    return;
+  }
+  ElectronNavigation navigated = NavigationOf(*navigation);
+  if (navigation->IsErrorPage()) {
+    const int error = static_cast<int>(navigation->GetNetErrorCode());
+    calls_.load_failed.Run(
+        ElectronLoadFailure{.url = std::move(navigated.url),
+                            .main_frame = navigated.main_frame,
+                            .frame = navigated.frame,
+                            .error_code = error,
+                            .error_description = net::ErrorToShortString(error),
+                            .provisional = true});
+    return;
+  }
+  const net::HttpResponseHeaders* headers = navigation->GetResponseHeaders();
+  calls_.navigation_committed.Run(ElectronNavigationCommit{
+      .navigation = std::move(navigated),
+      .http_response_code = headers ? headers->response_code() : -1,
+      .http_status_text = headers ? headers->GetStatusText() : std::string()});
+}
+
+void ElectronPage::DidFailLoad(content::RenderFrameHost* frame,
+                               const GURL& url,
+                               int error_code) {
+  if (frame->GetPage().IsPrimary()) {
+    calls_.load_failed.Run(ElectronLoadFailure{
+        .url = url,
+        .main_frame = frame->GetParent() == nullptr,
+        .frame = FrameOf(*frame),
+        .error_code = error_code,
+        .error_description = net::ErrorToShortString(error_code),
+        .provisional = false});
+  }
+}
+
+void ElectronPage::RenderFrameCreated(content::RenderFrameHost* frame) {
+  // Not a speculative frame a navigation may yet drop, nor one prerendering.
+  if (frame->IsActive()) {
+    calls_.frame_created.Run(FrameOf(*frame), frame->GetParent() == nullptr);
+  }
+}
+
 void ElectronPage::Edit(ElectronEditCommand command) {
   content::WebContents& contents = *web_contents();
   switch (command) {
@@ -465,7 +611,10 @@ void ElectronPage::PrimaryPageChanged(content::Page& page) {
 void ElectronPage::DidFinishLoad(content::RenderFrameHost* frame,
                                  const GURL& url) {
   if (frame->IsInPrimaryMainFrame()) {
+    // The app hears the main frame's load as window_loaded.
     ReportSize("DidFinishLoad");
+  } else if (frame->GetParent() != nullptr && frame->IsActive()) {
+    calls_.frame_loaded.Run(FrameOf(*frame));
   }
 }
 

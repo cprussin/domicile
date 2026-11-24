@@ -77,6 +77,12 @@ export type OpenKeys = {
   readonly node?: PageNode;
 };
 
+/** A history a page opens with, oldest first, and the entry it shows. */
+export type RestoredHistory = {
+  readonly entries: readonly { readonly url: string; readonly title: string }[];
+  readonly index: number;
+};
+
 /** What an app says of itself as it connects, which its pages are told. */
 export type EngineHello = {
   readonly app_id: string;
@@ -102,7 +108,15 @@ export type EditCommand =
 
 export type EngineRequest =
   | ({ readonly type: "hello"; readonly version: number } & EngineHello)
-  | ({ readonly type: "open_window"; readonly url: string } & OpenKeys)
+  | ({
+      readonly type: "open_window";
+      readonly url: string;
+      /**
+       * navigationHistory.restore: the page opens with this history at
+       * entry `index`, whose address `url` is, instead of loading `url`.
+       */
+      readonly history?: RestoredHistory;
+    } & OpenKeys)
   /** The app's answer to a page's `window_open`: its handler denied it. */
   | {
       readonly type: "window_open_answer";
@@ -129,6 +143,33 @@ export type EngineRequest =
       readonly index: number;
     }
   | { readonly type: "clear_history"; readonly window: number }
+  /** navigationHistory.removeEntryAtIndex: an entry the page doesn't show. */
+  | {
+      readonly type: "remove_history_entry";
+      readonly window: number;
+      readonly index: number;
+    }
+  /**
+   * Whether the page's webContents has a will-navigate, will-frame-navigate
+   * or will-redirect listener: without one, no navigation waits for the app.
+   */
+  | {
+      readonly type: "navigation_listen";
+      readonly window: number;
+      readonly listening: boolean;
+    }
+  /** Whether a navigation `will_navigate` asked about goes on. */
+  | {
+      readonly type: "navigation_answer";
+      readonly ask: number;
+      readonly proceed: boolean;
+    }
+  /** Whether a page whose `beforeunload` asked to stay leaves anyway. */
+  | {
+      readonly type: "unload_answer";
+      readonly ask: number;
+      readonly unload: boolean;
+    }
   /** webContents.undo and the rest of the Edit menu, at the page's focus. */
   | {
       readonly type: "edit";
@@ -259,6 +300,19 @@ export type EngineRequest =
   | SessionCallMessage
   | PermissionMessage
   | DownloadMessage;
+
+/** A frame of a page, by the engine's ids for it. */
+const wireFrame = z.object({ process: z.number(), routing: z.number() });
+
+/** What each of the engine's navigation events says of its navigation. */
+const navigationKeys = {
+  frame: wireFrame.optional(),
+  initiator: wireFrame.optional(),
+  main_frame: z.boolean(),
+  same_document: z.boolean(),
+  url: z.string(),
+  window: z.number(),
+};
 
 const engineEvent = z.discriminatedUnion("type", [
   z.object({
@@ -426,6 +480,56 @@ const engineEvent = z.discriminatedUnion("type", [
     window: z.number(),
   }),
   z.object({ type: z.literal("page_gone"), window: z.number() }),
+  // A navigation in a frame of the page: did-start-navigation.
+  z.object({ type: z.literal("navigation_started"), ...navigationKeys }),
+  // A server redirected one: did-redirect-navigation.
+  z.object({ type: z.literal("navigation_redirected"), ...navigationKeys }),
+  // One committed a document: did-navigate and kin.
+  z.object({
+    http_response_code: z.number(),
+    http_status_text: z.string(),
+    type: z.literal("navigation_committed"),
+    ...navigationKeys,
+  }),
+  // The page navigates a frame itself, or a server redirects: the app's
+  // will-navigate and kin decide, answered with navigation_answer.
+  z.object({
+    ask: z.number(),
+    redirect: z.boolean(),
+    type: z.literal("will_navigate"),
+    ...navigationKeys,
+  }),
+  // A frame failed to load: an error page committed (provisional), or a
+  // document failed after it committed.
+  z.object({
+    error_code: z.number(),
+    error_description: z.string(),
+    frame: wireFrame.optional(),
+    main_frame: z.boolean(),
+    provisional: z.boolean(),
+    type: z.literal("load_failed"),
+    url: z.string(),
+    window: z.number(),
+  }),
+  // A frame but the main frame finished loading.
+  z.object({
+    frame: wireFrame,
+    type: z.literal("frame_loaded"),
+    window: z.number(),
+  }),
+  z.object({
+    frame: wireFrame,
+    main_frame: z.boolean(),
+    type: z.literal("frame_created"),
+    window: z.number(),
+  }),
+  // The page's beforeunload asked to stay: will-prevent-unload decides,
+  // answered with unload_answer.
+  z.object({
+    ask: z.number(),
+    type: z.literal("will_prevent_unload"),
+    window: z.number(),
+  }),
   /** What the app's executeJavaScript `call` gave, or why it gave nothing. */
   z.object({
     call: z.number(),
@@ -592,6 +696,25 @@ export type EngineEvent = z.infer<typeof engineEvent>;
 
 /** What the engine says about one window. */
 export type WindowEvent = Extract<EngineEvent, { window: number }>;
+
+/** A frame of a page, by the engine's ids for it. */
+export type WireFrame = z.infer<typeof wireFrame>;
+
+/** What the engine says of a page's navigations, frames and loads. */
+export type NavigationEvent = Extract<
+  EngineEvent,
+  {
+    type:
+      | "navigation_started"
+      | "navigation_redirected"
+      | "navigation_committed"
+      | "will_navigate"
+      | "load_failed"
+      | "frame_loaded"
+      | "frame_created"
+      | "will_prevent_unload";
+  }
+>;
 
 /** What the engine last said of a page: its history, loading and focus. */
 export type PageState = Omit<

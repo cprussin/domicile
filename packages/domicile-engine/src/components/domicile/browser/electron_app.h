@@ -84,6 +84,31 @@ struct ElectronPageCalls {
   // An event of the page's DevTools client, which page calls drive.
   base::RepeatingCallback<void(std::string method, base::DictValue params)>
       devtools_event;
+  // What the page's frames did, which the app hears of as Electron's
+  // navigation events: a navigation starting, redirected and committing, a
+  // frame failing to load, a frame but the main frame finishing loading, and
+  // a frame made.
+  base::RepeatingCallback<void(ElectronNavigation navigation)>
+      navigation_started;
+  base::RepeatingCallback<void(ElectronNavigation navigation)>
+      navigation_redirected;
+  base::RepeatingCallback<void(ElectronNavigationCommit commit)>
+      navigation_committed;
+  base::RepeatingCallback<void(ElectronLoadFailure failure)> load_failed;
+  base::RepeatingCallback<void(ElectronFrame frame)> frame_loaded;
+  base::RepeatingCallback<void(ElectronFrame frame, bool main_frame)>
+      frame_created;
+  // The page navigates a frame itself, or a server redirects a navigation
+  // (`redirect`): the app decides, and `answered` runs once with whether it
+  // goes on.
+  base::RepeatingCallback<void(ElectronNavigation navigation,
+                               bool redirect,
+                               base::OnceCallback<void(bool proceed)> answered)>
+      will_navigate;
+  // The page's `beforeunload` asked to stay: the app decides, and `answered`
+  // runs once with whether the page leaves anyway.
+  base::RepeatingCallback<void(base::OnceCallback<void(bool unload)> answered)>
+      will_prevent_unload;
 };
 
 // A window's menu bar, as the desk lists it: the menu's entries as JSON
@@ -269,10 +294,12 @@ class ElectronDesk {
   // make `calls` and load through
   // `session`. A `view` is a WebContentsView's page, listed only while a
   // window holds it. A window shows `title` instead of its page's when it
-  // isn't empty, and opens `hidden` when asked. Returns its id, or nothing
-  // when there is no shell to open it in.
+  // isn't empty, and opens `hidden` when asked. With a `history`, the page
+  // opens with it, at its entry `url`, instead of loading `url`. Returns its
+  // id, or nothing when there is no shell to open it in.
   virtual std::optional<std::string> Open(
       const GURL& url,
+      const std::optional<ElectronHistory>& history,
       const std::string& app_id,
       const WebViewPartition& partition,
       const std::string& preload,
@@ -327,6 +354,9 @@ class ElectronDesk {
   virtual void GoToIndex(const std::string& id, int index) = 0;
   // Forgets every entry of window `id`'s page's history but the one shown.
   virtual void ClearHistory(const std::string& id) = 0;
+  // Forgets entry `index` of window `id`'s page's history, if it has one
+  // and doesn't show it.
+  virtual void RemoveHistoryEntry(const std::string& id, int index) = 0;
   // Does `command` at the focus in window `id`'s page.
   virtual void Edit(const std::string& id, ElectronEditCommand command) = 0;
   // Puts `text` in place of the word at the selection in window `id`'s page:
@@ -468,6 +498,8 @@ class ElectronApp {
     std::string session;
     // A WebContentsView's page rather than a BrowserWindow.
     bool view = false;
+    // Its webContents has a listener its navigations wait on.
+    bool listens_for_navigation = false;
   };
 
   // A page's protocol request, waiting on the app's handler.
@@ -570,6 +602,29 @@ class ElectronApp {
   void PageStateChanged(ElectronWindow number, ElectronPageState state);
   void WindowStateChanged(ElectronWindow number, ElectronWindowState state);
   void PageFound(ElectronWindow number, ElectronFindResult result);
+  // Sends `line`, of what window `number`'s page did, while it is open.
+  void TellOfPage(ElectronWindow number, const std::string& line);
+  void PageNavigationStarted(ElectronWindow number,
+                             ElectronNavigation navigation);
+  void PageNavigationRedirected(ElectronWindow number,
+                                ElectronNavigation navigation);
+  void PageNavigationCommitted(ElectronWindow number,
+                               ElectronNavigationCommit commit);
+  void PageLoadFailed(ElectronWindow number, ElectronLoadFailure failure);
+  void PageFrameLoaded(ElectronWindow number, ElectronFrame frame);
+  void PageFrameCreated(ElectronWindow number,
+                        ElectronFrame frame,
+                        bool main_frame);
+  // Window `number`'s page asked whether a navigation goes on, or whether it
+  // leaves though its `beforeunload` asked to stay: the app decides.
+  void PageWillNavigate(ElectronWindow number,
+                        ElectronNavigation navigation,
+                        bool redirect,
+                        base::OnceCallback<void(bool)> answered);
+  void PageWillPreventUnload(ElectronWindow number,
+                             base::OnceCallback<void(bool)> answered);
+  void AnswerNavigation(const ElectronNavigationAnswer& answer);
+  void AnswerUnload(const ElectronUnloadAnswer& answer);
   void PageContextMenu(ElectronWindow number, ElectronContextMenu menu);
   void CallPage(ElectronPageCall call);
   void PageDevToolsEvent(ElectronWindow number,
@@ -642,6 +697,12 @@ class ElectronApp {
   };
   std::map<int, WindowOpenAsk> window_open_asks_;
   int next_window_open_ask_ = 1;
+  // The pages' navigations waiting on the app's will-navigate listeners, and
+  // their `beforeunload`s on its will-prevent-unload ones, by ask.
+  std::map<int, base::OnceCallback<void(bool proceed)>> navigation_asks_;
+  int next_navigation_ask_ = 1;
+  std::map<int, base::OnceCallback<void(bool unload)>> unload_asks_;
+  int next_unload_ask_ = 1;
   base::WeakPtrFactory<ElectronApp> weak_factory_{this};
 };
 

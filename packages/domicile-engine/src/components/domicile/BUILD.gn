@@ -819,6 +819,7 @@ source_set("browser_page_throttle") {
   public_deps = [ "//content/public/browser" ]
 
   deps = [
+    ":app_navigation_throttle",
     ":browser_pages",
     ":profile_route_throttle",
     ":web_view_guest",
@@ -1017,6 +1018,22 @@ source_set("will_navigate") {
   ]
 
   public_deps = [ "//ui/base" ]
+}
+
+# The throttle that holds an app's page's navigation for the app's answer,
+# as Electron's will-navigate. :browser_page_throttle adds it.
+source_set("app_navigation_throttle") {
+  sources = [
+    "browser/app_navigation_throttle.cc",
+    "browser/app_navigation_throttle.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//content/public/browser",
+  ]
+
+  deps = [ ":web_view_guest" ]
 }
 
 # The throttle that holds a <webview>'s navigation for the shell's answer.

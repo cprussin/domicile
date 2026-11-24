@@ -162,6 +162,17 @@ WebViewGuest::ContextMenuTaking TellTheApp(
       std::move(context_menu));
 }
 
+// `history`'s entries as a guest restores them.
+std::vector<WebViewGuest::HistoryEntry> HistoryEntries(
+    const ElectronHistory& history) {
+  std::vector<WebViewGuest::HistoryEntry> entries;
+  for (const ElectronHistory::Entry& entry : history.entries) {
+    entries.push_back(
+        {.url = entry.url, .title = base::UTF8ToUTF16(entry.title)});
+  }
+  return entries;
+}
+
 // Has `contents` load as `user_agent`: its next browser navigation, as
 // WebViewGuest::Navigate asks for the override, and the navigations its
 // page makes after its current document, which take its entry's.
@@ -319,10 +330,11 @@ class DeskWindows final : public base::SupportsUserData::Data,
   }
 
   // Opens an app window at `url` for an Electron app, with `app_id`, in its
-  // own `partition`. Returns its id, or nothing when the profile has no shell
-  // to own it.
+  // own `partition`, or with `history` at its entry `url`. Returns its id, or
+  // nothing when the profile has no shell to own it.
   std::optional<std::string> OpenElectron(
       const GURL& url,
+      const std::optional<ElectronHistory>& history,
       const std::string& app_id,
       const WebViewPartition& partition,
       const std::string& preload,
@@ -348,7 +360,13 @@ class DeskWindows final : public base::SupportsUserData::Data,
           }
           ElectronPage::Attach(guest.contents(), preload, arguments, node,
                                std::move(calls), std::move(session));
-          guest.Navigate(url);
+          // Its navigations and beforeunloads are the app's to decide on.
+          ElectronPage::FromWebContents(&guest.contents())->DecideFor(guest);
+          if (history.has_value()) {
+            guest.RestoreHistory(HistoryEntries(*history), history->index);
+          } else {
+            guest.Navigate(url);
+          }
         },
         /*popup_window=*/std::nullopt, 0, 0,
         /*private_browsing=*/false, /*profile=*/std::string(), /*app=*/true,
@@ -383,6 +401,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
     }
     ElectronPage::Attach(guest->contents(), preload, arguments, node,
                          std::move(calls), std::move(session));
+    ElectronPage::FromWebContents(&guest->contents())->DecideFor(*guest);
     const std::string id = guest->window_id();
     auto watch = std::make_unique<Watch>(
         guest->contents(), id,
@@ -1790,6 +1809,7 @@ std::optional<std::string> AdoptElectronWindow(
 
 std::optional<std::string> OpenElectronWindow(
     const GURL& url,
+    const std::optional<ElectronHistory>& history,
     const std::string& app_id,
     const WebViewPartition& partition,
     const std::string& preload,
@@ -1804,9 +1824,9 @@ std::optional<std::string> OpenElectronWindow(
   if (windows == nullptr) {
     return std::nullopt;
   }
-  return windows->OpenElectron(url, app_id, partition, preload, arguments, node,
-                               std::move(calls), std::move(session), view,
-                               title, hidden);
+  return windows->OpenElectron(url, history, app_id, partition, preload,
+                               arguments, node, std::move(calls),
+                               std::move(session), view, title, hidden);
 }
 
 void SetElectronTitle(const std::string& id, const std::string& title) {

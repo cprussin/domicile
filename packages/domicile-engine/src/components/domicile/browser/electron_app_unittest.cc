@@ -19,6 +19,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/test/bind.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -71,6 +72,7 @@ class FakeDesk final : public ElectronDesk {
     return id;
   }
   std::optional<std::string> Open(const GURL& url,
+                                  const std::optional<ElectronHistory>& history,
                                   const std::string& app_id,
                                   const WebViewPartition& partition,
                                   const std::string& preload,
@@ -91,7 +93,11 @@ class FakeDesk final : public ElectronDesk {
              ? ""
              : " with arguments " + base::JoinString(arguments, " ")) +
         (node.has_value() ? " with node" : "") +
-        (title.empty() ? "" : " titled " + title) + (hidden ? " hidden" : ""));
+        (title.empty() ? "" : " titled " + title) + (hidden ? " hidden" : "") +
+        (history.has_value()
+             ? " restoring " + base::NumberToString(history->entries.size()) +
+                   " entries at " + base::NumberToString(history->index)
+             : ""));
     const std::string id = base::NumberToString(next_id++);
     pages.emplace(id, std::move(page_calls));
     partitions.emplace(id, partition);
@@ -107,6 +113,9 @@ class FakeDesk final : public ElectronDesk {
   }
   void ClearHistory(const std::string& id) override {
     calls.push_back("clear history " + id);
+  }
+  void RemoveHistoryEntry(const std::string& id, int index) override {
+    calls.push_back("remove entry " + id + " " + base::NumberToString(index));
   }
   void Edit(const std::string& id, ElectronEditCommand command) override {
     calls.push_back("edit " + id + " " +
@@ -723,6 +732,176 @@ TEST_F(ElectronAppTest, APagesStateReachesTheAppAndItsHistoryMoves) {
   sent_.clear();
   page.state.Run(ElectronPageState{});
   EXPECT_TRUE(sent_.empty());
+}
+
+TEST_F(ElectronAppTest, AHistoryEntryIsRemovedAndAHistoryRestored) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/2",)"
+             R"("history":{"entries":[{"url":"https://a.test/1","title":"1"},)"
+             R"({"url":"https://a.test/2","title":"2"}],"index":1}})");
+  app_->Take(R"({"type":"remove_history_entry","window":3,"index":0})");
+
+  EXPECT_EQ(desk_.calls,
+            (Lines{"open https://a.test/2 as com.anthropic.Claude restoring 2 "
+                   "entries at 1",
+                   "remove entry 10 0"}));
+}
+
+TEST_F(ElectronAppTest, ARestoredHistoryOpensOnlyWhatItsSessionOpens) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/",)"
+             R"("history":{"entries":[{"url":"file:///a","title":""},)"
+             R"({"url":"https://a.test/","title":""}],"index":1}})");
+
+  EXPECT_TRUE(desk_.calls.empty());
+  ASSERT_EQ(sent_.size(), 1u);
+  EXPECT_TRUE(base::StartsWith(sent_[0], R"({"type":"window_refused")"))
+      << sent_[0];
+}
+
+TEST_F(ElectronAppTest, APagesNavigationsReachTheApp) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  sent_.clear();
+  const ElectronNavigation navigation{
+      .url = GURL("https://a.test/b"),
+      .main_frame = true,
+      .frame = ElectronFrame{.process = 4, .routing = 1}};
+  const ElectronNavigationCommit commit{.navigation = navigation,
+                                        .http_response_code = 200,
+                                        .http_status_text = "OK"};
+  const ElectronLoadFailure failure{
+      .url = GURL("https://a.test/b"),
+      .error_code = -105,
+      .error_description = "ERR_NAME_NOT_RESOLVED"};
+  const ElectronFrame frame{.process = 4, .routing = 2};
+
+  page.navigation_started.Run(navigation);
+  page.navigation_redirected.Run(navigation);
+  page.navigation_committed.Run(commit);
+  page.load_failed.Run(failure);
+  page.frame_loaded.Run(frame);
+  page.frame_created.Run(frame, false);
+  EXPECT_EQ(sent_, (Lines{ElectronNavigationStarted(3, navigation),
+                          ElectronNavigationRedirected(3, navigation),
+                          ElectronNavigationCommitted(3, commit),
+                          ElectronLoadFailed(3, failure),
+                          ElectronFrameLoaded(3, frame),
+                          ElectronFrameCreated(3, frame, false)}));
+
+  // What raced the window closing says nothing.
+  app_->Listed({});
+  sent_.clear();
+  page.navigation_started.Run(navigation);
+  page.load_failed.Run(failure);
+  EXPECT_TRUE(sent_.empty());
+}
+
+TEST_F(ElectronAppTest, APagesNavigationWaitsForTheApp) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"navigation_listen","window":3,"listening":true})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  sent_.clear();
+  const ElectronNavigation navigation{.url = GURL("https://b.test/"),
+                                      .main_frame = true};
+  std::vector<bool> answers;
+  const auto answer = [&answers](bool proceed) { answers.push_back(proceed); };
+
+  page.will_navigate.Run(navigation, false, base::BindLambdaForTesting(answer));
+  page.will_navigate.Run(navigation, true, base::BindLambdaForTesting(answer));
+  EXPECT_EQ(sent_, (Lines{ElectronWillNavigate(1, 3, navigation, false),
+                          ElectronWillNavigate(2, 3, navigation, true)}));
+  EXPECT_TRUE(answers.empty());
+
+  app_->Take(R"({"type":"navigation_answer","ask":2,"proceed":true})");
+  app_->Take(R"({"type":"navigation_answer","ask":1,"proceed":false})");
+  EXPECT_EQ(answers, (std::vector<bool>{true, false}));
+}
+
+TEST_F(ElectronAppTest, APagesNavigationGoesAtOnceWhenTheAppDoesNotListen) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"navigation_listen","window":3,"listening":true})");
+  app_->Take(R"({"type":"navigation_listen","window":3,"listening":false})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  sent_.clear();
+  std::optional<bool> proceed;
+
+  page.will_navigate.Run(
+      ElectronNavigation{.url = GURL("https://b.test/"), .main_frame = true},
+      false, base::BindLambdaForTesting([&proceed](bool go) { proceed = go; }));
+
+  EXPECT_EQ(proceed, true);
+  EXPECT_TRUE(sent_.empty());
+}
+
+TEST_F(ElectronAppTest, APagesBeforeUnloadAsksTheApp) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  sent_.clear();
+  std::optional<bool> unload;
+
+  page.will_prevent_unload.Run(
+      base::BindLambdaForTesting([&unload](bool leave) { unload = leave; }));
+  EXPECT_EQ(sent_, Lines{ElectronWillPreventUnload(1, 3)});
+  app_->Take(R"({"type":"unload_answer","ask":1,"unload":true})");
+  EXPECT_EQ(unload, true);
+}
+
+TEST_F(ElectronAppTest, ANavigationOrUnloadAnswerNobodyWaitsForIsRefused) {
+  Hello();
+
+  app_->Take(R"({"type":"navigation_answer","ask":4,"proceed":true})");
+  app_->Take(R"({"type":"unload_answer","ask":5,"unload":true})");
+
+  EXPECT_EQ(sent_, (Lines{R"({"type":"refused","why":"no navigation is )"
+                          R"(waiting for answer 4"})"
+                          "\n",
+                          R"({"type":"refused","why":"no page's )"
+                          R"(beforeunload is waiting for answer 5"})"
+                          "\n"}));
+}
+
+TEST_F(ElectronAppTest, AClosedWindowsPageNeitherNavigatesNorStays) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  app_->Listed({});
+  sent_.clear();
+  std::optional<bool> proceed;
+  std::optional<bool> unload;
+
+  page.will_navigate.Run(
+      ElectronNavigation{.url = GURL("https://b.test/")}, false,
+      base::BindLambdaForTesting([&proceed](bool go) { proceed = go; }));
+  page.will_prevent_unload.Run(
+      base::BindLambdaForTesting([&unload](bool leave) { unload = leave; }));
+
+  EXPECT_TRUE(sent_.empty());
+  EXPECT_EQ(proceed, false);
+  EXPECT_EQ(unload, true);
+}
+
+TEST_F(ElectronAppTest, AnAppThatGoesStopsItsPagesNavigationsAndLetsThemLeave) {
+  Hello();
+  app_->Take(R"({"type":"open_window","window":3,"url":"https://a.test/"})");
+  app_->Take(R"({"type":"navigation_listen","window":3,"listening":true})");
+  ElectronPageCalls page = desk_.pages.at("10");
+  std::optional<bool> proceed;
+  std::optional<bool> unload;
+  page.will_navigate.Run(
+      ElectronNavigation{.url = GURL("https://b.test/")}, false,
+      base::BindLambdaForTesting([&proceed](bool go) { proceed = go; }));
+  page.will_prevent_unload.Run(
+      base::BindLambdaForTesting([&unload](bool leave) { unload = leave; }));
+
+  app_.reset();
+
+  EXPECT_EQ(proceed, false);
+  EXPECT_EQ(unload, true);
 }
 
 TEST_F(ElectronAppTest, APageEditsAndFindsAsTheAppAsks) {

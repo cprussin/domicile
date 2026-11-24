@@ -8,8 +8,6 @@
   "DownloadItem unmeasured",
   "ImageView missing",
   "IpcMainServiceWorker missing",
-  "NavigationHistory.removeEntryAtIndex absent",
-  "NavigationHistory.restore absent",
   "Session.clearAuthCache missing",
   "Session.clearCodeCaches missing",
   "Session.clearData missing",

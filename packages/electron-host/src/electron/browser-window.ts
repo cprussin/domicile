@@ -14,18 +14,26 @@ import type {
   OpenKeys,
   PageNode,
   PageState,
+  RestoredHistory,
   ViewPlacement,
   WindowEvent,
+  WireFrame,
 } from "../engine";
 import { Priority, say } from "../journal";
 import type { ElectronApp } from "./app";
 import type { ContextMenuAsked } from "./context-menu";
 import { contextMenuParams } from "./context-menu";
+import { createFrames, SubFrame } from "./frames";
 import type { createIpcMain } from "./ipc-main";
 import { IpcMain } from "./ipc-main";
 import type { MenuEntry } from "./menu";
 import type { MessagePortMain } from "./message-port-main";
 import { createPagePorts } from "./message-port-main";
+import {
+  ASKS_BEFORE_NAVIGATING,
+  asksBeforeNavigating,
+  takeNavigation,
+} from "./navigation";
 import type {
   DevToolsEvents,
   PageMethod,
@@ -331,9 +339,16 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
    * app's scripts and IPC only in the main frame, so it has no others.
    */
   class WebFrameMain extends EventEmitter {
+    /** The engine's ids for the frame, once a navigation event names them. */
+    #ids: WireFrame | undefined;
+
     constructor(readonly page: Page) {
       super();
     }
+
+    readonly identify = (frame: WireFrame) => {
+      this.#ids = frame;
+    };
 
     get ipc() {
       return this.page.webContents.ipc;
@@ -367,13 +382,17 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     }
     // As the engine last said; nothing before its first word on the page.
     get routingId() {
-      return this.page.webContents.pageState()?.routing_id ?? 0;
+      return (
+        this.page.webContents.pageState()?.routing_id ?? this.#ids?.routing ?? 0
+      );
     }
     get frameTreeNodeId() {
       return this.page.id;
     }
     get processId() {
-      return this.page.webContents.getProcessId();
+      return (
+        this.page.webContents.pageState()?.process_id ?? this.#ids?.process ?? 0
+      );
     }
     get osProcessId() {
       return this.page.webContents.getOSProcessId();
@@ -435,7 +454,37 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     constructor(readonly owner: Page) {
       super();
       Object.assign(this, createPageControl(owner));
+      this.on("newListener", (name: string | symbol) => {
+        if (asksBeforeNavigating(name)) {
+          this.#tellListening(true);
+        }
+      });
+      this.on("removeListener", (name: string | symbol) => {
+        if (asksBeforeNavigating(name)) {
+          this.#tellListening(this.#listening());
+        }
+      });
     }
+
+    /** What the engine was last told of the page's will-navigate listeners. */
+    #toldListening = false;
+    readonly #listening = () =>
+      ASKS_BEFORE_NAVIGATING.some((name) => this.listenerCount(name) > 0);
+    readonly #tellListening = (listening: boolean) => {
+      if (this.owner.isOpen() && listening !== this.#toldListening) {
+        this.#toldListening = listening;
+        toEngine({
+          listening,
+          type: "navigation_listen",
+          window: this.owner.id,
+        });
+      }
+    };
+    /** Tells a newly opened page's engine window, which starts out not listening. */
+    readonly opened = () => {
+      this.#toldListening = false;
+      this.#tellListening(this.#listening());
+    };
 
     get caretBrowsingEnabled() {
       return this.isCaretBrowsingEnabled();
@@ -484,6 +533,13 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     get mainFrame() {
       this.#mainFrame ??= new WebFrameMain(this.owner);
       return this.#mainFrame;
+    }
+
+    #frames: ReturnType<typeof createFrames<WebFrameMain>> | undefined;
+    /** The page's frames the engine has named. */
+    get frames() {
+      this.#frames ??= createFrames(this.mainFrame);
+      return this.#frames;
     }
 
     /**
@@ -589,6 +645,57 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       goToOffset: (offset: number) =>
         this.navigationHistory.goToIndex(this.#index() + offset),
       length: () => this.#entries().length,
+      /** Whether entry `index` goes: one the page has and doesn't show. */
+      removeEntryAtIndex: (index: number) => {
+        const removable =
+          this.owner.isOpen() &&
+          Number.isInteger(index) &&
+          index >= 0 &&
+          index < this.#entries().length &&
+          index !== this.#index();
+        if (removable) {
+          toEngine({
+            index,
+            type: "remove_history_entry",
+            window: this.owner.id,
+          });
+        }
+        return removable;
+      },
+      /**
+       * Opens the page with `entries`, at `index` or the newest, as
+       * Electron restores only into a page that hasn't navigated. Resolves
+       * once that entry loads.
+       */
+      restore: ({
+        entries,
+        index = entries.length - 1,
+      }: {
+        entries: readonly { url: string; title: string }[];
+        index?: number;
+      }) => {
+        const shown = entries[index];
+        if (!Number.isInteger(index) || index < 0 || shown === undefined) {
+          throw new Error(
+            "Invalid index. Index must be a positive integer and within the bounds of the entries length.",
+          );
+        } else if (this.owner.isOpen()) {
+          throw new Error(
+            "navigationHistory.restore can only be used on a WebContents that has no existing history entries",
+          );
+        } else {
+          const restored = this.owner.openWithHistory({
+            entries: entries.map(({ title, url }) => ({ title, url })),
+            index,
+          });
+          // Electron's has a rejection handler of its own, so an app that
+          // doesn't wait on it hears of no failure it didn't ask about.
+          restored.catch(() => {
+            /* no-op */
+          });
+          return restored;
+        }
+      },
     };
 
     /**
@@ -986,21 +1093,48 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
 
     /** Shows `url`. Resolves once the page loads, as Electron's does. */
     readonly loadURL = (url: string) => {
-      this.assertAlive();
-      this.url = url;
-      this.#loading = true;
-      const loaded = new Promise<void>((resolve, reject) => {
-        this.#loads.push({ reject, resolve });
-      });
+      const loaded = this.#load(url);
       if (this.opened) {
         toEngine({ type: "load_url", url, window: this.id });
       } else {
-        this.opened = true;
-        toEngine({ type: "open_window", url, ...this.#openKeys() });
-        this.#sendSettings();
-        this.wasOpened();
+        this.#open({ type: "open_window", url, ...this.#openKeys() });
       }
       return loaded;
+    };
+
+    /**
+     * Opens the page with `history` instead of a load of its own, showing
+     * its entry `index`. Resolves once that entry loads.
+     */
+    readonly openWithHistory = (history: RestoredHistory) => {
+      const url = history.entries[history.index]?.url;
+      if (url === undefined || this.opened) {
+        throw new Error(
+          "a page opens with a history once, at an entry the history has",
+        );
+      } else {
+        const loaded = this.#load(url);
+        this.#open({ history, type: "open_window", url, ...this.#openKeys() });
+        return loaded;
+      }
+    };
+
+    /** A load of `url` the page starts, which settles as it loads or fails. */
+    readonly #load = (url: string) => {
+      this.assertAlive();
+      this.url = url;
+      this.#loading = true;
+      return new Promise<void>((resolve, reject) => {
+        this.#loads.push({ reject, resolve });
+      });
+    };
+
+    readonly #open = (request: EngineRequest) => {
+      this.opened = true;
+      toEngine(request);
+      this.#sendSettings();
+      this.webContents.opened();
+      this.wasOpened();
     };
 
     /** What the engine is told of the page as it opens. */
@@ -1038,6 +1172,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         ...this.#openKeys(),
       });
       this.#sendSettings();
+      this.webContents.opened();
       this.wasOpened();
     };
 
@@ -1147,6 +1282,13 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           for (const run of this.#toRun.splice(0)) {
             run();
           }
+          this.webContents.emit(
+            "did-frame-finish-load",
+            eventObject(),
+            true,
+            this.webContents.mainFrame.processId,
+            this.webContents.mainFrame.routingId,
+          );
           this.webContents.emit("did-finish-load");
           this.wasLoaded();
           for (const load of this.#loads.splice(0)) {
@@ -1237,6 +1379,39 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         }
         case "context_menu": {
           this.webContents.contextMenu(event);
+          break;
+        }
+        case "navigation_started":
+        case "navigation_redirected":
+        case "navigation_committed":
+        case "will_navigate":
+        case "load_failed":
+        case "frame_loaded":
+        case "frame_created":
+        case "will_prevent_unload": {
+          takeNavigation(
+            {
+              committed: (frame, main, url, sameDocument) => {
+                if (main) {
+                  this.url = url;
+                  if (!sameDocument) {
+                    this.webContents.frames.clear();
+                  }
+                } else if (frame instanceof SubFrame) {
+                  frame.url = url;
+                }
+              },
+              emit: (name, ...args) => this.webContents.emit(name, ...args),
+              failed: (error) => {
+                for (const load of this.#loads.splice(0)) {
+                  load.reject(error);
+                }
+              },
+              frame: this.webContents.frames.frame,
+              toEngine,
+            },
+            event,
+          );
           break;
         }
         case "devtools_event": {

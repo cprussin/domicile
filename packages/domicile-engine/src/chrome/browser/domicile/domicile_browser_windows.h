@@ -76,11 +76,13 @@ bool OpenAppModuleWindow(const GURL& url, const std::string& app_host);
 // A `node` page has Node.js, in a renderer of its own that isn't sandboxed.
 // A `view` is a WebContentsView's page, listed only while a window holds it.
 // A window shows `title` instead of its page's when it isn't empty, and opens
-// `hidden` when asked.
+// `hidden` when asked. With a `history`, its page opens with it, at its entry
+// `url`, instead of loading `url`.
 // Returns the window's id. Nothing when there is no shell to own it. See
 // docs/architecture/ELECTRON-APPS.md.
 std::optional<std::string> OpenElectronWindow(
     const GURL& url,
+    const std::optional<ElectronHistory>& history,
     const std::string& app_id,
     const WebViewPartition& partition,
     const std::string& preload,

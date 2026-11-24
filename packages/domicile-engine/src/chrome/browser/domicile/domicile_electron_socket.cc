@@ -83,6 +83,7 @@ bool ConnectedByUs(const net::UnixDomainServerSocket::Credentials& peer) {
 class ChromeElectronDesk final : public ElectronDesk {
  public:
   std::optional<std::string> Open(const GURL& url,
+                                  const std::optional<ElectronHistory>& history,
                                   const std::string& app_id,
                                   const WebViewPartition& partition,
                                   const std::string& preload,
@@ -93,9 +94,9 @@ class ChromeElectronDesk final : public ElectronDesk {
                                   bool view,
                                   const std::string& title,
                                   bool hidden) override {
-    return OpenElectronWindow(url, app_id, partition, preload, arguments, node,
-                              std::move(calls), std::move(session), view, title,
-                              hidden);
+    return OpenElectronWindow(url, history, app_id, partition, preload,
+                              arguments, node, std::move(calls),
+                              std::move(session), view, title, hidden);
   }
   std::optional<std::string> Adopt(std::unique_ptr<ElectronHeldPage> page,
                                    const std::string& app_id,
@@ -142,6 +143,11 @@ class ChromeElectronDesk final : public ElectronDesk {
   void ClearHistory(const std::string& id) override {
     if (ElectronPage* page = ElectronPageOf(id)) {
       page->ClearHistory();
+    }
+  }
+  void RemoveHistoryEntry(const std::string& id, int index) override {
+    if (ElectronPage* page = ElectronPageOf(id)) {
+      page->RemoveHistoryEntry(index);
     }
   }
   void Edit(const std::string& id, ElectronEditCommand command) override {

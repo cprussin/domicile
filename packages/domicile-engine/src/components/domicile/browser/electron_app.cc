@@ -200,6 +200,14 @@ ElectronApp::~ElectronApp() {
   }
   // Nor does a window the app never allowed open: a held one closes.
   window_open_asks_.clear();
+  // Nor does a navigation the app never let through, while a page whose
+  // `beforeunload` asked to stay leaves with its window.
+  for (auto& [number, answered] : std::exchange(navigation_asks_, {})) {
+    std::move(answered).Run(false);
+  }
+  for (auto& [number, answered] : std::exchange(unload_asks_, {})) {
+    std::move(answered).Run(true);
+  }
 }
 
 void ElectronApp::Take(std::string_view line) {
@@ -247,6 +255,17 @@ void ElectronApp::Take(std::string_view line) {
   } else if (const auto* clear = std::get_if<ElectronClearHistory>(&*request)) {
     if (const std::optional<std::string> id = IdOf(clear->window)) {
       desk_->ClearHistory(*id);
+    }
+  } else if (const auto* remove =
+                 std::get_if<ElectronRemoveHistoryEntry>(&*request)) {
+    if (const std::optional<std::string> id = IdOf(remove->window)) {
+      desk_->RemoveHistoryEntry(*id, remove->index);
+    }
+  } else if (const auto* navigation_listen =
+                 std::get_if<ElectronNavigationListen>(&*request)) {
+    if (IdOf(navigation_listen->window)) {
+      windows_.at(navigation_listen->window).listens_for_navigation =
+          navigation_listen->listening;
     }
   } else if (const auto* edit = std::get_if<ElectronEdit>(&*request)) {
     if (const std::optional<std::string> id = IdOf(edit->window)) {
@@ -350,6 +369,12 @@ void ElectronApp::Take(std::string_view line) {
   } else if (auto* window_open =
                  std::get_if<ElectronWindowOpenAnswer>(&*request)) {
     AnswerWindowOpen(std::move(*window_open));
+  } else if (const auto* navigation =
+                 std::get_if<ElectronNavigationAnswer>(&*request)) {
+    AnswerNavigation(*navigation);
+  } else if (const auto* unload =
+                 std::get_if<ElectronUnloadAnswer>(&*request)) {
+    AnswerUnload(*unload);
   } else if (auto* set = std::get_if<ElectronSetViews>(&*request)) {
     SetViews(*set);
   } else if (auto* bar = std::get_if<ElectronSetMenuBar>(&*request)) {
@@ -421,12 +446,20 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
     return;
   } else if (!Opens(open.window, open.session, open.url)) {
     return;
+  } else if (open.history.has_value() &&
+             !std::ranges::all_of(open.history->entries,
+                                  [&](const ElectronHistory::Entry& entry) {
+                                    return Opens(open.window, open.session,
+                                                 entry.url);
+                                  })) {
+    return;
   }
   ElectronPageCalls calls = CallsFor(open.window);
-  const std::optional<std::string> id = desk_->Open(
-      open.url, hello_->app_id, *partition, open.preload, open.arguments,
-      open.node, std::move(calls), SessionNamed(open.session).GetWeakPtr(),
-      open.view, open.title, open.hidden);
+  const std::optional<std::string> id =
+      desk_->Open(open.url, open.history, hello_->app_id, *partition,
+                  open.preload, open.arguments, open.node, std::move(calls),
+                  SessionNamed(open.session).GetWeakPtr(), open.view,
+                  open.title, open.hidden);
   if (!id.has_value()) {
     send_.Run(
         ElectronWindowRefused(open.window, "there is no shell to open it in"));
@@ -475,6 +508,26 @@ ElectronPageCalls ElectronApp::CallsFor(ElectronWindow number) {
                                           weak_factory_.GetWeakPtr(), number),
       .devtools_event = base::BindRepeating(&ElectronApp::PageDevToolsEvent,
                                             weak_factory_.GetWeakPtr(), number),
+      .navigation_started =
+          base::BindRepeating(&ElectronApp::PageNavigationStarted,
+                              weak_factory_.GetWeakPtr(), number),
+      .navigation_redirected =
+          base::BindRepeating(&ElectronApp::PageNavigationRedirected,
+                              weak_factory_.GetWeakPtr(), number),
+      .navigation_committed =
+          base::BindRepeating(&ElectronApp::PageNavigationCommitted,
+                              weak_factory_.GetWeakPtr(), number),
+      .load_failed = base::BindRepeating(&ElectronApp::PageLoadFailed,
+                                         weak_factory_.GetWeakPtr(), number),
+      .frame_loaded = base::BindRepeating(&ElectronApp::PageFrameLoaded,
+                                          weak_factory_.GetWeakPtr(), number),
+      .frame_created = base::BindRepeating(&ElectronApp::PageFrameCreated,
+                                           weak_factory_.GetWeakPtr(), number),
+      .will_navigate = base::BindRepeating(&ElectronApp::PageWillNavigate,
+                                           weak_factory_.GetWeakPtr(), number),
+      .will_prevent_unload =
+          base::BindRepeating(&ElectronApp::PageWillPreventUnload,
+                              weak_factory_.GetWeakPtr(), number),
   };
 }
 
@@ -790,6 +843,98 @@ void ElectronApp::PageFound(ElectronWindow number, ElectronFindResult result) {
   if (windows_.contains(number)) {
     send_.Run(ElectronFoundInPage(number, result));
   }
+}
+
+void ElectronApp::TellOfPage(ElectronWindow number, const std::string& line) {
+  if (windows_.contains(number)) {
+    send_.Run(line);
+  }
+}
+
+void ElectronApp::PageNavigationStarted(ElectronWindow number,
+                                        ElectronNavigation navigation) {
+  TellOfPage(number, ElectronNavigationStarted(number, navigation));
+}
+
+void ElectronApp::PageNavigationRedirected(ElectronWindow number,
+                                           ElectronNavigation navigation) {
+  TellOfPage(number, ElectronNavigationRedirected(number, navigation));
+}
+
+void ElectronApp::PageNavigationCommitted(ElectronWindow number,
+                                          ElectronNavigationCommit commit) {
+  TellOfPage(number, ElectronNavigationCommitted(number, commit));
+}
+
+void ElectronApp::PageLoadFailed(ElectronWindow number,
+                                 ElectronLoadFailure failure) {
+  TellOfPage(number, ElectronLoadFailed(number, failure));
+}
+
+void ElectronApp::PageFrameLoaded(ElectronWindow number, ElectronFrame frame) {
+  TellOfPage(number, ElectronFrameLoaded(number, frame));
+}
+
+void ElectronApp::PageFrameCreated(ElectronWindow number,
+                                   ElectronFrame frame,
+                                   bool main_frame) {
+  TellOfPage(number, ElectronFrameCreated(number, frame, main_frame));
+}
+
+void ElectronApp::PageWillNavigate(ElectronWindow number,
+                                   ElectronNavigation navigation,
+                                   bool redirect,
+                                   base::OnceCallback<void(bool)> answered) {
+  if (!windows_.contains(number)) {
+    // Its page outlived the window, which no app's listener hears of.
+    std::move(answered).Run(false);
+    return;
+  } else if (!windows_.at(number).listens_for_navigation) {
+    // Nothing could stop it, so it doesn't wait a round trip.
+    std::move(answered).Run(true);
+    return;
+  }
+  const int ask = next_navigation_ask_++;
+  navigation_asks_.emplace(ask, std::move(answered));
+  send_.Run(ElectronWillNavigate(ask, number, navigation, redirect));
+}
+
+void ElectronApp::PageWillPreventUnload(
+    ElectronWindow number,
+    base::OnceCallback<void(bool)> answered) {
+  if (!windows_.contains(number)) {
+    std::move(answered).Run(true);
+    return;
+  }
+  const int ask = next_unload_ask_++;
+  unload_asks_.emplace(ask, std::move(answered));
+  send_.Run(ElectronWillPreventUnload(ask, number));
+}
+
+void ElectronApp::AnswerNavigation(const ElectronNavigationAnswer& answer) {
+  auto found = navigation_asks_.find(answer.ask);
+  if (found == navigation_asks_.end()) {
+    send_.Run(
+        ElectronRefused(base::StrCat({"no navigation is waiting for answer ",
+                                      base::NumberToString(answer.ask)})));
+    return;
+  }
+  base::OnceCallback<void(bool)> answered = std::move(found->second);
+  navigation_asks_.erase(found);
+  std::move(answered).Run(answer.proceed);
+}
+
+void ElectronApp::AnswerUnload(const ElectronUnloadAnswer& answer) {
+  auto found = unload_asks_.find(answer.ask);
+  if (found == unload_asks_.end()) {
+    send_.Run(ElectronRefused(
+        base::StrCat({"no page's beforeunload is waiting for answer ",
+                      base::NumberToString(answer.ask)})));
+    return;
+  }
+  base::OnceCallback<void(bool)> answered = std::move(found->second);
+  unload_asks_.erase(found);
+  std::move(answered).Run(answer.unload);
 }
 
 void ElectronApp::PageContextMenu(ElectronWindow number,

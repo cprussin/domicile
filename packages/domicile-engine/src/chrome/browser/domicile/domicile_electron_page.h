@@ -43,6 +43,8 @@ class SiteInstance;
 
 namespace domicile {
 
+class WebViewGuest;
+
 // An Electron app window's page, in the browser: sends its preload to the
 // main frame before each navigation commits, and carries its ipcRenderer to
 // the app and the app's webContents.send to it. The renderer half is
@@ -138,6 +140,12 @@ class ElectronPage final : public content::WebContentsObserver,
   void GoToIndex(int index);
   // navigationHistory.clear: forgets every entry but the one shown.
   void ClearHistory();
+  // navigationHistory.removeEntryAtIndex: forgets entry `index`. One the
+  // history no longer has, or shows, stays, which the log says.
+  void RemoveHistoryEntry(int index);
+  // Has `guest`, whose page this is, ask the app before the page navigates
+  // itself or redirects, and when its `beforeunload` asks to stay.
+  void DecideFor(WebViewGuest& guest);
   // webContents.undo and the rest of the Edit menu, at the page's focus.
   void Edit(ElectronEditCommand command);
   // webContents.replace and replaceMisspelling.
@@ -164,6 +172,16 @@ class ElectronPage final : public content::WebContentsObserver,
 
   // content::WebContentsObserver:
   void ReadyToCommitNavigation(content::NavigationHandle* navigation) override;
+  // Each tells the app of the page's frames: Electron's did-start-navigation,
+  // did-redirect-navigation, did-navigate and kin, did-fail-load and
+  // frame-created. Only the shown page's frames, not a prerendering page's.
+  void DidStartNavigation(content::NavigationHandle* navigation) override;
+  void DidRedirectNavigation(content::NavigationHandle* navigation) override;
+  void DidFinishNavigation(content::NavigationHandle* navigation) override;
+  void DidFailLoad(content::RenderFrameHost* frame,
+                   const GURL& url,
+                   int error_code) override;
+  void RenderFrameCreated(content::RenderFrameHost* frame) override;
   // Each tells the app the page's new size, for getContentBounds and
   // "resize". All of them: which one fires for a guest's page is Chromium's,
   // and a size heard twice is sent once. A page the shell sized before its
@@ -242,6 +260,14 @@ class ElectronPage final : public content::WebContentsObserver,
   // Whether a document has a preload, or Node, and so hears IPC.
   bool HasPreload() const;
 
+  // The app's will-navigate and kin decide on `navigation`; `answered` runs
+  // once, with yes for a navigation not in the shown page.
+  void AskToNavigate(content::NavigationHandle& navigation,
+                     bool redirect,
+                     base::OnceCallback<void(bool proceed)> answered);
+  // The app's will-prevent-unload decides whether the page leaves.
+  void AskToUnload(base::OnceCallback<void(bool unload)> answered);
+
   const std::string preload_;
   // webPreferences.additionalArguments, which the preload sees in
   // process.argv.
@@ -277,6 +303,7 @@ class ElectronPage final : public content::WebContentsObserver,
   base::ScopedObservation<content::DownloadManager,
                           content::DownloadManager::Observer>
       download_manager_observation_{this};
+  base::WeakPtrFactory<ElectronPage> weak_factory_{this};
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };
