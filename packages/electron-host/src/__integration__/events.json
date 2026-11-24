@@ -1,8 +1,6 @@
 {
   "gaps": {
     "App.gpu-info-update": "the engine reports no GPU info to the host, as getGPUInfo",
-    "BaseWindow.app-command": "not fired yet",
-    "BrowserWindow.app-command": "not fired yet",
     "Debugger.detach": "no webContents.debugger",
     "Debugger.message": "no webContents.debugger",
     "Extensions.extension-loaded": "no app-loaded extensions",

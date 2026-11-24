@@ -45,7 +45,10 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
                         const String& popup_menu,
                         bool wants_maximized,
                         bool wants_minimized,
-                        bool wants_fullscreen);
+                        bool wants_fullscreen,
+                        bool urgent,
+                        bool ignores_pointer,
+                        const String& shape);
   ~DomicileBrowserWindow() override;
 
   const String& id() const { return id_; }
@@ -77,6 +80,10 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   bool wantsMaximized() const { return wants_maximized_; }
   bool wantsMinimized() const { return wants_minimized_; }
   bool wantsFullscreen() const { return wants_fullscreen_; }
+  bool urgent() const { return urgent_; }
+  bool ignoresPointer() const { return ignores_pointer_; }
+  // Null for none, as the empty string the browser sends.
+  const String& shape() const { return shape_; }
 
   void Trace(Visitor*) const override;
 
@@ -106,6 +113,9 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   bool wants_maximized_ = false;
   bool wants_minimized_ = false;
   bool wants_fullscreen_ = false;
+  bool urgent_ = false;
+  bool ignores_pointer_ = false;
+  String shape_;
 };
 
 }  // namespace blink

@@ -131,6 +131,17 @@ namespace domicile {
 //                                           setFullScreen and their undoing:
 //                                           what the app asks the shell to
 //                                           make the window)
+//   {"type":"flash_frame","window":1,"flash":true}
+//                                          (win.flashFrame: the window asks
+//                                           for the user's attention)
+//   {"type":"set_ignore_mouse_events","window":1,"ignore":true}
+//                                          (win.setIgnoreMouseEvents: the
+//                                           pointer goes through the window)
+//   {"type":"set_shape","window":1,
+//    "rects":[{"x":0,"y":0,"width":10,"height":10}]}
+//                                          (win.setShape: the window draws
+//                                           and takes input only there, in
+//                                           its page's CSS pixels)
 //   {"type":"popup_menu","window":1,"popup":1,"menu":[...],"x":10,"y":20}
 //                                          (Menu.popup: a menu the shell
 //                                           draws over the window's page,
@@ -189,6 +200,11 @@ namespace domicile {
 //    "minimized":false,"fullscreen":true}
 //                                          (what the shell made the window,
 //                                           each time that changes)
+//   {"type":"app_command","window":1,"command":"browser-backward"}
+//                                          (the user pressed the mouse's
+//                                           back button in the page, or
+//                                           its forward button:
+//                                           "browser-forward")
 //   {"type":"cookie_changed","session":"","cookie":{...},
 //    "cause":"inserted","removed":false}
 //                                          (session.cookies' `changed`, for
@@ -729,6 +745,41 @@ struct ElectronWindowState {
   friend bool operator==(const ElectronWindowState&,
                          const ElectronWindowState&) = default;
 };
+
+// win.flashFrame: whether `window` asks for the user's attention, which the
+// desktop shows until the window has the keyboard.
+struct ElectronFlashFrame {
+  ElectronWindow window;
+  bool flash = false;
+};
+
+// win.setIgnoreMouseEvents: whether the pointer goes through `window` to what
+// is under it.
+struct ElectronSetIgnoreMouseEvents {
+  ElectronWindow window;
+  bool ignore = false;
+};
+
+// One rectangle of a window's shape, in CSS pixels from its page's top left.
+struct ElectronShapeRect {
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
+
+  friend bool operator==(const ElectronShapeRect&,
+                         const ElectronShapeRect&) = default;
+};
+
+// win.setShape: `window` draws and takes input only within `rects`.
+struct ElectronSetShape {
+  ElectronWindow window;
+  std::vector<ElectronShapeRect> rects;
+};
+
+// What the mouse's back and forward buttons in a page are to its app:
+// Electron's app-command on Linux.
+enum class ElectronAppCommand { kBrowserBackward, kBrowserForward };
 
 // win.maximize, unmaximize, minimize, restore and setFullScreen: the state
 // the app asks the shell to give `window`. The shell decides, and says what
@@ -1295,6 +1346,9 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronSetTitle,
                                      ElectronSetHidden,
                                      ElectronSetWindowState,
+                                     ElectronFlashFrame,
+                                     ElectronSetIgnoreMouseEvents,
+                                     ElectronSetShape,
                                      ElectronSetUserAgentFallback,
                                      ElectronPageCall,
                                      ElectronPageRequest,
@@ -1322,6 +1376,11 @@ struct ElectronRefusal {
 base::expected<WebViewPartition, std::string> ElectronSessionPartition(
     const WebViewPartition& app,
     std::string_view session);
+
+// Whether `url` is a page the engine makes itself, about:blank or a data:
+// URL, which an app window opens as in Electron: a BaseWindow's own page and
+// an ImageView's are.
+bool IsElectronEnginePage(const GURL& url);
 
 // The request on `line`, or why it is not one.
 base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
@@ -1380,6 +1439,8 @@ std::string ElectronContextMenuAsked(ElectronWindow window,
 std::string ElectronWindowResized(ElectronWindow window, int width, int height);
 // The user clicked entry `command` of `window`'s menu bar.
 std::string ElectronMenuClicked(ElectronWindow window, int command);
+std::string ElectronAppCommanded(ElectronWindow window,
+                                 ElectronAppCommand command);
 // The shell made `window` `state`.
 std::string ElectronWindowStateChanged(ElectronWindow window,
                                        const ElectronWindowState& state);

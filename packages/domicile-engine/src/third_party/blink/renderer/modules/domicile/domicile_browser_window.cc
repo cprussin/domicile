@@ -30,7 +30,10 @@ DomicileBrowserWindow::DomicileBrowserWindow(
     const String& popup_menu,
     bool wants_maximized,
     bool wants_minimized,
-    bool wants_fullscreen)
+    bool wants_fullscreen,
+    bool urgent,
+    bool ignores_pointer,
+    const String& shape)
     : id_(id),
       url_(url),
       title_(title),
@@ -55,7 +58,10 @@ DomicileBrowserWindow::DomicileBrowserWindow(
       popup_menu_(popup_menu),
       wants_maximized_(wants_maximized),
       wants_minimized_(wants_minimized),
-      wants_fullscreen_(wants_fullscreen) {}
+      wants_fullscreen_(wants_fullscreen),
+      urgent_(urgent),
+      ignores_pointer_(ignores_pointer),
+      shape_(shape) {}
 
 DomicileBrowserWindow::~DomicileBrowserWindow() = default;
 

@@ -3757,3 +3757,99 @@ describe("an Electron app's popup menu", () => {
     expect(answers()).toEqual([]);
   });
 });
+
+describe("an Electron app's window looks and input", () => {
+  usesStylesheet();
+
+  /** A browser window "1" of an Electron app, with its host. */
+  const appWindow = () => {
+    const host = new FakeDomicileHost();
+    host.openBrowser("https://claude.test/");
+    const { container } = render(
+      <BrowserWindow
+        behindPanel={false}
+        clickThrough={false}
+        covered={false}
+        depth={0}
+        domicile={host.domicile}
+        dragging={false}
+        focused={false}
+        frame={FRAME}
+        fullscreen={false}
+        isApp
+        motion="resting"
+        onDescription={noDescription}
+        onFocusRequest={() => undefined}
+        onIcon={noIcon}
+        onMotionEnded={nothingEnded}
+        onPageFullscreen={noFullscreen}
+        onReach={() => undefined}
+        rect={ON_SCREEN}
+        resizing={false}
+        url="https://claude.test/"
+        window="1"
+      />,
+    );
+    return { container, host };
+  };
+
+  /** The box holding the page and the app's views. */
+  const pageBox = (container: HTMLElement): HTMLElement => {
+    const box = view(container).parentElement;
+    if (box === null) {
+      throw new Error("test: the page has no box");
+    } else {
+      return box;
+    }
+  };
+
+  it("draws as it always does while its app asks nothing of it", () => {
+    const { container } = appWindow();
+
+    expect(browser()).not.toHaveAttribute("data-urgent");
+    expect(globalThis.getComputedStyle(browser()).pointerEvents).not.toBe(
+      "none",
+    );
+    expect(pageBox(container).style.clipPath).toBe("");
+  });
+
+  it("marks itself while its app asks for the user's attention", () => {
+    const { host } = appWindow();
+
+    act(() => {
+      host.setLooks("1", { urgent: true });
+    });
+    expect(browser()).toHaveAttribute("data-urgent");
+
+    act(() => {
+      host.setLooks("1", { urgent: false });
+    });
+    expect(browser()).not.toHaveAttribute("data-urgent");
+  });
+
+  it("lets the pointer through while its app ignores the mouse", () => {
+    const { host } = appWindow();
+
+    act(() => {
+      host.setLooks("1", { ignoresPointer: true });
+    });
+
+    expect(globalThis.getComputedStyle(browser()).pointerEvents).toBe("none");
+  });
+
+  it("draws its page and takes input only within its app's shape", () => {
+    const { container, host } = appWindow();
+
+    act(() => {
+      host.setLooks("1", {
+        shape: JSON.stringify([{ height: 40, width: 30, x: 1, y: 2 }]),
+      });
+    });
+    expect(pageBox(container).style.clipPath).toBe('path("M1 2h30v40h-30Z")');
+
+    act(() => {
+      host.setLooks("1", { shape: null });
+    });
+    expect(pageBox(container).style.clipPath).toBe("");
+  });
+});

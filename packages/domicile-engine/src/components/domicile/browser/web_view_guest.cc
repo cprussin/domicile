@@ -4,6 +4,7 @@
 #include "components/domicile/browser/web_view_guest.h"
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -57,6 +58,7 @@
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/desktop_media_id.h"
 #include "content/public/browser/document_service.h"
 #include "components/download/public/common/download_item.h"
 #include "content/public/browser/download_item_utils.h"
@@ -2822,6 +2824,25 @@ void WebViewGuest::RequestMediaAccessPermission(
     content::WebContents* web_contents,
     const content::MediaStreamRequest& request,
     content::MediaResponseCallback callback) {
+  if (const std::optional<std::string> named = NamedWindowSource(request)) {
+    // The page's app named one of its own windows: it is captured as a tab,
+    // as a browser window picked in the desktop's picker is.
+    const bool audio = WantsScreenSound(request.audio_type);
+    blink::mojom::StreamDevicesSetPtr tab = BrowserWindowTab(
+        web_contents->GetWeakPtr(), request.url_origin, audio,
+        request.suppress_local_audio_playback, *named);
+    if (tab) {
+      std::move(callback).Run(
+          *AsRequested(request.video_type, request.audio_type, std::move(tab)),
+          blink::mojom::MediaStreamRequestResult::OK, /*ui=*/nullptr);
+    } else {
+      std::move(callback).Run(
+          blink::mojom::StreamDevicesSet(),
+          blink::mojom::MediaStreamRequestResult::INVALID_STATE,
+          /*ui=*/nullptr);
+    }
+    return;
+  }
   if (IsScreenCapture(request.video_type)) {
     const int choice = next_screen_choice_++;
     const bool audio = WantsScreenSound(request.audio_type);
@@ -2855,6 +2876,23 @@ void WebViewGuest::RequestMediaAccessPermission(
     return;
   }
   Media().Request(*web_contents, request, std::move(callback));
+}
+
+std::optional<std::string> WebViewGuest::NamedWindowSource(
+    const content::MediaStreamRequest& request) const {
+  if (window_source_finding_.is_null() ||
+      request.video_type !=
+          blink::mojom::MediaStreamType::GUM_DESKTOP_VIDEO_CAPTURE ||
+      request.requested_video_device_ids.empty()) {
+    return std::nullopt;
+  }
+  const content::DesktopMediaID source =
+      content::DesktopMediaID::Parse(request.requested_video_device_ids[0]);
+  if (source.type != content::DesktopMediaID::TYPE_WINDOW ||
+      source.id < 1 || source.id > std::numeric_limits<int>::max()) {
+    return std::nullopt;
+  }
+  return window_source_finding_.Run(static_cast<int>(source.id));
 }
 
 bool WebViewGuest::CheckMediaAccessPermission(
@@ -3445,6 +3483,10 @@ void WebViewGuest::Focused() {
 
 void WebViewGuest::DecideWindowsWith(WindowOpening opening) {
   window_opening_ = std::move(opening);
+}
+
+void WebViewGuest::FindWindowSourcesWith(WindowSourceFinding finding) {
+  window_source_finding_ = std::move(finding);
 }
 
 void WebViewGuest::TakeContextMenusWith(ContextMenuTaking taking) {

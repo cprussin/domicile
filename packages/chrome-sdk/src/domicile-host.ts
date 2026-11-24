@@ -429,6 +429,25 @@ export type DomicileBrowserWindow = {
   readonly wantsMaximized: boolean;
   readonly wantsMinimized: boolean;
   readonly wantsFullscreen: boolean;
+  /**
+   * Whether an Electron app asks for the user's attention to this window
+   * (win.flashFrame). It stops once the window has the keyboard. False for
+   * any other window.
+   */
+  readonly urgent: boolean;
+  /**
+   * Whether the pointer goes through this Electron window to what is under
+   * it (win.setIgnoreMouseEvents): its page takes no clicks, and the shell
+   * passes them to whatever it draws beneath. False for any other window.
+   */
+  readonly ignoresPointer: boolean;
+  /**
+   * Where this Electron window draws and takes input (win.setShape), as
+   * JSON: a list of `x`, `y`, `width` and `height` in CSS pixels from its
+   * page's top left. Draw and pass clicks to the window only within them.
+   * Null for all of it, and for any other window.
+   */
+  readonly shape: string | null;
 };
 
 /**
