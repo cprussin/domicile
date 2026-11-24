@@ -328,7 +328,7 @@ The host carries out the webContents members that act on the page with
 | `copyImageAt`, `copyVideoFrameAt`, `adjustSelection` | `copy_image_at`, `copy_video_frame_at`, `adjust_selection` |
 | `caretBrowsingEnabled`, `setWebRTCIPHandlingPolicy` | `set_caret_browsing`, `set_webrtc_ip_policy` (renderer prefs) |
 | `win.setEnabled`, a modal's parent | `set_ignore_input` |
-| `capturePage`, `printToPDF`, `enableDeviceEmulation`, `beginFrameSubscription` | `devtools`: `Page.captureScreenshot` (with `Page.getLayoutMetrics` for a rect), `Page.printToPDF`, `Emulation.setDeviceMetricsOverride`, `Page.startScreencast` |
+| `capturePage`, `printToPDF`, `enableDeviceEmulation`, `beginFrameSubscription`, the session's `enableNetworkEmulation` | `devtools`: `Page.captureScreenshot` (with `Page.getLayoutMetrics` for a rect), `Page.printToPDF`, `Emulation.setDeviceMetricsOverride`, `Page.startScreencast`, `Network.emulateNetworkConditions` |
 
 - **DevTools:** each page has one DevTools client, untrusted and with no
   local files, attached at its first `devtools` call and kept while the page
@@ -552,12 +552,36 @@ The host carries out the webContents members that act on the page with
   A session's own preloads (`registerPreloadScript` with type `frame`, and
   `setPreloads`) run before the window's in a sandboxed page, each in turn,
   one's error thrown apart so the next still runs; a Node page refuses
-  them for now. The engine keeps a session's code cache with its partition,
-  so `setCodeCachePath` moves nothing. Not yet: `setSSLConfig` and
-  network emulation (both profile-wide in the engine), the
-  `spellcheck-dictionary-*` events, `preconnect`'s event,
-  `file-system-access-restricted`, a utility process's `login`, and
-  `setClientCertRequestPasswordHandler`.
+  them for now. `setCodeCachePath` is `set_code_cache_path`: the partition
+  keeps the code V8 compiles from then on in the app's directory
+  ([`domicile_code_cache.h`](../../packages/domicile-engine/src/content/public/browser/domicile_code_cache.h)).
+- **Session events**: a page's resource hint (`<link rel=preconnect>`)
+  comes as `preconnect {session, url, allow_credentials}`, its session's
+  `preconnect`. Each dictionary the engine checks spelling with comes as
+  `spellcheck_dictionary_initialized {language}` once loaded, those loaded
+  already right after `ready`; the app's sessions are partitions of the
+  shell's profile, so every session fires it, from `ready` on. The
+  dictionaries ship beside the engine, so no `spellcheck-dictionary-download-*`
+  comes. `gpu_info_update` is app's `gpu-info-update`
+  ([`electron_session_events.h`](../../packages/domicile-engine/src/components/domicile/browser/electron_session_events.h)).
+- **Network emulation**: `enableNetworkEmulation` is
+  `Network.emulateNetworkConditions` on the DevTools client of each of the
+  session's pages ([Page calls](#page-calls)), and of each it opens later
+  (`src/electron/network-emulation.ts`). A session's service workers are
+  not throttled.
+- **`WebSocket`** (and `net.WebSocket`) is Bun's, with Electron's options:
+  the handshake's headers and origin and, with `useSessionCookies`, the
+  session's cookies (`src/electron/web-socket.ts`). Cookies the handshake's
+  answer sets are not kept.
+- **Not yet:** `setSSLConfig` (the profile's SSL settings reach each
+  partition's network), extensions (they belong to a Chrome profile, and an
+  app's sessions are partitions of the shell's, which holds the user's own:
+  one an app loaded would reach the user's browsing), the device choosers'
+  `select-hid-device`, `select-serial-port` and `select-usb-device` (the
+  shell's chooser answers), `file-system-access-restricted`, a utility
+  process's `login`, `setClientCertRequestPasswordHandler`, a service
+  worker's `ServiceWorkerMain` and IPC, `registerLocalAIHandler` and
+  `sharedTexture`.
 
 ### Desktop pieces
 

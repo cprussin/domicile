@@ -8,6 +8,8 @@ import { join } from "node:path";
 export const createContentTracing = (temp: () => string) => {
   let recording = false;
   return {
+    // A heap profile goes in a trace, and the engine's traces aren't the app's.
+    enableHeapProfiling: () => Promise.resolve(),
     getCategories: async () => [] as string[],
     getTraceBufferUsage: async () => ({ percentage: 0, value: 0 }),
     get recording() {

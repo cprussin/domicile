@@ -21,6 +21,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/types/expected.h"
+#include "components/domicile/browser/electron_session_events.h"
 #include "url/url_constants.h"
 
 namespace domicile {
@@ -99,6 +100,10 @@ int ElectronSession::AskDownload(
     base::OnceCallback<void(ElectronDownloadAnswer)> decided) {
   return app_->StartDownloadAsk(name_, window, details, std::move(control),
                                 std::move(decided));
+}
+
+void ElectronSession::TellPreconnect(const GURL& url, bool allow_credentials) {
+  app_->send_.Run(ElectronPreconnected(name_, url, allow_credentials));
 }
 
 void ElectronSession::DownloadUpdated(
@@ -233,6 +238,9 @@ void ElectronApp::Take(std::string_view line) {
     } else {
       hello_ = *hello;
       send_.Run(ElectronReady(schemes_, engine_));
+      for (const std::string& language : dictionaries_) {
+        send_.Run(ElectronSpellcheckDictionaryInitialized(language));
+      }
     }
   } else if (!hello_.has_value()) {
     send_.Run(ElectronRefused("an app says hello first"));
@@ -432,6 +440,19 @@ void ElectronApp::DomReady(const std::string& id) {
       windows_, [&id](const auto& entry) { return entry.second.id == id; });
   if (found != windows_.end()) {
     send_.Run(ElectronWindowDomReady(found->first));
+  }
+}
+
+void ElectronApp::SpellcheckDictionaryInitialized(const std::string& language) {
+  // Before the hello, the app hears it with its ready.
+  if (dictionaries_.insert(language).second && hello_.has_value()) {
+    send_.Run(ElectronSpellcheckDictionaryInitialized(language));
+  }
+}
+
+void ElectronApp::GpuInfoUpdated() {
+  if (hello_.has_value()) {
+    send_.Run(ElectronGpuInfoUpdated());
   }
 }
 

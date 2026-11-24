@@ -54,7 +54,8 @@ export type ChildProcessGoneDetails = {
 /**
  * The `app` an Electron app sees, and what the host calls on it: `markReady`
  * once the engine can open windows, `sessionCreated` with each session it
- * makes, and `childProcessGone` when one of the app's processes went.
+ * makes, `childProcessGone` when one of the app's processes went, and
+ * `gpuInfoUpdated` when the engine learned more of its GPU.
  */
 export const createApp = ({
   appPath,
@@ -84,6 +85,10 @@ export const createApp = ({
     app,
     childProcessGone: (details: ChildProcessGoneDetails) => {
       app.emit("child-process-gone", eventObject(), details);
+    },
+    gpuInfoUpdated: () => {
+      // With nothing, as Electron's.
+      app.emit("gpu-info-update");
     },
     hooks,
     markReady: () => {

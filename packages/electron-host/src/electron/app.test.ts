@@ -93,6 +93,17 @@ describe(createApp, () => {
       ]);
     });
 
+    it("says the engine learned more of its GPU", async () => {
+      const { app, gpuInfoUpdated } = make();
+      const heard = new Promise((resolve) =>
+        app.once("gpu-info-update", (...args: unknown[]) => resolve(args)),
+      );
+
+      gpuInfoUpdated();
+
+      expect(await heard).toEqual([]);
+    });
+
     it("says a child process went, with what Electron says of it", async () => {
       const { app, childProcessGone } = make();
       const details = {

@@ -275,6 +275,10 @@ class ElectronSession {
       const ElectronClientCertificateAsk& select,
       ElectronSignInAsks::ClientCertificateAnswered answered);
 
+  // Tells the app's `preconnect` listeners that a page's resource hint
+  // opened a connection to `url`.
+  void TellPreconnect(const GURL& url, bool allow_credentials);
+
   // The user agent of the session's pages: session.setUserAgent's, else the
   // app's fallback; empty for the engine's.
   const std::string& user_agent() const;
@@ -531,6 +535,13 @@ class ElectronApp {
   // this app's.
   void DomReady(const std::string& id);
 
+  // Reports that the engine loaded its dictionary for `language`, now or once
+  // the app has said hello. Each language is reported once.
+  void SpellcheckDictionaryInitialized(const std::string& language);
+  // Reports that the engine learned more of its GPU, once the app has said
+  // hello.
+  void GpuInfoUpdated();
+
  private:
   friend class ElectronSession;
 
@@ -716,6 +727,8 @@ class ElectronApp {
   std::string user_agent_fallback_;
   // Set by the app's hello.
   std::optional<ElectronHello> hello_;
+  // The languages whose dictionaries the engine loaded.
+  std::set<std::string> dictionaries_;
   // The app's open windows, by the numbers it gave them.
   std::map<ElectronWindow, Window> windows_;
   // The popup menu each window shows, by the app's number for it.

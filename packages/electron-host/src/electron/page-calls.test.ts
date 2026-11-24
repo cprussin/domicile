@@ -96,6 +96,36 @@ describe("page calls", () => {
     ]);
   });
 
+  it("emulates its session's network conditions, set before and after it opens, until it closes", async () => {
+    const { BrowserWindow, say, sent, sessions } = setUp();
+    const slow = sessions.fromPartition("slow");
+    slow.enableNetworkEmulation({ latency: 200 });
+    const window = new BrowserWindow({ webPreferences: { session: slow } });
+    const loaded = window.loadURL("https://a.test/");
+    slow.enableNetworkEmulation({ offline: true });
+    const emulated = sent.filter(
+      (message) => "method" in message && message.method === "devtools",
+    );
+    say({ type: "window_closed", window: 1 });
+    await expect(loaded).rejects.toThrow();
+    sent.length = 0;
+    slow.disableNetworkEmulation();
+
+    expect(emulated).toEqual([
+      expect.objectContaining({
+        params: expect.objectContaining({ latency: 200, offline: false }),
+        type: "page_call",
+        window: 1,
+      }),
+      expect.objectContaining({
+        params: expect.objectContaining({ latency: 0, offline: true }),
+        type: "page_call",
+        window: 1,
+      }),
+    ]);
+    expect(sent).toEqual([]);
+  });
+
   it("runs an isolated world's scripts after the load under way", async () => {
     const { BrowserWindow, say, sent } = setUp();
     const window = new BrowserWindow();

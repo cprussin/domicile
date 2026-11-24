@@ -247,6 +247,26 @@ describe(createSessionCalls, () => {
     ).toThrow("preconnect's numSockets is 1 to 6, not 7");
   });
 
+  it("moves a session's code cache, refusing a relative path as Electron does", () => {
+    const { calls, sent } = setUp();
+    const session = calls.forSession("persist:a");
+
+    session.setCodeCachePath("/home/a/.cache/code");
+
+    expect(sent).toEqual([
+      {
+        call: 1,
+        method: "set_code_cache_path",
+        path: "/home/a/.cache/code",
+        session: "persist:a",
+        type: "session_call",
+      },
+    ]);
+    expect(() => session.setCodeCachePath("code")).toThrow(
+      "Absolute path must be provided to store code cache.",
+    );
+  });
+
   it("asks for a session's storage path", async () => {
     const { calls, sent } = setUp();
 

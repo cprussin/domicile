@@ -1,5 +1,5 @@
 // The stand-in for Electron's `net`: requests from the main process, with
-// Bun's `fetch` and `WebSocket`, which go out as Electron's `net` does.
+// Bun's `fetch`, which goes out as Electron's `net` does.
 
 import { lookup } from "node:dns/promises";
 import { EventEmitter } from "node:events";
@@ -250,7 +250,8 @@ const askToSignIn = async (
 
 const defaultPort = (protocol: string) => (protocol === "https:" ? 443 : 80);
 
-export const net = {
+/** Electron's `net`, whose `WebSocket` is the host's (see web-socket.ts). */
+export const createNet = <W>(WebSocket: W) => ({
   fetch: (input: string | Request, init?: RequestInit) => fetch(input, init),
   isOnline: () => isOnline(),
   get online() {
@@ -266,5 +267,5 @@ export const net = {
       })),
     };
   },
-  WebSocket: globalThis.WebSocket,
-};
+  WebSocket,
+});

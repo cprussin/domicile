@@ -30,6 +30,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/console_message.h"
+#include "content/public/browser/domicile_code_cache.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/service_worker_context_observer.h"
@@ -573,6 +574,10 @@ void RunElectronNetworkCall(const WebViewPartition& partition,
     new HostResolution(network, *resolve, std::move(done));
   } else if (const auto* preconnect = std::get_if<ElectronPreconnect>(&call)) {
     Preconnect(network, *preconnect);
+    Cleared(std::move(done));
+  } else if (const auto* code_cache =
+                 std::get_if<ElectronSetCodeCachePath>(&call)) {
+    content::SetDomicileCodeCachePath(*storage, code_cache->path);
     Cleared(std::move(done));
   } else if (std::holds_alternative<ElectronStoragePath>(call)) {
     // An in-memory session keeps nothing on disk.

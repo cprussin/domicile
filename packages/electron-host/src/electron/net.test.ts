@@ -1,6 +1,8 @@
 import { afterAll, describe, expect, it } from "bun:test";
 
-import { net } from "./net";
+import { createNet } from "./net";
+
+const net = createNet(globalThis.WebSocket);
 
 const server = Bun.serve({
   fetch: async (request) =>

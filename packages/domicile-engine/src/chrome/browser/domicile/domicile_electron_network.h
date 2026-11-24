@@ -18,7 +18,7 @@ namespace domicile {
 // An Electron app session's network and the rest of its storage, in
 // `partition` of the shell's profile (see domicile_electron_storage.h):
 // clearData, clearAuthCache, clearCodeCaches, resolveHost, preconnect,
-// getStoragePath and the shared dictionary calls, each answered once by
+// getStoragePath, setCodeCachePath and the shared dictionary calls, each answered once by
 // `done` with its result or why it failed. With no shell there is no
 // profile: the calls that clear clear nothing, and the ones that answer
 // say there is nothing to ask. See electron_network_calls.h.

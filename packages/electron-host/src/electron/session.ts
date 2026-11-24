@@ -8,8 +8,12 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { isAbsolute } from "node:path";
 
+import type { IncomingPreconnect } from "../engine";
 import type { DisplayMediaRequestHandler } from "./desktop-capturer";
 import { setDisplayMediaRequestHandler } from "./desktop-capturer";
+import type { NetworkEmulationOptions } from "./network-emulation";
+import { createNetworkEmulation } from "./network-emulation";
+import type { PageMethod } from "./page-control";
 import type {
   createPermissions,
   PermissionCheckHandler,
@@ -39,6 +43,12 @@ const storagePaths = new WeakMap<Session, string>();
 const watchedWorkers = new WeakMap<
   Session,
   ReturnType<typeof createServiceWorkers>
+>();
+
+/** Each session's network emulation, which its pages follow. */
+const emulations = new WeakMap<
+  Session,
+  ReturnType<typeof createNetworkEmulation>
 >();
 
 /** Electron's `PreloadScript`. */
@@ -78,6 +88,17 @@ export class Session extends EventEmitter {
     this.cookies = calls.cookies;
     this.#calls = calls;
     this.#permissions = permissions;
+    emulations.set(this, this.#emulation);
+  }
+
+  readonly #emulation = createNetworkEmulation();
+
+  enableNetworkEmulation(options: NetworkEmulationOptions) {
+    this.#emulation.enable(options);
+  }
+
+  disableNetworkEmulation() {
+    this.#emulation.disable();
   }
 
   /** Watched from the app's first use, as an app reaches for it as it starts. */
@@ -323,12 +344,8 @@ export class Session extends EventEmitter {
     return this.getStoragePath();
   }
 
-  /**
-   * The engine keeps a session's code cache with the rest of its storage,
-   * where it caches the code of the session's pages.
-   */
-  setCodeCachePath(_path: string): void {
-    // Nothing to do on Domicile: see above.
+  setCodeCachePath(path: string) {
+    this.#calls.setCodeCachePath(path);
   }
 
   clearCodeCaches(options: { urls?: readonly string[] }) {
@@ -447,6 +464,8 @@ export const createSessions = (
   created: (session: Session) => void,
 ) => {
   const made = new Map<string, Session>();
+  /** The engine's dictionaries loaded so far, which every session checks with. */
+  const dictionaries = new Set<string>();
   const fromPartition = (partition: string) => {
     const found = made.get(partition);
     if (found === undefined) {
@@ -459,6 +478,18 @@ export const createSessions = (
       );
       made.set(partition, session);
       created(session);
+      // After the app's listeners, as Electron loads a session's dictionaries
+      // once it is made. Those loaded later each session hears as they load.
+      const loaded = [...dictionaries];
+      setImmediate(() => {
+        for (const language of loaded) {
+          session.emit(
+            "spellcheck-dictionary-initialized",
+            eventOf(),
+            language,
+          );
+        }
+      });
       return session;
     } else {
       return found;
@@ -473,6 +504,35 @@ export const createSessions = (
       return fromPartition(`persist:${path}`);
     } else {
       throw new Error("An absolute path is required");
+    }
+  };
+  const madeNamed = (name: string) => {
+    const session = made.get(name);
+    if (session === undefined) {
+      throw new Error(
+        `the engine named session ${JSON.stringify(name)}, which the app never made`,
+      );
+    } else {
+      return session;
+    }
+  };
+  /** Fires `preconnect` on the session a page's resource hint was in. */
+  const heardPreconnect = (preconnect: IncomingPreconnect) => {
+    madeNamed(preconnect.session).emit(
+      "preconnect",
+      eventOf(),
+      preconnect.url,
+      preconnect.allow_credentials,
+    );
+  };
+  /**
+   * Fires `spellcheck-dictionary-initialized` on every session, as the app's
+   * sessions share the engine's dictionaries.
+   */
+  const heardDictionary = ({ language }: { readonly language: string }) => {
+    dictionaries.add(language);
+    for (const session of made.values()) {
+      session.emit("spellcheck-dictionary-initialized", eventOf(), language);
     }
   };
   /** Passes `event` to the service workers of the session it names. */
@@ -491,9 +551,30 @@ export const createSessions = (
     defaultSession: fromPartition(""),
     fromPartition,
     fromPath,
+    heardDictionary,
+    heardPreconnect,
     heardServiceWorker,
   };
 };
+
+/**
+ * Has `page`, one of `session`'s, emulate the session's network conditions
+ * from now on, until the returned stop.
+ */
+export const followNetworkEmulation = (
+  session: Session,
+  page: { readonly set: (method: PageMethod) => void },
+) => {
+  const emulation = emulations.get(session);
+  if (emulation === undefined) {
+    throw new Error("every Session is made by createSessions");
+  } else {
+    return emulation.follow(page);
+  }
+};
+
+/** Electron's `Event` for a session's events, which nothing prevents. */
+const eventOf = () => ({ preventDefault: () => undefined });
 
 /** The frame preloads `session` runs in each page, in order. */
 export const framePreloadsOf = (session: Session) =>
