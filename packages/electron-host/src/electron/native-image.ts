@@ -104,36 +104,74 @@ const scale = (bitmap: Bitmap, width: number, height: number): Bitmap => {
   return { height, rgba, width };
 };
 
-/** Electron's `NativeImage`. */
+/** Electron's `NativeImage`: a picture for each scale factor it has. */
 export class NativeImage {
-  readonly #picture: Picture;
+  readonly #pictures = new Map<number, Picture>();
 
   constructor(picture: Picture) {
-    this.#picture = picture;
+    if (picture.kind !== "empty") {
+      this.#pictures.set(1, picture);
+    }
   }
 
-  readonly isEmpty = () => this.#picture.kind === "empty";
+  readonly isEmpty = () => this.#pictures.size === 0;
 
-  readonly getSize = (_scaleFactor?: number): Size =>
-    this.#picture.kind === "empty"
-      ? { height: 0, width: 0 }
-      : { ...this.#picture.size };
+  /**
+   * In pixels, the picture closest to `scaleFactor`; without one, in DIPs,
+   * as the picture closest to 1 shows.
+   */
+  readonly getSize = (scaleFactor?: number): Size => {
+    const closest = this.#closest(scaleFactor ?? 1);
+    if (closest === undefined || closest.picture.kind === "empty") {
+      return { height: 0, width: 0 };
+    } else {
+      const divisor = scaleFactor === undefined ? closest.scale : 1;
+      return {
+        height: Math.round(closest.picture.size.height / divisor),
+        width: Math.round(closest.picture.size.width / divisor),
+      };
+    }
+  };
+
+  /** Adds the picture for a scale factor, encoded or as a BGRA bitmap. */
+  readonly addRepresentation = (options: {
+    scaleFactor?: number;
+    width?: number;
+    height?: number;
+    buffer?: Uint8Array;
+    dataURL?: string;
+  }) => {
+    const { buffer, dataURL, height = 0, scaleFactor = 1, width = 0 } = options;
+    const image = (() => {
+      if (buffer !== undefined) {
+        return width > 0 && height > 0
+          ? fromBgra(buffer, { height, width })
+          : new NativeImage(pictureOf(buffer));
+      } else if (dataURL === undefined) {
+        throw new TypeError("addRepresentation takes a buffer or a dataURL");
+      } else {
+        return nativeImage.createFromDataURL(dataURL);
+      }
+    })();
+    this.#pictures.set(scaleFactor, image.#picture);
+  };
 
   readonly getAspectRatio = () => {
     const { height, width } = this.getSize();
     return height === 0 ? 1 : width / height;
   };
 
-  /** Pictures for each scale factor: one, at 1, on Domicile. */
-  readonly getScaleFactors = () => [1];
+  readonly getScaleFactors = () =>
+    [...this.#pictures.keys()].sort((a, b) => a - b);
 
-  readonly toPNG = (_options?: { scaleFactor?: number }) => {
-    if (this.#picture.kind === "png") {
-      return Buffer.from(this.#picture.bytes);
-    } else if (this.#picture.kind === "empty") {
+  readonly toPNG = (options?: { scaleFactor?: number }) => {
+    const picture = this.#closest(options?.scaleFactor ?? 1)?.picture ?? EMPTY;
+    if (picture.kind === "png") {
+      return Buffer.from(picture.bytes);
+    } else if (picture.kind === "empty") {
       return Buffer.alloc(0);
     } else {
-      return Buffer.from(encodePng(this.#bitmap()));
+      return Buffer.from(encodePng(bitmapOf(picture)));
     }
   };
 
@@ -205,18 +243,35 @@ export class NativeImage {
   readonly setTemplateImage = (_template: boolean) => undefined;
   readonly isTemplateImage = () => false;
 
-  readonly #bitmap = (): Bitmap => {
-    if (this.#picture.kind === "jpeg") {
-      throw new Error(
-        "nativeImage can't decode a JPEG on Domicile, so it can't resize, crop or bitmap one: use a PNG",
-      );
-    } else if (this.#picture.kind === "empty") {
-      return { height: 0, rgba: new Uint8Array(), width: 0 };
-    } else {
-      return decodePng(this.#picture.bytes);
-    }
-  };
+  /** The picture closest to 1. */
+  get #picture(): Picture {
+    return this.#closest(1)?.picture ?? EMPTY;
+  }
+
+  /** The picture whose scale factor is closest to `scaleFactor`. */
+  readonly #closest = (scaleFactor: number) =>
+    [...this.#pictures.entries()]
+      .map(([scale, picture]) => ({ picture, scale }))
+      .sort(
+        (a, b) =>
+          Math.abs(a.scale - scaleFactor) - Math.abs(b.scale - scaleFactor),
+      )[0];
+
+  readonly #bitmap = (): Bitmap => bitmapOf(this.#picture);
 }
+
+/** `picture`'s pixels: a JPEG's can't be had, as the host can't decode one. */
+const bitmapOf = (picture: Picture): Bitmap => {
+  if (picture.kind === "jpeg") {
+    throw new Error(
+      "nativeImage can't decode a JPEG on Domicile, so it can't resize, crop or bitmap one: use a PNG",
+    );
+  } else if (picture.kind === "empty") {
+    return { height: 0, rgba: new Uint8Array(), width: 0 };
+  } else {
+    return decodePng(picture.bytes);
+  }
+};
 
 const fromBitmap = (bitmap: Bitmap) =>
   new NativeImage({

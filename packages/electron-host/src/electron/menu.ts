@@ -175,7 +175,11 @@ export type MenuItem<Window> = {
   readonly submenu: Menu<Window> | undefined;
   readonly accelerator: string | undefined;
   readonly icon: NativeImage | undefined;
-  click: MenuItemOptions<Window>["click"];
+  /** The menu it was last put in. */
+  readonly menu: Menu<Window> | undefined;
+  /** Clicks it as its menu would: toggles it, then its click or its role. */
+  click: (event?: ClickEvent, window?: Window | null) => void;
+  registerAccelerator: boolean;
   label: string;
   sublabel: string;
   toolTip: string;
@@ -315,7 +319,8 @@ export const createMenu = <Window>(dependencies: MenuDependencies<Window>) => {
     readonly accelerator: string | undefined;
     readonly icon: NativeImage | undefined;
     readonly menus = new Set<Menu<Window>>();
-    click: MenuItemOptions<Window>["click"];
+    registerAccelerator: boolean;
+    readonly #onClick: MenuItemOptions<Window>["click"];
     #label: string;
     #sublabel: string;
     #toolTip: string;
@@ -347,7 +352,8 @@ export const createMenu = <Window>(dependencies: MenuDependencies<Window>) => {
         options.type ?? (this.submenu === undefined ? "normal" : "submenu");
       this.accelerator = options.accelerator ?? spec?.accelerator;
       this.icon = iconOf(options.icon);
-      this.click = options.click;
+      this.#onClick = options.click;
+      this.registerAccelerator = options.registerAccelerator ?? true;
       this.#label =
         options.label ??
         spec?.label.replace("{app}", dependencies.appName()) ??
@@ -360,6 +366,36 @@ export const createMenu = <Window>(dependencies: MenuDependencies<Window>) => {
       // A change inside its submenu is a change to every menu holding it.
       this.submenu?.on("changed", () => changed(this));
     }
+
+    get menu() {
+      return [...this.menus].at(-1);
+    }
+
+    click = (
+      event: ClickEvent = NO_KEYS,
+      window: Window | null = dependencies.focusedWindow(),
+    ) => {
+      if (this.type === "checkbox") {
+        this.checked = !this.checked;
+      } else if (this.type === "radio") {
+        for (const radio of this.menu === undefined
+          ? [this]
+          : radioGroup(this.menu, this)) {
+          radio.checked = radio === this;
+        }
+      }
+      if (this.#onClick !== undefined) {
+        this.#onClick(this, window, event);
+      } else if (this.role !== undefined) {
+        const action = dependencies.roles[this.role];
+        if (action === undefined) {
+          throw new Error(
+            `the ${JSON.stringify(this.role)} menu role is not carried out on Domicile yet`,
+          );
+        }
+        action(window);
+      }
+    };
 
     get label() {
       return this.#label;
@@ -568,26 +604,8 @@ export const createMenu = <Window>(dependencies: MenuDependencies<Window>) => {
       return;
     }
     const { item } = found;
-    if (!(item.enabled && item.visible)) {
-      return;
-    }
-    if (item.type === "checkbox") {
-      item.checked = !item.checked;
-    } else if (item.type === "radio") {
-      for (const radio of radioGroup(found.menu, item)) {
-        radio.checked = radio === item;
-      }
-    }
-    if (item.click !== undefined) {
-      item.click(item, window, event);
-    } else if (item.role !== undefined) {
-      const action = dependencies.roles[item.role];
-      if (action === undefined) {
-        throw new Error(
-          `the ${JSON.stringify(item.role)} menu role is not carried out on Domicile yet`,
-        );
-      }
-      action(window);
+    if (item.enabled && item.visible) {
+      item.click(event, window);
     }
   };
 

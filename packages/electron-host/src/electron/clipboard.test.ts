@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { encodePng } from "../png";
 import type { Ran, RunOptions } from "./clipboard";
-import { createClipboard } from "./clipboard";
+import { ClipboardItem, createClipboard } from "./clipboard";
 import { nativeImage } from "./native-image";
 
 const PNG = Buffer.from(
@@ -128,7 +128,7 @@ describe("writing", () => {
   it("writes one format, and refuses several rather than dropping some", () => {
     const { clipboard, ran } = setUp();
 
-    clipboard.write({ text: "hi" });
+    expect(clipboard.write({ text: "hi" })).toBeUndefined();
     expect(ran[0]?.command).toEqual([
       "wl-copy",
       "--type",
@@ -151,5 +151,97 @@ describe("writing", () => {
     expect(() => clipboard.writeText("hi")).toThrow(
       "wl-copy failed, so the clipboard can't be written: wl-copy: not found",
     );
+  });
+});
+
+describe("Electron 44's clipboard of ClipboardItems", () => {
+  it("reads what the clipboard holds as one item, each type pasted when asked", async () => {
+    const { clipboard, ran } = setUp({
+      "text/html": Buffer.from("<b>hi</b>"),
+      "text/plain": Buffer.from("hi"),
+    });
+
+    const items = await clipboard.read();
+    expect(items.map(({ types }) => types)).toEqual([
+      ["text/html", "text/plain"],
+    ]);
+    expect(ran).toHaveLength(1);
+    expect(await (await items[0]?.getType("text/html"))?.text()).toBe(
+      "<b>hi</b>",
+    );
+    expect(items[0]?.getType("image/png")).rejects.toThrow(
+      "The type image/png is not in this ClipboardItem",
+    );
+  });
+
+  it("reads no items from an empty clipboard", async () => {
+    const { clipboard } = setUp();
+
+    expect(await clipboard.read()).toEqual([]);
+  });
+
+  it("writes an item's one type, and refuses several rather than dropping some", async () => {
+    const { clipboard, ran } = setUp();
+
+    await clipboard.write([
+      new ClipboardItem({ "text/html": Promise.resolve("<b>hi</b>") }),
+    ]);
+    expect(ran.map(({ command }) => command)).toEqual([
+      ["wl-copy", "--type", "text/html"],
+    ]);
+    expect(ran[0]?.options.input).toEqual(Buffer.from("<b>hi</b>"));
+    expect(
+      clipboard.write([
+        new ClipboardItem({ "text/html": "<b>hi</b>", "text/plain": "hi" }),
+      ]),
+    ).rejects.toThrow("can't offer text/html and text/plain at once");
+  });
+
+  it("writes a bookmark as its link, as Linux has no bookmarks", async () => {
+    const { clipboard, ran } = setUp();
+
+    await clipboard.write([
+      new ClipboardItem({
+        "electron application/bookmark": { title: "A", url: "https://a/" },
+      }),
+    ]);
+
+    expect(ran[0]?.command).toEqual([
+      "wl-copy",
+      "--type",
+      "text/plain;charset=utf-8",
+    ]);
+    expect(ran[0]?.options.input).toEqual(Buffer.from("https://a/"));
+  });
+
+  it("works the primary selection through clipboard.selection", async () => {
+    const { clipboard, ran } = setUp({ "text/plain": Buffer.from("hi") });
+
+    expect(await clipboard.selection.readText()).toBe("hi");
+    expect(await clipboard.selection.has("text/plain")).toBe(true);
+    await clipboard.selection.writeText("there");
+    clipboard.selection.clear();
+    await clipboard.selection.read();
+
+    expect(ran.map(({ command }) => command[1])).toEqual([
+      "--primary",
+      "--primary",
+      "--primary",
+      "--primary",
+      "--primary",
+    ]);
+  });
+});
+
+describe(ClipboardItem, () => {
+  it("names its types and gives each as a Blob", async () => {
+    const item = new ClipboardItem({
+      "image/png": new Blob([PNG]),
+      "text/plain": "hi",
+    });
+
+    expect(item.types).toEqual(["image/png", "text/plain"]);
+    expect(await (await item.getType("text/plain")).text()).toBe("hi");
+    expect((await item.getType("image/png")).type).toBe("image/png");
   });
 });

@@ -108,4 +108,40 @@ describe("nativeImage", () => {
       "neither a PNG nor a JPEG",
     );
   });
+
+  it("keeps a picture per scale factor, giving the closest one", () => {
+    const image = nativeImage.createEmpty();
+    const twice = encodePng({
+      height: 2,
+      rgba: new Uint8Array(4 * 4 * 2).fill(255),
+      width: 4,
+    });
+
+    image.addRepresentation({ buffer: RED_BLUE_PNG, scaleFactor: 1 });
+    image.addRepresentation({
+      dataURL: `data:image/png;base64,${Buffer.from(twice).toString("base64")}`,
+      scaleFactor: 2,
+    });
+
+    expect(image.isEmpty()).toBe(false);
+    expect(image.getScaleFactors()).toEqual([1, 2]);
+    expect(image.getSize()).toEqual({ height: 1, width: 2 });
+    expect(image.getSize(2)).toEqual({ height: 2, width: 4 });
+    expect(image.toPNG({ scaleFactor: 1.8 })).toEqual(Buffer.from(twice));
+    expect(image.toPNG()).toEqual(RED_BLUE_PNG);
+  });
+
+  it("takes a representation as a BGRA bitmap, and sizes in DIPs from it", () => {
+    const image = nativeImage.createEmpty();
+
+    image.addRepresentation({
+      buffer: Buffer.alloc(4 * 2 * 4),
+      height: 2,
+      scaleFactor: 2,
+      width: 4,
+    });
+
+    expect(image.getScaleFactors()).toEqual([2]);
+    expect(image.getSize()).toEqual({ height: 1, width: 2 });
+  });
 });

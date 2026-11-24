@@ -84,6 +84,49 @@ describe("safeStorage with a keyring", () => {
   });
 });
 
+describe("safeStorage's async encryption", () => {
+  it("encrypts and decrypts as the sync calls do", async () => {
+    const { safeStorage } = setUp("hunter2");
+
+    expect(await safeStorage.isAsyncEncryptionAvailable()).toBe(true);
+    expect(await safeStorage.encryptStringAsync("hello")).toEqual(HELLO_V11);
+    expect(await safeStorage.decryptStringAsync(HELLO_V11)).toEqual({
+      result: "hello",
+      shouldReEncrypt: false,
+    });
+  });
+
+  it("asks for the keyring's key on text the hardcoded key encrypted", async () => {
+    const { safeStorage } = setUp("hunter2");
+
+    expect(await safeStorage.decryptStringAsync(HELLO_V10)).toEqual({
+      result: "hello",
+      shouldReEncrypt: true,
+    });
+  });
+
+  it("keeps the hardcoded key's text as it is with no keyring", async () => {
+    const { safeStorage } = setUp(undefined);
+    safeStorage.setUsePlainTextEncryption(true);
+
+    expect(await safeStorage.decryptStringAsync(HELLO_V10)).toEqual({
+      result: "hello",
+      shouldReEncrypt: false,
+    });
+  });
+
+  it("rejects, as the sync calls throw", () => {
+    const { safeStorage } = setUp(undefined);
+
+    expect(safeStorage.encryptStringAsync("hello")).rejects.toThrow(
+      "Encryption is not available",
+    );
+    expect(safeStorage.decryptStringAsync(HELLO_V11)).rejects.toThrow(
+      "Error while decrypting",
+    );
+  });
+});
+
 describe("safeStorage without a keyring", () => {
   it("has no encryption until the app opts into plain text", () => {
     const { safeStorage } = setUp(undefined);

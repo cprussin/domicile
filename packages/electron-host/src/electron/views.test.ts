@@ -286,6 +286,21 @@ describe("WebContentsView", () => {
     expect(exits).toEqual([0]);
   });
 
+  it("tells the app when its bounds change, and only then", () => {
+    const { WebContentsView } = setUp();
+    const view = new WebContentsView();
+    let changes = 0;
+    view.on("bounds-changed", () => {
+      changes += 1;
+    });
+
+    view.setBounds({ height: 10, width: 10, x: 0, y: 0 });
+    view.setBounds({ height: 10, width: 10, x: 0, y: 0 });
+    view.setBounds({ height: 20, width: 10, x: 0, y: 0 });
+
+    expect(changes).toBe(2);
+  });
+
   it("holds no views of its own, as only a window does on Domicile", () => {
     const { WebContentsView } = setUp();
     const view = new WebContentsView();

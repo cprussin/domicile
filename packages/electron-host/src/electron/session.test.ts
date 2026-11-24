@@ -57,6 +57,34 @@ describe(createSessions, () => {
     ]);
   });
 
+  it("keeps a session made from a path, once per path", () => {
+    const { sessions } = setUp();
+
+    const session = sessions.fromPath("/home/me/.config/App/Partitions/a");
+
+    expect(sessions.fromPath("/home/me/.config/App/Partitions/a")).toBe(
+      session,
+    );
+    expect(session.isPersistent()).toBe(true);
+    expect(sessionPartition(session)).toBe(
+      "persist:/home/me/.config/App/Partitions/a",
+    );
+    expect(() => sessions.fromPath("Partitions/a")).toThrow(
+      "An absolute path is required",
+    );
+  });
+
+  it("keeps whether to check spelling, by method or property", () => {
+    const { sessions } = setUp();
+    const session = sessions.defaultSession;
+
+    session.spellCheckerEnabled = false;
+
+    expect(session.isSpellCheckerEnabled()).toBe(false);
+    session.setSpellCheckerEnabled(true);
+    expect(session.spellCheckerEnabled).toBe(true);
+  });
+
   it("has service workers and a net log for Slack to read, which say what the engine doesn't do", async () => {
     const { sessions } = setUp();
     const { netLog, serviceWorkers } = sessions.defaultSession;

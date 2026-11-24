@@ -565,6 +565,21 @@ describe(createBrowserWindow, () => {
     ]);
   });
 
+  it("gives its contentView, its accessible title, and leaves stacking to the desktop", () => {
+    const { BrowserWindow, sent } = setUp();
+    const window = new BrowserWindow();
+    sent.length = 0;
+
+    window.accessibleTitle = "Notes, 3 unread";
+    window.moveTop();
+    window.moveAbove("window:1:0");
+
+    expect(window.getContentView()).toBe(window.contentView);
+    expect(window.accessibleTitle).toBe("Notes, 3 unread");
+    expect(new BrowserWindow().accessibleTitle).toBe("");
+    expect(sent).toEqual([]);
+  });
+
   it("puts the user's close to the app's close listeners", () => {
     const { BrowserWindow, say, sent } = setUp();
     const kept = new BrowserWindow();
@@ -945,6 +960,30 @@ describe(createBrowserWindow, () => {
     expect(sent).toEqual([
       { args: [1], channel: "ping", type: "ipc_send", window: 1 },
     ]);
+  });
+
+  it("finds a page by its frame, and says whether it is a window's or a view's", () => {
+    const { BrowserWindow, WebContentsView, webContents } = setUp();
+    const window = new BrowserWindow();
+    const view = new WebContentsView();
+
+    expect(webContents.fromFrame(window.webContents.mainFrame)).toBe(
+      window.webContents,
+    );
+    expect(window.webContents.getType()).toBe("window");
+    expect(view.webContents.getType()).toBe("browserView");
+  });
+
+  it("focuses its page, and leaves blurring it to the desktop", () => {
+    const { BrowserWindow, sent } = setUp();
+    const window = new BrowserWindow();
+    void window.loadURL("https://a.test/");
+    sent.length = 0;
+
+    window.focusOnWebView();
+    window.blurWebView();
+
+    expect(sent).toEqual([{ type: "focus_window", window: 1 }]);
   });
 
   it("drops what it sends before its page opens, as Electron has no page to give it", () => {

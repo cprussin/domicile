@@ -9,10 +9,16 @@ const schema = z.object({
   DOMICILE_ELECTRON_SOCK: z.string().optional(),
   /** systemd's `<device>:<inode>` of the journal stream stderr may be. */
   JOURNAL_STREAM: z.string().optional(),
+  /** The compositor's socket, where `shell.beep` rings the bell. */
+  WAYLAND_DISPLAY: z.string().optional(),
   XDG_CACHE_HOME: z.string().optional(),
   XDG_CONFIG_HOME: z.string().optional(),
   /** The desktop, by which Chromium picks where safeStorage keeps its key. */
   XDG_CURRENT_DESKTOP: z.string().optional(),
+  /** Where the home trash is, for `shell.trashItem`. */
+  XDG_DATA_HOME: z.string().optional(),
+  /** Where the compositor's socket is. */
+  XDG_RUNTIME_DIR: z.string().optional(),
   /** Where the apps' own schemes are kept for the desktop's next start. */
   XDG_STATE_HOME: z.string().optional(),
 });

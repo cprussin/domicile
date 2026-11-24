@@ -67,13 +67,21 @@ for (const [name, { kind, methods, properties }] of Object.entries(surface)) {
 electron.app.whenReady().then(() => {
   const window = new electron.BrowserWindow({ show: false });
   const session = electron.session.defaultSession;
+  // An item with what Electron leaves unset when it isn't given, in a menu.
+  const menuItem = new electron.MenuItem({
+    accelerator: "CmdOrCtrl+E",
+    icon: electron.nativeImage.createEmpty(),
+    label: "x",
+    role: "editMenu",
+  });
+  new electron.Menu().append(menuItem);
   const made = {
     BaseWindow: window,
     BrowserView: new electron.BrowserView(),
     BrowserWindow: window,
     Cookies: session.cookies,
     Menu: new electron.Menu(),
-    MenuItem: new electron.MenuItem({ label: "x" }),
+    MenuItem: menuItem,
     MessagePortMain: new electron.MessageChannelMain().port1,
     NativeImage: electron.nativeImage.createEmpty(),
     NavigationHistory: window.webContents.navigationHistory,

@@ -110,6 +110,29 @@ describe(createNotification, () => {
     });
   });
 
+  it("asks the desktop for the app's sound, by name or file", async () => {
+    const { calls, Notification, settle } = setUp();
+
+    new Notification({ sound: "message-new-instant", title: "a" }).show();
+    new Notification({ sound: "/opt/app/ping.oga", title: "b" }).show();
+    await settle();
+
+    expect(calls.map(({ hints }) => hints)).toMatchObject([
+      { "sound-name": ["s", "message-new-instant"] },
+      { "sound-file": ["s", "/opt/app/ping.oga"] },
+    ]);
+  });
+
+  it("keeps a close button's text, which the desktop's notifications don't show", () => {
+    const { Notification } = setUp();
+
+    expect(
+      new Notification({ closeButtonText: "Dismiss" }).closeButtonText,
+    ).toBe("Dismiss");
+    expect(new Notification().closeButtonText).toBe("");
+    expect(new Notification().sound).toBe("");
+  });
+
   it("labels a reply with no placeholder Reply, as macOS does", async () => {
     const { calls, Notification, settle } = setUp();
 

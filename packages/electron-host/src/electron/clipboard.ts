@@ -6,6 +6,11 @@
 //
 // `wl-copy` offers one type per copy, so a `write` of more than one format
 // throws, naming the formats, rather than dropping some.
+//
+// Electron 44 made the clipboard ClipboardItems, read and written whole, and
+// gave Linux `clipboard.selection` for the primary selection. `read()` with
+// no format and `write` of an array are that API; the rest also answer as
+// the earlier Electron's did, for apps written for it.
 
 import type { NativeImage } from "./native-image";
 import { nativeImage } from "./native-image";
@@ -42,6 +47,60 @@ const PNG = "image/png";
 /** What `wl-paste` says when there's nothing to paste of a type. */
 const NOTHING =
   /Nothing is copied|No selection|No suitable type of content copied/;
+
+/** Electron's bookmark, which Linux keeps as its link. */
+export type ClipboardBookmark = {
+  readonly title: string;
+  readonly url: string;
+};
+
+/** The type Electron names a bookmark by. */
+const BOOKMARK = "electron application/bookmark";
+
+/** What a `ClipboardItem` holds of one type. */
+type ClipboardValue =
+  | string
+  | ClipboardBookmark
+  | Blob
+  | PromiseLike<Blob | string>;
+
+/** Electron's `ClipboardItem`: one entry of the clipboard, by MIME type. */
+export class ClipboardItem {
+  readonly types: string[];
+  readonly #items: Readonly<Record<string, ClipboardValue>>;
+
+  constructor(items: Readonly<Record<string, ClipboardValue>>) {
+    this.#items = { ...items };
+    this.types = Object.keys(items);
+  }
+
+  /** The item's `type` as a Blob, or a bookmark's title and link. */
+  getType(type: typeof BOOKMARK): Promise<ClipboardBookmark>;
+  getType(type: string): Promise<Blob>;
+  async getType(type: string): Promise<Blob | ClipboardBookmark> {
+    const value = this.#items[type];
+    if (value === undefined) {
+      throw new Error(`The type ${type} is not in this ClipboardItem`);
+    } else {
+      const held = await value;
+      return typeof held === "string" || held instanceof Blob
+        ? new Blob([held], { type })
+        : held;
+    }
+  }
+}
+
+/** `clipboard.read`: the whole clipboard's items, or one format's text. */
+type Read = {
+  (): Promise<ClipboardItem[]>;
+  (format: string): string;
+};
+
+/** `clipboard.write`: whole items, or the earlier Electron's formats. */
+type Write = {
+  (items: readonly ClipboardItem[], type?: ClipboardType): Promise<void>;
+  (data: ClipboardData, type?: ClipboardType): void;
+};
 
 export type ClipboardData = {
   text?: string | undefined;
@@ -102,6 +161,79 @@ export const createClipboard = ({ run }: ClipboardDependencies) => {
     writeType(TEXT, Buffer.from(text), type);
   };
 
+  const writeData = (data: ClipboardData, type?: ClipboardType) => {
+    const formats = Object.entries(data).filter(
+      ([, value]) => value !== undefined,
+    );
+    if (formats.length > 1) {
+      throw new Error(
+        `clipboard.write can't offer ${formats.map(([format]) => format).join(" and ")} at once on Domicile yet: wl-copy offers one type per copy`,
+      );
+    }
+    const { bookmark, html, image, rtf, text } = data;
+    if (text !== undefined) {
+      writeText(text, type);
+    } else if (html !== undefined) {
+      writeType(HTML, Buffer.from(html), type);
+    } else if (image !== undefined) {
+      writeType(PNG, image.toPNG(), type);
+    } else if (rtf !== undefined) {
+      writeType(RTF, Buffer.from(rtf), type);
+    } else if (bookmark !== undefined) {
+      writeText(bookmark, type);
+    }
+  };
+
+  /** What the clipboard holds as one item, each type pasted when asked. */
+  const readItems = (type: ClipboardType | undefined) =>
+    Promise.resolve().then(() => {
+      const types = availableFormats(type);
+      return types.length === 0
+        ? []
+        : [new PastedItem(types, (mime) => pasted(mime, type))];
+    });
+
+  /** `mime`'s bytes, which the clipboard listed as it was read. */
+  const pasted = (mime: string, type: ClipboardType | undefined) => {
+    const bytes = paste(["--type", mime], type);
+    if (bytes === undefined) {
+      throw new Error(`The clipboard no longer holds ${mime}`);
+    } else {
+      return new Blob([bytes], { type: mime });
+    }
+  };
+
+  const writeItems = async (
+    items: readonly ClipboardItem[],
+    type: ClipboardType | undefined,
+  ) => {
+    const entries = items.flatMap((item) =>
+      item.types.map((mime) => ({ item, mime })),
+    );
+    const [only, ...more] = entries;
+    if (only === undefined) {
+      copy(["--clear"], type);
+    } else if (more.length > 0) {
+      throw new Error(
+        `clipboard.write can't offer ${entries.map(({ mime }) => mime).join(" and ")} at once on Domicile yet: wl-copy offers one type per copy`,
+      );
+    } else if (only.mime === BOOKMARK) {
+      writeText((await only.item.getType(BOOKMARK)).url, type);
+    } else {
+      const held = await only.item.getType(only.mime);
+      writeType(only.mime, new Uint8Array(await held.arrayBuffer()), type);
+    }
+  };
+
+  const read: Read = ((format?: string) =>
+    format === undefined ? readItems(undefined) : readType(format)) as Read;
+
+  const write: Write = ((
+    data: ClipboardData | readonly ClipboardItem[],
+    type?: ClipboardType,
+  ) =>
+    isItems(data) ? writeItems(data, type) : writeData(data, type)) as Write;
+
   return {
     availableFormats,
 
@@ -112,7 +244,7 @@ export const createClipboard = ({ run }: ClipboardDependencies) => {
     has: (format: string, type?: ClipboardType) =>
       availableFormats(type).includes(format),
 
-    read: (format: string) => readType(format),
+    read,
 
     readBookmark: () => ({ title: "", url: "" }),
 
@@ -135,28 +267,27 @@ export const createClipboard = ({ run }: ClipboardDependencies) => {
 
     readText: (type?: ClipboardType) => readType(ANY_TEXT, type),
 
-    write: (data: ClipboardData, type?: ClipboardType) => {
-      const formats = Object.entries(data).filter(
-        ([, value]) => value !== undefined,
-      );
-      if (formats.length > 1) {
-        throw new Error(
-          `clipboard.write can't offer ${formats.map(([format]) => format).join(" and ")} at once on Domicile yet: wl-copy offers one type per copy`,
-        );
-      }
-      const { bookmark, html, image, rtf, text } = data;
-      if (text !== undefined) {
-        writeText(text, type);
-      } else if (html !== undefined) {
-        writeType(HTML, Buffer.from(html), type);
-      } else if (image !== undefined) {
-        writeType(PNG, image.toPNG(), type);
-      } else if (rtf !== undefined) {
-        writeType(RTF, Buffer.from(rtf), type);
-      } else if (bookmark !== undefined) {
-        writeText(bookmark, type);
-      }
+    /** The primary selection, as Electron 44 gives it on Linux. */
+    selection: {
+      clear: () => {
+        copy(["--clear"], "selection");
+      },
+      has: (mime: string) =>
+        Promise.resolve().then(() =>
+          availableFormats("selection").includes(mime),
+        ),
+      read: () => readItems("selection"),
+      readText: () =>
+        Promise.resolve().then(() => readType(ANY_TEXT, "selection")),
+      write: (items: readonly ClipboardItem[]) =>
+        writeItems(items, "selection"),
+      writeText: (text: string) =>
+        Promise.resolve().then(() => {
+          writeText(text, "selection");
+        }),
     },
+
+    write,
 
     writeBookmark: (_title: string, url: string, type?: ClipboardType) => {
       writeText(url, type);
@@ -184,3 +315,25 @@ export const createClipboard = ({ run }: ClipboardDependencies) => {
     writeText,
   };
 };
+
+const isItems = (
+  data: ClipboardData | readonly ClipboardItem[],
+): data is readonly ClipboardItem[] => Array.isArray(data);
+
+/** An item `clipboard.read` gives: each of its types pasted when asked. */
+class PastedItem extends ClipboardItem {
+  readonly #paste: (mime: string) => Blob;
+
+  constructor(types: readonly string[], paste: (mime: string) => Blob) {
+    super(Object.fromEntries(types.map((mime) => [mime, ""])));
+    this.#paste = paste;
+  }
+
+  override getType(type: typeof BOOKMARK): Promise<ClipboardBookmark>;
+  override getType(type: string): Promise<Blob>;
+  override getType(type: string): Promise<Blob | ClipboardBookmark> {
+    return this.types.includes(type)
+      ? Promise.resolve().then(() => this.#paste(type))
+      : super.getType(type);
+  }
+}

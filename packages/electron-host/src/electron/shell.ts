@@ -1,5 +1,7 @@
 // The stand-in for Electron's `shell`: links and files open with
 // `domicile open`, which picks the user's default app as the desktop does.
+// Trashed items go to the desktop's trash, and a beep rings the compositor's
+// bell for the shell to sound.
 
 import { dirname } from "node:path";
 import { Priority, say } from "../journal";
@@ -9,8 +11,16 @@ export type Run = (
   command: readonly string[],
 ) => Promise<{ readonly code: number; readonly output: string }>;
 
+/** What the shell reaches on the desktop besides commands. */
+export type ShellDesktop = {
+  /** Moves `path` to the trash. */
+  readonly trash: (path: string) => Promise<void>;
+  /** Rings the compositor's bell, for no window. */
+  readonly ringBell: () => Promise<void>;
+};
+
 /** Electron's `shell`, on Domicile. */
-export const createShell = (run: Run) => {
+export const createShell = (run: Run, desktop: ShellDesktop) => {
   /** Opens `target` with `domicile open`: why it couldn't, or undefined. */
   const open = async (target: string) => {
     const { code, output } = await run(["domicile", "open", target]);
@@ -23,6 +33,16 @@ export const createShell = (run: Run) => {
   };
 
   return {
+    beep: () => {
+      desktop.ringBell().catch((error: unknown) => {
+        // Electron's beep answers nothing, so the log is the only place
+        // for why.
+        say(
+          Priority.Error,
+          `electron-host: couldn't ring the bell: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+    },
     /** Opens `url` in the app the user opens its kind of link with. */
     openExternal: async (url: string, _options?: { activate?: boolean }) => {
       const why = await open(url);
@@ -47,5 +67,6 @@ export const createShell = (run: Run) => {
         },
       );
     },
+    trashItem: (path: string) => desktop.trash(path),
   };
 };

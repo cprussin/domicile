@@ -4,6 +4,7 @@
 // each field.
 
 import { EventEmitter } from "node:events";
+import { isAbsolute } from "node:path";
 
 /** A hint's D-Bus signature and value. */
 export type Hint =
@@ -63,6 +64,9 @@ export type NotificationOptions = {
   urgency?: "low" | "normal" | "critical" | undefined;
   timeoutType?: "default" | "never" | undefined;
   actions?: readonly NotificationAction[] | undefined;
+  /** A sound theme's name, or a sound file's path. */
+  sound?: string | undefined;
+  closeButtonText?: string | undefined;
 };
 
 /** What the server says the user did with a notification. */
@@ -105,6 +109,9 @@ export const createNotification = (
     urgency: "low" | "normal" | "critical";
     timeoutType: "default" | "never";
     actions: readonly NotificationAction[];
+    sound: string;
+    /** Kept for the app: the desktop's notifications have no close button text. */
+    closeButtonText: string;
     readonly #icon: string;
     #id = 0;
 
@@ -124,6 +131,8 @@ export const createNotification = (
       this.urgency = options.urgency ?? "normal";
       this.timeoutType = options.timeoutType ?? "default";
       this.actions = options.actions ?? [];
+      this.sound = options.sound ?? "";
+      this.closeButtonText = options.closeButtonText ?? "";
       this.#icon = options.icon ?? "";
     }
 
@@ -212,6 +221,7 @@ export const createNotification = (
         "desktop-entry": ["s", app.appId],
         ...(this.#icon === "" ? {} : { "image-path": ["s", this.#icon] }),
         ...(this.silent ? { "suppress-sound": ["b", true] } : {}),
+        ...soundHint(this.sound),
         urgency: ["y", URGENCY[this.urgency]],
       },
       icon: this.#icon,
@@ -222,4 +232,15 @@ export const createNotification = (
   }
 
   return Notification;
+};
+
+/** The hint naming `sound`: a file by its path, else a sound theme's name. */
+const soundHint = (sound: string): Readonly<Record<string, Hint>> => {
+  if (sound === "") {
+    return {};
+  } else {
+    return isAbsolute(sound)
+      ? { "sound-file": ["s", sound] }
+      : { "sound-name": ["s", sound] };
+  }
 };

@@ -2,6 +2,7 @@
 // requests its pages make, answered over the engine. See "Requests" in
 // docs/architecture/ELECTRON-APPS.md.
 
+import { isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** What the host asks the engine about a session's protocols. */
@@ -68,6 +69,26 @@ export type Protocol = {
   readonly handle: (scheme: string, handler: ProtocolHandler) => void;
   readonly unhandle: (scheme: string) => void;
   readonly isProtocolHandled: (scheme: string) => boolean;
+  /** Asks `handler` for the scheme ahead of its own: false when one is. */
+  readonly intercept: (scheme: string, handler: ProtocolHandler) => boolean;
+  readonly unintercept: (scheme: string) => boolean;
+  readonly isIntercepted: (scheme: string) => boolean;
+  /** Serves the scheme from directories on disk, as its one handler. */
+  readonly registerSource: (scheme: string, source: ProtocolSource) => void;
+  readonly getSource: (scheme: string) => ProtocolSource | null;
+};
+
+/** Electron's `ProtocolSource`: which directory serves which URLs. */
+export type ProtocolSource = {
+  readonly routes: readonly {
+    readonly match?: { readonly host?: string; readonly path?: string };
+    readonly source: {
+      readonly type: string;
+      readonly root: string;
+      readonly index?: string;
+      readonly headers?: Readonly<Record<string, string>>;
+    };
+  }[];
 };
 
 /**
@@ -76,34 +97,82 @@ export type Protocol = {
  * does, until the app handles `file:` itself. `send` asks the engine.
  */
 export const createProtocols = (send: (request: ProtocolRequest) => void) => {
-  const sessions = new Map<string, Map<string, ProtocolHandler>>();
+  const sessions = new Map<string, SessionHandlers>();
 
   const forSession = (session: string) => {
-    const handlers =
+    const { handlers, interceptors, sources } =
       sessions.get(session) ??
       (() => {
-        const made = new Map<string, ProtocolHandler>();
+        const made = {
+          handlers: new Map(),
+          interceptors: new Map(),
+          sources: new Map(),
+        };
         sessions.set(session, made);
         send({ scheme: "file", session, type: "handle_protocol" });
         return made;
       })();
+    /** Whether the engine sends the app `scheme`'s requests. file: always. */
+    const reaches = (scheme: string) =>
+      handled(scheme) || interceptors.has(scheme);
+    /** Whether the scheme has a handler or a source. file: always. */
+    const handled = (scheme: string) =>
+      scheme === "file" || handlers.has(scheme) || sources.has(scheme);
+    /** Adds `handler` to `table`, telling the engine if it now reaches. */
+    const add = <T>(table: Map<string, T>, scheme: string, handler: T) => {
+      const reached = reaches(scheme);
+      table.set(scheme, handler);
+      if (!reached) {
+        send({ scheme, session, type: "handle_protocol" });
+      }
+    };
+    /** Removes `scheme` from `table`, telling the engine if it no longer reaches. */
+    const remove = <T>(table: Map<string, T>, scheme: string) => {
+      const had = table.delete(scheme);
+      if (had && !reaches(scheme)) {
+        send({ scheme, session, type: "unhandle_protocol" });
+      }
+      return had;
+    };
     const protocol: Protocol = {
+      getSource: (scheme) => sources.get(scheme) ?? null,
       handle: (scheme, handler) => {
-        if (handlers.has(scheme)) {
+        if (handlers.has(scheme) || sources.has(scheme)) {
           throw new Error(`Failed to register protocol: ${scheme}`);
         }
-        handlers.set(scheme, handler);
-        // file: is handled from the start.
-        if (scheme !== "file") {
-          send({ scheme, session, type: "handle_protocol" });
-        }
+        add(handlers, scheme, handler);
       },
-      isProtocolHandled: (scheme) => scheme === "file" || handlers.has(scheme),
+      intercept: (scheme, handler) => {
+        const free = !interceptors.has(scheme);
+        if (free) {
+          add(interceptors, scheme, handler);
+        }
+        return free;
+      },
+      isIntercepted: (scheme) => interceptors.has(scheme),
+      isProtocolHandled: handled,
+      registerSource: (scheme, source) => {
+        if (handlers.has(scheme) || sources.has(scheme)) {
+          throw new Error(`Failed to register protocol: ${scheme}`);
+        }
+        for (const { source: route } of source.routes) {
+          if (route.type !== "directory") {
+            throw new TypeError(
+              `a source's type must be "directory", not ${JSON.stringify(route.type)}`,
+            );
+          } else if (!isAbsolute(route.root)) {
+            throw new TypeError(
+              `a source's root must be an absolute path: ${route.root}`,
+            );
+          }
+        }
+        add(sources, scheme, source);
+      },
       unhandle: (scheme) => {
-        if (handlers.delete(scheme) && scheme !== "file") {
-          send({ scheme, session, type: "unhandle_protocol" });
-        }
+        remove(handlers, scheme);
+        remove(sources, scheme);
       },
+      unintercept: (scheme) => remove(interceptors, scheme),
     };
     return withLegacyProtocols(protocol);
   };
@@ -112,39 +181,118 @@ export const createProtocols = (send: (request: ProtocolRequest) => void) => {
   const answer = async (incoming: IncomingRequest) => {
     const { request } = incoming;
     const scheme = new URL(incoming.url).protocol.slice(0, -1);
-    if (scheme === "file" && !sessions.get(incoming.session)?.has("file")) {
-      // A file: URL naming another host has no path here.
-      let path: string;
-      try {
-        path = fileURLToPath(incoming.url);
-      } catch (error) {
-        send({ error: whyFailed(error), request, type: "protocol_response" });
-        return;
-      }
-      // The engine reads it, ranges and all.
-      send({
-        file: path,
-        headers: [],
-        request,
-        status: 200,
-        type: "protocol_response",
-      });
-      return;
-    }
-    const handler = sessions.get(incoming.session)?.get(scheme);
-    if (handler === undefined) {
+    const handlers = sessions.get(incoming.session);
+    const handler =
+      handlers?.interceptors.get(scheme) ?? handlers?.handlers.get(scheme);
+    const source = handlers?.sources.get(scheme);
+    if (handler !== undefined) {
+      await respond(send, request, scheme, () => handler(asRequest(incoming)));
+    } else if (source !== undefined) {
+      send(fromSource(source, incoming));
+    } else if (scheme === "file") {
+      send(fromFileSystem(incoming));
+    } else {
       // The app unhandled the scheme as the page asked.
       send({
         error: `nothing handles ${scheme}: in this session`,
         request,
         type: "protocol_response",
       });
-    } else {
-      await respond(send, request, scheme, () => handler(asRequest(incoming)));
     }
   };
 
   return { answer, forSession };
+};
+
+/** The answer `source` gives `incoming`: a file the engine reads, or none. */
+const fromSource = (
+  source: ProtocolSource,
+  incoming: IncomingRequest,
+): ProtocolRequest => {
+  const file =
+    incoming.method === "GET" || incoming.method === "HEAD"
+      ? sourceFile(source, new URL(incoming.url))
+      : undefined;
+  return file === undefined
+    ? {
+        error: FILE_NOT_FOUND,
+        request: incoming.request,
+        type: "protocol_response",
+      }
+    : {
+        file: file.path,
+        headers: file.headers,
+        request: incoming.request,
+        status: 200,
+        type: "protocol_response",
+      };
+};
+
+/**
+ * A `file:` URL's file, for the engine to read, ranges and all. One naming
+ * another host has no path here.
+ */
+const fromFileSystem = (incoming: IncomingRequest): ProtocolRequest => {
+  const { request } = incoming;
+  try {
+    return {
+      file: fileURLToPath(incoming.url),
+      headers: [],
+      request,
+      status: 200,
+      type: "protocol_response",
+    };
+  } catch (error) {
+    return { error: whyFailed(error), request, type: "protocol_response" };
+  }
+};
+
+/** A session's handlers and sources, and its interceptors that come before them. */
+type SessionHandlers = {
+  readonly handlers: Map<string, ProtocolHandler>;
+  readonly interceptors: Map<string, ProtocolHandler>;
+  readonly sources: Map<string, ProtocolSource>;
+};
+
+/** What a source answers for what it doesn't serve, as Chromium names it. */
+const FILE_NOT_FOUND = "net::ERR_FILE_NOT_FOUND";
+
+/**
+ * The file `source` serves for `url`, and the headers it adds, or none. A
+ * route with a host wins over one without, then the longest path; the rest
+ * of the URL's path is a path inside its root, which it can't leave.
+ */
+const sourceFile = (source: ProtocolSource, url: URL) => {
+  const route = source.routes
+    .map(({ match, source: served }) => ({
+      host: match?.host,
+      path: match?.path ?? "/",
+      served,
+    }))
+    .filter(
+      ({ host, path }) =>
+        (host === undefined || host.toLowerCase() === url.host.toLowerCase()) &&
+        url.pathname.startsWith(path),
+    )
+    .sort(
+      (a, b) =>
+        Number(b.host !== undefined) - Number(a.host !== undefined) ||
+        b.path.length - a.path.length,
+    )[0];
+  if (route === undefined) {
+    return undefined;
+  } else {
+    const rest = decodeURIComponent(url.pathname.slice(route.path.length));
+    const index = route.served.index ?? "index.html";
+    const wantsIndex = rest === "" || rest.endsWith("/");
+    const path = join(route.served.root, rest, wantsIndex ? index : "");
+    const inside = relative(route.served.root, path);
+    const leaves =
+      inside === "" || inside === ".." || inside.startsWith(`..${sep}`);
+    return leaves || (wantsIndex && index === "")
+      ? undefined
+      : { headers: Object.entries(route.served.headers ?? {}), path };
+  }
 };
 
 /** What `protocol.registerSchemesAsPrivileged` is given for each scheme. */
@@ -328,41 +476,38 @@ export const legacyResponse = async (
 };
 
 /**
- * Electron's `register*Protocol`, `unregisterProtocol` and
- * `isProtocolRegistered`, which apps written before `protocol.handle` call,
- * on top of `protocol`'s `handle`.
+ * Electron's `register*Protocol`, `intercept*Protocol` and their undoing and
+ * asking, which apps written before `protocol.handle` call, on top of
+ * `protocol`'s `handle` and `intercept`.
  */
 export const withLegacyProtocols = <P extends Protocol>(protocol: P) => {
   const legacy = new Set<string>();
   const register =
-    (kind: LegacyKind) =>
-    (
-      scheme: string,
-      handler: (
-        request: unknown,
-        callback: (answer: LegacyAnswer) => void,
-      ) => void,
-    ) => {
+    (kind: LegacyKind) => (scheme: string, handler: LegacyHandler) => {
       if (protocol.isProtocolHandled(scheme) && scheme !== "file") {
         return false;
       }
-      protocol.handle(scheme, async (request) => {
-        const asked = await legacyRequest(request);
-        const answer = await new Promise<LegacyAnswer>((resolve) => {
-          handler(asked, resolve);
-        });
-        return legacyResponse(kind, answer);
-      });
+      protocol.handle(scheme, fromLegacy(kind, handler));
       legacy.add(scheme);
       return true;
     };
+  const intercept =
+    (kind: LegacyKind) => (scheme: string, handler: LegacyHandler) =>
+      protocol.intercept(scheme, fromLegacy(kind, handler));
   return Object.assign(protocol, {
+    interceptBufferProtocol: intercept("buffer"),
+    interceptFileProtocol: intercept("file"),
+    interceptHttpProtocol: intercept("http"),
+    interceptStreamProtocol: intercept("stream"),
+    interceptStringProtocol: intercept("string"),
+    isProtocolIntercepted: protocol.isIntercepted,
     isProtocolRegistered: (scheme: string) => legacy.has(scheme),
     registerBufferProtocol: register("buffer"),
     registerFileProtocol: register("file"),
     registerHttpProtocol: register("http"),
     registerStreamProtocol: register("stream"),
     registerStringProtocol: register("string"),
+    uninterceptProtocol: protocol.unintercept,
     unregisterProtocol: (scheme: string) => {
       const had = legacy.delete(scheme);
       if (had) {
@@ -372,3 +517,20 @@ export const withLegacyProtocols = <P extends Protocol>(protocol: P) => {
     },
   });
 };
+
+/** An Electron 24-style handler, which answers through its callback. */
+type LegacyHandler = (
+  request: unknown,
+  callback: (answer: LegacyAnswer) => void,
+) => void;
+
+/** `protocol.handle`'s handler for a legacy handler answering `kind`. */
+const fromLegacy =
+  (kind: LegacyKind, handler: LegacyHandler): ProtocolHandler =>
+  async (request) => {
+    const asked = await legacyRequest(request);
+    const answer = await new Promise<LegacyAnswer>((resolve) => {
+      handler(asked, resolve);
+    });
+    return legacyResponse(kind, answer);
+  };

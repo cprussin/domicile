@@ -220,6 +220,49 @@ describe("a click", () => {
   });
 });
 
+describe("a MenuItem's own members", () => {
+  it("clicks as a menu does when the app calls its click", () => {
+    const { Menu } = setUp();
+    const heard: unknown[] = [];
+    const menu = Menu.buildFromTemplate([
+      { checked: true, label: "Small", type: "radio" },
+      {
+        click: (item, window, event) =>
+          heard.push(item.label, window, event.triggeredByAccelerator),
+        label: "Large",
+        type: "radio",
+      },
+    ]);
+    const [small, large] = menu.items;
+
+    large?.click(
+      {
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+        triggeredByAccelerator: true,
+      },
+      null,
+    );
+
+    expect(heard).toEqual(["Large", null, true]);
+    expect([small?.checked, large?.checked]).toEqual([false, true]);
+  });
+
+  it("knows the menu it is in and whether to register its accelerator", () => {
+    const { Menu, MenuItem } = setUp();
+    const item = new MenuItem({ label: "Find", registerAccelerator: false });
+    const menu = new Menu();
+
+    menu.append(item);
+
+    expect(item.menu).toBe(menu);
+    expect(item.registerAccelerator).toBe(false);
+    expect(new MenuItem({ label: "Open" }).registerAccelerator).toBe(true);
+  });
+});
+
 describe("a menu that changes", () => {
   it("says so when an item changes or one is added", () => {
     const { Menu, MenuItem } = setUp();

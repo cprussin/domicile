@@ -445,6 +445,9 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     };
 
     readonly getTitle = () => this.owner.getTitle();
+    /** A window's page, or a view's. */
+    readonly getType = () =>
+      this.owner instanceof BrowserWindow ? "window" : "browserView";
     readonly focus = () => {
       if (this.owner instanceof BrowserWindow) {
         this.owner.focus();
@@ -1249,13 +1252,23 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
 
     /** Where the app asks for it in its window, in CSS pixels. */
     readonly setBounds = (bounds: Rectangle) => {
-      this.#bounds = {
+      const next = {
         height: bounds.height,
         width: bounds.width,
         x: bounds.x,
         y: bounds.y,
       };
+      const from = this.#bounds;
+      this.#bounds = next;
       this.holder?.placeViews();
+      if (
+        next.x !== from.x ||
+        next.y !== from.y ||
+        next.width !== from.width ||
+        next.height !== from.height
+      ) {
+        this.emit("bounds-changed");
+      }
     };
 
     readonly getBounds = (): Rectangle => this.#bounds;
@@ -1271,6 +1284,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     /** The shell draws views; the app's color and corners are its own look. */
     readonly setBackgroundColor = (_color: string) => undefined;
     readonly setBorderRadius = (_radius: number) => undefined;
+    readonly setBackgroundBlur = (_blur: number) => undefined;
 
     readonly children: readonly WebContentsView[] = [];
 
@@ -1420,6 +1434,12 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       view.holder ?? null;
 
     readonly contentView = new ContentView(this);
+    readonly getContentView = () => this.contentView;
+    /**
+     * Kept for the app: the desktop names a window to accessibility tools by
+     * the title it shows.
+     */
+    accessibleTitle = "";
     #shown = false;
     /** Hidden by the app: open, its page running, out of the desk's sight. */
     #hidden: boolean;
@@ -1505,6 +1525,11 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       }
     };
 
+    /** Gives the window's own page the keyboard, as focusing the window does. */
+    readonly focusOnWebView = () => {
+      this.focus();
+    };
+
     /** Closes the window once its page agrees, unless a `close` listener prevents it. */
     readonly close = () => {
       if (!this.destroyed) {
@@ -1588,10 +1613,13 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
     readonly isClosable = () => true;
     readonly isVisibleOnAllWorkspaces = () => false;
     readonly blur = () => undefined;
+    readonly blurWebView = () => undefined;
     readonly center = () => undefined;
     readonly setSimpleFullScreen = (_flag: boolean) => undefined;
     readonly setKiosk = (_flag: boolean) => undefined;
     readonly setAlwaysOnTop = (_flag: boolean, _level?: string) => undefined;
+    readonly moveTop = () => undefined;
+    readonly moveAbove = (_mediaSourceId: string) => undefined;
     readonly setEnabled = (_enabled: boolean) => undefined;
     readonly setFocusable = (_focusable: boolean) => undefined;
     readonly setResizable = (_resizable: boolean) => undefined;
@@ -2012,6 +2040,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
 
   /** Electron's `webContents` module: the app's pages. */
   const webContents = {
+    fromFrame: (frame: WebFrameMain) => frame.page.webContents,
     fromId: (id: number) => pages.get(id)?.webContents,
     getAllWebContents: () =>
       [...pages.values()]

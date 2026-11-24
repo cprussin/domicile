@@ -156,40 +156,58 @@ export const createSafeStorage = (dependencies: SafeStorageDependencies) => {
 
   const isEncryptionAvailable = () => keyring() !== undefined || usePlainText;
 
-  return {
-    decryptString: (encrypted: Buffer) => {
-      if (!Buffer.isBuffer(encrypted)) {
-        throw new TypeError(
-          "Expected the first argument of decryptString() to be a buffer",
-        );
-      }
-      const prefix = encrypted.subarray(0, 3).toString("latin1");
-      const body = encrypted.subarray(3);
-      const key = prefix === "v11" ? keyring() : V10_KEY;
-      const plain =
-        (prefix === "v10" || prefix === "v11") && key !== undefined
-          ? (decrypt(key, body) ?? decrypt(EMPTY_KEY, body))
-          : undefined;
-      if (plain === undefined) {
-        throw new Error(
-          "Error while decrypting the ciphertext provided to safeStorage.decryptString.",
-        );
-      }
-      return plain;
-    },
+  const decryptString = (encrypted: Buffer) => {
+    if (!Buffer.isBuffer(encrypted)) {
+      throw new TypeError(
+        "Expected the first argument of decryptString() to be a buffer",
+      );
+    }
+    const prefix = encrypted.subarray(0, 3).toString("latin1");
+    const body = encrypted.subarray(3);
+    const key = prefix === "v11" ? keyring() : V10_KEY;
+    const plain =
+      (prefix === "v10" || prefix === "v11") && key !== undefined
+        ? (decrypt(key, body) ?? decrypt(EMPTY_KEY, body))
+        : undefined;
+    if (plain === undefined) {
+      throw new Error(
+        "Error while decrypting the ciphertext provided to safeStorage.decryptString.",
+      );
+    }
+    return plain;
+  };
 
-    encryptString: (plainText: string) => {
-      const key = keyring();
-      if (key !== undefined) {
-        return encrypt(key, "v11", plainText);
-      } else if (usePlainText) {
-        return encrypt(V10_KEY, "v10", plainText);
-      } else {
-        throw new Error(
-          "Error while encrypting the text provided to safeStorage.encryptString. Encryption is not available.",
-        );
-      }
-    },
+  const encryptString = (plainText: string) => {
+    const key = keyring();
+    if (key !== undefined) {
+      return encrypt(key, "v11", plainText);
+    } else if (usePlainText) {
+      return encrypt(V10_KEY, "v10", plainText);
+    } else {
+      throw new Error(
+        "Error while encrypting the text provided to safeStorage.encryptString. Encryption is not available.",
+      );
+    }
+  };
+
+  return {
+    decryptString,
+
+    /**
+     * Decrypts as `decryptString`, saying whether to encrypt it again: text
+     * the hardcoded key encrypted once the keyring has a key, as Chromium's
+     * async OSCrypt says of data under a key that isn't its default.
+     */
+    decryptStringAsync: async (encrypted: Buffer) => ({
+      result: decryptString(encrypted),
+      shouldReEncrypt:
+        encrypted.subarray(0, 3).toString("latin1") === "v10" &&
+        keyring() !== undefined,
+    }),
+
+    encryptString,
+
+    encryptStringAsync: async (plainText: string) => encryptString(plainText),
 
     /** Electron's name for where the key is kept. */
     getSelectedStorageBackend: () =>

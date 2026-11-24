@@ -4,7 +4,7 @@
 
 import { statSync } from "node:fs";
 import { access, mkdir, readFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { homedir, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { readAppPackage } from "./app-package";
@@ -13,7 +13,7 @@ import { connectDesktop, runCommand, runCommandSync } from "./desktop";
 import { createApp } from "./electron/app";
 import { createAutoUpdater } from "./electron/auto-updater";
 import { createBrowserWindow } from "./electron/browser-window";
-import { createClipboard } from "./electron/clipboard";
+import { ClipboardItem, createClipboard } from "./electron/clipboard";
 import { completeElectron, completeInstances } from "./electron/complete";
 import { createCrashReporter } from "./electron/crash-reporter";
 import { desktopCapturer } from "./electron/desktop-capturer";
@@ -47,7 +47,9 @@ import { createSessions } from "./electron/session";
 import { createSessionCalls } from "./electron/session-calls";
 import { createShell } from "./electron/shell";
 import { createSystemPreferences } from "./electron/system-preferences";
+import { TouchBar } from "./electron/touch-bar";
 import { createContentTracing, createNetLog } from "./electron/tracing";
+import { createTrash } from "./electron/trash";
 import { createTray } from "./electron/tray";
 import {
   createUserAgentFallback,
@@ -68,6 +70,7 @@ import { mirrorResources } from "./mirror";
 import { electronPaths } from "./paths";
 import { quirksOf } from "./quirks";
 import { keepRunningOnUncaughtErrors } from "./uncaught-errors";
+import { ringBell, waylandSocket } from "./wayland-bell";
 
 /**
  * A window as the app's menus hand it to a click and pop up over: one of its
@@ -279,6 +282,7 @@ const main = async ([resources, ...args]: string[]) => {
       autoUpdater: createAutoUpdater(),
       BrowserView,
       BrowserWindow,
+      ClipboardItem,
       clipboard: createClipboard({ run: runCommandSync }),
       contentTracing: createContentTracing(tmpdir),
       crashReporter: createCrashReporter(),
@@ -353,8 +357,19 @@ const main = async ([resources, ...args]: string[]) => {
       }),
       screen: createScreen(listDisplays, desktopState.displays),
       session,
-      shell: createShell(runCommand),
+      shell: createShell(runCommand, {
+        ringBell: () => ringBell(waylandSocket(env)),
+        trash: createTrash({
+          homeTrash: join(
+            env.XDG_DATA_HOME ?? join(home, ".local/share"),
+            "Trash",
+          ),
+          now: () => new Date(),
+          uid: userInfo().uid,
+        }),
+      }),
       systemPreferences,
+      TouchBar,
       Tray: createTray({
         connect: desktop.connect,
         menus: { click, model },

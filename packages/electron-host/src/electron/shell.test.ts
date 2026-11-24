@@ -5,11 +5,25 @@ import { createShell } from "./shell";
 /** A shell whose commands answer `code` and `output`, recording each. */
 const setUp = (code = 0, output = "") => {
   const ran: (readonly string[])[] = [];
-  const shell = createShell((command) => {
-    ran.push(command);
-    return Promise.resolve({ code, output });
-  });
-  return { ran, shell };
+  const trashed: string[] = [];
+  let rung = 0;
+  const shell = createShell(
+    (command) => {
+      ran.push(command);
+      return Promise.resolve({ code, output });
+    },
+    {
+      ringBell: () => {
+        rung += 1;
+        return Promise.resolve();
+      },
+      trash: (path) => {
+        trashed.push(path);
+        return Promise.resolve();
+      },
+    },
+  );
+  return { ran, rung: () => rung, shell, trashed };
 };
 
 describe(createShell, () => {
@@ -51,5 +65,21 @@ describe(createShell, () => {
     await Promise.resolve();
 
     expect(ran).toEqual([["domicile", "open", "/home/me/Downloads"]]);
+  });
+
+  it("moves an item to the trash", async () => {
+    const { shell, trashed } = setUp();
+
+    await shell.trashItem("/home/me/old.txt");
+
+    expect(trashed).toEqual(["/home/me/old.txt"]);
+  });
+
+  it("rings the desktop's bell", () => {
+    const { rung, shell } = setUp();
+
+    shell.beep();
+
+    expect(rung()).toBe(1);
   });
 });

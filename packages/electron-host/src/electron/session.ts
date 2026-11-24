@@ -5,6 +5,7 @@
 // docs/architecture/ELECTRON-APPS.md.
 
 import { EventEmitter } from "node:events";
+import { isAbsolute } from "node:path";
 
 import type { DisplayMediaRequestHandler } from "./desktop-capturer";
 import { setDisplayMediaRequestHandler } from "./desktop-capturer";
@@ -93,6 +94,14 @@ export class Session extends EventEmitter {
 
   isSpellCheckerEnabled() {
     return this.#spellCheck.enabled;
+  }
+
+  get spellCheckerEnabled() {
+    return this.#spellCheck.enabled;
+  }
+
+  set spellCheckerEnabled(enabled: boolean) {
+    this.#spellCheck.enabled = enabled;
   }
 
   setSpellCheckerLanguages(languages: readonly string[]) {
@@ -297,7 +306,18 @@ export const createSessions = (
       return found;
     }
   };
-  return { defaultSession: fromPartition(""), fromPartition };
+  /**
+   * The persistent session named by `path`. The engine keeps its storage in
+   * the app's profile, as every session's, rather than at `path`.
+   */
+  const fromPath = (path: string, _options?: { cache?: boolean }) => {
+    if (isAbsolute(path)) {
+      return fromPartition(`persist:${path}`);
+    } else {
+      throw new Error("An absolute path is required");
+    }
+  };
+  return { defaultSession: fromPartition(""), fromPartition, fromPath };
 };
 
 /** The `cookies.set` details for a `Set-Cookie` line a response to `url` had. */

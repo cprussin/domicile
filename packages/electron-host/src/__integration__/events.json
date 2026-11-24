@@ -45,7 +45,6 @@
     "Session.usb-device-revoked": "no device chooser for apps",
     "Session.will-download": "downloads: the Fix Slack downloads work",
     "UtilityProcess.login": "the engine asks no sign-in or certificate question",
-    "View.bounds-changed": "not fired yet",
     "WebContents.audio-state-changed": "the engine reports no media or sound state",
     "WebContents.before-input-event": "the engine passes no input to the app",
     "WebContents.before-mouse-event": "the engine passes no input to the app",
@@ -91,8 +90,7 @@
     "WebContents.will-navigate": "the engine reports no navigation",
     "WebContents.will-prevent-unload": "not fired yet",
     "WebContents.will-redirect": "the engine reports no navigation",
-    "WebContents.zoom-changed": "not fired yet",
-    "WebContentsView.bounds-changed": "not fired yet"
+    "WebContents.zoom-changed": "not fired yet"
   },
   "honest": {
     "AutoUpdater.before-quit-for-update": "Electron has no autoUpdater on Linux",
