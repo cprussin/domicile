@@ -99,6 +99,9 @@ struct BrowserWindow {
   // laid out, so a shell keeps a window it hides, such as behind a tab, laid
   // out while it is captured.
   bool captured;
+  // Whether the page is unloaded (Discard). It loads when a <webview> shows
+  // it, so a shell that would rather not draws something else.
+  bool discarded;
   // For an Electron app's view (a WebContentsView), the window that holds
   // it; empty for every window. A view is listed right after its window,
   // bottom first, and only while a window holds it. Its app asks for it at
@@ -211,6 +214,12 @@ interface BrowserWindows {
   // first, and stays open if the shell answers Cancel. An unknown id is a
   // close that raced another, and does nothing.
   Close(string id);
+
+  // Unloads window `id`'s page: its renderer goes, and its history and scroll
+  // stay. The page loads again when a <webview> next shows the window; what
+  // was typed into it is not kept. An unknown window, one a <webview> shows,
+  // and an Electron app's do nothing, logged.
+  Discard(string id);
 
   // The user clicked entry `command` of window `id`'s menu bar; its app runs
   // the entry. A window that closed meanwhile, or has no menu, is a click

@@ -23,6 +23,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/memory/self_deleting.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
@@ -41,6 +42,7 @@
 #include "chrome/browser/domicile/domicile_browser_profiles.h"
 #include "chrome/browser/domicile/domicile_electron_page.h"
 #include "chrome/browser/domicile/domicile_electron_page_events.h"
+#include "chrome/browser/domicile/domicile_page_discarding.h"
 #include "chrome/browser/domicile/domicile_tab_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
@@ -282,6 +284,10 @@ class DeskWindows final : public base::SupportsUserData::Data,
 
   explicit DeskWindows(Profile* profile) : profile_(profile) {
     profile_observation_.Observe(profile);
+    // Unretained: it is a member.
+    discarding_.emplace(
+        base::BindRepeating(&DeskWindows::Discardable, base::Unretained(this)),
+        base::BindRepeating(&DeskWindows::Discard, base::Unretained(this)));
   }
   DeskWindows(const DeskWindows&) = delete;
   DeskWindows& operator=(const DeskWindows&) = delete;
@@ -977,6 +983,20 @@ class DeskWindows final : public base::SupportsUserData::Data,
     return found->view ? found->parent : found->id;
   }
 
+  // Unloads window `id`'s page; see mojom::BrowserWindows.Discard.
+  void Discard(const std::string& id) {
+    auto found = std::ranges::find(windows_, id, &Window::id);
+    const std::string refused =
+        found == windows_.end() ? "it is not open" : DiscardWindow(*found);
+    if (refused.empty()) {
+      LOG(INFO) << "domicile: unloaded browser window " << id << ".";
+      Changed();
+    } else {
+      LOG(WARNING) << "domicile: asked to unload browser window " << id << "; "
+                   << refused << ".";
+    }
+  }
+
   // The id of the window showing `page`, or empty when none does.
   std::string IdOf(const content::WebContents& page) const {
     auto found = std::ranges::find_if(windows_, [&page](const Window& window) {
@@ -1196,7 +1216,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
             : std::string(),
         partition.has_value() ? WebViewPartitionAttribute(*partition)
                               : std::string(),
-        window.app, window.app_id, window.captures > 0, window.parent, window.x,
+        window.app, window.app_id, window.captures > 0,
+        window.guest->contents().GetController().NeedsReload(), window.parent, window.x,
         window.y, window.hidden, window.menu_bar.menu, window.menu_bar.visible,
         window.menu_bar.auto_hide,
         window.message_boxes.empty()
@@ -1332,6 +1353,70 @@ class DeskWindows final : public base::SupportsUserData::Data,
     return listing;
   }
 
+  // Gives `window` a new page with its page's history, which loads when a
+  // <webview> next shows it, and ends the old one: how Chrome unloads a tab.
+  // Returns why not, or an empty string.
+  //
+  // Not WebContents::Discard, which keeps the page and ends its renderer:
+  // content attaches no page whose renderer is gone to a <webview>.
+  std::string DiscardWindow(Window& window) {
+    WebViewGuest& old = *window.guest;
+    content::WebContents& page = old.contents();
+    // An Electron app's page is its app's to keep.
+    if (!window.profiled) {
+      return "it is in no browser profile";
+    }
+    if (old.IsAttached()) {
+      return "a <webview> shows it";
+    }
+    if (page.GetController().NeedsReload()) {
+      return "it is unloaded already";
+    }
+    if (page.GetController().GetLastCommittedEntry()->IsInitialEntry()) {
+      return "it has shown nothing yet";
+    }
+    content::WebContents* shell = ShellContentsIn(profile_);
+    if (shell == nullptr) {
+      return "there is no shell to own its new page";
+    }
+    content::BrowserContext& context = *page.GetBrowserContext();
+    std::unique_ptr<WebViewGuest> guest = WebViewGuest::MakeWindow(
+        *shell, window.id, old.popup_window(), context.IsOffTheRecord(),
+        BrowserProfileRegistry::Get().IdOf(context), old.partition(),
+        base::BindRepeating(window.app ? &AttachAppTabHelpers
+                                       : &AttachTabHelpers));
+    WatchProfileOf(*guest);
+    auto watch = std::make_unique<Watch>(
+        guest->contents(), window.id,
+        base::BindRepeating(&DeskWindows::Changed, base::Unretained(this)));
+    guest->contents().GetController().CopyStateFrom(&page.GetController(),
+                                                    /*needs_reload=*/true);
+    closing_.push_back(
+        {window.id, std::exchange(window.guest, std::move(guest))});
+    window.watch = std::move(watch);
+    window.opened_at = GURL();
+    // Not now, which may be under the page's own call stack.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&DeskWindows::Reap,
+                                  weak_factory_.GetWeakPtr(), window.id));
+    return std::string();
+  }
+
+  // The windows a shortage of memory may unload: no app's, whose notifications
+  // would stop, and no extension's popup window.
+  std::vector<PageDiscarding::Candidate> Discardable() {
+    std::vector<PageDiscarding::Candidate> candidates;
+    for (const Window& window : windows_) {
+      content::WebContents& page = window.guest->contents();
+      if (window.profiled && !window.app &&
+          !window.guest->popup_window().has_value() &&
+          !window.guest->IsAttached() && !page.GetController().NeedsReload()) {
+        candidates.push_back({window.id, raw_ref(page)});
+      }
+    }
+    return candidates;
+  }
+
   // ProfileObserver:
   void OnProfileWillBeDestroyed(Profile* profile) override {
     if (profile != profile_.get()) {
@@ -1379,6 +1464,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
   // ones' off-the-record profiles. See WatchProfileOf.
   base::ScopedMultiSourceObservation<Profile, ProfileObserver> page_profiles_{
       this};
+
+  std::optional<PageDiscarding> discarding_;
 
   base::WeakPtrFactory<DeskWindows> weak_factory_{this};
 };
@@ -1653,6 +1740,8 @@ class BrowserWindowsService final
   }
 
   void Close(const std::string& id) override { windows_->UserAskedToClose(id); }
+
+  void Discard(const std::string& id) override { windows_->Discard(id); }
 
   void ClickMenu(const std::string& id, int32_t command) override {
     if (command < 1) {

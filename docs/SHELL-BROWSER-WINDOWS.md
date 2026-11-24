@@ -234,6 +234,14 @@ user's and every other partition, like a separate browser profile:
   `document.visibilityState` is `hidden`, timers slow and nothing paints.
   Showing the view shows the page. The page hears a hide 100ms late, so a
   view that is shown again within that time never reads `hidden`.
+- **Unmount a long-hidden window's view to let the engine unload it.** A
+  window no `<webview>` shows keeps running, hidden. While memory is short the
+  engine unloads such windows' pages, one every five seconds, the one hidden
+  longest first, by Chrome's rules for tabs. A page stays for ten minutes
+  after it is hidden, while it plays audio, records, is captured or holds what
+  the user typed, and in an app window. An unloaded window `isDiscarded`, and
+  keeps its history and scroll; its page loads when a `<webview>` shows it.
+  `browser.discard(id)` unloads one now.
 - **Lay out a hidden window while it `isCaptured`.** A screenshot, a picker's
   preview or a screen cast of the page alone sets it, and `browser.on("change")`
   fires. A page with no layout box draws nothing, so the capture would get no

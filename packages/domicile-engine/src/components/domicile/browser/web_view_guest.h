@@ -422,6 +422,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // This guest's WebContents. Lives as long as the guest.
   content::WebContents& contents() const { return *guest_contents_; }
 
+  // Whether a <webview> shows this browser window's page, or is about to.
+  bool IsAttached() const;
+
   // Gives a new window's page a copy of `source`'s history and takes `step`
   // there, as Chrome's middle-clicked back button does with a cloned tab. In
   // place of the first Navigate. See BrowserWindowHost::OpenHistoryStep.

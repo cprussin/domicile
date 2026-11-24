@@ -354,6 +354,7 @@ export class FakeDomicileHost {
           ignoresPointer: false,
           isApp,
           isCaptured: false,
+          isDiscarded: false,
           isHidden,
           isPrivate,
           menu: null,

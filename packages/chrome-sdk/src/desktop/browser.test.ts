@@ -22,6 +22,7 @@ describe("browser", () => {
         ignoresPointer: false,
         isApp: false,
         isCaptured: false,
+        isDiscarded: false,
         isHidden: false,
         isPrivate: false,
         menu: undefined,
@@ -119,6 +120,13 @@ describe("browser", () => {
       ["answerBrowserWindowPopupMenu", "2", 3],
       ["setBrowserWindowState", "2", false, false, true],
     ]);
+  });
+
+  it("unloads a window's page", () => {
+    const fake = new FakeDomicileHost();
+    desktop(fake.host).browser.discard("1");
+
+    expect(fake.calls).toStrictEqual([["discardBrowserWindow", "1"]]);
   });
 
   it("opens a window in a profile and moves one to another", () => {

@@ -2581,6 +2581,18 @@ void DomicileHost::closeBrowserWindow(ScriptState*,
   }
 }
 
+void DomicileHost::discardBrowserWindow(ScriptState*,
+                                        const String& id,
+                                        ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a browser window's id");
+    return;
+  }
+  if (Ready(exception_state)) {
+    windows_->Discard(id);
+  }
+}
+
 namespace {
 
 // The browser's answer to browserProfileFor().
@@ -3162,6 +3174,7 @@ void DomicileHost::ListBrowserWindows() {
         window->partition,
         window->profile.empty() ? String() : String(window->profile),
         window->app, window->app_id, window->captured,
+        window->discarded,
         toplevel_id == browser_toplevel_ids_.end() ? String()
                                                    : toplevel_id->value,
         window->parent.empty() ? String() : String(window->parent), window->x,

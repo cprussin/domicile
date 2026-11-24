@@ -183,6 +183,13 @@ export type Browser = {
   /** Close window `id`. Its page may ask to stay. */
   close: (id: string) => void;
   /**
+   * Unload window `id`'s page to free its memory. Its history and scroll
+   * stay, and it loads again when a `<webview>` next shows the window; what
+   * was typed into it is not kept. A window a `<webview>` shows and an
+   * Electron app's stay loaded.
+   */
+  discard: (id: string) => void;
+  /**
    * The user clicked entry `command` (its `id`) of window `id`'s menu bar;
    * its Electron app runs the entry.
    */
@@ -231,6 +238,7 @@ export type BrowserHost = Pick<
   | "clickBrowserWindowMenu"
   | "closeBrowserWindow"
   | "countBrowserWindowMatches"
+  | "discardBrowserWindow"
   | "fetchWithCookies"
   | "openAppWindow"
   | "openBrowserWindow"
@@ -273,6 +281,9 @@ export const browser = (host: BrowserHost): Browser => {
     },
     countMatches: (id, selector) =>
       host.countBrowserWindowMatches(id, selector),
+    discard: (id) => {
+      host.discardBrowserWindow(id);
+    },
     fetch: (
       url,
       {

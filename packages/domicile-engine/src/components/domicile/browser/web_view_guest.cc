@@ -899,7 +899,7 @@ void WebViewGuest::AttachToElement(
   CHECK(!window_id_.empty());
 
   // A window shows in one frame at a time; a second element shows nothing.
-  if (attaching_ || guest_contents_->GetOuterWebContents() != nullptr) {
+  if (IsAttached()) {
     LOG(WARNING) << "domicile: a <webview> named browser window " << window_id_
                  << ", which another <webview> is already showing; it shows "
                     "nothing.";
@@ -949,6 +949,10 @@ void WebViewGuest::AttachWindowTo(
             << " to a <webview>.";
 
   ReportEverything();
+}
+
+bool WebViewGuest::IsAttached() const {
+  return attaching_ || guest_contents_->GetOuterWebContents() != nullptr;
 }
 
 void WebViewGuest::ElementGone() {

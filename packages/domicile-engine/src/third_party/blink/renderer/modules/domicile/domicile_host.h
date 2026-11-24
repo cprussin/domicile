@@ -323,6 +323,7 @@ class MODULES_EXPORT DomicileHost final
                                                     const String& selector,
                                                     ExceptionState&);
   void closeBrowserWindow(ScriptState*, const String& id, ExceptionState&);
+  void discardBrowserWindow(ScriptState*, const String& id, ExceptionState&);
   void reopenBrowserWindow(ScriptState*,
                            const String& id,
                            const String& profile,
