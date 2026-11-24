@@ -1,5 +1,42 @@
 # @domicile-desktop/builder
 
+## 0.2.0
+
+### Minor Changes
+
+- 53ff70a: `domicile dev <entry>` serves a shell from its source with hot module replacement: an edit applies as you save, and with React Fast Refresh the shell keeps its state. Ctrl-C goes back to the shell it replaced. The engine reaches the builder's Vite dev server over a private socket, so no port opens.
+
+### Patch Changes
+
+- Updated dependencies [6f4cabd]
+- Updated dependencies [02fe478]
+- Updated dependencies [b7d85c0]
+- Updated dependencies [394ecc7]
+- Updated dependencies [2794947]
+- Updated dependencies [d194a0d]
+- Updated dependencies [ce56535]
+- Updated dependencies [3977a25]
+- Updated dependencies [728d513]
+- Updated dependencies [86c57d9]
+- Updated dependencies [dba9a81]
+- Updated dependencies [382819f]
+- Updated dependencies [4a4f057]
+- Updated dependencies [5b3650f]
+- Updated dependencies [2bf4b1b]
+- Updated dependencies [1cbbfb5]
+- Updated dependencies [adb0ef5]
+- Updated dependencies [28238ca]
+- Updated dependencies [69247ca]
+- Updated dependencies [4799f21]
+- Updated dependencies [14704ae]
+- Updated dependencies [3600d3b]
+- Updated dependencies [dabcc0c]
+- Updated dependencies [133ce8a]
+- Updated dependencies [b95da52]
+- Updated dependencies [5fe0d76]
+- Updated dependencies [6e41263]
+  - @domicile-desktop/component-library@2.2.0
+
 ## 0.1.2
 
 ### Patch Changes

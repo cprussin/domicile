@@ -1,5 +1,124 @@
 # @domicile-desktop/component-library
 
+## 2.2.0
+
+### Minor Changes
+
+- 6f4cabd: `EmptyState` draws its icon on a tinted disc, and takes `tone="warning"` with a `detail` tooltip and `layout="inline"`. Panels that showed a line of text when empty or unreadable use it, and Saved networks opens from a button beside the Wi-Fi switch.
+- b7d85c0: Danger buttons draw white text in both themes, and a `dangerGhost` variant draws red text with no fill. Settings uses it for Uninstall in Extensions and Stop in Agents.
+- d194a0d: A Ctrl+click opens in a new window wherever a middle click does: Back, Forward, the pages in their menus, and the profiles in the profile menu.
+  
+  - `@domicile-desktop/component-library/new-tab-click`: `newTabClick(onOpen, onOpenInNew)` gives `onClick` and `onAuxClick` handlers that call `onOpenInNew` for a middle click or a Ctrl+click, as a link opens in a new tab.
+  - `ListRow`'s `onMiddlePress` is `onPressInNew`, and takes a Ctrl+click too.
+- ce56535: The tray's menu button opens after icons were dragged. A right click anywhere on an app's row in the tray's menu opens its menu, and `ListRow` takes `onSecondaryPress`. A pressed `ListRow` with `actions` cuts a long label short instead of pushing its actions out.
+- 3977a25: Quick settings' Wi-Fi, Wired and Bluetooth tiles light their icon in the accent color while connected, as the toggles do while on. `QuickTile` takes a required `lit`.
+- 728d513: Portal dialogs and the on-screen region picker animate out once answered, instead of vanishing. `AppChooser` takes `open` and `onOpenChangeComplete`.
+- 86c57d9: An agent let reach the entire desktop can be remembered, and comes in without asking from then on. A running agent's reach can be changed from the bar, and Settings › Agents lists every agent connected or remembered, to stop or forget. `domicile list-agents`, `stop-agent` and `forget-agent` do the same. The SDK adds `PortalAnswer.Agent(reach, remember)`, `PortalAnswer.Change()`, the dialog's `current` and `remembered`, `portals.changeAgent`, `portals.agents` and `portals.forgetAgent`; `AgentDialog` draws the Remember switch and the change dialog, and the capturing indicator and Manganese's bar a Change button.
+- 382819f: Manganese draws an Electron app's menu bar under its window's tab. The app's accelerators run their entries, Alt and a menu's letter open it, and Alt shows or hides a bar the app auto-hides. The SDK reads a window's menu with `@domicile-desktop/sdk/app-menu` (`appMenu`, `acceleratedBy`, `openedByMnemonic`), and the component library has a `MenuBar`.
+- 4a4f057: Electron apps on the engine behave more like their own Electron:
+  
+  - Closing a window asks the app first, so an app that closes to its tray, as Slack and Element do, keeps running there instead of quitting.
+  - `win.hide()`, `win.show()` and `show: false` hide and show a window, its page still running. The engine lists a hidden window with `isHidden`, and Manganese keeps it off every workspace until its app shows it.
+  - A window's own title (`setTitle`, or `page-title-updated` prevented) is the one the desktop shows, so Claude Desktop reads "Claude", not "index.html".
+  - `ipcRenderer` is an EventEmitter, so `ipcRenderer.emit` reaches the preload's own listeners. Element's preload calls it as it starts, and showed "Unable to load config file" without it.
+  - Manganese draws an app window with its app's icon, in its title bar and in the screenshot and screen cast pickers, instead of its page's.
+  - A window has the properties Electron gives for what its methods set: `autoHideMenuBar`, `menuBarVisible`, `fullScreen`, `resizable` and the rest, and its page `audioMuted`, `backgroundThrottling` and `userAgent`. Element reads `autoHideMenuBar` once its page loads.
+- 5b3650f: Popups close when the desk changes under them. `PopupScene` closes every popup inside it when its `scene` key changes, and `PopupBoundary` closes its popups when its box moves. Manganese keys the scene on the overview, launcher, clipboard, each screen's workspace, fullscreen and scratchpad windows.
+- 1cbbfb5: `Button` takes `label` on a text button as a longer name, such as "Forget Codex", and still draws it as text. Only an element child makes an icon-only button. Settings' Agents page draws Sign out, Forget and Stop with their padding again.
+- 69247ca: The tray has a menu of every icon at its end. Pin or unpin any app or extension icon, switch extensions on and off, and change what each can do: its options, which websites it can read, private windows, local files and user scripts, or uninstall it. Settings your config sets show locked. Shells get the same through `domicile.extensions.installed`, `setEnabled`, `configure` and `uninstall`. `Menu` holds check, radio and submenu items, and `ListRow` takes `actions` beside a pressed row.
+- 133ce8a: Browser profiles have an order. The config's `browser.order` lists profile ids, and the profiles it leaves out follow by id. The compositor sends the profiles in that order, so the profile menu and Settings list them that way.
+  
+  Settings' Profiles page moves a profile up or down. After its swatches, a color well takes any color, and the swatches now include the theme's cyan.
+  
+  In the profile menu, middle-clicking a profile opens the page in a new window of that profile, using `ListRow`'s new `onMiddlePress`. The profile button writes its name in black on light colors, where white would be hard to read.
+- b95da52: An agent asks before it drives the desktop. `domicile mcp`'s first tool call runs `domicile agent`, which puts an `agent` dialog to the shell: the entire desktop, or only the windows the user checks. Every tool call after is checked against the answer, and the agent is listed as an `agent` capturing session, with what it did last, until it disconnects or the user stops it. The SDK parses them as `PortalKind.Agent`, `PortalAnswer.Agent` and `CapturingKind.Agent`; `<PortalDialogs />` draws the dialog and takes `omitAgents`; Manganese's bar shows each agent as a violet pill with a Stop button.
+
+### Patch Changes
+
+- 02fe478: "Select on screen" in the screenshot and share pickers draws over a dialog already up, such as the launcher, instead of under it.
+- 394ecc7: Electron apps can pop up menus (`Menu.popup`), as Claude's menu button does: the shell draws the app's menu where the button was pressed, with the same look as the app's menu bar, and the entry chosen runs in the app. Shells read a window's popup menu from `popupMenu` (`appPopupMenu` in `@domicile-desktop/sdk/app-menu`) and answer it with `domicile.browser.answerPopupMenu`.
+- 2794947: Electron apps can make their windows fullscreen (`setFullScreen`), and they read and hear what the shell makes them (`isMaximized`, `isFullScreen`, `maximize`, `enter-full-screen` and the rest) instead of a window that always reads as normal. Shells read what an app asks from a window's `wantsMaximized`, `wantsMinimized` and `wantsFullscreen`, and report what they made it with `domicile.browser.setWindowState`.
+- dba9a81: A `ModalDialog` opened over another, such as the screenshot dialog over the launcher, dims all of it instead of drawing its backdrop under the other's popup.
+- 2bf4b1b: Menus, popovers, tooltips and dialogs (`zIndex.modal`, `zIndex.modalBackdrop`) stack over every window a shell places, a fullscreen one's included. Only the lock screen is higher.
+- adb0ef5: A `Popover` that something else's focus shuts as it opens now logs an error naming the element that took focus, so a panel that seems never to open can be traced.
+- 28238ca: A `ListRow`'s folded details sit tighter around a `PanelFooter`, and Wi-Fi's Disconnect and Forget are `dangerGhost` buttons.
+- 4799f21: Volume and brightness toasts and the slider's level meter move their fills with a transform, so a new level skips layout.
+- 14704ae: The lock screen is above every window depth, so the overview's workspace outline blurs with the rest of the desk instead of staying sharp over it.
+- 3600d3b: Loading skeletons in History and the splash's dot grid move with transforms, and shadows that fade in fade on their own layer, so they no longer repaint every frame. A check fails on new animations of properties the compositor cannot run.
+- dabcc0c: `RegionPicker` takes the keyboard when it opens and takes it back from a browser window's page, so Ctrl+C and Escape reach it.
+- 5fe0d76: A screenshot dialog test waits for an app window's icon to load instead of reading it the moment the app's name shows.
+- 6e41263: A browser window lists what its Electron app asks of its looks and input: `urgent`, `ignoresPointer` and `shape`. `FakeDomicileHost.setLooks` sets them.
+- Updated dependencies [7680c50]
+- Updated dependencies [9478a19]
+- Updated dependencies [87ac040]
+- Updated dependencies [394ecc7]
+- Updated dependencies [8f74f44]
+- Updated dependencies [d3978bb]
+- Updated dependencies [2794947]
+- Updated dependencies [0e71fa1]
+- Updated dependencies [f5fbd04]
+- Updated dependencies [4acd3cd]
+- Updated dependencies [d0fbc5b]
+- Updated dependencies [03dcccf]
+- Updated dependencies [996cc29]
+- Updated dependencies [5ef4689]
+- Updated dependencies [3e37020]
+- Updated dependencies [2a1913f]
+- Updated dependencies [cd75f9a]
+- Updated dependencies [d2a68f5]
+- Updated dependencies [c454256]
+- Updated dependencies [09a3ad4]
+- Updated dependencies [3bdac3b]
+- Updated dependencies [f268f2d]
+- Updated dependencies [fb07c3f]
+- Updated dependencies [24b88fb]
+- Updated dependencies [81215c5]
+- Updated dependencies [d566f68]
+- Updated dependencies [86c57d9]
+- Updated dependencies [057faa5]
+- Updated dependencies [51a769e]
+- Updated dependencies [52e71af]
+- Updated dependencies [5a70826]
+- Updated dependencies [5c11ddc]
+- Updated dependencies [8c477cc]
+- Updated dependencies [382819f]
+- Updated dependencies [befeb71]
+- Updated dependencies [4a4f057]
+- Updated dependencies [ebfad4b]
+- Updated dependencies [5a896a8]
+- Updated dependencies [69247ca]
+- Updated dependencies [94e5909]
+- Updated dependencies [bc8db8f]
+- Updated dependencies [e821d1f]
+- Updated dependencies [46d7737]
+- Updated dependencies [8ff882e]
+- Updated dependencies [0a4d218]
+- Updated dependencies [9c805c4]
+- Updated dependencies [9bd54ab]
+- Updated dependencies [a2cab16]
+- Updated dependencies [d6373e3]
+- Updated dependencies [09be8b7]
+- Updated dependencies [da632d6]
+- Updated dependencies [85ad296]
+- Updated dependencies [539ce11]
+- Updated dependencies [e4f3394]
+- Updated dependencies [e7b707c]
+- Updated dependencies [8a2777f]
+- Updated dependencies [756c1bd]
+- Updated dependencies [133ce8a]
+- Updated dependencies [b95da52]
+- Updated dependencies [9478a19]
+- Updated dependencies [a85afe8]
+- Updated dependencies [25522ef]
+- Updated dependencies [19cc2c5]
+- Updated dependencies [a5ade39]
+- Updated dependencies [5315b06]
+- Updated dependencies [6e41263]
+- Updated dependencies [dec9fc2]
+- Updated dependencies [6aad1fa]
+  - @domicile-desktop/sdk@3.0.0
+  - @domicile-desktop/system-apps@1.3.0
+
 ## 2.1.0
 
 ### Minor Changes

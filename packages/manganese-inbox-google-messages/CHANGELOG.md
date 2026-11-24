@@ -1,5 +1,20 @@
 # @domicile-desktop/manganese-inbox-google-messages
 
+## 0.2.0
+
+### Minor Changes
+
+- befeb71: Gmail and Messages inboxes, the Gmail bar module and launcher bookmarks take a `profile`, the browser profile they open in, so two Gmail accounts can live in two profiles. A site's app window is now in a browser profile, its site's by default, and `domicile open --app --profile <id>`, `browser.openApp(url, { profile })` and `browser.fetch(url, { profile })` pick one.
+
+### Patch Changes
+
+- Updated dependencies [befeb71]
+- Updated dependencies [3e08ff0]
+- Updated dependencies [3600d3b]
+- Updated dependencies [f268f2d]
+  - @domicile-desktop/manganese-notifications@2.1.0
+  - @domicile-desktop/manganese-bar-module-google-messages@1.0.3
+
 ## 0.1.2
 
 ### Patch Changes

@@ -1,5 +1,112 @@
 # @domicile-desktop/manganese-bar-module-gmail
 
+## 2.1.0
+
+### Minor Changes
+
+- 79166e4: Email links can be written from a Gmail alias. `gmailInbox` lists the account's verified "Send mail as" addresses, and writing from one saves the message as a draft from it, then opens that draft. This needs the `gmail.settings.basic` and `gmail.compose` scopes, so each Gmail account signs in again once.
+- 15b8ec4: A Gmail inbox given a browser `profile` opens Gmail's own address (`https://mail.google.com/mail/`) in that profile, signed in with the profile's Google account. Without a profile it still picks the account with `?authuser=`. `inboxAddress` takes an optional `profile`.
+- befeb71: Gmail and Messages inboxes, the Gmail bar module and launcher bookmarks take a `profile`, the browser profile they open in, so two Gmail accounts can live in two profiles. A site's app window is now in a browser profile, its site's by default, and `domicile open --app --profile <id>`, `browser.openApp(url, { profile })` and `browser.fetch(url, { profile })` pick one.
+- f268f2d: Email links ask which inbox, and which of its addresses, to write from, then open a new message in that inbox's window. `Inbox.Watched` takes a `write`, and an inbox's `InboxReading.Counted` may name the addresses it sends from; `gmailInbox` writes from the account.
+
+### Patch Changes
+
+- 394ecc7: Electron apps can pop up menus (`Menu.popup`), as Claude's menu button does: the shell draws the app's menu where the button was pressed, with the same look as the app's menu bar, and the entry chosen runs in the app. Shells read a window's popup menu from `popupMenu` (`appPopupMenu` in `@domicile-desktop/sdk/app-menu`) and answer it with `domicile.browser.answerPopupMenu`.
+- 2794947: Electron apps can make their windows fullscreen (`setFullScreen`), and they read and hear what the shell makes them (`isMaximized`, `isFullScreen`, `maximize`, `enter-full-screen` and the rest) instead of a window that always reads as normal. Shells read what an app asks from a window's `wantsMaximized`, `wantsMinimized` and `wantsFullscreen`, and report what they made it with `domicile.browser.setWindowState`.
+- 51a769e: Pressing a new-mail notification opens the mail beside the inbox list, as a click in Gmail does: it shows the inbox and clicks the mail's row once Gmail lists it. A mail Gmail never lists in 20 seconds opens on its own.
+- 6e41263: A browser window lists what its Electron app asks of its looks and input: `urgent`, `ignoresPointer` and `shape`. `FakeDomicileHost.setLooks` sets them.
+- Updated dependencies [6f4cabd]
+- Updated dependencies [02fe478]
+- Updated dependencies [b7d85c0]
+- Updated dependencies [7680c50]
+- Updated dependencies [9478a19]
+- Updated dependencies [87ac040]
+- Updated dependencies [394ecc7]
+- Updated dependencies [8f74f44]
+- Updated dependencies [d3978bb]
+- Updated dependencies [2794947]
+- Updated dependencies [0e71fa1]
+- Updated dependencies [d194a0d]
+- Updated dependencies [ce56535]
+- Updated dependencies [f5fbd04]
+- Updated dependencies [4acd3cd]
+- Updated dependencies [d0fbc5b]
+- Updated dependencies [3977a25]
+- Updated dependencies [03dcccf]
+- Updated dependencies [996cc29]
+- Updated dependencies [5ef4689]
+- Updated dependencies [3e37020]
+- Updated dependencies [2a1913f]
+- Updated dependencies [cd75f9a]
+- Updated dependencies [d2a68f5]
+- Updated dependencies [c454256]
+- Updated dependencies [09a3ad4]
+- Updated dependencies [3bdac3b]
+- Updated dependencies [f268f2d]
+- Updated dependencies [fb07c3f]
+- Updated dependencies [24b88fb]
+- Updated dependencies [81215c5]
+- Updated dependencies [728d513]
+- Updated dependencies [d566f68]
+- Updated dependencies [86c57d9]
+- Updated dependencies [057faa5]
+- Updated dependencies [51a769e]
+- Updated dependencies [52e71af]
+- Updated dependencies [5a70826]
+- Updated dependencies [dba9a81]
+- Updated dependencies [5c11ddc]
+- Updated dependencies [8c477cc]
+- Updated dependencies [382819f]
+- Updated dependencies [befeb71]
+- Updated dependencies [4a4f057]
+- Updated dependencies [5b3650f]
+- Updated dependencies [ebfad4b]
+- Updated dependencies [2bf4b1b]
+- Updated dependencies [1cbbfb5]
+- Updated dependencies [adb0ef5]
+- Updated dependencies [5a896a8]
+- Updated dependencies [28238ca]
+- Updated dependencies [69247ca]
+- Updated dependencies [4799f21]
+- Updated dependencies [94e5909]
+- Updated dependencies [bc8db8f]
+- Updated dependencies [e821d1f]
+- Updated dependencies [46d7737]
+- Updated dependencies [8ff882e]
+- Updated dependencies [14704ae]
+- Updated dependencies [0a4d218]
+- Updated dependencies [3600d3b]
+- Updated dependencies [9c805c4]
+- Updated dependencies [9bd54ab]
+- Updated dependencies [a2cab16]
+- Updated dependencies [d6373e3]
+- Updated dependencies [09be8b7]
+- Updated dependencies [dabcc0c]
+- Updated dependencies [da632d6]
+- Updated dependencies [85ad296]
+- Updated dependencies [539ce11]
+- Updated dependencies [e4f3394]
+- Updated dependencies [e7b707c]
+- Updated dependencies [8a2777f]
+- Updated dependencies [756c1bd]
+- Updated dependencies [133ce8a]
+- Updated dependencies [b95da52]
+- Updated dependencies [9478a19]
+- Updated dependencies [a85afe8]
+- Updated dependencies [25522ef]
+- Updated dependencies [19cc2c5]
+- Updated dependencies [a5ade39]
+- Updated dependencies [5315b06]
+- Updated dependencies [5fe0d76]
+- Updated dependencies [6e41263]
+- Updated dependencies [dec9fc2]
+- Updated dependencies [6aad1fa]
+  - @domicile-desktop/component-library@2.2.0
+  - @domicile-desktop/sdk@3.0.0
+  - @domicile-desktop/react@0.2.0
+  - @domicile-desktop/system-apps@1.3.0
+  - @domicile-desktop/manganese-host@2.0.3
+
 ## 2.0.2
 
 ### Patch Changes
