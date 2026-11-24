@@ -65,6 +65,7 @@ Keep work and personal apart: each profile has its own sign-ins and extensions, 
 
 ### Fixes
 
+- The night light warms the pointer on a DisplayLink monitor too, instead of leaving it looking blue.
 - A download that waits on a picker nobody answers, such as a Slack download from a hidden window, no longer stops every later download in the browser from asking where to save. "Save video as…" asks again.
 - Speakers behind sound correction show as muted when the hardware behind them is muted, and unmuting them unmutes it. The hardware itself is no longer offered as a separate choice.
 - Switching workspaces keeps a floating window that hangs off the screen on its own workspace, instead of sliding its off-screen part into view.

@@ -1636,6 +1636,19 @@ TEST_F(FrameSinkBrokerTest, AColorMatrixThatIsNotFiniteIsABadMessage) {
   EXPECT_TRUE(color_matrices_.empty());
 }
 
+TEST_F(FrameSinkBrokerTest, AColorMatrixThatBrightensIsABadMessage) {
+  // Its diagonal warms the pointer too, which takes gains of 0 to 1.
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  mojo::test::BadMessageObserver bad_message;
+  remote->SetColorMatrix(7, {1, 0, 0, 0, 1.5f, 0, 0, 0, 1});
+
+  EXPECT_THAT(bad_message.WaitForBadMessage(),
+              testing::HasSubstr("diagonal is 0 to 1"));
+  EXPECT_TRUE(color_matrices_.empty());
+}
+
 TEST_F(FrameSinkBrokerTest, AProducersEmulatedInputReachesTheDesk) {
   // An EIS client's click, which only the engine can deliver to the shell.
   mojo::Remote<mojom::FrameSinkBroker> remote;

@@ -419,6 +419,14 @@ A monitor on a connector whose CRTC has no gamma (`GAMMA_LUT_SIZE` 0, as
 [below](#in-hdr), as in HDR. A display on no connector (nested) is left to the
 host compositor.
 
+The cursor plane skips that matrix, and a white pointer on a warm screen looks
+blue. So the pointer on a monitor drawn through a matrix, with no gamma or in
+HDR, is warmed by the matrix's gains (patch `0269`): the broker sends them with each matrix
+(`OzonePlatform::SetDomicileCursorTint`), and `DrmCursor` scales the pointer
+image's encoded channels by their 2.2nd roots, as a ramp would. The broker
+refuses a matrix whose diagonal is outside 0 to 1. On every other monitor the
+CRTC's ramp warms the cursor plane with the rest.
+
 ### In HDR
 
 A ramp scales the values the CRTC sends, and in HDR those are PQ-encoded, so

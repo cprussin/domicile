@@ -3,6 +3,7 @@
 
 #include "content/browser/domicile/domicile_frame_sink_broker.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -437,8 +438,19 @@ void RedrawDisplay(int64_t display_id) {
 // Has viz draw display `display_id` through `matrix`, 3x3 and row-major, in
 // linear light (patch 0217), and redraws it so a still screen shows it. A
 // display no window shows has nothing to draw.
+//
+// The cursor plane skips that matrix, so the pointer on the display is warmed
+// by its gains too. The night light's matrix is diagonal.
 void SetColorMatrix(int64_t display_id,
                     const domicile::FrameSinkBroker::ColorMatrix& m) {
+  const std::vector<display::Display> displays =
+      display::Screen::Get()->GetAllDisplays();
+  const auto display =
+      std::ranges::find(displays, display_id, &display::Display::id);
+  if (display != displays.end()) {
+    ui::OzonePlatform::GetInstance()->SetDomicileCursorTint(
+        display_id, display->bounds(), {m[0], m[4], m[8]});
+  }
   const std::optional<viz::FrameSinkId> target =
       DisplayCaptureTarget(display_id);
   if (!target) {

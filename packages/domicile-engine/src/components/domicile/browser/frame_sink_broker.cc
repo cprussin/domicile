@@ -417,6 +417,12 @@ void FrameSinkBroker::SetColorMatrix(int64_t display_id,
     receivers_.ReportBadMessage("A color matrix is nine finite numbers");
     return;
   }
+  // The diagonal warms the pointer too (ui::TintedCursorBitmaps).
+  if (!std::ranges::all_of(std::array{matrix[0], matrix[4], matrix[8]},
+                           [](float x) { return x >= 0.f && x <= 1.f; })) {
+    receivers_.ReportBadMessage("A color matrix's diagonal is 0 to 1");
+    return;
+  }
   if (!set_color_matrix_) {
     // No windows, so no display to draw.
     return;

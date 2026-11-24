@@ -478,6 +478,13 @@ Unverified. On a tty, leave a monitor showing something that does not move
 Expect the monitor to warm at once, not when the pointer next moves over it or
 something on it next redraws.
 
+## Night light and the pointer on a DisplayLink dock
+
+Unverified. On a tty with the night light on, move the pointer from a laptop
+panel onto a monitor on a DisplayLink dock. Expect a white arrow warmed the
+same on both, not blue on the dock's; and the dock's pointer to warm and cool
+with the night light's fade.
+
 ## An input method in a native window
 
 Unverified. On a tty, start fcitx5 with its Wayland input method frontend and
