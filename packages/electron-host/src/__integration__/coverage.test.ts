@@ -80,6 +80,7 @@ electron.app.whenReady().then(() => {
     BrowserView: new electron.BrowserView(),
     BrowserWindow: window,
     Cookies: session.cookies,
+    Debugger: window.webContents.debugger,
     Menu: new electron.Menu(),
     MenuItem: menuItem,
     MessagePortMain: new electron.MessageChannelMain().port1,

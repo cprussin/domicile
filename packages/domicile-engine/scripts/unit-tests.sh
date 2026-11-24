@@ -43,13 +43,15 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8,
 # InputMethodLines 7, DeskModifierTaps 13, TapModifierOf 1, IdentityDialog 11,
 # PictureInPictureVideos 15, ElectronProtocol 57, ElectronApp 67,
-# ElectronPageCall 3, ElectronPermissionFor 2, ElectronSchemes 8,
+# ElectronPageCall 4, ElectronPermissionFor 2, ElectronSchemes 8,
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4,
 # BrowserProfiles 12, UnfocusedWebViews 7, HistoryMenu 2, ShellDevServer 7,
 # ShellDevServerLoad 4, ShellDevServerGone 1, ForCaptureTools 2, DeskDrag 6,
 # DomicileMonitorTwinActivation 1, CursorDisplay 7, DomicileHiddenPageTiles 4,
 # ChannelDisconnectOrder 2.
 #
+# 951, and it was 950 — which URLs a page's DevTools clients follow it to
+# is one more ElectronPageCall case. Before that
 # 950, and it was 939 — an Electron app's downloads are five more
 # ElectronProtocol cases and six more ElectronApp ones. Before that
 # 939, and it was 933 — an Electron app's page calls are three more
@@ -343,7 +345,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=950
+FLOOR=951
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

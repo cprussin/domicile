@@ -23,7 +23,7 @@ const SOURCES: Record<keyof typeof ELECTRON_EVENTS, readonly string[]> = {
   BrowserWindow: ["electron/browser-window.ts"],
   ClientRequest: ["electron/net.ts"],
   Cookies: ["electron/session-calls.ts"],
-  Debugger: [],
+  Debugger: ["electron/debugger.ts"],
   DownloadItem: ["electron/downloads.ts"],
   Extensions: [],
   IncomingMessage: ["electron/net.ts"],

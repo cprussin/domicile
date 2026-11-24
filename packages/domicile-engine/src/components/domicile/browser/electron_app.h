@@ -81,9 +81,10 @@ struct ElectronPageCalls {
   base::RepeatingCallback<void(ElectronContextMenu menu)> context_menu;
   // The shell made the window `state`; called only when that changes.
   base::RepeatingCallback<void(ElectronWindowState state)> window_state;
-  // An event of the page's DevTools client, which page calls drive.
-  base::RepeatingCallback<void(std::string method, base::DictValue params)>
-      devtools_event;
+  // An event of one of the page's DevTools clients, which page calls drive.
+  base::RepeatingCallback<void(ElectronDevToolsMessage event)> devtools_event;
+  // webContents.debugger's client detached from the page, for `reason`.
+  base::RepeatingCallback<void(std::string reason)> debugger_detached;
 };
 
 // A window's menu bar, as the desk lists it: the menu's entries as JSON
@@ -572,9 +573,8 @@ class ElectronApp {
   void PageFound(ElectronWindow number, ElectronFindResult result);
   void PageContextMenu(ElectronWindow number, ElectronContextMenu menu);
   void CallPage(ElectronPageCall call);
-  void PageDevToolsEvent(ElectronWindow number,
-                         std::string method,
-                         base::DictValue params);
+  void PageDevToolsEvent(ElectronWindow number, ElectronDevToolsMessage event);
+  void PageDebuggerDetached(ElectronWindow number, std::string reason);
   void SetMenuBar(const ElectronSetMenuBar& bar);
   // The desk id of window `number` when it is a window, not a view, or
   // nothing after refusing `what` of a view.
