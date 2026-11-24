@@ -178,8 +178,41 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
     `did-start-loading`, `did-stop-loading`, `focus`, `blur` and
     `render-process-gone`. `goBack`, `goForward` and `goToIndex` send
     `go_to_index {window, index}` for an index the history has;
-    `navigationHistory.clear` sends `clear_history {window}`. A window is
-    focused when its page has the keyboard focus.
+    `navigationHistory.clear` sends `clear_history {window}` and
+    `removeEntryAtIndex` sends `remove_history_entry {window, index}` for an
+    entry the page doesn't show. `restore` opens a page that hasn't loaded
+    with `open_window`'s `history {entries, index}`
+    (`WebViewGuest::RestoreHistory`), as Electron restores only into a page
+    with no history. A window is focused when its page has the keyboard
+    focus.
+  - **Navigations:** `ElectronPage` tells the app of each navigation in the
+    shown page's frames, with the frame's `{process, routing}` ids:
+    `navigation_started`, `navigation_redirected`, `navigation_committed`,
+    `load_failed`, `frame_loaded` and `frame_created`. The host emits
+    Electron's `did-start-navigation`, `did-redirect-navigation`,
+    `did-navigate`, `did-frame-navigate`, `did-navigate-in-page`,
+    `did-fail-provisional-load`, `did-fail-load`, `did-frame-finish-load`
+    and `frame-created`, with Electron's details and older arguments
+    ([`navigation.ts`](../../packages/electron-host/src/electron/navigation.ts)).
+    A main-frame `did-fail-load` rejects the `loadURL` under way with
+    Electron's error. `mainFrame` takes the engine's ids; another frame is a
+    `SubFrame` that names itself and its address and throws on scripts and
+    IPC, as the engine runs those only in the main frame.
+  - **Will navigate:** a navigation the page starts itself, and each server
+    redirect, waits for the app (`AppNavigationThrottle`, `will_navigate`,
+    answered by `navigation_answer`). The host emits `will-redirect`, or
+    `will-frame-navigate` and then, for the main frame, `will-navigate`; a
+    listener's `preventDefault` cancels it. Slack, Element and Claude Desktop
+    keep plain links out of their windows this way and open them with
+    `shell.openExternal`. The app's own `loadURL`, a history step and a
+    reload ask nothing, as in Electron. Only a window whose webContents has
+    one of those listeners waits: the host says so as listeners come and go
+    (`navigation_listen`), and otherwise the engine lets the navigation go
+    at once, without a round trip.
+  - **Unload:** a `beforeunload` that asks to stay asks the app, not the
+    shell (`will_prevent_unload`, answered by `unload_answer`), and shows no
+    dialog. The page leaves only if a `will-prevent-unload` listener prevents
+    it, as in Electron.
   - **Edit and find:** `webContents.undo`, `redo`, `cut`, `copy`, `paste`,
     `pasteAndMatchStyle`, `delete`, `selectAll`, `unselect` and
     `centerSelection` send `edit {window, command}`, which the engine does

@@ -304,6 +304,75 @@ TEST(ElectronProtocolTest, AWindowsHistoryMovesToAnIndexOrIsCleared) {
   }
 }
 
+TEST(ElectronProtocolTest, AHistoryEntryIsRemovedByItsIndex) {
+  const auto remove = ParseElectronRequest(
+      R"({"type":"remove_history_entry","window":2,"index":1})");
+
+  ASSERT_TRUE(remove.has_value()) << remove.error().why;
+  EXPECT_EQ(std::get<ElectronRemoveHistoryEntry>(*remove).window, 2);
+  EXPECT_EQ(std::get<ElectronRemoveHistoryEntry>(*remove).index, 1);
+  EXPECT_EQ(
+      WhyRefused(R"({"type":"remove_history_entry","window":2,"index":-1})"),
+      "\"index\" must be a whole number from 0");
+}
+
+TEST(ElectronProtocolTest, AWindowSaysWhetherItsAppListensToNavigations) {
+  const auto listen = ParseElectronRequest(
+      R"({"type":"navigation_listen","window":2,"listening":true})");
+
+  ASSERT_TRUE(listen.has_value()) << listen.error().why;
+  EXPECT_EQ(std::get<ElectronNavigationListen>(*listen).window, 2);
+  EXPECT_TRUE(std::get<ElectronNavigationListen>(*listen).listening);
+  EXPECT_EQ(WhyRefused(R"({"type":"navigation_listen","window":2})"),
+            "\"listening\" must be true or false");
+}
+
+TEST(ElectronProtocolTest, OpenWindowMayRestoreAHistory) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"open_window","window":3,"url":"https://a.test/2",)"
+      R"("history":{"entries":[{"url":"https://a.test/1","title":"1"},)"
+      R"({"url":"https://a.test/2","title":"2"}],"index":1}})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(std::get<ElectronOpenWindow>(*request).history,
+            (ElectronHistory{
+                .entries = {{.url = GURL("https://a.test/1"), .title = "1"},
+                            {.url = GURL("https://a.test/2"), .title = "2"}},
+                .index = 1}));
+  const auto plain = ParseElectronRequest(
+      R"({"type":"open_window","window":3,"url":"https://a/"})");
+  ASSERT_TRUE(plain.has_value()) << plain.error().why;
+  EXPECT_FALSE(std::get<ElectronOpenWindow>(*plain).history.has_value());
+}
+
+TEST(ElectronProtocolTest, ABadHistoryIsRefusedAsItsWindows) {
+  constexpr char kShape[] =
+      "\"history\" must be an object with \"entries\", a list of "
+      "{\"url\", \"title\"}, and \"index\", the entry shown";
+  for (const char* line :
+       {R"({"type":"open_window","window":3,"url":"https://a/","history":1})",
+        R"({"type":"open_window","window":3,"url":"https://a/",)"
+        R"("history":{"entries":[],"index":0}})",
+        R"({"type":"open_window","window":3,"url":"https://a/",)"
+        R"("history":{"entries":[{"url":"https://a/"}],"index":0}})"}) {
+    const auto request = ParseElectronRequest(line);
+    ASSERT_FALSE(request.has_value()) << line;
+    EXPECT_EQ(request.error(), (ElectronRefusal{.why = kShape, .window = 3}));
+  }
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":3,"url":"https://a/",)"
+                       R"("history":{"entries":[{"url":"https://a/",)"
+                       R"("title":""}],"index":1}})"),
+            "\"history\"'s \"index\" must be one of its entries");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":3,"url":"https://a/",)"
+                       R"("history":{"entries":[{"url":"https://b/",)"
+                       R"("title":""}],"index":0}})"),
+            "\"url\" must be the address of the history's entry \"index\"");
+  EXPECT_EQ(WhyRefused(R"({"type":"open_window","window":3,"url":"https://a/",)"
+                       R"("history":{"entries":[{"url":"chrome://a/",)"
+                       R"("title":""}],"index":0}})"),
+            "chrome: URLs do not open in an app window");
+}
+
 TEST(ElectronProtocolTest, AnEditIsOneOfTheEditMenusCommands) {
   for (const auto& [name, command] :
        std::vector<std::pair<std::string, ElectronEditCommand>>{
@@ -1268,12 +1337,101 @@ TEST(ElectronProtocolTest, AWindowOpenAnswerNamesNoAddressAndNoView) {
   EXPECT_EQ(
       WhyRefused(R"({"type":"window_open_answer","ask":7,"action":"allow",)"
                  R"("window":2,"url":"https://c.test/"})"),
-      "a window_open_answer names no \"url\": the window opens where its "
-      "page asked");
+      "a window_open_answer names no \"url\" or \"history\": the window "
+      "opens where its page asked");
   EXPECT_EQ(
       WhyRefused(R"({"type":"window_open_answer","ask":7,"action":"allow",)"
                  R"("window":2,"view":true})"),
       "a page's new window is a window, not a view");
+}
+
+TEST(ElectronProtocolTest, ANavigationOrUnloadAnswerSaysWhetherItGoesOn) {
+  const auto navigation = ParseElectronRequest(
+      R"({"type":"navigation_answer","ask":3,"proceed":false})");
+  const auto unload =
+      ParseElectronRequest(R"({"type":"unload_answer","ask":4,"unload":true})");
+
+  ASSERT_TRUE(navigation.has_value()) << navigation.error().why;
+  ASSERT_TRUE(unload.has_value()) << unload.error().why;
+  EXPECT_EQ(std::get<ElectronNavigationAnswer>(*navigation),
+            (ElectronNavigationAnswer{.ask = 3, .proceed = false}));
+  EXPECT_EQ(std::get<ElectronUnloadAnswer>(*unload),
+            (ElectronUnloadAnswer{.ask = 4, .unload = true}));
+  EXPECT_EQ(WhyRefused(R"({"type":"navigation_answer","proceed":true})"),
+            "\"ask\" must be a whole number from 1");
+  // No answer is not a yes: the app's bug is refused.
+  EXPECT_EQ(WhyRefused(R"({"type":"navigation_answer","ask":3})"),
+            "\"proceed\" must be true or false");
+  EXPECT_EQ(WhyRefused(R"({"type":"unload_answer","ask":4})"),
+            "\"unload\" must be true or false");
+}
+
+TEST(ElectronProtocolTest, NavigationEventsAreOneLineEach) {
+  const ElectronNavigation navigation{
+      .url = GURL("https://a.test/"),
+      .main_frame = true,
+      .frame = ElectronFrame{.process = 4, .routing = 1},
+      .initiator = ElectronFrame{.process = 4, .routing = 2}};
+  constexpr char kNavigation[] =
+      R"("frame":{"process":4,"routing":1},)"
+      R"("initiator":{"process":4,"routing":2},"main_frame":true,)"
+      R"("same_document":false,)";
+
+  EXPECT_EQ(ElectronNavigationStarted(1, navigation),
+            base::StrCat({"{", kNavigation,
+                          R"("type":"navigation_started",)"
+                          R"("url":"https://a.test/","window":1})"
+                          "\n"}));
+  EXPECT_EQ(ElectronNavigationRedirected(1, navigation),
+            base::StrCat({"{", kNavigation,
+                          R"("type":"navigation_redirected",)"
+                          R"("url":"https://a.test/","window":1})"
+                          "\n"}));
+  EXPECT_EQ(ElectronWillNavigate(3, 1, navigation, /*redirect=*/true),
+            R"({"ask":3,"frame":{"process":4,"routing":1},)"
+            R"("initiator":{"process":4,"routing":2},"main_frame":true,)"
+            R"("redirect":true,"same_document":false,"type":"will_navigate",)"
+            R"("url":"https://a.test/","window":1})"
+            "\n");
+  // A same-document navigation has no frame Chromium names, nor initiator.
+  EXPECT_EQ(ElectronNavigationCommitted(
+                2,
+                ElectronNavigationCommit{
+                    .navigation = {.url = GURL("https://a.test/#b"),
+                                   .same_document = true},
+                    .http_response_code = 200,
+                    .http_status_text = "OK"}),
+            R"({"http_response_code":200,"http_status_text":"OK",)"
+            R"("main_frame":false,"same_document":true,)"
+            R"("type":"navigation_committed","url":"https://a.test/#b",)"
+            R"("window":2})"
+            "\n");
+  EXPECT_EQ(
+      ElectronLoadFailed(2,
+                         ElectronLoadFailure{
+                             .url = GURL("https://a.test/"),
+                             .main_frame = true,
+                             .frame = ElectronFrame{.process = 4, .routing = 1},
+                             .error_code = -105,
+                             .error_description = "ERR_NAME_NOT_RESOLVED",
+                             .provisional = true}),
+      R"({"error_code":-105,"error_description":"ERR_NAME_NOT_RESOLVED",)"
+      R"("frame":{"process":4,"routing":1},"main_frame":true,)"
+      R"("provisional":true,"type":"load_failed","url":"https://a.test/",)"
+      R"("window":2})"
+      "\n");
+  EXPECT_EQ(ElectronFrameLoaded(2, ElectronFrame{.process = 5, .routing = 6}),
+            R"({"frame":{"process":5,"routing":6},"type":"frame_loaded",)"
+            R"("window":2})"
+            "\n");
+  EXPECT_EQ(ElectronFrameCreated(2, ElectronFrame{.process = 5, .routing = 6},
+                                 /*main_frame=*/false),
+            R"({"frame":{"process":5,"routing":6},"main_frame":false,)"
+            R"("type":"frame_created","window":2})"
+            "\n");
+  EXPECT_EQ(ElectronWillPreventUnload(4, 2),
+            R"({"ask":4,"type":"will_prevent_unload","window":2})"
+            "\n");
 }
 
 TEST(ElectronProtocolTest, APermissionRequestIsOneLine) {

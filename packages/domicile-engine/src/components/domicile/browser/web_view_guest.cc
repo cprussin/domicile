@@ -1388,6 +1388,41 @@ void WebViewGuest::Navigate(const GURL& url) {
   guest_contents_->GetController().LoadURLWithParams(params);
 }
 
+void WebViewGuest::RestoreHistory(const std::vector<HistoryEntry>& entries,
+                                  int index) {
+  CHECK(guest_contents_);
+  CHECK_GE(index, 0);
+  CHECK_LT(index, static_cast<int>(entries.size()));
+  // As Navigate: a user agent the window was given is the entries' too.
+  const bool overriding =
+      !guest_contents_->GetUserAgentOverride().ua_string_override.empty();
+  std::vector<std::unique_ptr<content::NavigationEntry>> restored;
+  for (const HistoryEntry& entry : entries) {
+    const bool may_show = MayShowInWebView(entry.url, app_host_);
+    if (!may_show) {
+      LOG(WARNING) << "domicile: a <webview> may not show "
+                   << entry.url.possibly_invalid_spec()
+                   << "; its restored entry is blocked.";
+    }
+    std::unique_ptr<content::NavigationEntry> made =
+        content::NavigationController::CreateNavigationEntry(
+            may_show ? entry.url : GURL(content::kBlockedURL),
+            content::Referrer(),
+            /*initiator_origin=*/std::nullopt,
+            /*initiator_base_url=*/std::nullopt, ui::PAGE_TRANSITION_RELOAD,
+            /*is_renderer_initiated=*/false,
+            /*extra_headers=*/std::string(),
+            guest_contents_->GetBrowserContext(),
+            /*blob_url_loader_factory=*/nullptr);
+    made->SetTitle(entry.title);
+    made->SetIsOverridingUserAgent(overriding);
+    restored.push_back(std::move(made));
+  }
+  content::NavigationController& history = guest_contents_->GetController();
+  history.Restore(index, content::RestoreType::kRestored, &restored);
+  history.LoadIfNecessary();
+}
+
 std::optional<WebViewPartition> WebViewGuest::partition() const {
   const content::StoragePartitionConfig& config =
       guest_contents_->GetPrimaryMainFrame()->GetStoragePartition()->GetConfig();
@@ -2905,6 +2940,7 @@ void WebViewGuest::RunJavaScriptDialog(
           client_.get(), origin, type, message_text, default_prompt_text));
   // The dialog guard greps for these.
   if (opened) {
+    dialog_asks_app_ = false;
     LOG(INFO) << "domicile: a <webview>'s page opened a dialog; asking the "
                  "shell.";
   } else {
@@ -2923,6 +2959,28 @@ void WebViewGuest::RunBeforeUnloadDialog(
   // Split so a refused one can still leave: GuestDialogs drops what it
   // refuses, and content waits for an answer.
   auto [asked, refused] = base::SplitOnceCallback(std::move(callback));
+  if (!unload_deciding_.is_null()) {
+    const bool opened = dialogs_.Open(
+        std::move(asked),
+        base::BindOnce(
+            [](const UnloadDeciding& deciding, GuestDialogs::Closed answer) {
+              deciding.Run(base::BindOnce(
+                  [](GuestDialogs::Closed answer, bool unload) {
+                    std::move(answer).Run(unload, std::u16string());
+                  },
+                  std::move(answer)));
+            },
+            unload_deciding_));
+    if (opened) {
+      dialog_asks_app_ = true;
+      LOG(INFO) << "domicile: an Electron page asked to stay; asking its app.";
+    } else {
+      LOG(WARNING) << "domicile: an Electron page asked to stay while a "
+                      "dialog was open; it leaves.";
+      std::move(refused).Run(true, std::u16string());
+    }
+    return;
+  }
   const bool opened = dialogs_.Open(
       std::move(asked),
       base::BindOnce(
@@ -2940,6 +2998,7 @@ void WebViewGuest::RunBeforeUnloadDialog(
           client_.get(), origin));
   // The beforeunload guard greps for these.
   if (opened) {
+    dialog_asks_app_ = false;
     LOG(INFO) << "domicile: a <webview>'s page asked to stay; asking the "
                  "shell.";
   } else {
@@ -2951,7 +3010,7 @@ void WebViewGuest::RunBeforeUnloadDialog(
 
 void WebViewGuest::CancelDialogs(content::WebContents* web_contents,
                                  bool reset_state) {
-  if (dialogs_.Cancel()) {
+  if (dialogs_.Cancel() && !std::exchange(dialog_asks_app_, false)) {
     client_->DialogWithdrawn();
   }
 }
@@ -3351,6 +3410,14 @@ void WebViewGuest::DecideWindowsWith(WindowOpening opening) {
 
 void WebViewGuest::TakeContextMenusWith(ContextMenuTaking taking) {
   context_menu_taking_ = std::move(taking);
+}
+
+void WebViewGuest::DecideNavigationsWith(NavigationDeciding deciding) {
+  navigation_deciding_ = std::move(deciding);
+}
+
+void WebViewGuest::DecideUnloadsWith(UnloadDeciding deciding) {
+  unload_deciding_ = std::move(deciding);
 }
 
 void WebViewGuest::KeepFullFrameRate() {

@@ -66,6 +66,7 @@
 
 namespace content {
 class BrowserContext;
+class NavigationHandle;
 }  // namespace content
 
 namespace domicile {
@@ -658,6 +659,39 @@ class WebViewGuest : public mojom::WebViewGuest,
       base::RepeatingCallback<void(const content::ContextMenuParams& params,
                                    const gfx::Point& in_page)>;
   void TakeContextMenusWith(ContextMenuTaking taking);
+
+  // Runs with each navigation the page starts itself and each server redirect
+  // (`redirect`), which wait until `answered` says whether they go on, before
+  // the shell is asked. An Electron window's, whose app decides with
+  // will-navigate, will-frame-navigate and will-redirect. See
+  // AppNavigationThrottle.
+  using NavigationDeciding = base::RepeatingCallback<void(
+      content::NavigationHandle& navigation,
+      bool redirect,
+      base::OnceCallback<void(bool proceed)> answered)>;
+  void DecideNavigationsWith(NavigationDeciding deciding);
+  // Null when the page's navigations are the shell's alone.
+  const NavigationDeciding& navigation_deciding() const {
+    return navigation_deciding_;
+  }
+
+  // Runs when the page's `beforeunload` asks to stay, instead of asking the
+  // shell: `answered` says whether the page leaves anyway. An Electron
+  // window's, whose app decides with will-prevent-unload and shows no
+  // dialog, as on Electron.
+  using UnloadDeciding = base::RepeatingCallback<void(
+      base::OnceCallback<void(bool unload)> answered)>;
+  void DecideUnloadsWith(UnloadDeciding deciding);
+
+  // An address and title a page's restored history holds.
+  struct HistoryEntry {
+    GURL url;
+    std::u16string title;
+  };
+  // Gives the page `entries`, oldest first, and loads entry `index`, in place
+  // of the first Navigate: an Electron window's navigationHistory.restore.
+  // Each address Navigate would not show is blocked, as Navigate blocks it.
+  void RestoreHistory(const std::vector<HistoryEntry>& entries, int index);
 
   // The page's zoom factor, for chrome.tabs. In manual mode, the factor the
   // page's own code zooms to, with the page itself at the default zoom.
@@ -1411,6 +1445,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   WindowOpening window_opening_;
   // See TakeContextMenusWith.
   ContextMenuTaking context_menu_taking_;
+  // See DecideNavigationsWith and DecideUnloadsWith.
+  NavigationDeciding navigation_deciding_;
+  UnloadDeciding unload_deciding_;
+  // Whether the dialog open in `dialogs_` asks UnloadDeciding rather than the
+  // shell, which then hears no DialogWithdrawn for it.
+  bool dialog_asks_app_ = false;
 
   // See AddZoomChangedCallback.
   base::RepeatingCallbackList<void(double, double)> zoom_callbacks_;
