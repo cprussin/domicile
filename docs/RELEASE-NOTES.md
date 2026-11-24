@@ -6,7 +6,7 @@ in the manganese desktop is in
 
 ## 1.3.0
 
-_Unreleased_
+_November 24, 2026_
 
 ### Electron apps on the engine
 
