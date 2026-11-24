@@ -12,8 +12,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Nothing in this group may skip: bun is set up below and turbo needs nothing
-  # else. On a pull request that changes the fork, the pinned-engine check fails
+  # Nothing in this group may skip: bun and the motion harness's Chromium are
+  # set up below and turbo needs nothing else. On a pull request that changes the fork, the pinned-engine check fails
   # until `engine.yml` writes the new pin back, so the pull request is not
   # mergeable before its engine exists.
   DOMICILE_CHECK_STRICT: "1"
@@ -59,6 +59,14 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-${{ matrix.shard }}-
       - run: .github/scripts/turbo-cache-prune.sh mark .turbo/cache
+
+      # The motion harness plays manganese's motions in headless Chromium,
+      # Playwright's own build of the version in bun.lock. No GPU: it reads
+      # which thread ran each animation, not pixels.
+      - if: matrix.shard == 'rest'
+        run: |
+          bun install --frozen-lockfile
+          packages/motion-harness/node_modules/.bin/playwright install --with-deps chromium
 
       # `TURBO_CACHE_DIR` points turbo at the restored cache. The
       # pull request's head and base let the pinned-engine check say whether a

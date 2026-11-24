@@ -1064,6 +1064,34 @@
         "typescript": "catalog:",
       },
     },
+    "packages/motion-harness": {
+      "name": "@domicile-desktop/motion-harness",
+      "version": "0.0.0",
+      "dependencies": {
+        "@domicile-desktop/component-library": "workspace:*",
+        "@domicile-desktop/manganese-window-management": "workspace:*",
+        "react": "catalog:",
+        "react-dom": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/check-runner": "workspace:*",
+        "@domicile-desktop/test-support": "workspace:*",
+        "@pandacss/dev": "catalog:",
+        "@storybook/react-vite": "catalog:",
+        "@testing-library/react": "catalog:",
+        "@testing-library/user-event": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "playwright": "catalog:",
+        "postcss": "catalog:",
+        "storybook": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+        "zod": "catalog:",
+      },
+    },
     "packages/react": {
       "name": "@domicile-desktop/react",
       "version": "0.2.0",
@@ -1427,6 +1455,7 @@
     "micromark-extension-gfm": "^3.0.0",
     "next": "^16.4.6",
     "oxc-parser": "^0.158.0",
+    "playwright": "^1.65.1",
     "postcss": "^8.5.32",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -1633,6 +1662,8 @@
     "@domicile-desktop/manganese-wallpaper": ["@domicile-desktop/manganese-wallpaper@workspace:packages/manganese-wallpaper"],
 
     "@domicile-desktop/manganese-window-management": ["@domicile-desktop/manganese-window-management@workspace:packages/manganese-window-management"],
+
+    "@domicile-desktop/motion-harness": ["@domicile-desktop/motion-harness@workspace:packages/motion-harness"],
 
     "@domicile-desktop/react": ["@domicile-desktop/react@workspace:packages/react"],
 
@@ -2715,6 +2746,10 @@
     "pirates": ["pirates@4.0.7", "", {}, "sha512-TfySrs/5nm8fQJDcBDuUng3VOUKsd7S+zqvbOTiGXHfxX4wK31ard+hoNuvkicM/2YFzlpDgABOevKSsB4G/FA=="],
 
     "pkg-types": ["pkg-types@2.3.0", "", { "dependencies": { "confbox": "^0.2.2", "exsolve": "^1.0.7", "pathe": "^2.0.3" } }, "sha512-SIqCzDRg0s9npO5XQ3tNZioRY1uK06lA41ynBC1YmFTmnY6FjUjVt6s4LoADmwoig1qqD0oK8h1p/8mlMx8Oig=="],
+
+    "playwright": ["playwright@1.65.1", "", { "dependencies": { "playwright-core": "1.65.1" }, "bin": { "playwright": "cli.js" } }, "sha512-vJ1FuoOrNwOKHUIVEvSt3jT1L+wjjDpwhwIstKtfvTh8XIG4FG4bIFuvNdMxi81LGfAhUgUZleVFaOLY4RIUUw=="],
+
+    "playwright-core": ["playwright-core@1.65.1", "", { "bin": { "playwright-core": "cli.js" } }, "sha512-hqPpz7blSMPxWVdoeE1yiBSzXsKiVOd2k+kjCvmUywD2GPO2Dd9HfcWnq9NN0GHbNZDFgZ9JfBFr+X5/BLo0qw=="],
 
     "pluralize": ["pluralize@8.0.0", "", {}, "sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA=="],
 

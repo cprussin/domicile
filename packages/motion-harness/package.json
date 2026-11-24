@@ -1,0 +1,43 @@
+{
+  "dependencies": {
+    "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/manganese-window-management": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "description": "Plays manganese's motions in Storybook, slowed for review, and fails on any that runs on the main thread, through Playwright.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/check-runner": "workspace:*",
+    "@domicile-desktop/test-support": "workspace:*",
+    "@pandacss/dev": "catalog:",
+    "@storybook/react-vite": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@testing-library/user-event": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "playwright": "catalog:",
+    "postcss": "catalog:",
+    "storybook": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "zod": "catalog:"
+  },
+  "engines": {
+    "bun": ">=1.4.2"
+  },
+  "license": "MIT",
+  "name": "@domicile-desktop/motion-harness",
+  "private": true,
+  "scripts": {
+    "build:storybook": "storybook build",
+    "prepare": "panda codegen --silent && panda cssgen --silent",
+    "start:dev": "storybook dev -p 4001",
+    "test:shell": "check-runner tests/*.sh",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

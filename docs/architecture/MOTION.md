@@ -215,9 +215,9 @@ Tooling:
 
 - [ ] `springs.*` easing tokens in `component-library`'s preset, generated from
       spring parameters, with a unit test of the sampled curve
-- [ ] a motion harness: manganese in Playwright, records frames of one motion,
+- [x] a motion harness: manganese in Playwright, records frames of one motion,
       fails if any animation of it runs on the main thread
-- [ ] Storybook page that plays each motion at 0.1× speed
+- [x] Storybook page that plays each motion at 0.1× speed
 
 Windows (no engine change):
 
