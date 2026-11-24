@@ -739,6 +739,11 @@ At start the host fills what it lacks from the surface
   object may still set it.
 - A name Electron itself doesn't have logs once ("doesn't have on Linux"):
   the surface is stale or the app is probing.
+- On an object the app gets (a window, a `webContents`, a session), a read of
+  a member the typings don't list logs once as a warning, naming the
+  object's class. Electron has members its typings don't, and apps call them:
+  Slack calls `webContents.getLastWebPreferences()`. Names starting with `_`
+  aren't logged.
 
 `src/__integration__/coverage.json` lists every gap left: each name an app
 would be handed back for ("missing"), find `undefined` for ("absent"), or

@@ -121,4 +121,41 @@ describe("completeInstances", () => {
       "unsupported: Element called BrowserWindow.flashFrame, which Domicile's Electron doesn't have yet",
     ]);
   });
+
+  // Slack called WebContents.getLastWebPreferences, which Electron has and
+  // its typings don't, and its window never opened with nothing logged.
+  it("logs once a read of a member none of its classes has, naming the object's class", () => {
+    const { hooks: h, said } = hooks();
+    class Base {
+      getBounds() {
+        return 1;
+      }
+    }
+    class Window extends Base {
+      readonly own = 2;
+    }
+    completeInstances(
+      { BaseWindow: Base.prototype, BrowserWindow: Window.prototype },
+      "Slack",
+      h,
+    );
+    const window = new Window() as Window & Record<string, unknown>;
+
+    expect(window.getBounds()).toBe(1);
+    expect(window.own).toBe(2);
+    expect(window.then).toBeUndefined();
+    expect(window._events).toBeUndefined();
+    expect(window.getLastWebPreferences).toBeUndefined();
+    expect(window.getLastWebPreferences).toBeUndefined();
+    expect(new Base() as unknown as Record<string, unknown>).toHaveProperty(
+      "getBounds",
+    );
+    expect(
+      (new Base() as unknown as Record<string, unknown>).snap,
+    ).toBeUndefined();
+    expect(said).toEqual([
+      "warn: Slack reached for BrowserWindow.getLastWebPreferences, which Domicile's Electron doesn't have",
+      "warn: Slack reached for BaseWindow.snap, which Domicile's Electron doesn't have",
+    ]);
+  });
 });

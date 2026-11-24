@@ -156,6 +156,11 @@ export const completeInstances = (
   hooks: Hooks,
 ) => {
   const warned = new Set<string>();
+  const types = new Map<object, InstanceType>(
+    (Object.entries(prototypes) as [InstanceType, object][]).map(
+      ([type, prototype]) => [prototype, type],
+    ),
+  );
   for (const [type, prototype] of Object.entries(prototypes) as [
     InstanceType,
     object,
@@ -216,4 +221,51 @@ export const completeInstances = (
       }
     }
   }
+  // A read that falls past every prototype here is of a member Electron's
+  // typings don't list, which Electron may still have.
+  for (const [prototype, type] of types) {
+    const parent = Object.getPrototypeOf(prototype) as object;
+    if (types.has(parent)) {
+      continue;
+    }
+    Object.setPrototypeOf(
+      prototype,
+      new Proxy(parent, {
+        get: (target, key, receiver) => {
+          if (
+            typeof key === "string" &&
+            !PROBED.has(key) &&
+            // Private by convention: Node's EventEmitter reads its `_events`
+            // before it sets them.
+            !key.startsWith("_") &&
+            !(key in target)
+          ) {
+            const name = `${classOf(receiver, types) ?? type}.${key}`;
+            if (!warned.has(name)) {
+              warned.add(name);
+              hooks.warn(
+                `${app} reached for ${name}, which Domicile's Electron doesn't have`,
+              );
+            }
+          }
+          return Reflect.get(target, key, receiver);
+        },
+      }),
+    );
+  }
+};
+
+/** The most derived of `types` that `object` is one of. */
+const classOf = (object: unknown, types: ReadonlyMap<object, InstanceType>) => {
+  for (
+    let prototype = Object.getPrototypeOf(object) as object | null;
+    prototype !== null;
+    prototype = Object.getPrototypeOf(prototype) as object | null
+  ) {
+    const type = types.get(prototype);
+    if (type !== undefined) {
+      return type;
+    }
+  }
+  return undefined;
 };
