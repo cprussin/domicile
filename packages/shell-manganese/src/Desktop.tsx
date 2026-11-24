@@ -75,6 +75,7 @@ import { screenOverviewsOf } from "@domicile-desktop/manganese-window-management
 import { sightOf } from "@domicile-desktop/manganese-window-management/overview/sight";
 import { steeredInOverview } from "@domicile-desktop/manganese-window-management/overview/steering";
 import { useOverviewPhase } from "@domicile-desktop/manganese-window-management/overview/useOverviewPhase";
+import { useOverviewPinch } from "@domicile-desktop/manganese-window-management/overview/useOverviewPinch";
 import { PictureInPictureFloats } from "@domicile-desktop/manganese-window-management/picture-in-picture/PictureInPictureFloats";
 import { pageOf } from "@domicile-desktop/manganese-window-management/picture-in-picture/page-of";
 import type { Geometry } from "@domicile-desktop/manganese-window-management/placement";
@@ -384,9 +385,14 @@ export const Desktop = ({
 
   const screens = useStageScreens(windows, displays);
 
-  // Each screen's workspaces at once, while open and while it closes.
-  const { closed: overviewClosed, phase: overviewPhase } = useOverviewPhase(
+  // Each screen's workspaces at once, while open, while a pinch moves it and
+  // while it closes.
+  const overviewPinch = useOverviewPinch(
+    domicile.gestures,
     windows.overviewOpen,
+  );
+  const { closed: overviewClosed, phase: overviewPhase } = useOverviewPhase(
+    windows.overviewOpen || overviewPinch !== undefined,
   );
   const overviews = useMemo(
     () =>
@@ -396,8 +402,9 @@ export const Desktop = ({
     [overviewPhase, screens, windows],
   );
   const sight = useMemo(
-    () => (overviews === undefined ? undefined : sightOf(overviews)),
-    [overviews],
+    () =>
+      overviews === undefined ? undefined : sightOf(overviews, overviewPinch),
+    [overviewPinch, overviews],
   );
   // With no screen there is no backdrop to end the closing fade.
   useEffect(() => {
@@ -835,6 +842,7 @@ export const Desktop = ({
             closing={overviewPhase === "closing"}
             onClosed={overviewClosed}
             overviews={overviews}
+            progress={overviewPinch}
           />
         )}
         {/*
@@ -882,8 +890,11 @@ export const Desktop = ({
           shown={screens.length > 0 && !lock.locked}
           workspaceFor={pictureInPictureWorkspace}
         />
-        {/* Over every window, while the overview is open. */}
-        {overviews !== undefined && overviewPhase === "open" && (
+        {/*
+        Over every window, while the overview is open. Not while a pinch is
+        still opening it: it takes the keyboard.
+      */}
+        {overviews !== undefined && windows.overviewOpen && (
           <OverviewPicker
             aim={windows.overviewAim}
             cards={windows.overviewCards}

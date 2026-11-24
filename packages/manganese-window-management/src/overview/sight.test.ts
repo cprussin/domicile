@@ -46,7 +46,7 @@ const overviewOf = (closing: boolean): ScreenOverview => ({
 
 describe("sightOf", () => {
   it("shrinks each workspace into its tile", () => {
-    const sight = sightOf([overviewOf(false)]);
+    const sight = sightOf([overviewOf(false)], undefined);
 
     expect(sight.shown.get("left")?.view).toStrictEqual({
       scale: 0.1,
@@ -63,7 +63,7 @@ describe("sightOf", () => {
   it("pulls back from the shown workspace: the others arrive from where they sit beside it", () => {
     // Workspace 2's tile is 300px right of 1's at a tenth of full size, so at
     // full size it starts 3000px right: past the screen's right edge.
-    const sight = sightOf([overviewOf(false)]);
+    const sight = sightOf([overviewOf(false)], undefined);
 
     expect(sight.shown.get("left")?.arriving).toBeUndefined();
     expect(sight.hidden.get("app:kitty")?.seen.arriving).toStrictEqual({
@@ -74,7 +74,7 @@ describe("sightOf", () => {
   });
 
   it("pushes back in while closing: the shown workspace fills its screen and the rest leave beside it", () => {
-    const sight = sightOf([overviewOf(true)]);
+    const sight = sightOf([overviewOf(true)], undefined);
 
     expect(sight.shown.get("left")).toStrictEqual({
       arriving: undefined,
@@ -90,16 +90,36 @@ describe("sightOf", () => {
     });
   });
 
+  it("follows a pinch part of the way, with no ease, so the windows keep up with the fingers", () => {
+    // Halfway between the closed overview and the open one.
+    const sight = sightOf([overviewOf(false)], 0.5);
+
+    expect(sight.shown.get("left")).toStrictEqual({
+      arriving: undefined,
+      fading: false,
+      following: true,
+      shut: false,
+      view: { scale: 0.55, x: 50, y: 25 },
+    });
+    expect(sight.hidden.get("app:kitty")?.seen).toMatchObject({
+      following: true,
+      view: { scale: 0.55, x: 1700, y: 25 },
+    });
+  });
+
   it("keeps the pointer off the hidden workspaces' windows from the start, so closing restyles none of them", () => {
     // Under the picker while open, then leaving: they never take a press.
     // Shut from the start, the leaving windows' every part need not be
     // restyled in the frame the overview starts closing.
-    expect(sightOf([overviewOf(false)]).shown.get("left")?.shut).toBe(false);
     expect(
-      sightOf([overviewOf(false)]).hidden.get("app:kitty")?.seen.shut,
+      sightOf([overviewOf(false)], undefined).shown.get("left")?.shut,
+    ).toBe(false);
+    expect(
+      sightOf([overviewOf(false)], undefined).hidden.get("app:kitty")?.seen
+        .shut,
     ).toBe(true);
-    expect(sightOf([overviewOf(true)]).hidden.get("app:kitty")?.seen.shut).toBe(
-      true,
-    );
+    expect(
+      sightOf([overviewOf(true)], undefined).hidden.get("app:kitty")?.seen.shut,
+    ).toBe(true);
   });
 });

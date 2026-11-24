@@ -428,6 +428,8 @@ const MANGANESE_KEYS: ShellKeybindings = {
     ),
     line("v", true, "send-shell clipboard"),
     line("o", false, "send-shell overview"),
+    ["pinch:4:inward", KeyAction.SendShell(["overview", "show"])],
+    ["pinch:4:outward", KeyAction.SendShell(["overview", "hide"])],
     line("t", false, "send-shell keymap next"),
     line("b", false, "send-shell split h"),
     line("v", false, "send-shell split v"),
@@ -4281,11 +4283,8 @@ describe("the overview", () => {
     // Workspace 1's windows trade places with 2's, which stay on screen.
     press("l", true);
     fireEvent.keyDown(overview() ?? document, { key: "Escape" });
-    // The closing fade plays out.
-    const backdrop = container.querySelector("[data-overview-backdrop]");
-    if (backdrop !== null) {
-      fireEvent.animationEnd(backdrop);
-    }
+    // The camera arrives back on the shown workspace.
+    cameraArrives(container);
 
     expect(windowsOnScreen(container)).toEqual(["two"]);
     expect(screen.getByRole("button", { name: "1" })).toHaveAttribute(
@@ -4337,6 +4336,53 @@ describe("the overview", () => {
     fireEvent.keyDown(overview() ?? document, { key: "Escape" });
 
     expect(overview()).toBeNull();
+  });
+
+  describe("under a four-finger pinch", () => {
+    const pinch = (phase: "begin" | "end" | "update", scale: number) => {
+      domicile.dispatch("gesture", {
+        canceled: false,
+        dx: 0,
+        dy: 0,
+        edge: "",
+        fingers: 4,
+        kind: "pinch",
+        phase,
+        rotation: 0,
+        scale,
+      });
+    };
+    const grid = (container: HTMLElement) =>
+      container.querySelector<HTMLElement>("[data-overview-grid]");
+
+    it("follows the fingers in, and opens once they lift", async () => {
+      const { container } = await renderShell();
+      clientAppears("one");
+
+      pinch("begin", 1);
+      pinch("update", 0.8);
+      // Drawn as far along as the pinch, for its picker once it opens.
+      expect(grid(container)?.style.transition).toBe("none");
+      expect(overview()).toBeNull();
+
+      pinch("end", 0.8);
+      expect(overview()).not.toBeNull();
+      expect(grid(container)?.style.transition).toBe("");
+    });
+
+    it("turns back to the desk when the fingers spread again before lifting", async () => {
+      const { container } = await renderShell();
+      clientAppears("one");
+
+      pinch("begin", 1);
+      pinch("update", 0.6);
+      pinch("update", 1.1);
+      pinch("end", 1.1);
+      expect(overview()).toBeNull();
+      cameraArrives(container);
+
+      expect(grid(container)).toBeNull();
+    });
   });
 
   describe("on the lock screen", () => {
@@ -4694,3 +4740,16 @@ const pageMenuAsked = (): Event =>
     x: 10,
     y: 20,
   });
+
+/** Ends the overview's camera move on each screen, as it closes. */
+const cameraArrives = (container: HTMLElement): void => {
+  for (const grid of container.querySelectorAll("[data-overview-grid]")) {
+    // happy-dom's `TransitionEvent` drops `propertyName`.
+    fireEvent(
+      grid,
+      Object.assign(new Event("transitionend", { bubbles: true }), {
+        propertyName: "transform",
+      }),
+    );
+  }
+};

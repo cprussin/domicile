@@ -45,6 +45,7 @@
     "./overview/sight": "./src/overview/sight.ts",
     "./overview/steering": "./src/overview/steering.ts",
     "./overview/useOverviewPhase": "./src/overview/useOverviewPhase.ts",
+    "./overview/useOverviewPinch": "./src/overview/useOverviewPinch.ts",
     "./panda-preset": "./src/panda-preset.ts",
     "./picture-in-picture/PictureInPictureFloats": "./src/picture-in-picture/PictureInPictureFloats.tsx",
     "./picture-in-picture/page-of": "./src/picture-in-picture/page-of.ts",

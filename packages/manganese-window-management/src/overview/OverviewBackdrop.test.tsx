@@ -1,12 +1,24 @@
 import { describe, expect, it } from "bun:test";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import { fireEvent, render } from "@testing-library/react";
 
+import { token } from "../../styled-system/tokens";
 import type { Rect } from "../rect";
 import { besideOf, overviewOf } from "./fixture";
 import { OverviewBackdrop } from "./OverviewBackdrop";
+import { cameraOf } from "./overview";
+import { matrixOf, partway } from "./tiles";
 
-const backdropOf = (container: HTMLElement): Element => {
-  const found = container.querySelector("[data-overview-backdrop]");
+// Loads the real stylesheet so the camera's and cards' easing resolve.
+loadEmittedStylesheet(
+  document,
+  new URL("../../styled-system/styles.css", import.meta.url),
+);
+
+const backdropOf = (container: HTMLElement): HTMLElement => {
+  const found = container.querySelector<HTMLElement>(
+    "[data-overview-backdrop]",
+  );
   if (found === null) {
     throw new Error("test: no backdrop");
   } else {
@@ -181,7 +193,48 @@ describe("OverviewBackdrop", () => {
     ).toBe("");
   });
 
-  it("is not closed by its fade in ending", () => {
+  it("eases the camera and a swap's cards on a spring", () => {
+    const { container } = render(
+      <OverviewBackdrop
+        cards={{}}
+        closing={false}
+        onClosed={() => undefined}
+        overviews={[overviewOf(false)]}
+      />,
+    );
+    const spring = token("durations.springs.smooth");
+
+    expect(transitionOf(gridOf(container))).toContain(spring);
+    expect(
+      transitionOf(
+        container.querySelector<HTMLElement>('[data-overview-card="1"]'),
+      ),
+    ).toContain(spring);
+  });
+
+  it("keeps up with a pinch: the camera, the dimming and the names as far along as it is", () => {
+    const overview = overviewOf(false);
+    const { container } = render(
+      <OverviewBackdrop
+        cards={{}}
+        closing={false}
+        onClosed={() => undefined}
+        overviews={[overview]}
+        progress={0.25}
+      />,
+    );
+    const grid = gridOf(container);
+
+    expect(grid.style.getPropertyValue("--overview-to")).toBe(
+      matrixOf(partway(cameraOf(overview), NO_MOVE, 0.25)),
+    );
+    expect(grid.style.transition).toBe("none");
+    expect(backdropOf(container).style.opacity).toBe("0.25");
+    expect(backdropOf(container).style.transition).toBe("none");
+    expect(labelOf(container, "1").style.opacity).toBe("0.25");
+  });
+
+  it("is not closed by its camera arriving, nor a card's swap ending", () => {
     const closed: string[] = [];
     const { container } = render(
       <OverviewBackdrop
@@ -192,12 +245,12 @@ describe("OverviewBackdrop", () => {
       />,
     );
 
-    fireEvent.animationEnd(backdropOf(container));
+    fireEvent(gridOf(container), transitionEnd("transform"));
 
     expect(closed).toStrictEqual([]);
   });
 
-  it("says when it has faded out", async () => {
+  it("says when its camera is back on the shown workspace", async () => {
     const closed = new Promise<void>((resolve) => {
       const { container } = render(
         <OverviewBackdrop
@@ -207,9 +260,68 @@ describe("OverviewBackdrop", () => {
           overviews={[overviewOf(true)]}
         />,
       );
-      fireEvent.animationEnd(backdropOf(container));
+      const card = container.querySelector('[data-overview-card="1"]');
+      if (card !== null) {
+        fireEvent(card, transitionEnd("transform"));
+      }
+      fireEvent(gridOf(container), transitionEnd("transform"));
+    });
+
+    expect(await closed).toBeUndefined();
+  });
+
+  it("closes at once once a pinch let go has left it shut, with nothing to ease", async () => {
+    const closed = new Promise<void>((resolve) => {
+      const { rerender } = render(
+        <OverviewBackdrop
+          cards={{}}
+          closing={false}
+          onClosed={resolve}
+          overviews={[overviewOf(false)]}
+          progress={0}
+        />,
+      );
+      rerender(
+        <OverviewBackdrop
+          cards={{}}
+          closing
+          onClosed={resolve}
+          overviews={[overviewOf(true)]}
+        />,
+      );
     });
 
     expect(await closed).toBeUndefined();
   });
 });
+
+/** A `transitionend`; happy-dom's `TransitionEvent` drops `propertyName`. */
+const transitionEnd = (propertyName: string): Event =>
+  Object.assign(new Event("transitionend", { bubbles: true }), {
+    propertyName,
+  });
+
+const gridOf = (container: HTMLElement): HTMLElement => {
+  const found = container.querySelector<HTMLElement>("[data-overview-grid]");
+  if (found === null) {
+    throw new Error("test: no grid");
+  } else {
+    return found;
+  }
+};
+
+const labelOf = (container: HTMLElement, name: string): HTMLElement => {
+  const found = [
+    ...container.querySelectorAll<HTMLElement>("[data-overview-grid] > span"),
+  ].find(({ textContent }) => textContent === name);
+  if (found === undefined) {
+    throw new Error(`test: no name ${name}`);
+  } else {
+    return found;
+  }
+};
+
+const transitionOf = (element: HTMLElement | null): string =>
+  element === null ? "" : globalThis.getComputedStyle(element).transition;
+
+const NO_MOVE = { scale: 1, x: 0, y: 0 };

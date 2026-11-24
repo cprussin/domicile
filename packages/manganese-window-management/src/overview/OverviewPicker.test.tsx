@@ -1,12 +1,20 @@
 import { describe, expect, it } from "bun:test";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 
+import { token } from "../../styled-system/tokens";
 import type { Rect } from "../rect";
 import { appWindowId } from "../window";
 import { besideOf, overviewOf } from "./fixture";
 import { OverviewPicker } from "./OverviewPicker";
 import type { ScreenOverview } from "./overview";
+
+// Loads the real stylesheet so the rings' easing resolves.
+loadEmittedStylesheet(
+  document,
+  new URL("../../styled-system/styles.css", import.meta.url),
+);
 
 const OVERVIEW = overviewOf(false);
 
@@ -139,10 +147,28 @@ describe("OverviewPicker", () => {
         return found;
       }
     };
-    // Placed with `translate`, so a swap slides them on the compositor.
-    const at = (ring: HTMLElement) => ring.style.getPropertyValue("translate");
-    const placeOf = (box: Rect) =>
-      `${box.x.toString()}px ${box.y.toString()}px`;
+    // A screen shrunk into its tile by a transform, so a swap slides and
+    // sizes them on the compositor.
+    const at = (ring: HTMLElement) => ring.style.transform;
+    const placeOf = (box: Rect) => {
+      const scale = (
+        box.width / OVERVIEW.screen.geometry.screen.width
+      ).toString();
+      return `matrix(${scale}, 0, 0, ${scale}, ${box.x.toString()}, ${box.y.toString()})`;
+    };
+
+    it("are the screen's size, shrunk into their tile, easing on a spring by their transform alone", () => {
+      const { container } = render(
+        <OverviewPicker aim="3" cards={{}} overviews={[OVERVIEW]} {...props} />,
+      );
+      const ring = ringOf(container, "aim");
+      const { transition } = globalThis.getComputedStyle(ring);
+
+      expect(ring.style.inlineSize).toBe("1920px");
+      expect(ring.style.blockSize).toBe("1080px");
+      expect(transition).toContain(token("durations.springs.smooth"));
+      expect(transition).not.toContain("size");
+    });
 
     it("slide with the workspaces they ring as those swap", () => {
       // The whole tile moves, ring and all, not just what is in it.

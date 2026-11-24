@@ -66,9 +66,8 @@ export const windowManagementPreset = definePreset({
           "100%": { opacity: "0" },
         },
         dropLineShowing: BACKDROP_FADE,
-        // The overview's backdrop, names and picker rings fade in as it
-        // opens; the backdrop fades out by `overviewHiding`. See `overview/`.
-        overviewHiding: BACKDROP_FADE,
+        // The overview's picker and its rings fade in as it opens. See
+        // `overview/`.
         overviewShowing: BACKDROP_FADE,
         // A video in picture-in-picture grows out of its place in its page,
         // and shrinks back into it (see `PictureInPictureFloats`).

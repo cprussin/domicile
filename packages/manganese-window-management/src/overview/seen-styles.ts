@@ -19,7 +19,8 @@ import { matrixOf } from "./tiles";
  * back from wherever the camera has got to. The move is set through
  * `--overview-to`, since `@starting-style` loses to an inline `transform`.
  *
- * `emphasized`, as a workspace switch: the move is up to a screen's size.
+ * On `springs.smooth`: the camera arrives, and a pinch let go mid-way carries
+ * on from where it left the windows.
  */
 export const seenStyles = cva({
   base: {
@@ -58,7 +59,7 @@ export const seenStyles = cva({
       false: {},
       true: {
         transition: `
-          transform {durations.slower} {easings.emphasized},
+          transform {durations.springs.smooth} {easings.springs.smooth},
           opacity {durations.slow} {easings.out}
         `,
       },
@@ -77,7 +78,7 @@ export const seenStyles = cva({
 
 /**
  * Inline style moving part of a window by `seen`, or none outside the
- * overview.
+ * overview. While a pinch moves it, it keeps up rather than eases.
  *
  * Clipped to its `screen` as well, so a float hanging off the edge stays in
  * its tile: this clip moves with the box, the wrapper's (see
@@ -97,6 +98,7 @@ export const seenAt = (
       ...(seen.arriving === undefined
         ? {}
         : { "--overview-from": matrixOf(seen.arriving) }),
+      ...(seen.following === undefined ? {} : { transition: "none" }),
     };
   }
 };

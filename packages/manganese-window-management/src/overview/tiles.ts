@@ -83,6 +83,16 @@ export const composed = (outer: View, inner: View): View => ({
 });
 
 /**
+ * The view `progress` of the way from `from` to `to`, 0 to 1: where a
+ * transition between their matrices shows at that point of its ease.
+ */
+export const partway = (from: View, to: View, progress: number): View => ({
+  scale: from.scale + (to.scale - from.scale) * progress,
+  x: from.x + (to.x - from.x) * progress,
+  y: from.y + (to.y - from.y) * progress,
+});
+
+/**
  * `view`, of page points, for points measured from `origin` instead: for an
  * element placed there.
  */

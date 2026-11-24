@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, TransitionEvent } from "react";
 import { useLayoutEffect, useRef } from "react";
 
 import { css, cva } from "../../styled-system/css";
@@ -8,17 +8,22 @@ import { within } from "../rect";
 import { placedAt, placedIn } from "../window-styles";
 import type { ScreenOverview } from "./overview";
 import { cameraOf } from "./overview";
-import type { OverviewTile } from "./tiles";
-import { fromOrigin, LABEL, matrixOf, viewOf } from "./tiles";
+import type { OverviewTile, View } from "./tiles";
+import { fromOrigin, LABEL, matrixOf, partway, viewOf } from "./tiles";
 
 type Props = {
   /** Whether the overview is closing, which fades the backdrop out. */
   closing: boolean;
-  /** Called once the closing fade has played out. */
+  /** Called once the camera is back on the shown workspace as it closes. */
   onClosed: () => void;
   overviews: readonly ScreenOverview[];
   /** Which card each tile shows; see `WindowState.overviewCards`. */
   cards: Readonly<Record<string, string>>;
+  /**
+   * How far open a pinch has the overview, 0 to 1, while one moves it; see
+   * `useOverviewPinch`.
+   */
+  progress?: number | undefined;
 };
 
 /**
@@ -33,6 +38,7 @@ export const OverviewBackdrop = ({
   closing,
   onClosed,
   overviews,
+  progress,
 }: Props) => {
   // Where each card was last drawn: its tile, and the screen it was on.
   const drawn = useRef(new Map<string, { box: Rect; screen: string }>());
@@ -46,33 +52,47 @@ export const OverviewBackdrop = ({
       ),
     );
   });
+  // A pinch let go with the overview shut leaves nothing to ease, so no
+  // transition ends to say it has closed.
+  const followed = useRef(progress);
+  useLayoutEffect(() => {
+    if (closing && followed.current === 0) {
+      onClosed();
+    }
+    followed.current = progress;
+  }, [closing, onClosed, progress]);
   return (
     <>
       {overviews.map((overview) => {
         const { screen, tiles } = overview;
         // The camera on the shown workspace, for the grid placed at the
         // screen's corner. See `cameraOf`.
-        const camera = matrixOf(
-          fromOrigin(cameraOf(overview), screen.geometry.screen),
-        );
+        const camera = fromOrigin(cameraOf(overview), screen.geometry.screen);
         return (
           <div
             aria-hidden
             className={backdropStyles({ closing })}
             data-overview-backdrop=""
             key={screen.geometry.name}
-            onAnimationEnd={(event) => {
-              // Not the end of a tile's or name's own animation.
-              if (closing && event.target === event.currentTarget) {
-                onClosed();
-              }
+            style={{
+              ...placedAt(screen.geometry.screen, BACKDROP),
+              ...followedAt(progress),
             }}
-            style={placedAt(screen.geometry.screen, BACKDROP)}
           >
             <div
               className={gridStyles}
               data-overview-grid=""
-              style={gridAt(camera, closing)}
+              onTransitionEnd={(event: TransitionEvent) => {
+                // Not the end of a card's or name's own transition.
+                if (
+                  closing &&
+                  event.target === event.currentTarget &&
+                  event.propertyName === "transform"
+                ) {
+                  onClosed();
+                }
+              }}
+              style={gridAt(camera, closing, progress)}
             >
               {dealt(tiles, cards).map(({ box, card }) => {
                 const was = drawn.current.get(card);
@@ -93,7 +113,10 @@ export const OverviewBackdrop = ({
                 <span
                   className={labelStyles({ current: name === screen.current })}
                   key={name}
-                  style={placedIn(labelOf(within(box, screen.geometry.screen)))}
+                  style={{
+                    ...placedIn(labelOf(within(box, screen.geometry.screen))),
+                    ...followedAt(progress),
+                  }}
                 >
                   {name}
                 </span>
@@ -108,15 +131,35 @@ export const OverviewBackdrop = ({
 
 /**
  * Inline style for the grid, which comes into view from `camera` and, as the
- * overview closes, goes back to it.
+ * overview closes, goes back to it. While a pinch moves the overview, it
+ * keeps up, `progress` of the way from `camera`.
  */
 const gridAt = (
-  camera: string,
+  camera: View,
   closing: boolean,
-): Record<`--${string}`, string> & CSSProperties => ({
-  "--overview-from": camera,
-  ...(closing ? { "--overview-to": camera } : {}),
-});
+  progress: number | undefined,
+): Record<`--${string}`, string> & CSSProperties => {
+  const from = { "--overview-from": matrixOf(camera) };
+  if (progress === undefined) {
+    return closing ? { ...from, "--overview-to": matrixOf(camera) } : from;
+  } else {
+    return {
+      ...from,
+      "--overview-to": matrixOf(partway(camera, NO_MOVE, progress)),
+      transition: "none",
+    };
+  }
+};
+
+/** The grid at rest in the open overview. */
+const NO_MOVE: View = { scale: 1, x: 0, y: 0 };
+
+/**
+ * Inline style fading the backdrop or a name `progress` of the way in, with
+ * no ease, while a pinch moves the overview, or none.
+ */
+const followedAt = (progress: number | undefined): CSSProperties =>
+  progress === undefined ? {} : { opacity: progress, transition: "none" };
 
 /**
  * Each tile's card, and the tile it is on, in the cards' own order: a card
@@ -170,31 +213,28 @@ const labelOf = (tile: Rect): Rect => ({
 });
 
 // Dims like the scratchpad's backdrop, without the blur: the tiles are the
-// point, and blurring the photo would cost a pass over every screen. Fades
-// out under a second name, since an animation reversed after it played does
-// not play again.
+// point, and blurring the photo would cost a pass over every screen. A
+// transition, so closing fades from wherever a pinch left it.
 const backdropStyles = cva({
   base: {
-    animation: "overviewShowing {durations.slower} {easings.out}",
+    _starting: { opacity: 0 },
     backgroundColor: "backdrop",
     // Its grid moves in from beside the shown workspace, off the screen.
     overflow: "clip",
     pointerEvents: "none",
+    transition: "opacity {durations.slower} {easings.out}",
   },
   variants: {
     closing: {
       false: {},
-      true: {
-        animation:
-          "overviewHiding {durations.slower} {easings.out} reverse forwards",
-      },
+      true: { opacity: 0 },
     },
   },
 });
 
 // The cards and names, moved by the same camera as the windows: pulled back
 // from the shown workspace as the overview opens, pushed back in as it
-// closes. A transition from a starting style, as the windows' (see
+// closes. A transition from a starting style on the windows' spring (see
 // `seenStyles`), so closing partway through opening turns back.
 const gridStyles = css({
   _starting: { transform: "var(--overview-from)" },
@@ -202,13 +242,14 @@ const gridStyles = css({
   position: "absolute",
   transform: "var(--overview-to, none)",
   transformOrigin: "0 0",
-  transition: "transform {durations.slower} {easings.emphasized}",
+  transition: "transform {durations.springs.smooth} {easings.springs.smooth}",
 });
 
 // The empty desk behind a workspace's windows: lighter than the dimmed photo,
 // so an empty workspace still shows its shape. Swapped, it slides with its
-// windows, as `seenStyles` moves them; swapped onto another screen, it is
-// drawn afresh there, sliding in from its old tile past the screen's edge.
+// windows on their spring, as `seenStyles` moves them; swapped onto another
+// screen, it is drawn afresh there, sliding in from its old tile past the
+// screen's edge.
 const cardStyles = cva({
   base: {
     backgroundColor: "fillOverPhoto",
@@ -216,7 +257,7 @@ const cardStyles = cva({
     // `transform`; see `seenStyles`.
     transform: "var(--card-at)",
     transformOrigin: "0 0",
-    transition: "transform {durations.slower} {easings.emphasized}",
+    transition: "transform {durations.springs.smooth} {easings.springs.smooth}",
   },
   variants: {
     crossing: {
@@ -228,10 +269,11 @@ const cardStyles = cva({
 
 const labelStyles = cva({
   base: {
+    // Fades in once the grid has all but landed, with the tiles' rings. A
+    // transition, so names a pinch faded part of the way in carry on from
+    // there.
+    _starting: { opacity: 0 },
     alignItems: "center",
-    // Once the grid has all but landed, with the tiles' rings.
-    animation:
-      "overviewShowing {durations.normal} {easings.out} {durations.slow} backwards",
     color: "onPhoto",
     display: "flex",
     fontSize: "ui",
@@ -239,6 +281,7 @@ const labelStyles = cva({
     fontWeight: "medium",
     justifyContent: "center",
     textShadow: "textOverPhoto",
+    transition: "opacity {durations.normal} {easings.out} {durations.slow}",
   },
   variants: {
     current: { false: {}, true: { fontWeight: "semibold" } },

@@ -1,7 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import { Direction } from "../direction";
 import type { Rect } from "../rect";
-import { seenThrough, tileAt, tilesOf, tileToward, viewOf } from "./tiles";
+import {
+  partway,
+  seenThrough,
+  tileAt,
+  tilesOf,
+  tileToward,
+  viewOf,
+} from "./tiles";
 
 const SCREEN: Rect = { height: 1080, width: 1920, x: 0, y: 0 };
 const AREA: Rect = { height: 1048, width: 1920, x: 0, y: 32 };
@@ -62,6 +69,21 @@ describe("viewOf", () => {
     expect(
       seenThrough(view, { height: 108, width: 192, x: 2112, y: 108 }),
     ).toStrictEqual({ height: 27, width: 48, x: 2048, y: 127 });
+  });
+});
+
+describe("partway", () => {
+  it("moves and scales a view part of the way to another, as CSS eases a matrix", () => {
+    const from = { scale: 1, x: 0, y: 0 };
+    const to = { scale: 0.5, x: 200, y: 100 };
+
+    expect(partway(from, to, 0)).toStrictEqual(from);
+    expect(partway(from, to, 0.25)).toStrictEqual({
+      scale: 0.875,
+      x: 50,
+      y: 25,
+    });
+    expect(partway(from, to, 1)).toStrictEqual(to);
   });
 });
 

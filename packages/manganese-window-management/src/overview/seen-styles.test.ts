@@ -49,9 +49,18 @@ describe("seenAt", () => {
     });
   });
 
-  it("eases between its states, so closing partway through opening turns back", () => {
-    expect(seenStyles.raw({ seen: true }).transition).toContain("transform");
+  it("eases between its states on a spring, so closing partway through opening turns back", () => {
+    expect(seenStyles.raw({ seen: true }).transition).toContain(
+      "transform {durations.springs.smooth} {easings.springs.smooth}",
+    );
     expect(seenStyles.raw({ arriving: true })).not.toHaveProperty("animation");
+  });
+
+  it("keeps up with a pinch rather than easing after it", () => {
+    expect(seenAt(SEEN, SCREEN)).not.toHaveProperty("transition");
+    expect(seenAt({ ...SEEN, following: true }, SCREEN).transition).toBe(
+      "none",
+    );
   });
 
   it("drops its move at once as the overview finishes closing, so its window keeps its place in the stack", () => {

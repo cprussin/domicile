@@ -10,7 +10,7 @@ import { placedAt, placedIn } from "../window-styles";
 import type { OverviewWindow, ScreenOverview } from "./overview";
 import { windowAt } from "./overview";
 import { aimedToward } from "./steering";
-import { tileAt } from "./tiles";
+import { matrixOf, tileAt, viewOf } from "./tiles";
 
 type Props = {
   /**
@@ -80,17 +80,21 @@ const Rings = ({ aim, cards, overviews }: Props) => {
         .flatMap(({ screen, tiles }) =>
           tiles
             .filter(({ name }) => name === screen.current)
-            .map(({ box, name }) => ({ box, card: ringed(name) })),
+            .map(({ box, name }) => ({
+              box,
+              card: ringed(name),
+              screen: screen.geometry.screen,
+            })),
         )
         // In the cards' order, which a swap leaves as it is: a ring moved in
         // the document would be redrawn, not slid.
         .toSorted((one, other) => one.card.localeCompare(other.card))
-        .map(({ box, card }) => (
+        .map(({ box, card, screen }) => (
           <div
             className={ringStyles({ kind: "shown" })}
             data-overview-ring="shown"
             key={`shown ${card}`}
-            style={ringAt(box)}
+            style={ringAt(screen, box)}
           />
         ))}
       {aimed !== undefined && (
@@ -98,7 +102,7 @@ const Rings = ({ aim, cards, overviews }: Props) => {
           className={ringStyles({ kind: "aim" })}
           data-overview-ring="aim"
           key={`aim ${ringed(aimed.name)}`}
-          style={ringAt(aimed.box)}
+          style={ringAt(aimed.screen, aimed.box)}
         />
       )}
     </div>
@@ -106,19 +110,36 @@ const Rings = ({ aim, cards, overviews }: Props) => {
 };
 
 /**
- * Inline style placing a ring over `box` with `translate`, so a swap between
- * tiles of one size slides it on the compositor.
+ * Inline style drawing a ring the size of `screen` through its tile at
+ * `box`, as the cards are (see `cardAt` in `OverviewBackdrop`): one matrix,
+ * so a swap slides and sizes it on the compositor, even between tiles of two
+ * sizes. `--ring-scale` keeps its outline its size once shrunk.
  */
-const ringAt = (box: Rect): CSSProperties => ({
-  blockSize: `${box.height.toString()}px`,
-  inlineSize: `${box.width.toString()}px`,
-  translate: `${box.x.toString()}px ${box.y.toString()}px`,
-});
+const ringAt = (
+  screen: Rect,
+  box: Rect,
+): Record<`--${string}`, string> & CSSProperties => {
+  const view = viewOf({ ...screen, x: 0, y: 0 }, box);
+  return {
+    "--ring-scale": view.scale.toString(),
+    blockSize: `${screen.height.toString()}px`,
+    inlineSize: `${screen.width.toString()}px`,
+    transform: matrixOf(view),
+  };
+};
 
-/** The tile workspace `aim` is on, in any of `overviews`. */
+/** The tile workspace `aim` is on, and its screen, in any of `overviews`. */
 const aimOf = (overviews: readonly ScreenOverview[], aim: string) =>
   overviews
-    .flatMap(({ tiles }) => tiles.filter(({ name }) => name === aim))
+    .flatMap(({ screen, tiles }) =>
+      tiles
+        .filter(({ name }) => name === aim)
+        .map(({ box, name }) => ({
+          box,
+          name,
+          screen: screen.geometry.screen,
+        })),
+    )
     .at(0);
 
 /** How far, in page pixels, a press moves before it is a drag. */
@@ -427,26 +448,28 @@ const ringsStyles = css({
 
 // Outside the tile, as the hover ring: the accent round the workspace on
 // screen, a bolder white round the keyboard's, drawn over it. A swap slides
-// them as it does the cards (see `cardStyles` in `OverviewBackdrop`).
+// them on the cards' spring (see `cardStyles` in `OverviewBackdrop`). Their
+// outlines and corners are divided by their scale, so they stay the hover
+// ring's once shrunk.
 const ringStyles = cva({
   base: {
-    borderRadius: "md",
+    borderRadius: "calc({radii.md} / var(--ring-scale))",
     insetBlockStart: 0,
     insetInlineStart: 0,
     outlineColor: "accent",
-    outlineOffset: "3px",
+    outlineOffset: "calc(3px / var(--ring-scale))",
     outlineStyle: "solid",
-    outlineWidth: "2px",
+    outlineWidth: "calc(2px / var(--ring-scale))",
     position: "absolute",
-    transitionDuration: "slower",
-    // main-thread animation: sizes ease only where two tiles differ, as across
-    // monitors at other scales; within one, only `translate` changes.
-    transitionProperty: "translate, block-size, inline-size",
-    transitionTimingFunction: "emphasized",
+    transformOrigin: "0 0",
+    transition: "transform {durations.springs.smooth} {easings.springs.smooth}",
   },
   variants: {
     kind: {
-      aim: { outlineColor: "onPhoto", outlineWidth: "3px" },
+      aim: {
+        outlineColor: "onPhoto",
+        outlineWidth: "calc(3px / var(--ring-scale))",
+      },
       shown: {},
     },
   },

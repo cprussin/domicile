@@ -229,8 +229,8 @@ Windows (no engine change):
 
 Overview:
 
-- [ ] tile size as a transform
-- [ ] open / close follows pinch progress and reverses mid-gesture
+- [x] tile size as a transform
+- [x] open / close follows pinch progress and reverses mid-gesture
 
 Shell surfaces:
 
