@@ -140,6 +140,11 @@ pub fn engine(
         "--password-store=basic".into(),
         "--no-first-run".into(),
         format!("--user-data-dir={}", runtime.profile.display()).into(),
+        // Chromium otherwise starts in the profile it saved as last used,
+        // which can be a desk's browser profile, and the engine refuses a
+        // shell there. The switch also clears the saved last-active profiles,
+        // so none of them opens a second shell.
+        "--profile-directory=Default".into(),
         format!("--domicile-broker-socket={}", runtime.broker.display()).into(),
     ];
     // The root is `domicile dev`'s socket, so an engine restarted during

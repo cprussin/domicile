@@ -60,6 +60,14 @@ An effect can draw the element through a mesh, a grid for cloth or instances for
 
 [Design](architecture/MOTION.md#shader-primitive)
 
+## 1.3.1
+
+_Unreleased_
+
+### Fixes
+
+- The desktop starts its shell in the `Default` browser profile every time. Once Chromium saved another browser profile as last used, the engine crashed on every start.
+
 ## 1.3.0
 
 _November 24, 2026_

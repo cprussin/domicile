@@ -89,6 +89,23 @@ fn the_engine_is_a_desktop_rather_than_a_browser() {
 }
 
 #[test]
+fn the_engine_starts_the_shell_in_the_default_profile() {
+    // Chromium otherwise starts in the profile it saved as last used, which
+    // can be a desk's browser profile, and the engine refuses a shell there.
+    let args = args_of(&engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "wayland",
+        &runtime(),
+        None,
+    ));
+    assert!(
+        args.contains(&"--profile-directory=Default".to_string()),
+        "{args:?}"
+    );
+}
+
+#[test]
 fn the_engine_takes_commands_on_a_socket_of_this_runs_own() {
     // Without this switch `domicile load-shell` has nowhere to send
     // `load_shell`, and the shell cannot be replaced.
