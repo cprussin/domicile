@@ -280,7 +280,7 @@ struct View {
 const FIT: u32 = 1280;
 
 /// Each tool, by name, in the order `tools/list` gives them.
-const TOOLS: [(&str, Tool); 31] = [
+const TOOLS: [(&str, Tool); 33] = [
     ("list_windows", Tool::Listing("list-windows")),
     ("list_displays", Tool::Listing("list-displays")),
     ("list_inputs", Tool::Listing("list-inputs")),
@@ -302,6 +302,8 @@ const TOOLS: [(&str, Tool); 31] = [
     ("type_text", Tool::TypeText),
     ("browser_snapshot", Tool::Browser(Browser::Snapshot)),
     ("browser_click", Tool::Browser(Browser::Click)),
+    ("browser_drag", Tool::Browser(Browser::Drag)),
+    ("browser_scroll", Tool::Browser(Browser::Scroll)),
     ("browser_type", Tool::Browser(Browser::Type)),
     ("browser_key", Tool::Browser(Browser::Key)),
     ("browser_navigate", Tool::Browser(Browser::Navigate)),
@@ -713,6 +715,8 @@ fn what_it_did(
         Tool::Browser(Browser::Type) | Tool::AppAct("set-text") => {
             format!("Typed in {}", window("window"))
         }
+        Tool::Browser(Browser::Drag) => format!("Dragged in {}", window("window")),
+        Tool::Browser(Browser::Scroll) => format!("Scrolled in {}", window("window")),
         Tool::Browser(Browser::Key) => format!("Pressed a key in {}", window("window")),
         Tool::Browser(Browser::Navigate) => format!("Loaded a page in {}", window("window")),
         Tool::Browser(Browser::Screenshot) => format!("Took a screenshot of {}", window("window")),

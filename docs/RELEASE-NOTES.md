@@ -10,7 +10,7 @@ _Unreleased_
 
 ### An agent's input to a browser window leaves the user's focus
 
-DevTools input sent to a browser window's own page, as `domicile devtools <window>` and the MCP server's `browser_` tools send it, no longer moves the user's focus to that window: a press focuses the page for the agent only, and `Input.insertText` and keys go to the frame focused in that page rather than wherever the user is typing. Input sent to window `shell` still focuses what it presses, as a person's click does.
+DevTools input sent to a browser window's own page, as `domicile devtools <window>` and the MCP server's `browser_` tools send it, no longer moves the user's focus to that window: a press focuses the page for the agent only, and `Input.insertText` and keys go to the frame focused in that page rather than wherever the user is typing. Input sent to window `shell` still focuses what it presses, as a person's click does. `browser_click` also clicks at a point of the page, with any button and as a double-click, and `browser_drag` and `browser_scroll` drag and scroll there, for a canvas or anything else with no ref.
 
 [Agents](AGENTS.md) · [Agent seats](architecture/AGENT-SEATS.md#what-each-kind-of-window-gets)
 

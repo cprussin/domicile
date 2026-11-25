@@ -672,7 +672,9 @@ Each tool runs a verb and answers what it printed, or its error:
 | `scroll` | `pointer`, then `scroll` |
 | `key`, `type_text` | `key <chord>`, `type <text>` |
 | `browser_snapshot` | `devtools <window> Accessibility.getFullAXTree`, then the same for each view the window holds, answered as an outline of the page and each view, one element a line with its ref. A view's refs are `<view>:<element>` |
-| `browser_click` | `devtools` scrolling the element into view, finding its box, and clicking its middle |
+| `browser_click` | `devtools` scrolling the element into view, finding its box, and clicking its middle; or, given `at`, pressing at that point of the page, in `browser_screenshot`'s pixels, with `button` and `count` |
+| `browser_drag` | `devtools` pressing at `from`, moving to `to` in steps, and letting go |
+| `browser_scroll` | `devtools` turning the wheel at `at` by `by` |
 | `browser_type` | `devtools` focusing the element, if given a ref, then `Input.insertText` |
 | `browser_key` | `devtools` pressing and releasing Enter, Tab, Escape, an arrow or another named key |
 | `browser_navigate` | `devtools <window> Page.navigate` |
@@ -682,7 +684,7 @@ Each tool runs a verb and answers what it printed, or its error:
 | `ask_to_use_desktop` | nothing: asks the user again, after they stopped the agent or turned it away |
 | `stop_using_desktop` | nothing: ends the agent's session, as **Stop** does, so its next call asks again |
 
-The browser and app tools work on a window the desk hides and need no screenshot, so prefer them for browser windows and for native apps that support accessibility. The browser tools reach the shell's own bars, panels and dialogs as window `shell`, with the entire desktop. `initialize`'s instructions tell the agent so. Each browser and app act answers what it changed in the window since the agent last read it, or all of it, read a quarter second after. An Electron app such as Claude or Slack draws its page in views: `browser_click` acts in the view its ref names, and `browser_type`, `browser_key` and `browser_screenshot` take a `view`. Tools the lock refuses are refused while the desktop is locked.
+The browser and app tools work on a window the desk hides and need no screenshot, so prefer them for browser windows and for native apps that support accessibility. The browser tools reach the shell's own bars, panels and dialogs as window `shell`, with the entire desktop. `initialize`'s instructions tell the agent so. Each browser and app act answers what it changed in the window since the agent last read it, or all of it, read a quarter second after. An Electron app such as Claude or Slack draws its page in views: `browser_click` acts in the view its ref names, and `browser_type`, `browser_key`, `browser_screenshot`, `browser_drag`, `browser_scroll` and a `browser_click` at a point take a `view`. Points are for what has no ref, such as a canvas. Tools the lock refuses are refused while the desktop is locked.
 
 ### Over HTTP
 
