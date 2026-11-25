@@ -568,3 +568,119 @@ fn a_menu_the_user_opens_takes_the_app_from_the_agents_keyboard() {
         "the agent kept typing in the app the user opened a menu in"
     );
 }
+
+/// The seats the shell was last told of.
+fn told_seats(
+    chrome: &mut domicile_test_chrome::Chrome,
+    until: impl Fn(&[domicile_protocol::AgentSeat]) -> bool,
+) -> Vec<domicile_protocol::AgentSeat> {
+    let told = chrome
+        .wait_for(|message| matches!(message, HostMessage::Seats { seats } if until(seats)))
+        .expect("the shell is told the agent seats");
+    let HostMessage::Seats { seats } = told else {
+        unreachable!("the wait matched on this variant")
+    };
+    seats
+}
+
+/// The shell hears where an agent's pointer is and which window it holds,
+/// to draw it.
+#[test]
+fn the_shell_is_told_what_an_agents_seat_holds() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows(&compositor);
+    let (_held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+    assert_eq!(
+        as_the_agent(&compositor, session, click_at(1100.0, 100.0)),
+        None
+    );
+
+    let other = desk.other.1.clone();
+    let seats = told_seats(&mut desk.chrome, |seats| {
+        seats
+            .iter()
+            .any(|seat| seat.focused.as_deref() == Some(other.as_str()))
+    });
+    assert_eq!(
+        seats,
+        vec![domicile_protocol::AgentSeat {
+            id: format!("agent-{session}"),
+            name: "Claude Code".to_string(),
+            pointer: Some([1100.0, 100.0]),
+            focused: Some(other.clone()),
+            holds: vec![other],
+            taken: Vec::new(),
+        }]
+    );
+}
+
+/// The shell takes a window from an agent: the agent's input there is
+/// refused until the shell gives it back.
+#[test]
+fn the_shell_takes_a_window_from_an_agent_and_gives_it_back() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows(&compositor);
+    let (_held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+    assert_eq!(
+        as_the_agent(&compositor, session, click_at(1100.0, 100.0)),
+        None
+    );
+    let other = desk.other.1.clone();
+
+    desk.chrome
+        .say(&ChromeMessage::TakeOver {
+            app_id: other.clone(),
+        })
+        .expect("the chrome takes the window");
+    let seats = told_seats(&mut desk.chrome, |seats| {
+        seats.iter().any(|seat| !seat.taken.is_empty())
+    });
+    assert_eq!(seats[0].taken, vec![other.clone()]);
+    assert!(
+        seats[0].holds.is_empty(),
+        "the agent still holds what was taken: {seats:?}"
+    );
+    let refused = as_the_agent(&compositor, session, click_at(1100.0, 100.0));
+    assert!(
+        refused
+            .as_deref()
+            .is_some_and(|why| why.contains("took over")),
+        "the agent clicked in a window the user took: {refused:?}"
+    );
+
+    desk.chrome
+        .say(&ChromeMessage::GiveBack {
+            app_id: other.clone(),
+        })
+        .expect("the chrome gives the window back");
+    told_seats(&mut desk.chrome, |seats| {
+        seats.iter().all(|seat| seat.taken.is_empty())
+    });
+    assert_eq!(
+        as_the_agent(&compositor, session, click_at(1100.0, 100.0)),
+        None
+    );
+}
+
+/// The user's keyboard taking an app from an agent keeps it theirs after they
+/// move on, until they give it back.
+#[test]
+fn a_window_the_user_took_stays_theirs_after_they_leave_it() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows(&compositor);
+    let (_held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+    assert_eq!(
+        as_the_agent(&compositor, session, click_at(1100.0, 100.0)),
+        None
+    );
+    the_user_focuses(&compositor, &mut desk.chrome, &desk.other.1, 2);
+    the_user_focuses(&compositor, &mut desk.chrome, &desk.users.1, 3);
+
+    let refused = as_the_agent(&compositor, session, click_at(1100.0, 100.0));
+    assert!(
+        refused
+            .as_deref()
+            .is_some_and(|why| why.contains("took over")),
+        "the agent took back a window the user took: {refused:?}"
+    );
+}

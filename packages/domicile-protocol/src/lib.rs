@@ -267,6 +267,16 @@ pub enum ChromeMessage {
     /// Return keyboard focus to the chrome.
     FocusChrome,
 
+    /// The user takes window `app_id` from the agent seat holding it, as their
+    /// click or key in it does: the agent lets go of it, and its pointer and
+    /// keys there are refused until [`ChromeMessage::GiveBack`]. Nothing
+    /// happens if no agent holds it. See `docs/architecture/AGENT-SEATS.md`.
+    TakeOver { app_id: String },
+
+    /// Let agents drive window `app_id` again after the user took it, by
+    /// [`ChromeMessage::TakeOver`] or their own click or key.
+    GiveBack { app_id: String },
+
     /// Ask the client that owns `app_id` to close it.
     ///
     /// The client may refuse, for example to ask about unsaved work. There is
@@ -1132,6 +1142,14 @@ pub enum HostMessage {
     /// restores the full text. Text selections only. The history is in memory
     /// only, so it starts empty.
     Clipboard { entries: Vec<ClipboardEntry> },
+
+    /// The agent seats on the desk, each driving its own pointer and
+    /// keyboard beside the user's. See `docs/architecture/AGENT-SEATS.md`.
+    ///
+    /// The user's own seat is not listed: it holds every window no agent
+    /// seat does. Pushed whenever a seat comes, goes, moves its pointer or
+    /// focus, or a window is taken or given back; and on connect.
+    Seats { seats: Vec<AgentSeat> },
 
     /// The desktop's current theme.
     ///
@@ -3049,6 +3067,34 @@ pub enum SystemErrorKind {
     Other,
 }
 
+/// An agent seat, in [`HostMessage::Seats`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentSeat {
+    /// The seat's id, `agent-<session>`, as `domicile agent` prints the
+    /// session.
+    pub id: String,
+
+    /// The agent's name, as it asked to be let in (`Claude Code`).
+    pub name: String,
+
+    /// Where the agent's pointer is, in desk coordinates (those of
+    /// [`HostMessage::Displays`] bounds). Absent before it first points.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pointer: Option<[f64; 2]>,
+
+    /// The window the agent's keyboard is in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focused: Option<String>,
+
+    /// The windows the seat holds: the one its keyboard is in and the one
+    /// its pointer is in. A window appears in one seat's `holds` at most.
+    pub holds: Vec<String>,
+
+    /// The windows the user took from this agent, which it can't drive
+    /// until [`ChromeMessage::GiveBack`].
+    pub taken: Vec<String>,
+}
+
 /// One clipboard history entry.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClipboardEntry {
@@ -3242,6 +3288,10 @@ pub struct ListedWindow {
     pub focused: bool,
     /// It asked for the keyboard and was refused.
     pub urgent: bool,
+    /// The agent seat whose pointer or keyboard is in it (`agent-<session>`),
+    /// absent when it is the user's. See [`HostMessage::Seats`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held_by: Option<String>,
     /// A browser window's address, or the one it is opening.
     pub url: Option<String>,
     /// A browser window in the off-the-record profile.

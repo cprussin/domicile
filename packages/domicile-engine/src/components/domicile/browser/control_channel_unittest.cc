@@ -212,6 +212,17 @@ class FakeClient : public mojom::ControlChannelClient {
                                           entry->current ? " current" : ""));
     }
   }
+  void Seats(std::vector<mojom::AgentSeatPtr> seats) override {
+    for (const auto& seat : seats) {
+      std::string pointer =
+          seat->pointer ? seat->pointer->ToString() : std::string("nowhere");
+      heard_.push_back(base::StringPrintf(
+          "seat %s '%s' at %s in %s holds %zu took %zu", seat->id.c_str(),
+          seat->name.c_str(), pointer.c_str(),
+          seat->focused ? seat->focused->c_str() : "nothing",
+          seat->holds.size(), seat->taken.size()));
+    }
+  }
   void Tray(std::vector<mojom::TrayItemPtr>) override {}
   void Notifications(std::vector<mojom::NotificationPtr> items) override {
     for (const auto& item : items) {
@@ -945,6 +956,40 @@ TEST_F(ControlChannelTest, TheCurrentClipboardRowReachesThePage) {
   EXPECT_EQ(client_.heard_,
             (std::vector<std::string>{"clipboard 3 'now' current",
                                       "clipboard 2 'before'", "locked false"}));
+}
+
+// An agent's seat reaches the page, and a seat with no id is dropped.
+TEST_F(ControlChannelTest, AnAgentsSeatReachesThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"seats\",\"seats\":["
+      "{\"id\":\"agent-3\",\"name\":\"Claude Code\",\"pointer\":[1100.5,"
+      "240],\"focused\":\"app-2\",\"holds\":[\"app-2\",\"app-4\"],"
+      "\"taken\":[\"app-5\"]},"
+      "{\"id\":\"agent-4\",\"name\":\"Codex\",\"holds\":[],\"taken\":[]},"
+      "{\"name\":\"nobody\",\"holds\":[],\"taken\":[]}]}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{
+                "seat agent-3 'Claude Code' at 1100.5,240 in app-2 holds 2 "
+                "took 1",
+                "seat agent-4 'Codex' at nowhere in nothing holds 0 took 0",
+                "locked false"}));
+}
+
+// Taking a window from an agent, and giving it back, reach the compositor.
+TEST_F(ControlChannelTest, TakingAWindowFromAnAgentReachesTheCompositor) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), kHello);
+  control_->TakeOver("app-2");
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), R"({"app_id":"app-2","type":"take_over"})");
+  control_->GiveBack("app-2");
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), R"({"app_id":"app-2","type":"give_back"})");
 }
 
 // Removing a clipboard row reaches the compositor as its id.

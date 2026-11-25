@@ -441,9 +441,12 @@ Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox (private)
   the keyboard for browser windows, so none is marked.
 - `urgent` marks a window that asked for the keyboard and was refused.
 - `private` marks a private browser window.
+- `held by agent-<session>` marks a window an agent's own pointer or keyboard
+  is in ([AGENT-SEATS.md](architecture/AGENT-SEATS.md)).
 
 `--json` prints a JSON array instead, for scripts, with `kind`, `title`,
-`app`, `pid`, `size`, `focused`, `urgent`, `url` (a browser window's address,
+`app`, `pid`, `size`, `focused`, `urgent`, `held_by` (the agent seat holding
+it, absent when it is the user's), `url` (a browser window's address,
 `null` for a native window), `private`, `engine_id` (a browser window's
 id in the engine, `null` for a native window) and `views` per window.
 `views` lists the views a browser window holds and shows, bottom first: an

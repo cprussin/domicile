@@ -435,6 +435,10 @@ pub fn somebody_is_here(request: &ClientRequest) -> Option<&'static str> {
         // An agent, on its own seat.
         | ClientRequest::AgentInput { .. }
         | ClientRequest::AgentGone { .. }
+        // The shell's, on a button the person pressed, which the engine
+        // already counted.
+        | ClientRequest::TakeOver { .. }
+        | ClientRequest::GiveBack { .. }
         | ClientRequest::HeldAwakeByTheScreenSaver { .. }
         // The lock chord landed on the shell, and locking must not light the
         // screens.

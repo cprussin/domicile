@@ -187,6 +187,11 @@ impl Input {
         self.lift().into_iter().chain(leave).collect()
     }
 
+    /// Where the pointer is on the desk, once it has moved.
+    pub fn at(&self) -> Option<[f64; 2]> {
+        self.pointer.map(|point| [point.x, point.y])
+    }
+
     /// Release every key and button held down. The pointer stays where it is,
     /// over the same window.
     pub fn lift(&mut self) -> Vec<ClientRequest> {

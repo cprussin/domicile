@@ -21,6 +21,7 @@ describe("windows", () => {
         gid: undefined,
         grab: false,
         height: undefined,
+        heldBy: undefined,
         inhibitsShortcuts: false,
         maxHeight: undefined,
         maxWidth: undefined,

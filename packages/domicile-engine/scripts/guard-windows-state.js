@@ -42,6 +42,7 @@ const EVENT_NAMES = [
   "windowschanged",
   "focusedwindowchanged",
   "clipboardchanged",
+  "seatschanged",
   "traychanged",
   "notificationschanged",
   "extensionschanged",
@@ -138,6 +139,7 @@ const report = (host) => {
     gid: window.gid,
     grab: window.grab,
     height: window.height,
+    heldBy: window.heldBy,
     inhibitsShortcuts: window.inhibitsShortcuts,
     maxHeight: window.maxHeight,
     maxWidth: window.maxWidth,
@@ -166,6 +168,15 @@ const report = (host) => {
   }));
   console.log(`GUARD browser ${JSON.stringify(browser)}`);
   console.log(`GUARD focused ${host.focusedWindow}`);
+  const seats = (host.seats ?? []).map((seat) => ({
+    focused: seat.focused,
+    holds: seat.holds,
+    id: seat.id,
+    name: seat.name,
+    pointer: [seat.pointerX, seat.pointerY],
+    taken: seat.taken,
+  }));
+  console.log(`GUARD seats ${JSON.stringify(seats)}`);
   console.log(
     `GUARD appearance ${host.accentColor} ${host.highContrast} ${host.reducedMotion}`,
   );

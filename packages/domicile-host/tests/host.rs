@@ -3,7 +3,7 @@
 //! `Host` tracks Wayland apps, applies the chrome's focus requests and reports
 //! changes back as `HostMessage`s. These tests need no Wayland or GPU.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use domicile_host::ipc::apply_chrome_message;
 use domicile_host::{AppId, Appearances, BrowserWindow, Host, Mapped};
@@ -143,6 +143,7 @@ fn every_window_is_listed_native_and_browser_alike() {
                     size: Some(SIZE),
                     focused: true,
                     urgent: false,
+                    held_by: None,
                     url: None,
                     private: false,
                     engine_id: None,
@@ -157,6 +158,7 @@ fn every_window_is_listed_native_and_browser_alike() {
                     size: None,
                     focused: false,
                     urgent: false,
+                    held_by: None,
                     url: Some("https://mail.example/".into()),
                     private: false,
                     engine_id: Some("3".into()),
@@ -171,6 +173,7 @@ fn every_window_is_listed_native_and_browser_alike() {
                     size: None,
                     focused: false,
                     urgent: false,
+                    held_by: None,
                     url: Some("https://example.com/".into()),
                     private: true,
                     engine_id: Some("7".into()),
@@ -179,6 +182,25 @@ fn every_window_is_listed_native_and_browser_alike() {
             ]
         }
     );
+}
+
+#[test]
+fn a_window_an_agent_holds_lists_its_seat() {
+    let mut host = Host::new();
+    let held = host.app_created(OWNER, "kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA".to_string());
+    host.app_mapped(&held, mapped());
+    let users = host.app_created(OWNER, "nW1zT5yB8vC2xF6hJ9pL4sR0gAkD3mQ7".to_string());
+    host.app_mapped(&users, mapped());
+    host.describe_agent_holds(HashMap::from([(held.clone(), "agent-3".to_string())]));
+
+    let HostMessage::WindowList { windows } = host.list_windows() else {
+        panic!("list_windows answers with a window list");
+    };
+    let held_by: Vec<Option<&str>> = windows
+        .iter()
+        .map(|window| window.held_by.as_deref())
+        .collect();
+    assert_eq!(held_by, vec![Some("agent-3"), None]);
 }
 
 #[test]

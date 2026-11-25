@@ -35,6 +35,7 @@
   X(windowschanged, Windowschanged)                               \
   X(focusedwindowchanged, Focusedwindowchanged)                   \
   X(clipboardchanged, Clipboardchanged)                           \
+  X(seatschanged, Seatschanged)                                   \
   X(traychanged, Traychanged)                                     \
   X(notificationschanged, Notificationschanged)                   \
   X(extensionschanged, Extensionschanged)                         \

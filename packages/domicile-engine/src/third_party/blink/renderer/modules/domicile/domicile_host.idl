@@ -123,6 +123,14 @@
   // window can refuse and show a save dialog instead.
   [CallWith=ScriptState, RaisesException] undefined closeApp(DOMString appId);
 
+  // Take a window from the agent seat holding it, as the user's click or key
+  // in it does: the agent lets go, and can't drive it until giveBack(). Does
+  // nothing to a window no agent holds.
+  [CallWith=ScriptState, RaisesException] undefined takeOver(DOMString appId);
+
+  // Let agents drive a window the user took again.
+  [CallWith=ScriptState, RaisesException] undefined giveBack(DOMString appId);
+
   // Say this page took the pointer for a window's `pointerConstraint`
   // (`active`), as a pointer lock on its <app>, or let it go. Only once taken
   // is the client told its pointer is locked or confined; letting go unlocks
@@ -356,6 +364,10 @@
   // nothing. See packages/chrome-sdk/README.md.
   readonly attribute FrozenArray<DomicileClipboardEntry>? clipboard;
   attribute EventHandler onclipboardchanged;
+  // The agent seats, each with a pointer and keyboard of its own. The user's
+  // seat isn't listed: it holds every window no agent seat does.
+  readonly attribute FrozenArray<DomicileSeat>? seats;
+  attribute EventHandler onseatschanged;
   readonly attribute FrozenArray<DomicileTrayItem>? tray;
   attribute EventHandler ontraychanged;
   readonly attribute FrozenArray<DomicileNotification>? notifications;

@@ -1,0 +1,37 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// An agent's seat: a pointer and keyboard of its own, driving windows beside
+// the user's. See docs/architecture/AGENT-SEATS.md in the Domicile
+// repository.
+//
+// An interface rather than a dictionary, for DomicileClipboardEntry's reason:
+// these are read off DomicileHost.seats.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileSeat {
+  // `agent-<session>`, the session `domicile agent` prints. What
+  // DomicileWindow.heldBy names.
+  readonly attribute DOMString id;
+
+  // The agent's name, as it asked to be let in.
+  readonly attribute DOMString name;
+
+  // Where the agent's pointer is, in the desk's coordinates (those of
+  // DomicileHost.displays). Null before it first points.
+  readonly attribute double? pointerX;
+  readonly attribute double? pointerY;
+
+  // The window its keyboard is in; null for none.
+  readonly attribute DOMString? focused;
+
+  // The windows it holds: the one its keyboard is in and the one its pointer
+  // is in. A window is in one seat's list at most.
+  readonly attribute FrozenArray<DOMString> holds;
+
+  // The windows the user took from it, which it can't drive until
+  // DomicileHost.giveBack().
+  readonly attribute FrozenArray<DOMString> taken;
+};

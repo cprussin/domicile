@@ -107,6 +107,19 @@ SEQUENCE = [
         "grab": True,
         "frames": [{"app_id": "second", "frame": 5}, {"app_id": "menu", "frame": 1}],
     },
+    {
+        "type": "seats",
+        "seats": [
+            {
+                "id": "agent-3",
+                "name": "Claude Code",
+                "pointer": [100.5, 20],
+                "focused": "second",
+                "holds": ["second"],
+                "taken": ["first"],
+            }
+        ],
+    },
     {"type": "browser_toplevel_ids", "toplevel_ids": {"1": "browser-listed"}},
     {"type": "appearance", "accent_color": "#3584e4", "high_contrast": True, "reduced_motion": False},
     {"type": "system_reply", "id": 1, "reply": {"kind": "written"}},

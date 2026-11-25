@@ -271,6 +271,9 @@ pub struct Host {
     inputs: Vec<ListedInput>,
     /// Which monitors are off.
     darkness: Darkness,
+    /// The agent seat holding each window an agent holds, by app id. See
+    /// [`Host::describe_agent_holds`].
+    agent_holds: HashMap<AppId, String>,
 }
 
 impl Host {
@@ -306,6 +309,12 @@ impl Host {
 
     /// Record which monitors are off: every one when `all`, else those named
     /// in `asleep`.
+    /// Which agent seat holds each window an agent holds, by app id, for
+    /// [`Host::list_windows`]. The compositor's agent seats decide it.
+    pub fn describe_agent_holds(&mut self, holds: HashMap<AppId, String>) {
+        self.agent_holds = holds;
+    }
+
     pub fn describe_darkness(&mut self, all: bool, asleep: Vec<String>) {
         self.darkness = Darkness { all, asleep };
     }
@@ -358,6 +367,8 @@ impl Host {
                 size: None,
                 focused: false,
                 urgent: false,
+                // Agents drive browser windows by ref, holding none.
+                held_by: None,
                 // An older engine says no address.
                 url: (!window.url.is_empty()).then(|| window.url.clone()),
                 private: window.private,
@@ -377,6 +388,7 @@ impl Host {
                     size: app.size.map(|(width, height)| [width, height]),
                     focused: focused.as_ref() == Some(&app.app_id),
                     urgent: app.urgent,
+                    held_by: self.agent_holds.get(&app.app_id).cloned(),
                     url: None,
                     private: false,
                     engine_id: None,
@@ -1181,6 +1193,10 @@ impl Host {
             // A close is the client's to answer. The window leaves the scene
             // when the client destroys it.
             ChromeMessage::CloseApp { .. }
+            // The compositor's agent seats hold windows; the scene doesn't
+            // change.
+            | ChromeMessage::TakeOver { .. }
+            | ChromeMessage::GiveBack { .. }
             | ChromeMessage::Spawn { .. }
             | ChromeMessage::Exec { .. }
             | ChromeMessage::SearchFiles { .. }

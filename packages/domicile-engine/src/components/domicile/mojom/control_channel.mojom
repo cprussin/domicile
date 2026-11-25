@@ -295,6 +295,24 @@ struct ClipboardEntry {
   bool current;
 };
 
+// An agent's seat: a pointer and keyboard of its own, driving windows beside
+// the user's. The compositor sends every seat whenever any changes.
+struct AgentSeat {
+  // `agent-<session>`.
+  string id;
+  // The agent's name, as it asked to be let in.
+  string name;
+  // Where its pointer is, in the desk's coordinates; null before it points.
+  gfx.mojom.PointF? pointer;
+  // The window its keyboard is in.
+  string? focused;
+  // The windows it holds: the one its keyboard is in and the one its pointer
+  // is in.
+  array<string> holds;
+  // The windows the user took from it, until GiveBack.
+  array<string> taken;
+};
+
 // One icon in the system tray: an application's StatusNotifierItem, as the
 // compositor read it off the session bus.
 //
@@ -441,6 +459,13 @@ interface ControlChannel {
   // Ask a client to close. Not a kill: the client decides, which is why a
   // window can refuse and show a save dialog instead.
   CloseApp(string app_id);
+
+  // Take a window from the agent seat holding it: its input there is refused
+  // until GiveBack. Nothing happens to a window no agent holds.
+  TakeOver(string app_id);
+
+  // Let agents drive a window the user took again.
+  GiveBack(string app_id);
 
   // Where the page put an <app>, in the desk's CSS pixels. The compositor
   // gives the client the scale of the monitor holding most of it. It positions
@@ -755,6 +780,10 @@ interface ControlChannelClient {
   // clipboard, which on the platform this engine scans out on is connected to
   // no Wayland client at all.
   Clipboard(array<ClipboardEntry> entries);
+
+  // The agent seats. Pushed like Clipboard, the whole list every time, and
+  // on connect even when empty.
+  Seats(array<AgentSeat> seats);
 
   // The system tray: every application showing an icon, in the order they
   // registered.

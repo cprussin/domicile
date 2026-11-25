@@ -54,6 +54,10 @@
       "types": "./dist/portals.d.ts",
       "default": "./dist/portals.js"
     },
+    "./seats": {
+      "types": "./dist/seats.d.ts",
+      "default": "./dist/seats.js"
+    },
     "./session": {
       "types": "./dist/session.d.ts",
       "default": "./dist/session.js"

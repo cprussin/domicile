@@ -80,17 +80,21 @@ between them is explicit: a future `clipboard_read` / `clipboard_write` tool.
 Any shell can build the mockup's UX from these:
 
 ```ts
-domicile.seats; // [{ id, kind: "person" | "agent", name, pointer: {x, y} | undefined, focused: windowId | undefined }]
-window.heldBy; // seat id, on each DomicileWindow
+domicile.seats.list; // [{ id, name, pointer: {x, y} | undefined, focused, holds, taken }]
+window.heldBy; // agent seat id, or undefined for the user's
 domicile.seats.takeOver(windowId);
 domicile.seats.giveBack(windowId);
 ```
 
-- `seats` changes on the same stream as windows, throttled to a frame, so the
-  shell draws the agent's cursor in the page. The hardware cursor plane stays
-  the user's.
-- The person-wins rule is the compositor's default. A shell can turn it off
-  per window, e.g. to let a user watch without interrupting.
+- `seats.list` lists agent seats only: the user's seat holds every window no
+  agent seat does.
+- The compositor sends the seats after each run of an agent's input and each
+  take or give back, so the shell draws the agent's cursor in the page. The
+  hardware cursor plane stays the user's.
+- A window the user took (`taken`) stays theirs after their pointer and
+  keyboard leave it, until given back.
+- The person-wins rule is the compositor's default. Turning it off per window,
+  e.g. to let a user watch without interrupting, is not built.
 
 ### MCP
 
@@ -121,9 +125,9 @@ domicile.seats.giveBack(windowId);
       names the grant)
 - [x] compositor: a selection per seat (Smithay `share_selection_devices`)
 - [ ] engine: CDP raw input for browser windows from the agent seat
-- [ ] protocol and SDK: `seats`, `heldBy`, `takeOver`, `giveBack`
+- [x] protocol and SDK: `seats`, `heldBy`, `takeOver`, `giveBack`
 - [x] MCP: raw tools on the agent seat
-- [ ] MCP: `heldBy` in `list_windows`
+- [x] MCP: `heldBy` in `list_windows` (`held_by`)
 - [ ] manganese: agent cursor, ring and name tag, "Yours now · Give back"
       strip, held windows in the agent pill
 - [ ] new windows from an agent's `open`/`exec` start held by it

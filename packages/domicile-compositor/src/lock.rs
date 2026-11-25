@@ -421,6 +421,9 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::Activity { .. }
             // Lets go of what an agent held, which the lock lets through.
             | ClientRequest::AgentGone { .. }
+            // Only make agents' input refused, or let them drive again.
+            | ClientRequest::TakeOver { .. }
+            | ClientRequest::GiveBack { .. }
             // Refused by `agent_input` itself, which first lets go of what
             // the agent holds and answers why.
             | ClientRequest::AgentInput { .. }

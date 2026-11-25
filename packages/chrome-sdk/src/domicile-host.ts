@@ -744,6 +744,7 @@ export type DomicileHostEventMap = {
    */
   focusedwindowchanged: Event;
   clipboardchanged: Event;
+  seatschanged: Event;
   traychanged: Event;
   notificationschanged: Event;
   extensionschanged: Event;
@@ -949,6 +950,14 @@ export type DomicileHost = {
    * window can refuse and show a save dialog instead.
    */
   closeApp(appId: string): void;
+  /**
+   * Take a window from the agent seat holding it, as the user's click or key
+   * in it does: the agent lets go, and can't drive it until giveBack(). Does
+   * nothing to a window no agent holds.
+   */
+  takeOver(appId: string): void;
+  /** Let agents drive a window the user took again. */
+  giveBack(appId: string): void;
   /**
    * Say this page took the pointer for a window's `pointerConstraint`
    * (`active`), as a pointer lock on its <app>, or let it go. Only once taken
@@ -1416,6 +1425,11 @@ export type DomicileHost = {
    * nothing. See packages/chrome-sdk/README.md.
    */
   readonly clipboard: readonly DomicileClipboardEntry[] | null;
+  /**
+   * The agent seats, each with a pointer and keyboard of its own. The user's
+   * seat isn't listed: it holds every window no agent seat does.
+   */
+  readonly seats: readonly DomicileSeat[] | null;
   readonly tray: readonly DomicileTrayItem[] | null;
   readonly notifications: readonly DomicileNotification[] | null;
   readonly extensions: readonly DomicileExtension[] | null;
@@ -1668,6 +1682,42 @@ export type DomicilePictureInPictureVideo = {
 };
 
 /**
+ * An agent's seat: a pointer and keyboard of its own, driving windows beside
+ * the user's. See docs/architecture/AGENT-SEATS.md in the Domicile
+ * repository.
+ *
+ * An interface rather than a dictionary, for DomicileClipboardEntry's reason:
+ * these are read off DomicileHost.seats.
+ */
+export type DomicileSeat = {
+  /**
+   * `agent-<session>`, the session `domicile agent` prints. What
+   * DomicileWindow.heldBy names.
+   */
+  readonly id: string;
+  /** The agent's name, as it asked to be let in. */
+  readonly name: string;
+  /**
+   * Where the agent's pointer is, in the desk's coordinates (those of
+   * DomicileHost.displays). Null before it first points.
+   */
+  readonly pointerX: number | null;
+  readonly pointerY: number | null;
+  /** The window its keyboard is in; null for none. */
+  readonly focused: string | null;
+  /**
+   * The windows it holds: the one its keyboard is in and the one its pointer
+   * is in. A window is in one seat's list at most.
+   */
+  readonly holds: readonly string[];
+  /**
+   * The windows the user took from it, which it can't drive until
+   * DomicileHost.giveBack().
+   */
+  readonly taken: readonly string[];
+};
+
+/**
  * A combination claimed with grabShortcut() was pressed (`shortcut`) or let
  * go (`shortcutrelease`).
  *
@@ -1815,6 +1865,12 @@ export type DomicileWindow = {
    * not had the keyboard since. False while it holds the keyboard.
    */
   readonly urgent: boolean;
+  /**
+   * The id of the agent seat (DomicileHost.seats) holding the window, whose
+   * pointer or keyboard is in it; null when it is the user's, as every window
+   * no agent holds is.
+   */
+  readonly heldBy: string | null;
   /**
    * The client holds a zwp_keyboard_shortcuts_inhibitor_v1. While the window
    * has the keyboard, the desktop's shortcuts are its keys: grabbed chords

@@ -13,6 +13,9 @@
 //! - The user wins. Their pointer entering a client takes it from the
 //!   agent's pointer, and their keyboard entering one takes it from the
 //!   agent's pointer and keyboard both, before the user's seat says `enter`.
+//!   The window the agent typed in is then taken: the agent is refused it
+//!   until the shell gives it back (`ChromeMessage::GiveBack`).
+//! - The shell hears every agent seat (`HostMessage::Seats`) to draw them.
 //!
 //! Each agent seat has its own clipboard and primary selection too. An app
 //! the agent types in copies to and pastes from the agent's, never the
@@ -23,7 +26,7 @@
 //! windows take it: the shell and browser windows are the engine's, and the
 //! agent reaches them by ref.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use smithay::backend::input::{Axis, AxisSource, ButtonState, KeyState, Keycode};
 use smithay::input::keyboard::{FilterResult, KeyboardHandle, XkbConfig};
@@ -39,7 +42,7 @@ use smithay::wayland::selection::share_selection_devices;
 use smithay::wayland::shell::xdg::PopupSurface;
 use tracing::debug;
 
-use domicile_protocol::{HostMessage, PointerAxisSource};
+use domicile_protocol::{AgentSeat as SeatSummary, HostMessage, PointerAxisSource};
 
 use crate::client_requests::ClientRequest;
 use crate::eis::{Emulated, Input};
@@ -72,6 +75,9 @@ pub struct AgentSeats {
     /// Sessions that ended, which never get a seat again: input from one
     /// can still be on its way.
     gone: HashSet<u32>,
+    /// What the chromes were last told, so an unchanged list isn't sent
+    /// again.
+    told: Vec<SeatSummary>,
 }
 
 struct AgentSeat {
@@ -84,6 +90,9 @@ struct AgentSeat {
     typing_in: Option<String>,
     /// Menus it opened that grabbed its keyboard, innermost last.
     menus: Vec<PopupSurface>,
+    /// Windows the user took from it, which it can't drive until given
+    /// back.
+    taken: BTreeSet<String>,
 }
 
 impl AgentSeat {
@@ -152,6 +161,7 @@ impl DomicileCompositor {
         if let_go || done.is_err() {
             self.agent_lets_go(session);
         }
+        self.tell_the_chromes_the_seats(false);
         done
     }
 
@@ -182,6 +192,7 @@ impl DomicileCompositor {
         self.seat_state.remove_seat(&agent.seat);
         debug!(session, "an agent's seat went with its session");
         self.activate(self.seat.get_keyboard().unwrap().current_focus().as_ref());
+        self.tell_the_chromes_the_seats(false);
     }
 
     /// The user's seat is about to enter `surface`'s client, with its
@@ -207,7 +218,8 @@ impl DomicileCompositor {
                 self.agent_lets_go(session);
                 typing.set_focus(self, None, SERIAL_COUNTER.next_serial());
                 let agent = self.agent_seats.mine(session);
-                agent.typing_in = None;
+                // Theirs until they give it back.
+                agent.taken.extend(agent.typing_in.take());
                 // Its menus close, as a menu does when its window loses the
                 // keyboard.
                 for menu in std::mem::take(&mut agent.menus).iter().rev() {
@@ -215,6 +227,122 @@ impl DomicileCompositor {
                 }
             }
         }
+        self.tell_the_chromes_the_seats(false);
+    }
+
+    /// The user takes window `app_id` from the agent holding it: the agent
+    /// lets go and leaves it, and can't drive it until it's given back.
+    pub fn take_over(&mut self, app_id: &str) {
+        let held_by = self
+            .agent_seats
+            .seats
+            .iter()
+            .find(|(_, agent)| {
+                [&agent.typing_in, &agent.pointing_at]
+                    .into_iter()
+                    .any(|held| held.as_deref() == Some(app_id))
+            })
+            .map(|(session, _)| *session);
+        let Some(session) = held_by else {
+            // The shell's list was a frame behind the agent's.
+            debug!(app_id, "the shell took a window no agent holds");
+            return;
+        };
+        let Some(surface) = self.surface_for(app_id) else {
+            debug!(app_id, "the shell took a window that has closed");
+            return;
+        };
+        debug!(session, app_id, "the shell took a window from an agent");
+        let (typing, pointer) = self.agent_seats.seats[&session].devices();
+        self.agent_lets_go(session);
+        let client = surface.client();
+        let in_client = |on: Option<WlSurface>| on.and_then(|on| on.client()) == client;
+        if in_client(pointer.current_focus()) {
+            self.agent_pointer_leaves(&pointer);
+            self.agent_seats.mine(session).pointing_at = None;
+        }
+        if in_client(typing.current_focus()) {
+            typing.set_focus(self, None, SERIAL_COUNTER.next_serial());
+            let agent = self.agent_seats.mine(session);
+            agent.typing_in = None;
+            for menu in std::mem::take(&mut agent.menus).iter().rev() {
+                menu.send_popup_done();
+            }
+        }
+        self.agent_seats
+            .mine(session)
+            .taken
+            .insert(app_id.to_string());
+        self.tell_the_chromes_the_seats(false);
+    }
+
+    /// Agents may drive window `app_id` again.
+    pub fn give_back(&mut self, app_id: &str) {
+        let mut given = false;
+        for agent in self.agent_seats.seats.values_mut() {
+            given |= agent.taken.remove(app_id);
+        }
+        debug!(app_id, given, "the shell gave a window back to agents");
+        self.tell_the_chromes_the_seats(false);
+    }
+
+    /// Tell every chrome the agent seats, if they changed since last told, or
+    /// `always` for a chrome that just connected.
+    pub fn tell_the_chromes_the_seats(&mut self, always: bool) {
+        // Most of the time there are none, and the user's every move asks.
+        if !always && self.agent_seats.seats.is_empty() && self.agent_seats.told.is_empty() {
+            return;
+        }
+        let names: HashMap<u32, String> = self
+            .hub
+            .portals
+            .agents()
+            .known()
+            .connected
+            .into_iter()
+            .map(|agent| (agent.session, agent.agent))
+            .collect();
+        let mut sessions: Vec<u32> = self.agent_seats.seats.keys().copied().collect();
+        sessions.sort_unstable();
+        let seats: Vec<SeatSummary> = sessions
+            .into_iter()
+            .map(|session| {
+                let agent = &self.agent_seats.seats[&session];
+                // A menu it points at is held through its window.
+                let pointing_at = agent
+                    .pointing_at
+                    .clone()
+                    .filter(|window| self.toplevel_for(window).is_some());
+                let mut holds: Vec<String> = Vec::new();
+                for held in [agent.typing_in.clone(), pointing_at].into_iter().flatten() {
+                    if !holds.contains(&held) {
+                        holds.push(held);
+                    }
+                }
+                SeatSummary {
+                    id: format!("agent-{session}"),
+                    name: names.get(&session).cloned().unwrap_or_default(),
+                    pointer: agent.input.at(),
+                    focused: agent.typing_in.clone(),
+                    holds,
+                    taken: agent.taken.iter().cloned().collect(),
+                }
+            })
+            .collect();
+        if !always && seats == self.agent_seats.told {
+            return;
+        }
+        let holds = seats
+            .iter()
+            .flat_map(|seat| {
+                seat.holds
+                    .iter()
+                    .map(|held| (held.clone(), seat.id.clone()))
+            })
+            .collect();
+        self.hub.host.lock().unwrap().describe_agent_holds(holds);
+        self.agent_seats.told = seats.clone();
+        self.hub.broadcast(HostMessage::Seats { seats });
     }
 
     /// Agent session `session`'s seat, made on first use with the user's
@@ -254,6 +382,7 @@ impl DomicileCompositor {
                 pointing_at: None,
                 typing_in: None,
                 menus: Vec::new(),
+                taken: BTreeSet::new(),
             },
         );
         Ok(())
@@ -304,6 +433,7 @@ impl DomicileCompositor {
                 let Some(surface) = self.surface_for(&app_id) else {
                     return Err(format!("window {app_id} has closed"));
                 };
+                self.taken_from(session, &app_id)?;
                 self.someone_else_holds(session, &surface, false)?;
                 let (x, y) = crate::window_geometry::surface_point(
                     with_states(&surface, window_geometry),
@@ -396,7 +526,12 @@ impl DomicileCompositor {
                              focus_window, first"
                             .to_string())
                     }
-                    (true, Some(surface)) => self.someone_else_holds(session, &surface, true)?,
+                    (true, Some(surface)) => {
+                        if let Some(window) = self.agent_seats.mine(session).typing_in.clone() {
+                            self.taken_from(session, &window)?;
+                        }
+                        self.someone_else_holds(session, &surface, true)?
+                    }
                     (false, _) => {}
                 }
                 let key: Keycode = (keycode + 8).into();
@@ -422,10 +557,22 @@ impl DomicileCompositor {
                  Act on browser windows and the shell by ref"
             ));
         };
+        self.taken_from(session, window)?;
         self.someone_else_holds(session, &surface, true)?;
         let (keyboard, _) = self.agent_seats.mine(session).devices();
         keyboard.set_focus(self, Some(surface), SERIAL_COUNTER.next_serial());
         self.agent_seats.mine(session).typing_in = Some(window.to_string());
+        Ok(())
+    }
+
+    /// Why agent `session` can't drive window `window`: the user took it.
+    fn taken_from(&mut self, session: u32, window: &str) -> Result<(), String> {
+        if self.agent_seats.mine(session).taken.contains(window) {
+            return Err(format!(
+                "the user took over window {window}: act on it by ref, or wait until they give it \
+                 back"
+            ));
+        }
         Ok(())
     }
 
