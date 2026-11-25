@@ -212,11 +212,19 @@ const labelOf = (tile: Rect): Rect => ({
   y: tile.y + tile.height,
 });
 
-// Dims like the scratchpad's backdrop, without the blur: the tiles are the
-// point, and blurring the photo would cost a pass over every screen. A
-// transition, so closing fades from wherever a pinch left it.
+// Dims like the scratchpad's backdrop. A transition, so closing fades from
+// wherever a pinch left it.
+//
+// With the depth of field on, it also throws the photo out of focus behind
+// the tiles (see `WINDOW_EFFECTS`), and its fade brings the blur in and out.
+// Without it, no blur: plain blurring would cost a pass over every screen
+// for less.
 const backdropStyles = cva({
   base: {
+    _depthOfField: {
+      backdropFilter:
+        "domicile-shader(depth-of-field, 12, var(--device-pixel-ratio))",
+    },
     _starting: { opacity: 0 },
     backgroundColor: "backdrop",
     // Its grid moves in from beside the shown workspace, off the screen.

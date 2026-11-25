@@ -248,6 +248,11 @@ const backdropStyles = cva({
       // A lighter scrim and stronger blur, so content stays visible through
       // the glass popup.
       glass: {
+        // Frosted while the shell's `frost` effect may draw; see `FROST`.
+        _frost: {
+          backdropFilter:
+            "blur({spacing.2.5}) saturate(140%) domicile-shader(frost, 1, var(--device-pixel-ratio))",
+        },
         backdropFilter: "blur({spacing.2.5}) saturate(140%)",
         backgroundColor:
           "color-mix(in oklab, {colors.backdrop} 55%, transparent)",

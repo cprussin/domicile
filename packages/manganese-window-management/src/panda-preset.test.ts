@@ -39,6 +39,50 @@ describe("window keyframes", () => {
     expect(keyframes[reversal]).toStrictEqual(keyframes[slide]);
   });
 
+  // With the slide blur on, each slide blurs most as it moves fastest,
+  // early on its spring, and lands sharp.
+  it.each([
+    ["windowArrivingFromEndBlurred", "windowArrivingFromEnd"],
+    ["windowArrivingFromStartBlurred", "windowArrivingFromStart"],
+    ["windowLeavingToEndBlurred", "windowLeavingToEnd"],
+    ["windowLeavingToStartBlurred", "windowLeavingToStart"],
+    ["windowRetreatingToEndBlurred", "windowArrivingFromEnd"],
+    ["windowRetreatingToStartBlurred", "windowArrivingFromStart"],
+    ["windowReturningFromEndBlurred", "windowLeavingToEnd"],
+    ["windowReturningFromStartBlurred", "windowLeavingToStart"],
+  ] as const)("blurs %s along the frames of %s", (blurred, slide) => {
+    expect(keyframes[blurred]).toStrictEqual({
+      "0%": {
+        ...keyframes[slide]?.["0%"],
+        filter: "domicile-shader(slide-blur, 0, var(--device-pixel-ratio))",
+      },
+      "20%": {
+        filter: "domicile-shader(slide-blur, 12, var(--device-pixel-ratio))",
+      },
+      "100%": {
+        ...keyframes[slide]?.["100%"],
+        filter: "domicile-shader(slide-blur, 0, var(--device-pixel-ratio))",
+      },
+    });
+  });
+
+  // `--origin-x` and `--origin-y` are the frame's middle, set by `originAt`,
+  // so every part of the window dissolves in one pattern.
+  it("dissolves a closing window from its frame's middle", () => {
+    expect(keyframes.windowDissolving).toStrictEqual({
+      "0%": {
+        filter:
+          "domicile-shader(dissolve, 0, var(--origin-x), var(--origin-y), var(--device-pixel-ratio))",
+        transform: "scale(1)",
+      },
+      "100%": {
+        filter:
+          "domicile-shader(dissolve, 1, var(--origin-x), var(--origin-y), var(--device-pixel-ratio))",
+        transform: "scale(0.96)",
+      },
+    });
+  });
+
   // `--tab-slide-x` and `--tab-slide-y` are the side, set by `tabSlidFrom`.
   it("slides a revealed tab in from its side as it fades in", () => {
     expect(keyframes.windowRevealing).toStrictEqual({

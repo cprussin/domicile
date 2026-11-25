@@ -70,6 +70,7 @@
     "./usePointerWarp": "./src/usePointerWarp.ts",
     "./useWindows": "./src/useWindows.ts",
     "./window": "./src/window.ts",
+    "./window-effects": "./src/window-effects.ts",
     "./window-state": "./src/window-state.ts",
     "./window-styles": "./src/window-styles.ts",
     "./workspaces-context": "./src/workspaces-context.ts"

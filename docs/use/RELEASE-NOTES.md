@@ -15,6 +15,16 @@ An agent now has a clipboard of its own. What it copies never replaces what you 
 
 An agent now clicks and types with a pointer and keyboard of its own, so it can work in one app while you work in another. It never moves your pointer or changes what you're typing in, and an app you're using stays yours.
 
+### Window effects
+
+Closing windows dissolve away, windows blur a little as a workspace switch slides them, the overview throws your wallpaper out of focus, a theme change wipes in behind a soft edge, and the launcher's glass is frosted. Turn them off with Window effects in Settings.
+
+[Window effects](APPEARANCE.md#window-effects)
+
+### Smoother motion
+
+Windows, the overview, toasts, popovers and rows move on springs. A dialog grows out of the window that asked for it, a window sent to another workspace flies to it in the switcher, and a workspace switch or a four-finger pinch into the overview turns back midway when you change your mind. Panels grow from their bar buttons, toasts follow your swipe, and closed rows slide away.
+
 ## 1.3.0
 
 _November 24, 2026_

@@ -25,6 +25,17 @@ export default defineConfig({
     "html, body, #root": {
       blockSize: "100%",
     },
+    // With the theme wipe effect on, the new theme comes in behind a soft
+    // edge rather than the preset's hard clip, the same way and on the same
+    // timing. See `SHADER_EFFECTS`.
+    "html[data-theme-flip-to='dark'][data-shader-effects~=theme-wipe]::view-transition-new(root)":
+      {
+        animationName: "themeSoftWipeFromTop",
+      },
+    "html[data-theme-flip-to='light'][data-shader-effects~=theme-wipe]::view-transition-new(root)":
+      {
+        animationName: "themeSoftWipeFromBottom",
+      },
     // Fields stay selectable so they can be edited.
     "input, textarea": {
       userSelect: "text",
@@ -49,4 +60,18 @@ export default defineConfig({
     lockPreset,
     batteryPreset,
   ],
+  theme: {
+    extend: {
+      keyframes: {
+        themeSoftWipeFromBottom: {
+          "0%": { filter: "domicile-shader(theme-wipe, 0, 0)" },
+          "100%": { filter: "domicile-shader(theme-wipe, 1, 0)" },
+        },
+        themeSoftWipeFromTop: {
+          "0%": { filter: "domicile-shader(theme-wipe, 0, 1)" },
+          "100%": { filter: "domicile-shader(theme-wipe, 1, 1)" },
+        },
+      },
+    },
+  },
 });

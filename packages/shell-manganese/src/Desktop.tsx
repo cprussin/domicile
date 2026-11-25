@@ -115,6 +115,7 @@ import {
 } from "@domicile-desktop/manganese-window-management/window-state";
 import type { Workspaces } from "@domicile-desktop/manganese-window-management/workspaces-context";
 import { WorkspacesContext } from "@domicile-desktop/manganese-window-management/workspaces-context";
+import { useAppearance } from "@domicile-desktop/react/appearance";
 import { useDomicile } from "@domicile-desktop/react/domicile-provider";
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 import { previewFile } from "@domicile-desktop/sdk/file-preview";
@@ -151,6 +152,9 @@ import { options } from "./options";
 import { usePageDuplicates } from "./page-duplicates";
 import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
+import { SHADER_EFFECTS } from "./shader-effects/shader-effects";
+import { useDevicePixelRatio } from "./shader-effects/useDevicePixelRatio";
+import { useShaderEffects } from "./shader-effects/useShaderEffects";
 import { showsSharing } from "./shows-sharing";
 import { deskVirtualMonitors } from "./virtual-monitors";
 
@@ -460,6 +464,14 @@ export const Desktop = ({
   useLayoutEffect(() => {
     applyFont(shellOptions.font);
   }, [shellOptions.font]);
+  const { reducedMotion } = useAppearance();
+  const pixelRatio = useDevicePixelRatio();
+  useShaderEffects(
+    domicile.effects,
+    SHADER_EFFECTS,
+    { reducedMotion, switchedOn: shellOptions.effects.windows },
+    pixelRatio,
+  );
   // How many bar items' panels, and applications' dialogs, hold the keyboard;
   // see `useKeepsKeyboard`.
   const [heldPanels, setHeldPanels] = useState(0);

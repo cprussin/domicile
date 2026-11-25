@@ -293,6 +293,35 @@ describe("OverviewBackdrop", () => {
 
     expect(await closed).toBeUndefined();
   });
+
+  // The backdrop's own fade, which a pinch drives, brings the blur in and
+  // out with it. The shell sets the device pixels to a CSS pixel with the
+  // effects it lists.
+  it.each([
+    ["", ""],
+    ["depth-of-field", "domicile-shader(depth-of-field, 12, 2)"],
+  ])(
+    "with effects '%s' blurs the wallpaper behind it as '%s'",
+    (listed, filter) => {
+      document.documentElement.setAttribute("data-shader-effects", listed);
+      document.documentElement.style.setProperty("--device-pixel-ratio", "2");
+      const { container } = render(
+        <OverviewBackdrop
+          cards={{}}
+          closing={false}
+          onClosed={() => undefined}
+          overviews={[overviewOf(false)]}
+        />,
+      );
+      const drawn = globalThis.getComputedStyle(
+        backdropOf(container),
+      ).backdropFilter;
+      document.documentElement.removeAttribute("data-shader-effects");
+      document.documentElement.style.removeProperty("--device-pixel-ratio");
+
+      expect(drawn).toBe(filter);
+    },
+  );
 });
 
 /** A `transitionend`; happy-dom's `TransitionEvent` drops `propertyName`. */

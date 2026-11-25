@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
   APP_FOCUS_REQUESTED_EVENT,
   APP_TAG_NAME,
@@ -346,6 +346,34 @@ describe("AppWindow", () => {
       expect(
         globalThis.getComputedStyle(windowBox(container)).animation,
       ).toContain("windowOpening");
+    });
+
+    describe("with shader effects", () => {
+      afterEach(() => {
+        document.documentElement.removeAttribute("data-shader-effects");
+      });
+
+      // The shell lists the effects that may draw; see `useShaderEffects`.
+      it.each([
+        ["closing", "", "windowClosing"],
+        ["closing", "dissolve", "windowDissolving"],
+        ["arriving-from-end", "", "windowArrivingFromEnd "],
+        ["arriving-from-end", "slide-blur", "windowArrivingFromEndBlurred"],
+        ["retreating-to-start", "slide-blur", "windowRetreatingToStartBlurred"],
+        ["closing", "slide-blur", "windowClosing"],
+      ] as const)(
+        "plays %s with effects '%s' as %s",
+        (motion, listed, name) => {
+          document.documentElement.setAttribute("data-shader-effects", listed);
+          const { container } = render(
+            <AppWindow {...windowProps} focused={false} motion={motion} />,
+          );
+
+          expect(
+            globalThis.getComputedStyle(windowBox(container)).animation,
+          ).toContain(name);
+        },
+      );
     });
 
     // The contents and title bar are separate elements. Each must scale about

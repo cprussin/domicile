@@ -137,8 +137,17 @@ export const contentsScaledAbout = (
     rect,
   );
 
-/** Inline style setting part of a window's `transform-origin` to `point`. */
-export const originAt = ({ x, y }: Point): CSSProperties => ({
+/**
+ * Inline style setting part of a window's `transform-origin` to `point`, and
+ * `--origin-x` and `--origin-y` to it as numbers, where the dissolve lays its
+ * noise from so it runs unbroken across the parts.
+ */
+export const originAt = ({
+  x,
+  y,
+}: Point): CSSProperties & Record<`--${string}`, number> => ({
+  "--origin-x": x,
+  "--origin-y": y,
   transformOrigin: `${x.toString()}px ${y.toString()}px`,
 });
 
@@ -326,6 +335,9 @@ export const clippedAlong = (
  * docs/architecture/MOTION.md): `springs.smooth` for what arrives,
  * `springs.snappy` for what leaves. Departures use `forwards` so the window
  * does not snap back before it is removed.
+ *
+ * A close dissolves, and a workspace switch blurs along its slide, while the
+ * shell lists that effect (`_dissolve`, `_slideBlur`; see `WINDOW_EFFECTS`).
  */
 export const movingStyles = cva({
   compoundVariants: [
@@ -378,14 +390,28 @@ export const movingStyles = cva({
       // drawn partway through starts where the others have got to
       // (`--motion-delay`, see `DrawnWindow.shownRewound`).
       "arriving-from-end": {
+        _slideBlur: {
+          animation:
+            "windowArrivingFromEndBlurred {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms)",
+        },
         animation:
           "windowArrivingFromEnd {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms)",
       },
       "arriving-from-start": {
+        _slideBlur: {
+          animation:
+            "windowArrivingFromStartBlurred {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms)",
+        },
         animation:
           "windowArrivingFromStart {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms)",
       },
+      // With the dissolve on, it burns away instead of fading, slower so
+      // the pattern is seen.
       closing: {
+        _dissolve: {
+          animation:
+            "windowDissolving {durations.slower} {easings.in-out} forwards",
+        },
         animation:
           "windowClosing {durations.springs.snappy} {easings.springs.snappy} forwards",
       },
@@ -406,10 +432,18 @@ export const movingStyles = cva({
           "windowDropping {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms)",
       },
       "leaving-to-end": {
+        _slideBlur: {
+          animation:
+            "windowLeavingToEndBlurred {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) forwards",
+        },
         animation:
           "windowLeavingToEnd {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) forwards",
       },
       "leaving-to-start": {
+        _slideBlur: {
+          animation:
+            "windowLeavingToStartBlurred {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) forwards",
+        },
         animation:
           "windowLeavingToStart {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) forwards",
       },
@@ -438,18 +472,34 @@ export const movingStyles = cva({
       // `Reversal`). The spring runs backwards too, which keeps the two
       // workspaces side by side.
       "retreating-to-end": {
+        _slideBlur: {
+          animation:
+            "windowRetreatingToEndBlurred {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
+        },
         animation:
           "windowRetreatingToEnd {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
       },
       "retreating-to-start": {
+        _slideBlur: {
+          animation:
+            "windowRetreatingToStartBlurred {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
+        },
         animation:
           "windowRetreatingToStart {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
       },
       "returning-from-end": {
+        _slideBlur: {
+          animation:
+            "windowReturningFromEndBlurred {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
+        },
         animation:
           "windowReturningFromEnd {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
       },
       "returning-from-start": {
+        _slideBlur: {
+          animation:
+            "windowReturningFromStartBlurred {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
+        },
         animation:
           "windowReturningFromStart {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
       },

@@ -14,6 +14,7 @@ The engine serves this page over `domicile://` and hands `Shell` the desktop.
 | `default-bars.tsx` | `DEFAULT_BAR` and the lock screen's `LOCK_BAR`. |
 | `shows-sharing.ts` | Whether a bar has the sharing item, so the portal dialogs leave screen casts to it. |
 | `screens/` | `Monitor` (a screen's bar) and `NoScreens`. |
+| `shader-effects/` | Every shader effect manganese draws with, and `useShaderEffects`, which registers them at start and lists those that may draw on `<html>` with the device pixel ratio (`useDevicePixelRatio`). |
 | `theme/` | Theme from the host or the last session. |
 
 `package.json` also depends on packages no default uses, such as

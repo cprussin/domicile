@@ -70,6 +70,25 @@ const LEAVING_TO_START = {
   "100%": { transform: "translateX(calc(-1 * var(--workspace-width)))" },
 };
 
+/**
+ * `slide` with the `slide-blur` effect over it: sharp at either end and
+ * blurred most at a fifth of the way, where a spring moves fastest. Only
+ * `filter` has a keyframe there, so the slide still eases in one go.
+ */
+const blurred = (slide: Record<"0%" | "100%", { transform: string }>) => ({
+  "0%": {
+    ...slide["0%"],
+    filter: "domicile-shader(slide-blur, 0, var(--device-pixel-ratio))",
+  },
+  "20%": {
+    filter: "domicile-shader(slide-blur, 12, var(--device-pixel-ratio))",
+  },
+  "100%": {
+    ...slide["100%"],
+    filter: "domicile-shader(slide-blur, 0, var(--device-pixel-ratio))",
+  },
+});
+
 // The scratchpad backdrop fades in with a window's drop, and out with its
 // stow by playing this backwards. Two names for the same reason as
 // `SCRATCHPAD_SLIDE`.
@@ -80,6 +99,16 @@ const BACKDROP_FADE = {
 
 /** Keyframes and tokens for windows: opening, closing, restacking, workspace switches and the scratchpad. */
 export const windowManagementPreset = definePreset({
+  // A shader effect the shell lists on `<html>` as one that may draw: its
+  // switch is on, motion is not reduced, and the GPU compiled and kept it.
+  // See `WINDOW_EFFECTS` and the shell's `useShaderEffects`.
+  conditions: {
+    extend: {
+      depthOfField: "[data-shader-effects~=depth-of-field] &",
+      dissolve: "[data-shader-effects~=dissolve] &",
+      slideBlur: "[data-shader-effects~=slide-blur] &",
+    },
+  },
   name: "@domicile-desktop/manganese-window-management",
   theme: {
     extend: {
@@ -150,7 +179,9 @@ export const windowManagementPreset = definePreset({
           "100%": { opacity: "0", transform: "scale(1)" },
         },
         windowArrivingFromEnd: ARRIVING_FROM_END,
+        windowArrivingFromEndBlurred: blurred(ARRIVING_FROM_END),
         windowArrivingFromStart: ARRIVING_FROM_START,
+        windowArrivingFromStartBlurred: blurred(ARRIVING_FROM_START),
         // The reverse of `windowOpening`. It shrinks only to 0.85 rather than
         // to nothing; the fade does most of the work.
         windowClosing: {
@@ -188,6 +219,20 @@ export const windowManagementPreset = definePreset({
           "0%": { zIndex: "-1" },
           "100%": { zIndex: "-1" },
         },
+        // With the dissolve on, a closing window burns away in place of its
+        // fade, from its frame's middle (`--origin-*`, see `originAt`).
+        windowDissolving: {
+          "0%": {
+            filter:
+              "domicile-shader(dissolve, 0, var(--origin-x), var(--origin-y), var(--device-pixel-ratio))",
+            transform: "scale(1)",
+          },
+          "100%": {
+            filter:
+              "domicile-shader(dissolve, 1, var(--origin-x), var(--origin-y), var(--device-pixel-ratio))",
+            transform: "scale(0.96)",
+          },
+        },
         windowDropping: SCRATCHPAD_SLIDE,
         // Holds a window at the tiled depth. The tab a close uncovers, and the
         // tab a switch reveals, keep it while the other tab fades over or
@@ -200,7 +245,9 @@ export const windowManagementPreset = definePreset({
           "100%": { zIndex: "0" },
         },
         windowLeavingToEnd: LEAVING_TO_END,
+        windowLeavingToEndBlurred: blurred(LEAVING_TO_END),
         windowLeavingToStart: LEAVING_TO_START,
+        windowLeavingToStartBlurred: blurred(LEAVING_TO_START),
         // A window opening fades and scales up to its laid-out box.
         //
         // Uses a transform, not the box size: an `<app>`'s box sets its
@@ -235,9 +282,13 @@ export const windowManagementPreset = definePreset({
         windowRestackingDepth: RESTACKING_DEPTH,
         windowRestackingDepthAgain: RESTACKING_DEPTH,
         windowRetreatingToEnd: ARRIVING_FROM_END,
+        windowRetreatingToEndBlurred: blurred(ARRIVING_FROM_END),
         windowRetreatingToStart: ARRIVING_FROM_START,
+        windowRetreatingToStartBlurred: blurred(ARRIVING_FROM_START),
         windowReturningFromEnd: LEAVING_TO_END,
+        windowReturningFromEndBlurred: blurred(LEAVING_TO_END),
         windowReturningFromStart: LEAVING_TO_START,
+        windowReturningFromStartBlurred: blurred(LEAVING_TO_START),
         // A tab switch: the revealed tab slides a short way in from its tab's
         // side of the hidden one, `--tab-slide-x` and `--tab-slide-y` (see
         // `tabSlidFrom`), as it fades in over it.

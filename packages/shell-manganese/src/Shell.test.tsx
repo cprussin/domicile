@@ -1213,6 +1213,24 @@ describe("Shell", () => {
     });
   });
 
+  describe("shader effects", () => {
+    it("are registered once the shell starts", async () => {
+      await renderCountedShell();
+
+      expect(
+        domicile.calls.flatMap(([method, name]) =>
+          method === "registerShaderEffect" ? [name] : [],
+        ),
+      ).toStrictEqual([
+        "depth-of-field",
+        "dissolve",
+        "slide-blur",
+        "frost",
+        "theme-wipe",
+      ]);
+    });
+  });
+
   describe("virtual monitors", () => {
     it("are added by `virtual-monitor add` and removed by `virtual-monitor remove`", async () => {
       await renderShell();

@@ -173,6 +173,18 @@ a shell can build each.
   `animated-properties` enforces. A sized animation becomes a transform.
 - **Reduced motion** keeps its fastest-duration override
   (`html[data-reduced-motion]`). Shader effects are off under it.
+- **Shader effects are on by default**, with a Settings switch
+  (`shell_options.effects.windows`).
+- **An effect applies only while `<html>`'s `data-shader-effects` lists it.**
+  The shell registers every effect once at start (`useShaderEffects`) and
+  lists those that compiled, while they are switched on and motion is not
+  reduced. An effect the engine reports `lost` is dropped from the list and
+  logged, not registered again: it may have hung the GPU. Its motion plays
+  without it.
+- **Effects measure in CSS pixels.** Each takes `scale` last, the device
+  pixels to a CSS pixel, and divides `p` or multiplies its lengths by it. The
+  shell sets `--device-pixel-ratio` on `<html>` from `devicePixelRatio` with
+  the list, and each motion passes `var(--device-pixel-ratio)`.
 - **Each change ships with a before and after recording** for review.
 
 ### Windows
@@ -277,15 +289,15 @@ Shader primitive (engine):
 
 Shader effects in manganese:
 
-- [ ] dissolve on close
-- [ ] genie on send to workspace
-- [ ] wobbly drag
-- [ ] workspace switch motion blur, overview depth of field
-- [ ] Settings switch for window effects
+- [x] dissolve on close
+- [ ] genie on send to workspace (needs mesh effects)
+- [ ] wobbly drag (needs mesh effects)
+- [x] workspace switch motion blur, overview depth of field
+- [x] theme switch soft-edged wipe
+- [x] launcher frosted backdrop (`frost` on `ModalDialog`'s glass backdrop)
+- [x] Settings switch for window effects
 
 ## Open questions
 
-- **Effects on by default?** Recommend on, with a Settings switch, and off
-  under reduced motion.
 - **A `time` uniform in the first engine PR?** Recommend no. Nothing in the
   first effects needs it.

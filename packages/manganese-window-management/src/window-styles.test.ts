@@ -59,6 +59,15 @@ describe("scaledAbout", () => {
     // A hidden tab's window shows only its tab, so the tab is the frame.
     expect(scaledAbout(BAR, BAR).transformOrigin).toBe("960px 15px");
   });
+
+  // The dissolve's noise is laid from this point, so it runs on unbroken
+  // from the bar into the contents.
+  it("hands the point to a shader effect as numbers", () => {
+    expect(scaledAbout(FRAME, BAR)).toMatchObject({
+      "--origin-x": 960,
+      "--origin-y": 524,
+    });
+  });
 });
 
 describe("shuffledBy", () => {

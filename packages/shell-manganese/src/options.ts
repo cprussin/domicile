@@ -19,6 +19,12 @@ export const options = defineOptions({
     format: option.choice("Clock format", ["24h", "12h"], "24h"),
     seconds: option.toggle("Show seconds", true),
   },
+  effects: {
+    // Shader effects: closing windows dissolve, workspace switches blur,
+    // the overview blurs the wallpaper, and the theme wipe has a soft edge.
+    // Off under reduced motion whatever this says.
+    windows: option.toggle("Window effects", true),
+  },
   // A face installed on the computer, by name. Inter ships with manganese.
   font: option.text("Font", "Inter"),
   keymap: {

@@ -94,6 +94,7 @@
     "./Menu": "./src/Menu/Menu.tsx",
     "./MenuBar": "./src/MenuBar/MenuBar.tsx",
     "./ModalDialog": "./src/ModalDialog/ModalDialog.tsx",
+    "./ModalDialog/frost": "./src/ModalDialog/frost.ts",
     "./media-theme-source": "./src/ThemeSwitch/media-theme-source.ts",
     "./Notice": "./src/Notice/Notice.tsx",
     "./new-tab-click": "./src/new-tab-click.ts",

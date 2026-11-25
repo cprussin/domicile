@@ -94,6 +94,9 @@ export const domicilePreset = definePreset({
       // Inside a button or link under the pointer, such as an animated icon's
       // part.
       controlHover: ":is(button, a, [role=button]):hover &",
+      // The shell lists `frost` on `<html>` while it may draw (see
+      // `ModalDialog/frost.ts`).
+      frost: "[data-shader-effects~=frost] &",
       // A picked item keeps its fill under the pointer: the current page or
       // place, a selected tab or option, a checked row.
       hoverEnabled:

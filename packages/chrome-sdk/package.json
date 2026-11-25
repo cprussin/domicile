@@ -90,6 +90,10 @@
       "types": "./dist/desktop/downloads.d.ts",
       "default": "./dist/desktop/downloads.js"
     },
+    "./desktop/effects": {
+      "types": "./dist/desktop/effects.d.ts",
+      "default": "./dist/desktop/effects.js"
+    },
     "./desktop/extensions": {
       "types": "./dist/desktop/extensions.d.ts",
       "default": "./dist/desktop/extensions.js"

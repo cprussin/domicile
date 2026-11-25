@@ -419,6 +419,20 @@ Moves run on the preset's springs (`springs.smooth` for what arrives,
 [MOTION.md](/docs/architecture/MOTION.md)). Fades and settles keep fixed
 curves.
 
+Shader effects (`window-effects.ts`) join some motions while the shell lists
+them in `<html>`'s `data-shader-effects`, which it does when they compiled,
+are switched on and motion is not reduced. Each takes the shell's
+`--device-pixel-ratio` last, so its lengths are CSS pixels. Each is a
+condition in `panda-preset.ts`:
+
+- `_dissolve`: a closing window burns away (`windowDissolving`) in place of
+  its fade, every part in one noise pattern laid from the frame's middle
+  (`--origin-x`, `--origin-y` from `originAt`).
+- `_slideBlur`: a workspace switch blurs each window along its slide, most
+  where the spring moves fastest (`window*Blurred`).
+- `_depthOfField`: the overview's backdrop blurs the wallpaper under it, and
+  its fade brings the blur in and out.
+
 - Opening: fade in and grow from the center. A client's dialog grows out of
   the middle of the window it is for (its `transientFor`), when that window
   is drawn on its screen (`useTravels`). Browser popups and launched apps
