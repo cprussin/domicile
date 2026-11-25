@@ -8,6 +8,18 @@ in the manganese desktop is in
 
 _Unreleased_
 
+### Shader effects
+
+![Windows closing in smoke, cloth and a swarm, and workspaces on a cube, all drawn by shader effects in the example shell](media/release-effects.png)
+
+Your shell can draw its own SkSL over any element. Register it with `domicile.effects.register(name, { sksl, outset })`, then use it with `filter: domicile-shader(name, …)` or `backdrop-filter`. Its numbers animate with CSS transitions, and it composes with the built-in filters. When the GPU hangs on an effect, the engine drops it and `effects.on("lost")` names it.
+
+An effect can draw the element through a mesh, a grid for cloth or instances for particles, placed by its own `vertex` program. It samples `images`, takes arrays you set for each element with `update(element, { points })`, and with `outset: "screen"` draws as far as the screen. A closed window's last frame stays while its `<app>` is in the page, up to 10 seconds, so a close effect plays on it. Windows say where they came from, so an open can start there: `launchedFrom` for a launch, `opener` for a browser window a page opened.
+
+[Shader effects](SHELL-SHADER-EFFECTS.md) is the guide, and [`shell-effects-example`](/packages/shell-effects-example) builds smoke, cloth, swarm, liquid glass and a workspace cube with it. The effect types are in `@domicile-desktop/sdk/desktop/effects`.
+
+[Design](architecture/MOTION.md#shader-primitive)
+
 ### Agents' own pointer and keyboard reach browser windows
 
 An agent seat's `click`, `move_pointer`, `drag`, `scroll`, `key`, `type_text` and `focus_window` now reach browser windows at desk positions, not only native windows, so an agent can draw on a canvas or drag from one page to another. The compositor sends each step to the browser as `agent_input` on the control channel; the browser hit tests the desk point to the page under it and answers `agent_input_reached` with the window it reached or why it refused. A point on the shell's own page is refused: agents act on the shell by ref. The user's own press or key in a browser window an agent holds takes it (`person_in_agents_window`), and `domicile.seats.list` names browser windows in `holds` and `taken` by their ids.
@@ -43,16 +55,6 @@ An agent session's seat has its own clipboard and middle-click selection. An app
 Each agent session has a seat of its own, so an agent clicks and types in one native window while the user works in another, and never moves the user's pointer or focus. `domicile pointer`, `drag`, `scroll`, `key`, `type` and `focus-window` take `--agent <session>`, and `domicile agent` prints the session. One seat drives an app at a time, and the user wins an app both want. Shell commands still wait until the user has been away for 30 seconds: `domicile idle-time --json` adds `local_seconds`, which counts only the computer's own keyboard, pointer and touch.
 
 [Agents](AGENTS.md) · [Agent seats](architecture/AGENT-SEATS.md) · [`domicile pointer`](CLI.md#domicile-pointer---agent-session-xy-clickdouble-clickright-clickmiddle-click) · [`domicile idle-time`](CLI.md#domicile-idle-time---json)
-
-### Shader effects
-
-Your shell can draw its own SkSL over any element. Register it with `domicile.effects.register(name, { sksl, outset })`, then use it with `filter: domicile-shader(name, …)` or `backdrop-filter`. Its numbers animate with CSS transitions, and it composes with the built-in filters. When the GPU hangs on an effect, the engine drops it and `effects.on("lost")` names it.
-
-An effect can draw the element through a mesh, a grid for cloth or instances for particles, placed by its own `vertex` program. It samples `images`, takes arrays you set for each element with `update(element, { points })`, and with `outset: "screen"` draws as far as the screen. A closed window's last frame stays while its `<app>` is in the page, up to 10 seconds, so a close effect plays on it. Windows say where they came from, so an open can start there: `launchedFrom` for a launch, `opener` for a browser window a page opened.
-
-[Shader effects](SHELL-SHADER-EFFECTS.md) is the guide, and [`shell-effects-example`](/packages/shell-effects-example) builds smoke, cloth, swarm, liquid glass and a workspace cube with it. The effect types are in `@domicile-desktop/sdk/desktop/effects`.
-
-[Design](architecture/MOTION.md#shader-primitive)
 
 ## 1.3.0
 
