@@ -72,6 +72,7 @@ An effect can draw the element through a mesh, a grid for cloth or instances for
 - A picker's event has its anchor in the `<webview>`'s coordinates, wherever the `<webview>` is on the desktop. [Browser windows](SHELL-BROWSER-WINDOWS.md)
 - Setting a site's permission lets a site ask again that Chrome stopped for unanswered requests. [Browser windows](SHELL-BROWSER-WINDOWS.md)
 - A browser window's page runs `pagehide` and `unload` when the user logs out, for two seconds at most, so an app can give up a lock or save its work.
+- A screenshot or screen cast of one window draws its subsurfaces, so Firefox's content shows.
 
 ## 1.3.1
 

@@ -371,6 +371,8 @@ struct Client {
     late_bubble: bool,
     /// See [`crate::arguments::Arguments::bubble_without_input`].
     bubble_without_input: bool,
+    /// See [`crate::arguments::Arguments::redrawn_bubble`].
+    redraws_bubble: bool,
     /// Whether to open a dialog once the window is up. See
     /// [`crate::arguments::Arguments::dialog`].
     wants_dialog: bool,
@@ -689,11 +691,15 @@ impl Client {
             constrain_pointer: asked.constrain_pointer,
             constrain_region: asked.constrain_region,
             popups: Vec::new(),
-            wants_bubble: asked.bubble || asked.bubble_without_input || asked.scrolling_bubble,
+            wants_bubble: asked.bubble
+                || asked.bubble_without_input
+                || asked.redrawn_bubble
+                || asked.scrolling_bubble,
             bubble: None,
             scrolls: asked.scrolling_bubble,
             late_bubble: asked.late_bubble,
             bubble_without_input: asked.bubble_without_input,
+            redraws_bubble: asked.redrawn_bubble,
             wants_dialog: asked.dialog,
             dialog: None,
             pointer_over: None,
@@ -1877,7 +1883,8 @@ fn open_bubble(client: &mut Client, handle: &QueueHandle<Client>) {
 }
 
 /// Grow a `--bubble` after its first frame, once. A `--scrolling-bubble`
-/// keeps its size.
+/// keeps its size. A `--redrawn-bubble` then commits its last buffer again
+/// after each frame.
 fn grow_bubble(client: &mut Client, handle: &QueueHandle<Client>) {
     let grown_already = client
         .bubble
@@ -1885,6 +1892,13 @@ fn grow_bubble(client: &mut Client, handle: &QueueHandle<Client>) {
         .is_some_and(|bubble| bubble.drawn.len() > 1);
     if !grown_already && !client.scrolls {
         draw_bubble(client, handle, BUBBLE_GROWN);
+    } else if let (true, Some(bubble)) = (client.redraws_bubble, &client.bubble) {
+        let (buffer, _) = bubble.drawn.last().expect("it has grown");
+        let (_, _, width, height) = BUBBLE_GROWN;
+        bubble.surface.attach(Some(buffer), 0, 0);
+        bubble.surface.damage(0, 0, width, height);
+        bubble.surface.frame(handle, BubbleRole);
+        bubble.surface.commit();
     }
 }
 

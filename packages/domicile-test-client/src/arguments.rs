@@ -146,6 +146,10 @@ pub struct Arguments {
     /// content subsurface is: the pointer over it belongs to the window.
     pub bubble_without_input: bool,
 
+    /// Whether to open a `--bubble` that commits its buffer again after each
+    /// frame, as a subsurface playing a video does.
+    pub redrawn_bubble: bool,
+
     /// Whether to scroll a stripe down the window, a step each frame, with a
     /// sync `wl_subsurface` bubble moved onto it in the same commit, as a page
     /// scrolls under an anchored popup.
@@ -360,6 +364,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut constrain_region = None;
     let mut bubble = None;
     let mut bubble_without_input = None;
+    let mut redrawn_bubble = None;
     let mut scrolling_bubble = None;
     let mut late_bubble = None;
     let mut dialog = None;
@@ -491,6 +496,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--bubble-without-input" => {
                 take(&mut bubble_without_input, &flag, true)?;
             }
+            "--redrawn-bubble" => {
+                take(&mut redrawn_bubble, &flag, true)?;
+            }
             "--scrolling-bubble" => {
                 take(&mut scrolling_bubble, &flag, true)?;
             }
@@ -569,6 +577,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         constrain_region,
         bubble: bubble.unwrap_or(false),
         bubble_without_input: bubble_without_input.unwrap_or(false),
+        redrawn_bubble: redrawn_bubble.unwrap_or(false),
         scrolling_bubble: scrolling_bubble.unwrap_or(false),
         late_bubble: late_bubble.unwrap_or(false),
         dialog: dialog.unwrap_or(false),

@@ -52,7 +52,11 @@ impl DomicileCompositor {
             .map(|tracked| tracked.surface.clone())
             .collect();
         for gone in hidden {
-            self.subsurface_gone(&gone);
+            let parent = self.subsurface_gone(&gone);
+            // `surface`'s own frame shows it without them.
+            if let Some(parent) = parent.filter(|parent| parent != surface) {
+                self.cast_restacked(&parent);
+            }
         }
         let _ = self.subsurface_id(surface);
         self.set_the_children(surface)
@@ -74,6 +78,7 @@ impl DomicileCompositor {
         if children_changed && !drew {
             self.redraw(surface);
         }
+        self.cast_restacked(surface);
         if is_sync_subsurface(surface) || !self.is_a_subsurface(surface) {
             return;
         }
@@ -81,13 +86,16 @@ impl DomicileCompositor {
             if self.set_the_children(&parent) {
                 self.redraw(&parent);
             }
+            self.cast_restacked(&parent);
         }
     }
 
     /// A destroyed subsurface goes at once: no commit will come to notice it.
     pub fn subsurface_destroyed(&mut self, surface: &WlSurface) {
         if self.is_a_subsurface(surface) {
-            self.subsurface_gone(surface);
+            if let Some(parent) = self.subsurface_gone(surface) {
+                self.cast_restacked(&parent);
+            }
         }
     }
 
@@ -184,15 +192,12 @@ impl DomicileCompositor {
     }
 
     /// Stop tracking a hidden or destroyed subsurface, and draw its parent
-    /// without it.
-    fn subsurface_gone(&mut self, surface: &WlSurface) {
-        let Some(at) = self
+    /// without it. Returns the parent, whose casts are still to be drawn.
+    fn subsurface_gone(&mut self, surface: &WlSurface) -> Option<WlSurface> {
+        let at = self
             .subsurfaces
             .iter()
-            .position(|tracked| tracked.surface == *surface)
-        else {
-            return;
-        };
+            .position(|tracked| tracked.surface == *surface)?;
         let gone = self.subsurfaces.remove(at);
         self.by_surface.remove(&gone.surface);
         if self.pointer_surface.as_ref() == Some(&gone.surface) {
@@ -203,6 +208,7 @@ impl DomicileCompositor {
         if gone.parent.is_alive() && self.set_the_children(&gone.parent) {
             self.redraw(&gone.parent);
         }
+        Some(gone.parent)
     }
 
     /// `surface`'s subsurfaces as its frames draw them, bottom to top. Those
@@ -225,12 +231,14 @@ impl DomicileCompositor {
             .collect()
     }
 
-    /// Tell the engine `surface`'s subsurfaces, and whether they changed.
+    /// Tell the engine and the casts `surface`'s subsurfaces, and whether
+    /// they changed.
     fn set_the_children(&mut self, surface: &WlSurface) -> bool {
         let Some(app_id) = self.app_id_of(surface) else {
             return false;
         };
         let children = self.children_of(surface);
+        self.casting.children(&app_id, children.clone());
         self.engine
             .as_mut()
             .is_some_and(|session| session.set_children(&app_id, children))

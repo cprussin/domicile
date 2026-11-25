@@ -405,11 +405,13 @@ impl DomicileCompositor {
         }
 
         let remapped = match (remaps, &committer) {
-            (Some(_), Committer::App(app_id)) => {
+            (Some(size), Committer::App(app_id)) => {
                 let Answered {
                     configured, at_box, ..
                 } = self.answered_box(surface, app_id, &role);
-                self.remap_frame(app_id, &mapping, configured, at_box)
+                let remapped = self.remap_frame(app_id, &mapping, configured, at_box);
+                self.cast_remapped(app_id, size, &mapping, configured);
+                remapped
             }
             _ => None,
         };
@@ -450,6 +452,7 @@ impl DomicileCompositor {
                         surface,
                         buffer: &buffer,
                         sampled,
+                        pixels_a_point,
                         at_box,
                         box_size,
                         damage: exact_damage(damage, buffer_transform),

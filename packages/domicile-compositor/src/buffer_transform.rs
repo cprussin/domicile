@@ -22,6 +22,17 @@ impl Sampled {
         let (_, _, width, height) = self.crop;
         upright_size((width as u32, height as u32), self.transform)
     }
+
+    /// The same part of a `size` buffer, with the whole buffer spelled out.
+    pub fn of(self, size: (u32, u32)) -> Self {
+        match self.crop {
+            (_, _, 0, 0) => Self {
+                crop: (0, 0, size.0 as i32, size.1 as i32),
+                ..self
+            },
+            _ => self,
+        }
+    }
 }
 
 /// The size of `buffer` once turned upright: a quarter turn swaps its sides.

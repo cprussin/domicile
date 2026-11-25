@@ -28,6 +28,9 @@ the detail, when there is one. Remove a gap when it's fixed.
 - **A `wl_shm` window in 10-bit or half-float stays blank after the engine
   falls back to software:** the engine shows only 8-bit frames from memory.
   [A-DESKTOP-ON-A-TTY.md](/docs/architecture/A-DESKTOP-ON-A-TTY.md#software-output).
+- **A cast of a window that stays still is blank while the engine composites
+  in software,** and a subsurface is missing until it commits again.
+  [WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md#subsurfaces).
 - **Unknown: whether viz hit testing must agree with Domicile's.**
   [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#open-questions).
 
