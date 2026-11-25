@@ -167,8 +167,9 @@ namespace domicile {
 // Chrome DevTools Protocol method sent to the window's page, answered with
 // the method's result. Only the methods kDevToolsMethods names go through:
 // enough to read the page's accessibility tree, click, type, scroll and
-// navigate, and nothing that reads cookies or storage or runs script. A
-// private window is never driven. `params` defaults to {}.
+// navigate, and nothing that reads cookies or storage or runs script, plus
+// Domicile's own methods for the file choosers an agent opens. A private
+// window is never driven. `params` defaults to {}.
 // `set_log_levels` is `domicile set-log-level`: `min_level` is Chromium's
 // minimum severity (0 INFO to 3 FATAL) and `vmodule` its `--vmodule`, in every
 // engine process until the engine exits.
@@ -560,9 +561,24 @@ using DisableWhileTyping =
     base::FunctionRef<base::expected<bool, std::string>(
         std::optional<bool> enabled)>;
 
-// The Chrome DevTools Protocol methods `devtools` sends. Page.navigate goes
-// only to http and https addresses.
+// Domicile's own `devtools` methods, which the engine answers itself: a file
+// request an agent's press or key set off waits for the agent, not the shell.
+//
+//   Domicile.fileChooser -> {"chooser":{"mode":"open-multiple",
+//                            "accept":["mp4"],"suggestedName":"",
+//                            "folder":""}}, or {} when none waits
+//   Domicile.chooseFiles {"files":["/abs/path"]} or {"cancel":true} -> {}
+//
+// `mode` and the rest are the `domicile-file-chooser` event's. See
+// docs/architecture/AGENT-SEATS.md.
+inline constexpr char kFileChooserMethod[] = "Domicile.fileChooser";
+inline constexpr char kChooseFilesMethod[] = "Domicile.chooseFiles";
+
+// The methods `devtools` sends: Chrome DevTools Protocol methods and
+// Domicile's own. Page.navigate goes only to http and https addresses.
 inline constexpr std::string_view kDevToolsMethods[] = {
+    kChooseFilesMethod,
+    kFileChooserMethod,
     "Accessibility.getFullAXTree",
     "Accessibility.getPartialAXTree",
     "Accessibility.queryAXTree",

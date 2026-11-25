@@ -179,6 +179,7 @@ fn tools_list_describes_each_tool() {
             "browser_key",
             "browser_navigate",
             "browser_screenshot",
+            "browser_choose_files",
             "app_snapshot",
             "app_click",
             "app_focus",
@@ -624,6 +625,7 @@ fn a_browser_click_scrolls_the_element_into_view_and_clicks_its_middle() {
             mouse("mousePressed"),
             mouse("mouseReleased"),
             // Read again, to answer what it changed.
+            ("Domicile.fileChooser".to_string(), json!({})),
             ("Accessibility.getFullAXTree".to_string(), json!({})),
         ]
     );
@@ -814,6 +816,7 @@ fn browser_key_presses_and_releases_a_named_key() {
                 "Input.dispatchKeyEvent".to_string(),
                 json!({"type": "keyUp", "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13})
             ),
+            ("Domicile.fileChooser".to_string(), json!({})),
             ("Accessibility.getFullAXTree".to_string(), json!({})),
         ]
     );
@@ -825,6 +828,72 @@ fn browser_key_presses_and_releases_a_named_key() {
         never_run,
     );
     assert_eq!(replies[0]["result"]["isError"], true);
+}
+
+#[test]
+fn a_press_that_opens_a_file_chooser_says_the_page_waits_on_it() {
+    let mut ran = Vec::new();
+    let chooser = json!({"chooser": {"mode": "open-multiple", "accept": ["mp4", "mov"], "suggestedName": "", "folder": ""}});
+    let replies = served(
+        &[call("browser_key", json!({"window": "w1", "key": "Enter"}))],
+        page(&[("Domicile.fileChooser", chooser)], &mut ran),
+    );
+    let said = replies[0]["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        said.contains(
+            "The page waits on a file chooser for one or more files, accepting .mp4, .mov: \
+             answer it with browser_choose_files."
+        ),
+        "{said}"
+    );
+}
+
+#[test]
+fn browser_choose_files_answers_the_chooser_with_paths_or_cancels_it() {
+    let mut ran = Vec::new();
+    let replies = served(
+        &[
+            call(
+                "browser_choose_files",
+                json!({"window": "w1", "paths": ["/home/me/clip.mp4"]}),
+            ),
+            call(
+                "browser_choose_files",
+                json!({"window": "w1", "cancel": true}),
+            ),
+        ],
+        page(&[], &mut ran),
+    );
+    assert_eq!(replies[0]["result"]["isError"], false);
+    assert_eq!(replies[1]["result"]["isError"], false);
+    let sent: Vec<_> = ran
+        .iter()
+        .filter(|(method, _)| method == "Domicile.chooseFiles")
+        .map(|(_, params)| params.clone())
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            json!({"files": ["/home/me/clip.mp4"]}),
+            json!({"cancel": true})
+        ]
+    );
+}
+
+#[test]
+fn browser_choose_files_takes_absolute_paths_or_a_cancel() {
+    for arguments in [
+        json!({"window": "w1"}),
+        json!({"window": "w1", "paths": ["clip.mp4"]}),
+        json!({"window": "w1", "paths": ["/a"], "cancel": true}),
+        json!({"window": "w1", "paths": "/a"}),
+    ] {
+        let replies = served(
+            &[call("browser_choose_files", arguments.clone())],
+            never_run,
+        );
+        assert_eq!(replies[0]["result"]["isError"], true, "{arguments}");
+    }
 }
 
 #[test]

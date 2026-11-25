@@ -281,7 +281,7 @@ struct View {
 const FIT: u32 = 1280;
 
 /// Each tool, by name, in the order `tools/list` gives them.
-const TOOLS: [(&str, Tool); 33] = [
+const TOOLS: [(&str, Tool); 34] = [
     ("list_windows", Tool::Listing("list-windows")),
     ("list_displays", Tool::Listing("list-displays")),
     ("list_inputs", Tool::Listing("list-inputs")),
@@ -309,6 +309,7 @@ const TOOLS: [(&str, Tool); 33] = [
     ("browser_key", Tool::Browser(Browser::Key)),
     ("browser_navigate", Tool::Browser(Browser::Navigate)),
     ("browser_screenshot", Tool::Browser(Browser::Screenshot)),
+    ("browser_choose_files", Tool::Browser(Browser::ChooseFiles)),
     ("app_snapshot", Tool::AppSnapshot),
     ("app_click", Tool::AppAct("click")),
     ("app_focus", Tool::AppAct("focus")),
@@ -722,6 +723,9 @@ fn what_it_did(
         Tool::Browser(Browser::Key) => format!("Pressed a key in {}", window("window")),
         Tool::Browser(Browser::Navigate) => format!("Loaded a page in {}", window("window")),
         Tool::Browser(Browser::Screenshot) => format!("Took a screenshot of {}", window("window")),
+        Tool::Browser(Browser::ChooseFiles) => {
+            format!("Answered a file chooser in {}", window("window"))
+        }
         Tool::AppAct(_) => format!("Moved the focus in {}", window("window")),
         Tool::AskToUse | Tool::StopUsing => {
             unreachable!("guarded answers ask_to_use_desktop and stop_using_desktop itself")

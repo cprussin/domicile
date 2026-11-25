@@ -25,6 +25,7 @@ pub(super) enum Browser {
     Key,
     Navigate,
     Screenshot,
+    ChooseFiles,
 }
 
 /// The window the browser tools name to reach the shell's own page: its
@@ -90,6 +91,16 @@ pub(super) fn described(tool: Browser) -> (&'static str, Value, Vec<&'static str
             json!({"window": window, "view": view}),
             vec!["window"],
         ),
+        Browser::ChooseFiles => (
+            "Answer the file chooser your click or key opened in a browser window's page or view, such as an upload button's: give it `paths`, absolute, or `cancel`. The acts say when a page waits on one; the user never sees it. Answers what it changed in the window.",
+            json!({
+                "window": window,
+                "view": view,
+                "paths": {"type": "array", "items": {"type": "string"}, "description": "Absolute paths: files to open, a folder, or where to save, as the chooser asks."},
+                "cancel": {"type": "boolean", "description": "true cancels the chooser instead."},
+            }),
+            vec!["window"],
+        ),
     }
 }
 
@@ -140,11 +151,29 @@ pub(super) fn called(
         | Browser::Scroll
         | Browser::Type
         | Browser::Key
-        | Browser::Navigate => {
+        | Browser::Navigate
+        | Browser::ChooseFiles => {
             let did = answer["content"][0]["text"]
                 .as_str()
                 .expect("a browser tool answers text");
             std::thread::sleep(SETTLE);
+            // Only a press or a key lets a page open a chooser.
+            let pressed = matches!(
+                tool,
+                Browser::Click | Browser::Drag | Browser::Key | Browser::ChooseFiles
+            );
+            let waiting = if pressed {
+                waiting_chooser(&mut page)?
+            } else {
+                Ok(None)
+            };
+            let did = match waiting {
+                Ok(None) => did.to_string(),
+                Ok(Some(chooser)) => format!("{did}\n{chooser}"),
+                Err(why) => {
+                    format!("{did}\nWhether it opened a file chooser could not be read: {why}")
+                }
+            };
             page.view = None;
             let after = match outline_of(&mut page)? {
                 Ok(after) => after,
@@ -256,6 +285,57 @@ macro_rules! sent {
             Err(why) => return Ok(Err(why)),
         }
     };
+}
+
+/// The file chooser the page or view waits on for the agent, said for the
+/// agent, or nothing when none waits. The shell's own page asks no agent.
+fn waiting_chooser<D: FnMut(&[String]) -> io::Result<Ran>>(
+    page: &mut Page<'_, D>,
+) -> io::Result<Result<Option<String>, String>> {
+    if page.window == SHELL {
+        return Ok(Ok(None));
+    }
+    let answer = sent!(page, "Domicile.fileChooser", json!({}));
+    let chooser = &answer["chooser"];
+    if chooser.is_null() {
+        return Ok(Ok(None));
+    }
+    let asks = match chooser["mode"].as_str() {
+        Some("open") => "a file",
+        Some("open-multiple") => "one or more files",
+        Some("open-folder") => "a folder",
+        Some("save") => "where to save",
+        _ => {
+            return Ok(Err(format!(
+                "the engine described a chooser it can't: {chooser}"
+            )))
+        }
+    };
+    let Some(accept) = chooser["accept"].as_array().and_then(|accept| {
+        accept
+            .iter()
+            .map(|extension| extension.as_str().map(|extension| format!(".{extension}")))
+            .collect::<Option<Vec<_>>>()
+    }) else {
+        return Ok(Err(format!(
+            "the engine described a chooser it can't: {chooser}"
+        )));
+    };
+    let mut said = format!("The page waits on a file chooser for {asks}");
+    if !accept.is_empty() {
+        said.push_str(&format!(", accepting {}", accept.join(", ")));
+    }
+    match chooser["suggestedName"].as_str() {
+        Some("") => {}
+        Some(name) => said.push_str(&format!(", suggesting {name}")),
+        None => {
+            return Ok(Err(format!(
+                "the engine described a chooser it can't: {chooser}"
+            )))
+        }
+    }
+    said.push_str(": answer it with browser_choose_files.");
+    Ok(Ok(Some(said)))
 }
 
 /// The window's page, then each view it holds, as outlines, or why they
@@ -452,6 +532,41 @@ fn carried_out<D: FnMut(&[String]) -> io::Result<Ran>>(
             match navigated["errorText"].as_str() {
                 Some(why) if !why.is_empty() => Ok(Err(format!("{url} did not load: {why}"))),
                 _ => Ok(Ok(said(true, format!("loading {url}")))),
+            }
+        }
+        Browser::ChooseFiles => {
+            let cancel = match arguments.get("cancel") {
+                None => false,
+                Some(Value::Bool(cancel)) => *cancel,
+                Some(other) => return Ok(Err(format!("cancel is true or false, not {other}"))),
+            };
+            let paths = match arguments.get("paths") {
+                None => None,
+                Some(Value::Array(paths)) => match paths
+                    .iter()
+                    .map(|path| path.as_str().filter(|path| path.starts_with('/')))
+                    .collect::<Option<Vec<_>>>()
+                {
+                    Some(paths) => Some(paths),
+                    None => return Ok(Err("paths are absolute paths, as strings".to_string())),
+                },
+                Some(other) => return Ok(Err(format!("paths is a list of paths, not {other}"))),
+            };
+            match (paths, cancel) {
+                (Some(paths), false) => {
+                    sent!(page, "Domicile.chooseFiles", json!({"files": paths}));
+                    Ok(Ok(said(
+                        true,
+                        format!("gave the page {} path(s)", paths.len()),
+                    )))
+                }
+                (None, true) => {
+                    sent!(page, "Domicile.chooseFiles", json!({"cancel": true}));
+                    Ok(Ok(said(true, "canceled the file chooser".to_string())))
+                }
+                _ => Ok(Err(
+                    "browser_choose_files takes paths, or cancel: true".to_string()
+                )),
             }
         }
         Browser::Screenshot => {

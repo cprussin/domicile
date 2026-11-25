@@ -26,6 +26,12 @@ The component library's preset and manganese's Panda config are built for Panda 
 
 [Shell packaging](SHELL-PACKAGING.md#panda-with-manganeses-tokens)
 
+### Agents answer the file choosers they open
+
+A file request an agent's press or key sets off in a browser window (an `<input type="file">`, `showOpenFilePicker()`, `showSaveFilePicker()` or a download's save) waits for the agent instead of firing `domicile-file-chooser` at the shell. The agent reads it with the `devtools` method `Domicile.fileChooser` and answers it with `Domicile.chooseFiles`; the MCP server's `browser_click`, `browser_drag` and `browser_key` say when a page waits on one, and `browser_choose_files` answers it. The user's own press or key in the page sends its next request to the shell again.
+
+[Agents](AGENTS.md) · [Agent seats](architecture/AGENT-SEATS.md#file-choosers)
+
 ### Agents get shorter answers from browser windows
 
 The MCP server's `browser_snapshot` leaves out the `InlineTextBox` lines that repeat a text's words, and stops at 1500 elements with a line saying so. An act answers with at most 100 lines of what changed, then says how much more there is. `list_windows` gives a browser window an agent holds its seat in `held_by`, as it does a native window.
