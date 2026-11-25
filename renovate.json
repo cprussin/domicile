@@ -54,6 +54,11 @@
       "matchManagers": ["cargo"],
       "matchPackageNames": ["oxc_allocator", "oxc_parser", "oxc_span"],
       "allowedVersions": "<0.159"
+    },
+    {
+      "description": "Temporary: hold Panda CSS on 1.x. Panda 2 changes the CLI flags, the preset exports, the generated types and the CSS rule order across every UI package, so the move needs its own migration PR. Remove this rule in that PR.",
+      "matchPackageNames": ["@pandacss/dev", "@pandacss/preset-base", "@pandacss/preset-panda"],
+      "allowedVersions": "<2"
     }
   ],
   "platformAutomerge": false,

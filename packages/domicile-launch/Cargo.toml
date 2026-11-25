@@ -14,7 +14,7 @@ domicile-host = { path = "../domicile-host" }
 domicile-protocol = { path = "../domicile-protocol" }
 # The relay's wire, which `domicile mcp --relay` dials.
 domicile-relay = { path = "../domicile-relay" }
-ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+ed25519-dalek = { version = "3", default-features = false }
 libc.workspace = true
 notify.workspace = true
 # Finds a JavaScript shell's imports, to tell a bundle from an entry.
