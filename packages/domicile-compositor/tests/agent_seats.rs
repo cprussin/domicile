@@ -539,7 +539,8 @@ fn an_agent_copies_and_pastes_on_its_own_clipboard() {
     let (mut users_paste, users_pasting) =
         a_window(&compositor, &mut chrome, "users paste", &["--paste"]);
     // The protocol denies `set_selection` from a client without the
-    // keyboard, so each copier must have its copy handled before the
+    // keyboard, so each copier must have its copy handled (as
+    // `tests/selection.rs` waits for it) before the
     // keyboard that let it copy moves on.
     the_user_focuses(&compositor, &mut chrome, &users_copier, 1);
     assert!(
