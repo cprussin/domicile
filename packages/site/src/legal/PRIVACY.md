@@ -1,6 +1,6 @@
 # Privacy policy
 
-Updated November 21, 2026.
+Updated November 25, 2026.
 
 Domicile and manganese are free, open-source software that run on your
 computer. The Domicile project runs no servers that receive your data, has no
@@ -28,12 +28,32 @@ Google for these permissions:
 | `gmail.settings.basic` | Reads the addresses you send mail from, so an email link can start from the right one. |
 | `gmail.compose` | Creates a draft when you open an email link, so you can finish and send it in Gmail. It never sends mail for you. |
 
-- Your computer talks to Google directly. Your Gmail data and sign-in never
-  reach the Domicile project.
 - Gmail data is used only to show these features to you. It is not sold,
-  shared, used for ads, or used to train AI or machine learning models.
-- Nobody reads your Gmail data. It is kept on your computer only as long as the
-  feature needs it.
+  used for ads, or used to train AI or machine learning models.
+- Nobody reads your Gmail data.
+
+### Who gets your Gmail data
+
+Nobody. Manganese does not share, transfer or disclose Google user data to
+anyone:
+
+- Your computer talks to Google directly. Your Gmail data and sign-in never
+  reach the Domicile project or its developers.
+- No other company, service or app receives it, including analytics, ads and
+  AI providers.
+- Drafts manganese creates are saved only in your own Gmail account.
+
+### How your Gmail data is protected
+
+- Every request to Google uses HTTPS, so your data and sign-in are encrypted in
+  transit.
+- Your sign-in is stored only on your computer, in the desktop's storage in
+  your home folder, protected by your computer's file permissions. When you
+  remove the app's access, manganese deletes it.
+- Senders, subjects, unread counts and addresses are kept in memory only as
+  long as the feature needs them. They are never written to disk.
+- The code that handles Gmail data is open source, so anyone can check it:
+  [manganese-bar-module-gmail](https://github.com/cprussin/domicile/tree/main/packages/manganese-bar-module-gmail).
 
 Domicile's use and transfer to any other app of information received from
 Google APIs will adhere to
