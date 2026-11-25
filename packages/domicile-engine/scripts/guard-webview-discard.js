@@ -1,6 +1,7 @@
 // The shell for guard-webview-discard.sh. `?mode=manual` unloads one browser
-// window by hand, and `?mode=automatic` leaves three unmounted for the engine
-// to unload or not.
+// window by hand, and hides another whose <webview> stays mounted.
+// `?mode=automatic` leaves three unmounted for the engine to unload or not, and
+// `?mode=handled` does too, but listens for the shortage itself.
 //
 // - `?discard=1` is the claim and `?discard=0` the control, whose shell never
 //   asks (manual; automatic's control is the engine's thresholds).
@@ -21,6 +22,15 @@
 //   GUARD quiet                       `settle` ms later
 //   GUARD remounting                  `settle` ms later, a <webview> shows the
 //                                     subject again (manual)
+//   GUARD hidden                      the mounted window is not rendered
+//                                     (manual)
+//   GUARD asked-hidden                asked to unload it, or in the control
+//                                     only came this far (manual)
+//   GUARD showing-hidden              `settle` ms later, it is rendered again
+//                                     (manual)
+//   GUARD shown-hidden                `settle` ms after that (manual)
+//   GUARD short count=…               the shortage was heard, with how many
+//                                     windows (handled)
 //   GUARD done                        the last step, `settle` ms after it
 //
 // The pages log too (guard-webview-discard-server.py), and the extension
@@ -65,8 +75,11 @@ export const HostShell = (_root, desktop) => {
   // Window names in open order, which is the list's. The DevTools window comes
   // after them.
   const names =
-    mode === "manual" ? ["active", "subject-1"] : ["active", "plain", "typed"];
+    mode === "manual"
+      ? ["active", "subject-1", "kept"]
+      : ["active", "plain", "typed"];
   const SUBJECT = 1;
+  const KEPT = 2;
 
   document.body.style.margin = "0";
 
@@ -194,7 +207,7 @@ export const HostShell = (_root, desktop) => {
     await goOn(views[SUBJECT]);
     const devTools = await openDevTools(views[0]);
     await settled();
-    view(2, "src", await extensionPage());
+    view(3, "src", await extensionPage());
     await settled();
     host.discardBrowserWindow(ids[SUBJECT]);
     say("asked-attached");
@@ -214,10 +227,27 @@ export const HostShell = (_root, desktop) => {
     say("remounting");
     view(SUBJECT, "window", ids[SUBJECT]);
     await settled();
+    views[KEPT].style.display = "none";
+    say("hidden");
+    await settled();
+    if (discard) {
+      host.discardBrowserWindow(ids[KEPT]);
+    }
+    say("asked-hidden");
+    await settled();
+    say("showing-hidden");
+    views[KEPT].style.display = "";
+    await settled();
+    say("shown-hidden");
     say("done");
   };
 
   const automatic = async (_ids, views) => {
+    if (mode === "handled") {
+      host.addEventListener("browsermemoryshort", (event) => {
+        say(`short count=${JSON.parse(event.data).length}`);
+      });
+    }
     await settled();
     for (const element of views) {
       element.remove();

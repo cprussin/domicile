@@ -7,7 +7,7 @@
 #
 # Runs headless: nothing here is measured in pixels.
 #
-# Two engines, one after the other. Their shell is guard-webview-discard.js.
+# Three engines, one after the other. Their shell is guard-webview-discard.js.
 #
 # The manual engine has an extension (guard-webview-discard-extension), which
 # opens a popup window. The shell asks to unload
@@ -26,6 +26,9 @@
 #   shown again, it loads                the page says `restored`, with both
 #                                        history entries and its scroll
 #   it is listed loaded again
+#   a window whose <webview> is mounted  listed isDiscarded, and not loaded
+#     and not rendered is unloaded         until it is rendered
+#   rendered again, it loads             the same element shows its page
 #
 # The automatic engine is short of memory, by its feature's parameters, for a
 # page hidden a second. The shell mounts three windows and unmounts them:
@@ -33,10 +36,13 @@
 #   `plain` is unloaded
 #   `typed` stays                        it holds a user's edit
 #
+# The handled engine is as short, and its shell listens for that and unloads
+# nothing: it hears which windows could go, and the engine leaves them.
+#
 # NEGATIVE=1 is the control: the manual shell never asks to unload the
-# unmounted subject, and the automatic engine is never short. The subject's
-# page must live on and not load again, the extension must hear nothing, and
-# no window may be unloaded.
+# unmounted subject or the hidden window, and the other engines are never
+# short. Those pages must live on and not load again, the extension must hear
+# nothing, and no window may be unloaded.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -79,6 +85,7 @@ PROFILE="${PROFILE:-/tmp/domicile-webview-discard$WHICH-profile}"
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-webview-discard$WHICH-engine.log}"
 MANUAL_LOG="${ENGINE_LOG%.log}-manual.log"
 AUTOMATIC_LOG="${ENGINE_LOG%.log}-automatic.log"
+HANDLED_LOG="${ENGINE_LOG%.log}-handled.log"
 SOCKET_LOG="${SOCKET_LOG:-/tmp/domicile-webview-discard$WHICH-socket.log}"
 HTTP_LOG="${HTTP_LOG:-/tmp/domicile-webview-discard$WHICH-http.log}"
 FOR_SECONDS="${FOR_SECONDS:-120}"
@@ -175,12 +182,14 @@ engine() { # $1 mode, $2 log, then more switches
 }
 
 # The manual engine has the feature off, so only the shell unloads a page. One
-# that did not finish is a failure already, so the second does not run.
-rm -f "$AUTOMATIC_LOG"
+# that did not finish is a failure already, so the next does not run.
+rm -f "$AUTOMATIC_LOG" "$HANDLED_LOG"
 engine manual "$MANUAL_LOG" --domicile-control-socket="$CONTROL" \
   --disable-features=DomicilePageDiscarding &&
   engine automatic "$AUTOMATIC_LOG" \
-  --enable-features="DomicilePageDiscarding:$SHORT"
+    --enable-features="DomicilePageDiscarding:$SHORT" &&
+  engine handled "$HANDLED_LOG" \
+    --enable-features="DomicilePageDiscarding:$SHORT"
 
 # The readings, each anchored on the quotes Chromium puts around a console
 # message.
@@ -218,6 +227,18 @@ RESTORED=$(between "$MANUAL_LOG" remounting "done" |
 RELISTED=$(between "$MANUAL_LOG" remounting "done" |
   count '"GUARD list name=subject-1 discarded=false"')
 
+KEPT_LISTED=$(between "$MANUAL_LOG" hidden showing-hidden |
+  count '"GUARD list name=kept discarded=true"')
+KEPT_EARLY=$(between "$MANUAL_LOG" asked-hidden showing-hidden |
+  count '"GUARD loaded name=kept"')
+KEPT_LOADED=$(between "$MANUAL_LOG" showing-hidden shown-hidden |
+  count '"GUARD loaded name=kept"')
+SAW_KEPT=$(saw "$MANUAL_LOG" '"GUARD loaded name=kept"')
+
+SAW_HANDLED=$(saw "$HANDLED_LOG" '"GUARD done"')
+HEARD=$(saw "$HANDLED_LOG" '"GUARD short count=')
+HANDLED_LISTED=$(saw "$HANDLED_LOG" ' discarded=true"')
+
 SAW_UNMOUNTED=$(saw "$AUTOMATIC_LOG" '"GUARD unmounted"')
 SAW_DONE=$(saw "$AUTOMATIC_LOG" '"GUARD done"')
 SAW_TYPED=$(saw "$AUTOMATIC_LOG" '"GUARD typed name=typed value=words"')
@@ -229,6 +250,8 @@ echo "manual: shell=$SAW_SHELL subject=$SAW_SUBJECT extension=$SAW_EXTENSION rem
 echo "refused: attached=$SAW_REFUSED early=$EARLY popup=$SAW_POPUP_REFUSED devtools=$SAW_DEVTOOLS_REFUSED"
 echo "unloaded: listed=$LISTED ticks=$TICKS"
 echo "shown again: loaded=$LOADED restored=$RESTORED listed=$RELISTED"
+echo "hidden: page=$SAW_KEPT listed=$KEPT_LISTED early=$KEPT_EARLY loaded=$KEPT_LOADED"
+echo "handled: done=$SAW_HANDLED heard=$HEARD listed=$HANDLED_LISTED"
 echo "automatic: unmounted=$SAW_UNMOUNTED done=$SAW_DONE typed=$SAW_TYPED"
 echo "unloaded: plain=$AUTO_PLAIN typed=$AUTO_TYPED"
 echo
@@ -251,10 +274,16 @@ elif [ "$SAW_REMOUNT" != "1" ]; then
 has shell-failed, or the window list lost a window"
 elif [ "$SAW_REFUSED" != "1" ] || [ "$EARLY" != "0" ]; then
   FAILURE="A WINDOW A <webview> SHOWS WAS NOT REFUSED: discardBrowserWindow \
-reached DeskWindows::Discard and IsAttached said no, or never reached it"
+reached DeskWindows::Discard and IsShown said no, or never reached it"
 elif [ "$SAW_DONE" != "1" ] || [ "$SAW_UNMOUNTED" != "1" ]; then
   FAILURE="the automatic shell never finished: its windows never loaded (the \
 guest, or the page server), or it threw"
+elif [ "$SAW_HANDLED" != "1" ]; then
+  FAILURE="the handled shell never finished: its windows never loaded (the \
+guest, or the page server), or it threw"
+elif [ "$SAW_KEPT" != "1" ]; then
+  FAILURE="the window that stays mounted never loaded, so that it loads again \
+says nothing. That is the guest, or the page server"
 elif [ "$SAW_TYPED" != "1" ]; then
   FAILURE="the typed page never had its words, so that it stayed or went says \
 nothing about user edits. This is the harness"
@@ -268,6 +297,12 @@ silence is not its unloading"
   elif [ "$LOADED" != "0" ]; then
     FAILURE="the control's page loaded again when it was shown, so the \
 claim's load is not its unloading"
+  elif [ "$KEPT_LISTED" != "0" ] || [ "$KEPT_LOADED" != "0" ]; then
+    FAILURE="THE CONTROL UNLOADED THE HIDDEN WINDOW: the shell never asked, \
+and it was listed unloaded or loaded again"
+  elif [ "$HEARD" != "0" ]; then
+    FAILURE="THE CONTROL'S SHELL HEARD A SHORTAGE: the engine was never short \
+of memory"
   elif [ "$AUTO_PLAIN$AUTO_TYPED" != "00" ]; then
     FAILURE="THE CONTROL'S ENGINE UNLOADED A PAGE: it was never short of \
 memory, so the claim's unloading is not the shortage's"
@@ -294,6 +329,21 @@ The GUARD restored line says what it had"
 elif [ "$RELISTED" != "1" ]; then
   FAILURE="the subject loaded and is still listed isDiscarded: the Watch did \
 not see its navigation start"
+elif [ "$KEPT_LISTED" != "1" ]; then
+  FAILURE="A MOUNTED WINDOW THAT IS NOT RENDERED WAS NOT UNLOADED: \
+WebViewGuest::IsShown said a <webview> shows it"
+elif [ "$KEPT_EARLY" != "0" ]; then
+  FAILURE="the hidden window's page loaded before it was rendered: \
+HTMLWebViewElement::Replaced asked for it at once"
+elif [ "$KEPT_LOADED" != "1" ]; then
+  FAILURE="rendered again, the hidden window's <webview> did not load its \
+page once: HTMLWebViewElement::ShowIfRendered never asked for it"
+elif [ "$HEARD" != "1" ]; then
+  FAILURE="a listening shell did not hear of the shortage: \
+DeskWindows::AskMemoryShort, or DomicileHost::MemoryShort"
+elif [ "$HANDLED_LISTED" != "0" ]; then
+  FAILURE="the engine unloaded a page though the shell listens: \
+PageDiscarding::OnAsked"
 elif [ "$AUTO_PLAIN" != "1" ]; then
   FAILURE="a shortage of memory unloaded no plain page: PageDiscarding's \
 timer, its candidates, or MayDiscard"
@@ -304,7 +354,8 @@ else
   PASSED="an unmounted window's page is unloaded and loads with its history \
 and scroll when it is shown; a shown window, a popup window and a DevTools \
 window stay; and a shortage of memory unloads a plain page and leaves the \
-typed one"
+typed one, or is the shell's to handle; a mounted window that is not rendered \
+is unloaded, and loads when it is rendered"
 fi
 
 if [ -n "$PASSED" ]; then
@@ -313,7 +364,7 @@ if [ -n "$PASSED" ]; then
 fi
 
 annotate "guard-webview-discard: $FAILURE"
-for log in "$MANUAL_LOG" "$AUTOMATIC_LOG"; do
+for log in "$MANUAL_LOG" "$AUTOMATIC_LOG" "$HANDLED_LOG"; do
   echo "the steps in $log:" >&2
   grep -F '"GUARD ' "$log" | grep -vF '"GUARD tick ' | tail -40 >&2
   grep -F "asked to unload" "$log" >&2

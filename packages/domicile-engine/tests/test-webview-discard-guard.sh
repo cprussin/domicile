@@ -76,6 +76,13 @@ judge() { # $1 NEGATIVE, then NAME=value overrides
     SAW_TYPED=1
     AUTO_PLAIN=1
     AUTO_TYPED=0
+    SAW_KEPT=1
+    KEPT_LISTED=1
+    KEPT_EARLY=0
+    KEPT_LOADED=1
+    SAW_HANDLED=1
+    HEARD=1
+    HANDLED_LISTED=0
     NEGATIVE="$1"
     shift
     for override in "$@"; do
@@ -106,7 +113,8 @@ blames() { # $1 word, then the args judge takes
 
 # The control asks for nothing, so the page lives on and nothing is unloaded.
 CONTROL=(SAW_POPUP_REFUSED=0 SAW_DEVTOOLS_REFUSED=0 LISTED=0 TICKS=4
-  LOADED=0 RESTORED=0 RELISTED=0 AUTO_PLAIN=0)
+  LOADED=0 RESTORED=0 RELISTED=0 AUTO_PLAIN=0 KEPT_LISTED=0 KEPT_LOADED=0
+  HEARD=0)
 
 echo "reading the log"
 expect "only what the page said between the steps counts" "1" \
@@ -129,15 +137,29 @@ expect "a manual shell that stopped is a failure" "fail" \
   "$(verdict 0 SAW_REMOUNT=0)"
 expect "an automatic shell that stopped is a failure" "fail" \
   "$(verdict 0 SAW_DONE=0)"
+expect "a handled shell that stopped is a failure" "fail" \
+  "$(verdict 0 SAW_HANDLED=0)"
+expect "a hidden page that never loaded names the guest" "yes" \
+  "$(blames "the guest" 0 SAW_KEPT=0)"
 expect "a page nobody typed into blames the harness" "yes" \
   "$(blames "harness" 0 SAW_TYPED=0)"
 
 echo
 echo "the positive run"
 expect "every reading is the pass" "pass" "$(verdict 0)"
-expect "a shown window that was not refused names IsAttached" "yes" \
-  "$(blames "IsAttached" 0 SAW_REFUSED=0)"
-expect "so does one that was unloaded" "yes" "$(blames "IsAttached" 0 EARLY=1)"
+expect "a shown window that was not refused names IsShown" "yes" \
+  "$(blames "IsShown" 0 SAW_REFUSED=0)"
+expect "so does one that was unloaded" "yes" "$(blames "IsShown" 0 EARLY=1)"
+expect "a hidden window that stayed names IsShown" "yes" \
+  "$(blames "IsShown" 0 KEPT_LISTED=0)"
+expect "one that loaded while hidden names Replaced" "yes" \
+  "$(blames "Replaced" 0 KEPT_EARLY=1)"
+expect "one that never loaded again names ShowIfRendered" "yes" \
+  "$(blames "ShowIfRendered" 0 KEPT_LOADED=0)"
+expect "a shortage the shell did not hear names MemoryShort" "yes" \
+  "$(blames "MemoryShort" 0 HEARD=0)"
+expect "unloading a page the shell decides on names OnAsked" "yes" \
+  "$(blames "OnAsked" 0 HANDLED_LISTED=1)"
 expect "a subject never listed names DiscardWindow" "yes" \
   "$(blames "DiscardWindow" 0 LISTED=0)"
 expect "an old page that runs on names Reap" "yes" "$(blames "Reap" 0 TICKS=3)"
@@ -163,6 +185,10 @@ expect "a silent page is the control's failure" "yes" \
   "$(blames "silence" 1 "${CONTROL[@]}" TICKS=0)"
 expect "a page that loads again is the control's failure" "fail" \
   "$(verdict 1 "${CONTROL[@]}" LOADED=1)"
+expect "an unloaded hidden window is the control's failure" "yes" \
+  "$(blames "HIDDEN WINDOW" 1 "${CONTROL[@]}" KEPT_LISTED=1)"
+expect "a shortage heard is the control's failure" "yes" \
+  "$(blames "HEARD A SHORTAGE" 1 "${CONTROL[@]}" HEARD=1)"
 expect "an automatic unload is the control's failure" "yes" \
   "$(blames "shortage" 1 "${CONTROL[@]}" AUTO_PLAIN=1)"
 expect "a shown window that was not refused fails the control too" "fail" \
