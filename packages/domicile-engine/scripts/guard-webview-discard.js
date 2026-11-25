@@ -189,6 +189,8 @@ export const HostShell = (_root, desktop) => {
     });
 
   const manual = async (ids, views) => {
+    // A navigation while the first page still loads replaces its entry.
+    await settled();
     await goOn(views[SUBJECT]);
     const devTools = await openDevTools(views[0]);
     await settled();
