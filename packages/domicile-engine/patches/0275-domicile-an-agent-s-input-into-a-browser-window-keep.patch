@@ -1,0 +1,208 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Connor Prussin <connor@prussin.net>
+Date: Wed, 25 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: an agent's input into a browser window keeps the
+ user's focus
+
+An agent drives a browser window through DevTools on that window's own page
+target: a <webview>'s or an Electron view's guest. Upstream lets that input
+move the user's focus twice over:
+
+- A press reaches the guest's widget, and OnInputEventPreDispatch answers
+  it with FocusOwningWebContents. The shell's focused element becomes the
+  <webview>, and the shell raises and focuses that window under the user.
+- Keys and text find their widget with GetFocusedRenderWidgetHost, which
+  for a guest looks in the outer page's focused frame tree: wherever the
+  user is typing. The agent's text would land in the user's page.
+
+Input sent to a guest's own target now leaves the focused WebContents
+where it is (RenderWidgetHostImpl::set_dispatch_keeps_focus around the
+press), and its keys and text go to the frame focused within the guest. The
+guest gets page focus of its own beside the user's, so it draws a caret and
+fires focus events for the agent.
+
+Input sent to the shell's own target keeps upstream's rules: the engine's
+guards press on it, hit-testing into a <webview>, and expect the press to
+focus the page it lands in, as a person's would.
+---
+ .../devtools/protocol/input_handler.cc        | 71 ++++++++++++++++++-
+ .../renderer_host/render_widget_host_impl.cc  |  4 ++
+ .../renderer_host/render_widget_host_impl.h   |  9 +++
+ 3 files changed, 81 insertions(+), 3 deletions(-)
+
+diff --git a/content/browser/devtools/protocol/input_handler.cc b/content/browser/devtools/protocol/input_handler.cc
+index a769abe..439cc63 100644
+--- a/content/browser/devtools/protocol/input_handler.cc
++++ b/content/browser/devtools/protocol/input_handler.cc
+@@ -18,6 +18,7 @@
+ #include "base/functional/bind.h"
+ #include "base/functional/callback.h"
+ #include "base/functional/callback_helpers.h"
++#include "base/logging.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/strings/string_split.h"
+ #include "base/strings/stringprintf.h"
+@@ -30,6 +31,7 @@
+ #include "content/browser/devtools/protocol/native_input_event_builder.h"
+ #include "content/browser/devtools/protocol/protocol.h"
+ #include "content/browser/renderer_host/data_transfer_util.h"
++#include "content/browser/renderer_host/frame_tree_node.h"
+ #include "content/browser/renderer_host/input/touch_emulator_impl.h"
+ #include "content/browser/renderer_host/render_frame_host_impl.h"
+ #include "content/browser/renderer_host/render_widget_host_impl.h"
+@@ -62,6 +64,45 @@ namespace content::protocol {
+ 
+ namespace {
+ 
++// domicile: an agent drives a browser window through that window's own page
++// target, and its input there must never move the user's focus. The shell's
++// own page target keeps upstream's rules: the engine's guards press on it and
++// expect the press to focus the page it lands in, as a person's would.
++//
++// The page `host` is in when it is a page inside another, a <webview>'s or an
++// Electron view's guest; null for the shell and every outermost page.
++WebContentsImpl* DomicileInnerPageOf(RenderFrameHostImpl* host) {
++  if (!host) {
++    return nullptr;
++  }
++  WebContentsImpl* contents = WebContentsImpl::FromRenderFrameHostImpl(host);
++  return contents && contents->GetOuterWebContents() ? contents : nullptr;
++}
++
++// Where keys and text for inner page `contents` go: the frame focused within
++// it, which upstream would look up in the user's focused page instead.
++RenderWidgetHostImpl* DomicileKeyTargetIn(WebContentsImpl* contents) {
++  FrameTreeNode* focused = contents->GetPrimaryFrameTree().GetFocusedFrame();
++  RenderFrameHostImpl* frame = focused ? focused->current_frame_host()
++                                       : contents->GetPrimaryMainFrame();
++  return frame->GetRenderWidgetHost();
++}
++
++// Gives inner page `contents` page focus of its own, beside the user's, so it
++// draws its caret and fires focus events for the agent's input. Nothing else
++// changes: the user's focused page keeps its focus.
++void DomicileFocusForAgent(WebContentsImpl* contents) {
++  RenderWidgetHostImpl* page =
++      contents->GetPrimaryMainFrame()->GetRenderWidgetHost();
++  if (page->is_focused()) {
++    return;
++  }
++  LOG(INFO) << "domicile: an agent's input focuses "
++            << contents->GetLastCommittedURL().GetWithEmptyPath()
++            << "; the user's focus stays where it is";
++  page->SetPageFocus(true);
++}
++
+ gfx::PointF CssPixelsToPointF(double x, double y, float scale_factor) {
+   return gfx::PointF(x * scale_factor, y * scale_factor);
+ }
+@@ -1274,7 +1315,10 @@ void InputHandler::DispatchKeyEvent(
+   }
+ 
+   RenderWidgetHostImpl* widget_host = host_->GetRenderWidgetHost();
+-  if (!host_->GetParent() && widget_host->delegate()) {
++  if (WebContentsImpl* inner = DomicileInnerPageOf(host_)) {
++    DomicileFocusForAgent(inner);
++    widget_host = DomicileKeyTargetIn(inner);
++  } else if (!host_->GetParent() && widget_host->delegate()) {
+     RenderWidgetHostImpl* target_host =
+         widget_host->delegate()->GetFocusedRenderWidgetHost(widget_host);
+     if (target_host)
+@@ -1301,7 +1345,10 @@ void InputHandler::InsertText(const std::string& text,
+   }
+ 
+   RenderWidgetHostImpl* widget_host = host_->GetRenderWidgetHost();
+-  if (!host_->GetParent() && widget_host->delegate()) {
++  if (WebContentsImpl* inner = DomicileInnerPageOf(host_)) {
++    DomicileFocusForAgent(inner);
++    widget_host = DomicileKeyTargetIn(inner);
++  } else if (!host_->GetParent() && widget_host->delegate()) {
+     RenderWidgetHostImpl* target_host =
+         widget_host->delegate()->GetFocusedRenderWidgetHost(widget_host);
+     if (target_host)
+@@ -1338,7 +1385,10 @@ void InputHandler::ImeSetComposition(
+   // |RenderFrameHostImpl::GetRenderWidgetHost| returns the RWHImpl of the
+   // nearest local root of |host_|.
+   RenderWidgetHostImpl* widget_host = host_->GetRenderWidgetHost();
+-  if (widget_host->delegate()) {
++  if (WebContentsImpl* inner = DomicileInnerPageOf(host_)) {
++    DomicileFocusForAgent(inner);
++    widget_host = DomicileKeyTargetIn(inner);
++  } else if (widget_host->delegate()) {
+     RenderWidgetHostImpl* target_host =
+         widget_host->delegate()->GetFocusedRenderWidgetHost(widget_host);
+     if (target_host)
+@@ -1655,6 +1705,18 @@ void InputHandler::OnWidgetForDispatchMouseEvent(
+ 
+   RenderWidgetHostImpl* widget_host =
+       RenderWidgetHostImpl::From(target->GetRenderWidgetHost());
++  // domicile: a press into a browser window's own page focuses that page for
++  // the agent and leaves the user's focus where it is. The injection runs the
++  // press synchronously, so the flag covers it alone; a queued mouse move
++  // never focuses.
++  WebContentsImpl* inner = DomicileInnerPageOf(host_);
++  base::WeakPtr<RenderWidgetHostImpl> keeping = widget_host->GetWeakPtr();
++  if (inner) {
++    if (event->GetType() == blink::WebInputEvent::Type::kMouseDown) {
++      DomicileFocusForAgent(inner);
++    }
++    widget_host->set_dispatch_keeps_focus(true);
++  }
+   if (event->GetType() == blink::WebInputEvent::Type::kMouseWheel) {
+     EnsureInjector(widget_host)
+         ->InjectWheelEvent(static_cast<blink::WebMouseWheelEvent*>(event.get()),
+@@ -1662,6 +1724,9 @@ void InputHandler::OnWidgetForDispatchMouseEvent(
+   } else {
+     EnsureInjector(widget_host)->InjectMouseEvent(*event, std::move(callback));
+   }
++  if (inner && keeping) {
++    keeping->set_dispatch_keeps_focus(false);
++  }
+ }
+ 
+ void InputHandler::DispatchTouchEvent(
+diff --git a/content/browser/renderer_host/render_widget_host_impl.cc b/content/browser/renderer_host/render_widget_host_impl.cc
+index f863df8..a96148d 100644
+--- a/content/browser/renderer_host/render_widget_host_impl.cc
++++ b/content/browser/renderer_host/render_widget_host_impl.cc
+@@ -3226,6 +3226,10 @@ void RenderWidgetHostImpl::OnInputEventPreDispatch(
+     return;
+   }
+ 
++  if (dispatch_keeps_focus_) {
++    return;
++  }
++
+   if (event.GetType() == WebInputEvent::Type::kMouseDown ||
+       event.GetType() == WebInputEvent::Type::kTouchStart ||
+       event.GetType() == WebInputEvent::Type::kGestureTap) {
+diff --git a/content/browser/renderer_host/render_widget_host_impl.h b/content/browser/renderer_host/render_widget_host_impl.h
+index 71bba03..41f694e 100644
+--- a/content/browser/renderer_host/render_widget_host_impl.h
++++ b/content/browser/renderer_host/render_widget_host_impl.h
+@@ -578,6 +578,12 @@ class CONTENT_EXPORT RenderWidgetHostImpl
+   // Focus()/Blur().
+   void SetPageFocus(bool focused);
+ 
++  // domicile: while set, a press this widget dispatches leaves the focused
++  // WebContents where it is, rather than focusing this widget's. An agent's
++  // DevTools input into a browser window sets it, so the agent never moves the
++  // user's focus. See OnInputEventPreDispatch.
++  void set_dispatch_keeps_focus(bool keeps) { dispatch_keeps_focus_ = keeps; }
++
+   // Returns true if the RenderWidgetHost thinks it is active. This
+   // is different than `is_focused` but must always be true if `is_focused`
+   // is true. All RenderWidgetHosts in an active tab are considered active,
+@@ -1731,6 +1737,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl
+   // causing HasFocus to return false when is_focused_ is true.
+   bool is_focused_ = false;
+ 
++  // domicile: see set_dispatch_keeps_focus().
++  bool dispatch_keeps_focus_ = false;
++
+   bool focus_emulation_enabled_ = false;
+ 
+   // Indicates whether what the last focus active state that was sent to the
+-- 
+2.43.0
+

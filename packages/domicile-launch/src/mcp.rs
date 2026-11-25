@@ -280,7 +280,7 @@ struct View {
 const FIT: u32 = 1280;
 
 /// Each tool, by name, in the order `tools/list` gives them.
-const TOOLS: [(&str, Tool); 31] = [
+const TOOLS: [(&str, Tool); 33] = [
     ("list_windows", Tool::Listing("list-windows")),
     ("list_displays", Tool::Listing("list-displays")),
     ("list_inputs", Tool::Listing("list-inputs")),
@@ -302,6 +302,8 @@ const TOOLS: [(&str, Tool); 31] = [
     ("type_text", Tool::TypeText),
     ("browser_snapshot", Tool::Browser(Browser::Snapshot)),
     ("browser_click", Tool::Browser(Browser::Click)),
+    ("browser_drag", Tool::Browser(Browser::Drag)),
+    ("browser_scroll", Tool::Browser(Browser::Scroll)),
     ("browser_type", Tool::Browser(Browser::Type)),
     ("browser_key", Tool::Browser(Browser::Key)),
     ("browser_navigate", Tool::Browser(Browser::Navigate)),
@@ -386,12 +388,12 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec!["words"],
         ),
         Tool::Exec => (
-            "Start a program as the desktop starts apps, without a shell, its name found on the desktop's PATH. Fails saying why when it does not start.",
+            "Start a program as the desktop starts apps, without a shell, its name found on the desktop's PATH. Its windows open held by your own pointer and keyboard, with your keyboard in them, and never take the user's. Fails saying why when it does not start.",
             json!({"argv": {"type": "array", "items": {"type": "string"}, "minItems": 1, "description": "The program and its arguments, such as [\"kitty\", \"--hold\", \"btop\"]."}}),
             vec!["argv"],
         ),
         Tool::Open => (
-            "Open a file, folder or URL with its default app; a URL opens in a browser window.",
+            "Open a file, folder or URL with its default app. A file's app opens held by your own pointer and keyboard, and never takes the user's; a URL opens in a browser window.",
             json!({
                 "target": {"type": "string", "description": "An absolute path or a URL."},
                 "app": {"type": "boolean", "description": "Open a site as an app, with no address bar."},
@@ -713,6 +715,8 @@ fn what_it_did(
         Tool::Browser(Browser::Type) | Tool::AppAct("set-text") => {
             format!("Typed in {}", window("window"))
         }
+        Tool::Browser(Browser::Drag) => format!("Dragged in {}", window("window")),
+        Tool::Browser(Browser::Scroll) => format!("Scrolled in {}", window("window")),
         Tool::Browser(Browser::Key) => format!("Pressed a key in {}", window("window")),
         Tool::Browser(Browser::Navigate) => format!("Loaded a page in {}", window("window")),
         Tool::Browser(Browser::Screenshot) => format!("Took a screenshot of {}", window("window")),
@@ -736,11 +740,14 @@ fn moves_the_users_hands(tool: Tool) -> bool {
 }
 
 /// Whether `tool` points or types with the agent's own pointer and
-/// keyboard, which never move the user's (`--agent`).
+/// keyboard, which never move the user's (`--agent`), or starts a program
+/// whose windows that seat holds.
 fn on_its_own_seat(tool: Tool) -> bool {
     matches!(
         tool,
-        Tool::Click
+        Tool::Exec
+            | Tool::Open
+            | Tool::Click
             | Tool::MovePointer
             | Tool::Drag
             | Tool::Scroll

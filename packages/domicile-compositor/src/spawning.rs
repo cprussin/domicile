@@ -30,7 +30,7 @@ use crate::{app_scope, engine};
 /// [`crate::app_scope`]. It starts at nice value `nice`; see
 /// [`client_command`]. `activation_token` lets it raise its window; see
 /// [`client_command`]. A client in `launches` is launched again by the next
-/// compositor if a crash takes it; see [`crate::launches`].
+/// compositor if a crash takes it; see [`crate::launches`]. Returns its pid.
 pub fn spawn_client(
     command: &[String],
     wayland_display: &OsStr,
@@ -38,7 +38,7 @@ pub fn spawn_client(
     nice: i32,
     activation_token: Option<&str>,
     launches: Option<&Arc<Launches>>,
-) -> Result<(), String> {
+) -> Result<u32, String> {
     let (program, args) = command
         .split_first()
         .ok_or("there was nothing to start: the command is empty")?;
@@ -65,9 +65,10 @@ pub fn spawn_client(
         "{}",
         grepped::SPAWNING
     );
+    let pid = child.id();
     let launches = launches.cloned();
     if let Some(launches) = &launches {
-        launches.launched(child.id(), command);
+        launches.launched(pid, command);
     }
     thread::spawn(move || {
         let _ = child.wait();
@@ -75,7 +76,7 @@ pub fn spawn_client(
             launches.ended(child.id());
         }
     });
-    Ok(())
+    Ok(pid)
 }
 
 /// Gives an app its own journal stream, named by [`stream_name`], at `info`,

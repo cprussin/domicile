@@ -141,6 +141,7 @@ Headless.
 | `guard-webview-keyboard.sh` | a desktop shortcut pressed in a guest is caught; an unclaimed Ctrl+R goes to the shell as `domicile-guest-keydown`; a lone Alt let go goes as `domicile-guest-keyup`, and a plain key's release does not |
 | `guard-webview-escape.sh` | Escape with an unfocused browser window does not crash the browser (patch 0037) |
 | `guard-webview-browser-page.sh` | `chrome://history` in a browser window is refused by `BrowserPageThrottle` (patch 0083) |
+| `guard-agent-input-keeps-focus.sh` | an agent's press, text and key sent to a browser window with `devtools <window>` reach that window's page, and the user's focused field in the shell keeps the focus and gets nothing. Control: the same press sent to window `shell`, a person's path, moves the focus to the window |
 | `guard-webview-click.sh` | a click in a browser window fires an event in the shell's document |
 | `guard-webview-activate.sh` | a page brought to the front (`Page.bringToFront`, the same `Activate()` as a notification click's `client.focus()`) fires `domicile-focus-request` |
 | `guard-webview-routed-link.sh` | a middle click on a link opens a browser window through `OpenURLFromTab` |

@@ -324,9 +324,14 @@ pub enum Invocation {
     ///
     /// Kept as typed; it is relative to the working directory. A web address
     /// opens in browser profile `profile`, or the one its site opens in.
+    ///
+    /// What opens a file starts held by agent session `agent`'s seat when
+    /// given, without taking the user's focus. A web address opens in a
+    /// browser window, which no seat holds.
     Open {
         target: String,
         profile: Option<String>,
+        agent: Option<u32>,
     },
     /// Tell the running desktop to open this as an app: an existing file as
     /// an app module ([`crate::app_entry`]), anything else as a site in a
@@ -545,6 +550,24 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (Some(entry), None) => Ok(Invocation::Dev { entry }),
                 (Some(_), Some(extra)) => Err(CliError::ExtraToServe { extra }),
             },
+            Verb::Opening if args.peek().is_some_and(|word| word == AGENT) => {
+                let agent = agent_flag(&mut args)?;
+                // Collected, so the call is to this same function, not a new one
+                // for each nested iterator type.
+                let rest: Vec<String> = std::iter::once(first).chain(args).collect();
+                match invocation(rest)? {
+                    Invocation::Open {
+                        target, profile, ..
+                    } => Ok(Invocation::Open {
+                        target,
+                        profile,
+                        agent,
+                    }),
+                    // A site as an app, an Electron app or the opener's
+                    // name: no seat holds what these open.
+                    other => Ok(other),
+                }
+            }
             Verb::Opening if args.peek().is_some_and(|word| word == ELECTRON) => {
                 args.next();
                 let target = args.next().ok_or(CliError::NothingToOpen)?;
@@ -571,6 +594,7 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     (Some(target), None) => Ok(Invocation::Open {
                         target,
                         profile: Some(profile),
+                        agent: None,
                     }),
                 }
             }
@@ -596,6 +620,7 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                         None => Invocation::Open {
                             target,
                             profile: None,
+                            agent: None,
                         },
                     }),
                 }
@@ -993,11 +1018,12 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 }
             }
             Verb::Executing => {
+                let agent = agent_flag(&mut args)?;
                 let command: Vec<String> = args.collect();
                 match command.is_empty() {
                     true => Err(CliError::NothingToExec),
                     false => Ok(Invocation::Ask {
-                        request: Request::Launch { command },
+                        request: Request::Launch { command, agent },
                     }),
                 }
             }

@@ -482,11 +482,12 @@ fn read_chrome_messages(
                 hub.send_request(ClientRequest::Spawn {
                     command,
                     answer: None,
+                    agent: None,
                 });
                 Vec::new()
             }
-            Ok(ChromeMessage::Exec { command }) => vec![HostMessage::Executed {
-                refused: exec(hub, command).err(),
+            Ok(ChromeMessage::Exec { command, agent }) => vec![HostMessage::Executed {
+                refused: exec(hub, command, agent).err(),
             }],
             Ok(ChromeMessage::SetTheme { theme }) => {
                 answer_on_the_connection(hub, ConnectionRequest::SetTheme { theme })
@@ -1115,8 +1116,9 @@ const CONFIGURING_A_DISPLAY: std::time::Duration = std::time::Duration::from_sec
 const STARTING_A_PROGRAM: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// Start `command` for `domicile exec`, or say why it did not start. Refused
-/// while locked, as the shell's own spawns are.
-fn exec(hub: &ChromeHub, command: Vec<String>) -> Result<(), String> {
+/// while locked, as the shell's own spawns are. `agent` is the session it
+/// is started for, if any.
+fn exec(hub: &ChromeHub, command: Vec<String>, agent: Option<u32>) -> Result<(), String> {
     if hub.the_desk_is_locked() {
         return Err("the desktop is locked".to_string());
     }
@@ -1124,6 +1126,7 @@ fn exec(hub: &ChromeHub, command: Vec<String>) -> Result<(), String> {
     hub.send_request(ClientRequest::Spawn {
         command,
         answer: Some(answer),
+        agent,
     });
     answered
         .recv_timeout(STARTING_A_PROGRAM)

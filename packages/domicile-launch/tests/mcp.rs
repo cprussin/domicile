@@ -172,6 +172,8 @@ fn tools_list_describes_each_tool() {
             "type_text",
             "browser_snapshot",
             "browser_click",
+            "browser_drag",
+            "browser_scroll",
             "browser_type",
             "browser_key",
             "browser_navigate",
@@ -235,25 +237,33 @@ fn send_shell_passes_its_words() {
 }
 
 #[test]
-fn exec_runs_its_argv() {
+fn exec_runs_its_argv_for_the_agents_seat() {
     assert_eq!(
         ran_for("exec", json!({"argv": ["kitty", "--hold", "btop"]})),
-        ["exec", "kitty", "--hold", "btop"]
+        ["exec", "--agent", "7", "kitty", "--hold", "btop"]
     );
 }
 
 #[test]
-fn open_takes_an_app_flag_and_a_profile() {
+fn open_takes_an_app_flag_and_a_profile_for_the_agents_seat() {
     assert_eq!(
         ran_for("open", json!({"target": "https://example.com"})),
-        ["open", "https://example.com"]
+        ["open", "--agent", "7", "https://example.com"]
     );
     assert_eq!(
         ran_for(
             "open",
             json!({"target": "https://example.com", "app": true, "profile": "work"})
         ),
-        ["open", "--app", "--profile", "work", "https://example.com"]
+        [
+            "open",
+            "--agent",
+            "7",
+            "--app",
+            "--profile",
+            "work",
+            "https://example.com"
+        ]
     );
 }
 
@@ -615,6 +625,134 @@ fn a_browser_click_scrolls_the_element_into_view_and_clicks_its_middle() {
             // Read again, to answer what it changed.
             ("Accessibility.getFullAXTree".to_string(), json!({})),
         ]
+    );
+}
+
+/// Runtime.evaluate's answer for a page at device pixel ratio 2, so a
+/// screenshot's pixels are half the page's.
+fn at_two_x() -> (&'static str, Value) {
+    (
+        "Runtime.evaluate",
+        json!({"result": {"type": "number", "value": 2}}),
+    )
+}
+
+#[test]
+fn a_browser_click_at_a_point_clicks_there_in_the_pages_pixels() {
+    let mut ran = Vec::new();
+    let replies = served(
+        &[call(
+            "browser_click",
+            json!({"window": "w1", "at": [200, 100], "button": "right"}),
+        )],
+        page(&[at_two_x()], &mut ran),
+    );
+    assert_eq!(replies[0]["result"]["isError"], false, "{replies:?}");
+    assert_eq!(
+        ran[..4],
+        [
+            (
+                "Runtime.evaluate".to_string(),
+                json!({"expression": "devicePixelRatio", "returnByValue": true})
+            ),
+            (
+                "Input.dispatchMouseEvent".to_string(),
+                json!({"type": "mouseMoved", "x": 100.0, "y": 50.0})
+            ),
+            (
+                "Input.dispatchMouseEvent".to_string(),
+                json!({"type": "mousePressed", "x": 100.0, "y": 50.0, "button": "right", "buttons": 2, "clickCount": 1})
+            ),
+            (
+                "Input.dispatchMouseEvent".to_string(),
+                json!({"type": "mouseReleased", "x": 100.0, "y": 50.0, "button": "right", "buttons": 0, "clickCount": 1})
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_browser_double_click_counts_its_clicks() {
+    let mut ran = Vec::new();
+    served(
+        &[call(
+            "browser_click",
+            json!({"window": "w1", "at": [2, 2], "count": 2}),
+        )],
+        page(&[at_two_x()], &mut ran),
+    );
+    let presses: Vec<&Value> = ran
+        .iter()
+        .filter(|(_, params)| params["type"] == "mousePressed")
+        .map(|(_, params)| &params["clickCount"])
+        .collect();
+    assert_eq!(presses, [&json!(1), &json!(2)]);
+}
+
+#[test]
+fn a_browser_click_takes_a_ref_or_a_point() {
+    let replies = served(
+        &[call("browser_click", json!({"window": "w1"}))],
+        page(&[], &mut Vec::new()),
+    );
+    assert_eq!(replies[0]["result"]["isError"], true);
+    let replies = served(
+        &[call(
+            "browser_click",
+            json!({"window": "w1", "at": [1, 1], "count": 3}),
+        )],
+        page(&[at_two_x()], &mut Vec::new()),
+    );
+    assert_eq!(replies[0]["result"]["isError"], true);
+}
+
+#[test]
+fn a_browser_drag_presses_moves_in_steps_and_lets_go() {
+    let mut ran = Vec::new();
+    let replies = served(
+        &[call(
+            "browser_drag",
+            json!({"window": "w1", "from": [0, 0], "to": [160, 80]}),
+        )],
+        page(&[at_two_x()], &mut ran),
+    );
+    assert_eq!(replies[0]["result"]["isError"], false, "{replies:?}");
+    let mouse: Vec<&Value> = ran
+        .iter()
+        .filter(|(method, _)| method == "Input.dispatchMouseEvent")
+        .map(|(_, params)| params)
+        .collect();
+    assert_eq!(mouse[1]["type"], "mousePressed");
+    assert_eq!(mouse[1]["buttons"], 1);
+    let last = mouse.len() - 1;
+    // The last move is at the end, with the button still held.
+    assert_eq!(mouse[last - 1]["type"], "mouseMoved");
+    assert_eq!(
+        (mouse[last - 1]["x"].as_f64(), mouse[last - 1]["y"].as_f64()),
+        (Some(80.0), Some(40.0))
+    );
+    assert_eq!(mouse[last - 1]["buttons"], 1);
+    assert_eq!(mouse[last]["type"], "mouseReleased");
+    assert_eq!(mouse.len(), 3 + 8);
+}
+
+#[test]
+fn a_browser_scroll_turns_the_wheel_at_a_point() {
+    let mut ran = Vec::new();
+    let replies = served(
+        &[call(
+            "browser_scroll",
+            json!({"window": "w1", "at": [100, 100], "by": [0, 240]}),
+        )],
+        page(&[at_two_x()], &mut ran),
+    );
+    assert_eq!(replies[0]["result"]["isError"], false, "{replies:?}");
+    assert_eq!(
+        ran[1],
+        (
+            "Input.dispatchMouseEvent".to_string(),
+            json!({"type": "mouseWheel", "x": 50.0, "y": 50.0, "deltaX": 0.0, "deltaY": 120.0})
+        )
     );
 }
 

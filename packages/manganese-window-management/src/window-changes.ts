@@ -113,8 +113,9 @@ const UNSAID = {
 /** The action that opens a new window, tiled or floating. */
 const appeared = (rules: FloatingRules, window: ClientWindow): Action => {
   const { appId, clientFrame, height, title, transientFor, width } = window;
+  const held = window.heldBy !== undefined;
   if (!opensFloating(rules, window)) {
-    return WindowAction.AppAppeared(appId, named(title), transientFor);
+    return WindowAction.AppAppeared(appId, named(title), transientFor, held);
   } else if (width === undefined || height === undefined) {
     throw new Error(`windows: ${appId} is listed before it drew`);
   } else {
@@ -124,6 +125,7 @@ const appeared = (rules: FloatingRules, window: ClientWindow): Action => {
       [width, height],
       clientFrame,
       transientFor,
+      held,
     );
   }
 };

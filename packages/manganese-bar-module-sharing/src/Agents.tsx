@@ -1,12 +1,14 @@
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import type { Portals } from "@domicile-desktop/sdk/desktop/portals";
+import type { Seat, Seats } from "@domicile-desktop/sdk/desktop/seats";
+import type { Windows } from "@domicile-desktop/sdk/desktop/windows";
 import type { Capturing } from "@domicile-desktop/sdk/portal";
 import { CapturingKind } from "@domicile-desktop/sdk/portal";
 import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
 import { StopIcon } from "@phosphor-icons/react/dist/ssr/Stop";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import { css } from "../styled-system/css";
 import { center, flex, hstack } from "../styled-system/patterns";
@@ -22,12 +24,17 @@ const HOUR_MS = 60 * MINUTE_MS;
 /** How often "1 min ago" moves on while the panel is open. */
 const TICK_MS = 15 * 1000;
 
-/** What the agents item reads: the agents in control. */
+/**
+ * What the agents item reads: the agents in control, their seats, and the
+ * windows' titles.
+ */
 export type AgentsDesktop = {
   readonly portals: Pick<
     Portals,
     "capturing" | "changeAgent" | "on" | "stopCapturing"
   >;
+  readonly seats: Pick<Seats, "giveBack" | "list" | "on" | "takeOver">;
+  readonly windows: Pick<Windows, "list" | "on">;
 };
 
 /**
@@ -49,6 +56,7 @@ export const Agents = ({ domicile }: { domicile: AgentsDesktop }) => {
     heard();
     return portals.on("change", heard);
   }, [domicile]);
+  const uses = useUses(domicile);
 
   const [first, ...rest] = agents;
   // Nothing at all when none is in, so the bar closes the item.
@@ -58,23 +66,83 @@ export const Agents = ({ domicile }: { domicile: AgentsDesktop }) => {
       change={(agent) => {
         domicile.portals.changeAgent(agent.id);
       }}
+      giveBack={domicile.seats.giveBack}
       stop={(agent) => {
         domicile.portals.stopCapturing(agent.id);
       }}
+      takeOver={domicile.seats.takeOver}
+      uses={uses}
     />
   );
 };
+
+/** How an agent uses a window. */
+type How = "typing" | "pointing" | "taken";
+
+/** A window an agent uses, or that the user took from it. */
+type Use = { appId: string; how: How; title: string };
+
+/** The windows each agent uses, by its session's id. */
+const useUses = (
+  domicile: AgentsDesktop,
+): ((agent: Agent) => readonly Use[]) => {
+  const { seats, windows } = domicile;
+  const seatsChanged = useCallback(
+    (changed: () => void) => seats.on("change", changed),
+    [seats],
+  );
+  const windowsChanged = useCallback(
+    (changed: () => void) => windows.on("change", changed),
+    [windows],
+  );
+  const list = useSyncExternalStore(seatsChanged, () => seats.list);
+  const titled = useSyncExternalStore(windowsChanged, () => windows.list);
+  return (agent) => {
+    const seat = list?.find(({ id }) => id === seatId(agent));
+    const title = (appId: string): string =>
+      titled.find((window) => window.appId === appId)?.title ?? "";
+    return seat === undefined
+      ? []
+      : [
+          ...seat.holds
+            .filter((appId) => !seat.taken.includes(appId))
+            .map((appId) => ({
+              appId,
+              how: howHeld(seat, appId),
+              title: title(appId),
+            })),
+          ...seat.taken.map((appId) => ({
+            appId,
+            how: "taken" as const,
+            title: title(appId),
+          })),
+        ];
+  };
+};
+
+/** The seat id the compositor gives `agent`'s session. */
+const seatId = (agent: Agent): string => `agent-${String(agent.id)}`;
+
+/** Whether `seat` types in or points at window `appId`, which it holds. */
+const howHeld = (seat: Seat, appId: string): How =>
+  seat.focused === appId ? "typing" : "pointing";
 
 /** The agent sessions in control, never none. */
 type Sessions = readonly [Agent, ...Agent[]];
 
 type Controls = {
   change: (agent: Agent) => void;
+  /** Lets agents drive window `appId` again. */
+  giveBack: (appId: string) => void;
   stop: (agent: Agent) => void;
+  /** Takes window `appId` from the agent using it. */
+  takeOver: (appId: string) => void;
+  /** The windows `agent` uses. */
+  uses: (agent: Agent) => readonly Use[];
 };
 
 /** The one pill, and its panel. */
-const Pill = ({ agents, change, stop }: Controls & { agents: Sessions }) => {
+const Pill = ({ agents, ...controls }: Controls & { agents: Sessions }) => {
   const [first] = agents;
   const names = new Set(agents.map((agent) => agent.agent));
   const label = names.size === 1 ? first.agent : "Agents";
@@ -100,12 +168,11 @@ const Pill = ({ agents, change, stop }: Controls & { agents: Sessions }) => {
       }
     >
       {several === undefined ? (
-        <Panel agent={first} change={change} stop={stop} />
+        <Panel agent={first} {...controls} />
       ) : (
         <SessionsPanel
           agents={agents}
-          change={change}
-          stop={stop}
+          {...controls}
           title={`${several} are in control`}
         />
       )}
@@ -114,7 +181,12 @@ const Pill = ({ agents, change, stop }: Controls & { agents: Sessions }) => {
 };
 
 /** One session's panel. */
-const Panel = ({ agent, change, stop }: Controls & { agent: Agent }) => {
+const Panel = ({
+  agent,
+  change,
+  stop,
+  ...using
+}: Controls & { agent: Agent }) => {
   const now = useNow();
   return (
     <div className={panelStyles}>
@@ -124,6 +196,7 @@ const Panel = ({ agent, change, stop }: Controls & { agent: Agent }) => {
           {`It can see and use ${reach(agent)}.`}
         </span>
       </span>
+      <Using agent={agent} {...using} />
       <Actions agent={agent} now={now} />
       <Buttons agent={agent} change={change} stop={stop} />
     </div>
@@ -136,6 +209,7 @@ const SessionsPanel = ({
   change,
   stop,
   title,
+  ...using
 }: Controls & { agents: Sessions; title: string }) => {
   const now = useNow();
   return (
@@ -153,6 +227,7 @@ const SessionsPanel = ({
               {`Can see and use ${reach(agent)}.`}
             </span>
           </span>
+          <Using agent={agent} {...using} />
           <Actions agent={agent} now={now} />
           <Buttons agent={agent} change={change} quiet stop={stop} />
         </section>
@@ -173,6 +248,68 @@ const SessionsPanel = ({
       </span>
     </div>
   );
+};
+
+/**
+ * The windows `agent` uses now, each with a button that takes it over, then
+ * the windows the user took from it, each with one that gives it back.
+ */
+const Using = ({
+  agent,
+  giveBack,
+  takeOver,
+  uses,
+}: Pick<Controls, "giveBack" | "takeOver" | "uses"> & { agent: Agent }) => {
+  const used = uses(agent);
+  return (
+    used.length > 0 && (
+      <ul aria-label={`What ${agent.agent} is using`} className={actionsStyles}>
+        {used.map(({ appId, how, title }) => {
+          const name = title === "" ? "an untitled window" : title;
+          return (
+            <li className={actionStyles} key={appId}>
+              <span className={useStyles}>
+                <span className={saidStyles}>
+                  {title === "" ? "Untitled window" : title}
+                </span>
+                <span className={whenStyles}>{HOW[how]}</span>
+              </span>
+              {how === "taken" ? (
+                <Button
+                  label={`Give ${name} back`}
+                  onClick={() => {
+                    giveBack(appId);
+                  }}
+                  size="sm"
+                  variant="outline"
+                >
+                  Give back
+                </Button>
+              ) : (
+                <Button
+                  label={`Take over ${name}`}
+                  onClick={() => {
+                    takeOver(appId);
+                  }}
+                  size="sm"
+                  variant="outline"
+                >
+                  Take over
+                </Button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    )
+  );
+};
+
+/** What a row of {@link Using} says the agent does in its window. */
+const HOW: Readonly<Record<How, string>> = {
+  pointing: "Pointing",
+  taken: "Yours now",
+  typing: "Typing",
 };
 
 /** What `agent` did last, if anything. */
@@ -202,7 +339,7 @@ const Buttons = ({
   change,
   quiet = false,
   stop,
-}: Controls & { agent: Agent; quiet?: boolean }) => (
+}: Pick<Controls, "change" | "stop"> & { agent: Agent; quiet?: boolean }) => (
   <span className={buttonsStyles}>
     <Button
       beforeIcon={<SlidersHorizontalIcon aria-hidden />}
@@ -272,16 +409,17 @@ const useNow = (): number => {
   return now;
 };
 
-// Violet, so it reads apart from the red sharing pill.
+// The agent's violet, so it reads apart from the red sharing pill and as
+// the same agent as its rings and pointer.
 const triggerStyles = hstack({
   _hover: {
-    backgroundColor: "color-mix(in oklab, {colors.violet.600} 85%, black)",
+    backgroundColor: "color-mix(in oklab, {colors.agent} 85%, black)",
   },
-  backgroundColor: "violet.600",
+  backgroundColor: "agent",
   blockSize: 6,
   borderRadius: "lg",
   borderStyle: "none",
-  color: "onPhoto",
+  color: "onAgent",
   cursor: "pointer",
   flexShrink: 0,
   fontSize: "sm",
@@ -349,5 +487,8 @@ const saidStyles = css({
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 });
+
+// A window's name over what the agent does in it.
+const useStyles = flex({ direction: "column", minInlineSize: 0 });
 
 const whenStyles = css({ flexShrink: 0, fontSize: "xs", opacity: 0.75 });

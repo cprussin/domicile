@@ -1,7 +1,16 @@
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import type { Seat } from "@domicile-desktop/sdk/desktop/seats";
 import type { ReactNode } from "react";
-import { Fragment, memo, useCallback, useMemo, useState } from "react";
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
+import { AgentSeats } from "./AgentSeats";
 import { AppWindow } from "./AppWindow";
 import { BrowserWindow } from "./BrowserWindow";
 import { useProfileMark } from "./browser/useBrowserProfile";
@@ -19,6 +28,7 @@ import { GrabbingSheet } from "./GrabbingSheet";
 import { GroupTitleBar } from "./GroupTitleBar";
 import { GroupWell } from "./GroupWell";
 import type { HandedDrag } from "./handed-drag";
+import { holdableWindows } from "./holdable-windows";
 import type { Modifiers } from "./keyboard/useModifiers";
 import { seenAt, seenClip, seenStyles } from "./overview/seen-styles";
 import type { OverviewSight, Seen } from "./overview/sight";
@@ -330,6 +340,11 @@ export const Stage = memo(
     // Every window the drag carries, which follow the pointer without easing.
     const held = useMemo(() => heldBy(desk, movingId), [desk, movingId]);
     const { onPlayedOut } = motions;
+    const seats = useSeats(domicile);
+    const holdable = useMemo(
+      () => (working ? holdableWindows(motions.drawn) : []),
+      [motions.drawn, working],
+    );
     const tabsShown = motions.tabs.map(({ tab }) => tab);
     return (
       <main {...tabDrop}>
@@ -893,6 +908,15 @@ export const Stage = memo(
               />
             </Sliding>
           )}
+          {/*
+          After every window and tab, each at its window's raised depth, so
+          it covers its window and the windows above stay above.
+        */}
+          <AgentSeats
+            onGiveBack={domicile.seats.giveBack}
+            seats={seats ?? NO_SEATS}
+            windows={holdable}
+          />
           {working && aim !== undefined && <DropIndicator aim={aim} />}
           {movingId !== undefined && pulled && <GrabbingSheet />}
         </SettleHandoffs>
@@ -950,6 +974,18 @@ const deskOf = (screens: readonly StageScreen[]): Desk => {
     screens: new Map(screens.map((screen) => [screen.geometry.name, screen])),
     targeted: new Set(targets.map(({ id }) => id)),
   };
+};
+
+/** No agents' seats, before the compositor lists them. */
+const NO_SEATS: readonly Seat[] = [];
+
+/** Every agent's seat, following each change. See `AgentSeats`. */
+const useSeats = (domicile: Domicile): readonly Seat[] | undefined => {
+  const subscribe = useCallback(
+    (changed: () => void) => domicile.seats.on("change", changed),
+    [domicile],
+  );
+  return useSyncExternalStore(subscribe, () => domicile.seats.list);
 };
 
 /** No popups, shared so a window without any keeps its memoized render. */

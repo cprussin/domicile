@@ -8,6 +8,18 @@ in the manganese desktop is in
 
 _Unreleased_
 
+### An agent's input to a browser window leaves the user's focus
+
+DevTools input sent to a browser window's own page, as `domicile devtools <window>` and the MCP server's `browser_` tools send it, no longer moves the user's focus to that window: a press focuses the page for the agent only, and `Input.insertText` and keys go to the frame focused in that page rather than wherever the user is typing. Input sent to window `shell` still focuses what it presses, as a person's click does. `browser_click` also clicks at a point of the page, with any button and as a double-click, and `browser_drag` and `browser_scroll` drag and scroll there, for a canvas or anything else with no ref.
+
+[Agents](AGENTS.md) · [Agent seats](architecture/AGENT-SEATS.md#what-each-kind-of-window-gets)
+
+### Windows an agent starts are held by it
+
+`domicile exec --agent <session>` and `domicile open --agent <session>` start a program for an agent session: its windows, and those of programs it starts, open held by the agent's seat with the agent's keyboard in them. They get no activation token, and `heldBy` is set when the shell first hears of the window, so a shell can open it without focusing it. The MCP server's `exec` and `open` use them.
+
+[Agent seats](architecture/AGENT-SEATS.md#taking-over) · [`domicile exec`](CLI.md#domicile-exec---agent-session-program-arg)
+
 ### Shells see agents' seats
 
 `domicile.seats.list` lists the agent seats: each agent's name, where its pointer is, the window its keyboard is in, the windows it holds and the windows the user took from it. Each window's `heldBy` names the agent seat holding it. `domicile.seats.takeOver(appId)` takes a window from an agent, as the user's click or key in it does, and the agent can't drive it until `domicile.seats.giveBack(appId)`. A window the user takes stays theirs after they leave it. `useSeats()` in `@domicile-desktop/react/seats` follows the list. `domicile list-windows` and the MCP server's `list_windows` add `held_by`.

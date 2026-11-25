@@ -514,14 +514,17 @@ export enum WindowActionKind {
 export const WindowAction = {
   /**
    * The host announced a Wayland client, a dialog for client `opener` if
-   * given.
+   * given. `held` says an agent's seat holds it: an agent opened it, so it
+   * opens without taking the user's focus.
    */
   AppAppeared: (
     appId: string,
     title: string | undefined,
     opener: string | undefined = undefined,
+    held = false,
   ) => ({
     appId,
+    held,
     kind: WindowActionKind.AppAppeared as const,
     opener,
     title,
@@ -530,7 +533,8 @@ export const WindowAction = {
   /**
    * The host announced a Wayland client that opens floating, at the `size` it
    * drew. `bare` drops the title bar for a client that draws its own frame.
-   * `opener` is the client it is a dialog for, if any.
+   * `opener` is the client it is a dialog for, if any. `held` is as for
+   * {@link WindowAction.AppAppeared}.
    */
   AppAppearedFloating: (
     appId: string,
@@ -538,9 +542,11 @@ export const WindowAction = {
     size: readonly [width: number, height: number],
     bare: boolean,
     opener: string | undefined = undefined,
+    held = false,
   ) => ({
     appId,
     bare,
+    held,
     kind: WindowActionKind.AppAppearedFloating as const,
     opener,
     size,
@@ -1379,10 +1385,14 @@ const reduceAction = (
 ): WindowState => {
   switch (action.kind) {
     case WindowActionKind.AppAppeared: {
-      return openApp(state, action.appId, action.title, action.opener);
+      return focusKept(
+        state,
+        openApp(state, action.appId, action.title, action.opener),
+        action.held,
+      );
     }
     case WindowActionKind.AppAppearedFloating: {
-      return openFloatingApp(state, action);
+      return focusKept(state, openFloatingApp(state, action), action.held);
     }
     case WindowActionKind.AppClosed: {
       // Popups and windows share one id space without overlap.
@@ -1911,6 +1921,23 @@ const stepWindow = (state: WindowState, direction: Direction): WindowState => {
       (workspace) => pushedOnBy(workspace, leaving.node, direction),
     );
   }
+};
+
+// A window an agent holds opens without taking the user's focus: the window
+// focused `before` keeps it, so the shell never hands the user's keyboard to
+// the agent's window. On an empty workspace the user's keyboard has nowhere
+// else to be, so the new window keeps the focus it opened with.
+const focusKept = (
+  before: WindowState,
+  opened: WindowState,
+  held: boolean,
+): WindowState => {
+  const focused = activeIdOf(before);
+  return held &&
+    focused !== undefined &&
+    currentHere(opened) === currentHere(before)
+    ? onCurrent(opened, (workspace) => reached(workspace, focused))
+    : opened;
 };
 
 // Ignores a re-announcement of a known client; portals are keyed by app id.

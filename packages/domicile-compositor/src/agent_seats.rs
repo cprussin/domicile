@@ -71,6 +71,29 @@ pub const NOTHING_NATIVE: &str = "nothing at that point takes the agent's own po
      the shell, a browser window, or the empty desk. Act on browser windows and on the shell \
      (window \"shell\") by ref, with browser_snapshot and then browser_click or browser_type";
 
+/// How many parents [`AgentSeats::started_for`] looks through.
+const MOST_FORKS: usize = 8;
+
+/// Process `pid`'s parent, from `/proc`: field 4 of its `stat` line, counted
+/// after the command name's last `)`, which may hold spaces. `None` for a
+/// process that is gone, and for the first process.
+fn parent_of(pid: u32) -> Option<u32> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    parent_in(&stat)
+}
+
+/// The parent a `/proc/PID/stat` line names, unless it is none (0).
+fn parent_in(stat: &str) -> Option<u32> {
+    let (_, after) = stat.rsplit_once(')')?;
+    // `after` starts at field 3, the state.
+    after
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()
+        .filter(|parent| *parent != 0)
+}
+
 /// Every agent's seat, by its session.
 #[derive(Default)]
 pub struct AgentSeats {
@@ -81,6 +104,9 @@ pub struct AgentSeats {
     /// What the chromes were last told, so an unchanged list isn't sent
     /// again.
     told: Vec<SeatSummary>,
+    /// The agent session each program an agent started is for, by its pid.
+    /// Its windows, and its children's, start held by that agent.
+    started: HashMap<u32, u32>,
 }
 
 struct AgentSeat {
@@ -120,6 +146,26 @@ impl AgentSeat {
 }
 
 impl AgentSeats {
+    /// Program `pid` was started for agent `session` (`domicile exec
+    /// --agent`).
+    pub fn started(&mut self, pid: u32, session: u32) {
+        self.started.insert(pid, session);
+    }
+
+    /// The agent session the program `pid` was started for, by it or by a
+    /// parent of it: a shell, or a launcher that forks.
+    fn started_for(&self, pid: u32) -> Option<u32> {
+        let mut at = pid;
+        // Far enough for a shell and a forking launcher, and no loop.
+        for _ in 0..MOST_FORKS {
+            if let Some(session) = self.started.get(&at) {
+                return Some(*session);
+            }
+            at = parent_of(at)?;
+        }
+        None
+    }
+
     /// Agent `session`'s seat, which its input made first.
     fn mine(&mut self, session: u32) -> &mut AgentSeat {
         self.seats
@@ -173,6 +219,9 @@ impl DomicileCompositor {
     /// Agent session `session` ended: its seat lets go of everything and goes.
     pub fn agent_gone(&mut self, session: u32) {
         self.agent_seats.gone.insert(session);
+        self.agent_seats
+            .started
+            .retain(|_, started_for| *started_for != session);
         // An agent that never pointed or typed has no seat.
         if !self.agent_seats.seats.contains_key(&session) {
             return;
@@ -610,6 +659,38 @@ impl DomicileCompositor {
             .unwrap_or_else(|| app_id.to_string())
     }
 
+    /// Window `app_id` first drew, before the chromes hear of it. A window of
+    /// a program an agent started is that agent's: its keyboard goes in, and
+    /// the chromes hear it held before they hear of the window, so the shell
+    /// leaves the user's keyboard where it is.
+    pub fn agents_window_appeared(&mut self, app_id: &str, surface: &WlSurface) {
+        let Ok(pid) = u32::try_from(crate::clients::owner_of(surface).pid) else {
+            return;
+        };
+        let Some(session) = self.agent_seats.started_for(pid) else {
+            return;
+        };
+        if let Err(why) = self.agent_seat(session) {
+            debug!(
+                session,
+                app_id, why, "a window an agent started is the user's"
+            );
+            return;
+        }
+        if let Err(why) = self.someone_else_holds(session, surface, true) {
+            debug!(
+                session,
+                app_id, why, "a window an agent started is the user's"
+            );
+            return;
+        }
+        debug!(session, app_id, "a window an agent started is held by it");
+        let (keyboard, _) = self.agent_seats.mine(session).devices();
+        keyboard.set_focus(self, Some(surface.clone()), SERIAL_COUNTER.next_serial());
+        self.agent_seats.mine(session).typing_in = Some(app_id.to_string());
+        self.tell_the_chromes_the_seats(false);
+    }
+
     /// Window `app_id` closed: it leaves every agent's seat.
     pub fn agents_window_closed(&mut self, app_id: &str) {
         for agent in self.agent_seats.seats.values_mut() {
@@ -744,5 +825,23 @@ impl DomicileCompositor {
         let (keyboard, _) = agent.devices();
         let next = next.or_else(|| root.and_then(|window| self.surface_for(&window)));
         keyboard.set_focus(self, next, SERIAL_COUNTER.next_serial());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parent_in;
+
+    #[test]
+    fn a_parent_is_read_past_a_command_name_with_spaces_and_parentheses() {
+        assert_eq!(
+            parent_in("4242 (my (odd) app) S 4100 4242 4242 0 -1 4194560"),
+            Some(4100)
+        );
+    }
+
+    #[test]
+    fn the_first_process_has_no_parent() {
+        assert_eq!(parent_in("1 (systemd) S 0 1 1 0 -1 4194560"), None);
     }
 }

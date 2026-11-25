@@ -779,6 +779,11 @@ input there, and in its popups, is then refused until
 taken from leaves. A shell offers both, for example a "Give back" button on
 a window in `taken`.
 
+A window an agent started (`domicile exec --agent`) already has `heldBy` set
+when the shell first sees it, with the agent's keyboard in it. Open it
+without focusing it: focusing it gives it the user's keyboard, which takes it
+from the agent.
+
 ### Focus follows the mouse
 
 If focus follows the pointer, a keyboard focus change can be undone at once:

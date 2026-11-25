@@ -11,13 +11,15 @@ use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
 use super::changes::{changed, SETTLE};
-use super::{said, string, Ran};
+use super::{number, pair, said, string, Ran};
 
 /// A browser tool.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Browser {
     Snapshot,
     Click,
+    Drag,
+    Scroll,
     Type,
     Key,
     Navigate,
@@ -38,6 +40,7 @@ pub(super) fn described(tool: Browser) -> (&'static str, Value, Vec<&'static str
     let element =
         json!({"type": "string", "description": "An element's ref, from browser_snapshot."});
     let view = json!({"type": "string", "description": "One of the window's views, from browser_snapshot or list_windows. Left out, the window's own page."});
+    let at = json!({"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "description": "[x, y] in the pixels of browser_screenshot of the same page or view."});
     match tool {
         Browser::Snapshot => (
             "Read a browser window's page, then each view it holds, as accessibility trees: one element a line, with the ref the other browser tools take. An Electron app such as Claude or Slack draws its page in views. Works on hidden windows; private ones are refused.",
@@ -45,12 +48,29 @@ pub(super) fn described(tool: Browser) -> (&'static str, Value, Vec<&'static str
             vec!["window"],
         ),
         Browser::Click => (
-            "Click an element of a browser window's page or view by its ref, scrolling it into view first. Answers what it changed in the window.",
-            json!({"window": window, "ref": element}),
-            vec!["window", "ref"],
+            "Click an element of a browser window's page or view by its ref, scrolling it into view first, or at a point `at` of the page, for a canvas or anything else with no ref. The user's pointer and focus stay where they are. Answers what it changed in the window.",
+            json!({
+                "window": window,
+                "ref": element,
+                "view": view,
+                "at": at.clone(),
+                "button": {"type": "string", "enum": ["left", "right", "middle"], "description": "Left out, the left one."},
+                "count": {"type": "integer", "enum": [1, 2], "description": "2 double-clicks. Left out, 1."},
+            }),
+            vec!["window"],
+        ),
+        Browser::Drag => (
+            "Press the left button at point `from` of a browser window's page or view, move to `to` and let go, as on a canvas. The user's pointer and focus stay where they are. Answers what it changed in the window.",
+            json!({"window": window, "view": view, "from": at.clone(), "to": at.clone()}),
+            vec!["window", "from", "to"],
+        ),
+        Browser::Scroll => (
+            "Scroll a browser window's page or view with the wheel at point `at`, by `by`, [right, down], in the same pixels. The user's pointer stays where it is. Answers what it changed in the window.",
+            json!({"window": window, "view": view, "at": at.clone(), "by": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "description": "[right, down]; negative goes left or up."}}),
+            vec!["window", "at", "by"],
         ),
         Browser::Type => (
-            "Type text into a browser window's page or view: into the element with ref, focusing it first, or where its focus is. Answers what it changed in the window.",
+            "Type text into a browser window's page or view: into the element with ref, focusing it first, or where its focus is. Never into the window the user is typing in. Answers what it changed in the window.",
             json!({"window": window, "ref": element, "view": view, "text": {"type": "string"}}),
             vec!["window", "text"],
         ),
@@ -107,7 +127,12 @@ pub(super) fn called(
             Ok(answer)
         }
         Browser::Screenshot => Ok(answer),
-        Browser::Click | Browser::Type | Browser::Key | Browser::Navigate => {
+        Browser::Click
+        | Browser::Drag
+        | Browser::Scroll
+        | Browser::Type
+        | Browser::Key
+        | Browser::Navigate => {
             let did = answer["content"][0]["text"]
                 .as_str()
                 .expect("a browser tool answers text");
@@ -159,6 +184,23 @@ impl<D: FnMut(&[String]) -> io::Result<Ran>> Page<'_, D> {
                 ran.stdout
             ))
         })
+    }
+
+    /// How many of a screenshot's pixels make one of the page's CSS pixels:
+    /// its device pixel ratio, which Page.captureScreenshot draws at and
+    /// Input.dispatchMouseEvent divides out.
+    fn scale(&mut self) -> io::Result<Result<f64, String>> {
+        let answer = match self.send(
+            "Runtime.evaluate",
+            json!({"expression": "devicePixelRatio", "returnByValue": true}),
+        )? {
+            Ok(answer) => answer,
+            Err(why) => return Ok(Err(why)),
+        };
+        Ok(answer["result"]["value"]
+            .as_f64()
+            .filter(|scale| *scale > 0.0)
+            .ok_or_else(|| format!("the page answered no device pixel ratio: {answer}")))
     }
 
     /// The views the window holds, as `domicile list-windows` lists them, or
@@ -236,9 +278,97 @@ fn carried_out<D: FnMut(&[String]) -> io::Result<Ran>>(
 ) -> io::Result<Result<Value, String>> {
     match tool {
         Browser::Snapshot => Ok(outline_of(page)?.map(|lines| said(true, lines))),
+        Browser::Click if element.is_none() => {
+            let Some(at) = arguments.get("at") else {
+                return Ok(Err(
+                    "browser_click takes the ref of an element, or a point `at`".to_string(),
+                ));
+            };
+            let (button, count) = match clicked_with(arguments) {
+                Ok(how) => how,
+                Err(why) => return Ok(Err(why)),
+            };
+            let scale = match page.scale()? {
+                Ok(scale) => scale,
+                Err(why) => return Ok(Err(why)),
+            };
+            let (x, y) = match pair(arguments, "at") {
+                Ok((x, y)) => (x / scale, y / scale),
+                Err(why) => return Ok(Err(why)),
+            };
+            sent!(
+                page,
+                "Input.dispatchMouseEvent",
+                json!({"type": "mouseMoved", "x": x, "y": y})
+            );
+            for click in 1..=count {
+                for kind in ["mousePressed", "mouseReleased"] {
+                    sent!(
+                        page,
+                        "Input.dispatchMouseEvent",
+                        json!({"type": kind, "x": x, "y": y, "button": button, "buttons": held(button, kind), "clickCount": click})
+                    );
+                }
+            }
+            Ok(Ok(said(true, format!("clicked at {at}"))))
+        }
+        Browser::Drag => {
+            let scale = match page.scale()? {
+                Ok(scale) => scale,
+                Err(why) => return Ok(Err(why)),
+            };
+            let ((x1, y1), (x2, y2)) = match (pair(arguments, "from"), pair(arguments, "to")) {
+                (Ok(from), Ok(to)) => (
+                    (from.0 / scale, from.1 / scale),
+                    (to.0 / scale, to.1 / scale),
+                ),
+                (Err(why), _) | (_, Err(why)) => return Ok(Err(why)),
+            };
+            sent!(
+                page,
+                "Input.dispatchMouseEvent",
+                json!({"type": "mouseMoved", "x": x1, "y": y1})
+            );
+            sent!(
+                page,
+                "Input.dispatchMouseEvent",
+                json!({"type": "mousePressed", "x": x1, "y": y1, "button": "left", "buttons": 1, "clickCount": 1})
+            );
+            // In steps, so a page that follows the pointer sees it travel.
+            for step in 1..=DRAG_STEPS {
+                let along = f64::from(step) / f64::from(DRAG_STEPS);
+                sent!(
+                    page,
+                    "Input.dispatchMouseEvent",
+                    json!({"type": "mouseMoved", "x": x1 + (x2 - x1) * along, "y": y1 + (y2 - y1) * along, "button": "left", "buttons": 1})
+                );
+            }
+            sent!(
+                page,
+                "Input.dispatchMouseEvent",
+                json!({"type": "mouseReleased", "x": x2, "y": y2, "button": "left", "buttons": 0, "clickCount": 1})
+            );
+            Ok(Ok(said(true, "dragged".to_string())))
+        }
+        Browser::Scroll => {
+            let scale = match page.scale()? {
+                Ok(scale) => scale,
+                Err(why) => return Ok(Err(why)),
+            };
+            let ((x, y), (dx, dy)) = match (pair(arguments, "at"), pair(arguments, "by")) {
+                (Ok(at), Ok(by)) => ((at.0 / scale, at.1 / scale), (by.0 / scale, by.1 / scale)),
+                (Err(why), _) | (_, Err(why)) => return Ok(Err(why)),
+            };
+            sent!(
+                page,
+                "Input.dispatchMouseEvent",
+                json!({"type": "mouseWheel", "x": x, "y": y, "deltaX": dx, "deltaY": dy})
+            );
+            Ok(Ok(said(true, "scrolled".to_string())))
+        }
         Browser::Click => {
             let Some(element) = element else {
-                return Ok(Err("browser_click takes the ref of an element".to_string()));
+                unreachable!("a click with no ref is a click at a point, above")
             };
             let node = json!({"backendNodeId": element});
             sent!(page, "DOM.scrollIntoViewIfNeeded", node.clone());
@@ -318,6 +448,40 @@ fn carried_out<D: FnMut(&[String]) -> io::Result<Ran>>(
                 "isError": false,
             })))
         }
+    }
+}
+
+/// How many moves a drag takes between its ends.
+const DRAG_STEPS: u32 = 8;
+
+/// Argument `button` and `count`: the button a click presses and how many
+/// times.
+fn clicked_with(arguments: &Map<String, Value>) -> Result<(&'static str, u32), String> {
+    let button = match string(arguments, "button")?.as_deref() {
+        None | Some("left") => "left",
+        Some("right") => "right",
+        Some("middle") => "middle",
+        Some(other) => return Err(format!("button is left, right or middle, not {other}")),
+    };
+    let count = match arguments.get("count") {
+        None => 1,
+        Some(_) => match number(arguments, "count")? {
+            1.0 => 1,
+            2.0 => 2,
+            other => return Err(format!("count is 1 or 2, not {other}")),
+        },
+    };
+    Ok((button, count))
+}
+
+/// The buttons held during a `kind` of `button`, as CDP's bit mask: held
+/// while pressed, none once released.
+fn held(button: &str, kind: &str) -> u32 {
+    match (kind, button) {
+        ("mouseReleased", _) => 0,
+        (_, "right") => 2,
+        (_, "middle") => 4,
+        _ => 1,
     }
 }
 

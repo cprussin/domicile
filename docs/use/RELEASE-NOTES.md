@@ -7,6 +7,18 @@ building shells is in [Domicile's release notes](../RELEASE-NOTES.md).
 
 _Unreleased_
 
+### Agents in browser windows don't take your typing
+
+When an agent clicks or types in a browser window, the window you're typing in keeps your keyboard, and the agent's typing never lands there.
+
+### Apps an agent opens don't interrupt you
+
+An app an agent opens is the agent's from the start. It opens beside what you're doing, and your keyboard stays where it was.
+
+### See what an agent is using
+
+A window an agent is using gets a violet ring with its name, and its pointer is violet with its name too. Click or type in that window and it's yours until you give it back. The agent pill lists the windows it's using, each with **Take over**.
+
 ### Agents copy and paste on their own clipboard
 
 An agent now has a clipboard of its own. What it copies never replaces what you copied, and stays out of your clipboard history.

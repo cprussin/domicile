@@ -454,6 +454,8 @@ export const Shell = runManganese({
 - Hovering one session's pill says what it can reach.
 - Click says what each session can see and use and what it did last, with
   **Change** and **Stop** buttons, and **Stop all** when there are several.
+- Under each session, the windows its seat uses now, each with **Take over**,
+  then those the user took from it, each with **Give back**.
 - See [AGENTS.md](../../../docs/AGENTS.md).
 
 ## Keep awake

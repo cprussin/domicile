@@ -294,7 +294,14 @@ pub enum ChromeMessage {
     /// looked up on the compositor's `PATH`. Answered with
     /// [`HostMessage::Executed`] on this connection only. Sent by `domicile
     /// exec` and `domicile open`.
-    Exec { command: Vec<String> },
+    Exec {
+        command: Vec<String>,
+        /// The agent session it is started for (`--agent`): its windows
+        /// start held by that agent's seat, with its keyboard in them, and
+        /// it gets no activation token to take the user's focus with.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent: Option<u32>,
+    },
 
     // Input the chrome captured over an <app> element, for the compositor to
     // inject into the client.

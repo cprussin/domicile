@@ -53,7 +53,7 @@ resources per client.
 | Window | Agent pointer and keys |
 |---|---|
 | Native Wayland | Agent seat, multiplexed |
-| Browser and Electron windows | CDP `Input.dispatch*`, which moves neither the engine's pointer nor its focus |
+| Browser and Electron windows | CDP on the window's own page (the `browser_` tools, by ref), which moves neither the engine's pointer nor its focus (patch 0275) |
 | X11 apps | User's seat only. xwayland-satellite is one client with one X focus, so raw input waits for the user to step away, as today |
 | The shell | Refs only (`browser_*` on window `shell`) |
 
@@ -69,7 +69,12 @@ resources per client.
 - **Give back** returns it. **Take over** in the bar pill's list does the
   same as a click.
 - A window an agent opens with `open` or `exec` starts held by the agent and
-  does not take the user's focus.
+  does not take the user's focus. The compositor knows it by the process
+  that `exec` started, or a descendant of it, and sends the seats before it
+  announces the window, so `heldBy` is set when the shell first sees it. A
+  shell opens such a window without focusing it. Manganese still focuses one
+  that opens on an empty workspace, where the user's keyboard has nowhere
+  else to be.
 
 ### Clipboard
 
@@ -128,13 +133,15 @@ domicile.seats.giveBack(windowId);
 - [x] compositor: emulated input tagged with its seat (`ChromeMessage::Emulate`
       names the grant)
 - [x] compositor: a selection per seat (Smithay `share_selection_devices`)
-- [ ] engine: CDP raw input for browser windows from the agent seat
+- [x] engine: CDP input for browser windows leaves the user's focus (patch
+      0275): a press sent to a window's own page target does not focus its
+      WebContents, and keys and text go to the frame focused in that page
 - [x] protocol and SDK: `seats`, `heldBy`, `takeOver`, `giveBack`
 - [x] MCP: raw tools on the agent seat
 - [x] MCP: `heldBy` in `list_windows` (`held_by`)
-- [ ] manganese: agent cursor, ring and name tag, "Yours now · Give back"
+- [x] manganese: agent cursor, ring and name tag, "Yours now · Give back"
       strip, held windows in the agent pill
-- [ ] new windows from an agent's `open`/`exec` start held by it
+- [x] new windows from an agent's `open`/`exec` start held by it
 
 ## Open questions
 

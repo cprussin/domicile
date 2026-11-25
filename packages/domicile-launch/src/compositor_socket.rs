@@ -146,16 +146,19 @@ pub fn open_link(
 }
 
 /// Tells the compositor at `socket` to start `command` as an app, as the
-/// launcher does, and waits to hear it started or why not.
+/// launcher does, and waits to hear it started or why not. With `agent`, it
+/// is started for that agent session, whose seat holds its windows.
 pub fn launch(
     socket: &Path,
     command: &[String],
+    agent: Option<u32>,
     patience: Option<Duration>,
 ) -> Result<(), CompositorError> {
     let said = exchanged(
         socket,
         &[ChromeMessage::Exec {
             command: command.to_vec(),
+            agent,
         }],
         patience,
     )?;

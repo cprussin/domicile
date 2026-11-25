@@ -1000,6 +1000,46 @@ describe("the workspaces", () => {
     expect(currentOn(state, "right")).toBe("2");
   });
 
+  it("opens a window an agent holds without taking the user's focus", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.AppAppeared("browser", "browser", undefined, true),
+    );
+
+    expect(windowsOn(workspaceHere(state))).toEqual([
+      APP("kitty"),
+      APP("browser"),
+    ]);
+    expect(activeIdOf(state)).toBe(APP("kitty"));
+  });
+
+  it("opens a floating window an agent holds without taking the user's focus", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.AppAppearedFloating(
+        "dialog",
+        "dialog",
+        [400, 300],
+        false,
+        undefined,
+        true,
+      ),
+    );
+
+    expect(windowsOn(workspaceHere(state))).toContain(APP("dialog"));
+    expect(activeIdOf(state)).toBe(APP("kitty"));
+  });
+
+  it("focuses a window an agent holds on an empty workspace", () => {
+    // The user's keyboard has nowhere else to be.
+    const state = reduce(
+      desktop(),
+      WindowAction.AppAppeared("browser", "browser", undefined, true),
+    );
+
+    expect(activeIdOf(state)).toBe(APP("browser"));
+  });
+
   it("opens a window on the screen the keyboard is on", () => {
     // A new window opens on the focused screen, not always on the first.
     const state = reduce(

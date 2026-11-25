@@ -226,6 +226,7 @@ fn open_takes_one_thing_to_open_as_typed() {
         Invocation::Open {
             target: "~/notes.org".to_string(),
             profile: None,
+            agent: None,
         }
     );
     assert_eq!(run(&["open"]), Err(CliError::NothingToOpen));
@@ -238,12 +239,48 @@ fn open_takes_one_thing_to_open_as_typed() {
 }
 
 #[test]
+fn open_with_agent_names_the_seat_its_app_opens_held_by() {
+    assert_eq!(
+        run(&["open", "--agent", "3", "~/notes.org"]).unwrap(),
+        Invocation::Open {
+            target: "~/notes.org".to_string(),
+            profile: None,
+            agent: Some(3),
+        }
+    );
+    assert_eq!(
+        run(&[
+            "open",
+            "--agent",
+            "3",
+            "--profile",
+            "work",
+            "https://example.com"
+        ])
+        .unwrap(),
+        Invocation::Open {
+            target: "https://example.com".to_string(),
+            profile: Some("work".to_string()),
+            agent: Some(3),
+        }
+    );
+    assert_eq!(run(&["open", "--agent", "3"]), Err(CliError::NothingToOpen));
+    assert!(run(&["open", "--agent", "three", "a.txt"]).is_err());
+    // A site as an app opens in a browser window, which no seat holds.
+    assert_eq!(
+        run(&["open", "--agent", "3", "--app", "https://example.com/"]).unwrap(),
+        run(&["open", "--app", "https://example.com/"]).unwrap()
+    );
+}
+
+#[test]
 fn open_with_profile_names_the_browser_profile() {
     assert_eq!(
         run(&["open", "--profile", "work", "https://example.com"]).unwrap(),
         Invocation::Open {
             target: "https://example.com".to_string(),
             profile: Some("work".to_string()),
+            agent: None,
         }
     );
     assert_eq!(
@@ -1195,11 +1232,26 @@ fn exec_starts_every_word_after_it_as_argv() {
                     "kitty".to_string(),
                     "--hold".to_string(),
                     "btop".to_string()
-                ]
+                ],
+                agent: None,
             }
         })
     );
     assert_eq!(run(&["exec"]), Err(CliError::NothingToExec));
+}
+
+#[test]
+fn exec_for_an_agent_names_its_session() {
+    assert_eq!(
+        run(&["exec", "--agent", "3", "kitty"]),
+        Ok(Invocation::Ask {
+            request: Request::Launch {
+                command: vec!["kitty".to_string()],
+                agent: Some(3),
+            }
+        })
+    );
+    assert_eq!(run(&["exec", "--agent", "3"]), Err(CliError::NothingToExec));
 }
 
 #[test]

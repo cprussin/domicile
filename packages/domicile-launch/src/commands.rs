@@ -277,6 +277,11 @@ pub const COMMANDS: &[Command] = &[
                 ),
                 ("--which", "Print the app `open` would use, and open nothing"),
                 (
+                    "--agent <session>",
+                    "Open a file's app held by that agent session's seat, \
+                     without taking your focus",
+                ),
+                (
                     "--electron",
                     "Run an installed Electron app on the desktop's engine. \
                      `<command>` is its own, which runs it if the engine can't",
@@ -301,6 +306,10 @@ pub const COMMANDS: &[Command] = &[
              environment, in its own scope, without a shell. A `<program>` with no \
              `/` is found on the desktop's `PATH`. Fails saying why when it does \
              not start.",
+            "With `--agent <session>`, it is started for that agent session, as \
+             `domicile agent` printed it: its windows open held by the agent's own \
+             seat, with the agent's keyboard in them, and never take the user's \
+             focus.",
         ],
         sections: &[],
         examples: &["domicile exec kitty --hold btop"],

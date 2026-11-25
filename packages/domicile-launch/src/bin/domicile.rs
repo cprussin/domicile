@@ -223,7 +223,11 @@ fn run() -> Result<ExitCode, String> {
         Invocation::Ask { request } => asked(&request),
         Invocation::Load { shell } => asked(&shell_to_load(&shell)?),
         Invocation::Dev { entry } => developed(&entry),
-        Invocation::Open { target, profile } => opened(&target, profile),
+        Invocation::Open {
+            target,
+            profile,
+            agent,
+        } => opened(&target, profile, agent),
         Invocation::Opener { target } => {
             let id = opener(&target, &typed_in()?, &places()).map_err(|why| why.to_string())?;
             if let Some(id) = id {
@@ -495,7 +499,8 @@ fn versioned() -> Result<ExitCode, String> {
 /// Opens `target` with what opens its type, started by the running desktop's
 /// compositor, or in a browser window of the running desktop, in browser profile `profile` when
 /// given; see `domicile_launch::open`. Only a web address takes a profile.
-fn opened(target: &str, profile: Option<String>) -> Result<ExitCode, String> {
+/// What opens a file starts held by agent session `agent`'s seat, if given.
+fn opened(target: &str, profile: Option<String>, agent: Option<u32>) -> Result<ExitCode, String> {
     // A shell page that claims the link's scheme, such as manganese's inbox
     // picker for `mailto:`, opens it instead of an application.
     if claimable(target) && profile.is_none() && link_taken(target)? {
@@ -510,7 +515,7 @@ fn opened(target: &str, profile: Option<String>) -> Result<ExitCode, String> {
         // The compositor starts it, as the launcher would: whoever asked,
         // such as the engine's `xdg-open`, may lack the desktop's
         // environment.
-        Opening::Run(command) => asked(&Request::Launch { command }),
+        Opening::Run(command) => asked(&Request::Launch { command, agent }),
     }
 }
 
@@ -2534,8 +2539,8 @@ fn answer_a_command(
                     run_app: &|root, module| {
                         run_app(engine, root, module, ANSWER_WITHIN).map_err(|why| why.to_string())
                     },
-                    launch: &|command| {
-                        launch(chrome, command, Some(ANSWER_WITHIN + ANSWER_WITHIN))
+                    launch: &|command, agent| {
+                        launch(chrome, command, agent, Some(ANSWER_WITHIN + ANSWER_WITHIN))
                             .map_err(|why| why.to_string())
                     },
                     open_link: &|url| {

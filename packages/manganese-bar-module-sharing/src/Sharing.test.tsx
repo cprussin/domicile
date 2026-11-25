@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { PortalsHost } from "@domicile-desktop/sdk/desktop/portals";
 import { portals } from "@domicile-desktop/sdk/desktop/portals";
+import type { DomicileSeat } from "@domicile-desktop/sdk/domicile-host";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -57,8 +60,11 @@ class FakeHost {
   }
 }
 
-/** The desktop the indicator reads: `host`'s captures, `DOMICILE`'s entries. */
-const sharing = (host: FakeHost) => ({
+/**
+ * The desktop the indicator reads: `host`'s captures, `DOMICILE`'s entries,
+ * and `seats`' windows and agents' seats.
+ */
+const sharing = (host: FakeHost, seats = new FakeDomicileHost()) => ({
   ...DOMICILE,
   portals: portals(host as unknown as PortalsHost, {
     agents: () => {
@@ -68,6 +74,20 @@ const sharing = (host: FakeHost) => ({
       throw new Error("the bar forgets no agents");
     },
   }),
+  seats: desktop(seats.host).seats,
+  windows: desktop(seats.host).windows,
+});
+
+/** Session 8's seat, as the compositor describes it. */
+const seat = (fields: Partial<DomicileSeat> = {}): DomicileSeat => ({
+  focused: "report",
+  holds: ["report"],
+  id: "agent-8",
+  name: "Claude Code",
+  pointerX: null,
+  pointerY: null,
+  taken: [],
+  ...fields,
 });
 
 const ZOOM = {
@@ -327,6 +347,80 @@ describe("Sharing", () => {
         [8, { kind: "change" }],
         [8, { kind: "stop" }],
       ]);
+    });
+
+    it("lists the windows it uses now, and the user takes one over", async () => {
+      const host = new FakeHost();
+      const seats = new FakeDomicileHost();
+      seats.appear("report", { title: "Expense report" });
+      seats.appear("pulls", { title: "Pull requests" });
+      seats.set({ seats: [seat({ holds: ["report", "pulls"] })] });
+      render(<Agents domicile={sharing(host, seats)} />);
+      host.capture([CLAUDE]);
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Claude Code" }),
+      );
+
+      const using = await screen.findByRole("list", {
+        name: "What Claude Code is using",
+      });
+      expect(
+        within(using)
+          .getAllByRole("listitem")
+          .map((item) => item.textContent),
+      ).toEqual([
+        "Expense reportTypingTake over",
+        "Pull requestsPointingTake over",
+      ]);
+      await userEvent.click(
+        within(using).getByRole("button", {
+          name: "Take over Expense report",
+        }),
+      );
+      expect(seats.calls).toContainEqual(["takeOver", "report"]);
+    });
+
+    it("lists the windows the user took from it, and gives one back", async () => {
+      const host = new FakeHost();
+      const seats = new FakeDomicileHost();
+      seats.appear("report", { title: "Expense report" });
+      seats.set({
+        seats: [seat({ focused: null, holds: [], taken: ["report"] })],
+      });
+      render(<Agents domicile={sharing(host, seats)} />);
+      host.capture([CLAUDE]);
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Claude Code" }),
+      );
+
+      const using = await screen.findByRole("list", {
+        name: "What Claude Code is using",
+      });
+      expect(
+        within(using)
+          .getAllByRole("listitem")
+          .map((item) => item.textContent),
+      ).toEqual(["Expense reportYours nowGive back"]);
+      await userEvent.click(
+        within(using).getByRole("button", {
+          name: "Give Expense report back",
+        }),
+      );
+      expect(seats.calls).toContainEqual(["giveBack", "report"]);
+    });
+
+    it("lists nothing it uses before it uses a window", async () => {
+      const host = new FakeHost();
+      render(<Agents domicile={sharing(host)} />);
+      host.capture([CLAUDE]);
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Claude Code" }),
+      );
+
+      await screen.findByText("It can see and use Notes and Pull requests.");
+      expect(
+        screen.queryByRole("list", { name: "What Claude Code is using" }),
+      ).not.toBeInTheDocument();
     });
 
     it("says when it reaches the whole desktop", async () => {
