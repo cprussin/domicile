@@ -8,12 +8,16 @@ use std::time::Duration;
 /// How long a window is given to answer an act before it is read again.
 pub(super) const SETTLE: Duration = Duration::from_millis(250);
 
+/// The most lines of a window an act answers with, when it answers with the
+/// whole window: enough for a dialog or the top of a page.
+const MOST_ANSWERED: usize = 100;
+
 /// What `after`, a window's outline, says about it since `before`, the one
-/// last read: the lines gone and new, or all of it when it wasn't read or
-/// changed more than it kept.
-pub(super) fn changed(before: Option<&str>, after: &str) -> String {
+/// last read: the lines gone and new, or the top of it when it wasn't read or
+/// changed more than it kept, each cut at [`MOST_ANSWERED`] lines. `reader` is the tool that reads all of it.
+pub(super) fn changed(before: Option<&str>, after: &str, reader: &str) -> String {
     let Some(before) = before else {
-        return format!("The window now:\n{after}");
+        return whole(after, reader);
     };
     let mut kept: HashMap<&str, usize> = HashMap::new();
     for line in before.lines() {
@@ -37,14 +41,40 @@ pub(super) fn changed(before: Option<&str>, after: &str) -> String {
         return "Nothing in the window changed.\n".to_string();
     }
     if gone.len() + new.len() > after.lines().count() {
-        return format!("The window now:\n{after}");
+        return whole(after, reader);
     }
+    let changes = gone.len() + new.len();
     let lines: String = gone
         .iter()
         .map(|line| format!("gone: {line}\n"))
         .chain(new.iter().map(|line| format!("new: {line}\n")))
+        .take(MOST_ANSWERED)
         .collect();
-    format!("What changed in the window since it was last read:\n{lines}")
+    let more = match changes > MOST_ANSWERED {
+        true => format!(
+            "… and {} more changes: {reader} reads all of it.\n",
+            changes - MOST_ANSWERED
+        ),
+        false => String::new(),
+    };
+    format!("What changed in the window since it was last read:\n{lines}{more}")
+}
+
+/// `after`, a whole window, up to [`MOST_ANSWERED`] lines.
+fn whole(after: &str, reader: &str) -> String {
+    let lines = after.lines().count();
+    if lines <= MOST_ANSWERED {
+        return format!("The window now:\n{after}");
+    }
+    let top: String = after
+        .lines()
+        .take(MOST_ANSWERED)
+        .map(|line| format!("{line}\n"))
+        .collect();
+    format!(
+        "The window now:\n{top}… and {} more lines: {reader} reads all of it.\n",
+        lines - MOST_ANSWERED
+    )
 }
 
 /// An outline's line without its indent and bullet.

@@ -839,6 +839,7 @@ fn called(
             printed.push_str(&changes::changed(
                 read.get(&window).map(String::as_str),
                 &ran.stdout,
+                "app_snapshot",
             ));
             read.insert(window, ran.stdout);
         }

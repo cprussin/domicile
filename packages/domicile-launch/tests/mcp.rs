@@ -4,6 +4,7 @@ use std::cell::{Cell, RefCell};
 use std::io;
 use std::rc::Rc;
 
+use domicile_launch::accessibility::MOST;
 use domicile_launch::mcp::{serve, Grant, Ran};
 use domicile_protocol::{AgentReach, AgentWindow, WindowKind};
 use serde_json::{json, Value};
@@ -1409,6 +1410,93 @@ fn a_browser_act_answers_what_changed_since_the_window_was_last_read() {
     assert_eq!(
         replies[2]["result"]["content"][0]["text"],
         "pressed Tab\nNothing in the window changed.\n"
+    );
+}
+
+/// A page of `count` buttons, as `one_button`'s.
+fn buttons(count: u64) -> Value {
+    let mut nodes = vec![json!({
+        "nodeId": "1", "ignored": false, "role": {"value": "RootWebArea"},
+        "name": {"value": "Inbox"},
+        "childIds": (0..count).map(|index| format!("b{index}")).collect::<Vec<_>>(),
+        "backendDOMNodeId": 1,
+    })];
+    nodes.extend((0..count).map(|index| {
+        json!({"nodeId": format!("b{index}"), "ignored": false, "role": {"value": "button"},
+               "name": {"value": "b"}, "childIds": [], "backendDOMNodeId": 100 + index})
+    }));
+    json!({ "nodes": nodes })
+}
+
+#[test]
+fn a_browser_snapshot_leaves_out_the_text_boxes_that_repeat_their_text() {
+    let tree = json!({"nodes": [
+        {"nodeId": "1", "ignored": false, "role": {"value": "RootWebArea"}, "name": {"value": "Inbox"}, "childIds": ["2"], "backendDOMNodeId": 1},
+        {"nodeId": "2", "ignored": false, "role": {"value": "StaticText"}, "name": {"value": "Hello world"}, "childIds": ["3", "4"], "backendDOMNodeId": 2},
+        {"nodeId": "3", "ignored": false, "role": {"value": "InlineTextBox"}, "name": {"value": "Hello "}, "childIds": []},
+        {"nodeId": "4", "ignored": false, "role": {"value": "InlineTextBox"}, "name": {"value": "world"}, "childIds": []}
+    ]});
+    let replies = served(
+        &[call("browser_snapshot", json!({"window": "w1"}))],
+        page(&[("Accessibility.getFullAXTree", tree)], &mut Vec::new()),
+    );
+    assert_eq!(
+        replies[0]["result"]["content"][0]["text"],
+        "- RootWebArea \"Inbox\" [ref=1]\n  \
+         - StaticText \"Hello world\" [ref=2]\n"
+    );
+}
+
+#[test]
+fn a_browser_snapshot_of_a_huge_page_is_cut_and_says_so() {
+    let replies = served(
+        &[call("browser_snapshot", json!({"window": "w1"}))],
+        changing_page(vec![buttons(MOST as u64 + 10)]),
+    );
+    let text = replies[0]["result"]["content"][0]["text"].as_str().unwrap();
+    assert_eq!(text.lines().count(), MOST + 1);
+    assert!(
+        text.ends_with(&format!("… cut at {MOST} elements\n")),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_browser_act_on_a_huge_window_not_read_yet_answers_its_top_and_says_so() {
+    let replies = served(
+        &[call("browser_key", json!({"window": "w1", "key": "Enter"}))],
+        changing_page(vec![buttons(1000)]),
+    );
+    let text = replies[0]["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        text.starts_with("pressed Enter\nThe window now:\n- RootWebArea \"Inbox\" [ref=1]\n"),
+        "{text}"
+    );
+    assert!(text.lines().count() < 300, "{} lines", text.lines().count());
+    assert!(
+        text.ends_with("browser_snapshot reads all of it.\n"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_browser_act_that_changes_a_huge_part_of_a_window_answers_some_and_says_so() {
+    let replies = served(
+        &[
+            call("browser_snapshot", json!({"window": "w1"})),
+            call("browser_key", json!({"window": "w1", "key": "End"})),
+        ],
+        changing_page(vec![one_button("Search"), buttons(1000)]),
+    );
+    let text = replies[1]["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        text.starts_with("pressed End\nWhat changed in the window since it was last read:\n"),
+        "{text}"
+    );
+    assert!(text.lines().count() < 300, "{} lines", text.lines().count());
+    assert!(
+        text.ends_with("browser_snapshot reads all of it.\n"),
+        "{text}"
     );
 }
 

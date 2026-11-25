@@ -191,7 +191,39 @@ fn a_window_an_agent_holds_lists_its_seat() {
     host.app_mapped(&held, mapped());
     let users = host.app_created(OWNER, "nW1zT5yB8vC2xF6hJ9pL4sR0gAkD3mQ7".to_string());
     host.app_mapped(&users, mapped());
-    host.describe_agent_holds(HashMap::from([(held.clone(), "agent-3".to_string())]));
+    // A browser window is held by its engine id.
+    host.browser_windows(vec![
+        BrowserWindow {
+            id: "3".into(),
+            title: "Example".into(),
+            app_id: String::new(),
+            url: "https://example.com/".into(),
+            private: false,
+            views: Vec::new(),
+        },
+        BrowserWindow {
+            id: "7".into(),
+            title: "Inbox".into(),
+            app_id: String::new(),
+            url: "https://mail.example/".into(),
+            private: false,
+            views: Vec::new(),
+        },
+    ]);
+    host.browser_toplevel_ids(BTreeMap::from([
+        (
+            "3".to_string(),
+            "Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE".to_string(),
+        ),
+        (
+            "7".to_string(),
+            "aU2iO9pE4rT7yW1qZ5xC8vB3nM6lK0jH".to_string(),
+        ),
+    ]));
+    host.describe_agent_holds(HashMap::from([
+        (held.clone(), "agent-3".to_string()),
+        ("7".to_string(), "agent-4".to_string()),
+    ]));
 
     let HostMessage::WindowList { windows } = host.list_windows() else {
         panic!("list_windows answers with a window list");
@@ -200,7 +232,7 @@ fn a_window_an_agent_holds_lists_its_seat() {
         .iter()
         .map(|window| window.held_by.as_deref())
         .collect();
-    assert_eq!(held_by, vec![Some("agent-3"), None]);
+    assert_eq!(held_by, vec![Some("agent-3"), None, None, Some("agent-4")]);
 }
 
 #[test]

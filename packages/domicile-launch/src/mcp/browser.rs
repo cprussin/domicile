@@ -12,6 +12,7 @@ use serde_json::{json, Map, Value};
 
 use super::changes::{changed, SETTLE};
 use super::{number, pair, said, string, Ran};
+use crate::accessibility::MOST;
 
 /// A browser tool.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -147,7 +148,11 @@ pub(super) fn called(
                     ))
                 }
             };
-            let changes = changed(read.get(&page.window).map(String::as_str), &after);
+            let changes = changed(
+                read.get(&page.window).map(String::as_str),
+                &after,
+                "browser_snapshot",
+            );
             read.insert(page.window.clone(), after);
             Ok(said(true, format!("{did}\n{changes}")))
         }
@@ -559,18 +564,14 @@ fn middle(quads: &Value) -> Option<(f64, f64)> {
 }
 
 /// Roles that only group others, which a snapshot leaves out unless named.
-const GROUPING: [&str; 5] = [
-    "generic",
-    "none",
-    "presentation",
-    "InlineTextBox",
-    "LineBreak",
-];
+const GROUPING: [&str; 4] = ["generic", "none", "presentation", "LineBreak"];
 
 /// Accessibility.getFullAXTree's nodes as an outline indented from `depth`,
 /// one element a line: its role, name, ref after `prefix`, value and states.
 /// Ignored and unnamed grouping nodes give their place to their children, and
-/// text that repeats its parent's name is left out.
+/// text that repeats its parent's name is left out, as are the text boxes
+/// that split a text's name into lines. At most [`MOST`] elements, then a
+/// line saying it was cut.
 fn outline(tree: &Value, depth: usize, prefix: &str) -> String {
     let nodes: Vec<&Value> = tree["nodes"]
         .as_array()
@@ -579,11 +580,29 @@ fn outline(tree: &Value, depth: usize, prefix: &str) -> String {
         .iter()
         .filter_map(|node| Some((node["nodeId"].as_str()?, *node)))
         .collect();
-    let mut lines = String::new();
+    let mut outline = Outline {
+        lines: String::new(),
+        listed: 0,
+        cut: false,
+    };
     if let Some(root) = nodes.first() {
-        write_node(root, &by_id, depth, "", prefix, &mut lines);
+        write_node(root, &by_id, depth, "", prefix, &mut outline);
     }
-    lines
+    if outline.cut {
+        outline
+            .lines
+            .push_str(&format!("… cut at {MOST} elements\n"));
+    }
+    outline.lines
+}
+
+/// An outline as it is written.
+struct Outline {
+    lines: String,
+    /// How many elements it lists.
+    listed: usize,
+    /// Whether it stopped at [`MOST`] with elements left.
+    cut: bool,
 }
 
 fn write_node(
@@ -592,15 +611,22 @@ fn write_node(
     depth: usize,
     parent_name: &str,
     prefix: &str,
-    lines: &mut String,
+    outline: &mut Outline,
 ) {
     let role = node["role"]["value"].as_str().unwrap_or("");
     let name = node["name"]["value"].as_str().unwrap_or("");
     let ignored = node["ignored"].as_bool().unwrap_or(false);
     let shown = !ignored
+        && role != "InlineTextBox"
         && !(name.is_empty() && GROUPING.contains(&role))
         && !(role == "StaticText" && (name.is_empty() || name == parent_name));
+    if shown && outline.listed >= MOST {
+        outline.cut = true;
+        return;
+    }
+    let lines = &mut outline.lines;
     let (depth_below, name_below) = if shown {
+        outline.listed += 1;
         lines.push_str(&"  ".repeat(depth));
         lines.push_str("- ");
         lines.push_str(role);
@@ -637,7 +663,7 @@ fn write_node(
     };
     for child in node["childIds"].as_array().into_iter().flatten() {
         if let Some(child) = child.as_str().and_then(|id| by_id.get(id)) {
-            write_node(child, by_id, depth_below, name_below, prefix, lines);
+            write_node(child, by_id, depth_below, name_below, prefix, outline);
         }
     }
 }

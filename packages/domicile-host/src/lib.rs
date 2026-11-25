@@ -274,8 +274,8 @@ pub struct Host {
     inputs: Vec<ListedInput>,
     /// Which monitors are off.
     darkness: Darkness,
-    /// The agent seat holding each window an agent holds, by app id. See
-    /// [`Host::describe_agent_holds`].
+    /// The agent seat holding each window an agent holds, by app id, or by
+    /// engine id for a browser window. See [`Host::describe_agent_holds`].
     agent_holds: HashMap<AppId, String>,
 }
 
@@ -310,8 +310,8 @@ impl Host {
         }
     }
 
-    /// Which agent seat holds each window an agent holds, by app id, for
-    /// [`Host::list_windows`]. The compositor's agent seats decide it.
+    /// Which agent seat holds each window an agent holds, by app id or a
+    /// browser window's engine id, for [`Host::list_windows`]. The compositor's agent seats decide it.
     pub fn describe_agent_holds(&mut self, holds: HashMap<AppId, String>) {
         self.agent_holds = holds;
     }
@@ -370,8 +370,7 @@ impl Host {
                 size: None,
                 focused: false,
                 urgent: false,
-                // Agents drive browser windows by ref, holding none.
-                held_by: None,
+                held_by: self.agent_holds.get(&window.id).cloned(),
                 // An older engine says no address.
                 url: (!window.url.is_empty()).then(|| window.url.clone()),
                 private: window.private,
