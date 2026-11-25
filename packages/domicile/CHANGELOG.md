@@ -1,5 +1,11 @@
 # domicile
 
+## 1.3.1
+
+### Patch Changes
+
+- 701bd16: The engine always starts the shell in the `Default` browser profile, never in the profile Chromium saved as last used.
+
 ## 1.3.0
 
 ### Minor Changes

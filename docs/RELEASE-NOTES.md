@@ -4,6 +4,14 @@ What's new for shells and apps built on Domicile, in each release. What's new
 in the manganese desktop is in
 [manganese's release notes](use/RELEASE-NOTES.md).
 
+## 1.3.1
+
+_November 25, 2026_
+
+### Fixes
+
+- The desktop starts its shell in the `Default` browser profile every time. Once Chromium saved another browser profile as last used, the engine crashed on every start.
+
 ## 1.3.0
 
 _November 24, 2026_
