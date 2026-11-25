@@ -1,0 +1,237 @@
+// The shell for guard-webview-discard.sh. `?mode=manual` unloads one browser
+// window by hand, and `?mode=automatic` leaves three unmounted for the engine
+// to unload or not.
+//
+// - `?discard=1` is the claim and `?discard=0` the control, whose shell never
+//   asks (manual; automatic's control is the engine's thresholds).
+// - `?src=` is the page server's address.
+// - `?settle=` is the ms between steps, so each has landed before the next.
+//
+// It logs to the console, which the engine writes to its log:
+//
+//   GUARD shell-loaded                this module ran
+//   GUARD list name=… discarded=…     a window's isDiscarded changed
+//   GUARD asked-attached              asked to unload a window a <webview>
+//                                     shows (manual)
+//   GUARD unmounted                   no <webview> shows the windows
+//   GUARD asked                       asked to unload the subject and an
+//                                     extension's popup window, or in the
+//                                     control only came this far (manual)
+//   GUARD quiet                       `settle` ms later
+//   GUARD remounting                  `settle` ms later, a <webview> shows the
+//                                     subject again (manual)
+//   GUARD done                        the last step, `settle` ms after it
+//
+// The pages log too (guard-webview-discard-server.py), and the extension
+// (guard-webview-discard-extension/popup.js).
+//
+// Everything is inside `HostShell`, which Domicile's document calls once the module
+// loads.
+
+export const HostShell = (_root, desktop) => {
+  const say = (what) => {
+    console.log(`GUARD ${what}`);
+  };
+
+  /**
+   * Reads a required query parameter. A default would make a misinvoked guard
+   * measure the wrong thing.
+   */
+  const required = (parameters, name) => {
+    const value = parameters.get(name);
+    if (value === null) {
+      throw new Error(`guard-webview-discard: ?${name}= is required`);
+    } else {
+      return value;
+    }
+  };
+
+  const host = desktop;
+  if (host === null || host === undefined) {
+    throw new Error(
+      "guard-webview-discard: no desktop was handed to Shell, so this" +
+        " document was not served by the forked engine",
+    );
+  }
+
+  const parameters = new URLSearchParams(location.search);
+  const mode = required(parameters, "mode");
+  const discard = required(parameters, "discard") === "1";
+  const settle = Number(required(parameters, "settle"));
+  const expected = required(parameters, "expect");
+  const src = required(parameters, "src");
+
+  // Window names in open order, which is the list's.
+  const names =
+    mode === "manual" ? ["active", "subject-1"] : ["active", "plain", "typed"];
+  const SUBJECT = 1;
+
+  document.body.style.margin = "0";
+
+  const settled = () =>
+    new Promise((resolve) => {
+      setTimeout(resolve, settle);
+    });
+
+  /**
+   * A <webview> in the column at `index` with `attribute` set, calling `shown`
+   * with each page's address. `window` is set before the element enters the
+   * document, when it asks for its page; `src` after, when it has a frame.
+   */
+  const view = (index, attribute, value, shown = () => undefined) => {
+    const element = document.createElement("webview");
+    element.style.position = "absolute";
+    element.style.insetInlineStart = `${index * 25}%`;
+    element.style.inlineSize = "25%";
+    element.style.blockSize = "100%";
+    element.style.border = "0";
+    element.addEventListener("domicile-page-change", () => {
+      shown(element.url);
+    });
+    if (attribute === "window") {
+      element.setAttribute(attribute, value);
+      document.body.append(element);
+    } else {
+      document.body.append(element);
+      element.setAttribute(attribute, value);
+    }
+    return element;
+  };
+
+  /** Resolves once each of `addresses` was shown in its window. */
+  const mountAll = (ids) =>
+    Promise.all(
+      names.map(
+        (name, index) =>
+          new Promise((resolve) => {
+            const element = view(index, "window", ids[index], (url) => {
+              if (url === `${src}?${name}`) {
+                resolve(element);
+              }
+            });
+          }),
+      ),
+    );
+
+  /** Resolves with the fixture's popup address, once it is in the tray. */
+  const extensionPage = () =>
+    new Promise((resolve) => {
+      const look = () => {
+        const row = (host.extensions ?? []).find(
+          (extension) => extension.id === expected,
+        );
+        if (row !== undefined && row.popup !== null) {
+          resolve(row.popup);
+        }
+      };
+      host.addEventListener("extensionschanged", look);
+      look();
+    });
+
+  /** Resolves once the list has `count` windows, which it logs the state of. */
+  const opened = (count) =>
+    new Promise((resolve) => {
+      const was = new Map();
+      const look = () => {
+        const windows = (host.browserWindows ?? []).filter(
+          (window) => window.popupWindow === null,
+        );
+        windows.forEach((window, index) => {
+          if (was.get(window.id) !== window.isDiscarded) {
+            was.set(window.id, window.isDiscarded);
+            say(`list name=${names[index]} discarded=${window.isDiscarded}`);
+          }
+        });
+        if (windows.length === count) {
+          resolve(windows.map((window) => window.id));
+        }
+      };
+      host.addEventListener("browserwindowschanged", look);
+    });
+
+  const popupWindow = () => {
+    const found = host.browserWindows.find(
+      (window) => window.popupWindow !== null,
+    );
+    if (found === undefined) {
+      throw new Error("guard-webview-discard: no extension popup window");
+    } else {
+      return found.id;
+    }
+  };
+
+  /** Shows the subject's second page, so its history has two entries. */
+  const goOn = (subject) =>
+    new Promise((resolve) => {
+      subject.addEventListener("domicile-page-change", () => {
+        if (subject.url === `${src}?subject-2`) {
+          resolve();
+        }
+      });
+      subject.src = `${src}?subject-2`;
+    });
+
+  const manual = async (ids, views) => {
+    await goOn(views[SUBJECT]);
+    await settled();
+    view(2, "src", await extensionPage());
+    await settled();
+    host.discardBrowserWindow(ids[SUBJECT]);
+    say("asked-attached");
+    await settled();
+    views[SUBJECT].remove();
+    say("unmounted");
+    await settled();
+    if (discard) {
+      host.discardBrowserWindow(ids[SUBJECT]);
+      host.discardBrowserWindow(popupWindow());
+    }
+    say("asked");
+    await settled();
+    say("quiet");
+    await settled();
+    say("remounting");
+    view(SUBJECT, "window", ids[SUBJECT]);
+    await settled();
+    say("done");
+  };
+
+  const automatic = async (_ids, views) => {
+    // After the typed page took focus, so the first window is the active tab.
+    await settled();
+    views[0].focus();
+    await settled();
+    for (const element of views) {
+      element.remove();
+    }
+    say("unmounted");
+    // The engine looks every five seconds, and unloads one page each time.
+    for (let waits = 0; waits < 6; waits += 1) {
+      await settled();
+    }
+    say("done");
+  };
+
+  const run = async () => {
+    const listed = opened(names.length);
+    for (const name of names) {
+      host.openBrowserWindow(`${src}?${name}`);
+    }
+    const ids = await listed;
+    const views = await mountAll(ids);
+    await (mode === "manual" ? manual(ids, views) : automatic(ids, views));
+  };
+
+  // The first list is empty, and the windows are opened once it has come.
+  let started = false;
+  host.addEventListener("browserwindowschanged", () => {
+    if (!started) {
+      started = true;
+      run().catch((error) => {
+        say(`shell-failed ${error.message}`);
+      });
+    }
+  });
+
+  say("shell-loaded");
+};
