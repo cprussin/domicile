@@ -1,6 +1,7 @@
 // The desk's browser windows, which the browser holds and a shell draws with
 // `<webview window="id">`, and fetches with the browser's cookies.
 
+import { z } from "zod";
 import type {
   DomicileBrowserProfile,
   DomicileBrowserWindow,
@@ -13,6 +14,9 @@ import { defined } from "./defined";
 import { memoizeLast } from "./memoize-last";
 import type { On } from "./subscribe";
 import { hostEvent, on } from "./subscribe";
+
+// `browsermemoryshort`'s `data`: window ids, hidden longest first.
+const memoryShortSchema = z.array(z.string());
 
 export type BrowserWindow = Defined<DomicileBrowserWindow>;
 
@@ -316,7 +320,7 @@ export const browser = (host: BrowserHost): Browser => {
         hostEvent(host, "browserwindowschanged", () => listener()),
       memoryShort: (listener) =>
         hostEvent(host, "browsermemoryshort", (event) =>
-          listener(JSON.parse(event.data) as string[]),
+          listener(memoryShortSchema.parse(JSON.parse(event.data))),
         ),
       profilesChange: (listener) =>
         hostEvent(host, "browserprofileschanged", () => listener()),

@@ -47,6 +47,10 @@ An agent now has a clipboard of its own. What it copies never replaces what you 
 
 An agent now clicks and types with a pointer and keyboard of its own, so it can work in one app while you work in another. It never moves your pointer or changes what you're typing in, and an app you're using stays yours.
 
+### Hidden pages free memory when it runs low
+
+When your computer runs low on memory, pages you can't see, like background tabs and browser windows on other workspaces, unload as in Chrome. They load again, where you left off, when you switch to them. Pages playing sound, sharing your screen, or holding something you typed stay loaded.
+
 ### Fixes
 
 - Element no longer says it is open in another window after you log out and quickly in again.

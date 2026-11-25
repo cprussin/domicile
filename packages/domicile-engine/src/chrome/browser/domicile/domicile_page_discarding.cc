@@ -67,7 +67,11 @@ bool IsShortOfMemory() {
     return false;
   }
   const std::optional<double> stalled = StalledPercent(pressure);
-  return stalled.has_value() && *stalled >= kStalledPercent.Get();
+  if (!stalled.has_value()) {
+    LOG(ERROR) << "domicile: unreadable /proc/pressure/memory: " << pressure;
+    return false;
+  }
+  return *stalled >= kStalledPercent.Get();
 }
 
 // Whether `page` may go without the user missing anything: the rules of
