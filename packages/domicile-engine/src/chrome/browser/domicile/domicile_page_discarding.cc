@@ -5,7 +5,6 @@
 
 #include <optional>
 #include <string>
-#include <string_view>
 #include <utility>
 
 #include "base/byte_size.h"
@@ -16,11 +15,11 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial_params.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/system/sys_info.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "components/domicile/browser/memory_stall.h"
 #include "components/performance_manager/public/decorators/page_live_state_decorator.h"
 #include "components/performance_manager/public/graph/page_node.h"
 #include "components/performance_manager/public/performance_manager.h"
@@ -51,19 +50,6 @@ const base::FeatureParam<base::TimeDelta> kHiddenFor{
 constexpr base::TimeDelta kSilentFor = base::Minutes(1);
 // UrgentPageDiscardingPolicy's.
 constexpr base::TimeDelta kInterval = base::Seconds(5);
-
-// The "some avg10" of /proc/pressure/memory.
-std::optional<double> StalledPercent(std::string_view pressure) {
-  constexpr std::string_view kPrefix = "some avg10=";
-  if (!pressure.starts_with(kPrefix)) {
-    return std::nullopt;
-  }
-  pressure.remove_prefix(kPrefix.size());
-  double percent = 0;
-  return base::StringToDouble(pressure.substr(0, pressure.find(' ')), &percent)
-             ? std::optional(percent)
-             : std::nullopt;
-}
 
 bool IsShortOfMemory() {
   const base::ByteSize total = base::SysInfo::AmountOfTotalPhysicalMemory();

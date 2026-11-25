@@ -1286,6 +1286,17 @@ source_set("desk_tabs") {
   public_deps = [ "//base" ]
 }
 
+# How long tasks wait on memory, for when the desk unloads pages. Its own
+# target for :desk_tabs' reason: //chrome/browser/domicile unloads them.
+source_set("memory_stall") {
+  sources = [
+    "browser/memory_stall.cc",
+    "browser/memory_stall.h",
+  ]
+
+  deps = [ "//base" ]
+}
+
 # What Chrome offers a profile's user that a desktop has no place for, off.
 # Only the pref names are wanted of the three components, and a pref name is
 # the contract, so it is theirs rather than a string spelled here.
@@ -1643,6 +1654,7 @@ source_set("unit_tests") {
     "browser/agent_input_lines_unittest.cc",
     "browser/input_method_lines_unittest.cc",
     "browser/line_framer_unittest.cc",
+    "browser/memory_stall_unittest.cc",
     "browser/notification_window_unittest.cc",
     "browser/page_matches_unittest.cc",
     "browser/placeholder_stage_unittest.cc",
@@ -1749,6 +1761,7 @@ source_set("unit_tests") {
     ":input_method_lines",
     ":keyboard_layout",
     ":line_framer",
+    ":memory_stall",
     ":notification_window",
     ":page_matches",
     ":picture_in_picture_videos",

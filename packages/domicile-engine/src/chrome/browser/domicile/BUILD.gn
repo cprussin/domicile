@@ -143,6 +143,7 @@ source_set("domicile") {
     "//components/media_router/browser",
     "//components/media_router/common",
     # What a page is doing, for which pages a shortage of memory may unload.
+    "//components/domicile:memory_stall",
     "//components/performance_manager",
     "//third_party/webrtc_overrides:webrtc_component",
     "//chrome/browser/ui/browser_window",
