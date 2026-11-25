@@ -19,7 +19,7 @@ export const Page = ({ children, description, readOnly, title }: Props) => (
       <h1 className={titleStyles}>{title}</h1>
       <p className={descriptionStyles}>{description}</p>
     </header>
-    {readOnly !== undefined && <Notice>{readOnly}</Notice>}
+    {readOnly !== undefined && <Notice tone="locked">{readOnly}</Notice>}
     {children}
   </article>
 );

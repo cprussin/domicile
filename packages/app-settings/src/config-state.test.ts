@@ -22,7 +22,7 @@ describe(configState, () => {
     const state = configState(json("{}", false));
     expect(state.settings?.theme.mode).toBe("dark");
     expect(whyReadOnly(state)).toBe(
-      "/home/me/.config/domicile/domicile.json is read-only. Change it where it is made, such as your home-manager config.",
+      "These settings come from your config file, which cannot be changed here. Change them where the file is made, such as your home-manager config.",
     );
   });
 

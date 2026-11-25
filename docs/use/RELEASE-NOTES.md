@@ -19,6 +19,10 @@ Closing windows dissolve away, windows blur a little as a workspace switch slide
 
 Windows, the overview, toasts, popovers and rows move on springs. A dialog grows out of the window that asked for it, a window sent to another workspace flies to it in the switcher, and a workspace switch or a four-finger pinch into the overview turns back midway when you change your mind. Panels grow from their bar buttons, toasts follow your swipe, and closed rows slide away.
 
+### Locked settings look locked
+
+When your config file can't be changed from Settings, its switches now look plainly off, and the note at the top of the page has a lock and says why in plain words.
+
 ### See when you've taken over from an agent
 
 Click or type in a window an agent is using and it's clear the window is now yours. Its ring turns amber and says the agent is paused, a banner slides in under the title bar with **Give back**, and the agent pill turns amber and says for a few seconds which window you took. Give the window back from the banner, the notice or the pill.

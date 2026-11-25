@@ -101,6 +101,6 @@ export const whyReadOnly = (state: ConfigState): string | undefined => {
     case ConfigKind.Json:
       return state.file.writable
         ? undefined
-        : `${state.file.path} is read-only. Change it where it is made, such as your home-manager config.`;
+        : "These settings come from your config file, which cannot be changed here. Change them where the file is made, such as your home-manager config.";
   }
 };

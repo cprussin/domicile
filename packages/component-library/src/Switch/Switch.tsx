@@ -32,7 +32,11 @@ export const Switch = ({ hideLabel = false, label, ...rootProps }: Props) => {
       <BaseSwitch.Thumb className={thumbStyles} />
     </BaseSwitch.Root>
   ) : (
-    <label className={labelStyles} htmlFor={id}>
+    <label
+      className={labelStyles}
+      data-disabled={rootProps.disabled === true ? "" : undefined}
+      htmlFor={id}
+    >
       <BaseSwitch.Root className={rootStyles} id={id} {...rootProps}>
         <BaseSwitch.Thumb className={thumbStyles} />
       </BaseSwitch.Root>
@@ -43,12 +47,16 @@ export const Switch = ({ hideLabel = false, label, ...rootProps }: Props) => {
 
 // Takes its surface's text color, so it reads on a card and over the wallpaper.
 const labelStyles = hstack({
+  _disabled: { color: "muted", cursor: "not-allowed" },
   color: "inherit",
   cursor: "pointer",
   gap: 2,
 });
 
+// Fades when disabled, so an "on" switch shows a pale accent and can't pass for
+// a live one.
 const rootStyles = css({
+  _disabled: { cursor: "not-allowed", opacity: "inactive" },
   "&:focus-visible": {
     outline: "{spacing.0.5} solid {colors.accent}",
     outlineOffset: 0.5,
@@ -67,6 +75,7 @@ const rootStyles = css({
 });
 
 const thumbStyles = css({
+  _disabled: { boxShadow: "none" },
   "&[data-checked]": { translate: "{spacing.4} 0" },
   backgroundColor: "background",
   blockSize: 4,

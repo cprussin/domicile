@@ -254,11 +254,10 @@ describe(App, () => {
         config: { theme: { mode: "light" } },
         writable: false,
       });
-      expect(
-        screen.getByText(
-          `${CONFIG_PATH} is read-only. Change it where it is made, such as your home-manager config.`,
-        ),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "These settings come from your config file, which cannot be changed here. Change them where the file is made, such as your home-manager config.",
+      );
+      expect(screen.getByRole("img", { name: "Locked" })).toBeInTheDocument();
       const theme = screen.getByRole("combobox", { name: "Theme" });
       expect(theme).toHaveTextContent("Light");
       expect(theme).toBeDisabled();
