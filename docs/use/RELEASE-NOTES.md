@@ -24,10 +24,7 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 ### Also new
 
 - When your config file can't be changed from Settings, its switches look plainly off, and the note at the top says why.
-
-### Hidden pages free memory when it runs low
-
-When your computer runs low on memory, pages you can't see, like background tabs and browser windows on other workspaces, unload as in Chrome. They load again, where you left off, when you switch to them. Pages playing sound, sharing your screen, or holding something you typed stay loaded.
+- When memory runs low, pages you can't see, like background tabs and windows on other workspaces, unload as in Chrome, and load again where you left off when you switch to them.
 
 ### Fixes
 
@@ -35,6 +32,7 @@ When your computer runs low on memory, pages you can't see, like background tabs
 - Bar panels such as notifications, agents, downloads, quick settings and the tray menu stay on their screen and scroll when they hold more than fits, even on a small screen beside a taller one.
 - Moving the pointer into an embedded frame, such as an artifact on claude.ai, no longer shows the frame's label far away from the pointer.
 - Workspace switches stay smooth with busy pages open: a sliding page no longer redraws on every frame of the slide.
+- Switching tabs or windows with the keyboard no longer moves the pointer off the top bar.
 
 ## 1.3.0
 

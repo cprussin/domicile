@@ -735,8 +735,9 @@ void ControlChannel::SyncFrames() {
 // `GrabShortcut` has for the same kind of reason.
 void ControlChannel::WarpPointer(double x,
                                  double y,
+                                 const std::vector<gfx::RectF>& only_over,
                                  const std::optional<gfx::RectF>& unless_over) {
-  warp_sink_.Run(x, y, unless_over);
+  warp_sink_.Run(x, y, only_over, unless_over);
 }
 
 // Nothing is sent, for WarpPointer's reason. The answer comes back from the UI

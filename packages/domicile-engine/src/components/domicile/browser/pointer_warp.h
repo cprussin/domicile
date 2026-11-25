@@ -29,14 +29,21 @@ std::optional<gfx::Point> PointerWarpTarget(const gfx::Rect& page,
                                             double x,
                                             double y);
 
-// Whether a warp that the page asked to skip over `box` is skipped.
-//
-// The shell warps only when the pointer will not be over the window it
-// focuses. It cannot see the pointer move over a browser window's page, so the
-// browser, which can, makes the last check. `pointer` and `box` are in the
-// page's CSS pixels, edges included; `pointer` is `std::nullopt` off the page.
+// Whether `pointer` is over `box`, edges included. Both are in the page's CSS
+// pixels; `pointer` is `std::nullopt` off the page, and over nothing.
 bool PointerAlreadyOver(const std::optional<gfx::PointF>& pointer,
                         const gfx::RectF& box);
+
+// Whether a page's `warp_pointer` request moves the pointer: only while it is
+// over one of `only_over` and not over `unless_over`.
+//
+// The shell warps only when the pointer is over a window other than the one it
+// focuses, which would take focus back; over its top bar it stays put. It
+// cannot see the pointer move over a browser window's page, so the browser,
+// which can, makes the check. Boxes are in `PointerAlreadyOver`'s terms.
+bool PointerWarps(const std::optional<gfx::PointF>& pointer,
+                  const std::vector<gfx::RectF>& only_over,
+                  const std::optional<gfx::RectF>& unless_over);
 
 // The boxes a page's `confine_pointer` request holds the pointer in, in its
 // window's root, in DIP.

@@ -33,6 +33,7 @@ Each agent gets its own pointer, keyboard and clipboard, in native and browser w
 
 ### Breaking changes
 
+- `domicile.pointer.warp(x, y, onlyOver, unlessOver)` takes a required list of boxes, `onlyOver`: the pointer moves only while it is over one of them. Pass the other windows' frames so a focus change leaves a pointer over your bar where it is. [Writing a shell](WRITING-A-SHELL.md#focus-follows-the-mouse)
 - Panda CSS 2: a shell that runs Panda with the component library's preset or manganese's config needs `@pandacss/dev@2`, and `@domicile-desktop/manganese/css`'s generated entry points are `index.js` files. [Shell packaging](SHELL-PACKAGING.md#panda-with-manganeses-tokens)
 
 ### Fixes

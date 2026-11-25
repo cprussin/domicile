@@ -2,7 +2,7 @@ import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { Focus, Shown, Spot } from "./pointer-warp";
-import { overAnother, warpTo } from "./pointer-warp";
+import { warpTo } from "./pointer-warp";
 import type { Rect } from "./rect";
 import type { WindowState } from "./window-state";
 
@@ -75,8 +75,8 @@ export type Pointer = {
  * Three focus changes count as the desktop's: a key press (signaled by
  * `pressed`), a newly opened window taking focus, and the focused window
  * closing. A new tab or the next tab in the same box is skipped, since nothing
- * moved under the pointer. A newly opened window warps only when the pointer is
- * over another window, which would otherwise take focus from it.
+ * moved under the pointer. Each warps only when the pointer is over another
+ * window, which would otherwise take focus back; see `warpTo`.
  *
  * It also reports whether a pointer event is the user's: windows moving under
  * a still pointer fire `pointerover` too. See {@link Pointer.pointing}.
@@ -153,22 +153,24 @@ export const usePointerWarp = ({
       !sameBox(was.box, focus?.box);
     const keyed = pressed !== answered.current;
     answered.current = pressed;
-    // The pending target, if any, so a window opened before the last warp
-    // lands is measured from where the cursor is going.
-    const at = sent.current.at(-1) ?? pointer.current;
     const warp =
-      keyed || gone || (opened && overAnother(shown, focus, at))
-        ? warpTo({ from: was, to: focus })
+      keyed || gone || opened
+        ? warpTo({ from: was, shown, to: focus })
         : undefined;
     held.current = focus;
     open.current = windows;
     if (warp !== undefined) {
       // Record it now: the engine does not report when the warp lands, or
-      // that it stayed put over `unlessOver`.
+      // that it declined.
       // Keep duplicates in order: a spot sent twice is landed on twice, and
       // folding them would let the first landing clear both.
       sent.current = [...sent.current, warp.to].slice(-IN_FLIGHT);
-      domicile.pointer.warp(warp.to[0], warp.to[1], warp.unlessOver);
+      domicile.pointer.warp(
+        warp.to[0],
+        warp.to[1],
+        warp.onlyOver,
+        warp.unlessOver,
+      );
     }
   }, [domicile, focus, pressed, shown, windows]);
 

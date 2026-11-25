@@ -119,17 +119,15 @@ Workspaces belong to the desktop, and screens show them, as in sway:
 
 The pointer follows keyboard focus (sway's `mouse_warping container`):
 
-- The pointer warps only when it will not be over the newly focused window,
-  title bar included, once the layout settles. A window that slides in under
-  the pointer, such as a neighbor filling a closed window's space, leaves it
-  where it is. `warpTo` in `src/pointer-warp.ts` holds this rule for every
-  focus change below. The engine checks where the pointer is, since the shell
-  cannot see it move over a browser window's page.
+- The pointer warps only when focus changes and the pointer is over another
+  window, which would take focus back, once the layout settles. Over the top
+  bar or an empty screen it stays put, as it does when a window, title bar
+  included, slides in under it. `warpTo` in `src/pointer-warp.ts` holds this
+  rule for every focus change below. The engine checks where the pointer is,
+  since the shell cannot see it move over a browser window's page.
 - A keyed focus change, or a granted focus request, warps the pointer to the
   center of the new window's contents. An empty screen warps to its center.
-- A window that opens with the keyboard also warps the pointer, but only when
-  the pointer is over another window. Over the top bar or an empty workspace,
-  it stays put.
+- A window that opens with the keyboard also warps the pointer.
 - Focus changes on `pointerover` only when the pointer moves, however slowly.
   A window sliding under a still pointer does not take focus.
 

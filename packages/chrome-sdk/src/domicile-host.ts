@@ -1002,11 +1002,16 @@ export type DomicileHost = {
    * coordinate outside this page is clamped to its own box -- what a page may
    * move is the pointer over itself -- and NaN throws.
    *
-   * `unlessOver`, a box in the same coordinates, skips the warp while the
-   * pointer is over it. The page cannot see the pointer over a browser
-   * window's page; the browser process can.
+   * The warp happens only while the pointer is over one of `onlyOver`, boxes
+   * in the same coordinates, and not over `unlessOver`. The page cannot see
+   * the pointer over a browser window's page; the browser process can.
    */
-  warpPointer(x: number, y: number, unlessOver?: DOMRectReadOnly | null): void;
+  warpPointer(
+    x: number,
+    y: number,
+    onlyOver: readonly DOMRectReadOnly[],
+    unlessOver?: DOMRectReadOnly | null,
+  ): void;
   /**
    * Ask a client to close. Not a kill -- the client decides, which is why a
    * window can refuse and show a save dialog instead.

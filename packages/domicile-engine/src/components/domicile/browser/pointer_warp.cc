@@ -44,6 +44,16 @@ bool PointerAlreadyOver(const std::optional<gfx::PointF>& pointer,
          pointer->y() <= box.bottom();
 }
 
+bool PointerWarps(const std::optional<gfx::PointF>& pointer,
+                  const std::vector<gfx::RectF>& only_over,
+                  const std::optional<gfx::RectF>& unless_over) {
+  return !(unless_over.has_value() &&
+           PointerAlreadyOver(pointer, *unless_over)) &&
+         std::ranges::any_of(only_over, [&pointer](const gfx::RectF& box) {
+           return PointerAlreadyOver(pointer, box);
+         });
+}
+
 std::optional<std::vector<gfx::RectF>> PointerConfinementBoxes(
     const gfx::Rect& page,
     const std::vector<gfx::RectF>& boxes) {

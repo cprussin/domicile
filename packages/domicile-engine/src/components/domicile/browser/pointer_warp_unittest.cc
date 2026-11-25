@@ -77,6 +77,37 @@ TEST(PointerWarpTest, APointerOffThePageMoves) {
   EXPECT_FALSE(PointerAlreadyOver(std::nullopt, kFrame));
 }
 
+// Another window's frame, left of `kFrame`.
+constexpr gfx::RectF kOther(0, 70, 99, 530);
+
+TEST(PointerWarpTest, APointerOverAnotherWindowWarps) {
+  EXPECT_TRUE(PointerWarps(gfx::PointF(50, 300), {kOther}, kFrame));
+}
+
+TEST(PointerWarpTest, APointerOverNoWindowStaysPut) {
+  // Over the top bar, a tab switch must not move it: nothing there would take
+  // focus back.
+  EXPECT_FALSE(PointerWarps(gfx::PointF(50, 10), {kOther}, kFrame));
+}
+
+TEST(PointerWarpTest, APointerOverTheNewWindowStaysPutEvenOverAnother) {
+  // A float over the other window's frame is the window under the pointer.
+  EXPECT_FALSE(PointerWarps(gfx::PointF(300, 300), {gfx::RectF(0, 0, 800, 600)},
+                            kFrame));
+}
+
+TEST(PointerWarpTest, APointerOffThePageStaysPut) {
+  EXPECT_FALSE(PointerWarps(std::nullopt, {kOther}, kFrame));
+}
+
+TEST(PointerWarpTest, NoOtherWindowLeavesItPut) {
+  EXPECT_FALSE(PointerWarps(gfx::PointF(50, 300), {}, std::nullopt));
+}
+
+TEST(PointerWarpTest, WithNoBoxToStayOverItWarpsFromAnother) {
+  EXPECT_TRUE(PointerWarps(gfx::PointF(50, 300), {kOther}, std::nullopt));
+}
+
 void ExpectBoxes(const std::optional<std::vector<gfx::RectF>>& boxes,
                  const std::vector<gfx::RectF>& expected) {
   ASSERT_TRUE(boxes.has_value());

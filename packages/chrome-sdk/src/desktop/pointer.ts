@@ -9,11 +9,16 @@ export type Pointer = {
    * coordinates, as focus that follows the pointer needs. Clamped to the
    * page's box; NaN throws.
    *
-   * With `unlessOver`, a box in the same coordinates, the pointer stays put
-   * while it is over that box. The engine decides, since the page cannot see
-   * the pointer move over a browser window's page.
+   * The pointer moves only while it is over one of `onlyOver`, boxes in the
+   * same coordinates, and not over `unlessOver`. The engine decides, since the
+   * page cannot see the pointer move over a browser window's page.
    */
-  warp: (x: number, y: number, unlessOver?: Box) => void;
+  warp: (
+    x: number,
+    y: number,
+    onlyOver: readonly Box[],
+    unlessOver?: Box,
+  ) => void;
   /**
    * Hold the pointer inside `boxes`, in the page's CSS pixels, for a window
    * whose `pointerConstraint` is "confine"; none lets go, as the page going
@@ -30,10 +35,11 @@ export const pointer = (
   host: Pick<DomicileHost, "confinePointer" | "warpPointer">,
 ): Pointer => ({
   confine: (boxes) => host.confinePointer(boxes.map(rect)),
-  warp: (x, y, unlessOver) => {
+  warp: (x, y, onlyOver, unlessOver) => {
     host.warpPointer(
       x,
       y,
+      onlyOver.map(rect),
       unlessOver === undefined ? undefined : rect(unlessOver),
     );
   },
