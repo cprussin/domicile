@@ -8,7 +8,12 @@ import type { FloatingOptions } from "./floating/floating-rules";
 import { floatingRulesSchema } from "./floating/floating-rules";
 import { useWindows } from "./useWindows";
 import { appWindowId, browserWindowId } from "./window";
-import { currentHere, WindowAction, workspaceOn } from "./window-state";
+import {
+  activeIdOf,
+  currentHere,
+  WindowAction,
+  workspaceOn,
+} from "./window-state";
 import { windowsOn } from "./workspace";
 
 const LEFT: Display = {
@@ -149,6 +154,33 @@ describe("the desktop", () => {
 
     host.focuses(null);
     expect(result.current.focusedId).toBeUndefined();
+  });
+
+  it("leaves the user's keyboard where it is when a window an agent holds asks for it", () => {
+    const { host, result } = desktop([LEFT]);
+    host.announces("kitty");
+    host.announces("foot");
+    act(() => {
+      host.fake.set({
+        seats: [
+          {
+            focused: "kitty",
+            holds: ["kitty"],
+            id: "agent-3",
+            name: "Claude Code",
+            pointerX: null,
+            pointerY: null,
+            taken: [],
+          },
+        ],
+      });
+    });
+
+    act(() => {
+      host.fake.dispatch("focusrequested", { appId: "kitty" });
+    });
+
+    expect(activeIdOf(result.current)).toBe(appWindowId("foot"));
   });
 
   it("takes up the screens the host describes", () => {
@@ -343,6 +375,35 @@ describe("the desk's browser windows", () => {
     x: 0,
     y: 0,
   };
+
+  it("leave the user's keyboard where it is when one an agent holds asks for it", () => {
+    // A page an agent drives asks to be in front when the agent focuses a
+    // field in it.
+    const { host, result } = desktop([LEFT]);
+    host.lists([EXAMPLE]);
+    host.announces("kitty");
+    act(() => {
+      host.fake.set({
+        seats: [
+          {
+            focused: "1",
+            holds: ["1"],
+            id: "agent-3",
+            name: "Claude Code",
+            pointerX: null,
+            pointerY: null,
+            taken: [],
+          },
+        ],
+      });
+    });
+
+    act(() => {
+      result.current.act(WindowAction.FocusRequested(browserWindowId("1")));
+    });
+
+    expect(activeIdOf(result.current)).toBe(appWindowId("kitty"));
+  });
 
   it("are drawn as the engine lists them", () => {
     // `domicile open`, a page's target="_blank" and the bar's `+` each

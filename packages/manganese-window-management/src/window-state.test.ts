@@ -191,6 +191,16 @@ describe("the windows a host announces", () => {
     ).toBe(state.pressed + 1);
   });
 
+  it("leaves the user's keyboard where it is when an agent holds the window asking", () => {
+    // A page an agent drives asks to be in front when the agent focuses a
+    // field in it. The user's keyboard must not follow.
+    const state = desktop("kitty", "editor");
+
+    expect(
+      reduceWindows(state, WindowAction.FocusRequested(APP("kitty"), true)),
+    ).toBe(state);
+  });
+
   it("leaves a window that already has the keyboard as it is", () => {
     // A launched window asks with the launch's token once it opens focused.
     // Where the pointer goes is then the new window's rule.

@@ -13,7 +13,7 @@ An agent's own pointer and keyboard now work in browser windows too, so it can d
 
 ### Agents in browser windows don't take your typing
 
-When an agent clicks or types in a browser window, the window you're typing in keeps your keyboard, and the agent's typing never lands there.
+When an agent clicks or types in a browser window, the window you're typing in keeps your keyboard, and the agent's typing never lands there. A page the agent is using can't pull your keyboard over to it either.
 
 ### Apps an agent opens don't interrupt you
 

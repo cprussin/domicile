@@ -750,9 +750,11 @@ export const WindowAction = {
    * Window `id` asked for the keyboard: a client over `xdg-activation`, or a
    * browser window's page or an extension. The compositor leaves the decision
    * to the shell; Manganese grants it, shows the window's workspace and tab,
-   * and warps the pointer to it.
+   * and warps the pointer to it. `held` says an agent's seat holds it: the
+   * agent's input made it ask, so the user's keyboard stays where it is.
    */
-  FocusRequested: (id: string) => ({
+  FocusRequested: (id: string, held = false) => ({
+    held,
     id,
     kind: WindowActionKind.FocusRequested as const,
   }),
@@ -1512,7 +1514,7 @@ const reduceAction = (
       }
     }
     case WindowActionKind.FocusRequested: {
-      return grantFocus(state, action.id);
+      return action.held ? state : grantFocus(state, action.id);
     }
     case WindowActionKind.FocusStepped: {
       return stepFocus(state, action.direction);

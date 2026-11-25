@@ -19,6 +19,7 @@ import {
 import type { FloatingRules } from "./floating/floating-rules";
 import type { HandedDrag } from "./handed-drag";
 import { followPresses } from "./handed-drag";
+import { heldByAnAgent } from "./held-by-an-agent";
 import { openCommand } from "./open-command";
 import type { PlacedScreen } from "./screens/screen-toward";
 import { appIdOf, appWindowId, browserIdOf } from "./window";
@@ -86,10 +87,24 @@ export const useWindows = (
   const [state, dispatchUnlogged] = useReducer(reduceWindows, NO_WINDOWS);
   // Every action, so `domicile set-log-level debug shell` says what the desk
   // was asked to do and what it did. See `window-log.ts`.
-  const dispatch = useCallback((action: WindowAction) => {
-    log.debug(describedAction(action));
-    dispatchUnlogged(action);
-  }, []);
+  //
+  // A window asking for the keyboard is asked as held when an agent's seat
+  // holds it, whoever passed the request on: a client's, or a browser
+  // window's page.
+  const dispatch = useCallback(
+    (action: WindowAction) => {
+      const asked =
+        action.kind === WindowActionKind.FocusRequested
+          ? Action.FocusRequested(
+              action.id,
+              heldByAnAgent(domicile.seats.list, action.id),
+            )
+          : action;
+      log.debug(describedAction(asked));
+      dispatchUnlogged(asked);
+    },
+    [domicile],
+  );
   // The state as last drawn, for `act` to read without depending on it. A new
   // `act` would re-add every listener that runs commands.
   const drawn = useRef(state);
