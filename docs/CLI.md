@@ -782,8 +782,12 @@ commit   144a93c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7
 engine   s2ffe1826ced0, checked build of Chromium 7703634 at 246fa60eff4e, built 2026-11-15T09:12:44Z
 ```
 
-- The first two lines are `libexec/domicile/version`, which the flake and the
-  distribution packages write.
+- A build that is not a release names its channel and short commit in place
+  of the version: `domicile stable 144a93c1d2e3` when it runs the official
+  engine, else `domicile main 144a93c1d2e3`.
+- The first two lines are `libexec/domicile/version`, which
+  `packages/distro/version-file.sh` writes for the flake and the distribution
+  packages.
 - The engine line is from its release's `PROVENANCE`.
 - A missing file fails, naming it.
 

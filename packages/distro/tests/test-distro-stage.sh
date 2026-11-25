@@ -124,6 +124,8 @@ put "$WORKSPACE/packages/app-history/.vite/app/history.js" 'export const main = 
 put "$WORKSPACE/packages/app-settings/.vite/app/settings.js" 'export const main = () => {};'
 # The distribution package's manifest, whose version `--version` prints.
 put "$WORKSPACE/packages/domicile/package.json" '{"name":"domicile","private":true,"version":"0.0.0"}'
+# The checked engine pin, so a commit is `main` (`packages/distro/version-file.sh`).
+put "$WORKSPACE/packages/domicile-engine/engine-release.nix" '  identity = "aaaa";'
 # A crate: no `package.json`, so not part of the workspace.
 put "$WORKSPACE/packages/domicile-launch/Cargo.toml" ''
 # As `packages/distro/build.sh` installs before it builds.
@@ -164,8 +166,8 @@ expect "bin holds only what the flake installs" "$FLAKE_BINARIES" \
 [ -f "$USR/share/man/man1/domicile.1" ] &&
   ok "the man pages are in share/man/man1" ||
   fail "the man pages are in share/man/man1" "no $USR/share/man/man1/domicile.1"
-expect "libexec/domicile/version names the version and commit" \
-  "$(printf 'domicile 0.0.0\ncommit   %s' "$REV")" "$(cat "$LIBEXEC/version" 2>&1)"
+expect "libexec/domicile/version names the channel and commit" \
+  "$(printf 'domicile main %s\ncommit   %s' "${REV:0:12}" "$REV")" "$(cat "$LIBEXEC/version" 2>&1)"
 for shell in manganese simple splash; do
   [ -f "$LIBEXEC/shells/$shell/shell.js" ] &&
     ok "the $shell shell is prebuilt" ||
@@ -215,6 +217,8 @@ echo "a release ships the versions the workspace holds"
 if out="$(DOMICILE_RELEASE=1 "$STAGE_SH" "$BINARIES" "$ENGINE" "$BUN" "$WORKSPACE" "$REV" "$WORK/release" 2>&1)"; then
   expect "every package carries its own version" 0.0.0 \
     "$(jq -r .version "$WORK/release/usr/libexec/domicile/workspace/packages"/*/package.json | sort -u)"
+  expect "libexec/domicile/version names the version and commit" \
+    "$(printf 'domicile 0.0.0\ncommit   %s' "$REV")" "$(cat "$WORK/release/usr/libexec/domicile/version" 2>&1)"
 else
   fail "stage.sh succeeds for a release" "$out"
 fi

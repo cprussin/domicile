@@ -340,7 +340,7 @@ The shell's renderer:
 <prefix>/bin/domicile
 <prefix>/bin/domicile-compositor
 <prefix>/libexec/domicile/engine/     the Chromium tree, with `chrome` inside
-<prefix>/libexec/domicile/version     the version and commit `--version` prints
+<prefix>/libexec/domicile/version     the version or channel, and the commit, `--version` prints
 <prefix>/libexec/domicile/builder     builds a shell from an entry or a package
 <prefix>/libexec/domicile/shells/     bundled shells and the splash, prebuilt
 ```
