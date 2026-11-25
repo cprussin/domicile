@@ -104,8 +104,8 @@ TEST(AgentInputLinesTest, WhatThisEngineCannotReadIsNothing) {
 TEST(AgentInputLinesTest, AnAnswerIsWrittenAsTheCompositorReadsIt) {
   EXPECT_EQ(AgentLineWritten(AgentInputReachedMessage(
                 1764040000000001u, std::string("w7"), std::nullopt)),
-            "{\"serial\":1764040000000001.0,\"type\":\"agent_input_reached\","
-            "\"window\":\"w7\"}");
+            "{\"serial\":1.764040000000001e+15,"
+            "\"type\":\"agent_input_reached\",\"window\":\"w7\"}");
   EXPECT_EQ(AgentLineWritten(AgentInputReachedMessage(
                 7, std::nullopt, std::string("the shell"))),
             "{\"refused\":\"the shell\",\"serial\":7.0,"

@@ -835,12 +835,13 @@ fn the_desk_pointer_is_a_point_or_nothing_on_the_wire() {
 }
 
 /// The engine writes these lines itself (`AgentInputReachedMessage` and
-/// `PersonInAgentsWindowMessage`), its serial a double with a `.0`.
+/// `PersonInAgentsWindowMessage`), its serial a double: in exponent form
+/// once large, as a clock serial is, and with a `.0` when small.
 #[test]
 fn the_browser_answers_an_agents_input_on_the_wire() {
     assert_eq!(
         serde_json::from_str::<ChromeMessage>(
-            r#"{"type":"agent_input_reached","serial":1764040000000001.0,"window":"w7"}"#
+            r#"{"type":"agent_input_reached","serial":1.764040000000001e+15,"window":"w7"}"#
         )
         .expect("parsed"),
         ChromeMessage::AgentInputReached {

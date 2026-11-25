@@ -143,8 +143,9 @@ base::DictValue AgentInputReachedMessage(
     const std::optional<std::string>& refused) {
   base::DictValue message;
   message.Set("type", "agent_input_reached");
-  // A double, which JSON writes with a `.0`; the compositor reads it back
-  // whole. See Whole.
+  // A double, which JSON writes with a `.0`, or in exponent form once it is
+  // large (a clock serial is); either reads back whole in the compositor, as
+  // a serial stays under 2^53. See Whole.
   message.Set("serial", static_cast<double>(serial));
   if (window) {
     message.Set("window", *window);
