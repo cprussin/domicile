@@ -6,10 +6,15 @@
 
 #include <string>
 
+#include "base/functional/callback_forward.h"
 #include "components/domicile/mojom/extension_tray.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 
 class GURL;
+
+namespace ui {
+class Accelerator;
+}
 
 namespace content {
 class BrowserContext;
@@ -34,6 +39,19 @@ void BindExtensionTray(content::RenderFrameHost* frame,
 bool RequestExtensionPopup(content::BrowserContext* context,
                            const std::string& id,
                            const GURL& popup);
+
+// Asks every shell document of `context` with a tray client whether its shell
+// runs command `name` of extension `id`, pressed in a page of `context`.
+// `handled` hears true when one does.
+void AskShellToRunCommand(content::BrowserContext* context,
+                          const std::string& id,
+                          const std::string& name,
+                          base::OnceCallback<void(bool)> handled);
+
+// Whether a shell document of `context` keeps `keys` from extensions. See
+// mojom::ExtensionTray.ReserveKeys.
+bool IsReservedByShell(content::BrowserContext* context,
+                       const ui::Accelerator& keys);
 
 }  // namespace domicile
 

@@ -225,6 +225,35 @@ using AddToDictionaryCallback =
     base::RepeatingCallback<void(content::BrowserContext& context,
                                  const std::string& word)>;
 
+// The extension items of one context menu, and what runs them. Provided by
+// //chrome, which owns chrome.contextMenus: see
+// //chrome/browser/domicile/domicile_extension_menus.h.
+class GuestExtensionMenu {
+ public:
+  virtual ~GuestExtensionMenu() = default;
+
+  // The entries, as WebViewContextMenu::extension_items.
+  virtual const std::string& json() const = 0;
+
+  // Runs entry `item` on `page`, for the click in `frame` the menu was for.
+  virtual void Run(int item,
+                   content::WebContents& page,
+                   content::RenderFrameHost& frame) = 0;
+};
+
+// The extension items for a right click in `page`. Never null.
+using ExtensionMenusCallback =
+    base::RepeatingCallback<std::unique_ptr<GuestExtensionMenu>(
+        content::WebContents& page,
+        const content::ContextMenuParams& params)>;
+
+// What runs the command a key press in `page` is bound to, of an extension in
+// the page's profile. Null for a key bound to none. Provided by //chrome, which
+// owns extensions' keys.
+using ExtensionKeysCallback = base::RepeatingCallback<base::OnceClosure(
+    content::WebContents& page,
+    const input::NativeWebKeyboardEvent& event)>;
+
 // Prints `guest`'s page through the desktop's print dialog. Provided by
 // //chrome, which owns printing: see
 // //chrome/browser/domicile/domicile_printing.h.
@@ -402,6 +431,14 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Set once by //chrome, before any guest exists. Runs for a menu's
   // kAddToDictionary. See AddToDictionaryCallback.
   static void SetAddToDictionary(AddToDictionaryCallback add);
+
+  // Set once by //chrome, before any guest exists. Runs for each context menu
+  // the shell draws. See ExtensionMenusCallback.
+  static void SetExtensionMenus(ExtensionMenusCallback menus);
+
+  // Set once by //chrome, before any guest exists. Runs for each chord pressed
+  // in a page. See ExtensionKeysCallback.
+  static void SetExtensionKeys(ExtensionKeysCallback keys);
 
   // Set once by //chrome, before any guest exists. See MediaAccess.
   static void SetMediaAccess(MediaAccess* access);
@@ -834,6 +871,7 @@ class WebViewGuest : public mojom::WebViewGuest,
   void RunContextMenuAction(int32_t menu,
                             mojom::WebViewContextMenuAction action) override;
   void ReplaceMisspelling(int32_t menu, const std::string& word) override;
+  void RunContextMenuExtensionItem(int32_t menu, int32_t item) override;
   void Inspect() override;
   void Print() override;
 
@@ -892,7 +930,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // A match is swallowed and sent down the control channel. Modifier state is
   // always sent, since the shell needs it (e.g. Alt to drag a window).
   //
-  // Unclaimed chords the page ignores arrive later at HandleKeyboardEvent.
+  // An extension's key runs its command, and never goes to the page. Other
+  // unclaimed chords the page ignores arrive later at
+  // HandleKeyboardEvent.
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       content::WebContents* source,
       const input::NativeWebKeyboardEvent& event) override;
@@ -1453,10 +1493,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   std::optional<gfx::Size> content_size_;
 
   // The newest context menu sent to the element: its id (0 before the first),
-  // its frame and its params.
+  // its frame, the document that was in it, its params and its extension items.
   int context_menu_id_ = 0;
   content::GlobalRenderFrameHostId context_menu_frame_;
+  content::WeakDocumentPtr context_menu_document_;
   std::optional<content::ContextMenuParams> context_menu_params_;
+  std::unique_ptr<GuestExtensionMenu> context_menu_extensions_;
 
   // Whether an agent's input, not a person's, last pressed or keyed in this
   // page. See NoteAgentInput.

@@ -80,6 +80,8 @@ source_set("domicile") {
     "domicile_electron_socket.h",
     "domicile_extension_installer.cc",
     "domicile_extension_installer.h",
+    "domicile_extension_menus.cc",
+    "domicile_extension_menus.h",
     "domicile_extension_settings.cc",
     "domicile_extension_settings.h",
     "domicile_extension_tray.cc",
@@ -234,6 +236,12 @@ source_set("domicile") {
     "//extensions/browser",
     "//extensions/common",
     "//extensions/common:mojom",
+    # Extensions' menus and commands, which the shell draws and runs.
+    "//components/domicile:extension_menu",
+    "//ui/base",
+    "//ui/content_accelerators",
+    "//ui/events:events_base",
+    "//ui/menus",
     # The shell's tray: extension actions and their icons as PNGs.
     "//components/domicile:extension_tray_entry",
     "//components/domicile/mojom",

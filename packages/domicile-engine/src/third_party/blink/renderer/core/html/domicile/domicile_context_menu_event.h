@@ -58,8 +58,11 @@ class CORE_EXPORT DomicileContextMenuEvent final : public Event {
     return menu_->spelling_suggestions;
   }
 
+  const String& extensionItems() const { return menu_->extension_items; }
+
   void run(const String& action, ExceptionState&);
   void replaceMisspelling(const String& word, ExceptionState&);
+  void runExtensionItem(int32_t item, ExceptionState&);
 
   const AtomicString& InterfaceName() const override;
 

@@ -256,6 +256,17 @@ class MODULES_EXPORT DomicileHost final
   void setExtensionsProfile(ScriptState*,
                             const String& profile,
                             ExceptionState&);
+  void reserveExtensionKeys(ScriptState*,
+                            const Vector<String>& keys,
+                            ExceptionState&);
+  void runExtensionCommand(ScriptState*,
+                           const String& id,
+                           const String& name,
+                           ExceptionState&);
+  ScriptPromise<IDLString> extensionMenu(ScriptState*,
+                                         const String& id,
+                                         ExceptionState&);
+  void runExtensionMenuItem(ScriptState*, int32_t item, ExceptionState&);
   ScriptPromise<IDLUndefined> setExtensionEnabled(ScriptState*,
                                                   const String& id,
                                                   bool enabled,
@@ -449,6 +460,8 @@ class MODULES_EXPORT DomicileHost final
   const FrozenArray<DomicileTrayItem>* tray() const;
   const FrozenArray<DomicileNotification>* notifications() const;
   const FrozenArray<DomicileExtension>* extensions() const;
+  // Null until the browser says.
+  const String& extensionCommands() const { return extension_commands_; }
   const FrozenArray<DomicileInstalledExtension>* installedExtensions() const;
   std::optional<bool> idle() const;
   std::optional<bool> locked() const;
@@ -544,6 +557,11 @@ class MODULES_EXPORT DomicileHost final
   // domicile::mojom::blink::ExtensionTrayClient:
   void ExtensionsChanged(
       Vector<domicile::mojom::blink::TrayExtensionPtr> extensions) override;
+  void CommandsChanged(const String& commands) override;
+  void CommandPressed(const String& id,
+                      const String& name,
+                      const String& profile,
+                      CommandPressedCallback handled) override;
   void InstalledChanged(
       Vector<domicile::mojom::blink::InstalledExtensionPtr> extensions)
       override;
@@ -757,6 +775,7 @@ class MODULES_EXPORT DomicileHost final
   Member<FrozenArray<DomicileTrayItem>> tray_items_;
   Member<FrozenArray<DomicileNotification>> notifications_;
   Member<FrozenArray<DomicileExtension>> extensions_;
+  String extension_commands_;
   Member<FrozenArray<DomicileInstalledExtension>> installed_extensions_;
   std::optional<bool> idle_;
   std::optional<bool> locked_;

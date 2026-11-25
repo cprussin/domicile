@@ -188,6 +188,10 @@ class CORE_EXPORT HTMLWebViewElement final
   void ReplaceMisspelling(const DomicileContextMenuEvent& menu,
                           const String& word,
                           ExceptionState&);
+  // Runs `menu`'s extension entry `item`. Throws as RunContextMenuAction.
+  void RunContextMenuExtensionItem(const DomicileContextMenuEvent& menu,
+                                   int32_t item,
+                                   ExceptionState&);
 
   // Releases a dispatched file chooser event once answered. See
   // `waiting_choosers_`.

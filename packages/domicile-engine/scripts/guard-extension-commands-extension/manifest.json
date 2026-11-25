@@ -1,0 +1,24 @@
+{
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Domicile commands guard"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Ctrl+Shift+U" }
+    },
+    "fill": {
+      "description": "Fill in",
+      "suggested_key": { "default": "Ctrl+Shift+L" }
+    }
+  },
+  "description": "Two commands, an item in its action's menu and one in a page's, for guard-extension-commands.sh and guard-extension-page.sh.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlyF93NACWUOMSMh6Sve+YSGCN0tmxju6bhXlyAnJll6p1gmhrydAV12xD/RGsESz6qApqyxTcy5I62jSmKrEoo9UDE5f1B60mxtfDEFp6QhC8igwwhB1y+OCazpfo7+vA/lBl6fAFCiiKFxxZo5tJBZEdtFRsZ7lL2Pc17O0VCNTGjzE914aswwn4WU1KHckcC3q21CSnv8EQLe+cFr1q5/3ZusLQiCF3OK0sC6/RK89Xor4VXHh3EEKyntjm+oiqPNuzy3GxxM3IS48B05fwKWvXGO4sqe5NTVVNLixs3J9lv+hEyHWwk87lrtMRo0oJjTRtfXQEAdkN25P+g07bQIDAQAB",
+  "manifest_version": 3,
+  "name": "Domicile commands guard",
+  "permissions": ["contextMenus"],
+  "version": "1"
+}

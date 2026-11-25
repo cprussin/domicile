@@ -280,6 +280,55 @@ interface DomicileExtension {
   panel), but ask for no user gesture, which the desk's clicks lack. Phantom
   opens in its side panel by default from 26.37.
 
+- **Commands** (`chrome.commands`). The browser matches the keys in a page and
+  runs the command there, unless the shell listens for
+  `extensioncommandpressed`:
+
+  ```ts
+  // DomicileHost
+  readonly extensionCommands: string | null; // JSON, with extensioncommandschanged
+  onextensioncommandpressed: EventHandler; // data: JSON of id, name, profile
+  runExtensionCommand(id: string, name: string): void;
+  ```
+
+  - `extensionCommands` has every extension with commands, with an action or
+    without, each with the keys `CommandService` assigned at install
+    (`CommandsOf` in `domicile_extension_menus.cc`). It is JSON, as a window's
+    `menu` is, so it needs no interface per row. `CommandService` keeps Chrome's
+    own accelerators from extensions, and a patch lifts that: a desk has none.
+    The shell's own are those `reserveExtensionKeys` names, refused where the
+    keys are looked up, as they are known only after an extension installs.
+  - `runExtensionCommand` does what `ExtensionKeybindingRegistry` does for a
+    key: it grants `activeTab` on the active tab, then sends
+    `commands.onCommand` with that tab.
+  - A command's keys never go to the page. `PreHandleKeyboardEvent` finds the
+    command in the page's profile and asks every shell document; when none
+    listens, the browser runs it on that page, if the page is still there.
+    Chrome's registry on the shell's window binds none (patch 0283).
+  - `_execute_action` goes through Chrome's `ExtensionActionRunner`, and asks
+    the shell for the popup as `action.openPopup()` does. With no active tab it
+    is `activateExtension`.
+  - Over a private page the extension is not allowed in, nothing runs.
+- **The action's menu** (`chrome.contextMenus`, the `action` context):
+
+  ```ts
+  // DomicileHost
+  extensionMenu(id: string): Promise<string>;
+  runExtensionMenuItem(item: number): void;
+  ```
+
+  - Chrome's `ContextMenuMatcher` picks the items, as for a toolbar button's
+    menu, and the entries are an Electron menu's, so a shell reads both with
+    `appMenu`.
+  - Ids go up from one menu to the next, so an entry of an old menu is never
+    taken for one of the newest.
+  - `MenuManager::ExecuteCommand` runs an entry on the active tab: it grants
+    `activeTab`, flips a checkbox, and sends `contextMenus.onClicked`.
+- **A page's context menu.** `domicile-context-menu` carries the items that
+  match the click as `extensionItems`, and `runExtensionItem(id)` runs one for
+  that click, with its link, selection and frame
+  (`WebViewGuest::SetExtensionMenus`). Only a tab's menu has any: an
+  extension's popup is in no tab.
 - **Every installed extension** reaches the shell too, for a menu that
   switches and configures them, as chrome://extensions does. The SDK gives it
   as `domicile.extensions.installed` (`on("installed")`), with `setEnabled`,
@@ -436,10 +485,12 @@ relative to the source window and passes `NaN` without them.
 
 ## Not in scope
 
-- `chrome.contextMenus`: the shell draws the context menu, and
-  `domicile-context-menu` carries no extension items.
-- `chrome.commands`: shortcuts belong to the shell. Use `grabShortcut` if
+- Changing a command's keys: a desk has no chrome://extensions/shortcuts. The
+  keys are those Chrome assigned at install.
+- Global commands: `chrome.commands` says which are, and the browser runs
+  a command's keys in pages only. Grab them with `grabShortcut` if
   needed.
+- `chrome.contextMenus` on the shell's own page or a native window.
 - Install, permission and "extension added" bubbles (see Installing).
 
 ## Tests
@@ -450,6 +501,8 @@ Engine guards in `packages/domicile-engine/scripts/`:
 - `guard-extension-in-private.sh`
 - `guard-extension-reload.sh`
 - `guard-extension-tray.sh`
+- `guard-extension-commands.sh`
+- `guard-extension-page.sh`
 - `guard-extension-open-popup.sh`
 - `guard-extension-side-panel.sh`
 - `guard-webview-content-script.sh`

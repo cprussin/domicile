@@ -274,6 +274,36 @@
   [CallWith=ScriptState, RaisesException] undefined activateExtension(
       DOMString id);
 
+  // Keep `keys`, each as `Ctrl+T`, from extensions, in place of those given
+  // before: a command bound to one has no keys, and the page gets them, then
+  // the shell. None are kept by default. Over the tray's pipe, as
+  // activateExtension().
+  [CallWith=ScriptState, RaisesException] undefined reserveExtensionKeys(
+      sequence<DOMString> keys);
+
+  // Run command `name` of extension `id`, one of `extensionCommands`, as its
+  // keys do in Chrome: the extension is granted activeTab on the active tab
+  // and hears `commands.onCommand`. The action's own command,
+  // `_execute_action`, runs the action, and is `extensionpopuprequested`
+  // when the action has a popup. A command that is gone does nothing; an
+  // empty id or name throws. Over the tray's pipe, as activateExtension().
+  [CallWith=ScriptState, RaisesException] undefined runExtensionCommand(
+      DOMString id,
+      DOMString name);
+
+  // The items extension `id` adds to its action's menu (chrome.contextMenus),
+  // matched now, as JSON: an array of entries as DomicileBrowserWindow.menu's,
+  // `[]` for none. Over the tray's pipe, as activateExtension(). An empty id
+  // throws.
+  [CallWith=ScriptState, RaisesException] Promise<DOMString> extensionMenu(
+      DOMString id);
+
+  // Run entry `item`, the `id` of one in the newest extensionMenu(), on the
+  // active tab: its extension is granted activeTab there and hears
+  // `contextMenus.onClicked`. An entry of an older menu does nothing.
+  [CallWith=ScriptState, RaisesException] undefined runExtensionMenuItem(
+      long item);
+
   // Show the actions of browser profile `profile`'s extensions in
   // `extensions`, and have activateExtension() click them there, on the
   // active tab of its pages: as Chrome's toolbar shows its window's
@@ -383,6 +413,18 @@
   // opens a clicked action's. Not held for a late listener: a popup the user
   // did not see asked for is not one to open later.
   attribute EventHandler onextensionpopuprequested;
+  // Every extension with commands (chrome.commands), as JSON: an array of its
+  // `id`, `name`, `profile` and `commands`, each with its `name`,
+  // `description`, `keys` (`Ctrl+Shift+L`, or empty for none) and whether
+  // they are `global`. Those of the profile setExtensionsProfile() named.
+  // Null until the browser says.
+  readonly attribute DOMString? extensionCommands;
+  attribute EventHandler onextensioncommandschanged;
+  // The keys of an extension's command were pressed in a page: a MessageEvent
+  // whose `data` is the extension's `id`, the command's `name` and the page's
+  // `profile`, as JSON. The engine runs the command on that page, unless this
+  // has a listener: the shell then does, by runExtensionCommand().
+  attribute EventHandler onextensioncommandpressed;
   // Every extension installed in the shell's profile, switched on or off,
   // with its settings, for a menu that manages them. Null until the browser
   // lists them, which it does as soon as this page listens. No [SameObject],

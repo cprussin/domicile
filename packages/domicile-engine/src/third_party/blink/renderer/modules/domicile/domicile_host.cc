@@ -1292,6 +1292,58 @@ void DomicileHost::activateExtension(ScriptState*,
   }
 }
 
+void DomicileHost::reserveExtensionKeys(ScriptState*,
+                                        const Vector<String>& keys,
+                                        ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    tray_->ReserveKeys(keys);
+  }
+}
+
+void DomicileHost::runExtensionCommand(ScriptState*,
+                                       const String& id,
+                                       const String& name,
+                                       ExceptionState& exception_state) {
+  if (id.empty() || name.empty()) {
+    exception_state.ThrowTypeError(
+        "id and name must be an extension's id and its command's name");
+    return;
+  }
+  if (Ready(exception_state)) {
+    tray_->RunCommand(id, name);
+  }
+}
+
+ScriptPromise<IDLString> DomicileHost::extensionMenu(
+    ScriptState* script_state,
+    const String& id,
+    ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a non-empty extension id");
+    return EmptyPromise();
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLString>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  tray_->ActionMenu(
+      id, BindOnce(
+              [](ScriptPromiseResolver<IDLString>* resolver,
+                 const String& menu) { resolver->Resolve(menu); },
+              WrapPersistent(resolver)));
+  return promise;
+}
+
+void DomicileHost::runExtensionMenuItem(ScriptState*,
+                                        int32_t item,
+                                        ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    tray_->RunActionMenuItem(item);
+  }
+}
+
 // Over the tray's pipe, as activateExtension().
 void DomicileHost::setExtensionsProfile(ScriptState*,
                                         const String& profile,
@@ -2180,6 +2232,35 @@ void DomicileHost::ExtensionsChanged(
   extensions_ =
       MakeGarbageCollected<FrozenArray<DomicileExtension>>(std::move(tray));
   DispatchEvent(*Event::Create(domicile_event_names::Extensionschanged()));
+}
+
+// Held as it came: the SDK parses it, as it does a window's menu.
+void DomicileHost::CommandsChanged(const String& commands) {
+  extension_commands_ = commands;
+  DispatchEvent(
+      *Event::Create(domicile_event_names::Extensioncommandschanged()));
+}
+
+void DomicileHost::CommandPressed(const String& id,
+                                  const String& name,
+                                  const String& profile,
+                                  CommandPressedCallback handled) {
+  const AtomicString& type = domicile_event_names::Extensioncommandpressed();
+  if (!HasEventListeners(type)) {
+    std::move(handled).Run(false);
+    return;
+  }
+  auto command = std::make_unique<JSONObject>();
+  command->SetString("id", id);
+  command->SetString("name", name);
+  command->SetString("profile", profile);
+  MessageEvent* event = MessageEvent::Create();
+  event->initMessageEvent(type, /*bubbles=*/false, /*cancelable=*/false,
+                          command->ToJSONString(), /*origin=*/nullptr,
+                          /*last_event_id=*/String(), /*source=*/nullptr,
+                          /*ports=*/nullptr);
+  DispatchEvent(*event);
+  std::move(handled).Run(true);
 }
 
 // Every installed extension, wholesale, as `extensions` is.

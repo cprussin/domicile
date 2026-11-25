@@ -20,8 +20,12 @@ the detail, when there is one. Remove a gap when it's fixed.
 - **A chrome repaint damages the whole output.**
 - **Windows under a fullscreen window keep drawing,** so manganese can animate
   the fullscreen window back to its box.
-- **Browser window context menus have only Chrome's core items.** No page or
-  extension items.
+- **Manganese's browser window context menus have only Chrome's core items.**
+  The event carries extensions' items
+  ([SHELL-EXTENSIONS.md](/docs/SHELL-EXTENSIONS.md#menus)), and manganese draws
+  none of them.
+- **Extensions' media-key commands do nothing,** nor does an action's key when
+  the action opens the extension's side panel.
 - **An input method's candidate list does not show over pages or the
   shell:** they compose from it, but only native windows show its list.
   [TEXT-INPUT.md](/docs/architecture/TEXT-INPUT.md#plan).

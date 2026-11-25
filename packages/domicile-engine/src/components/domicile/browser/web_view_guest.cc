@@ -261,6 +261,18 @@ AddToDictionaryCallback& AddToDictionarySlot() {
   return *add;
 }
 
+// Storage for SetExtensionMenus's callback.
+ExtensionMenusCallback& ExtensionMenusSlot() {
+  static base::NoDestructor<ExtensionMenusCallback> menus;
+  return *menus;
+}
+
+// Storage for SetExtensionKeys's callback.
+ExtensionKeysCallback& ExtensionKeysSlot() {
+  static base::NoDestructor<ExtensionKeysCallback> keys;
+  return *keys;
+}
+
 // The guests' camera and microphone. See SetMediaAccess.
 MediaAccess* g_media_access = nullptr;
 
@@ -289,6 +301,20 @@ const AddToDictionaryCallback& DictionaryAdder() {
   // //chrome sets it in StartDesk, with the window host.
   CHECK(!AddToDictionarySlot().is_null());
   return AddToDictionarySlot();
+}
+
+// Finds a menu's extension items. See SetExtensionMenus.
+const ExtensionMenusCallback& ExtensionMenus() {
+  // //chrome sets it in StartDesk, with the window host.
+  CHECK(!ExtensionMenusSlot().is_null());
+  return ExtensionMenusSlot();
+}
+
+// Finds an extension's key. See SetExtensionKeys.
+const ExtensionKeysCallback& ExtensionKeys() {
+  // //chrome sets it in StartDesk, with the window host.
+  CHECK(!ExtensionKeysSlot().is_null());
+  return ExtensionKeysSlot();
 }
 
 // Serves WebViewGuestHost for one document.
@@ -1096,6 +1122,18 @@ void WebViewGuest::SetPrint(PrintCallback print) {
 void WebViewGuest::SetAddToDictionary(AddToDictionaryCallback add) {
   CHECK(AddToDictionarySlot().is_null());
   AddToDictionarySlot() = std::move(add);
+}
+
+// static
+void WebViewGuest::SetExtensionMenus(ExtensionMenusCallback menus) {
+  CHECK(ExtensionMenusSlot().is_null());
+  ExtensionMenusSlot() = std::move(menus);
+}
+
+// static
+void WebViewGuest::SetExtensionKeys(ExtensionKeysCallback keys) {
+  CHECK(ExtensionKeysSlot().is_null());
+  ExtensionKeysSlot() = std::move(keys);
 }
 
 // static
@@ -1920,8 +1958,15 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
   const bool pressed =
       event.GetType() == blink::WebInputEvent::Type::kRawKeyDown ||
       event.GetType() == blink::WebInputEvent::Type::kKeyDown;
+  // An Electron app has no extensions.
+  base::OnceClosure run_extension_command;
+  if (pressed && !app_page_ && (held.alt || held.ctrl || held.meta)) {
+    run_extension_command = ExtensionKeys().Run(*guest_contents_, event);
+  }
   if (!pressed || (modifiers & blink::WebInputEvent::kIsAutoRepeat) != 0) {
-    return content::KeyboardEventProcessingResult::NOT_HANDLED;
+    return run_extension_command
+               ? content::KeyboardEventProcessingResult::HANDLED
+               : content::KeyboardEventProcessingResult::NOT_HANDLED;
   }
 
   // Escape leaves page fullscreen before the page sees it, as in Chrome, so a
@@ -1934,6 +1979,12 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
   // A matched chord is HANDLED so the page never sees it and cannot override a
   // desktop shortcut.
   if (ShortcutRegistry::Get().Press(chord, page)) {
+    return content::KeyboardEventProcessingResult::HANDLED;
+  }
+  // Before the page, as in Chrome, so a page's own use of the keys does not
+  // keep them from the extension.
+  if (run_extension_command) {
+    std::move(run_extension_command).Run();
     return content::KeyboardEventProcessingResult::HANDLED;
   }
   if (!ui::KeycodeConverter::IsDomKeyForModifier(key)) {
@@ -2040,13 +2091,17 @@ bool WebViewGuest::HandleContextMenu(
 
   context_menu_id_ += 1;
   context_menu_frame_ = render_frame_host.GetGlobalId();
+  context_menu_document_ = render_frame_host.GetWeakDocumentPtr();
   context_menu_params_ = params;
+  context_menu_extensions_ = ExtensionMenus().Run(*guest_contents_, params);
 
   // The context menu guard greps for this line.
   LOG(INFO) << "domicile: a <webview>'s page asked for a context menu; "
                "asking the shell to draw it.";
-  client_->ContextMenuRequested(
-      AsWebViewContextMenu(context_menu_id_, params, in_page));
+  mojom::WebViewContextMenuPtr menu =
+      AsWebViewContextMenu(context_menu_id_, params, in_page);
+  menu->extension_items = context_menu_extensions_->json();
+  client_->ContextMenuRequested(std::move(menu));
   return true;
 }
 
@@ -2177,6 +2232,23 @@ void WebViewGuest::ReplaceMisspelling(int32_t menu, const std::string& word) {
           },
           base::UTF8ToUTF16(word)),
       kEditTries);
+}
+
+void WebViewGuest::RunContextMenuExtensionItem(int32_t menu, int32_t item) {
+  CHECK(guest_contents_);
+  if (!IsNewestContextMenu(menu)) {
+    return;
+  }
+  // The document, not its frame: the item grants activeTab on the page, and a
+  // frame may hold another document by now.
+  content::RenderFrameHost* frame =
+      context_menu_document_.AsRenderFrameHostIfValid();
+  if (frame == nullptr || !frame->IsActive()) {
+    LOG(INFO) << "domicile: the page a <webview>'s context menu was for is "
+                 "gone; dropping the extension item.";
+    return;
+  }
+  context_menu_extensions_->Run(item, *guest_contents_, *frame);
 }
 
 bool WebViewGuest::IsNewestContextMenu(int32_t menu) {

@@ -7,6 +7,7 @@
 // trusted.
 
 import { z } from "zod";
+import { acceleratorOf } from "./app-menu";
 
 /** A Chromium extension id: 32 letters `a` through `p`. */
 const EXTENSION_ID = /^[a-p]{32}$/;
@@ -54,6 +55,64 @@ export const extensionPopupSchema = z.object({
 });
 
 export type ExtensionPopup = z.infer<typeof extensionPopupSchema>;
+
+/** Chromium's names for the keys an `Accelerator` names by their character. */
+const KEY_NAMES: Readonly<Record<string, string | undefined>> = {
+  Comma: ",",
+  Period: ".",
+};
+
+/** A command's keys as Chromium writes them, such as `Ctrl+Shift+L`. */
+const boundKeys = (keys: string) =>
+  keys === ""
+    ? undefined
+    : acceleratorOf(
+        keys
+          .split("+")
+          .map((part) => KEY_NAMES[part] ?? part)
+          .join("+"),
+      );
+
+/**
+ * One of an extension's commands (`chrome.commands`). The action's own is
+ * `_execute_action`.
+ */
+export const extensionCommandSchema = z.object({
+  /** For a person to read. The action's own often has none. */
+  description: z.string(),
+  /** Bound everywhere, not only in browser windows. */
+  global: z.boolean(),
+  /**
+   * The keys bound to it, or `undefined` for none, or for a media key. Match a
+   * key event with `pressesAccelerator`.
+   */
+  keys: z.string().transform(boundKeys),
+  /** What `Extensions.runCommand` takes. */
+  name: z.string(),
+});
+
+export type ExtensionCommand = z.infer<typeof extensionCommandSchema>;
+
+/** One extension's commands, with an action or without. */
+export const extensionCommandsSchema = z.object({
+  commands: z.array(extensionCommandSchema),
+  id: z.string().regex(EXTENSION_ID),
+  name: z.string(),
+  /** The browser profile it is in, as `Extension.profile`. */
+  profile: z.string(),
+});
+
+export type ExtensionCommands = z.infer<typeof extensionCommandsSchema>;
+
+/** A command whose keys were pressed in a page. */
+export const pressedCommandSchema = z.object({
+  id: z.string().regex(EXTENSION_ID),
+  name: z.string(),
+  /** The page's browser profile, as `Extension.profile`. */
+  profile: z.string(),
+});
+
+export type PressedCommand = z.infer<typeof pressedCommandSchema>;
 
 /** Which sites an extension can read and change. */
 export const siteAccessSchema = z.enum([

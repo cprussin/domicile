@@ -129,6 +129,11 @@ struct WebViewContextMenu {
   // suggestions for it, best first. See ReplaceMisspelling.
   string misspelled_word;
   array<string> spelling_suggestions;
+
+  // The items extensions add to this menu (chrome.contextMenus): a JSON array,
+  // as an Electron app's menu is (BrowserWindow.menu). See
+  // RunContextMenuExtensionItem.
+  string extension_items;
 };
 
 // What a shell's context menu can ask the browser to do.
@@ -603,7 +608,7 @@ interface WebViewGuestClient {
   PageChanged(url.mojom.Url url, WebViewSecurity security);
 
   // A key with Ctrl, Alt or Meta that the page did not handle, for browser
-  // shortcuts.
+  // shortcuts. Not one bound to an extension's command, which neither gets.
   //
   // Unhandled guest keys stop at the guest's WebContentsDelegate, so the shell
   // cannot see them otherwise. Comes from HandleKeyboardEvent, which runs only
@@ -1004,6 +1009,11 @@ interface WebViewGuest {
   // with no misspelled word is a bad message, which the element rejects
   // first.
   ReplaceMisspelling(int32 menu, string word);
+
+  // Runs extension entry `item` of context menu `menu`'s `extension_items`.
+  // Ids as RunContextMenuAction's. An entry the menu does not have, or one
+  // that is gone or disabled since, is dropped.
+  RunContextMenuExtensionItem(int32 menu, int32 item);
 
   // Opens DevTools for the page in a new browser window. If DevTools is
   // already open, its window's element gets FocusRequested instead. See

@@ -31,11 +31,13 @@ Each agent gets its own pointer, keyboard and clipboard, in native and browser w
 - Pages no `<webview>` shows are unloaded while the computer is short of memory, and load again when they are shown. A window has `isDiscarded`, and `browser.discard(id)` unloads one by hand. [Browser windows](SHELL-BROWSER-WINDOWS.md)
 - `domicile open --agent <session> <url>` opens a browser window held by the agent's seat (seat `agent-<session>`); the engine's `open_url` takes `"agent"` and answers with the window. [Browser windows](SHELL-BROWSER-WINDOWS.md) · [`domicile open`](CLI.md#domicile-open)
 - `domicile list-windows` and the MCP server's `list_windows` give a browser window `focused` and its page's `size`, from the engine's new `browser_windows` command. [`domicile list-windows`](CLI.md#domicile-list-windows---json)
+- Extensions' keys and menus: `extensions.commands` and `runCommand()` run `chrome.commands`, `extensions.menu()` has an action's `chrome.contextMenus` items, and a page's context menu event carries `extensionItems`. [Commands](SHELL-EXTENSIONS.md#commands) · [Menus](SHELL-EXTENSIONS.md#menus)
 - `idle.ignore_pointer_motion` keeps a drifting mouse from holding the desktop awake. [`idle`](SHELL-CONFIG.md#idle)
 
 ### Breaking changes
 
 - `domicile.pointer.warp(x, y, onlyOver, unlessOver)` takes a required list of boxes, `onlyOver`: the pointer moves only while it is over one of them. Pass the other windows' frames so a focus change leaves a pointer over your bar where it is. [Writing a shell](WRITING-A-SHELL.md#focus-follows-the-mouse)
+- **The engine runs extensions' keys.** A page does not get the keys of its profile's extensions, except those `extensions.reserveKeys()` names for your shell. Listen for `extensions.on("commandPressed")` to run the commands yourself. [Commands](SHELL-EXTENSIONS.md#commands)
 - Panda CSS 2: a shell that runs Panda with the component library's preset or manganese's config needs `@pandacss/dev@2`, and `@domicile-desktop/manganese/css`'s generated entry points are `index.js` files. [Shell packaging](SHELL-PACKAGING.md#panda-with-manganeses-tokens)
 
 ### Fixes

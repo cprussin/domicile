@@ -407,7 +407,8 @@ The guest has no built-in browser behavior:
 Bind browser keys yourself:
 
 - `domicile-guest-keydown`: a `KeyboardEvent` for each chord (Ctrl, Alt or
-  Meta held) the page did not `preventDefault`. Plain keys never arrive.
+  Meta held) the page did not `preventDefault`. Plain keys never arrive, nor do
+  the keys of an [extension's command](SHELL-EXTENSIONS.md#commands).
 - `domicile-guest-keyup`: a `KeyboardEvent` for each modifier (Alt, Control,
   Meta or Shift) let go of that the page did not `preventDefault`. With
   `domicile-guest-keydown`, it tells a lone Alt tap from Alt held for a chord.
@@ -447,6 +448,8 @@ Draw the context menu yourself:
   `save-link-as`, `copy-image`, `copy-media-address`, `save-media-as`,
   `picture-in-picture` (enters, or leaves when in), the edit commands (`cut`,
   `paste`, …), `add-to-dictionary` and `inspect`. A save asks `domicile-file-chooser` where. See `WEBVIEW_CONTEXT_MENU_ACTIONS`.
+- `event.extensionItems` is the items extensions add, as JSON for `appMenu`,
+  and `event.runExtensionItem(id)` runs one ([Menus](SHELL-EXTENSIONS.md#menus)).
 - Back, reload and "open in new window" (`browser.open`) need no menu
   action.
 - `view.inspect()` opens DevTools for the page in a new browser window. It
