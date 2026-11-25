@@ -944,9 +944,16 @@ class WebViewGuest : public mojom::WebViewGuest,
   bool PreHandleMouseEvent(content::WebContents* source,
                            const blink::WebMouseEvent& event) override;
 
+  // Notes the widget under the pointer, whose coordinates PreHandleMouseEvent
+  // reads, and hides the tooltip when it changes, as Chrome's CursorManager
+  // does.
+  void DomicileMouseEventTo(content::WebContents* source,
+                            content::RenderWidgetHost* widget) override;
+
   // Reports the page's tooltip to the shell, which draws it; Chrome draws
   // none. See TooltipChanged in the mojom. `widget` is the page's or a frame's
-  // in another process, and the pointer is in its coordinates.
+  // in another process. Only the widget under the pointer's counts, as in
+  // Chrome: entering a frame, its parent reports the frame element's title.
   bool DomicileTooltip(content::WebContents* source,
                        content::RenderWidgetHost* widget,
                        const std::u16string& text) override;
@@ -1295,12 +1302,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Sends the tooltip as it is now, if it changed, at the pointer.
   void SendTooltip();
   // The tooltip to show: none while the pointer is outside the page, or once
-  // the widget that reported it is gone.
+  // the widget under it is gone.
   const std::string& TooltipNow() const;
-  // The widget that reported `tooltip_`, or null once it or its view is gone.
-  content::RenderWidgetHost* TooltipWidget() const;
-  // The pointer in the page's coordinates. `pointer_` is in the tooltip
-  // widget's, which for a frame in another process are the frame's own.
+  // The widget under the pointer, or null once it or its view is gone.
+  content::RenderWidgetHost* PointerWidget() const;
+  // The pointer in the page's coordinates. `pointer_` is in the widget under
+  // it's, which for a frame in another process are the frame's own.
   gfx::Point PointerInPage(content::RenderWidgetHost& widget) const;
   // `point`, in `view`'s coordinates, in the page's.
   gfx::Point InPage(content::RenderWidgetHostView& view,
@@ -1487,14 +1494,15 @@ class WebViewGuest : public mojom::WebViewGuest,
   // The renderer's last link, which stays set while the pointer is outside the
   // page. See PreHandleMouseEvent.
   GURL renderer_target_url_;
-  // The renderer's last tooltip, which stays set while the pointer is outside
-  // the page, and the one the shell has. See DomicileTooltip.
+  // The last tooltip of the widget under the pointer, which stays set while
+  // the pointer is outside the page, and the one the shell has. See
+  // DomicileTooltip.
   std::string tooltip_;
   std::string reported_tooltip_;
-  // The widget that reported `tooltip_`, as RenderWidgetHost::FromID's
-  // arguments: a frame's widget can go away under its tooltip.
-  int tooltip_process_ = 0;
-  int tooltip_routing_ = 0;
+  // The widget under the pointer, as RenderWidgetHost::FromID's arguments: a
+  // frame's widget can go away under it. See DomicileMouseEventTo.
+  int pointer_process_ = 0;
+  int pointer_routing_ = 0;
   // Runs out when a new tooltip shows. See ReportTooltip.
   base::OneShotTimer tooltip_delay_;
   // Where the pointer last was over the page, in the DIPs of the widget under

@@ -28,9 +28,17 @@
 #                                     frame's
 #   after a delay                    not the moment the pointer arrived
 #
-# NEGATIVE=1 is the control: the pointer rests on the page outside the frame,
-# where nothing has a title. Nothing may be reported, or the positive run's
-# tooltip could come from somewhere other than the hover.
+# The iframe element has a title of its own. Entering the frame, the page's
+# widget gets a move over the element and reports that title, but the pointer
+# is in the frame's widget. Chrome shows only the tooltip of the widget under
+# the pointer; patch 0280 names it to WebViewGuest. The element's title must
+# never reach the shell. Shown, it lands in the frame's coordinates, far up
+# and left of the pointer (claude.ai's artifact frame).
+#
+# NEGATIVE=1 is the control: the pointer rests inside the frame, right of its
+# titled block, where only the frame element has a title. Nothing may be
+# reported, or the positive run's tooltip could come from somewhere other than
+# the hover.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -68,9 +76,10 @@ CHROME_Y=$((STRIP_HEIGHT / 2))
 # page's coordinates) and 312,202 from its corner.
 PAGE_X=$((WIDTH / 2))
 PAGE_Y=$(((HEIGHT - STRIP_HEIGHT) / 2))
-# The control's point: on the page, clear of the frame.
-OUTSIDE_X=100
-OUTSIDE_Y=50
+# The control's point: in the frame (550 to 600 in the page), right of its
+# titled block.
+UNTITLED_X=575
+UNTITLED_Y=300
 
 # Chrome shows a tooltip 500 ms after the pointer stops. The reading starts
 # once the move's script returns, after the move, so it only undercounts.
@@ -172,13 +181,13 @@ python3 "$SCRIPTS/guard-webview-click-mouse.py" --move \
 wait_for_line 20 "GUARD chrome-mousemove" "$ENGINE_LOG" ||
   echo "the shell's document never reported the first move" >&2
 
-# 5. The pointer onto the frame, or beside it in the control.
+# 5. The pointer onto the frame's title, or its untitled side in the control.
 TOOLTIP_LINE="GUARD tooltip text=[in a frame]"
 if [ "$NEGATIVE" = "1" ]; then
   python3 "$SCRIPTS/guard-webview-click-mouse.py" --move \
-    --port "$DEBUG_PORT" --x "$OUTSIDE_X" --y "$((STRIP_HEIGHT + OUTSIDE_Y))" \
+    --port "$DEBUG_PORT" --x "$UNTITLED_X" --y "$((STRIP_HEIGHT + UNTITLED_Y))" \
     >>"$CLICK_LOG" 2>&1 ||
-    echo "the move beside the frame could not be driven; see $CLICK_LOG" >&2
+    echo "the move onto the frame's untitled side could not be driven; see $CLICK_LOG" >&2
   # A fixed wait, not a poll, because the control expects an absence.
   sleep 5
 else
@@ -200,6 +209,7 @@ SAW_CHROME=$(saw "GUARD chrome-mousemove")
 SAW_PAGE=$(saw "GUARD page-loaded")
 SAW_TOOLTIP=$(saw "$TOOLTIP_LINE")
 SAW_PLACED=$(saw "$TOOLTIP_LINE x=$PAGE_X y=$PAGE_Y ")
+SAW_ELEMENT=$(saw "GUARD tooltip text=[the frame element]")
 SAW_DELAYED=0
 DELAY_MS=""
 if [ "$SAW_TOOLTIP" = "1" ] && [ "$NEGATIVE" != "1" ]; then
@@ -210,7 +220,7 @@ fi
 
 echo
 echo "shell=$SAW_SHELL page=$SAW_PAGE"
-echo "the shell's document saw: move=$SAW_CHROME tooltip=$SAW_TOOLTIP placed=$SAW_PLACED delayed=$SAW_DELAYED (${DELAY_MS:-no} ms)"
+echo "the shell's document saw: move=$SAW_CHROME tooltip=$SAW_TOOLTIP placed=$SAW_PLACED delayed=$SAW_DELAYED (${DELAY_MS:-no} ms) element=$SAW_ELEMENT"
 grep -F "GUARD tooltip" "$ENGINE_LOG" | sed 's/^/  /'
 echo
 
@@ -228,13 +238,18 @@ delivered to this browser. This is the harness"
 elif [ "$SAW_PAGE" != "1" ]; then
   FAILURE="the page or its frame never loaded, so there was no title to \
 hover. That is the guest: it was not made, attached or navigated"
+elif [ "$SAW_ELEMENT" = "1" ]; then
+  FAILURE="the iframe element's title reached the shell with the pointer \
+inside the frame. Chrome shows only the tooltip of the widget under the \
+pointer: WebViewGuest must drop the page's, named by DomicileMouseEventTo \
+(patch 0280)"
 elif [ "$NEGATIVE" = "1" ]; then
   if [ "$SAW_TOOLTIP" = "1" ]; then
-    FAILURE="the control heard the frame's title with the pointer beside the \
-frame, so the positive run's tooltip may not come from the hover"
+    FAILURE="the control heard the frame's title with the pointer right of \
+it, so the positive run's tooltip may not come from the hover"
   else
-    PASSED="the control is sharp: with the pointer beside the frame, the \
-element reported no tooltip"
+    PASSED="the control is sharp: with the pointer on the frame's untitled \
+side, the element reported no tooltip"
   fi
 elif [ "$SAW_TOOLTIP" != "1" ]; then
   FAILURE="the pointer was over the frame's title and the shell never heard \

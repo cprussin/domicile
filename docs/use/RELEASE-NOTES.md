@@ -33,6 +33,7 @@ When your computer runs low on memory, pages you can't see, like background tabs
 
 - Element no longer says it is open in another window after you log out and quickly in again.
 - Bar panels such as notifications, agents, downloads, quick settings and the tray menu stay on their screen and scroll when they hold more than fits, even on a small screen beside a taller one.
+- Moving the pointer into an embedded frame, such as an artifact on claude.ai, no longer shows the frame's label far away from the pointer.
 
 ## 1.3.0
 

@@ -2392,12 +2392,27 @@ bool WebViewGuest::PreHandleMouseEvent(content::WebContents* source,
   return false;
 }
 
+void WebViewGuest::DomicileMouseEventTo(content::WebContents* source,
+                                        content::RenderWidgetHost* widget) {
+  const int process = widget->GetProcess()->GetDeprecatedID();
+  const int routing = widget->GetRoutingID();
+  if (process == pointer_process_ && routing == pointer_routing_) {
+    return;
+  }
+  pointer_process_ = process;
+  pointer_routing_ = routing;
+  // PreHandleMouseEvent, next, reports it.
+  tooltip_.clear();
+}
+
 bool WebViewGuest::DomicileTooltip(content::WebContents* source,
                                    content::RenderWidgetHost* widget,
                                    const std::u16string& text) {
+  // Chrome draws none from a widget the pointer is not over either.
+  if (widget != PointerWidget()) {
+    return true;
+  }
   tooltip_ = base::UTF16ToUTF8(text);
-  tooltip_process_ = widget->GetProcess()->GetDeprecatedID();
-  tooltip_routing_ = widget->GetRoutingID();
   ReportTooltip();
   return true;
 }
@@ -2420,13 +2435,13 @@ void WebViewGuest::ReportTooltip() {
 
 const std::string& WebViewGuest::TooltipNow() const {
   // A frame's widget can go away under its tooltip, and its tooltip with it.
-  return pointer_inside_ && TooltipWidget() != nullptr ? tooltip_
+  return pointer_inside_ && PointerWidget() != nullptr ? tooltip_
                                                        : base::EmptyString();
 }
 
-content::RenderWidgetHost* WebViewGuest::TooltipWidget() const {
+content::RenderWidgetHost* WebViewGuest::PointerWidget() const {
   content::RenderWidgetHost* widget =
-      content::RenderWidgetHost::FromID(tooltip_process_, tooltip_routing_);
+      content::RenderWidgetHost::FromID(pointer_process_, pointer_routing_);
   // A crashed frame keeps its widget and loses its view.
   return widget != nullptr && widget->GetView() != nullptr ? widget : nullptr;
 }
@@ -2439,7 +2454,7 @@ void WebViewGuest::SendTooltip() {
   reported_tooltip_ = tooltip;
   // Where the pointer is now, which is where Chrome shows it after its delay.
   const gfx::Point at =
-      tooltip.empty() ? gfx::Point() : PointerInPage(*TooltipWidget());
+      tooltip.empty() ? gfx::Point() : PointerInPage(*PointerWidget());
   client_->TooltipChanged(tooltip, at.x(), at.y());
 }
 

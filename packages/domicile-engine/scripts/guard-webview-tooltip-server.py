@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """The pages guard-webview-tooltip.sh hovers.
 
-  /page    the page in the browser window. Nothing on it has a title. It holds
-           one iframe, at 200,150 and 400x300, loaded from `localhost` so it
-           is another site and so another process: its own render widget,
-           with its own coordinates, as an extension's or a challenge's frame
-           is. Says `GUARD page-loaded` once the frame has loaded.
+  /page    the page in the browser window. It holds one iframe, at 200,150
+           and 400x300, loaded from `localhost` so it is another site and so
+           another process: its own render widget, with its own coordinates,
+           as an extension's or a challenge's frame is. The iframe element is
+           titled `the frame element`, as claude.ai's artifact frame is, and
+           nothing else on the page has a title. Says `GUARD page-loaded` once
+           the frame has loaded.
 
-  /frame   that frame: one block filling it, titled `in a frame`.
+  /frame   that frame: a block over its left 350 px, titled `in a frame`, and
+           nothing titled to its right.
 
 Served over HTTP for the reason guard-webview-framing-server.py serves its
 own subject: `crux` reaches no arbitrary host.
@@ -39,7 +42,7 @@ PAGE_HTML = """<!doctype html>
     </style>
   </head>
   <body>
-    <iframe src="%(frame)s"></iframe>
+    <iframe title="the frame element" src="%(frame)s"></iframe>
     <script>
       document.querySelector("iframe").addEventListener("load", () => {
         console.log("GUARD page-loaded");
@@ -55,6 +58,7 @@ FRAME_HTML = b"""<!doctype html>
     <meta charset="utf-8" />
     <style>
       html, body, div { margin: 0; height: 100%; }
+      div { width: 350px; }
     </style>
   </head>
   <body><div title="in a frame"></div></body>

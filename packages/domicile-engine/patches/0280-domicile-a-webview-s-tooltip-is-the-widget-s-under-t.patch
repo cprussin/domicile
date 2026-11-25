@@ -1,0 +1,104 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Wed, 25 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a webview's tooltip is the widget's under the
+ pointer
+
+Chrome shows a tooltip only from the widget under the pointer, and
+hides it when the pointer moves to another widget (CursorManager). 0181
+hands tooltips to WebViewGuest before that check, so one from a widget
+the pointer had left was shown, mapped from that widget's coordinates
+with the pointer in another's: far from the pointer.
+
+Entering a frame from another site does that every time: the parent
+gets a move at the frame's element, reports the element's `title`, and
+the pointer is already in the frame.
+
+- `render_widget_host_delegate.h`, `web_contents_impl.{h,cc}`,
+  `web_contents_delegate.h`: DomicileMouseEventTo, naming the widget a
+  mouse event goes to.
+- `render_widget_host_impl.cc`: calls it just before
+  PreHandleMouseEvent.
+
+guard-webview-tooltip.sh checks it.
+---
+ content/browser/renderer_host/render_widget_host_delegate.h | 4 ++++
+ content/browser/renderer_host/render_widget_host_impl.cc    | 2 ++
+ content/browser/web_contents/web_contents_impl.cc           | 6 ++++++
+ content/browser/web_contents/web_contents_impl.h            | 1 +
+ content/public/browser/web_contents_delegate.h              | 5 +++++
+ 5 files changed, 18 insertions(+)
+
+diff --git a/content/browser/renderer_host/render_widget_host_delegate.h b/content/browser/renderer_host/render_widget_host_delegate.h
+index bfcef58..4b5533c 100644
+--- a/content/browser/renderer_host/render_widget_host_delegate.h
++++ b/content/browser/renderer_host/render_widget_host_delegate.h
+@@ -429,6 +429,10 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
+   virtual void DomicileCursorChanged(RenderWidgetHostImpl* widget,
+                                      const ui::Cursor& cursor) {}
+ 
++  // Domicile: the mouse event PreHandleMouseEvent is about to see goes to
++  // `widget`, in its coordinates.
++  virtual void DomicileMouseEventTo(RenderWidgetHostImpl* widget) {}
++
+ #if BUILDFLAG(IS_ANDROID)
+   // Get the offset for the current touch sequence. e.g. visible top controls or
+   // side UI will result in a nonzero offset being added to touch events.
+diff --git a/content/browser/renderer_host/render_widget_host_impl.cc b/content/browser/renderer_host/render_widget_host_impl.cc
+index fa0c3b0..1d75e87 100644
+--- a/content/browser/renderer_host/render_widget_host_impl.cc
++++ b/content/browser/renderer_host/render_widget_host_impl.cc
+@@ -1851,6 +1851,8 @@ void RenderWidgetHostImpl::ForwardMouseEventWithLatencyInfo(
+   // Protect against delegate handling possibly destroying `this`.
+   const auto weak_this = weak_factory_.GetWeakPtr();
+   // `!IsIgnoringWebInputEvents()` implies `delegate_` is non-null.
++  // Domicile: names the widget whose coordinates the event is in.
++  delegate_->DomicileMouseEventTo(this);
+   if (delegate_->PreHandleMouseEvent(mouse_event) || !weak_this) {
+     return;
+   }
+diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
+index a1edbc0..c37c7f9 100644
+--- a/content/browser/web_contents/web_contents_impl.cc
++++ b/content/browser/web_contents/web_contents_impl.cc
+@@ -5542,6 +5542,12 @@ void WebContentsImpl::DomicileCursorChanged(RenderWidgetHostImpl* widget,
+   }
+ }
+ 
++void WebContentsImpl::DomicileMouseEventTo(RenderWidgetHostImpl* widget) {
++  if (delegate_) {
++    delegate_->DomicileMouseEventTo(this, widget);
++  }
++}
++
+ bool WebContentsImpl::ShouldShowStaleContentOnEviction() {
+   if (WasDiscarded()) {
+     return false;
+diff --git a/content/browser/web_contents/web_contents_impl.h b/content/browser/web_contents/web_contents_impl.h
+index 14f7383..5718533 100644
+--- a/content/browser/web_contents/web_contents_impl.h
++++ b/content/browser/web_contents/web_contents_impl.h
+@@ -1173,6 +1173,7 @@ class CONTENT_EXPORT WebContentsImpl
+       const input::NativeWebKeyboardEvent& event) override;
+   void DomicileCursorChanged(RenderWidgetHostImpl* widget,
+                              const ui::Cursor& cursor) override;
++  void DomicileMouseEventTo(RenderWidgetHostImpl* widget) override;
+   void RenderWidgetDeleted(RenderWidgetHostImpl* render_widget_host) override;
+   void RenderWidgetWasResized(RenderWidgetHostImpl* render_widget_host,
+                               bool width_changed) override;
+diff --git a/content/public/browser/web_contents_delegate.h b/content/public/browser/web_contents_delegate.h
+index ceed1ca..f5d8aa9 100644
+--- a/content/public/browser/web_contents_delegate.h
++++ b/content/public/browser/web_contents_delegate.h
+@@ -608,6 +608,11 @@ class CONTENT_EXPORT WebContentsDelegate {
+                                      RenderWidgetHost* widget,
+                                      const ui::Cursor& cursor) {}
+ 
++  // Domicile: the mouse event PreHandleMouseEvent is about to see goes to
++  // `widget`, which draws some of `source`'s frames, in its coordinates.
++  virtual void DomicileMouseEventTo(WebContents* source,
++                                    RenderWidgetHost* widget) {}
++
+   // Returns true if `web_contents` is, or is transitioning to, tab-fullscreen.
+   virtual bool IsFullscreenForTabOrPending(const WebContents* web_contents);
+ 
