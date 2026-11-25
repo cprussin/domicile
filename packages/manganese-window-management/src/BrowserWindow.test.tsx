@@ -265,6 +265,7 @@ const asksForAMenu = (
       canRedo: false,
       canSelectAll: false,
       canUndo: false,
+      extensionItems: "[]",
       hasImageContents: false,
       inPictureInPicture: false,
       isEditable: false,
@@ -277,6 +278,9 @@ const asksForAMenu = (
       },
       run: (action: string) => {
         ran.push(action);
+      },
+      runExtensionItem: (item: number) => {
+        ran.push(`extension item ${item}`);
       },
       selectionText: "",
       spellingSuggestions: [],
@@ -2756,6 +2760,32 @@ describe("BrowserWindow", () => {
         "Zoom outCtrl+−",
         "InspectCtrl+Shift+I",
       ]);
+    });
+
+    it("draws extensions' items above Inspect, and runs one", async () => {
+      const { container } = renderWindow();
+      const ran = asksForAMenu(view(container), {
+        extensionItems: JSON.stringify([
+          {
+            checked: false,
+            enabled: true,
+            id: 3,
+            label: "Save to Vault",
+            type: "normal",
+            visible: true,
+          },
+        ]),
+      });
+
+      const menu = await screen.findByRole("menu", { name: "Page" });
+      expect(
+        [...menu.querySelectorAll("[role=menuitem]")]
+          .map((item) => item.textContent)
+          .slice(-2),
+      ).toEqual(["Save to Vault", "InspectCtrl+Shift+I"]);
+      await userEvent.click(await menuItem("Save to Vault"));
+
+      expect(ran).toStrictEqual(["extension item 3"]);
     });
 
     it("drives the view from the page's history", async () => {

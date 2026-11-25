@@ -21,6 +21,7 @@ const plain = (overrides: Partial<PageContext> = {}): PageContext => ({
     undo: false,
   },
   editable: false,
+  extensionItems: [],
   hasPixels: false,
   link: undefined,
   media: MediaKind.None,
@@ -28,6 +29,7 @@ const plain = (overrides: Partial<PageContext> = {}): PageContext => ({
   pictureInPicture: { active: false, can: false },
   replaceMisspelling: () => undefined,
   run: () => undefined,
+  runExtensionItem: () => undefined,
   selection: "",
   source: undefined,
   x: 0,
@@ -54,6 +56,7 @@ const event = (fields: Partial<DomicileContextMenuEvent>) =>
     canRedo: false,
     canSelectAll: false,
     canUndo: false,
+    extensionItems: "[]",
     hasImageContents: false,
     inPictureInPicture: false,
     isEditable: false,
@@ -63,6 +66,7 @@ const event = (fields: Partial<DomicileContextMenuEvent>) =>
     misspelledWord: "",
     replaceMisspelling: () => undefined,
     run: () => undefined,
+    runExtensionItem: () => undefined,
     selectionText: "",
     spellingSuggestions: [],
     srcUrl: "",
@@ -142,6 +146,35 @@ describe("pageContextOf", () => {
       pageContextOf(event({ run: resolve })).run("copy-link-address");
     });
     expect(ran).toBe("copy-link-address");
+  });
+});
+
+describe("pageContextOf's extension items", () => {
+  it("reads the items extensions add to the menu", () => {
+    const context = pageContextOf(
+      event({
+        extensionItems: JSON.stringify([
+          {
+            checked: false,
+            enabled: true,
+            id: 3,
+            label: "Save to &Vault",
+            type: "normal",
+            visible: true,
+          },
+        ]),
+      }),
+    );
+    expect(context.extensionItems).toMatchObject([
+      { id: 3, label: "Save to Vault" },
+    ]);
+  });
+
+  it("hands an extension item back to the event it came from", async () => {
+    const ran = await new Promise<number>((resolve) => {
+      pageContextOf(event({ runExtensionItem: resolve })).runExtensionItem(3);
+    });
+    expect(ran).toBe(3);
   });
 });
 

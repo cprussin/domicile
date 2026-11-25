@@ -1048,6 +1048,7 @@ export const BrowserWindow = ({
           {menu !== undefined && (
             <PageMenu
               at={menu.at}
+              extensionItems={menu.context.extensionItems}
               items={pageMenuFor(menu.context, {
                 canGoBack,
                 canGoForward,
@@ -1059,6 +1060,7 @@ export const BrowserWindow = ({
                   openWindow,
                 });
               }}
+              onChooseExtensionItem={menu.context.runExtensionItem}
               onClose={dismissMenu}
             />
           )}

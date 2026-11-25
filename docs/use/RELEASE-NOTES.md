@@ -25,7 +25,8 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 
 - A web page an agent opens is the agent's from the start: it opens in its own window beside what you're doing, not as a tab behind yours, and your keyboard stays where it was.
 - When your config file can't be changed from Settings, its switches look plainly off, and the note at the top says why.
-- Extensions' keyboard shortcuts work in browser windows, such as Bitwarden's Ctrl+Shift+L. The desk's shortcuts come first. [Extensions](BROWSER.md#extensions)
+- Extensions' keyboard shortcuts work in browser windows, such as Bitwarden's Ctrl+Shift+L. The desk's and the browser's own shortcuts come first. [Extensions](BROWSER.md#extensions)
+- Extensions' items show in a page's right-click menu, above Inspect. [Extensions](BROWSER.md#extensions)
 - When memory runs low, pages you can't see, like background tabs and windows on other workspaces, unload as in Chrome, and load again where you left off when you switch to them.
 
 ### Fixes

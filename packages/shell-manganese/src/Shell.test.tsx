@@ -4775,6 +4775,7 @@ const pageMenuAsked = (): Event =>
     canRedo: false,
     canSelectAll: false,
     canUndo: false,
+    extensionItems: "[]",
     hasImageContents: false,
     inPictureInPicture: false,
     isEditable: false,
@@ -4787,6 +4788,9 @@ const pageMenuAsked = (): Event =>
     },
     run: () => {
       throw new Error("test: no action to run");
+    },
+    runExtensionItem: () => {
+      throw new Error("test: no extension item to run");
     },
     selectionText: "",
     spellingSuggestions: [],

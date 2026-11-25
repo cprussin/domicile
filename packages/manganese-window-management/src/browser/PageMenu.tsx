@@ -1,6 +1,8 @@
 import { ContextMenu } from "@domicile-desktop/component-library/ContextMenu";
+import type { AppMenuEntry } from "@domicile-desktop/sdk/app-menu";
 import { Fragment } from "react";
 import { css } from "../../styled-system/css";
+import { AppMenuEntries } from "./AppMenuBar";
 
 import type { PageMenuItem } from "./page-menu";
 
@@ -9,13 +11,24 @@ type Props = {
   at: { x: number; y: number };
   /** The menu, in groups a line goes between — see `pageMenuFor`. */
   items: PageMenuItem[][];
+  /** Extensions' items, drawn above the last group, as Chrome does. */
+  extensionItems: readonly AppMenuEntry[];
   onChoose: (item: PageMenuItem) => void;
+  /** One of `extensionItems` was chosen, by its id. */
+  onChooseExtensionItem: (item: number) => void;
   /** It closed: chosen from, or put away with Escape or a press outside. */
   onClose: () => void;
 };
 
 /** A browser window's context menu, drawn where the right click was. */
-export const PageMenu = ({ at, items, onChoose, onClose }: Props) => (
+export const PageMenu = ({
+  at,
+  extensionItems,
+  items,
+  onChoose,
+  onChooseExtensionItem,
+  onClose,
+}: Props) => (
   <ContextMenu
     at={at}
     label="Page"
@@ -29,6 +42,15 @@ export const PageMenu = ({ at, items, onChoose, onClose }: Props) => (
     {items.map((group, index) => (
       <Fragment key={group.map(keyOf).join()}>
         {index > 0 && <ContextMenu.Separator />}
+        {index === items.length - 1 && extensionItems.length > 0 && (
+          <>
+            <AppMenuEntries
+              entries={extensionItems}
+              onChoose={onChooseExtensionItem}
+            />
+            <ContextMenu.Separator />
+          </>
+        )}
         {group.map((item) => (
           <ContextMenu.Item
             disabled={item.disabled}

@@ -4,6 +4,8 @@
 // new window, search) are the window's own.
 
 import { searchUrl } from "@domicile-desktop/manganese-address/search";
+import type { AppMenuEntry } from "@domicile-desktop/sdk/app-menu";
+import { appMenu } from "@domicile-desktop/sdk/app-menu";
 import type { WebViewContextMenuAction } from "@domicile-desktop/sdk/webview-element";
 import { WEBVIEW_MEDIA_TYPES } from "@domicile-desktop/sdk/webview-element";
 import { z } from "zod";
@@ -66,6 +68,8 @@ export type PageContext = {
     undo: boolean;
   };
   editable: boolean;
+  /** The items extensions add for the click (`chrome.contextMenus`). */
+  extensionItems: readonly AppMenuEntry[];
   /** Whether an image under the click has pixels to copy. */
   hasPixels: boolean;
   link: string | undefined;
@@ -78,6 +82,8 @@ export type PageContext = {
   replaceMisspelling: (word: string) => void;
   /** Ask the browser to do one of the things only it can, for this click. */
   run: (action: WebViewContextMenuAction) => void;
+  /** Run one of `extensionItems`, by its id, for this click. */
+  runExtensionItem: (item: number) => void;
   selection: string;
   /** The address of the image, video or audio under the click. */
   source: string | undefined;
@@ -142,6 +148,7 @@ export const pageContextOf = (
     undo: event.canUndo,
   },
   editable: event.isEditable,
+  extensionItems: appMenu(event.extensionItems),
   hasPixels: event.hasImageContents,
   link: addressOf(event.linkUrl),
   media: mediaSchema.parse(event.mediaType),
@@ -161,6 +168,9 @@ export const pageContextOf = (
   },
   run: (action) => {
     event.run(action);
+  },
+  runExtensionItem: (item) => {
+    event.runExtensionItem(item);
   },
   selection: event.selectionText,
   source: addressOf(event.srcUrl),

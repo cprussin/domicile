@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
-import { BrowserCommand, browserCommandFor } from "./browser-command";
+import {
+  BROWSER_KEYS,
+  BrowserCommand,
+  browserCommandFor,
+} from "./browser-command";
 
 const press = (
   key: string,
@@ -111,5 +115,41 @@ describe("browserCommandFor", () => {
       browserCommandFor(press("P", { ctrlKey: true, shiftKey: true })),
     ).toBe(BrowserCommand.Print);
     expect(browserCommandFor(press("p", { ctrlKey: true }))).toBeUndefined();
+  });
+});
+
+/** `KeyboardEvent.key` for a key as Chrome's accelerators name it. */
+const keyOf = (name: string, shiftKey: boolean): string => {
+  if (name === "Left" || name === "Right") {
+    return `Arrow${name}`;
+  } else {
+    return shiftKey ? name.toUpperCase() : name.toLowerCase();
+  }
+};
+
+/** A key event for keys as Chrome's accelerators write them, such as `Ctrl+F`. */
+const pressOf = (keys: string) => {
+  const parts = keys.split("+");
+  const shiftKey = parts.includes("Shift");
+  return press(keyOf(parts.at(-1) ?? "", shiftKey), {
+    altKey: parts.includes("Alt"),
+    ctrlKey: parts.includes("Ctrl"),
+    shiftKey,
+  });
+};
+
+describe("BROWSER_KEYS", () => {
+  it("are each a browser command's keys", () => {
+    expect(
+      BROWSER_KEYS.filter(
+        (keys) => browserCommandFor(pressOf(keys)) === undefined,
+      ),
+    ).toStrictEqual([]);
+  });
+
+  it("keep Find, Reload and history from extensions", () => {
+    expect(BROWSER_KEYS).toEqual(
+      expect.arrayContaining(["Ctrl+F", "Ctrl+R", "Alt+Left", "Alt+Right"]),
+    );
   });
 });

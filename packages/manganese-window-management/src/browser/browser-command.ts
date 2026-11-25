@@ -17,6 +17,24 @@ export enum BrowserCommand {
   ZoomReset = "ZoomReset",
 }
 
+/**
+ * The keys of the commands below that an extension's command could have, as
+ * Chrome's accelerators write them. A shell keeps them from extensions with
+ * `extensions.reserveKeys`, as Chrome keeps its own. Zoom's `=` and `-` are
+ * none an extension may have.
+ */
+export const BROWSER_KEYS: readonly string[] = [
+  "Alt+Left",
+  "Alt+Right",
+  "Ctrl+F",
+  "Ctrl+Shift+F",
+  "Ctrl+Shift+I",
+  "Ctrl+Shift+P",
+  "Ctrl+R",
+  "Ctrl+Shift+R",
+  "Ctrl+0",
+];
+
 /** The `KeyboardEvent` fields a binding reads. */
 type Press = Pick<
   KeyboardEvent,

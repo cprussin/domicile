@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { applicationsConfigSchema } from "@domicile-desktop/manganese-launcher/applications-config";
+import { BROWSER_KEYS } from "@domicile-desktop/manganese-window-management/browser/browser-command";
 import { floatingRulesSchema } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
 
 import { exec } from "@domicile-desktop/manganese-window-management/keyboard/commands";
@@ -80,6 +81,17 @@ describe("Manganese", () => {
         ),
       ),
     ).toEqual(new Set(["Meta+x"]));
+  });
+
+  // As Chrome keeps its own shortcuts from extensions.
+  it("keeps its browser keys from extensions", async () => {
+    const fake = onADesk();
+    await renderManganese(fake);
+
+    expect(fake.calls).toContainEqual([
+      "reserveExtensionKeys",
+      [...BROWSER_KEYS],
+    ]);
   });
 
   // The config's look, which the settings portal also serves windows.
