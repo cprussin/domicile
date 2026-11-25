@@ -59,6 +59,9 @@ ask to sign in again.
 - An agent has a pointer and keyboard of its own, so it can click and type
   in one app while you work in another. It never moves your pointer or
   changes what you're typing in.
+- An agent copies and pastes on a clipboard of its own, so it never
+  replaces what you copied, and what it copies stays out of your clipboard
+  history.
 - An app you're using is yours. Click or type in an app the agent is using
   and it lets go at once.
 - An agent waits to run shell commands, like switching workspaces, until

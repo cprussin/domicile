@@ -676,7 +676,7 @@
         };
         cargoLock = {
           lockFile = ./Cargo.lock;
-          outputHashes."smithay-0.7.0" = "sha256-KurBCYl6xnT77V5pO/MI/IhI4BJhwAzwjDUzmkJ/VW8=";
+          outputHashes."smithay-0.7.0" = "sha256-QvfEf/HKPVwPa/mwZfx8BRc+6qSAIXzEYKwcYI0miBU=";
         };
         cargoBuildFlags = [ "-p" "domicile-relay" "--bin" "domicile-relay" ];
         doCheck = false;
@@ -702,7 +702,7 @@
           lockFile = ./Cargo.lock;
           # The Smithay fork `[patch.crates-io]` in `Cargo.toml` names. Update
           # with its `rev`, and drop with it.
-          outputHashes."smithay-0.7.0" = "sha256-KurBCYl6xnT77V5pO/MI/IhI4BJhwAzwjDUzmkJ/VW8=";
+          outputHashes."smithay-0.7.0" = "sha256-QvfEf/HKPVwPa/mwZfx8BRc+6qSAIXzEYKwcYI0miBU=";
         };
 
         nativeBuildInputs = [

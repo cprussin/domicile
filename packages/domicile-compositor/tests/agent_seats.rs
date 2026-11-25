@@ -394,3 +394,119 @@ fn an_agent_that_left_sends_nothing() {
         "a gone agent still typed: {refused:?}"
     );
 }
+
+/// Opens a window titled `title` whose client is started with `extra`, and
+/// returns it with its app id.
+fn a_window(
+    compositor: &Compositor,
+    chrome: &mut domicile_test_chrome::Chrome,
+    title: &str,
+    extra: &[&str],
+) -> (Client, String) {
+    let client = compositor.client_with(title, extra);
+    let appeared = chrome
+        .wait_for(|message| {
+            matches!(message, HostMessage::AppAppeared { title: Some(t), .. } if t == title)
+        })
+        .expect("a client that opened a window is announced to the chrome");
+    let HostMessage::AppAppeared { app_id, .. } = appeared else {
+        unreachable!("the wait matched on this variant")
+    };
+    (client, app_id)
+}
+
+/// Gives the user's keyboard to `app_id`, as the shell does on a click.
+fn the_user_focuses(
+    compositor: &Compositor,
+    chrome: &mut domicile_test_chrome::Chrome,
+    app_id: &str,
+    times: usize,
+) {
+    chrome
+        .say(&ChromeMessage::FocusApp {
+            app_id: app_id.to_string(),
+        })
+        .expect("the chrome forwards the user's focus");
+    compositor.wait_for_log_times("keyboard focus -> client", times);
+}
+
+/// An agent copies and pastes on a clipboard of its own: its copy reaches
+/// the window it pastes in, never the user's clipboard, and the user's copy
+/// never reaches the agent.
+#[test]
+fn an_agent_copies_and_pastes_on_its_own_clipboard() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let (_users_copier, users_copier) = a_window(
+        &compositor,
+        &mut chrome,
+        "users copier",
+        &[
+            "--copy",
+            "the user's copy",
+            "--copy-primary",
+            "the user's selection",
+        ],
+    );
+    let (_agents_copier, agents_copier) = a_window(
+        &compositor,
+        &mut chrome,
+        "agents copier",
+        &[
+            "--copy",
+            "the agent's copy",
+            "--copy-primary",
+            "the agent's selection",
+        ],
+    );
+    let (mut agents_paste, agents_pasting) =
+        a_window(&compositor, &mut chrome, "agents paste", &["--paste"]);
+    let (mut users_paste, users_pasting) =
+        a_window(&compositor, &mut chrome, "users paste", &["--paste"]);
+    the_user_focuses(&compositor, &mut chrome, &users_copier, 1);
+    let (_held, session) = an_agent_let_in(&compositor, &mut chrome);
+
+    for window in [&agents_copier, &agents_pasting] {
+        assert_eq!(
+            as_the_agent(
+                &compositor,
+                session,
+                vec![EmulatedInput::Focus {
+                    window: window.clone()
+                }]
+            ),
+            None
+        );
+    }
+    for (what, line) in [
+        ("clipboard", "clipboard: the agent's copy"),
+        ("middle-click selection", "primary: the agent's selection"),
+    ] {
+        assert!(
+            agents_paste.wait_for_trace(line, 1),
+            "the agent's {what} never reached the window it pasted in; it traced:\n{}",
+            agents_paste.trace()
+        );
+    }
+
+    the_user_focuses(&compositor, &mut chrome, &users_pasting, 2);
+    for (what, line) in [
+        ("clipboard", "clipboard: the user's copy"),
+        ("middle-click selection", "primary: the user's selection"),
+    ] {
+        assert!(
+            users_paste.wait_for_trace(line, 1),
+            "the user's {what} did not survive the agent's copy; their window traced:\n{}",
+            users_paste.trace()
+        );
+    }
+    let (agents, users) = (agents_paste.trace(), users_paste.trace());
+    assert!(
+        !agents.contains("the user's"),
+        "the user's clipboard reached the agent:\n{agents}"
+    );
+    assert!(
+        !users.contains("the agent's"),
+        "the agent's clipboard reached the user:\n{users}"
+    );
+}

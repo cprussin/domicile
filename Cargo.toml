@@ -75,8 +75,8 @@ codegen-units = 1
 # Smithay 0.7.0 with Smithay/smithay#2217 backported: `wl_keyboard.keymap` is
 # sent read-only, so SELinux lets confined clients such as wezterm receive it.
 # Branch `agent-seats-shared-resources` of the fork: `domicile-0.7` plus seats
-# that share another seat's client objects, for agent seats. Drop this once a
-# Smithay release contains #2217 and those; `a_client_is_handed_a_read_only_keymap`
-# checks the release.
+# that share another seat's client objects and selection devices, for agent
+# seats. Drop this once a Smithay release contains #2217 and those;
+# `a_client_is_handed_a_read_only_keymap` checks the release.
 [patch.crates-io]
-smithay = { git = "https://github.com/cprussin/smithay", rev = "57ebb74dda59438a2d304bc91a995153658d76c1" }
+smithay = { git = "https://github.com/cprussin/smithay", rev = "c64bd8447c1b6be05c1b9e0f536e9cfaaaae4638" }

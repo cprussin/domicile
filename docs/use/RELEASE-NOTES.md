@@ -7,6 +7,10 @@ building shells is in [Domicile's release notes](../RELEASE-NOTES.md).
 
 _Unreleased_
 
+### Agents copy and paste on their own clipboard
+
+An agent now has a clipboard of its own. What it copies never replaces what you copied, and stays out of your clipboard history.
+
 ### Agents get their own pointer and keyboard
 
 An agent now clicks and types with a pointer and keyboard of its own, so it can work in one app while you work in another. It never moves your pointer or changes what you're typing in, and an app you're using stays yours.

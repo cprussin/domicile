@@ -69,8 +69,10 @@ resources per client.
 
 ### Clipboard
 
-Each seat has its own selection. A client sees the selection of the seat
-driving it, so an agent's copy never replaces the user's clipboard. Copying
+Each seat has its own clipboard and primary selection. A client sees the
+selection of the seat driving it, so an agent's copy never replaces the
+user's clipboard. Clipboard managers (data control) and the clipboard
+history see only the user's. An agent's selection ends with its session. Copying
 between them is explicit: a future `clipboard_read` / `clipboard_write` tool.
 
 ### Shell primitives
@@ -117,7 +119,7 @@ domicile.seats.giveBack(windowId);
       takeover (`src/agent_seats.rs`)
 - [x] compositor: emulated input tagged with its seat (`ChromeMessage::Emulate`
       names the grant)
-- [ ] compositor: a selection per seat
+- [x] compositor: a selection per seat (Smithay `share_selection_devices`)
 - [ ] engine: CDP raw input for browser windows from the agent seat
 - [ ] protocol and SDK: `seats`, `heldBy`, `takeOver`, `giveBack`
 - [x] MCP: raw tools on the agent seat

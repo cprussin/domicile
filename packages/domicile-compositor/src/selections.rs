@@ -62,12 +62,23 @@ impl SelectionHandler for DomicileCompositor {
     ///
     /// Both clipboards are read; the primary only so the browser can paste it.
     /// It gets no history.
+    ///
+    /// An agent's copy stays on its seat: it is not read, so it reaches
+    /// neither the history, the browser nor portals.
     fn new_selection(
         &mut self,
         target: SelectionTarget,
         source: Option<SelectionSource>,
-        _seat: Seat<Self>,
+        seat: Seat<Self>,
     ) {
+        if seat != self.seat {
+            debug!(
+                ?target,
+                seat = seat.name(),
+                "an agent copied, onto its own clipboard"
+            );
+            return;
+        }
         // A cleared selection (`None`) or one with no text or image (a file)
         // is not read; the previous copy stays.
         self.copying[at(clipboard_of(target))] = source

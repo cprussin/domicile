@@ -72,9 +72,14 @@ impl SeatHandler for DomicileCompositor {
     /// `None` means no surface is focused. The chrome is an ordinary client
     /// here and gets the clipboard the same way.
     ///
-    /// An agent's seat has no clipboard here: only the windows it holds
-    /// change, which stay activated.
+    /// An agent's seat has a clipboard of its own, offered the same way to the
+    /// client its keyboard is in.
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {
+        let client = focused.and_then(|on| on.client());
+        set_data_device_focus(&self.display_handle, seat, client.clone());
+        // The primary selection follows the same rule, so both pastes work in
+        // the same client.
+        set_primary_focus(&self.display_handle, seat, client);
         if seat != &self.seat {
             let users = self.seat.get_keyboard().unwrap().current_focus();
             let mut activated = self.agent_seats.focused(seat);
@@ -82,11 +87,6 @@ impl SeatHandler for DomicileCompositor {
             self.activate_with(users.as_ref(), &activated);
             return;
         }
-        let client = focused.and_then(|on| on.client());
-        set_data_device_focus(&self.display_handle, seat, client.clone());
-        // The primary selection follows the same rule, so both pastes work in
-        // the same client.
-        set_primary_focus(&self.display_handle, seat, client);
         let agents = self.agent_seats.focused(seat);
         self.activate_with(focused, &agents);
         self.report_running_apps(focused);

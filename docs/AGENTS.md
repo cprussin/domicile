@@ -50,6 +50,9 @@ it, as `domicile pointer --agent <session>` and the like:
   keyboard is in, or for the pointer tools, their pointer.
 - The user wins. Their pointer entering an app takes it from the agent's
   pointer, and their keyboard, from both.
+- The seat has its own clipboard and middle-click selection. An app the
+  agent types in copies to and pastes from the agent's, never the user's,
+  and the clipboard history leaves them out. They go when the session ends.
 
 `send_shell` acts on the user's focus, so it is refused until the user has left
 this computer's keyboard, pointer and touch alone for 30 seconds

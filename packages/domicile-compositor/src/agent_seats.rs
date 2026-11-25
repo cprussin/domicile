@@ -14,6 +14,10 @@
 //!   agent's pointer, and their keyboard entering one takes it from the
 //!   agent's pointer and keyboard both, before the user's seat says `enter`.
 //!
+//! Each agent seat has its own clipboard and primary selection too. An app
+//! the agent types in copies to and pastes from the agent's, never the
+//! user's, and clipboard managers and the history see only the user's.
+//!
 //! The agent's input arrives as [`crate::eis::Emulated`] events, laid out on
 //! the desk by the same translation as the user's emulated input. Only native
 //! windows take it: the shell and browser windows are the engine's, and the
@@ -29,6 +33,9 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::Resource;
 use smithay::utils::SERIAL_COUNTER;
 use smithay::wayland::compositor::with_states;
+use smithay::wayland::selection::data_device::clear_data_device_selection;
+use smithay::wayland::selection::primary_selection::clear_primary_selection;
+use smithay::wayland::selection::share_selection_devices;
 use smithay::wayland::shell::xdg::PopupSurface;
 use tracing::debug;
 
@@ -167,6 +174,10 @@ impl DomicileCompositor {
         let (keyboard, pointer) = agent.devices();
         keyboard.set_focus(self, None, SERIAL_COUNTER.next_serial());
         self.agent_pointer_leaves(&pointer);
+        // What it copied goes with it: the app that copied it is told it
+        // no longer holds a clipboard.
+        clear_data_device_selection(&self.display_handle, &agent.seat);
+        clear_primary_selection(&self.display_handle, &agent.seat);
         self.seat_state.remove_seat(&agent.seat);
         debug!(session, "an agent's seat went with its session");
         self.activate(self.seat.get_keyboard().unwrap().current_focus().as_ref());
@@ -230,6 +241,9 @@ impl DomicileCompositor {
             .set_keymap_from_string(self, keymap)
             .expect("the compositor wrote this keymap, so xkb reads it back");
         seat.add_pointer_sharing_objects(&self.seat.get_pointer().unwrap());
+        // Its own clipboard and primary selection, offered and set through
+        // the same clients' devices as the user's.
+        share_selection_devices(&seat, &self.seat);
         debug!(session, "an agent's seat was made");
         self.agent_seats.seats.insert(
             session,

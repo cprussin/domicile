@@ -8,6 +8,12 @@ in the manganese desktop is in
 
 _Unreleased_
 
+### Agents copy and paste on a clipboard of their own
+
+An agent session's seat has its own clipboard and middle-click selection. An app the agent types in copies to and pastes from the agent's, so an agent's copy never replaces the user's, and clipboard managers and the clipboard history see only the user's. The agent's go when its session ends.
+
+[Agents](AGENTS.md) · [Agent seats](architecture/AGENT-SEATS.md#clipboard)
+
 ### Agents get their own pointer and keyboard
 
 Each agent session has a seat of its own, so an agent clicks and types in one native window while the user works in another, and never moves the user's pointer or focus. `domicile pointer`, `drag`, `scroll`, `key`, `type` and `focus-window` take `--agent <session>`, and `domicile agent` prints the session. One seat drives an app at a time, and the user wins an app both want. Shell commands still wait until the user has been away for 30 seconds: `domicile idle-time --json` adds `local_seconds`, which counts only the computer's own keyboard, pointer and touch.
