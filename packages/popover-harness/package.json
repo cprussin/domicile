@@ -1,0 +1,51 @@
+{
+  "dependencies": {
+    "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/manganese-bar": "workspace:*",
+    "@domicile-desktop/manganese-bar-module-battery": "workspace:*",
+    "@domicile-desktop/manganese-bar-module-downloads": "workspace:*",
+    "@domicile-desktop/manganese-bar-module-notifications": "workspace:*",
+    "@domicile-desktop/manganese-bar-module-sharing": "workspace:*",
+    "@domicile-desktop/manganese-bar-module-tray": "workspace:*",
+    "@domicile-desktop/manganese-notifications": "workspace:*",
+    "@domicile-desktop/manganese-quick-settings": "workspace:*",
+    "@domicile-desktop/manganese-window-management": "workspace:*",
+    "@domicile-desktop/react": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
+    "@phosphor-icons/react": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "description": "Opens each bar popover crowded with rows on a small screen, in Chromium through Playwright, and fails on any that runs off the screen.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/check-runner": "workspace:*",
+    "@domicile-desktop/test-support": "workspace:*",
+    "@pandacss/dev": "catalog:",
+    "@storybook/react-vite": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "playwright": "catalog:",
+    "postcss": "catalog:",
+    "storybook": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  },
+  "engines": {
+    "bun": ">=1.4.2"
+  },
+  "license": "MIT",
+  "name": "@domicile-desktop/popover-harness",
+  "private": true,
+  "scripts": {
+    "build:storybook": "storybook build",
+    "prepare": "panda codegen --log-level silent && panda cssgen --log-level silent",
+    "start:dev": "storybook dev -p 4002",
+    "test:shell": "check-runner tests/*.sh",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

@@ -1,0 +1,32 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "build:storybook": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!README.md",
+        "!**/*.test.*",
+        "$TURBO_ROOT$/packages/component-library/src/**/*.{ts,tsx}",
+        "$TURBO_ROOT$/packages/manganese-*/src/**/*.{ts,tsx}"
+      ]
+    },
+    "prepare": {
+      "inputs": [
+        "panda.config.ts",
+        "src/**/*.{ts,tsx}",
+        "package.json",
+        "$TURBO_ROOT$/packages/component-library/src/**/*.{ts,tsx}",
+        "$TURBO_ROOT$/packages/manganese-*/src/**/*.{ts,tsx}"
+      ]
+    },
+    "test:shell": {
+      "cache": false,
+      "dependsOn": ["build:storybook"],
+      "passThroughEnv": [
+        "DOMICILE_CHECK_LOG_DIR",
+        "DOMICILE_POPOVER_CHROMIUM",
+        "PLAYWRIGHT_BROWSERS_PATH"
+      ]
+    }
+  }
+}

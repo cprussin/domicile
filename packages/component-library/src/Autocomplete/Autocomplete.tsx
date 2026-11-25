@@ -275,7 +275,7 @@ const popupStyles = css({
   flexDirection: "column",
   // Match the field's width, measured by base-ui's positioner.
   inlineSize: "var(--anchor-width)",
-  maxBlockSize: "min(60vh, {spacing.96})",
+  maxBlockSize: "min({spacing.96}, var(--available-height))",
   opacity: 1,
   outlineStyle: "none",
   overflow: "hidden",

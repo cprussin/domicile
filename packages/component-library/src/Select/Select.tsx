@@ -522,7 +522,7 @@ const popupStyles = css({
   // At least the field's width, and wider for long options up to the
   // available space.
   inlineSize: "max-content",
-  maxBlockSize: "min(60vh, {spacing.96})",
+  maxBlockSize: "min({spacing.96}, var(--available-height))",
   maxInlineSize: "var(--available-width)",
   minInlineSize: "var(--anchor-width)",
   opacity: 1,

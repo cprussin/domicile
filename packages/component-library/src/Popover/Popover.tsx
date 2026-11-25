@@ -98,7 +98,8 @@ type Props = ExtendProps<
  * room for. Use `ModalDialog` when the user must respond first.
  *
  * Stays inside its `PopupBoundary`, else on the `<Screen>` region of the
- * trigger that opened it, so it never spans two windows or two monitors.
+ * trigger that opened it, so it never spans two windows or two monitors. It
+ * grows no taller than the room there, and its body scrolls the rest.
  * Triggers elsewhere open it through a `handle` from `createHandle()`, as
  * `Popover.Trigger`.
  *
@@ -302,7 +303,9 @@ const popupStyles = flex({
   boxShadow: "lifted",
   color: "foreground",
   direction: "column",
-  // `--available-width` is the room its `PopupBoundary` leaves it.
+  // `--available-height` and `--available-width` are the room its
+  // `PopupBoundary` or screen leaves it. The body scrolls past the height.
+  maxBlockSize: "var(--available-height)",
   maxInlineSize: "min({spacing.88}, 90vw, var(--available-width))",
   opacity: 1,
   outlineStyle: "none",
@@ -322,6 +325,10 @@ const titleStyles = css({
   margin: 0,
 });
 
+// Scrolls what the panel's height cuts off. A child with `minBlockSize: 0`
+// shrinks to fit instead, to scroll a part of itself. The margin and padding
+// cancel out, leaving room inside the scrolled box for focus rings at its
+// edges.
 const bodyStyles = cva({
   base: {
     "[data-tone=overPhoto] > &": {
@@ -333,11 +340,16 @@ const bodyStyles = cva({
     fontSize: "xs",
     gap: 2,
     lineHeight: "normal",
+    margin: -1,
+    minBlockSize: 0,
+    overflowY: "auto",
+    overscrollBehavior: "contain",
+    padding: 1,
   },
   variants: {
     hasTitle: {
-      false: { paddingBlockStart: 0 },
-      true: { paddingBlockStart: 1.5 },
+      false: { paddingBlockStart: 1 },
+      true: { paddingBlockStart: 2.5 },
     },
   },
 });

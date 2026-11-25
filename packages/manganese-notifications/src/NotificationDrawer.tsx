@@ -273,15 +273,15 @@ const Notifications = ({
     </ul>
   );
 
-// The usual popover's width. The list scrolls past most of the screen's
-// height. The padding evens out the panel's, which is thinner above and
-// below, as in quick settings.
+// The usual popover's width. Shrinks to the panel's height, so the list
+// scrolls under the header. The padding evens out the panel's, which is
+// thinner above and below, as in quick settings.
 const drawerStyles = css({
   display: "flex",
   flexDirection: "column",
   gap: 3,
   inlineSize: 80,
-  maxBlockSize: "80vh",
+  minBlockSize: 0,
   paddingBlock: 1.5,
 });
 

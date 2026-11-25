@@ -82,6 +82,7 @@ Each agent session has a seat of its own, so an agent clicks and types in one na
 
 ### Fixes
 
+- A `Popover` grows no taller than the room on its screen, and its body scrolls the rest; a child with `min-block-size: 0` shrinks to scroll a part of itself. `Select` and `Autocomplete` lists cap at the room too.
 - An extension that asks for a page's language, such as Ghostery, is refused and the desktop stays up. [Extensions](SHELL-EXTENSIONS.md)
 - A picker's event has its anchor in the `<webview>`'s coordinates, wherever the `<webview>` is on the desktop. [Browser windows](SHELL-BROWSER-WINDOWS.md)
 - Setting a site's permission lets a site ask again that Chrome stopped for unanswered requests. [Browser windows](SHELL-BROWSER-WINDOWS.md)

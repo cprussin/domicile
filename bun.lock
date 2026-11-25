@@ -1093,6 +1093,42 @@
         "zod": "catalog:",
       },
     },
+    "packages/popover-harness": {
+      "name": "@domicile-desktop/popover-harness",
+      "version": "0.0.0",
+      "dependencies": {
+        "@domicile-desktop/component-library": "workspace:*",
+        "@domicile-desktop/manganese-bar": "workspace:*",
+        "@domicile-desktop/manganese-bar-module-battery": "workspace:*",
+        "@domicile-desktop/manganese-bar-module-downloads": "workspace:*",
+        "@domicile-desktop/manganese-bar-module-notifications": "workspace:*",
+        "@domicile-desktop/manganese-bar-module-sharing": "workspace:*",
+        "@domicile-desktop/manganese-bar-module-tray": "workspace:*",
+        "@domicile-desktop/manganese-notifications": "workspace:*",
+        "@domicile-desktop/manganese-quick-settings": "workspace:*",
+        "@domicile-desktop/manganese-window-management": "workspace:*",
+        "@domicile-desktop/react": "workspace:*",
+        "@domicile-desktop/sdk": "workspace:*",
+        "@phosphor-icons/react": "catalog:",
+        "react": "catalog:",
+        "react-dom": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/check-runner": "workspace:*",
+        "@domicile-desktop/test-support": "workspace:*",
+        "@pandacss/dev": "catalog:",
+        "@storybook/react-vite": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "playwright": "catalog:",
+        "postcss": "catalog:",
+        "storybook": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+      },
+    },
     "packages/react": {
       "name": "@domicile-desktop/react",
       "version": "0.2.0",
@@ -1675,6 +1711,8 @@
     "@domicile-desktop/manganese-window-management": ["@domicile-desktop/manganese-window-management@workspace:packages/manganese-window-management"],
 
     "@domicile-desktop/motion-harness": ["@domicile-desktop/motion-harness@workspace:packages/motion-harness"],
+
+    "@domicile-desktop/popover-harness": ["@domicile-desktop/popover-harness@workspace:packages/popover-harness"],
 
     "@domicile-desktop/react": ["@domicile-desktop/react@workspace:packages/react"],
 

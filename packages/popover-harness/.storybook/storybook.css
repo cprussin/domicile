@@ -1,0 +1,7 @@
+@layer reset, base, tokens, recipes, utilities;
+
+/* As the shell's: the desk never scrolls, so a panel that runs off the screen
+   stays off it. */
+:root {
+  overflow: clip;
+}

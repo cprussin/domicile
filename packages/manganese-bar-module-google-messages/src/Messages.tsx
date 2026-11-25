@@ -192,11 +192,14 @@ const itemStyles = css({
 // The panel is flush, so the request gets its own inset.
 const askStyles = css({ padding: 2 });
 
-// Wide enough for Messages' list and conversation side by side, within the
-// screen. `display: block` avoids a line-box gap under it in the panel.
+// Wide enough for Messages' list and conversation side by side. Shrinks to
+// the panel's room on a smaller screen. `display: block` avoids a line-box gap
+// under it in the panel.
 const viewStyles = css({
-  blockSize: "min({spacing.160}, 80vh)",
+  blockSize: "{spacing.160}",
   borderStyle: "none",
   display: "block",
-  inlineSize: "min({spacing.240}, 90vw)",
+  inlineSize: "{spacing.240}",
+  maxInlineSize: "100%",
+  minBlockSize: 0,
 });

@@ -54,6 +54,7 @@ An agent now clicks and types with a pointer and keyboard of its own, so it can 
 ### Fixes
 
 - Element no longer says it is open in another window after you log out and quickly in again.
+- Bar panels such as notifications, agents, downloads, quick settings and the tray menu stay on their screen and scroll when they hold more than fits, even on a small screen beside a taller one.
 
 ## 1.3.0
 
