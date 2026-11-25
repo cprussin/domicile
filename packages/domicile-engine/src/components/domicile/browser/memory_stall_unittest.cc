@@ -11,10 +11,10 @@ namespace domicile {
 namespace {
 
 TEST(StalledPercentTest, ReadsSomeTasksLastTenSeconds) {
-  EXPECT_EQ(StalledPercent(
-                "some avg10=12.50 avg60=3.10 avg300=0.40 total=1234\n"
-                "full avg10=99.00 avg60=2.00 avg300=0.20 total=567\n"),
-            12.5);
+  EXPECT_EQ(
+      StalledPercent("some avg10=12.50 avg60=3.10 avg300=0.40 total=1234\n"
+                     "full avg10=99.00 avg60=2.00 avg300=0.20 total=567\n"),
+      12.5);
 }
 
 TEST(StalledPercentTest, ReadsNoneFromOtherText) {
