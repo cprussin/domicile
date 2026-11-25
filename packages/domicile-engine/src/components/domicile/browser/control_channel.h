@@ -62,10 +62,13 @@ using KeymapSink = base::RepeatingCallback<void(const std::string&)>;
 // in a callback rather than in a line of JSON. A page's own coordinates, in
 // CSS pixels, so this target stays free of //ui and of the window the point is
 // clamped into. See components/domicile/browser/pointer_warp.h.
-// `unless_over` is the box the pointer stays put over; see
-// `PointerAlreadyOver`.
-using PointerWarpSink = base::RepeatingCallback<
-    void(double x, double y, const std::optional<gfx::RectF>& unless_over)>;
+// `only_over` and `unless_over` are the boxes the pointer moves from and stays
+// put over; see `PointerWarps`.
+using PointerWarpSink =
+    base::RepeatingCallback<void(double x,
+                                 double y,
+                                 const std::vector<gfx::RectF>& only_over,
+                                 const std::optional<gfx::RectF>& unless_over)>;
 
 // How a `confine_pointer` reaches the cursor it is about, for
 // PointerWarpSink's reasons: boxes in the page's CSS pixels, none to let go.
@@ -188,6 +191,7 @@ class ControlChannel : public mojom::ControlChannel {
   void SyncFrames() override;
   void WarpPointer(double x,
                    double y,
+                   const std::vector<gfx::RectF>& only_over,
                    const std::optional<gfx::RectF>& unless_over) override;
   void ConfinePointer(const std::vector<gfx::RectF>& boxes,
                       ConfinePointerCallback confined) override;

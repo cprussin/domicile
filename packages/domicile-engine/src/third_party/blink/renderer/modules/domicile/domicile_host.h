@@ -195,6 +195,7 @@ class MODULES_EXPORT DomicileHost final
   void warpPointer(ScriptState*,
                    double x,
                    double y,
+                   const HeapVector<Member<DOMRectReadOnly>>& only_over,
                    DOMRectReadOnly* unless_over,
                    ExceptionState&);
   void closeApp(ScriptState*, const String& app_id, ExceptionState&);

@@ -799,12 +799,16 @@ from the agent.
 
 If focus follows the pointer, a keyboard focus change can be undone at once:
 the old window is still under the pointer. Move the pointer with
-`domicile.pointer.warp(x, y)`, in page coordinates (`clientX`/`clientY`).
+`domicile.pointer.warp(x, y, onlyOver, unlessOver)`, in page coordinates
+(`clientX`/`clientY`).
 
+- The pointer moves only while it is over one of the `onlyOver` boxes and not
+  over the `unlessOver` box. The engine checks, since the page cannot see the
+  pointer over a browser window's page.
 - Points outside the page are clamped.
 - In a nested run inside another compositor, nothing moves.
 - `shell-manganese` warps on its own focus changes (keyboard-driven, or a new
-  window taking focus) when the pointer is not already over the window.
+  window taking focus) only when the pointer is over another window.
 
 ### Window scale on several monitors
 

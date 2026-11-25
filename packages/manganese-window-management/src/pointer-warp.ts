@@ -1,11 +1,12 @@
 // Decides where to warp the pointer after the desktop moves focus, like sway's
 // `mouse_warping`.
 //
-// The rule: the pointer moves only when it will not be over the newly focused
-// window once the layout settles. Every focus change `usePointerWarp` answers
-// goes through `warpTo`, which hands the engine that window's frame: the page
-// cannot see the pointer move over a browser window's page, so the engine,
-// which can, makes the check. See
+// The rule: the pointer moves only when the focus changed and the pointer is
+// over another window once the layout settles, which would take focus back.
+// Over the top bar or an empty screen it stays put. Every focus change
+// `usePointerWarp` answers goes through `warpTo`, which hands the engine the
+// frames to check: the page cannot see the pointer move over a browser
+// window's page, so the engine, which can, makes the check. See
 // packages/manganese-window-management/docs/WINDOW-MANAGEMENT.md#pointer-warping.
 
 import type { Rect } from "./rect";
@@ -29,7 +30,7 @@ export type Focus = {
   id: string | undefined;
 };
 
-/** A window the screen shows, and its box. */
+/** A window the screen shows, and its frame: just its tab, if hidden. */
 export type Shown = {
   box: Rect;
   id: string;
@@ -38,12 +39,16 @@ export type Shown = {
 type Move = {
   /** The focus before the key press. */
   from: Focus | undefined;
+  /** Every window the screens show, in the new layout. */
+  shown: readonly Shown[];
   /** The focus now. */
   to: Focus | undefined;
 };
 
 /** A warp to ask the engine for. */
 export type Warp = {
+  /** The boxes the pointer moves from: every other shown window's. */
+  onlyOver: readonly Rect[];
   /** Where the pointer goes. */
   to: Spot;
   /** The box the pointer stays put over: the new window's frame. */
@@ -54,28 +59,18 @@ export type Warp = {
  * The warp to ask for, or `undefined` to leave the pointer.
  *
  * Asks only when the focus changed window or box (as `mod+shift+h` does), and
- * only for a pointer outside the new window's frame. A window that slides in
- * under the pointer, such as a neighbor filling a closed window's space, keeps
- * it where it is. Other keys, such as a split or the launcher, must not move
- * the cursor.
+ * only for a pointer over another shown window and outside the new window's
+ * frame. A window that slides in under the pointer, such as a neighbor filling
+ * a closed window's space, keeps it where it is; so does a tab switch with the
+ * pointer over the top bar. Other keys, such as a split or the launcher, must
+ * not move the cursor.
  */
-export const warpTo = ({ from, to }: Move): Warp | undefined =>
-  to === undefined || settled(from, to)
+export const warpTo = ({ from, shown, to }: Move): Warp | undefined => {
+  const others = shown.flatMap(({ box, id }) => (id === to?.id ? [] : [box]));
+  return to === undefined || settled(from, to) || others.length === 0
     ? undefined
-    : { to: middleOf(to.box), unlessOver: to.frame };
-
-/**
- * Whether the pointer is over a shown window other than `focus`.
- *
- * A window that opens only needs the pointer if another window would take
- * focus from it. Over the top bar or an empty screen, nothing would.
- */
-export const overAnother = (
-  shown: readonly Shown[],
-  focus: Focus | undefined,
-  pointer: Spot | undefined,
-): boolean =>
-  shown.some(({ box, id }) => id !== focus?.id && holds(box, pointer));
+    : { onlyOver: others, to: middleOf(to.box), unlessOver: to.frame };
+};
 
 /** Whether the focus stayed on the same window in the same box. */
 const settled = (from: Focus | undefined, to: Focus): boolean =>
@@ -85,16 +80,6 @@ const settled = (from: Focus | undefined, to: Focus): boolean =>
   from.box.y === to.box.y &&
   from.box.width === to.box.width &&
   from.box.height === to.box.height;
-
-/**
- * Whether the pointer is over `box`. An unknown pointer counts as outside.
- */
-const holds = (box: Rect, pointer: Spot | undefined): boolean =>
-  pointer !== undefined &&
-  pointer[0] >= box.x &&
-  pointer[0] <= box.x + box.width &&
-  pointer[1] >= box.y &&
-  pointer[1] <= box.y + box.height;
 
 /**
  * The middle of `box`, rounded to a whole pixel.

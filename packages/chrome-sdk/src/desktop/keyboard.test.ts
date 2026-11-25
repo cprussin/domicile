@@ -93,18 +93,22 @@ describe("keyboard", () => {
 });
 
 describe("pointer", () => {
-  it("warps the pointer", () => {
-    const fake = new FakeDomicileHost();
-    desktop(fake.host).pointer.warp(10, 20);
-
-    expect(fake.calls).toStrictEqual([["warpPointer", 10, 20, undefined]]);
-  });
-
-  it("asks the engine to leave a pointer that is over a box", () => {
+  it("warps a pointer that is over one of the boxes", () => {
     // The page cannot see the pointer over a browser window's page; the
     // engine can.
     const fake = new FakeDomicileHost();
-    desktop(fake.host).pointer.warp(10, 20, {
+    desktop(fake.host).pointer.warp(10, 20, [
+      { height: 4, width: 3, x: 1, y: 2 },
+    ]);
+
+    expect(fake.calls).toStrictEqual([
+      ["warpPointer", 10, 20, [new DOMRectReadOnly(1, 2, 3, 4)], undefined],
+    ]);
+  });
+
+  it("asks the engine to leave a pointer that is over a box", () => {
+    const fake = new FakeDomicileHost();
+    desktop(fake.host).pointer.warp(10, 20, [], {
       height: 4,
       width: 3,
       x: 1,
@@ -112,7 +116,7 @@ describe("pointer", () => {
     });
 
     expect(fake.calls).toStrictEqual([
-      ["warpPointer", 10, 20, new DOMRectReadOnly(1, 2, 3, 4)],
+      ["warpPointer", 10, 20, [], new DOMRectReadOnly(1, 2, 3, 4)],
     ]);
   });
 

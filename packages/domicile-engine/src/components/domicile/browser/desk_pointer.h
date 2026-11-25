@@ -69,8 +69,8 @@ class DeskPointer {
   ListenerId AddListener(Moved moved);
   void RemoveListener(ListenerId listener);
 
-  // Where the pointer is now, for a warp that stays put over a box. See
-  // `PointerAlreadyOver`.
+  // Where the pointer is now, for a warp that depends on what it is over. See
+  // `PointerWarps`.
   DeskPointerAt Now();
 
   // The pointer is at `at`, or left the desk. A place it is already at tells

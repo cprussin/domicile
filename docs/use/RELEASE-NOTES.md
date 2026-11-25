@@ -7,6 +7,10 @@ building shells is in [Domicile's release notes](../RELEASE-NOTES.md).
 
 _Unreleased_
 
+### The pointer stays on the top bar when you switch tabs
+
+Switching tabs or windows with the keyboard no longer moves the pointer off the top bar. It moves only when it's over another window, which would otherwise take focus back.
+
 ### See when you've taken over from an agent
 
 Click or type in a window an agent is using and it's clear the window is now yours. Its ring turns amber and says the agent is paused, a banner slides in under the title bar with **Give back**, and the agent pill turns amber and says for a few seconds which window you took. Give the window back from the banner, the notice or the pill.

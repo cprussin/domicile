@@ -706,11 +706,13 @@ void DomicileHost::syncFrames(ScriptState*, ExceptionState& exception_state) {
   }
 }
 
-void DomicileHost::warpPointer(ScriptState*,
-                               double x,
-                               double y,
-                               DOMRectReadOnly* unless_over,
-                               ExceptionState& exception_state) {
+void DomicileHost::warpPointer(
+    ScriptState*,
+    double x,
+    double y,
+    const HeapVector<Member<DOMRectReadOnly>>& only_over,
+    DOMRectReadOnly* unless_over,
+    ExceptionState& exception_state) {
   // A coordinate that is not a number is not a place, and every arithmetic
   // that follows it -- the browser's clamp into this page's box, the round to
   // a pixel -- would carry it. Refused here because the page is where the
@@ -731,10 +733,22 @@ void DomicileHost::warpPointer(ScriptState*,
     exception_state.ThrowTypeError("warpPointer: unlessOver must be finite");
     return;
   }
+  // Refused for the same reason: a NaN box would never hold the pointer.
+  Vector<gfx::RectF> from;
+  for (const DOMRectReadOnly* box : only_over) {
+    if (!std::isfinite(box->x()) || !std::isfinite(box->y()) ||
+        !std::isfinite(box->width()) || !std::isfinite(box->height())) {
+      exception_state.ThrowTypeError("warpPointer: onlyOver must be finite");
+      return;
+    }
+    from.push_back(gfx::RectF(box->left(), box->top(),
+                              box->right() - box->left(),
+                              box->bottom() - box->top()));
+  }
   if (Ready(exception_state)) {
     warp_landing_.Warped(gfx::PointF(x, y));
     channel_->WarpPointer(
-        x, y,
+        x, y, from,
         unless_over == nullptr
             ? std::nullopt
             : std::make_optional(gfx::RectF(

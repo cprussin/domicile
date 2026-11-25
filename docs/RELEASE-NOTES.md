@@ -8,6 +8,12 @@ in the manganese desktop is in
 
 _Unreleased_
 
+### Pointer warps only from over another window
+
+`domicile.pointer.warp(x, y, onlyOver, unlessOver)` takes a required list of boxes: the engine moves the pointer only while it is over one of them and not over `unlessOver`. Pass the other windows' frames so a focus change leaves a pointer over your bar where it is.
+
+[Writing a shell](WRITING-A-SHELL.md#focus-follows-the-mouse)
+
 ### Panda CSS 2
 
 The component library's preset and manganese's Panda config are built for Panda CSS 2. A shell that runs Panda with either needs `@pandacss/dev@2`. `@domicile-desktop/manganese/css` and its other generated entry points are `index.js` files, as Panda 2 writes them.
