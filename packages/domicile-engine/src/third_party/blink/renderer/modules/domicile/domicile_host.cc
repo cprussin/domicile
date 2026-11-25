@@ -3173,8 +3173,7 @@ void DomicileHost::ListBrowserWindows() {
         window->width, window->height, window->private_browsing,
         window->partition,
         window->profile.empty() ? String() : String(window->profile),
-        window->app, window->app_id, window->captured,
-        window->discarded,
+        window->app, window->app_id, window->captured, window->discarded,
         toplevel_id == browser_toplevel_ids_.end() ? String()
                                                    : toplevel_id->value,
         window->parent.empty() ? String() : String(window->parent), window->x,

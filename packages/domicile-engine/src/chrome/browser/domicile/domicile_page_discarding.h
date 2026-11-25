@@ -20,8 +20,8 @@ namespace domicile {
 
 // Unloads pages while the computer is short of memory, as Chrome's Memory
 // Saver policies do for tabs. Those ask for a tab strip, which a desk's pages
-// are in none of, so this is PageDiscardingHelper's urgent discard over
-// its candidates: the one shown longest ago that DiscardEligibilityPolicy would let
+// are in none of, so this is PageDiscardingHelper's urgent discard over its
+// candidates: the one hidden longest that DiscardEligibilityPolicy would let
 // go, again every few seconds until the shortage ends.
 class PageDiscarding {
  public:
