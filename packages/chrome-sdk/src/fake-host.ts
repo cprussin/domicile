@@ -115,6 +115,7 @@ export const describedWindow = (
   height: null,
   heldBy: null,
   inhibitsShortcuts: false,
+  launchedFrom: null,
   maxHeight: null,
   maxWidth: null,
   minHeight: null,
@@ -296,7 +297,8 @@ export class FakeDomicileHost {
    * `openPrivateBrowserWindow` with `isPrivate`, and `openApp` with `isApp`
    * and `appId`. Ids count up from `"1"`; the asked-for size is 0 unless
    * `width` and `height` give one. With a `parent`, it is an Electron app's
-   * view in that window, at `x` and `y`. It is in `profile`, or as the
+   * view in that window, at `x` and `y`. An `opener` names the window whose
+   * page opened it. It is in `profile`, or as the
    * engine picks: none for an app window (an app module's or Electron
    * app's; `openApp` names one), else the default private profile
    * when `isPrivate` and the default one otherwise, from `browserProfiles`
@@ -309,6 +311,7 @@ export class FakeDomicileHost {
       isApp = false,
       isHidden = false,
       isPrivate = false,
+      opener = null,
       parent = null,
       partition = "",
       popupWindow = null,
@@ -325,6 +328,7 @@ export class FakeDomicileHost {
         | "isApp"
         | "isHidden"
         | "isPrivate"
+        | "opener"
         | "parent"
         | "partition"
         | "popupWindow"
@@ -356,6 +360,7 @@ export class FakeDomicileHost {
           menuBarAutoHide: false,
           menuBarVisible: true,
           messageBox: null,
+          opener,
           parent,
           partition,
           popupMenu: null,

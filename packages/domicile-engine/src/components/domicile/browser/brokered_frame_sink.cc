@@ -164,6 +164,19 @@ void BrokeredFrameSink::Embed(const viz::FrameSinkId& parent_frame_sink_id,
   }
 }
 
+void BrokeredFrameSink::SetShown(bool shown) {
+  if (shown == shown_) {
+    return;
+  }
+  shown_ = shown;
+  VLOG(1) << "domicile: app " << app_id_ << " ("
+          << frame_sink_id_.ToString() << ") is "
+          << (shown ? "shown again" : "shown by no element");
+  if (observer_) {
+    observer_->OnSurfaceShown(shown);
+  }
+}
+
 uint64_t BrokeredFrameSink::ImportBuffer(
     gfx::GpuMemoryBufferHandle handle,
     const gfx::Size& size,

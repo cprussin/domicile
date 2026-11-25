@@ -33,8 +33,13 @@ const PRIMITIVES: Readonly<Record<string, string>> = {
   "unsigned short": "number",
 };
 
-/** Interfaces `lib.dom` declares, which the IDL takes by name. */
-const PLATFORM_TYPES: ReadonlySet<string> = new Set(["DOMRectReadOnly"]);
+/** Interfaces and typed arrays `lib.dom` declares, which the IDL takes by name. */
+const PLATFORM_TYPES: ReadonlySet<string> = new Set([
+  "DOMRectReadOnly",
+  "Element",
+  "Float32Array",
+  "Uint8Array",
+]);
 
 /** Bases `lib.dom` declares. `EventTarget` is handled by `listeners`. */
 const PLATFORM_BASES: ReadonlySet<string> = new Set(["Event", "EventInit"]);

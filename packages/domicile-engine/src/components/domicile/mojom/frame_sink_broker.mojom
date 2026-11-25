@@ -44,6 +44,12 @@ interface SurfaceObserver {
   //
   // This is wl_buffer.release.
   OnBufferReleased(uint64 buffer_id);
+
+  // Whether an <app> element in a page shows this surface: false once the
+  // last one that embedded it leaves its page, true once one is back. Sent
+  // only when that changes; a surface starts out shown. The producer keeps a
+  // closed window's last frame only while it is.
+  OnSurfaceShown(bool shown);
 };
 
 // A mode a connector advertises.

@@ -751,7 +751,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
   // Content navigates it, so this does not.
   void Adopt(std::unique_ptr<content::WebContents> contents,
              const GURL& target_url,
-             const gfx::Size& size) {
+             const gfx::Size& size,
+             const std::string& opener) {
     std::unique_ptr<WebViewGuest> guest =
         WebViewGuest::AdoptOpenedWindow(std::move(contents));
     WatchProfileOf(*guest);
@@ -759,10 +760,15 @@ class DeskWindows final : public base::SupportsUserData::Data,
     auto watch = std::make_unique<Watch>(
         guest->contents(), id,
         base::BindRepeating(&DeskWindows::Changed, base::Unretained(this)));
-    windows_.push_back(Window{
-        id, std::move(guest), std::move(watch), size.width(), size.height(),
-        /*app=*/false, /*profiled=*/true, /*app_id=*/std::string(),
-        target_url});
+    windows_.push_back(Window{.id = id,
+                              .guest = std::move(guest),
+                              .watch = std::move(watch),
+                              .width = size.width(),
+                              .height = size.height(),
+                              .app = false,
+                              .profiled = true,
+                              .opened_at = target_url,
+                              .opener = opener});
     Changed();
   }
 
@@ -1115,6 +1121,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
     // [{"x", "y", "width", "height"}, ...], empty for all of it (no shape,
     // or Electron's empty one).
     std::string shape;
+    // The browser window whose page opened it; empty for none.
+    std::string opener;
   };
 
   // `menu` as the shell lists it over `window`: {"menu": its entries, "x",
@@ -1174,7 +1182,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
                                       : std::string(),
         window.wanted_state.maximized, window.wanted_state.minimized,
         window.wanted_state.fullscreen, window.urgent, window.ignores_pointer,
-        window.shape);
+        window.shape, window.opener);
   }
 
   // Makes a window and gives it its first page with `load`. Returns it, or
@@ -1389,9 +1397,10 @@ class Host final : public BrowserWindowHost {
 
   void AdoptOpenedWindow(std::unique_ptr<content::WebContents> contents,
                          const GURL& target_url,
-                         const gfx::Size& size) override {
+                         const gfx::Size& size,
+                         const std::string& opener) override {
     content::BrowserContext& context = *contents->GetBrowserContext();
-    Windows(context).Adopt(std::move(contents), target_url, size);
+    Windows(context).Adopt(std::move(contents), target_url, size, opener);
   }
 
   void OpenPopupWindow(content::BrowserContext& context,

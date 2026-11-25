@@ -119,6 +119,9 @@ pub struct App {
     /// The page anchor the client asked to be laid out at. See
     /// [`HostMessage::AppAnchored`].
     pub anchor: Option<String>,
+    /// Where the latest launch the window answered started. See
+    /// [`HostMessage::AppLaunchedFrom`].
+    pub launched_from: Option<String>,
     /// The window's latest synced frame. See [`Host::sync_frame`].
     pub frame: u32,
 }
@@ -773,6 +776,7 @@ impl Host {
                 max_size: NO_LIMIT,
                 inhibits_shortcuts: false,
                 anchor: None,
+                launched_from: None,
                 frame: 0,
             },
         );
@@ -1061,6 +1065,19 @@ impl Host {
         }
     }
 
+    /// Record the launch a window answered. Returns the chrome notification,
+    /// or `None` if the app is unknown, unannounced or named that launch
+    /// already.
+    pub fn app_launched_from(&mut self, app_id: &str, from: String) -> Option<HostMessage> {
+        let app = self.apps.get_mut(app_id)?;
+        if app.launched_from.as_ref() == Some(&from) {
+            None
+        } else {
+            app.launched_from = Some(from);
+            reported(app, launching(app)?)
+        }
+    }
+
     /// Record whether a window holds a shortcuts inhibitor. Returns the chrome
     /// notification, or `None` if the app is unknown or nothing changed.
     pub fn app_inhibits_shortcuts(&mut self, app_id: &str, inhibits: bool) -> Option<HostMessage> {
@@ -1300,9 +1317,9 @@ fn placed(popup: &Popup) -> HostMessage {
     }
 }
 
-/// Messages announcing a window, then its size limits, parent, urgency and
-/// any shortcuts inhibitor. Those come second because a chrome needs the
-/// window first.
+/// Messages announcing a window, then its size limits, parent, urgency, any
+/// shortcuts inhibitor, its anchor and the launch it answered. Those come
+/// second because a chrome needs the window first.
 fn announced(app: &App, mapped: Mapped) -> Vec<HostMessage> {
     let appeared = HostMessage::AppAppeared {
         app_id: app.app_id.clone(),
@@ -1332,6 +1349,7 @@ fn announced(app: &App, mapped: Mapped) -> Vec<HostMessage> {
             inhibits: true,
         });
     let anchor = app.anchor.is_some().then(|| anchoring(app));
+    let launched = launching(app);
     std::iter::once(appeared)
         .chain(min)
         .chain(max)
@@ -1339,6 +1357,7 @@ fn announced(app: &App, mapped: Mapped) -> Vec<HostMessage> {
         .chain(urgent)
         .chain(inhibits)
         .chain(anchor)
+        .chain(launched)
         .collect()
 }
 
@@ -1348,6 +1367,16 @@ fn anchoring(app: &App) -> HostMessage {
         app_id: app.app_id.clone(),
         anchor: app.anchor.clone(),
     }
+}
+
+/// The chrome message for the launch `app` answered, if it answered one.
+fn launching(app: &App) -> Option<HostMessage> {
+    app.launched_from
+        .clone()
+        .map(|from| HostMessage::AppLaunchedFrom {
+            app_id: app.app_id.clone(),
+            from,
+        })
 }
 
 /// The chrome message for the window `app` is a dialog for.

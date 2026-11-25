@@ -32,6 +32,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_fetch_header.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_fetch_response.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_search.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_shader_effect_image.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
 #include "third_party/blink/renderer/core/css/domicile/domicile_shader_effects.h"
 #include "third_party/blink/renderer/core/css/media_query_list.h"
@@ -520,6 +521,7 @@ void DomicileHost::WindowsChanged() {
 
 void DomicileHost::spawn(ScriptState* script_state,
                          const Vector<String>& command,
+                         const String& from,
                          ExceptionState& exception_state) {
   // An empty argv reaches the compositor as a request to run nothing, which it
   // cannot answer and should not have to refuse. Caught here so the shell gets
@@ -542,7 +544,7 @@ void DomicileHost::spawn(ScriptState* script_state,
   for (const String& argument : command) {
     argv.push_back(argument);
   }
-  channel_->Spawn(argv);
+  channel_->Spawn(argv, from.IsNull() ? g_empty_string : from);
 }
 
 
@@ -2042,6 +2044,11 @@ void DomicileHost::AppAnchored(const String& app_id, const String& anchor) {
   WindowsChanged();
 }
 
+void DomicileHost::AppLaunchedFrom(const String& app_id, const String& from) {
+  WindowNamed(app_id).launched_from = from;
+  WindowsChanged();
+}
+
 void DomicileHost::AppUrgent(const String& app_id, bool urgent) {
   WindowNamed(app_id).urgent = urgent;
   WindowsChanged();
@@ -2990,13 +2997,13 @@ ScriptPromise<DomicileFetchResponse> DomicileHost::fetchWithCookies(
 ScriptPromise<IDLUnsignedLong> DomicileHost::registerShaderEffect(
     ScriptState* script_state,
     const String& name,
-    const String& sksl,
-    double outset,
+    const DomicileShaderEffectInit* init,
     ExceptionState& exception_state) {
   if (name.empty()) {
     exception_state.ThrowTypeError("name must not be empty");
     return EmptyPromise();
   }
+  const double outset = init->outset();
   if (!std::isfinite(outset) || outset < 0) {
     exception_state.ThrowRangeError("outset must be 0 or more pixels");
     return EmptyPromise();
@@ -3017,19 +3024,63 @@ ScriptPromise<IDLUnsignedLong> DomicileHost::registerShaderEffect(
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUnsignedLong>>(
       script_state, exception_state.GetContext());
   auto promise = resolver->Promise();
+  // Viz checks the rest: it compiles the programs and makes the images.
+  auto source = domicile::mojom::blink::ShaderEffectSource::New();
+  source->sksl = init->sksl();
+  source->vertex = init->vertex();
+  source->columns = init->columns();
+  source->rows = init->rows();
+  source->instances = init->instances();
+  for (const auto& image : init->images()) {
+    base::span<const uint8_t> pixels = image->pixels()->AsSpan();
+    source->images.push_back(domicile::mojom::blink::ShaderEffectImage::New(
+        image->name(),
+        gfx::Size(base::saturated_cast<int>(image->width()),
+                  base::saturated_cast<int>(image->height())),
+        Vector<uint8_t>(pixels)));
+  }
   shader_effects_->Register(
-      sksl, BindOnce(&DomicileHost::ShaderEffectRegistered,
-                     WrapWeakPersistent(this), WrapPersistent(resolver),
-                     AtomicString(name), static_cast<float>(outset)));
+      std::move(source),
+      BindOnce(&DomicileHost::ShaderEffectRegistered, WrapWeakPersistent(this),
+               WrapPersistent(resolver), AtomicString(name),
+               static_cast<float>(outset), init->screenOutset()));
   return promise;
+}
+
+void DomicileHost::updateShaderEffect(Element* element,
+                                      const String& name,
+                                      const String& uniform,
+                                      NotShared<DOMFloat32Array> values,
+                                      ExceptionState& exception_state) {
+  Document* document = window_ ? window_->document() : nullptr;
+  if (!document || &element->GetDocument() != document) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotFoundError,
+        "The element is not in the shell's document.");
+    return;
+  }
+  const std::optional<DomicileShaderEffects::ArrayError> error =
+      DomicileShaderEffects::From(*document).SetArray(
+          *element, AtomicString(name), uniform, values->AsSpan());
+  if (!error) {
+    return;
+  }
+  if (error->not_found) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kNotFoundError,
+                                      error->message);
+  } else {
+    exception_state.ThrowRangeError(error->message);
+  }
 }
 
 void DomicileHost::ShaderEffectRegistered(
     ScriptPromiseResolver<IDLUnsignedLong>* resolver,
     const AtomicString& name,
     float outset,
+    bool screen_outset,
     uint32_t id,
     uint32_t arguments,
+    Vector<domicile::mojom::blink::ShaderEffectArrayPtr> arrays,
     const String& error) {
   if (!id) {
     resolver->RejectWithDOMException(DOMExceptionCode::kOperationError, error);
@@ -3041,8 +3092,16 @@ void DomicileHost::ShaderEffectRegistered(
     return;
   }
   // A second register of a name replaces its effect, so the first goes.
-  const uint32_t replaced = DomicileShaderEffects::From(*document).Register(
-      name, {.id = id, .outset = outset, .arguments = arguments});
+  DomicileShaderEffects::Effect effect{.id = id,
+                                      .outset = outset,
+                                      .screen_outset = screen_outset,
+                                      .arguments = arguments};
+  for (const auto& array : arrays) {
+    effect.arrays.push_back(
+        DomicileShaderEffects::Array{array->name, array->floats});
+  }
+  const uint32_t replaced =
+      DomicileShaderEffects::From(*document).Register(name, effect);
   if (replaced) {
     shader_effects_->Unregister(replaced);
   }
@@ -3113,7 +3172,8 @@ void DomicileHost::ListBrowserWindows() {
         window->popup_menu.empty() ? String() : window->popup_menu,
         window->wants_maximized, window->wants_minimized,
         window->wants_fullscreen, window->urgent, window->ignores_pointer,
-        window->shape.empty() ? String() : window->shape));
+        window->shape.empty() ? String() : window->shape,
+        window->opener.empty() ? String() : window->opener));
   }
   browser_windows_ = MakeGarbageCollected<FrozenArray<DomicileBrowserWindow>>(
       std::move(listed));

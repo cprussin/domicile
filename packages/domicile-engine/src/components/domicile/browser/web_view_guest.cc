@@ -3188,12 +3188,14 @@ content::WebContents* WebViewGuest::AddNewContents(
   }
   // Only the size the page asked for is kept, so the shell can float a sized
   // window, such as a call's, at that size. The shell places windows itself.
-  // Content navigates the window after this returns.
+  // Content navigates the window after this returns. The shell hears which
+  // window opened it, to open it from there.
   Host().AdoptOpenedWindow(
       std::move(new_contents), target_url,
       gfx::Size(window_features.has_width ? window_features.bounds.width() : 0,
                 window_features.has_height ? window_features.bounds.height()
-                                           : 0));
+                                           : 0),
+      window_id_);
   return nullptr;
 }
 

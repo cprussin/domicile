@@ -68,6 +68,13 @@ describe("processes", () => {
 
     expect(fake.calls).toStrictEqual([["spawn", ["firefox"]]]);
   });
+
+  it("names where a launch started", () => {
+    const fake = new FakeDomicileHost();
+    desktop(fake.host).processes.launch(["firefox"], "launcher");
+
+    expect(fake.calls).toStrictEqual([["spawn", ["firefox"], "launcher"]]);
+  });
 });
 
 describe("dbus", () => {

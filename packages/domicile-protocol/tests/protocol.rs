@@ -81,6 +81,7 @@ fn chrome_messages_round_trip() {
     });
     chrome_round_trip(&ChromeMessage::Spawn {
         command: vec!["kitty".into(), "--hold".into()],
+        from: None,
     });
     chrome_round_trip(&ChromeMessage::CopyClipboardEntry { entry: 7 });
     chrome_round_trip(&ChromeMessage::RemoveClipboardEntry { entry: 7 });
@@ -186,10 +187,39 @@ fn an_app_search_is_not_a_chrome_message() {
 fn spawn_wire_shape_is_pinned() {
     let v = serde_json::to_value(ChromeMessage::Spawn {
         command: vec!["kitty".into()],
+        from: None,
     })
     .unwrap();
     assert_eq!(v["type"], "spawn");
     assert_eq!(v["command"][0], "kitty");
+}
+
+/// A launch names where it started, and the window it opens says so, for a
+/// shell to open the window from there.
+#[test]
+fn a_launch_names_where_it_started() {
+    let v = serde_json::to_value(ChromeMessage::Spawn {
+        command: vec!["kitty".into()],
+        from: Some("launcher".into()),
+    })
+    .unwrap();
+    assert_eq!(v["from"], "launcher");
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(r#"{"type":"spawn","command":["kitty"]}"#)
+            .expect("parsed"),
+        ChromeMessage::Spawn {
+            command: vec!["kitty".into()],
+            from: None,
+        }
+    );
+    assert_eq!(
+        serde_json::to_value(HostMessage::AppLaunchedFrom {
+            app_id: "app-2".into(),
+            from: "launcher".into(),
+        })
+        .unwrap(),
+        serde_json::json!({"type": "app_launched_from", "app_id": "app-2", "from": "launcher"})
+    );
 }
 
 #[test]

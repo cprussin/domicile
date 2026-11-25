@@ -144,10 +144,12 @@ class BrowserWindowHost {
   // Lists the window MakeOpenedWindow made, now that content shows it.
   // `target_url` is the address content navigates it to next; the list shows
   // it until the window's first navigation. `size` is the size the page asked
-  // for, empty on an axis it left unset.
+  // for, empty on an axis it left unset. `opener` is the browser window whose
+  // page opened it, empty for a `<webview>` that is no window.
   virtual void AdoptOpenedWindow(std::unique_ptr<content::WebContents> contents,
                                  const GURL& target_url,
-                                 const gfx::Size& size) = 0;
+                                 const gfx::Size& size,
+                                 const std::string& opener) = 0;
 
   // Opens popup window `window_id`'s one tab at `url`, for an extension's
   // chrome.windows.create. `width` and `height` are the requested size, or 0.

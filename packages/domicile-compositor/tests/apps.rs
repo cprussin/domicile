@@ -149,6 +149,7 @@ fn a_spawned_program_is_pointed_at_this_compositor() {
                     reported.display()
                 ),
             ],
+            from: None,
         })
         .expect("the chrome socket takes a spawn");
 
@@ -195,7 +196,10 @@ fn a_spawn_with_no_command_does_not_stop_the_compositor_listening() {
     let mut chrome = compositor.chrome();
 
     chrome
-        .say(&ChromeMessage::Spawn { command: vec![] })
+        .say(&ChromeMessage::Spawn {
+            command: vec![],
+            from: None,
+        })
         .expect("the chrome socket takes it");
 
     let after = compositor.scratch_file("ran-after-the-empty-spawn");
@@ -206,6 +210,7 @@ fn a_spawn_with_no_command_does_not_stop_the_compositor_listening() {
                 "-c".to_string(),
                 format!("printf ran > {0}.new && mv {0}.new {0}", after.display()),
             ],
+            from: None,
         })
         .expect("the chrome socket takes the second one");
 
@@ -239,6 +244,7 @@ fn a_spawn_says_which_process_it_started() {
                     reported.display()
                 ),
             ],
+            from: None,
         })
         .expect("the chrome socket takes a spawn");
 

@@ -109,6 +109,8 @@ void SurfaceProducer::OnSurfaceEmbedded(
 
 void SurfaceProducer::OnBufferReleased(uint64_t buffer_id) {}
 
+void SurfaceProducer::OnSurfaceShown(bool shown) {}
+
 void SurfaceProducer::Submit(const viz::BeginFrameAck& ack) {
   const gfx::Rect rect(size_);
 

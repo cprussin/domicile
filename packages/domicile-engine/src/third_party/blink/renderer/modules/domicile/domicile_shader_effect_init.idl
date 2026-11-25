@@ -1,0 +1,22 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// What DomicileHost.registerShaderEffect() compiles. See
+// docs/architecture/MOTION.md#shader-primitive.
+dictionary DomicileShaderEffectInit {
+  // The fragment program: strict ES2 SkSL of at most 32 KiB.
+  required DOMString sksl;
+  // A mesh effect's vertex program, which draws the content through a grid
+  // of `columns` by `rows` cells or through `instances` quads. Empty for
+  // none.
+  DOMString vertex = "";
+  unsigned long columns = 0;
+  unsigned long rows = 0;
+  unsigned long instances = 0;
+  // How many CSS pixels the effect may draw outside the content, or the
+  // screen's longer side when `screenOutset` is true.
+  double outset = 0;
+  boolean screenOutset = false;
+  // The images it samples, at most 4.
+  sequence<DomicileShaderEffectImage> images = [];
+};

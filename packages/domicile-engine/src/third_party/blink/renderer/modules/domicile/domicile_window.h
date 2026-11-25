@@ -52,6 +52,8 @@ struct DomicileWindowState {
   String transient_for;
   // Null for no anchor.
   String anchor;
+  // Where the launch it answered started; null for none.
+  String launched_from;
   bool urgent = false;
   // The agent seat holding the window; null for the user's.
   String held_by;
@@ -104,6 +106,7 @@ class MODULES_EXPORT DomicileWindow final : public ScriptWrappable {
   uint32_t frame() const { return state_.frame; }
   const String& transientFor() const { return state_.transient_for; }
   const String& anchor() const { return state_.anchor; }
+  const String& launchedFrom() const { return state_.launched_from; }
   bool urgent() const { return state_.urgent; }
   const String& heldBy() const { return state_.held_by; }
   bool inhibitsShortcuts() const { return state_.inhibits_shortcuts; }

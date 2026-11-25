@@ -1427,6 +1427,26 @@ fn ask_for_focus_or_stop(
         if let Err(err) = client.ask_for_the_keyboard(handle, serial) {
             crate::say!("client", "cannot ask for the keyboard: {err}");
         }
+    } else if when == AskForFocus::OnceMapped
+        && client.ask_for_focus == Some(AskForFocus::WithItsLaunchToken)
+        && !client.asked
+    {
+        client.asked = true;
+        answer_the_launch(client);
+    }
+}
+
+/// Activate the window with the token the client was started with.
+fn answer_the_launch(client: &Client) {
+    let Ok(token) = std::env::var("XDG_ACTIVATION_TOKEN") else {
+        crate::say!("client", "was started with no activation token");
+        return;
+    };
+    if let (Some(activation), Some(window)) =
+        (client.globals.activation.as_ref(), client.window.as_ref())
+    {
+        activation.activate(token, &window.surface);
+        crate::say!(activation.id(), "activate()");
     }
 }
 

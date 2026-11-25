@@ -497,6 +497,10 @@ Each entry in `domicile.windows.list` describes one client window.
   anchor element and it moves with your layout in the same frame. Treat a
   name you have no anchor for as `undefined`. `shell-manganese` defines none.
   See [Anchored windows](architecture/WINDOW-COMPOSITING.md#anchored-windows).
+- **Launched from:** `launchedFrom` is the `from` you named when you launched
+  the app (`domicile.processes.launch(argv, "launcher")`), once the window
+  answers that launch's activation token, or `undefined`. Open the window from
+  there. A running app launched again names the latest launch.
 - **Urgency:** `urgent` is `true` when the compositor dropped the window's
   focus request (see [A client asking for focus](#a-client-asking-for-focus))
   and the window has not had the keyboard since. It clears when the window gets

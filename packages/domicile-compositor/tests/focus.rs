@@ -98,6 +98,71 @@ fn a_request_made_since_the_keyboard_last_moved_reaches_the_shell() {
     );
 }
 
+/// The shell's spawn of a test client that answers its launch token.
+fn launch(chrome: &mut domicile_test_chrome::Chrome, from: Option<&str>) {
+    chrome
+        .say(&ChromeMessage::Spawn {
+            command: vec![
+                env!("CARGO_BIN_EXE_domicile-test-client").to_string(),
+                "--title".to_string(),
+                "launched".to_string(),
+                "--ask-for-focus-with-its-launch-token".to_string(),
+            ],
+            from: from.map(str::to_string),
+        })
+        .expect("the chrome socket takes a spawn");
+}
+
+/// Whichever the shell hears first: where a launch started, or the request.
+fn launch_or_request(chrome: &mut domicile_test_chrome::Chrome) -> HostMessage {
+    chrome
+        .wait_for(|message| {
+            matches!(
+                message,
+                HostMessage::AppLaunchedFrom { .. } | HostMessage::FocusRequested { .. }
+            )
+        })
+        .expect("a window that answers its launch token asks for the keyboard")
+}
+
+/// A window that answers its launch's token names where the launch started,
+/// before its request, so the shell can open it from there.
+#[test]
+fn a_launched_window_names_where_its_launch_started() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+
+    launch(&mut chrome, Some("launcher"));
+    let app_id = appeared(&mut chrome);
+
+    assert_eq!(
+        launch_or_request(&mut chrome),
+        HostMessage::AppLaunchedFrom {
+            app_id: app_id.clone(),
+            from: "launcher".to_string(),
+        }
+    );
+    assert_eq!(
+        launch_or_request(&mut chrome),
+        HostMessage::FocusRequested { app_id }
+    );
+}
+
+/// A launch that named no start leaves its window naming none.
+#[test]
+fn a_launch_that_names_no_start_leaves_its_window_naming_none() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+
+    launch(&mut chrome, None);
+    let app_id = appeared(&mut chrome);
+
+    assert_eq!(
+        launch_or_request(&mut chrome),
+        HostMessage::FocusRequested { app_id }
+    );
+}
+
 /// A window that asks for the keyboard back after the user moved on is not
 /// heard, so it cannot take focus from where the user went.
 #[test]

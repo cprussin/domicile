@@ -18,10 +18,16 @@ constexpr char kRestarting[] = "the GPU process is restarting";
 
 }  // namespace
 
+ShaderEffectsHost::Registered::Registered() = default;
+ShaderEffectsHost::Registered::Registered(Registered&&) = default;
+ShaderEffectsHost::Registered& ShaderEffectsHost::Registered::operator=(
+    Registered&&) = default;
+ShaderEffectsHost::Registered::~Registered() = default;
+
 ShaderEffectsHost::Effect::Effect(FrameSinkId owner,
-                                  std::string sksl,
+                                  mojom::DomicileShaderEffectSourcePtr source,
                                   LostCallback lost)
-    : owner(owner), sksl(std::move(sksl)), lost(std::move(lost)) {}
+    : owner(owner), source(std::move(source)), lost(std::move(lost)) {}
 ShaderEffectsHost::Effect::Effect(Effect&&) = default;
 ShaderEffectsHost::Effect& ShaderEffectsHost::Effect::operator=(Effect&&) =
     default;
@@ -37,7 +43,8 @@ void ShaderEffectsHost::Connect(mojom::FrameSinkManager& manager) {
                                     receiver_.BindNewPipeAndPassRemote());
   // The same source compiles the same way, so the answers say nothing new.
   for (const auto& [id, effect] : effects_) {
-    registry_->Register(id, effect.owner, effect.sksl, base::DoNothing());
+    registry_->Register(id, effect.owner, effect.source.Clone(),
+                        base::DoNothing());
   }
 }
 
@@ -60,7 +67,7 @@ void ShaderEffectsHost::OnConnectionLost() {
 }
 
 void ShaderEffectsHost::Register(const FrameSinkId& owner,
-                                 std::string sksl,
+                                 mojom::DomicileShaderEffectSourcePtr source,
                                  LostCallback lost,
                                  RegisterCallback done) {
   if (!registry_.is_bound()) {
@@ -68,13 +75,16 @@ void ShaderEffectsHost::Register(const FrameSinkId& owner,
     return;
   }
   const uint32_t id = next_id_++;
+  // Kept to register again in a relaunched GPU process.
+  mojom::DomicileShaderEffectSourcePtr kept = source.Clone();
   registry_->Register(
-      id, owner, sksl,
+      id, owner, std::move(source),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           base::BindOnce(&ShaderEffectsHost::OnRegistered,
-                         weak_factory_.GetWeakPtr(), id, owner, sksl,
-                         std::move(lost), std::move(done)),
-          0u, std::string(kRestarting)));
+                         weak_factory_.GetWeakPtr(), id, owner,
+                         std::move(kept), std::move(lost), std::move(done)),
+          0u, std::vector<mojom::DomicileShaderEffectArrayPtr>(),
+          std::string(kRestarting)));
 }
 
 void ShaderEffectsHost::Unregister(uint32_t id) {
@@ -89,20 +99,26 @@ void ShaderEffectsHost::Drawing(const std::vector<uint32_t>& ids) {
   drawing_ = base::flat_set<uint32_t>(ids.begin(), ids.end());
 }
 
-void ShaderEffectsHost::OnRegistered(uint32_t id,
-                                     FrameSinkId owner,
-                                     std::string sksl,
-                                     LostCallback lost,
-                                     RegisterCallback done,
-                                     uint32_t arguments,
-                                     const std::string& error) {
+void ShaderEffectsHost::OnRegistered(
+    uint32_t id,
+    FrameSinkId owner,
+    mojom::DomicileShaderEffectSourcePtr source,
+    LostCallback lost,
+    RegisterCallback done,
+    uint32_t arguments,
+    std::vector<mojom::DomicileShaderEffectArrayPtr> arrays,
+    const std::string& error) {
   if (!error.empty()) {
     std::move(done).Run(base::unexpected(error));
     return;
   }
   effects_.insert_or_assign(id,
-                            Effect(owner, std::move(sksl), std::move(lost)));
-  std::move(done).Run(Registered{id, arguments});
+                            Effect(owner, std::move(source), std::move(lost)));
+  Registered registered;
+  registered.id = id;
+  registered.arguments = arguments;
+  registered.arrays = std::move(arrays);
+  std::move(done).Run(std::move(registered));
 }
 
 }  // namespace viz::domicile

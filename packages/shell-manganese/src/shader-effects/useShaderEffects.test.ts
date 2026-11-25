@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import type { Result } from "@cprussin/option-result";
-import { Err, Ok } from "@cprussin/option-result";
+import { Err, None, Ok } from "@cprussin/option-result";
 import type {
   Effects,
   EffectsListeners,
+  RegisteredEffect,
   ShaderEffect,
 } from "@domicile-desktop/sdk/desktop/effects";
 import { act, renderHook, waitFor } from "@testing-library/react";
@@ -32,8 +33,10 @@ const fakeEffects = (refused: Readonly<Record<string, string>> = {}) => {
     register: (name, effect) => {
       registered.push([name, effect]);
       const why = refused[name];
-      return Promise.resolve<Result<number, string>>(
-        why === undefined ? Ok(1) : Err(why),
+      return Promise.resolve<Result<RegisteredEffect, string>>(
+        why === undefined
+          ? Ok({ arguments: 1, update: () => None() })
+          : Err(why),
       );
     },
   };

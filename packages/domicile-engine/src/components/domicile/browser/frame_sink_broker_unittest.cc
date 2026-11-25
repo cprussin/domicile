@@ -218,12 +218,16 @@ class FakeSurfaceObserver : public mojom::SurfaceObserver {
     released_.push_back(buffer_id);
   }
 
+  void OnSurfaceShown(bool shown) override { shown_.push_back(shown); }
+
   // The first embed.
   base::test::TestFuture<viz::LocalSurfaceId, gfx::Size, double, double>
       embedded_;
   // Every LocalSurfaceId sent, in order. The producer submits to the last.
   std::vector<viz::LocalSurfaceId> told_;
   std::vector<uint64_t> released_;
+  // Every change of whether an element shows the surface, in order.
+  std::vector<bool> shown_;
 
  private:
   mojo::Receiver<mojom::SurfaceObserver> receiver_{this};
@@ -1192,6 +1196,77 @@ TEST_F(FrameSinkBrokerTest, AWaitingEmbedIsDroppedWithItsPage) {
   EXPECT_EQ(frame_sink_id, kept.Get());
   RunUntilIdle();
   EXPECT_THAT(observer.told_, testing::ElementsAre(kept_surface));
+}
+
+// A closed window's last frame stays while an <app> element shows it, so the
+// producer hears once the last element that embedded its surface leaves its
+// page, and once one is back.
+TEST_F(FrameSinkBrokerTest, AProducerHearsWhenNoElementShowsItsSurface) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeSurfaceObserver observer;
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  BrokerASink(remote, sink_client, sink, observer.BindRemote());
+  RunUntilIdle();
+
+  const uint64_t other_page = broker()->NewEmbedRequester();
+  broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
+                  base::DoNothing());
+  broker()->Embed(other_page, kTestApp, kPageFrameSinkId,
+                  AllocateLocalSurfaceId(), kEmbeddedSize, kEmbeddedScale,
+                  kEmbeddedZoom, base::DoNothing());
+  broker()->SetShown(page_, false);
+  RunUntilIdle();
+  // The other element still shows it.
+  EXPECT_THAT(observer.shown_, testing::IsEmpty());
+
+  broker()->SetShown(other_page, false);
+  broker()->SetShown(other_page, true);
+  RunUntilIdle();
+  EXPECT_THAT(observer.shown_, testing::ElementsAre(false, true));
+}
+
+// An element collected, or whose renderer went away, shows nothing.
+TEST_F(FrameSinkBrokerTest, AnElementThatGoesNoLongerShowsItsSurface) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeSurfaceObserver observer;
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  BrokerASink(remote, sink_client, sink, observer.BindRemote());
+  ExternalSurfaceProvider provider(broker());
+  mojo::Remote<mojom::ExternalSurfaceProvider> page;
+  provider.Bind(page.BindNewPipeAndPassReceiver(),
+                kPageFrameSinkId.client_id());
+  page->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+              kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom, base::DoNothing());
+  RunUntilIdle();
+
+  page.reset();
+  RunUntilIdle();
+  EXPECT_THAT(observer.shown_, testing::ElementsAre(false));
+}
+
+// A page says over its own pipe when its element leaves the page.
+TEST_F(FrameSinkBrokerTest, APageSaysItsElementLeftThePage) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeSurfaceObserver observer;
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  BrokerASink(remote, sink_client, sink, observer.BindRemote());
+  ExternalSurfaceProvider provider(broker());
+  mojo::Remote<mojom::ExternalSurfaceProvider> page;
+  provider.Bind(page.BindNewPipeAndPassReceiver(),
+                kPageFrameSinkId.client_id());
+  page->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+              kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom, base::DoNothing());
+  page->SetShown(false);
+  RunUntilIdle();
+
+  EXPECT_THAT(observer.shown_, testing::ElementsAre(false));
 }
 
 // The producer learns the embedder's LocalSurfaceId, since only the embedder
