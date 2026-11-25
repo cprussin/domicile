@@ -35,7 +35,7 @@ version = "0.0.0"
 edition = "2021"
 license = "MIT"
 # The oldest rustc the locked dependencies build with.
-rust-version = "1.97"
+rust-version = "1.98"
 
 # A bare stderr write has no level, so the journal shows it always. Logs go
 # through a leveled logger; see docs/guidelines/LOGGING.md.
@@ -66,9 +66,9 @@ png = "0.18"
 schemars = "1"
 # Parses JavaScript shells to find their imports (see
 # `domicile_launch::shell_source`).
-oxc_allocator = "0.158"
-oxc_parser = "0.158"
-oxc_span = "0.158"
+oxc_allocator = "0.159"
+oxc_parser = "0.159"
+oxc_span = "0.159"
 
 # The installed binaries (`domicileBinaries` in `flake.nix`). Panics unwind:
 # `domicile`'s `Drop`s end the desktop's process groups and its graphical

@@ -48,12 +48,6 @@
       "description": "Temporary: hold zbus on 5.x. zbus 6 removes the blocking API and the async-io feature this workspace is built on, so the move needs its own migration PR. Remove this rule in that PR.",
       "matchPackageNames": ["zbus"],
       "allowedVersions": "<6"
-    },
-    {
-      "description": "Temporary: hold the oxc crates on 0.158. 0.159 needs rustc 1.98 and the pinned nixpkgs has 1.97.1, so the move needs a nixpkgs update. Remove this rule in that PR.",
-      "matchManagers": ["cargo"],
-      "matchPackageNames": ["oxc_allocator", "oxc_parser", "oxc_span"],
-      "allowedVersions": "<0.159"
     }
   ],
   "platformAutomerge": false,
