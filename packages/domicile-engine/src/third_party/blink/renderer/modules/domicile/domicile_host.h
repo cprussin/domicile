@@ -22,10 +22,13 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_picture_in_picture_action.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_shader_effect_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_action.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/core/html/domicile/html_app_element.h"
+#include "third_party/blink/renderer/core/typed_arrays/array_buffer_view_helpers.h"
+#include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_chord.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_event_names.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
@@ -151,7 +154,10 @@ class MODULES_EXPORT DomicileHost final
   //
   // Throws on an empty argv. The browser refuses it too -- this check is a
   // better error message, not the enforcement.
-  void spawn(ScriptState*, const Vector<String>& command, ExceptionState&);
+  void spawn(ScriptState*,
+             const Vector<String>& command,
+             const String& from,
+             ExceptionState&);
   // Ask what in the home matches `query`; the promise settles with the answer.
   // Names no path -- see the IDL, where that is written down as a property
   // rather than a convenience.
@@ -401,14 +407,20 @@ class MODULES_EXPORT DomicileHost final
                                    uint32_t width,
                                    uint32_t height,
                                    ExceptionState&);
-  // Compiles `sksl` in the GPU process as shader effect `name`, which
+  // Compiles `init` in the GPU process as shader effect `name`, which
   // `domicile-shader(name, …)` then draws. Resolves with how many numbers it
   // takes; rejects with the compiler's error. See the IDL.
-  ScriptPromise<IDLUnsignedLong> registerShaderEffect(ScriptState*,
-                                                      const String& name,
-                                                      const String& sksl,
-                                                      double outset,
-                                                      ExceptionState&);
+  ScriptPromise<IDLUnsignedLong> registerShaderEffect(
+      ScriptState*,
+      const String& name,
+      const DomicileShaderEffectInit* init,
+      ExceptionState&);
+  // Sets an array of effect `name` for `element`. See the IDL.
+  void updateShaderEffect(Element* element,
+                          const String& name,
+                          const String& uniform,
+                          NotShared<DOMFloat32Array> values,
+                          ExceptionState&);
   // Sends `method` to `url` with the profile's cookies, through the browser's
   // own pipe.
   // The browser refuses what the page may not send; see the IDL.
@@ -493,6 +505,7 @@ class MODULES_EXPORT DomicileHost final
   void AppTransientFor(const String& app_id,
                        const String& transient_for) override;
   void AppAnchored(const String& app_id, const String& anchor) override;
+  void AppLaunchedFrom(const String& app_id, const String& from) override;
   void AppUrgent(const String& app_id, bool urgent) override;
   void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void ShortcutReleased(domicile::mojom::blink::ShortcutPtr shortcut) override;
@@ -811,12 +824,15 @@ class MODULES_EXPORT DomicileHost final
 
   // The browser's answer to registerShaderEffect(): `id` names effect `name`
   // in a filter, or is 0 and `error` says why.
-  void ShaderEffectRegistered(ScriptPromiseResolver<IDLUnsignedLong>* resolver,
-                              const AtomicString& name,
-                              float outset,
-                              uint32_t id,
-                              uint32_t arguments,
-                              const String& error);
+  void ShaderEffectRegistered(
+      ScriptPromiseResolver<IDLUnsignedLong>* resolver,
+      const AtomicString& name,
+      float outset,
+      bool screen_outset,
+      uint32_t id,
+      uint32_t arguments,
+      Vector<domicile::mojom::blink::ShaderEffectArrayPtr> arrays,
+      const String& error);
 
   // A chord grabbed by name, the press it is on the last keyboard heard, and
   // how many grabShortcut calls no ungrabShortcut has answered yet.

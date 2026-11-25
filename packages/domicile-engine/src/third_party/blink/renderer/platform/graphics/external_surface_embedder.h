@@ -95,6 +95,10 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder {
                  allocation, std::move(callback));
   }
 
+  // Tells the browser whether the element embedding for this is in its page,
+  // so a closed window's last frame stays only while one is.
+  void SetShown(bool shown);
+
  private:
   void OnEmbedded(EmbeddedCallback callback,
                   const String& app_id,

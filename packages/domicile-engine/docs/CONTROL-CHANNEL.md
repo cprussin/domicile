@@ -41,7 +41,8 @@ The engine has two channels to the rest of Domicile:
 - **Inbound:** `welcome`, `app_appeared`, `app_titled`, `app_desktop_id`,
   `app_resized`, `app_min_size`, `app_max_size`, `popup_placed`, `app_closed`,
   `app_cursor`, `app_presented`, `app_suspended`, `app_transient_for`,
-  `app_urgent`, `app_inhibits_shortcuts`, `browser_toplevel_ids`, `modifiers`,
+  `app_urgent`, `app_launched_from`, `app_inhibits_shortcuts`,
+  `browser_toplevel_ids`, `modifiers`,
   `found_files`,
   `clipboard`, `seats`, `theme`,
   `windows_theme`, `appearance`, `focus_changed`, `focus_requested`,
@@ -61,6 +62,12 @@ The engine has two channels to the rest of Domicile:
   `compositorreplaced` (below).
 
 ### Members with special handling
+
+- **`spawn`** may name `from`, where the launch started, such as
+  `"launcher"`. The compositor keeps it with the activation token it mints
+  for the launch. When a window activates with that token, it sends
+  `app_launched_from` with the window's id and `from`, before its
+  `focus_requested`, and the shell lists it as the window's `launchedFrom`.
 
 - **`pointer_pinch`** comes from `<app>` default input handling. It carries
   begin, update and end with the native device, unsigned millisecond clock,

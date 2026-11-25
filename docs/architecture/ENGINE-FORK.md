@@ -275,6 +275,7 @@ Callbacks (engine → compositor):
 |---|---|
 | `released(surface, buffer)` | `wl_buffer.release` |
 | `imported(surface, request, buffer)` | none: the answer to `domicile_surface_import_async`; zero is a refusal |
+| `showing(surface, showing)` | none: whether an `<app>` in the page shows the surface. A closed window's last frame stays until none does, up to 10 s. An older engine never calls it, and the frame stays the 10 s |
 | `configure(surface, width, height)`, `configure_at(…, scale)`, `configure_box(…, box)`, `configure_zoomed(…, zoom, box)` | `xdg_toplevel.configure` |
 | `ramped_displays(displays, count)` | `wl_output`. Primary first, never empty. Each display with its connector and gamma ramp size. `connected_displays` is the form without ramp sizes and `displays` the form without connectors, each called when the ones before it are unset. |
 | `copied_items(clipboard, items, count)` | `wl_data_device.set_selection` for a copy made in a page: its text and its image. `copied(clipboard, text, length)` is the text-only form, called when `copied_items` is unset. |

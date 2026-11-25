@@ -56,6 +56,10 @@ void ExternalSurfaceProvider::WaitForEnd(const viz::FrameSinkId& frame_sink_id,
   broker_->WaitForEnd(frame_sink_id, std::move(callback));
 }
 
+void ExternalSurfaceProvider::SetShown(bool shown) {
+  broker_->SetShown(receivers_.current_context().requester, shown);
+}
+
 // The element was collected or its renderer went away. Its pending replies
 // have nowhere to go.
 void ExternalSurfaceProvider::OnPageDisconnected() {

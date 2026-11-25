@@ -170,6 +170,7 @@ void FrameSinkBroker::Embed(uint64_t requester,
   frame_sink->Embed(parent_frame_sink_id, local_surface_id, size, scale, zoom);
   embed_tokens_[frame_sink->frame_sink_id()].insert(
       local_surface_id.embed_token());
+  Embedded(requester, frame_sink->frame_sink_id());
   std::move(callback).Run(frame_sink->frame_sink_id());
 }
 
@@ -177,6 +178,51 @@ void FrameSinkBroker::DropEmbeds(uint64_t requester) {
   std::erase_if(pending_embeds_, [requester](const PendingEmbed& embed) {
     return embed.requester == requester;
   });
+  hidden_requesters_.erase(requester);
+  auto embedded = embedded_by_.find(requester);
+  if (embedded == embedded_by_.end()) {
+    return;
+  }
+  const viz::FrameSinkId frame_sink_id = embedded->second;
+  embedded_by_.erase(embedded);
+  UpdateShown(frame_sink_id);
+}
+
+void FrameSinkBroker::SetShown(uint64_t requester, bool shown) {
+  if (shown) {
+    hidden_requesters_.erase(requester);
+  } else {
+    hidden_requesters_.insert(requester);
+  }
+  auto embedded = embedded_by_.find(requester);
+  if (embedded != embedded_by_.end()) {
+    UpdateShown(embedded->second);
+  }
+}
+
+void FrameSinkBroker::Embedded(uint64_t requester,
+                               const viz::FrameSinkId& frame_sink_id) {
+  auto [entry, inserted] = embedded_by_.try_emplace(requester, frame_sink_id);
+  if (!inserted && entry->second != frame_sink_id) {
+    // The element shows another app now, so the one it showed may have
+    // lost its last element.
+    const viz::FrameSinkId before = entry->second;
+    entry->second = frame_sink_id;
+    UpdateShown(before);
+  }
+  UpdateShown(frame_sink_id);
+}
+
+void FrameSinkBroker::UpdateShown(const viz::FrameSinkId& frame_sink_id) {
+  auto sink = frame_sink_map_.find(frame_sink_id);
+  if (sink == frame_sink_map_.end()) {
+    return;
+  }
+  const bool shown = std::ranges::any_of(embedded_by_, [&](const auto& entry) {
+    return entry.second == frame_sink_id &&
+           !hidden_requesters_.contains(entry.first);
+  });
+  sink->second->SetShown(shown);
 }
 
 void FrameSinkBroker::CreateFrameSink(
@@ -219,6 +265,7 @@ void FrameSinkBroker::CreateFrameSink(
     raw_frame_sink->Embed(embed.parent_frame_sink_id, embed.local_surface_id,
                           embed.size, embed.scale, embed.zoom);
     embed_tokens_[frame_sink_id].insert(embed.local_surface_id.embed_token());
+    Embedded(embed.requester, frame_sink_id);
     std::move(embed.callback).Run(frame_sink_id);
   }
   pending_embeds_ = std::move(still_waiting);

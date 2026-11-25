@@ -424,6 +424,17 @@ impl XdgActivationHandler for DomicileCompositor {
                 self.hub.broadcast(urgent);
             }
         } else if let Some(app_id) = app_id {
+            // Separate `let` so the host guard drops before the broadcast.
+            let launched = activation::launched_from(&token_data).and_then(|from| {
+                self.hub
+                    .host
+                    .lock()
+                    .unwrap()
+                    .app_launched_from(&app_id, from)
+            });
+            if let Some(launched) = launched {
+                self.hub.broadcast(launched);
+            }
             broadcast_focus_request(&self.hub, &app_id);
         }
     }

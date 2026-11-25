@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
@@ -21,6 +22,7 @@
 #include "content/public/browser/render_widget_host.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/viz/privileged/mojom/compositing/frame_sink_manager.mojom.h"
 
 namespace content {
 
@@ -31,6 +33,23 @@ namespace {
 viz::domicile::ShaderEffectsHost* Effects() {
   viz::HostFrameSinkManager* manager = GetHostFrameSinkManager();
   return manager ? &manager->domicile_shader_effects() : nullptr;
+}
+
+// The source as viz takes it. The domicile mojom stays apart from viz's
+// privileged one, which no renderer may see.
+viz::mojom::DomicileShaderEffectSourcePtr ToViz(
+    domicile::mojom::ShaderEffectSourcePtr source) {
+  auto viz_source = viz::mojom::DomicileShaderEffectSource::New();
+  viz_source->sksl = std::move(source->sksl);
+  viz_source->vertex = std::move(source->vertex);
+  viz_source->columns = source->columns;
+  viz_source->rows = source->rows;
+  viz_source->instances = source->instances;
+  for (auto& image : source->images) {
+    viz_source->images.push_back(viz::mojom::DomicileShaderEffectImage::New(
+        std::move(image->name), image->size, std::move(image->pixels)));
+  }
+  return viz_source;
 }
 
 void UnregisterEffect(uint32_t id) {
@@ -64,13 +83,18 @@ class ShaderEffectsService final
       base::expected<viz::domicile::ShaderEffectsHost::Registered, std::string>
           registered) {
     if (!registered.has_value()) {
-      std::move(callback).Run(0, 0, registered.error());
+      std::move(callback).Run(0, 0, {}, registered.error());
     } else if (!service) {
       UnregisterEffect(registered->id);
     } else {
       service->ids_.insert(registered->id);
+      std::vector<domicile::mojom::ShaderEffectArrayPtr> arrays;
+      for (const auto& array : registered->arrays) {
+        arrays.push_back(
+            domicile::mojom::ShaderEffectArray::New(array->name, array->floats));
+      }
       std::move(callback).Run(registered->id, registered->arguments,
-                              std::string());
+                              std::move(arrays), std::string());
     }
   }
 
@@ -92,16 +116,19 @@ class ShaderEffectsService final
     client_.Bind(std::move(client));
   }
 
-  void Register(const std::string& sksl, RegisterCallback callback) override {
+  void Register(domicile::mojom::ShaderEffectSourcePtr source,
+                RegisterCallback callback) override {
     viz::domicile::ShaderEffectsHost* effects = Effects();
     if (!effects) {
-      std::move(callback).Run(0, 0, "the compositor is not up");
+      std::move(callback).Run(0, 0, {}, "the compositor is not up");
       return;
     }
     // The widget's frame sink is the one whose frames hold the document's
-    // filters, so it is the only one that draws the effect.
+    // filters, so it is the only one that draws the effect. Viz checks the
+    // source: it compiles it.
     effects->Register(
-        render_frame_host().GetRenderWidgetHost()->GetFrameSinkId(), sksl,
+        render_frame_host().GetRenderWidgetHost()->GetFrameSinkId(),
+        ToViz(std::move(source)),
         base::BindOnce(&ShaderEffectsService::OnLost,
                        weak_factory_.GetWeakPtr()),
         base::BindOnce(&ShaderEffectsService::OnRegistered,

@@ -395,7 +395,11 @@ interface ControlChannel {
   // The argv form rather than a string, and not because it is tidier: a string
   // would have to be split by somebody, and the somebody would be a shell.
   // There is no shell in this path and there should not be one.
-  Spawn(array<string> command);
+  //
+  // `from` names where the launch started, such as "launcher"; empty for
+  // nowhere in particular. The window that answers the launch's activation
+  // token says so with AppLaunchedFrom.
+  Spawn(array<string> command, string from);
 
   // Ask what in the compositor's index of the home matches `query`. Answered
   // with ControlChannelClient::Files, carrying the same query.
@@ -689,6 +693,11 @@ interface ControlChannelClient {
   // The page anchor a window asked to be laid out at
   // (domicile_toplevel_anchor_v1.set_anchor); empty for none.
   AppAnchored(string app_id, string anchor);
+
+  // The window answered the activation token of a launch that named where it
+  // started, the `from` Spawn sent. A window launched again names the latest
+  // launch.
+  AppLaunchedFrom(string app_id, string from);
 
   // Whether a window wants attention: the compositor dropped its activation
   // request and it has not had the keyboard since.

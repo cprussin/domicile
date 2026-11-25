@@ -519,6 +519,54 @@ fn a_window_names_the_page_anchor_it_asked_for_right_after_it_appears() {
 }
 
 #[test]
+fn a_window_that_answers_a_launch_before_it_draws_names_it_right_after_it_appears() {
+    // A shell opens a launched window from where the launch started, so the
+    // launch comes with the announcement and the replay.
+    let mut host = Host::new();
+    let app = host.app_created(OWNER, LISTED.to_string());
+    assert_eq!(host.app_launched_from(&app, "launcher".to_string()), None);
+
+    let announced = host.app_mapped(&app, mapped());
+
+    let launched = HostMessage::AppLaunchedFrom {
+        app_id: app.clone(),
+        from: "launcher".to_string(),
+    };
+    assert!(
+        matches!(announced.first(), Some(HostMessage::AppAppeared { .. })),
+        "{announced:?}"
+    );
+    assert_eq!(announced.last(), Some(&launched));
+    assert!(host.open_apps().contains(&launched));
+}
+
+#[test]
+fn a_window_names_each_new_launch_it_answers_once() {
+    let mut host = Host::new();
+    let app = drawn(&mut host);
+
+    assert_eq!(
+        host.app_launched_from(&app, "launcher".to_string()),
+        Some(HostMessage::AppLaunchedFrom {
+            app_id: app.clone(),
+            from: "launcher".to_string(),
+        })
+    );
+    assert_eq!(host.app_launched_from(&app, "launcher".to_string()), None);
+    assert_eq!(
+        host.app_launched_from(&app, "dock".to_string()),
+        Some(HostMessage::AppLaunchedFrom {
+            app_id: app.clone(),
+            from: "dock".to_string(),
+        })
+    );
+    assert_eq!(
+        host.app_launched_from("app-nowhere", "dock".to_string()),
+        None
+    );
+}
+
+#[test]
 fn a_window_that_changes_its_anchor_says_so_once() {
     let mut host = Host::new();
     let app = drawn(&mut host);
@@ -1236,6 +1284,7 @@ fn spawn_is_a_no_op_in_the_brain() {
     let before = format!("{host:?}");
     host.handle_chrome_message(ChromeMessage::Spawn {
         command: vec!["kitty".into()],
+        from: None,
     })
     .unwrap();
     assert_eq!(format!("{host:?}"), before);

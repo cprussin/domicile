@@ -478,9 +478,10 @@ fn read_chrome_messages(
                 }
             }
             // Sent to the Wayland thread so a locked desktop can refuse it.
-            Ok(ChromeMessage::Spawn { command }) => {
+            Ok(ChromeMessage::Spawn { command, from }) => {
                 hub.send_request(ClientRequest::Spawn {
                     command,
+                    from,
                     answer: None,
                 });
                 Vec::new()
@@ -1123,6 +1124,7 @@ fn exec(hub: &ChromeHub, command: Vec<String>) -> Result<(), String> {
     let (answer, answered) = Answer::new();
     hub.send_request(ClientRequest::Spawn {
         command,
+        from: None,
         answer: Some(answer),
     });
     answered

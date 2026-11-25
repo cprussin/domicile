@@ -11,6 +11,7 @@
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "cc/layers/deadline_policy.h"
 #include "components/domicile/common/synced_frame.h"
@@ -192,6 +193,7 @@ void HTMLAppElement::ParseAttribute(
 
 Node::InsertionNotificationRequest HTMLAppElement::InsertedInto(
     ContainerNode& insertion_point) {
+  ScheduleShownReport();
   // No box until layout runs. LayoutAppSurface calls SurfaceBoxChanged() then.
   return HTMLElement::InsertedInto(insertion_point);
 }
@@ -202,7 +204,33 @@ void HTMLAppElement::RemovedFrom(ContainerNode& insertion_point) {
   // Keep the embedder: a moved element shows the same window. A new embedder
   // would wait for the producer to reconnect, which a running client never
   // does.
+  ScheduleShownReport();
   HTMLElement::RemovedFrom(insertion_point);
+}
+
+void HTMLAppElement::ScheduleShownReport() {
+  if (shown_report_posted_ || !external_surface_embedder_) {
+    return;
+  }
+  shown_report_posted_ = true;
+  // WrapWeakPersistent: a removed element may be collected first, and its
+  // closed pipe tells the browser instead.
+  GetDocument()
+      .GetTaskRunner(TaskType::kInternalDefault)
+      ->PostTask(FROM_HERE, BindOnce(&HTMLAppElement::ReportShown,
+                                     WrapWeakPersistent(this)));
+}
+
+// A closed window's last frame stays while an element shows it, as a shell's
+// gallery of closed windows does, and goes once none is in its page.
+void HTMLAppElement::ReportShown() {
+  shown_report_posted_ = false;
+  const bool shown = isConnected();
+  if (!external_surface_embedder_ || shown == shown_reported_) {
+    return;
+  }
+  shown_reported_ = shown;
+  external_surface_embedder_->SetShown(shown);
 }
 
 void HTMLAppElement::SurfaceBoxChanged(const gfx::Size& size, double zoom) {

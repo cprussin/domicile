@@ -191,6 +191,44 @@ export type DomicileGestureEventInit = EventInit & {
   edge?: string;
 };
 
+/**
+ * An image a shader effect samples as `uniform shader <name>`, which repeats
+ * across the content: `width` by `height` pixels of unpremultiplied RGBA,
+ * rows top first, at most 2048 on a side.
+ */
+export type DomicileShaderEffectImage = {
+  name: string;
+  width: number;
+  height: number;
+  pixels: Uint8Array;
+};
+
+/**
+ * What DomicileHost.registerShaderEffect() compiles. See
+ * docs/architecture/MOTION.md#shader-primitive.
+ */
+export type DomicileShaderEffectInit = {
+  /** The fragment program: strict ES2 SkSL of at most 32 KiB. */
+  sksl: string;
+  /**
+   * A mesh effect's vertex program, which draws the content through a grid
+   * of `columns` by `rows` cells or through `instances` quads. Empty for
+   * none.
+   */
+  vertex?: string;
+  columns?: number;
+  rows?: number;
+  instances?: number;
+  /**
+   * How many CSS pixels the effect may draw outside the content, or the
+   * screen's longer side when `screenOutset` is true.
+   */
+  outset?: number;
+  screenOutset?: boolean;
+  /** The images it samples, at most 4. */
+  images?: readonly DomicileShaderEffectImage[];
+};
+
 export type DomicileShortcutEventInit = EventInit & {
   chord?: string;
   keycode?: number;
@@ -448,6 +486,13 @@ export type DomicileBrowserWindow = {
    * Null for all of it, and for any other window.
    */
   readonly shape: string | null;
+  /**
+   * The id of the browser window whose page opened this one, with
+   * `window.open()` or `target="_blank"`, so the shell can open it from
+   * there. Null for none: a window the shell or the user opened, and one a
+   * plain `<webview>`'s page opened.
+   */
+  readonly opener: string | null;
 };
 
 /**
@@ -843,8 +888,11 @@ export type DomicileHost = {
    *
    * Sequence<DOMString> rather than a single string: splitting a command line
    * is a shell's job and there is no shell in this path.
+   *
+   * `from` names where the launch started, such as "launcher"; the window
+   * that answers the launch's activation token carries it as `launchedFrom`.
    */
-  spawn(command: readonly string[]): void;
+  spawn(command: readonly string[], from?: string): void;
   /**
    * Ask what in the compositor's index of the home matches `query`. Resolves
    * with the answer. A newer call supersedes this one, which rejects with an
@@ -1341,12 +1389,12 @@ export type DomicileHost = {
    */
   resizePictureInPictureVideo(id: string, width: number, height: number): void;
   /**
-   * Compiles `sksl`, strict ES2 SkSL of at most 32 KiB, in the GPU process
-   * as shader effect `name`, which `filter: domicile-shader(name, …)` and
-   * `backdrop-filter` then draw. Its child is `uniform shader content`, its
-   * first uniform `uniform float2 size`, and the rest are the function's
-   * numbers in order, at most 16 floats. `outset` is how many CSS pixels it
-   * may draw outside the content.
+   * Compiles `init` in the GPU process as shader effect `name`, which
+   * `filter: domicile-shader(name, …)` and `backdrop-filter` then draw. Its
+   * fragment program's children are `uniform shader content` and the
+   * images, its first uniform `uniform float2 size`, then the function's
+   * numbers in order, at most 16 floats, then its arrays, which
+   * updateShaderEffect() sets. A `vertex` program makes it a mesh effect.
    *
    * Resolves with how many numbers it takes. Rejects with an OperationError
    * whose message is the compiler's. A second register of `name` replaces
@@ -1357,9 +1405,21 @@ export type DomicileHost = {
    */
   registerShaderEffect(
     name: string,
-    sksl: string,
-    outset: number,
+    init: DomicileShaderEffectInit,
   ): Promise<number>;
+  /**
+   * Sets array `uniform` of shader effect `name` for `element`'s filters to
+   * `values`, and the rest of that array to zero; the element draws them in
+   * its next frame. An element's arrays hold at most 64 KiB. Throws a
+   * NotFoundError for an unknown effect or array, and a RangeError for too
+   * many values.
+   */
+  updateShaderEffect(
+    element: Element,
+    name: string,
+    uniform: string,
+    values: Float32Array,
+  ): void;
   /**
    * Sends `method`, "GET" or "POST", to `url` from the browser process with
    * the cookies of browser profile `profile`, one of `browserProfiles`, or
@@ -1859,6 +1919,13 @@ export type DomicileWindow = {
    * anchor of that name lays the window out as any other.
    */
   readonly anchor: string | null;
+  /**
+   * Where the launch whose activation token the window answered started, as
+   * DomicileHost.spawn's `from` named it, such as "launcher"; the latest when
+   * it answered several. Null for none: a window nothing launched, and one
+   * whose client never activates with the token it was started with.
+   */
+  readonly launchedFrom: string | null;
   /**
    * The compositor dropped the window's request for the keyboard (a token
    * from before the keyboard last moved, or a stale one), and the window has

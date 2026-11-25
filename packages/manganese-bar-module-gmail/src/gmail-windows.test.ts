@@ -21,6 +21,7 @@ const browser = (
   menuBarAutoHide: false,
   menuBarVisible: true,
   messageBox: null,
+  opener: null,
   parent: null,
   partition: "",
   popupMenu: null,

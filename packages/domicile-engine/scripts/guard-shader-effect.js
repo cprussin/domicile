@@ -50,11 +50,11 @@ export const HostShell = (_root, desktop) => {
   // Not the client's color or its swap, so the probe cannot find the page.
   document.body.style.background = "#202020";
 
-  desktop.registerShaderEffect("swap", SWAP, 0).then(
+  desktop.registerShaderEffect("swap", { sksl: SWAP }).then(
     (takes) => say(`registered swap takes=${takes}`),
     (error) => say(`refused swap ${error?.name} ${error?.message}`),
   );
-  desktop.registerShaderEffect("broken", BROKEN, 0).then(
+  desktop.registerShaderEffect("broken", { sksl: BROKEN }).then(
     () => say("compiled broken"),
     (error) =>
       say(

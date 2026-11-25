@@ -98,6 +98,8 @@ class SurfaceProducer : public viz::mojom::CompositorFrameSinkClient,
   // Sent only to producers whose sink the browser owns. This one holds its
   // own sink, so it is a no-op.
   void OnBufferReleased(uint64_t buffer_id) override;
+  // A spike window never closes, so it keeps no last frame.
+  void OnSurfaceShown(bool shown) override;
 
   // viz::mojom::CompositorFrameSinkClient:
   void DidReceiveCompositorFrameAck(

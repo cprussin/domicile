@@ -119,6 +119,10 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
              double scale,
              double zoom);
 
+  // Tells the producer whether an element in a page shows this surface, if
+  // that changed. It starts out shown.
+  void SetShown(bool shown);
+
   // Imports a dmabuf as a SharedImage and returns its buffer id, or 0 on
   // failure. Follows components/exo/buffer.cc.
   //
@@ -225,6 +229,9 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   viz::LocalSurfaceId local_surface_id_;
   gfx::Size size_;
   float scale_ = 1.f;
+
+  // Whether an element shows this surface, as the producer last heard.
+  bool shown_ = true;
 
   base::flat_map<uint64_t, ImportedBuffer> buffers_;
   uint64_t next_buffer_id_ = 1;
