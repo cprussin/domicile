@@ -19,15 +19,10 @@ DomicileSeat::DomicileSeat(const String& id,
       pointer_x_(pointer_x),
       pointer_y_(pointer_y),
       focused_(focused),
-      held_(holds),
       holds_(MakeGarbageCollected<FrozenArray<IDLString>>(Vector<String>(holds))),
       taken_(MakeGarbageCollected<FrozenArray<IDLString>>(Vector<String>(taken))) {}
 
 DomicileSeat::~DomicileSeat() = default;
-
-bool DomicileSeat::Holds(const String& app_id) const {
-  return held_.Contains(app_id);
-}
 
 void DomicileSeat::Trace(Visitor* visitor) const {
   visitor->Trace(holds_);

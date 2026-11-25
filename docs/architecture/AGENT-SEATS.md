@@ -60,8 +60,12 @@ resources per client.
 ### Taking over
 
 - The user wins. Their click or key in a window an agent holds moves it to
-  the user's seat at once. The agent's next raw call there fails with "the
-  user took over this window"; refs keep working.
+  the user's seat at once. Any agent's next raw call there, or in its
+  popups, fails with "the user took over this window"; refs keep working.
+  Focusing another window of the same app only moves the agent's keyboard
+  off; it takes nothing.
+- A taken window is recorded on the seat it was taken from, so it frees up
+  when that agent leaves or the window closes.
 - **Give back** returns it. **Take over** in the bar pill's list does the
   same as a click.
 - A window an agent opens with `open` or `exec` starts held by the agent and

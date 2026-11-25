@@ -21,6 +21,9 @@ there, and the symptom is an arrow where a hand should be -- so `second` keeps
 "the bad cursor was refused" and "the channel died on the bad cursor" are the
 same reading. See components/domicile/common/cursor_shape.h.
 
+`seats` says an agent holds `second` and `late`, a window announced only
+after it, which must still reach the page held.
+
 `browser_toplevel_ids` names the toplevel id of the browser window the page
 opens, which must reach that window's `toplevelId`.
 
@@ -115,10 +118,19 @@ SEQUENCE = [
                 "name": "Claude Code",
                 "pointer": [100.5, 20],
                 "focused": "second",
-                "holds": ["second"],
+                "holds": ["second", "late"],
                 "taken": ["first"],
             }
         ],
+    },
+    {
+        "type": "app_appeared",
+        "app_id": "late",
+        "title": "Late",
+        "size": [200, 100],
+        "dialog": False,
+        "client_frame": False,
+        "toplevel_id": "late-listed",
     },
     {"type": "browser_toplevel_ids", "toplevel_ids": {"1": "browser-listed"}},
     {"type": "appearance", "accent_color": "#3584e4", "high_contrast": True, "reduced_motion": False},

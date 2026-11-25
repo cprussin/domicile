@@ -471,6 +471,10 @@ DomicileWindowState& DomicileHost::WindowNamed(const String& app_id) {
   }
   DomicileWindowState state;
   state.app_id = app_id;
+  const auto held = held_by_.find(app_id);
+  if (held != held_by_.end()) {
+    state.held_by = held->value;
+  }
   window_states_.push_back(std::move(state));
   return window_states_.back();
 }
@@ -2217,7 +2221,13 @@ void DomicileHost::Seats(
     Vector<domicile::mojom::blink::AgentSeatPtr> seats) {
   HeapVector<Member<DomicileSeat>> listed;
   listed.reserve(seats.size());
+  held_by_.clear();
   for (const auto& seat : seats) {
+    // The first seat listed holding a window wins, as the compositor lists
+    // them in session order.
+    for (const String& held : seat->holds) {
+      held_by_.insert(held, seat->id);
+    }
     listed.push_back(MakeGarbageCollected<DomicileSeat>(
         seat->id, seat->name,
         seat->pointer ? std::make_optional(seat->pointer->x()) : std::nullopt,
@@ -2226,13 +2236,8 @@ void DomicileHost::Seats(
   }
   bool moved = false;
   for (DomicileWindowState& state : window_states_) {
-    String held_by;
-    for (const Member<DomicileSeat>& seat : listed) {
-      if (seat->Holds(state.app_id)) {
-        held_by = seat->id();
-        break;
-      }
-    }
+    const auto held = held_by_.find(state.app_id);
+    const String held_by = held == held_by_.end() ? String() : held->value;
     if (held_by != state.held_by) {
       state.held_by = held_by;
       moved = true;

@@ -773,9 +773,11 @@ the agent seats, `undefined` until the compositor says, and
 - `taken`, the windows the user took from it.
 
 The user wins any window both want. Their click or key in a window an agent
-holds takes it, as `domicile.seats.takeOver(appId)` does. The agent's raw
-input there is then refused until `domicile.seats.giveBack(appId)`. A shell
-offers both, for example a "Give back" button on a window in `taken`.
+holds takes it, as `domicile.seats.takeOver(appId)` does. Every agent's raw
+input there, and in its popups, is then refused until
+`domicile.seats.giveBack(appId)`, the window closes, or the agent it was
+taken from leaves. A shell offers both, for example a "Give back" button on
+a window in `taken`.
 
 ### Focus follows the mouse
 

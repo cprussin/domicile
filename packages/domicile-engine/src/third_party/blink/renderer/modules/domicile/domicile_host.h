@@ -734,6 +734,9 @@ class MODULES_EXPORT DomicileHost final
   // has said anything. Each list replaced wholesale, for `displays_`'s reason.
   Member<FrozenArray<DomicileClipboardEntry>> clipboard_;
   Member<FrozenArray<DomicileSeat>> seats_;
+  // The seat id holding each window an agent holds, by app id, from the last
+  // `seats`: a window announced after it is held from the start.
+  HashMap<String, String> held_by_;
   Member<FrozenArray<DomicileTrayItem>> tray_items_;
   Member<FrozenArray<DomicileNotification>> notifications_;
   Member<FrozenArray<DomicileExtension>> extensions_;

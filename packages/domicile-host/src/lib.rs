@@ -307,14 +307,14 @@ impl Host {
         }
     }
 
-    /// Record which monitors are off: every one when `all`, else those named
-    /// in `asleep`.
     /// Which agent seat holds each window an agent holds, by app id, for
     /// [`Host::list_windows`]. The compositor's agent seats decide it.
     pub fn describe_agent_holds(&mut self, holds: HashMap<AppId, String>) {
         self.agent_holds = holds;
     }
 
+    /// Record which monitors are off: every one when `all`, else those named
+    /// in `asleep`.
     pub fn describe_darkness(&mut self, all: bool, asleep: Vec<String>) {
         self.darkness = Darkness { all, asleep };
     }

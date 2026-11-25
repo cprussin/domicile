@@ -13,8 +13,11 @@
 //! - The user wins. Their pointer entering a client takes it from the
 //!   agent's pointer, and their keyboard entering one takes it from the
 //!   agent's pointer and keyboard both, before the user's seat says `enter`.
-//!   The window the agent typed in is then taken: the agent is refused it
-//!   until the shell gives it back (`ChromeMessage::GiveBack`).
+//!   The window the agent typed in, if that is the window the user's
+//!   keyboard went to, is then taken: every agent is refused it and its
+//!   popups until the shell gives it back (`ChromeMessage::GiveBack`), or
+//!   the agent it was taken from leaves.
+//! - A window that closes leaves every seat.
 //! - The shell hears every agent seat (`HostMessage::Seats`) to draw them.
 //!
 //! Each agent seat has its own clipboard and primary selection too. An app
@@ -82,6 +85,8 @@ pub struct AgentSeats {
 
 struct AgentSeat {
     seat: Seat<DomicileCompositor>,
+    /// The agent's name, as it asked to be let in.
+    name: String,
     /// Where its pointer is on the desk, and what it holds down.
     input: Input,
     /// The window its pointer is over, if a native one.
@@ -90,7 +95,7 @@ struct AgentSeat {
     typing_in: Option<String>,
     /// Menus it opened that grabbed its keyboard, innermost last.
     menus: Vec<PopupSurface>,
-    /// Windows the user took from it, which it can't drive until given
+    /// Windows the user took from it, which no agent can drive until given
     /// back.
     taken: BTreeSet<String>,
 }
@@ -217,9 +222,15 @@ impl DomicileCompositor {
                 debug!(session, "the user's keyboard took an app from an agent's");
                 self.agent_lets_go(session);
                 typing.set_focus(self, None, SERIAL_COUNTER.next_serial());
+                let users = self.window_of(surface);
                 let agent = self.agent_seats.mine(session);
-                // Theirs until they give it back.
-                agent.taken.extend(agent.typing_in.take());
+                // The window the user went to is theirs until they give it
+                // back. Another of the app's only moved the agent's keyboard
+                // off it.
+                let typing_in = agent.typing_in.take();
+                if typing_in.is_some() && typing_in == users {
+                    agent.taken.extend(typing_in);
+                }
                 // Its menus close, as a menu does when its window loses the
                 // keyboard.
                 for menu in std::mem::take(&mut agent.menus).iter().rev() {
@@ -233,6 +244,8 @@ impl DomicileCompositor {
     /// The user takes window `app_id` from the agent holding it: the agent
     /// lets go and leaves it, and can't drive it until it's given back.
     pub fn take_over(&mut self, app_id: &str) {
+        // A menu is taken with its window.
+        let app_id = &self.window_named(app_id);
         let held_by = self
             .agent_seats
             .seats
@@ -240,7 +253,8 @@ impl DomicileCompositor {
             .find(|(_, agent)| {
                 [&agent.typing_in, &agent.pointing_at]
                     .into_iter()
-                    .any(|held| held.as_deref() == Some(app_id))
+                    .flatten()
+                    .any(|held| self.window_named(held) == *app_id)
             })
             .map(|(session, _)| *session);
         let Some(session) = held_by else {
@@ -293,15 +307,6 @@ impl DomicileCompositor {
         if !always && self.agent_seats.seats.is_empty() && self.agent_seats.told.is_empty() {
             return;
         }
-        let names: HashMap<u32, String> = self
-            .hub
-            .portals
-            .agents()
-            .known()
-            .connected
-            .into_iter()
-            .map(|agent| (agent.session, agent.agent))
-            .collect();
         let mut sessions: Vec<u32> = self.agent_seats.seats.keys().copied().collect();
         sessions.sort_unstable();
         let seats: Vec<SeatSummary> = sessions
@@ -311,7 +316,8 @@ impl DomicileCompositor {
                 // A menu it points at is held through its window.
                 let pointing_at = agent
                     .pointing_at
-                    .clone()
+                    .as_deref()
+                    .map(|on| self.window_named(on))
                     .filter(|window| self.toplevel_for(window).is_some());
                 let mut holds: Vec<String> = Vec::new();
                 for held in [agent.typing_in.clone(), pointing_at].into_iter().flatten() {
@@ -321,7 +327,7 @@ impl DomicileCompositor {
                 }
                 SeatSummary {
                     id: format!("agent-{session}"),
-                    name: names.get(&session).cloned().unwrap_or_default(),
+                    name: agent.name.clone(),
                     pointer: agent.input.at(),
                     focused: agent.typing_in.clone(),
                     holds,
@@ -354,6 +360,18 @@ impl DomicileCompositor {
         if self.agent_seats.gone.contains(&session) {
             return Err(format!("no agent is in as session {session}"));
         }
+        let Some(name) = self
+            .hub
+            .portals
+            .agents()
+            .known()
+            .connected
+            .into_iter()
+            .find(|agent| agent.session == session)
+            .map(|agent| agent.agent)
+        else {
+            return Err(format!("no agent is in as session {session}"));
+        };
         let keymap = match self.hub.host.lock().unwrap().describe_keymap() {
             Some(HostMessage::Keymap { keymap }) => keymap,
             _ => return Err("the desktop has no keyboard yet".to_string()),
@@ -378,6 +396,7 @@ impl DomicileCompositor {
             session,
             AgentSeat {
                 seat,
+                name,
                 input: Input::default(),
                 pointing_at: None,
                 typing_in: None,
@@ -433,7 +452,7 @@ impl DomicileCompositor {
                 let Some(surface) = self.surface_for(&app_id) else {
                     return Err(format!("window {app_id} has closed"));
                 };
-                self.taken_from(session, &app_id)?;
+                self.taken(&app_id)?;
                 self.someone_else_holds(session, &surface, false)?;
                 let (x, y) = crate::window_geometry::surface_point(
                     with_states(&surface, window_geometry),
@@ -528,7 +547,7 @@ impl DomicileCompositor {
                     }
                     (true, Some(surface)) => {
                         if let Some(window) = self.agent_seats.mine(session).typing_in.clone() {
-                            self.taken_from(session, &window)?;
+                            self.taken(&window)?;
                         }
                         self.someone_else_holds(session, &surface, true)?
                     }
@@ -557,7 +576,7 @@ impl DomicileCompositor {
                  Act on browser windows and the shell by ref"
             ));
         };
-        self.taken_from(session, window)?;
+        self.taken(window)?;
         self.someone_else_holds(session, &surface, true)?;
         let (keyboard, _) = self.agent_seats.mine(session).devices();
         keyboard.set_focus(self, Some(surface), SERIAL_COUNTER.next_serial());
@@ -565,15 +584,41 @@ impl DomicileCompositor {
         Ok(())
     }
 
-    /// Why agent `session` can't drive window `window`: the user took it.
-    fn taken_from(&mut self, session: u32, window: &str) -> Result<(), String> {
-        if self.agent_seats.mine(session).taken.contains(window) {
+    /// Why no agent can drive window `app_id`, or a popup over it: the user
+    /// took it.
+    fn taken(&self, app_id: &str) -> Result<(), String> {
+        let window = self.window_named(app_id);
+        if self
+            .agent_seats
+            .seats
+            .values()
+            .any(|agent| agent.taken.contains(&window))
+        {
             return Err(format!(
                 "the user took over window {window}: act on it by ref, or wait until they give it \
                  back"
             ));
         }
         Ok(())
+    }
+
+    /// The window `app_id` names: itself, or the window under the popup it
+    /// is. A closed one names itself.
+    fn window_named(&self, app_id: &str) -> String {
+        self.surface_for(app_id)
+            .and_then(|surface| self.window_of(&surface))
+            .unwrap_or_else(|| app_id.to_string())
+    }
+
+    /// Window `app_id` closed: it leaves every agent's seat.
+    pub fn agents_window_closed(&mut self, app_id: &str) {
+        for agent in self.agent_seats.seats.values_mut() {
+            if agent.typing_in.as_deref() == Some(app_id) {
+                agent.typing_in = None;
+            }
+            agent.taken.remove(app_id);
+        }
+        self.tell_the_chromes_the_seats(false);
     }
 
     /// Why agent `session` can't send `surface`'s client its pointer, or

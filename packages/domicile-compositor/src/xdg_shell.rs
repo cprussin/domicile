@@ -199,6 +199,7 @@ impl XdgShellHandler for DomicileCompositor {
             self.foreign_toplevels.closed(&app_id);
             self.by_surface.remove(surface.wl_surface());
             self.forget(&app_id);
+            self.agents_window_closed(&app_id);
             self.the_running_apps_changed();
             // Return the keyboard to the chrome. The shell usually refocuses
             // something, but a crashed client gives it no chance, so the

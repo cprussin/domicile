@@ -12,6 +12,8 @@
 //   GUARD browser <json>           `browserWindows`: each one's id and
 //                                  toplevelId
 //   GUARD focused <id|null>        `focusedWindow`
+//   GUARD seats <json>             `seats`: each agent seat's id, name,
+//                                  pointer, focused, held and taken windows
 //   GUARD appearance <a> <c> <m>   `accentColor`, `highContrast`,
 //                                  `reducedMotion`
 //   GUARD changed n=…              how many `windowschanged` it heard after

@@ -41,9 +41,6 @@ class MODULES_EXPORT DomicileSeat final : public ScriptWrappable {
   const FrozenArray<IDLString>& holds() const { return *holds_; }
   const FrozenArray<IDLString>& taken() const { return *taken_; }
 
-  // Whether it holds window `app_id`.
-  bool Holds(const String& app_id) const;
-
   void Trace(Visitor*) const override;
 
  private:
@@ -54,7 +51,6 @@ class MODULES_EXPORT DomicileSeat final : public ScriptWrappable {
   std::optional<double> pointer_y_;
   // Null for none.
   String focused_;
-  Vector<String> held_;
   Member<FrozenArray<IDLString>> holds_;
   Member<FrozenArray<IDLString>> taken_;
 };
