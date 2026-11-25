@@ -137,4 +137,10 @@
   // page's top left. Draw and pass clicks to the window only within them.
   // Null for all of it, and for any other window.
   readonly attribute DOMString? shape;
+
+  // The id of the browser window whose page opened this one, with
+  // `window.open()` or `target="_blank"`, so the shell can open it from
+  // there. Null for none: a window the shell or the user opened, and one a
+  // plain `<webview>`'s page opened.
+  readonly attribute DOMString? opener;
 };

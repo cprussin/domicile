@@ -146,6 +146,10 @@ struct BrowserWindow {
   // [{"x", "y", "width", "height"}, ...] in CSS pixels from its page's top
   // left. Empty for all of it, and for any other window.
   string shape;
+  // The browser window whose page opened this one, with `window.open()` or
+  // `target="_blank"`; empty for none, as for a window the shell opened or
+  // one a plain `<webview>`'s page opened.
+  string opener;
 };
 
 // What OpenApp does when an app window with its `app_id` is already open.

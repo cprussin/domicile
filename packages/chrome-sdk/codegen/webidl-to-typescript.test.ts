@@ -23,6 +23,16 @@ describe("webIdlToTypeScript", () => {
     ).toContain("warp(box?: DOMRectReadOnly | null): void;");
   });
 
+  it("takes an element and typed arrays by their own names", () => {
+    expect(
+      emit(`interface Host {
+  undefined update(Element element, Float32Array values, Uint8Array pixels);
+};`),
+    ).toContain(
+      "update(element: Element, values: Float32Array, pixels: Uint8Array): void;",
+    );
+  });
+
   it("emits an enum as a union of its values, with its comment", () => {
     expect(
       emit(`// The theme.

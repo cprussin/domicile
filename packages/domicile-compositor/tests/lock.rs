@@ -388,6 +388,7 @@ fn say_start(chrome: &mut domicile_test_chrome::Chrome, reported: &std::path::Pa
                     reported.display()
                 ),
             ],
+            from: None,
         })
         .expect("the chrome socket takes a spawn");
 }

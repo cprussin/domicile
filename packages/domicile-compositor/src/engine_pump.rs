@@ -204,8 +204,10 @@ impl DomicileCompositor {
                         }
                     }
                 }
-                // Handled by the session, with the buffers.
-                engine::Event::Released { .. } | engine::Event::Imported { .. } => {}
+                // Handled by the session, with the lingering surfaces.
+                engine::Event::Released { .. }
+                | engine::Event::Imported { .. }
+                | engine::Event::Showing { .. } => {}
                 engine::Event::FrameDone { surface, frame } => {
                     let app_id = self
                         .engine

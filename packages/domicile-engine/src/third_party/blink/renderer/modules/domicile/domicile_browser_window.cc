@@ -33,7 +33,8 @@ DomicileBrowserWindow::DomicileBrowserWindow(
     bool wants_fullscreen,
     bool urgent,
     bool ignores_pointer,
-    const String& shape)
+    const String& shape,
+    const String& opener)
     : id_(id),
       url_(url),
       title_(title),
@@ -61,7 +62,8 @@ DomicileBrowserWindow::DomicileBrowserWindow(
       wants_fullscreen_(wants_fullscreen),
       urgent_(urgent),
       ignores_pointer_(ignores_pointer),
-      shape_(shape) {}
+      shape_(shape),
+      opener_(opener) {}
 
 DomicileBrowserWindow::~DomicileBrowserWindow() = default;
 

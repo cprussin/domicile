@@ -204,6 +204,11 @@ class CORE_EXPORT HTMLAppElement final
   // The producer of the surface shown disconnected.
   void OnSurfaceLost();
 
+  // Tells the browser whether the element is in its page, after the task
+  // that inserted or removed it, so a move tells it nothing.
+  void ScheduleShownReport();
+  void ReportShown();
+
   // Ask the browser for the surface of the video `picture-in-picture` names,
   // and embed each it sends; the first fires
   // `domicile-picture-in-picture-shown`. A no-op without a frame or without
@@ -280,6 +285,11 @@ class CORE_EXPORT HTMLAppElement final
 
   std::unique_ptr<::blink::SurfaceLayerBridge> surface_layer_bridge_;
   std::unique_ptr<ExternalSurfaceEmbedder> external_surface_embedder_;
+
+  // Whether the browser last heard the element is in its page, and whether a
+  // ReportShown() is posted.
+  bool shown_reported_ = true;
+  bool shown_report_posted_ = false;
 
   // A picture-in-picture video's: the browser's list of them, and the
   // surface of the one shown. Unbound for a window's <app>.

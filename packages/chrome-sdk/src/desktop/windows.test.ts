@@ -23,6 +23,7 @@ describe("windows", () => {
         height: undefined,
         heldBy: undefined,
         inhibitsShortcuts: false,
+        launchedFrom: undefined,
         maxHeight: undefined,
         maxWidth: undefined,
         minHeight: undefined,
@@ -46,6 +47,13 @@ describe("windows", () => {
         y: undefined,
       },
     ]);
+  });
+
+  it("lists where the launch a window answered started", () => {
+    const fake = new FakeDomicileHost();
+    fake.appear("1", { launchedFrom: "launcher" });
+
+    expect(desktop(fake.host).windows.list[0]?.launchedFrom).toBe("launcher");
   });
 
   it("reads the same list until the windows change", () => {

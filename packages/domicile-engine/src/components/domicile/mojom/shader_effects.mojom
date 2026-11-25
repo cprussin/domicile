@@ -3,6 +3,8 @@
 
 module domicile.mojom;
 
+import "ui/gfx/geometry/mojom/geometry.mojom";
+
 // The shell's shader effects: SkSL programs that `filter: domicile-shader()`
 // runs in viz. Bound for the shell's document only. See
 // docs/architecture/MOTION.md#shader-primitive.
@@ -10,13 +12,44 @@ interface ShaderEffects {
   // Hears which effects the engine drops. Once per document.
   Listen(pending_remote<ShaderEffectsClient> client);
 
-  // Compiles `sksl` in viz for this document's frames. `id` names the effect
-  // in a filter and `arguments` is how many floats it takes after `size`.
-  // When it does not compile, `id` is 0 and `error` says why.
-  Register(string sksl) => (uint32 id, uint32 arguments, string error);
+  // Compiles `source` in viz for this document's frames. `id` names the
+  // effect in a filter, `arguments` is how many floats it takes after
+  // `size`, and `arrays` are the array uniforms it takes. When it does not
+  // compile, `id` is 0 and `error` says why.
+  Register(ShaderEffectSource source)
+      => (uint32 id,
+          uint32 arguments,
+          array<ShaderEffectArray> arrays,
+          string error);
 
   // Forgets an effect this document registered.
   Unregister(uint32 id);
+};
+
+// An image an effect samples as `uniform shader <name>`: `size` of
+// unpremultiplied RGBA, rows top first.
+struct ShaderEffectImage {
+  string name;
+  gfx.mojom.Size size;
+  array<uint8> pixels;
+};
+
+// A fragment program, and for a mesh effect a vertex program over a grid of
+// `columns` by `rows` cells or `instances` quads. See
+// //components/viz/service/display/domicile/shader_effects.h.
+struct ShaderEffectSource {
+  string sksl;
+  string vertex;
+  uint32 columns;
+  uint32 rows;
+  uint32 instances;
+  array<ShaderEffectImage> images;
+};
+
+// An array uniform an effect takes, and how many floats it holds.
+struct ShaderEffectArray {
+  string name;
+  uint32 floats;
 };
 
 interface ShaderEffectsClient {

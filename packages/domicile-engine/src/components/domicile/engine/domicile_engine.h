@@ -745,6 +745,13 @@ typedef struct DomicileEngineCallbacks {
                                  uint32_t count,
                                  const DomicileBrowserWindowView* views,
                                  uint32_t view_count);
+  // Whether an <app> element in a page shows `surface`: zero once the last
+  // one that embedded it leaves its page, nonzero once one is back. Sent only
+  // when that changes; a surface starts out shown. A compositor keeps a
+  // closed window's last frame only while it is.
+  //
+  // An older engine ignores it.
+  void (*showing)(void* user_data, DomicileSurfaceId surface, int showing);
 } DomicileEngineCallbacks;
 
 // Returns nonzero. Exists so a compositor can tell an engine that calls

@@ -39,7 +39,8 @@ const swarm = await domicile.effects.register("swarm", {
 });
 
 // Arrays a CSS function cannot carry, such as a cloth simulation's points.
-swarm.update(element, { points: new Float32Array(…) });
+// `register` resolves to a Result; `update` returns why it failed, if it did.
+swarm.unwrap().update(element, { points: new Float32Array(…) });
 ```
 
 ```css
@@ -69,8 +70,11 @@ app[data-closing] {
 - **`time` uniform**, opt in. It redraws every vsync, so a shell uses it only
   while something animates.
 - **Closed windows.** A closed window's last frame stays while its `<app>`
-  stays in the page, up to 10 s, so a close effect plays on its pixels. Today
-  it lingers a fixed 1 s (`engine_lingering.rs`).
+  stays in the page, up to 10 s, so a close effect plays on its pixels. It
+  goes as soon as no `<app>` shows it (`engine_lingering.rs`).
+- **Where a window came from.** A window lists `launchedFrom`, the `from` its
+  launch named (`launch(argv, "launcher")`), and a browser window lists its
+  `opener`, so an open motion can start there.
 - **Composes** with the built-in filter functions in one `filter` list.
 
 ### Engine
@@ -94,7 +98,7 @@ app[data-closing] {
 - **Gate:** an origin trial feature for `domicile://shell/` only, as `<app>`
   is (patch 0116). Viz refuses effects from any other frame sink.
 - **As built (patch 0273, fragment effects):** the shell calls
-  `registerShaderEffect(name, sksl, outset)`. The browser's `ShaderEffects`
+  `registerShaderEffect(name, init)`. The browser's `ShaderEffects`
   service, which only a shell document can bind, hands the source to viz
   through `HostFrameSinkManager`. That service keeps it to register again
   after a GPU restart. Viz compiles the source and keeps it under the shell's
@@ -104,6 +108,33 @@ app[data-closing] {
   effect unscaled and scales only its outset. An effect with an outset moves
   pixels, so its animations run on the main thread. One with no outset
   animates on the compositor. The software renderer draws no effects.
+- **As built (patch 0274, meshes, images and arrays):**
+  - A mesh effect's `SkMeshSpecification` has two attributes, `uv` (0 to 1
+    across the grid or quad) and `index` (the grid point's or the
+    instance's), and three varyings, `position`, `uv` and `data`. Viz builds
+    the vertex buffer once, at register, with two triangles per cell or
+    instance, at most 16384. Its `size` and varyings are in the pass's
+    device pixels, as a fragment effect's are.
+  - The aggregator mipmaps a pass whose quad has a mesh effect, so the pass
+    has a texture to sample and is never bypassed. `SkiaRenderer` draws the
+    quad with `drawMesh` on a layer that takes the other filters, the mask,
+    the opacity and the blend mode. The mesh draws first and the other
+    filters run over it, whatever their order in the list. A mesh effect in
+    `backdrop-filter` draws nothing.
+  - Images cross with the source, as RGBA pixels: at most 4, 2048 on a side.
+    The SDK fetches and decodes them.
+  - Arrays ride on the `SHADER` filter, after its arguments, through the
+    layer tree's effect node to viz. The route keeps an element's arrays in
+    the same commit as its filter, so an array and the argument that goes
+    with it land in one frame, and needs no new channel. `update()` stores
+    the arrays on the element and marks its effect node dirty, so Blink
+    rebuilds the filter in the next frame without a style recalc. A
+    compositor animation of the filter keeps the arrays the page committed.
+    An element's arrays hold at most 64 KiB.
+  - `outset: "screen"` is the viewport's longer side.
+  - A filter animation whose only pixel-moving filters are shader effects
+    runs on the compositor when every keyframe has the same outsets, since
+    the layer's bounds then hold.
 
 ### Key decisions
 
@@ -279,10 +310,14 @@ Shader primitive (engine):
 - [x] Blink `domicile-shader()` parsing and interpolation
 - [x] `domicile.effects.register` in the SDK, the shell-only gate, the GPU
       hang handling
-- [ ] mesh effects: `SkMesh` grid and instances, `vertex`, `update` arrays
-- [ ] `images` inputs and `outset: "screen"`
-- [ ] a closed window's last frame stays while its `<app>` does
-- [ ] guard on `crux` for CSS 3D transforms on `<app>`
+- [x] mesh effects: `SkMesh` grid and instances, `vertex`, `update` arrays
+      (`guard-shader-mesh.sh`)
+- [x] `images` inputs and `outset: "screen"` (`guard-shader-image.sh`)
+- [x] a closed window's last frame stays while its `<app>` does
+- [x] where a window came from: its launch, or the browser window that
+      opened it
+- [x] guard on `crux` for CSS 3D transforms on `<app>`
+      (`guard-app-3d-transform.sh`)
 - [ ] `examples/`: smoke, cloth, swarm, liquid and cube, as proof each
       reference effect builds
 - [ ] docs: `SHELL-*` page with the API, costs and the timing note

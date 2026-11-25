@@ -424,6 +424,7 @@ const browserWindow = (id: string, title: string): DomicileBrowserWindow => ({
   menuBarAutoHide: false,
   menuBarVisible: true,
   messageBox: null,
+  opener: null,
   parent: null,
   partition: "",
   popupMenu: null,

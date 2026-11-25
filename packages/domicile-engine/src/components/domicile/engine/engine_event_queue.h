@@ -172,6 +172,9 @@ struct EngineEvent {
     kBrowserWindows,
     // The input devices the browser reads.
     kInputDevices,
+    // Whether an <app> element shows a window's surface, so its last frame
+    // stays after it closes.
+    kShowing,
   };
 
   Type type = Type::kConfigure;
@@ -210,6 +213,8 @@ struct EngineEvent {
   uint32_t flags = 0;
   // kCompositing: whether the browser composites in memory.
   bool in_memory = false;
+  // kShowing: whether an element shows `surface`.
+  bool showing = true;
   // kBrowserWindows: the whole list, in open order.
   std::vector<EngineBrowserWindow> browser_windows;
   // kInputDevices: the whole list, in the order the browser found them.

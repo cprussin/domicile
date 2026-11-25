@@ -49,6 +49,7 @@ class ExternalSurfaceProvider : public mojom::ExternalSurfaceProvider {
              EmbedCallback callback) override;
   void WaitForEnd(const viz::FrameSinkId& frame_sink_id,
                   WaitForEndCallback callback) override;
+  void SetShown(bool shown) override;
 
  private:
   // One bound page.

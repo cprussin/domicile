@@ -53,7 +53,7 @@ resources per client.
 | Window | Agent pointer and keys |
 |---|---|
 | Native Wayland | Agent seat, multiplexed |
-| Browser and Electron windows | Agent seat at desk positions, routed compositor → browser (patch 0276); refs through CDP on the window's own page (the `browser_` tools), which moves neither the engine's pointer nor its focus (patch 0275) |
+| Browser and Electron windows | Agent seat at desk positions, routed compositor → browser (patch 0277); refs through CDP on the window's own page (the `browser_` tools), which moves neither the engine's pointer nor its focus (patch 0276) |
 | X11 apps | User's seat only. xwayland-satellite is one client with one X focus, so raw input waits for the user to step away, as today |
 | The shell | Refs only (`browser_*` on window `shell`) |
 
@@ -72,14 +72,14 @@ it does to a client. It asks the browser instead:
   widget under it. A point that lands in the shell's own page is refused:
   agents act on the shell by ref. A point in a browser window, its views or
   its popups is sent to that widget in its own coordinates, keeping the
-  user's focus (patch 0275), and gives that window's page focus of its own
+  user's focus (patch 0276), and gives that window's page focus of its own
   for the agent's keys.
 - Keys go to the page the agent last clicked or focused, as evdev codes
   through the desk's keyboard layout: a key down, the character it types,
   and a key up.
 - A drag that starts from an agent's press is carried page to page by the
   browser, never as a platform drag that would move the user's pointer
-  (patch 0276).
+  (patch 0277).
 - The browser answers each ask with `agent_input_reached`: the window it
   reached, or why it refused. The compositor holds the agent's next steps
   until it does, so the agent's tool call answers with the real outcome.
@@ -178,7 +178,7 @@ domicile.seats.giveBack(windowId);
 - [x] new windows from an agent's `open`/`exec` start held by it
 - [x] engine and compositor: an agent seat's pointer, buttons, scrolls,
       keys and drags reach browser windows at desk positions
-      (`agent_input`, patch 0276); the shell refuses them; the user's press
+      (`agent_input`, patch 0277); the shell refuses them; the user's press
       or key takes the window
 - [x] manganese: ring, name tag and cursor on browser windows too
 

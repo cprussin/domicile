@@ -23,7 +23,7 @@
 # move to the browser window, so a "kept" reading in the positive run is the
 # patch's doing and not a guard that cannot see focus move.
 #
-# Headless, with no compositor or client. See patch 0275.
+# Headless, with no compositor or client. See patch 0276.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"

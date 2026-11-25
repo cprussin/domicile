@@ -24,7 +24,7 @@
 # page must get nothing, so the positive run's text is the agent seat's and
 # not something else reaching the page.
 #
-# Headless, with no real compositor or client. See patch 0276.
+# Headless, with no real compositor or client. See patch 0277.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"

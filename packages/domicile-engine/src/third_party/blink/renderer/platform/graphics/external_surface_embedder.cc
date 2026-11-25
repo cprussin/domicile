@@ -56,6 +56,10 @@ ExternalSurfaceEmbedder::ExternalSurfaceEmbedder(
 
 ExternalSurfaceEmbedder::~ExternalSurfaceEmbedder() = default;
 
+void ExternalSurfaceEmbedder::SetShown(bool shown) {
+  provider_->SetShown(shown);
+}
+
 viz::LocalSurfaceId ExternalSurfaceEmbedder::Embed(
     const String& app_id,
     const viz::FrameSinkId& parent_frame_sink_id,
