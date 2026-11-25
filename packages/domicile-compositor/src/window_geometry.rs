@@ -42,12 +42,12 @@ pub fn crop(
         (origin + f64::from(logical) * pixels / f64::from(units)).round() as i32
     };
     let (x0, y0) = (
-        across(left, source_x, source_width, surface_width),
-        across(top, source_y, source_height, surface_height),
+        across(left, source_x, source_width, surface_width).min(buffer.0 as i32 - 1),
+        across(top, source_y, source_height, surface_height).min(buffer.1 as i32 - 1),
     );
     let (x1, y1) = (
-        across(right, source_x, source_width, surface_width),
-        across(bottom, source_y, source_height, surface_height),
+        across(right, source_x, source_width, surface_width).max(x0 + 1),
+        across(bottom, source_y, source_height, surface_height).max(y0 + 1),
     );
     let whole = (x0, y0, x1, y1) == (0, 0, buffer.0 as i32, buffer.1 as i32);
     if whole {
@@ -201,6 +201,15 @@ mod tests {
                 Some((0.0, 0.0, 800.0, 600.0))
             ),
             (0, 0, 0, 0)
+        );
+    }
+
+    /// A cast indexes the buffer with the crop.
+    #[test]
+    fn a_source_smaller_than_a_pixel_is_the_pixel_it_is_in() {
+        assert_eq!(
+            crop(None, None, (1, 1), (10, 10), Some((9.6, 0.2, 0.3, 0.2))),
+            (9, 0, 1, 1)
         );
     }
 

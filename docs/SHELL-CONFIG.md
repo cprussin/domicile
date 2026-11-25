@@ -136,7 +136,7 @@ An edit applies to the running desktop, and windows stay open:
 | `input.pointers` | Tablets, touchscreens and absolute mice rebound |
 | `output.max_scale` | Re-advertised to clients |
 | `output.displays`, `output.profiles` | Displays rearranged |
-| `idle.blank_after_seconds`, `idle.lock_after_seconds` | Idle timer restarts. Dark screens relight |
+| `idle.blank_after_seconds`, `idle.lock_after_seconds`, `idle.ignore_pointer_motion` | Idle timer restarts. Dark screens relight |
 | `theme.mode` | Shell and windows repaint |
 | `theme.accent_color`, `contrast`, `reduced_motion` | Shell and windows that read the settings portal follow |
 | `theme.cursor_theme`, `cursor_size` | The pointer on a tty is redrawn; windows that read the settings portal follow |
@@ -384,6 +384,11 @@ on. `idle.lock_after_seconds` is how long before it locks.
   may be shorter or longer than `blank_after_seconds`. Unset means no lock on
   idle; the desktop still locks when the shell asks and before the machine
   sleeps ([Locking](SHELL-IDLE-AND-LOCK.md#locking)). `0` is an error.
+- `idle.ignore_pointer_motion` ignores pointer motion, for both timeouts, the
+  shell's idle watches, the idle time apps read, and lighting dark screens.
+  Keys, touch screens, clicks, scrolling, unlock attempts and
+  `domicile wake-displays` still count. Defaults to `false`
+  ([IDLE.md](IDLE.md#ignoring-pointer-motion)).
 - Apps can block blanking and locking (for example, during a video) with
   `zwp_idle_inhibit_manager_v1`. This involves only the app and the
   compositor.

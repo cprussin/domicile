@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/barrier_closure.h"
 #include "base/callback_list.h"
 #include "base/check.h"
 #include "base/functional/bind.h"
@@ -33,6 +34,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
@@ -920,6 +922,16 @@ class DeskWindows final : public base::SupportsUserData::Data,
   bool IsApp(const std::string& id) const {
     auto found = std::ranges::find(windows_, id, &Window::id);
     return found != windows_.end() && found->app;
+  }
+
+  void UnloadForExit(base::OnceClosure unloaded) {
+    // Posted, as a page calls it from its destructor too.
+    const base::RepeatingClosure page_unloaded =
+        base::BindPostTaskToCurrentDefault(
+            base::BarrierClosure(windows_.size(), std::move(unloaded)));
+    for (const Window& window : windows_) {
+      window.guest->UnloadForExit(page_unloaded);
+    }
   }
 
   // Closes window `id` once its page agrees; see WebViewGuest::AskToClose. An
@@ -2093,6 +2105,14 @@ void AskToCloseBrowserWindow(const std::string& id) {
 void CloseBrowserWindow(const std::string& id) {
   if (DeskWindows* windows = ShellDeskWindows()) {
     windows->Close(id);
+  }
+}
+
+void UnloadBrowserWindowsForExit(base::OnceClosure unloaded) {
+  if (DeskWindows* windows = ShellDeskWindows()) {
+    windows->UnloadForExit(std::move(unloaded));
+  } else {
+    std::move(unloaded).Run();
   }
 }
 

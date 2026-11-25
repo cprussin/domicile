@@ -296,7 +296,7 @@ class ControlChannel : public mojom::ControlChannel {
   void DeliverModifierTap(TapModifier modifier, base::TimeDelta held);
   // Somebody used the desk; see DeskActivity. Dropped while no compositor is
   // connected: the next one starts its idle clock fresh.
-  void SomebodyIsHere(const std::string& input);
+  void SomebodyIsHere(const std::string& input, ActivityKind kind);
   // The engine caught itself in a bug; see DeskFaults. Held while no
   // compositor is connected, so the person still hears of it.
   void FaultFound(const std::string& what);

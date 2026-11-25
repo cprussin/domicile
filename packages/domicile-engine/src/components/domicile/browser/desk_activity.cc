@@ -7,9 +7,33 @@
 #include <vector>
 
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/strings/strcat.h"
 
 namespace domicile {
+
+namespace {
+
+// The same as ui::UserActivityDetector's.
+constexpr base::TimeDelta kReportInterval = base::Milliseconds(200);
+
+}  // namespace
+
+std::string_view ActivityKindName(ActivityKind kind) {
+  switch (kind) {
+    case ActivityKind::kKey:
+      return "key";
+    case ActivityKind::kPointer:
+      return "pointer";
+    case ActivityKind::kPointerMotion:
+      return "pointer_motion";
+    case ActivityKind::kTouch:
+      return "touch";
+    case ActivityKind::kOther:
+      return "other";
+  }
+  NOTREACHED();
+}
 
 // static
 DeskActivity& DeskActivity::Get() {
@@ -34,7 +58,7 @@ void DeskActivity::RemoveListener(ListenerId listener) {
   });
 }
 
-void DeskActivity::Heard(const std::string& input) {
+void DeskActivity::Heard(const std::string& input, ActivityKind kind) {
   // Run outside the lock, since a callback may re-enter this.
   std::vector<Listener> tell;
   {
@@ -44,8 +68,16 @@ void DeskActivity::Heard(const std::string& input) {
     }
   }
   for (const Listener& heard : tell) {
-    heard.Run(input);
+    heard.Run(input, kind);
   }
+}
+
+bool ActivityThrottle::ShouldReport(base::TimeTicks now) {
+  if (!last_.is_null() && now - last_ < kReportInterval) {
+    return false;
+  }
+  last_ = now;
+  return true;
 }
 
 std::string DescribeInput(std::string_view event, std::string_view device) {

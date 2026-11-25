@@ -835,8 +835,8 @@ fn read_chrome_messages(
                 hub.send_request(ClientRequest::KeyForInputMethod { keycode, pressed });
                 Vec::new()
             }
-            Ok(ChromeMessage::Activity { input }) => {
-                hub.send_request(ClientRequest::Activity { input });
+            Ok(ChromeMessage::Activity { input, kind }) => {
+                hub.send_request(ClientRequest::Activity { input, kind });
                 Vec::new()
             }
             Ok(ChromeMessage::EngineFault { what }) => {

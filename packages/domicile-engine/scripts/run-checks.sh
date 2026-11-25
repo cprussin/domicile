@@ -63,6 +63,7 @@ TOGETHER=(
   guard-webview-content-script
   guard-extension-installer
   guard-extension-in-private
+  guard-extension-reload
   guard-extension-tray
   guard-extension-menu
   guard-extension-open-popup
@@ -161,6 +162,7 @@ TOGETHER=(
   guard-video-codecs
   guard-browser-brand
   guard-clean-exit
+  guard-exit-unload
 )
 
 # Run one at a time, after the rest. Latency measures time, so it runs alone.

@@ -124,6 +124,7 @@ Headless.
 | `guard-video-codecs.sh` | the engine plays H.264 and AAC (`src/build/args/domicile_codecs.gn`); VP9 is the control |
 | `guard-browser-brand.sh` | sites are told the engine is Google Chrome in `navigator.userAgentData` and `Sec-CH-UA` (patch 0157); `Chromium` is the control |
 | `guard-clean-exit.sh` | two SIGTERMs back to back, as a session end sends, leave the profile's clean-exit beacon saying the engine exited cleanly (patch 0259); the control sends SIGKILL and the beacon must say it did not |
+| `guard-exit-unload.sh` | a browser window's page runs `pagehide` when SIGTERM ends the engine, and what it wrote to localStorage is there at the next start; a page that hangs in its own does not hold the exit up; no window closes (patch 0278). The control sends SIGKILL, and the lock the page gives up must still be held |
 | `guard-display-capture.sh` | a display capture through the C ABI reads back the shell's color, before and after a resize |
 | `guard-headless-desk.sh` | with `--domicile-headless-desk`, two virtual displays come on `virtual-1` and `virtual-2`, and a capture of each shows its own slice of the one shell page; a click and the A key sent with `domicile_input_inject` reach the shell |
 | `guard-shell-crash.sh` | a crashed shell ends the engine with a FATAL line saying the shell's renderer died and that this is a bug in Domicile (patch 0124) |
@@ -158,7 +159,7 @@ Headless.
 | `guard-webview-file-access.sh` | a page that opened a file and writes to it asks the shell as `domicile-prompt` (`file-edit`, with the site, the name and the path) in place of Chrome's prompt (patch 0179), and the shell's yes lets the page write it; its control says no and the file is kept |
 | `guard-webview-page-failure.sh` | a page that fails to load (an empty HTTP 500, then no answer at all) is reported to the shell as `domicile-page-failure-change` (`http` with its status, then `network` with `ERR_EMPTY_RESPONSE`) in place of Chrome's error pages (patch 0180), and the page that loads after clears it; its control loads a page that works and reports nothing |
 | `guard-webview-resend-form.sh` | reloading a page a form posted to asks the shell as `domicile-prompt` (`resend-form`, with the site and the page's title) in place of Chrome's "Confirm Form Resubmission" dialog (patch 0181), and the shell's yes posts the form again; its control says no and the form is posted once |
-| `guard-webview-page-picker.sh` | pressing a color input asks the shell as `domicile-picker` (`color`, with the value, the page's suggested color and the input's box) in place of Chrome's picker (patch 0182), and the color the shell picks reaches the page; its control cancels and the page keeps black |
+| `guard-webview-page-picker.sh` | pressing a color input asks the shell as `domicile-picker` (`color`, with the value, the page's suggested color and the input's box in the element's pixels) in place of Chrome's picker (patch 0182), and the color the shell picks reaches the page; its control cancels and the page keeps black |
 | `guard-webview-chrome-sheets.sh` | a page in a `<webview>` has no `PaymentRequest`, which asks with a Chrome sheet (patch 0183, `RefuseChromeDialogs`); its control is the same page seeing `navigator.credentials` and document picture-in-picture |
 | `guard-webview-sign-in-with.sh` | a page's "Sign in with" (FedCM) request asks the shell as `domicile-identity` (`accounts`, with the site, the provider, its account and what signing in shares) in place of Chrome's account chooser (patch 0212); choosing the account gets the page the provider's token, navigating away withdraws the step (`domicile-identity-withdrawn`), and dismissing rejects the request |
 | `guard-webview-video-picture-in-picture.sh` | a video the shell's context menu puts in picture-in-picture is listed to the shell for its window with its place in its page in the first list that sizes it (patch 0224), and its `<app>` fires `domicile-picture-in-picture-shown` once it draws it, in place of Chrome's floating window (patch 0213); the shell shows it in an `<app picture-in-picture>`, and its close pauses the video and takes it off the list; its control is the video playing before the request |
@@ -201,11 +202,12 @@ Headless.
 | `guard-webview-content-script.sh` | a `--load-extension` content script runs in a `<webview>` |
 | `guard-extension-installer.sh` | an extension named in the compositor's `extensions` message is installed (patch 0055) |
 | `guard-extension-in-private.sh` | an extension the private profile switches on runs in a `<webview private>`; switched off there it does not |
+| `guard-extension-reload.sh` | `load_unpacked` on the command socket reloads an extension in both of two browser profiles, after an edit and from another directory; an edit it is not sent for runs in neither |
 | `guard-extension-tray.sh` | the tray event, popup, its auto-resized size and `window.close()` (patch 0056) |
 | `guard-extension-menu.sh` | `installedExtensions` lists every extension with its settings; `configureExtension()`, `setExtensionEnabled()` and `uninstallExtension()` change it, and refuse what the config owns |
 | `guard-extension-open-popup.sh` | `action.openPopup()` reaches the shell as `extensionpopuprequested` |
 | `guard-extension-side-panel.sh` | `sidePanel.open()` opens the side panel's page as a popup window with no size, which the shell tiles |
-| `guard-webview-tabs.sh` | `tabs.query` and `tabs.setZoom` target the focused `<webview>` (patch 0057), and `webNavigation.getAllFrames` lists its page |
+| `guard-webview-tabs.sh` | `tabs.query` and `tabs.setZoom` target the focused `<webview>` (patch 0057), `webNavigation.getAllFrames` lists its page, and `tabs.detectLanguage` is refused |
 | `guard-webview-active-tab.sh` | a tray click grants `activeTab` to the focused tab |
 | `guard-webview-popup-window.sh` | `windows.create({type: "popup"})` opens a browser window the shell draws at the requested size |
 

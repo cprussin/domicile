@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Wed, 25 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: pages unload before SIGTERM ends the browser
+
+SIGTERM ends the browser with SessionEnding(), which runs no `pagehide` and
+no `unload`. A desktop ends with SIGTERM every time, so no page ever heard
+its end. Element gives up its session lock there: after a quick login it
+said it was open in another window.
+
+`LetPagesUnload` (`chrome/browser/domicile/domicile_page_unloading.cc`) runs
+both events in every browser window's page first, for 2 s at most.
+
+guard-exit-unload.sh checks it.
+---
+ chrome/browser/chrome_browser_main_posix.cc | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/chrome/browser/chrome_browser_main_posix.cc b/chrome/browser/chrome_browser_main_posix.cc
+index 3be09bc..5786dab 100644
+--- a/chrome/browser/chrome_browser_main_posix.cc
++++ b/chrome/browser/chrome_browser_main_posix.cc
+@@ -20,6 +20,7 @@
+ #include "base/notreached.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/devtools/chrome_devtools_manager_delegate.h"
++#include "chrome/browser/domicile/domicile_page_unloading.h"
+ #include "chrome/browser/lifetime/application_lifetime.h"
+ #include "chrome/browser/lifetime/application_lifetime_desktop.h"
+ #include "chrome/browser/lifetime/browser_shutdown.h"
+@@ -113,7 +114,10 @@
+         // `kill` can't be reliably told apart from a logout or shutdown, and
+         // a graceful Exit() during a real session end risks losing data when
+         // SIGKILL follows. SessionEnding() saves state promptly in both cases.
+-        chrome::SessionEnding();
++        //
++        // Domicile's engine fork: the pages unload first. A desktop ends with
++        // SIGTERM every time, so they would never hear `pagehide` at its end.
++        domicile::LetPagesUnload(base::BindOnce(&chrome::SessionEnding));
+         break;
+       default:
+         NOTREACHED();
+-- 
+2.50.0
+

@@ -49,6 +49,8 @@ pub struct Commit<'a> {
     pub surface: &'a WlSurface,
     pub buffer: &'a wl_buffer::WlBuffer,
     pub sampled: Sampled,
+    /// See [`Mapping::pixels_a_point`].
+    pub pixels_a_point: (f64, f64),
     /// The box to show it at. See [`crate::configure_answers`].
     pub at_box: u64,
     /// That box's size in device pixels, if the compositor knows it.
@@ -174,6 +176,7 @@ impl DomicileCompositor {
                         casting::Shown {
                             dmabuf: dmabuf.clone(),
                             sampled: commit.sampled,
+                            pixels_a_point: commit.pixels_a_point,
                         },
                     );
                 }
@@ -221,8 +224,14 @@ impl DomicileCompositor {
         let sampled = mapping.sampled(size, configured);
         // A cast reads dmabufs, so it misses a window in memory.
         if let Some(dmabuf) = dmabuf_of(&buffer, &self.uploads) {
-            self.casting
-                .shown(app_id, casting::Shown { dmabuf, sampled });
+            self.casting.shown(
+                app_id,
+                casting::Shown {
+                    dmabuf,
+                    sampled,
+                    pixels_a_point: mapping.pixels_a_point(size),
+                },
+            );
         }
         Some(paced)
     }
@@ -324,6 +333,7 @@ impl DomicileCompositor {
                 casting::Shown {
                     dmabuf: dmabuf.clone(),
                     sampled: commit.sampled,
+                    pixels_a_point: commit.pixels_a_point,
                 },
             );
         }

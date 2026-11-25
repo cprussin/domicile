@@ -25,6 +25,9 @@ Part of [WRITING-A-SHELL.md](WRITING-A-SHELL.md). Design:
   manifest declares. Camera, microphone and the other site permissions are
   asked for like a site's.
 - Removing one from the list uninstalls it on reload.
+- `domicile load-extension <directory>` loads an unpacked extension, or
+  reloads it after an edit, without a restart
+  ([CLI.md](CLI.md#domicile-load-extension-directory)).
 
 ## The list
 
@@ -152,7 +155,7 @@ The browser carries out some extension calls. Others fire an event on a
 | `sidePanel.open()` | A popup window showing the side panel, with no size (0 by 0), in `browserwindowschanged`: tile it; a second call sends `domicile-focus-request` for it. `sidePanel.close()` closes it |
 
 Calls with no desktop meaning (`tabs.move`, `tabs.group`, `tabs.discard`, …)
-fail with `not supported on a Domicile desk`.
+and `tabs.detectLanguage` fail with `not supported on a Domicile desk`.
 
 ## Extension popup windows
 

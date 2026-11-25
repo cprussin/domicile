@@ -473,7 +473,8 @@ pub const COMMANDS: &[Command] = &[
         about: &[
             "Turns every monitor off until a key, a click or a pointer move, or \
              `wake-displays`. Windows and programs carry on. Input in the first \
-             second is ignored.",
+             second is ignored, and so are pointer moves with \
+             `idle.ignore_pointer_motion`.",
             "With a display, turns only that one off, until `wake-displays` names \
              it or names none.",
         ],
@@ -697,6 +698,25 @@ pub const COMMANDS: &[Command] = &[
         sections: &[],
         examples: &["domicile subscribe windows | jq -c '.windows | map(.title)'"],
         see_also: &["list-windows", "list-displays", "list-inputs", "status"],
+    },
+    Command {
+        name: "load-extension",
+        group: Group::Desktop,
+        takes: "<directory>",
+        summary: "Load or reload an unpacked extension",
+        forms: &[],
+        about: &[
+            "Loads the unpacked Chrome extension in `<directory>` into every browser \
+             profile, and prints its id. An extension already loaded from that \
+             directory reloads in place and keeps its id. Nothing restarts.",
+            "The id follows the directory, with symlinks resolved, unless the \
+             manifest has a `key`.",
+            "It stays across restarts until it is uninstalled, as one loaded from \
+             the Settings app does.",
+        ],
+        sections: &[],
+        examples: &["domicile load-extension ~/src/my-extension"],
+        see_also: &[],
     },
     Command {
         name: "power-off",

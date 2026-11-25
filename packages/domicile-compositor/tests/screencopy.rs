@@ -15,6 +15,7 @@ use std::os::unix::net::UnixStream;
 use std::process::Stdio;
 
 use domicile_protocol::{ChromeMessage, CursorImage, HostMessage};
+use domicile_test_client::{BUBBLE_GROWN, POPUP_COLOR};
 use wayland_client::protocol::{
     wl_buffer, wl_output, wl_pointer, wl_registry, wl_seat, wl_shm, wl_shm_pool,
 };
@@ -339,36 +340,7 @@ fn a_listed_window_is_captured_alone() {
         .expect("the window appeared");
     let (mut queue, mut copier) = connected(&compositor, 3);
     let handle = queue.handle();
-    while !copier
-        .toplevels
-        .iter()
-        .any(|(_, title)| title == "capture-me")
-    {
-        queue
-            .blocking_dispatch(&mut copier)
-            .expect("the window listed");
-    }
-    let (toplevel, _) = copier
-        .toplevels
-        .iter()
-        .find(|(_, title)| title == "capture-me")
-        .cloned()
-        .expect("listed");
-    let source = copier
-        .window_sources
-        .clone()
-        .expect("ext_foreign_toplevel_image_capture_source_manager_v1")
-        .create_source(&toplevel, &handle, ());
-    let session = copier
-        .ext
-        .clone()
-        .expect("ext_image_copy_capture_manager_v1")
-        .create_session(&source, Options::empty(), &handle, ());
-    while copier.sizes.is_empty() {
-        queue
-            .blocking_dispatch(&mut copier)
-            .expect("the session's constraints");
-    }
+    let session = copier.window_session(&mut queue, "capture-me");
     let size = copier.sizes[0];
 
     let (buffer, memory) = copier.buffer(size, &handle);
@@ -386,6 +358,45 @@ fn a_listed_window_is_captured_alone() {
         PATTERN,
         "the window's pixels, not the monitor's"
     );
+}
+
+/// A capture of a window shows its subsurfaces where its frames draw them.
+/// Without an engine a cast shows only the frames committed since it started,
+/// so the bubble keeps committing.
+#[test]
+fn a_captured_window_shows_its_subsurfaces() {
+    let compositor = started();
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client_with("bubble-me", &["--redrawn-bubble"]);
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
+        .expect("the window appeared");
+    let (mut queue, mut copier) = connected(&compositor, 3);
+    let handle = queue.handle();
+    let session = copier.window_session(&mut queue, "bubble-me");
+    let size = copier.sizes[0];
+    let (x, y, _, _) = BUBBLE_GROWN;
+    let [_, red, green, blue] = POPUP_COLOR.to_be_bytes();
+
+    // The window draws before its bubble does.
+    let shown = (0..100).any(|_| {
+        let (buffer, memory) = copier.buffer(size, &handle);
+        let frame = session.create_frame(&handle, ());
+        frame.attach_buffer(&buffer);
+        frame.capture();
+        assert_eq!(
+            copier.outcome(&mut queue),
+            Outcome::Ready,
+            "the compositor said:\n{}",
+            compositor.complaint()
+        );
+        frame.destroy();
+        // The window draws two pixels a point on this monitor.
+        let at = |x: i32, y: i32| pixel(&memory, size, (x as u32 * 2, y as u32 * 2));
+        at(x + 5, y + 5) == [red, green, blue] && at(x - 5, y - 5) != [red, green, blue]
+    });
+
+    assert!(shown, "the compositor said:\n{}", compositor.complaint());
 }
 
 /// A cursor session of a monitor follows the pointer over it in the monitor's
@@ -555,6 +566,39 @@ impl Copier {
         (buffer, memory)
     }
 
+    /// A capture session of the window titled `title`, once it is listed and
+    /// the session has said a size.
+    fn window_session(
+        &mut self,
+        queue: &mut EventQueue<Self>,
+        title: &str,
+    ) -> ExtImageCopyCaptureSessionV1 {
+        let handle = queue.handle();
+        let toplevel = loop {
+            let listed = self.toplevels.iter().find(|(_, each)| each == title);
+            if let Some((toplevel, _)) = listed {
+                break toplevel.clone();
+            }
+            queue.blocking_dispatch(self).expect("the window listed");
+        };
+        let source = self
+            .window_sources
+            .clone()
+            .expect("ext_foreign_toplevel_image_capture_source_manager_v1")
+            .create_source(&toplevel, &handle, ());
+        let session = self
+            .ext
+            .clone()
+            .expect("ext_image_copy_capture_manager_v1")
+            .create_session(&source, Options::empty(), &handle, ());
+        while self.sizes.is_empty() {
+            queue
+                .blocking_dispatch(self)
+                .expect("the session's constraints");
+        }
+        session
+    }
+
     /// How the pending copy ends, waiting for it.
     fn outcome(&mut self, queue: &mut EventQueue<Self>) -> Outcome {
         while self.outcome.is_none() {
@@ -567,10 +611,15 @@ impl Copier {
 /// The red, green and blue of the center pixel of an `argb8888` buffer of
 /// `size` in `memory`.
 fn center(memory: &OwnedFd, size: (u32, u32)) -> [u8; 3] {
-    let (width, height) = size;
+    pixel(memory, size, (size.0 / 2, size.1 / 2))
+}
+
+/// The red, green and blue of the pixel at `(x, y)` of an `argb8888` buffer of
+/// `size` in `memory`.
+fn pixel(memory: &OwnedFd, size: (u32, u32), (x, y): (u32, u32)) -> [u8; 3] {
     let mut pixel = [0; 4];
     File::from(memory.try_clone().expect("a duplicate"))
-        .read_exact_at(&mut pixel, u64::from((height / 2 * width + width / 2) * 4))
+        .read_exact_at(&mut pixel, u64::from((y * size.0 + x) * 4))
         .expect("the copied pixels read back");
     let [blue, green, red, _] = pixel;
     [red, green, blue]

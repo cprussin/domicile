@@ -68,6 +68,7 @@ const FILES: [(Subsystem, &[&str]); 13] = [
         &[
             "domicile_shell_windows",
             "domicile_browser_windows",
+            "domicile_page_unloading",
             "domicile_browser_profiles",
             "domicile_external_apps",
             "web_view_guest",

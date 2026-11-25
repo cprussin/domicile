@@ -1,8 +1,9 @@
 // Popup for guard-webview-tabs.sh. It queries the active tab in the current
-// window, zooms that tab, reads the zoom back, and lists the tab's frames.
+// window, zooms that tab, reads the zoom back, lists the tab's frames, and asks
+// for its page's language, which a desk refuses.
 //
 // The result goes into this page's own address,
-// `?active=<url>&frames=<url>&zoom=<f>`,
+// `?active=<url>&frames=<url>&language=<error>&zoom=<f>`,
 // because the shell sees each page the <webview> shows via
 // `domicile-page-change`. `active` is the tab's url when exactly one tab
 // matched, else `count-<n>`, so an empty result still reports.
@@ -20,8 +21,8 @@ const ZOOM = 1.5;
 const answer = (found) =>
   found.length === 1 ? found[0].url : `count-${found.length}`;
 
-const say = (active, zoom, frames) => {
-  const query = new URLSearchParams({ active, frames, zoom });
+const say = (active, zoom, frames, language) => {
+  const query = new URLSearchParams({ active, frames, language, zoom });
   location.replace(`popup.html?${query}`);
 };
 
@@ -60,17 +61,26 @@ const topFrameUrl = (frames) => {
 const framesAnswer = (found) =>
   found.length === 1 ? topFrame(found[0]) : Promise.resolve("no-tab");
 
+/** What tabs.detectLanguage answers for `tab`, or `error-<message>`. */
+const languageOf = (tab) =>
+  tabs.detectLanguage(tab.id).catch((error) => `error-${error.message}`);
+
+const languageAnswer = (found) =>
+  found.length === 1 ? languageOf(found[0]) : Promise.resolve("no-tab");
+
 // Run only on first load; the reload from `say` carries `?active=`.
 if (!new URLSearchParams(location.search).has("active")) {
   tabs.query({ active: true, currentWindow: true }).then(
     (found) =>
-      Promise.all([zoomAnswer(found), framesAnswer(found)]).then(
-        ([zoom, frames]) => {
-          say(answer(found), zoom, frames);
-        },
-      ),
+      Promise.all([
+        zoomAnswer(found),
+        framesAnswer(found),
+        languageAnswer(found),
+      ]).then(([zoom, frames, language]) => {
+        say(answer(found), zoom, frames, language);
+      }),
     (error) => {
-      say(`error-${error.message}`, "no-tab", "no-tab");
+      say(`error-${error.message}`, "no-tab", "no-tab", "no-tab");
     },
   );
 }

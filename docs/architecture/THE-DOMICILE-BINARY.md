@@ -28,6 +28,7 @@ domicile <shell>                  # run a desktop with this shell
 domicile --config <path> <shell>  # ...with this compositor config
 domicile which-shell              # ask the running desktop which shell it serves
 domicile load-shell <shell>       # replace the running desktop's shell
+domicile load-extension <dir>     # load an unpacked extension, or reload it in place, and print its id
 domicile open <file|url>          # a web link in the running desktop; anything else with its type's default
 domicile open --app <url|module>  # a site, or an app module, in an app window (WEB-APPS.md, APP-MODULES.md)
 domicile open --which <file|url>  # print the desktop file id `open` would run; nothing for a web link

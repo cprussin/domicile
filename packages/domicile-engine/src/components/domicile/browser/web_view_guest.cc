@@ -49,6 +49,7 @@
 #include "components/domicile/browser/shortcut_registry.h"
 #include "components/domicile/browser/site_permissions.h"
 #include "components/domicile/browser/unfocused_web_views.h"
+#include "components/permissions/permission_decision_auto_blocker.h"
 #include "components/permissions/permissions_client.h"
 #include "components/domicile/browser/web_view_url.h"
 #include "components/security_interstitials/content/security_interstitial_page.h"
@@ -1324,14 +1325,13 @@ void WebViewGuest::BindPagePicker(
 
 void WebViewGuest::Pick(mojom::WebViewPickerPtr picker,
                         PickCallback callback) {
-  // The anchor arrives in the frame's local root's DIPs. A frame in another
-  // process has a view of its own; the page's root is the element's box.
+  // The anchor arrives in the frame's local root's DIPs. The frame and its view
+  // can go before its message is read.
   content::RenderFrameHost* frame =
       content::RenderFrameHost::FromID(page_pickers_.current_context());
   if (frame && frame->GetView()) {
-    const gfx::PointF origin = frame->GetView()->TransformPointToRootCoordSpaceF(
-        gfx::PointF(picker->anchor.origin()));
-    picker->anchor.set_origin(gfx::ToFlooredPoint(origin));
+    picker->anchor.set_origin(
+        InPage(*frame->GetView(), picker->anchor.origin()));
   }
   open_picker_ = page_pickers_.current_receiver();
   // Logged before asking; the picker guard greps for it.
@@ -2144,6 +2144,17 @@ void WebViewGuest::Print() {
   Printer().Run(*guest_contents_);
 }
 
+void StoreSitePermission(content::BrowserContext& context,
+                         const GURL& site,
+                         mojom::WebViewPermission permission,
+                         mojom::WebViewPermissionSetting setting) {
+  permissions::PermissionsClient* client =
+      permissions::PermissionsClient::Get();
+  StoreSitePermission(*client->GetSettingsMap(&context),
+                      *client->GetPermissionDecisionAutoBlocker(&context), site,
+                      permission, setting);
+}
+
 void WebViewGuest::SetSitePermission(
     mojom::WebViewPermission permission,
     mojom::WebViewPermissionSetting setting) {
@@ -2156,13 +2167,8 @@ void WebViewGuest::SetSitePermission(
                     "with no site; it is dropped.";
     return;
   }
-  HostContentSettingsMap* map =
-      permissions::PermissionsClient::Get()->GetSettingsMap(
-          guest_contents_->GetBrowserContext());
-  const ContentSettingsType type = SettingsTypeFor(permission);
-  map->SetContentSettingDefaultScope(
-      site, site, type,
-      StoredSetting(setting, map->GetDefaultContentSetting(type)));
+  StoreSitePermission(*guest_contents_->GetBrowserContext(), site, permission,
+                      setting);
 }
 
 void WebViewGuest::ListMediaDevices(ListMediaDevicesCallback callback) {
@@ -2348,16 +2354,21 @@ void WebViewGuest::SendTooltip() {
 
 gfx::Point WebViewGuest::PointerInPage(
     content::RenderWidgetHost& widget) const {
+  // The widget just drew a tooltip in the page.
+  CHECK(widget.GetView());
+  return InPage(*widget.GetView(), pointer_);
+}
+
+gfx::Point WebViewGuest::InPage(content::RenderWidgetHostView& view,
+                                const gfx::Point& point) const {
   CHECK(guest_contents_);
-  // Both views exist: the widget just drew a tooltip in the page, and the
-  // page's main frame view is the element's box.
+  // The main frame's view is the element's box. The root is the shell's page,
+  // which the element is somewhere in.
   content::RenderWidgetHostView* page =
       guest_contents_->GetPrimaryMainFrame()->GetView();
   CHECK(page);
-  CHECK(widget.GetView());
   return gfx::ToFlooredPoint(page->TransformRootPointToViewCoordSpace(
-      widget.GetView()->TransformPointToRootCoordSpaceF(
-          gfx::PointF(pointer_))));
+      view.TransformPointToRootCoordSpaceF(gfx::PointF(point))));
 }
 
 bool WebViewGuest::ShowRepostFormWarningDialog(content::WebContents* source) {
@@ -3288,6 +3299,12 @@ void WebViewGuest::ReportNewWindow(const GURL& target_url) {
 }
 
 void WebViewGuest::CloseContents(content::WebContents* source) {
+  // UnloadForExit's page is done. A window closed here would not open again
+  // in the next session.
+  if (unloading_for_exit_) {
+    unloaded_for_exit_.RunAndReset();
+    return;
+  }
   LOG(INFO) << "domicile: a <webview>'s page asked to close.";
   Close();
 }
@@ -3301,6 +3318,12 @@ void WebViewGuest::AskToClose() {
   } else {
     Close();
   }
+}
+
+void WebViewGuest::UnloadForExit(base::OnceClosure unloaded) {
+  unloading_for_exit_ = true;
+  unloaded_for_exit_.ReplaceClosure(std::move(unloaded));
+  guest_contents_->ClosePage();
 }
 
 void WebViewGuest::BeforeUnloadFired(content::WebContents* tab,

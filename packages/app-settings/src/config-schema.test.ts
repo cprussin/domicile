@@ -11,7 +11,11 @@ describe(readSettings, () => {
       Ok({ delay_ms: 500, rate: 25 }),
     );
     expect(read.map(({ idle }) => idle)).toEqual(
-      Ok({ blank_after_seconds: undefined, lock_after_seconds: undefined }),
+      Ok({
+        blank_after_seconds: undefined,
+        ignore_pointer_motion: false,
+        lock_after_seconds: undefined,
+      }),
     );
   });
 

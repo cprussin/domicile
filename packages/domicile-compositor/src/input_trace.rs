@@ -74,11 +74,13 @@ pub fn described(request: &ClientRequest) -> Option<String> {
         ClientRequest::Touch { app_id, touch, .. } => {
             write!(said, "touch {touch:?} on {app_id}")
         }
-        ClientRequest::Activity { input } => write!(
-            said,
-            "the browser saw {}",
-            input.as_deref().unwrap_or("input")
-        ),
+        ClientRequest::Activity { input, kind } => {
+            let input = input.as_deref().unwrap_or("input");
+            match kind {
+                Some(kind) => write!(said, "the browser saw {input} ({kind:?})"),
+                None => write!(said, "the browser saw {input}"),
+            }
+        }
         ClientRequest::DeskPointer { at, .. } => match at {
             Some((x, y)) => write!(said, "desk pointer at ({x:.1}, {y:.1})"),
             None => write!(said, "desk pointer hidden"),
@@ -128,6 +130,22 @@ mod tests {
             })
             .unwrap(),
             "button 0x110 up"
+        );
+    }
+
+    #[test]
+    fn what_the_browser_saw_says_its_kind_when_the_engine_does() {
+        let saw = |kind| {
+            described(&ClientRequest::Activity {
+                input: Some("MouseMoved".to_string()),
+                kind,
+            })
+            .unwrap()
+        };
+        assert_eq!(saw(None), "the browser saw MouseMoved");
+        assert_eq!(
+            saw(Some(domicile_protocol::ActivityKind::Pointer)),
+            "the browser saw MouseMoved (Pointer)"
         );
     }
 

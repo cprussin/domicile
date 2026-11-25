@@ -362,7 +362,9 @@ the config to keep one.
 
 Turn every monitor off now. Windows, workspaces and the layout stay as they
 are, and programs keep running. A key, a click or a pointer move lights them
-again, as does `wake-displays`. Input in the first second is ignored, so
+again, as does `wake-displays`. With
+[`idle.ignore_pointer_motion`](IDLE.md#ignoring-pointer-motion), a pointer move
+does not. Input in the first second is ignored, so
 letting go of Enter or of the keybinding that ran it does not undo it. In
 manganese, bind `exec domicile sleep-displays`.
 
@@ -563,6 +565,28 @@ answers: `window_list` (with `windows`), `display_list` (`displays`),
 Most changes arrive at once; what holds the screens on or captures the
 desktop may take up to five seconds. It ends when the desktop does.
 
+## `domicile load-extension <directory>`
+
+Load the unpacked Chrome extension in `<directory>` into every browser profile,
+and print its id. Nothing restarts.
+
+```
+$ domicile load-extension ~/src/my-extension
+abcdefghijklmnopabcdefghijklmnop
+```
+
+- An extension already loaded from that directory reloads in place and keeps
+  its id. Run it again after each edit.
+- The id follows the directory, with symlinks resolved, unless the manifest has
+  a `key`. Without one, a link that points elsewhere loads a second extension
+  beside the first.
+- It returns once the default profile has
+  reloaded; a failure in another is in `domicile logs`.
+- A relative directory is relative to where the command runs.
+- It stays across restarts until it is uninstalled, as one loaded from the
+  Settings app does ([Extensions](architecture/EXTENSIONS.md#from-the-settings-app)).
+- A directory the engine cannot load prints why and exits nonzero.
+
 ## `domicile status [--json]`
 
 Print how the desktop is: the shell it serves, theme, keymap, whether it is
@@ -586,8 +610,10 @@ capturing   -
 
 Print how many whole seconds nobody has used the desktop: since the last key,
 pointer, touch or tablet input, or since the desktop started when there has
-been none. Idle inhibitors don't reset it. Electron apps read it for
-`powerMonitor.getSystemIdleTime`, so Slack and the like can mark you away.
+been none. With
+[`idle.ignore_pointer_motion`](IDLE.md#ignoring-pointer-motion) a moving
+pointer doesn't reset it. Idle inhibitors don't either. Electron apps read it
+for `powerMonitor.getSystemIdleTime`, so Slack and the like can mark you away.
 
 ```
 42
@@ -595,8 +621,9 @@ been none. Idle inhibitors don't reset it. Electron apps read it for
 
 `--json` prints `{"seconds": 42, "local_seconds": 90}` instead.
 `local_seconds` counts only this computer's own keyboard, pointer and touch,
-leaving out emulated input such as an agent's. Agents wait on it before they
-move the pointer or focus.
+leaving out emulated input such as an agent's. Pointer motion counts here even
+with `idle.ignore_pointer_motion`. Agents wait on it before they move the
+pointer or focus.
 
 ## `domicile disable-while-typing [on|off|toggle]`
 

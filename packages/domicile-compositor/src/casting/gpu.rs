@@ -10,7 +10,7 @@ use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::gles::{GlesError, GlesRenderer, GlesTexture};
 use smithay::backend::renderer::{
     Bind, Color32F, ExportMem as _, Frame, ImportDma as _, ImportMem as _, ImportMemWl as _,
-    Offscreen as _, Renderer as _,
+    Offscreen as _, Renderer as _, Texture as _,
 };
 use smithay::reexports::wayland_server::protocol::{wl_buffer::WlBuffer, wl_shm};
 use smithay::utils::{Physical, Rectangle, Size, Transform};
@@ -18,9 +18,9 @@ use smithay::wayland::dmabuf::get_dmabuf;
 use smithay::wayland::shm::with_buffer_contents;
 use thiserror::Error;
 
-use crate::buffer_transform::Sampled;
+use crate::buffer_transform::{crop_in_buffer, upright_size, Sampled};
 use crate::casting::cursor::{Plan, Sprite};
-use crate::casting::pacing::Rect;
+use crate::casting::pacing::{within, Rect};
 
 /// A window's last frame, kept after its buffer is released.
 pub enum Snapshot {
@@ -35,6 +35,16 @@ pub enum Snapshot {
     Texture(GlesTexture),
 }
 
+impl Snapshot {
+    /// In the buffer's own pixels.
+    pub fn size(&self) -> (u32, u32) {
+        match self {
+            Snapshot::Pixels { size, .. } => *size,
+            Snapshot::Texture(texture) => (texture.width(), texture.height()),
+        }
+    }
+}
+
 /// Part of a stream frame: `from` of `snapshot`, in its pixels, drawn over
 /// `to`, in the stream's, turned upright by `transform`.
 pub struct Layer<'a> {
@@ -46,16 +56,56 @@ pub struct Layer<'a> {
 }
 
 impl<'a> Layer<'a> {
-    /// `sampled` of `snapshot`, upright at the stream's corner.
-    pub fn upright(snapshot: &'a Snapshot, sampled: Sampled) -> Self {
-        let (width, height) = sampled.upright_size();
+    /// `sampled` of `snapshot`, upright over `to`.
+    pub fn placed(snapshot: &'a Snapshot, sampled: Sampled, to: Rect) -> Self {
         Self {
             snapshot,
             from: sampled.crop,
-            to: (0, 0, width as i32, height as i32),
+            to,
             transform: sampled.transform,
         }
     }
+
+    /// What of the layer falls in `part` of the stream, placed relative to
+    /// `part`, or `None` if none of it does.
+    pub fn cut(self, part: Rect) -> Option<Self> {
+        let visible = within(self.to, part)?;
+        let (from_width, from_height) =
+            upright_size((self.from.2 as u32, self.from.3 as u32), self.transform);
+        let (left, across) = sampled_span(
+            (visible.0 + part.0 - self.to.0, visible.2),
+            self.to.2,
+            from_width,
+        );
+        let (top, down) = sampled_span(
+            (visible.1 + part.1 - self.to.1, visible.3),
+            self.to.3,
+            from_height,
+        );
+        let (x, y, width, height) = crop_in_buffer(
+            (left, top, across, down),
+            (from_width, from_height),
+            self.transform,
+        );
+        Some(Self {
+            from: (self.from.0 + x, self.from.1 + y, width, height),
+            to: visible,
+            ..self
+        })
+    }
+}
+
+/// The pixels, of `from` of them drawn over `to`, that show in `shown`, a start
+/// and a length inside `to`.
+///
+/// Both edges round outward: the span stays inside `from` and holds a pixel.
+/// Rounding the start and the length could leave either untrue.
+fn sampled_span(shown: (i32, i32), to: i32, from: u32) -> (i32, i32) {
+    let (start, end) = (i64::from(shown.0), i64::from(shown.0) + i64::from(shown.1));
+    let (to, from) = (i64::from(to), i64::from(from));
+    let first = start * from / to;
+    let last = (end * from + to - 1) / to;
+    (first as i32, (last - first) as i32)
 }
 
 /// Why a frame could not be kept or filled.
@@ -289,6 +339,41 @@ mod tests {
         255, 255, 255, 255, // bottom right: white
     ];
 
+    /// All of a `size` buffer drawn over `to`, cut to `part`: what is sampled
+    /// and where it is drawn.
+    fn cut(size: (u32, u32), to: Rect, part: Rect) -> Option<(Rect, Rect)> {
+        let snapshot = Snapshot::Pixels {
+            bytes: Vec::new(),
+            stride: size.0 as usize * 4,
+            alpha: true,
+            size,
+        };
+        Layer {
+            snapshot: &snapshot,
+            from: (0, 0, size.0 as i32, size.1 as i32),
+            to,
+            transform: Transform::Normal,
+        }
+        .cut(part)
+        .map(|layer| (layer.from, layer.to))
+    }
+
+    #[test]
+    fn a_scaled_layer_cut_at_the_top_left_samples_inside_its_buffer() {
+        assert_eq!(
+            cut((5, 5), (-5, -5, 10, 10), (0, 0, 10, 10)),
+            Some(((2, 2, 3, 3), (0, 0, 5, 5)))
+        );
+    }
+
+    #[test]
+    fn a_pixel_stretched_past_the_edge_is_sampled_whole() {
+        assert_eq!(
+            cut((1, 1), (-60, -60, 100, 100), (0, 0, 100, 100)),
+            Some(((0, 0, 1, 1), (0, 0, 40, 40)))
+        );
+    }
+
     /// Reads `crop` of `texture` into `target`, rows `stride` bytes apart.
     fn read_back(
         renderer: &mut GlesRenderer,
@@ -390,7 +475,7 @@ mod tests {
 
         draw(
             &mut renderer,
-            &[Layer::upright(&snapshot, turned)],
+            &[Layer::placed(&snapshot, turned, (0, 0, 2, 2))],
             &target,
             (2, 2),
             Plan::Nothing,

@@ -48,6 +48,7 @@
 #include "components/domicile/browser/shell_window_wait.h"
 #include "components/domicile/browser/shortcut_registry.h"
 #include "components/domicile/browser/site_permissions.h"
+#include "components/domicile/browser/web_view_guest.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/permissions/permissions_client.h"
 #include "components/domicile/common/domicile_scheme.h"
@@ -59,6 +60,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/browser/extension_registry.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/socket/stream_socket.h"
@@ -358,15 +360,12 @@ bool SetShellSitePermission(const url::Origin& origin,
                             mojom::WebViewPermissionSetting setting) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  HostContentSettingsMap* map = ShellSettings();
-  if (map == nullptr) {
+  content::WebContents* shell = FindShellContents();
+  if (shell == nullptr) {
     return false;
   }
-  const GURL site = origin.GetURL();
-  const ContentSettingsType type = SettingsTypeFor(permission);
-  map->SetContentSettingDefaultScope(
-      site, site, type,
-      StoredSetting(setting, map->GetDefaultContentSetting(type)));
+  StoreSitePermission(*shell->GetBrowserContext(), origin.GetURL(), permission,
+                      setting);
   return true;
 }
 
@@ -382,6 +381,8 @@ Profile* ShellProfile() {
 
 constexpr char kNoProfile[] =
     "this engine has no shell, and so no profile to hold extensions";
+constexpr char kExtensionsDisabled[] =
+    "the extension did not load: extensions are disabled in this engine";
 
 void LoadUnpackedIntoTheShellProfile(const base::FilePath& directory,
                                      UnpackedLoaded loaded) {
@@ -391,7 +392,25 @@ void LoadUnpackedIntoTheShellProfile(const base::FilePath& directory,
     std::move(loaded).Run(base::unexpected(kNoProfile));
     return;
   }
-  LoadUnpackedInto(*profile, directory, std::move(loaded));
+  LoadUnpackedInto(
+      *profile, directory,
+      base::BindOnce(
+          [](base::WeakPtr<Profile> profile, UnpackedLoaded loaded,
+             base::expected<std::string, std::string> result) {
+            if (profile && result.has_value()) {
+              // Chromium reports a load as done with extensions disabled too,
+              // and adds none: an id printed then would be a lie.
+              if (extensions::ExtensionRegistry::Get(profile.get())
+                      ->GetInstalledExtension(result.value()) == nullptr) {
+                std::move(loaded).Run(base::unexpected(kExtensionsDisabled));
+                return;
+              }
+              BrowserProfileRegistry::Get().ReloadUnpackedElsewhere(
+                  *profile, result.value());
+            }
+            std::move(loaded).Run(std::move(result));
+          },
+          profile->GetWeakPtr(), std::move(loaded)));
 }
 
 base::expected<void, std::string> UninstallFromTheShellProfile(

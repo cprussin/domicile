@@ -59,10 +59,11 @@ TEST(DeskTabsTest, AnExtensionPageNeverTakesTheActiveTab) {
   EXPECT_FALSE(TakesActiveOnFocus("chrome-extension"));
 }
 
-TEST(DeskTabsTest, WhatHasNoDesktopMeaningIsRefused) {
+TEST(DeskTabsTest, WhatADeskDoesNotDoIsRefused) {
   for (const char* refused :
        {"tabs.move", "tabs.group", "tabs.ungroup", "tabs.discard",
-        "tabs.duplicate", "tabs.createSplit", "tabs.unsplit"}) {
+        "tabs.duplicate", "tabs.createSplit", "tabs.unsplit",
+        "tabs.detectLanguage"}) {
     EXPECT_TRUE(IsRefusedOnDesk(refused)) << refused;
   }
   for (const char* answered :
@@ -72,7 +73,7 @@ TEST(DeskTabsTest, WhatHasNoDesktopMeaningIsRefused) {
         "windows.create", "windows.remove"}) {
     EXPECT_FALSE(IsRefusedOnDesk(answered)) << answered;
   }
-  EXPECT_EQ(RefusedOnDesk().size(), 7u);
+  EXPECT_EQ(RefusedOnDesk().size(), 8u);
 }
 
 DeskWindowCreate APopup() {

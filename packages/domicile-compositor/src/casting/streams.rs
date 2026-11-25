@@ -1,8 +1,9 @@
 //! The Wayland thread's side of casting: routes requests and fills lent
 //! buffers with each source's frames.
 //!
-//! - A cast window's commit is kept as a [`Snapshot`] before the client's
-//!   buffer is released, so no client buffer is held for a stream.
+//! - A commit of a cast window or one of its subsurfaces is kept as a
+//!   [`Snapshot`] before the client's buffer is released, so no client buffer
+//!   is held for a stream.
 //! - A monitor or region is drawn from the engine's display captures (see
 //!   [`captures`](crate::casting::captures)). A region across monitors is one
 //!   piece per monitor (see [`region`](crate::casting::region)).
@@ -25,14 +26,16 @@ use std::time::Instant;
 
 use domicile_protocol::{PointerOverWindow, ShotWindow};
 use pipewire as pw;
+use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::Buffer as _;
 use smithay::backend::renderer::gles::GlesRenderer;
+use smithay::backend::renderer::ImportDma as _;
 use smithay::reexports::calloop::channel::Sender;
 use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
 use smithay::utils::Transform;
 use tracing::debug;
 
-use crate::buffer_transform::{crop_in_buffer, upright_size, Sampled};
+use crate::buffer_transform::Sampled;
 use crate::casting::audio::Heard;
 use crate::casting::captured::{self, Kept};
 use crate::casting::captures::{Capturer, Captures, Frame};
@@ -49,11 +52,11 @@ use crate::casting::shots::{
 };
 use crate::casting::{Candidate, Consumer, Event, Listener, Region, Request, Source, StreamId};
 use crate::engine::{BrowserView, BrowserWindow, CaptureId, CapturedFrame};
+use crate::engine_session::Child;
 
-/// A window's frame, as its commit brought it.
+/// How to read a surface's frame, as its commit brought it.
 pub struct Committed<'a> {
     pub app_id: &'a str,
-    pub buffer: &'a WlBuffer,
     /// The part of the buffer that is the window, in buffer pixels, and the
     /// turn that makes it upright.
     pub sampled: Sampled,
@@ -62,6 +65,14 @@ pub struct Committed<'a> {
     pub pixels_a_point: (f64, f64),
     /// The bounding box of the commit's damage, in buffer pixels.
     pub damage: Option<Rect>,
+}
+
+/// How a buffer is read since a commit that attached none.
+pub struct Remapped {
+    /// As in [`Committed`].
+    pub sampled: Sampled,
+    /// As in [`Committed`].
+    pub pixels_a_point: (f64, f64),
 }
 
 /// The GPU the streams' dmabufs are allocated on.
@@ -104,10 +115,21 @@ pub struct Streams {
     /// How many buffer pixels span each window's surface point, for the
     /// pointer over it.
     densities: HashMap<String, (f64, f64)>,
-    /// Each cast window's last frame.
+    /// The last frame of each cast window and of its subsurfaces.
     shots: HashMap<String, Shot>,
-    /// Each window's last frame the engine shows, for a shot of it alone.
+    /// The subsurfaces of cast windows whose last frame could not be read.
+    unreadable: HashSet<String>,
+    /// Each surface's last frame the engine shows, for a shot of its window
+    /// alone, and for a cast that has kept no commit of it.
     shown: HashMap<String, Shown>,
+    /// Each surface's subsurfaces as its frames draw them, bottom to top, for
+    /// shots and casts of its window.
+    /// A surface is in one list at most, or a chain of lists could close on
+    /// itself: each is read at its own surface's commits, and a client may
+    /// move subsurfaces between them.
+    children: HashMap<String, Vec<Child>>,
+    /// The surfaces whose `children` changed since a cast drew them.
+    restacked: HashSet<String>,
     /// The window under the pointer, and where, in its box's logical pixels.
     pointer: Option<(String, (f64, f64))>,
     /// Where the engine reports the pointer.
@@ -158,7 +180,7 @@ struct Shooting {
     developed: Developed,
 }
 
-/// A window's last frame and how to read it.
+/// A surface's last frame and how to read it.
 struct Shot {
     snapshot: Snapshot,
     sampled: Sampled,
@@ -287,7 +309,10 @@ impl Streams {
             sizes: HashMap::new(),
             densities: HashMap::new(),
             shots: HashMap::new(),
+            unreadable: HashSet::new(),
             shown: HashMap::new(),
+            children: HashMap::new(),
+            restacked: HashSet::new(),
             pointer: None,
             engine_pointer: EnginePointer::default(),
             screens: Vec::new(),
@@ -353,12 +378,9 @@ impl Streams {
             Request::ShootBrowserWindow { id, developed } => {
                 self.shoot_browser_window(&id, developed, capturer);
             }
-            Request::ShootWindow { app_id, developed } => developed(
-                self.shown
-                    .get(&app_id)
-                    .ok_or_else(|| format!("window {app_id} has shown no frame"))
-                    .and_then(|shown| shots::window(shown, renderer)),
-            ),
+            Request::ShootWindow { app_id, developed } => {
+                developed(self.shoot_window(&app_id, renderer));
+            }
             Request::Stop { stream } => {
                 if self.casts.contains_key(&stream) {
                     self.send(ToPipewire::End {
@@ -368,6 +390,74 @@ impl Streams {
                 }
             }
         }
+    }
+
+    /// Window `app_id` alone, from the last frames it and its subsurfaces
+    /// showed.
+    fn shoot_window(
+        &self,
+        app_id: &str,
+        renderer: Option<&mut GlesRenderer>,
+    ) -> Result<domicile_host::screenshot::Shot, String> {
+        let shown = self
+            .shown
+            .get(app_id)
+            .ok_or_else(|| format!("window {app_id} has shown no frame"))?;
+        let renderer = renderer.ok_or("no GPU renderer to read the window's frame")?;
+        let snapshots = self
+            .snapshots(app_id, |dmabuf| {
+                Ok(Snapshot::Texture(renderer.import_dmabuf(dmabuf, None)?))
+            })
+            .map_err(|why| why.to_string())?;
+        let surfaces: Vec<_> = self
+            .surfaces_shown(app_id, shown, |surface| snapshots.contains_key(surface))
+            .into_iter()
+            .map(|(surface, to)| {
+                let sampled = shots::sampled(&self.shown[&surface]);
+                (&snapshots[&surface], sampled, to)
+            })
+            .collect();
+        shots::window(shots::sampled(shown).upright_size(), &surfaces, renderer)
+    }
+
+    /// The frame each surface of window `app_id` last showed, without the
+    /// subsurfaces that do not `import`. Fails if the window's own does not.
+    fn snapshots(
+        &self,
+        app_id: &str,
+        mut import: impl FnMut(&Dmabuf) -> Result<Snapshot, FillError>,
+    ) -> Result<HashMap<String, Snapshot>, FillError> {
+        let mut snapshots = HashMap::new();
+        for surface in shots::surfaces(app_id, &self.children) {
+            let Some(shown) = self.shown.get(&surface) else {
+                continue;
+            };
+            match import(&shown.dmabuf) {
+                Ok(snapshot) => {
+                    snapshots.insert(surface, snapshot);
+                }
+                Err(why) if surface == app_id => return Err(why),
+                Err(why) => tracing::error!(%surface, %why, "a subsurface could not be shot"),
+            }
+        }
+        Ok(snapshots)
+    }
+
+    /// The surfaces of window `app_id` that are `drawn`, bottom first, beside
+    /// where each goes in a shot of the window, which showed `shown`.
+    fn surfaces_shown(
+        &self,
+        app_id: &str,
+        shown: &Shown,
+        drawn: impl Fn(&str) -> bool,
+    ) -> Vec<(String, Rect)> {
+        shots::stack(
+            app_id,
+            shots::sampled(shown).upright_size(),
+            shown.pixels_a_point,
+            &self.children,
+            drawn,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -730,6 +820,7 @@ impl Streams {
             let composed = view(
                 &shows,
                 &self.shots,
+                &self.children,
                 &self.captures,
                 &self.pages,
                 &self.screens,
@@ -989,14 +1080,7 @@ impl Streams {
             ToWayland::Ended { stream } => {
                 self.clients.remove(&stream);
                 match self.casts.remove(&stream).map(|cast| cast.shows) {
-                    Some(Shows::Window(app_id)) => {
-                        let shown = self.casts.values().any(
-                            |other| matches!(&other.shows, Shows::Window(id) if *id == app_id),
-                        );
-                        if !shown {
-                            self.shots.remove(&app_id);
-                        }
-                    }
+                    Some(Shows::Window(_)) => self.forget_what_is_not_cast(),
                     Some(Shows::Desk { .. }) => {
                         if let Some(capturer) = capturer {
                             self.captures.forget(stream, capturer);
@@ -1021,12 +1105,94 @@ impl Streams {
         self.next_due()
     }
 
-    /// A window committed a frame. Fills its streams' buffers and sends the
-    /// ones that are due. Returns when to call [`Streams::tick`], if a filled
-    /// frame waits.
+    /// Forgets the frames of the surfaces in no cast window.
+    fn forget_what_is_not_cast(&mut self) {
+        let cast: HashSet<String> = self
+            .windows()
+            .iter()
+            .flat_map(|app_id| shots::surfaces(app_id, &self.children))
+            .collect();
+        self.shots.retain(|surface, _| cast.contains(surface));
+        self.unreadable.retain(|surface| cast.contains(surface));
+    }
+
+    /// The streams of the windows `surface` is, or is in, each with its window.
+    fn streams_of(&self, surface: &str) -> Vec<(StreamId, String)> {
+        self.casts
+            .iter()
+            .filter_map(|(&stream, cast)| match &cast.shows {
+                Shows::Window(app_id) => Some((stream, app_id)),
+                Shows::BrowserWindow(_) | Shows::Desk { .. } => None,
+            })
+            .filter(|(_, app_id)| {
+                shots::surfaces(app_id, &self.children)
+                    .iter()
+                    .any(|each| each == surface)
+            })
+            .map(|(stream, app_id)| (stream, app_id.clone()))
+            .collect()
+    }
+
+    /// Where subsurface `surface` is in a cast of window `app_id`, in its
+    /// pixels, or all of the window if it is not drawn yet.
+    fn place_in(&self, app_id: &str, surface: &str) -> Vec<Rect> {
+        let Some(shot) = self.shots.get(app_id) else {
+            return Vec::new();
+        };
+        let size = shot.sampled.upright_size();
+        let whole = (0, 0, size.0 as i32, size.1 as i32);
+        shots::stack(app_id, size, shot.pixels_a_point, &self.children, |child| {
+            self.shots.contains_key(child)
+        })
+        .into_iter()
+        .find(|(each, _)| each == surface)
+        .map_or(Some(whole), |(_, to)| within(to, whole))
+        .into_iter()
+        .collect()
+    }
+
+    /// Keeps the frame each surface of window `app_id` last showed, where no
+    /// commit since the cast started has left one: a still surface, like the
+    /// toplevel Firefox draws its content over, may never commit again. Fails
+    /// if the window's own frame does not `import`.
+    fn keep_what_is_shown(
+        &mut self,
+        app_id: &str,
+        mut import: impl FnMut(&Dmabuf) -> Result<Snapshot, FillError>,
+    ) -> Result<(), FillError> {
+        for surface in shots::surfaces(app_id, &self.children) {
+            if self.shots.contains_key(&surface) || self.unreadable.contains(&surface) {
+                continue;
+            }
+            let Some(shown) = self.shown.get(&surface) else {
+                continue;
+            };
+            match import(&shown.dmabuf) {
+                Ok(snapshot) => {
+                    let sampled = shots::sampled(shown);
+                    self.shots.insert(
+                        surface,
+                        Shot {
+                            snapshot,
+                            sampled,
+                            pixels_a_point: shown.pixels_a_point,
+                        },
+                    );
+                }
+                Err(why) if surface == app_id => return Err(why),
+                Err(why) => self.leave_out(&surface, &why),
+            }
+        }
+        Ok(())
+    }
+
+    /// A window, or a subsurface in one, committed `buffer`, read as `frame`
+    /// says. Fills its streams' buffers and sends the ones that are due.
+    /// Returns when to call [`Streams::tick`], if a filled frame waits.
     pub fn committed(
         &mut self,
         frame: Committed,
+        buffer: &WlBuffer,
         mut renderer: Option<&mut GlesRenderer>,
         now: Instant,
     ) -> Option<Instant> {
@@ -1034,17 +1200,26 @@ impl Streams {
             .insert(frame.app_id.to_string(), frame.sampled.upright_size());
         self.densities
             .insert(frame.app_id.to_string(), frame.pixels_a_point);
-        let streams: Vec<_> = self
-            .casts
-            .iter()
-            .filter(|(_, cast)| matches!(&cast.shows, Shows::Window(id) if id == frame.app_id))
-            .map(|(&stream, _)| stream)
-            .collect();
-        if streams.is_empty() {
+        if self.streams_of(frame.app_id).is_empty() {
             return self.next_due();
         }
-        match gpu::snapshot(frame.buffer, renderer.as_deref_mut()) {
+        let snapshot = gpu::snapshot(buffer, renderer.as_deref_mut());
+        self.kept(frame, snapshot, renderer, now)
+    }
+
+    /// The `snapshot` of a frame a surface of a cast window committed, or why
+    /// it could not be kept. Returns as [`Streams::committed`] does.
+    fn kept(
+        &mut self,
+        frame: Committed,
+        snapshot: Result<Snapshot, FillError>,
+        mut renderer: Option<&mut GlesRenderer>,
+        now: Instant,
+    ) -> Option<Instant> {
+        let streams = self.streams_of(frame.app_id);
+        match snapshot {
             Ok(snapshot) => {
+                self.unreadable.remove(frame.app_id);
                 self.shots.insert(
                     frame.app_id.to_string(),
                     Shot {
@@ -1055,17 +1230,42 @@ impl Streams {
                 );
             }
             Err(why) => {
-                for stream in streams {
-                    self.fail(stream, &why);
+                self.shots.remove(frame.app_id);
+                if !self.windows().contains(frame.app_id) {
+                    self.leave_out(frame.app_id, &why);
+                }
+                for (stream, app_id) in streams {
+                    if app_id == frame.app_id {
+                        self.fail(stream, &why);
+                    } else {
+                        let damage = self.place_in(&app_id, frame.app_id);
+                        self.offer(stream, damage, renderer.as_deref_mut(), now);
+                    }
                 }
                 return self.next_due();
             }
         }
-        let damage = damage_in_view(frame.damage, frame.sampled);
-        for stream in streams {
-            self.offer(stream, damage.clone(), renderer.as_deref_mut(), now);
+        let restacked = self.restacked.remove(frame.app_id);
+        for (stream, app_id) in streams {
+            let damage = if restacked {
+                self.whole(&app_id)
+            } else if app_id == frame.app_id {
+                damage_in_view(frame.damage, frame.sampled)
+            } else {
+                self.place_in(&app_id, frame.app_id)
+            };
+            self.offer(stream, damage, renderer.as_deref_mut(), now);
         }
         self.next_due()
+    }
+
+    /// Casts of `surface`'s window go on without it until it commits a frame
+    /// they can read.
+    fn leave_out(&mut self, surface: &str, why: &FillError) {
+        // Once, not at each of its frames.
+        if self.unreadable.insert(surface.to_string()) {
+            tracing::error!(%surface, %why, "a subsurface could not be cast");
+        }
     }
 
     /// The engine captured a frame of a display. Keeps it and fills the
@@ -1535,9 +1735,104 @@ impl Streams {
             .collect()
     }
 
-    /// Window `app_id` showed `frame`, which a shot of it alone reads.
+    /// Surface `app_id` showed `frame`, which shots and casts of its window
+    /// read.
     pub fn shown(&mut self, app_id: &str, frame: Shown) {
         self.shown.insert(app_id.to_string(), frame);
+    }
+
+    /// Surface `app_id`'s last `buffer`-pixel buffer maps otherwise, without a
+    /// new one. `map` says how a buffer of some size does. Fills the streams of
+    /// its window. Returns when to call [`Streams::tick`], if a filled frame
+    /// waits.
+    pub fn remapped(
+        &mut self,
+        app_id: &str,
+        buffer: (u32, u32),
+        map: impl Fn((u32, u32)) -> Remapped,
+        renderer: Option<&mut GlesRenderer>,
+        now: Instant,
+    ) -> Option<Instant> {
+        let last = map(buffer);
+        self.sizes
+            .insert(app_id.to_string(), last.sampled.upright_size());
+        self.densities
+            .insert(app_id.to_string(), last.pixels_a_point);
+        if let Some(shown) = self.shown.get_mut(app_id) {
+            let Remapped {
+                sampled,
+                pixels_a_point,
+            } = map((shown.dmabuf.width(), shown.dmabuf.height()));
+            shown.sampled = sampled;
+            shown.pixels_a_point = pixels_a_point;
+        }
+        if let Some(shot) = self.shots.get_mut(app_id) {
+            let Remapped {
+                sampled,
+                pixels_a_point,
+            } = map(shot.snapshot.size());
+            shot.sampled = sampled;
+            shot.pixels_a_point = pixels_a_point;
+        }
+        self.restacked.remove(app_id);
+        self.redraw(app_id, renderer, now);
+        self.next_due()
+    }
+
+    /// Surface `app_id`'s subsurfaces are now `children`, bottom to top. Its
+    /// next frame draws them, or [`Streams::restacked`] if none comes.
+    pub fn children(&mut self, app_id: &str, children: Vec<Child>) {
+        let before = self.children.get(app_id).map_or(&[][..], Vec::as_slice);
+        if before == children {
+            return;
+        }
+        for (parent, listed) in &mut self.children {
+            let count = listed.len();
+            listed.retain(|old| children.iter().all(|new| new.app_id != old.app_id));
+            if listed.len() != count {
+                self.restacked.insert(parent.clone());
+            }
+        }
+        self.children.insert(app_id.to_string(), children);
+        self.children.retain(|_, listed| !listed.is_empty());
+        self.restacked.insert(app_id.to_string());
+        self.forget_what_is_not_cast();
+    }
+
+    /// Fills the streams of surface `app_id`'s window if its subsurfaces
+    /// changed and no frame of its own has drawn them. Returns when to call
+    /// [`Streams::tick`], if a filled frame waits.
+    pub fn restacked(
+        &mut self,
+        app_id: &str,
+        renderer: Option<&mut GlesRenderer>,
+        now: Instant,
+    ) -> Option<Instant> {
+        if self.restacked.remove(app_id) {
+            self.redraw(app_id, renderer, now);
+        }
+        self.next_due()
+    }
+
+    /// Draws the whole of each stream that shows `surface`.
+    fn redraw(&mut self, surface: &str, mut renderer: Option<&mut GlesRenderer>, now: Instant) {
+        for (stream, window) in self.streams_of(surface) {
+            let whole = self.whole(&window);
+            if !whole.is_empty() {
+                self.offer(stream, whole, renderer.as_deref_mut(), now);
+            }
+        }
+    }
+
+    /// All of cast window `app_id`, in its pixels, or nothing if it has no
+    /// frame.
+    fn whole(&self, app_id: &str) -> Vec<Rect> {
+        self.shots
+            .get(app_id)
+            .map(|shot| shot.sampled.upright_size())
+            .map(|(width, height)| (0, 0, width as i32, height as i32))
+            .into_iter()
+            .collect()
     }
 
     /// A window closed: its streams end.
@@ -1545,7 +1840,10 @@ impl Streams {
         self.sizes.remove(app_id);
         self.densities.remove(app_id);
         self.shown.remove(app_id);
+        self.children.remove(app_id);
+        self.restacked.remove(app_id);
         self.shots.remove(app_id);
+        self.unreadable.remove(app_id);
         let gone: Vec<_> = self
             .casts
             .iter()
@@ -1597,15 +1895,28 @@ impl Streams {
         &mut self,
         stream: StreamId,
         damage: Vec<Rect>,
-        renderer: Option<&mut GlesRenderer>,
+        mut renderer: Option<&mut GlesRenderer>,
         now: Instant,
     ) {
+        if let Some(Shows::Window(app_id)) = self.casts.get(&stream).map(|cast| &cast.shows) {
+            let app_id = app_id.clone();
+            if let Some(renderer) = renderer.as_deref_mut() {
+                let kept = self.keep_what_is_shown(&app_id, |dmabuf| {
+                    Ok(Snapshot::Texture(renderer.import_dmabuf(dmabuf, None)?))
+                });
+                if let Err(why) = kept {
+                    self.fail(stream, &why);
+                    return;
+                }
+            }
+        }
         let Some(cast) = self.casts.get_mut(&stream) else {
             return;
         };
         let Some(view) = view(
             &cast.shows,
             &self.shots,
+            &self.children,
             &self.captures,
             &self.pages,
             &self.screens,
@@ -1825,9 +2136,11 @@ fn placed(place: Rect, content: Rect) -> Rect {
 
 /// What a stream's next frame is made of, or `None` until every source it
 /// draws from has drawn.
+#[allow(clippy::too_many_arguments)] // What each kind of source draws from.
 fn view<'a>(
     shows: &Shows,
     shots: &'a HashMap<String, Shot>,
+    children: &HashMap<String, Vec<Child>>,
     captures: &'a Captures,
     pages: &'a HashMap<CaptureId, Page>,
     screens: &[Screen],
@@ -1837,9 +2150,23 @@ fn view<'a>(
     match shows {
         Shows::Window(app_id) => {
             let shot = shots.get(app_id)?;
+            let size = shot.sampled.upright_size();
+            let whole = (0, 0, size.0 as i32, size.1 as i32);
+            let layers = shots::stack(app_id, size, shot.pixels_a_point, children, |child| {
+                shots.contains_key(child)
+            })
+            .into_iter()
+            .filter_map(|(surface, to)| {
+                let Shot {
+                    snapshot, sampled, ..
+                } = &shots[&surface];
+                // A subsurface past the window's edge is cut there.
+                Layer::placed(snapshot, *sampled, to).cut(whole)
+            })
+            .collect();
             Some(View {
-                size: shot.sampled.upright_size(),
-                layers: vec![Layer::upright(&shot.snapshot, shot.sampled)],
+                size,
+                layers,
                 pointer: pointer
                     .filter(|(id, _)| id == app_id)
                     .map(|(_, point)| in_window(*point, shot.pixels_a_point)),
@@ -1915,29 +2242,7 @@ fn cut(view: View<'_>, part: Rect) -> (View<'_>, Rect) {
     let layers = view
         .layers
         .into_iter()
-        .filter_map(|layer| {
-            // Relative to the part.
-            let visible = within(layer.to, shown)?;
-            let (from_width, from_height) =
-                upright_size((layer.from.2 as u32, layer.from.3 as u32), layer.transform);
-            let (across, down) = (
-                f64::from(from_width) / f64::from(layer.to.2),
-                f64::from(from_height) / f64::from(layer.to.3),
-            );
-            let upright = (
-                (f64::from(visible.0 + shown.0 - layer.to.0) * across).round() as i32,
-                (f64::from(visible.1 + shown.1 - layer.to.1) * down).round() as i32,
-                (f64::from(visible.2) * across).round() as i32,
-                (f64::from(visible.3) * down).round() as i32,
-            );
-            let (x, y, width, height) =
-                crop_in_buffer(upright, (from_width, from_height), layer.transform);
-            Some(Layer {
-                from: (layer.from.0 + x, layer.from.1 + y, width, height),
-                to: visible,
-                ..layer
-            })
-        })
+        .filter_map(|layer| layer.cut(shown))
         .collect();
     let pointer = view.pointer.and_then(|(x, y)| {
         let (x, y) = (x - f64::from(shown.0), y - f64::from(shown.1));
@@ -2058,12 +2363,15 @@ fn heard(shows: &Shows, process: Option<u32>, client: bool) -> Option<Heard> {
 #[cfg(test)]
 mod tests {
     use std::collections::{HashMap, HashSet};
+    use std::fs::File;
     use std::io::Write as _;
     use std::os::fd::{FromRawFd as _, OwnedFd};
     use std::sync::mpsc;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
+    use smithay::backend::allocator::dmabuf::{Dmabuf, DmabufFlags};
+    use smithay::backend::allocator::{Buffer as _, Fourcc, Modifier};
     use smithay::reexports::calloop::channel::{channel, Channel};
 
     use domicile_protocol::{PointerOverWindow, ShotWindow};
@@ -2071,14 +2379,14 @@ mod tests {
     use smithay::utils::Transform;
 
     use super::{
-        compose, cut, damage_in_view, density, heard, view, Cast, EnginePointer, Shot, Shows,
-        Streams,
+        compose, cut, damage_in_view, density, heard, view, Cast, Committed, EnginePointer,
+        Remapped, Shot, Shows, Streams,
     };
     use crate::buffer_transform::Sampled;
     use crate::casting::audio::Heard;
     use crate::casting::captures::Capturer;
     use crate::casting::cursor::{CursorMode, Sprite};
-    use crate::casting::gpu::Snapshot;
+    use crate::casting::gpu::{FillError, Snapshot};
     use crate::casting::lifecycle::Ended;
     use crate::casting::memory::Mapping;
     use crate::casting::negotiation::Pixel;
@@ -2086,11 +2394,12 @@ mod tests {
     use crate::casting::producer::{BufferId, StreamFormat, Target, ToPipewire, ToWayland};
     use crate::casting::region;
     use crate::casting::region::Screen;
-    use crate::casting::shots::Desk;
+    use crate::casting::shots::{Desk, Shown};
     use crate::casting::{Candidate, Consumer, Region, Request, Source, StreamId};
     use crate::engine::{
         BrowserView, BrowserWindow, CaptureId, CapturedFrame, CapturedPixels, SharedFd,
     };
+    use crate::engine_session::Child;
 
     /// An engine that numbers captures by display, captures browser windows
     /// from 100 up, and records stops and releases.
@@ -2227,6 +2536,7 @@ mod tests {
         let shown = view(
             &shows,
             &streams.shots,
+            &streams.children,
             &streams.captures,
             &streams.pages,
             &streams.screens,
@@ -2268,6 +2578,7 @@ mod tests {
             let view = view(
                 &Shows::Window("app-1".into()),
                 &streams.shots,
+                &streams.children,
                 &streams.captures,
                 &streams.pages,
                 &streams.screens,
@@ -2313,6 +2624,7 @@ mod tests {
         let view = view(
             &Shows::Window("app-1".into()),
             &streams.shots,
+            &streams.children,
             &streams.captures,
             &streams.pages,
             &streams.screens,
@@ -2523,6 +2835,541 @@ mod tests {
         );
 
         assert!(heard.try_recv().expect("developed").is_err());
+    }
+
+    /// A frame the engine shows, all of a `size` buffer.
+    fn shown(size: (i32, i32), pixels_a_point: (f64, f64)) -> Shown {
+        let mut dmabuf = Dmabuf::builder(
+            size,
+            Fourcc::Argb8888,
+            Modifier::Linear,
+            DmabufFlags::empty(),
+        );
+        // Never imported, so any fd will do.
+        let fd = OwnedFd::from(File::open("/dev/null").expect("it opens"));
+        assert!(dmabuf.add_plane(fd, 0, 0, size.0 as u32 * 4));
+        Shown {
+            dmabuf: dmabuf.build().expect("it has a plane"),
+            sampled: Sampled::default(),
+            pixels_a_point,
+        }
+    }
+
+    #[test]
+    fn a_shot_window_draws_its_subsurfaces_at_the_density_it_shows() {
+        let mut streams = streams();
+        streams.shown("app-1", shown((200, 100), (2.0, 2.0)));
+        streams.shown("subsurface-1", shown((20, 20), (2.0, 2.0)));
+        let child = |app_id: &str, above| Child {
+            app_id: app_id.into(),
+            position: (30.0, 5.0),
+            size: (10.0, 10.0),
+            above,
+        };
+        streams.children(
+            "app-1",
+            vec![child("subsurface-1", false), child("subsurface-2", true)],
+        );
+        let places = |streams: &Streams| {
+            streams
+                .surfaces_shown("app-1", &streams.shown["app-1"], |surface| {
+                    streams.shown.contains_key(surface)
+                })
+                .iter()
+                .map(|(surface, to)| (streams.shown[surface].dmabuf.width(), *to))
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(
+            places(&streams),
+            [(20, (60, 10, 20, 20)), (200, (0, 0, 200, 100))]
+        );
+
+        // Its viewport grows twice as large over the same buffer.
+        streams.remapped(
+            "app-1",
+            (200, 100),
+            |_| Remapped {
+                sampled: Sampled {
+                    crop: (0, 0, 200, 100),
+                    transform: Transform::Normal,
+                },
+                pixels_a_point: (1.0, 1.0),
+            },
+            None,
+            Instant::now(),
+        );
+
+        assert_eq!(
+            places(&streams),
+            [(20, (30, 5, 10, 10)), (200, (0, 0, 200, 100))]
+        );
+    }
+
+    #[test]
+    fn a_surfaces_subsurfaces_are_kept_until_it_goes() {
+        let mut streams = streams();
+
+        streams.children("app-1", vec![small("subsurface-1")]);
+        streams.children("app-2", vec![small("subsurface-2")]);
+        streams.children("app-2", Vec::new());
+        assert_eq!(
+            streams.children,
+            HashMap::from([("app-1".to_string(), vec![small("subsurface-1")])])
+        );
+
+        streams.window_gone("app-1");
+        assert!(streams.children.is_empty());
+        assert!(!streams.restacked.contains("app-1"));
+    }
+
+    fn small(app_id: &str) -> Child {
+        Child {
+            app_id: app_id.into(),
+            position: (0.0, 0.0),
+            size: (1.0, 1.0),
+            above: true,
+        }
+    }
+
+    /// A client moves a subsurface under its own subsurface's, and only the
+    /// new parent is read again.
+    #[test]
+    fn a_surface_listed_by_its_own_subsurface_leaves_its_old_list() {
+        let mut streams = streams();
+        streams.children("app-1", vec![small("subsurface-1")]);
+        streams.children("subsurface-1", vec![small("subsurface-2")]);
+
+        streams.children("subsurface-2", vec![small("subsurface-1")]);
+
+        assert_eq!(
+            super::shots::surfaces("app-1", &streams.children),
+            ["app-1"]
+        );
+    }
+
+    #[test]
+    fn a_shot_leaves_out_a_subsurface_that_does_not_import() {
+        let mut streams = streams();
+        streams.shown("app-1", shown((200, 100), (1.0, 1.0)));
+        streams.shown("subsurface-1", shown((20, 20), (1.0, 1.0)));
+        streams.children("app-1", vec![small("subsurface-1")]);
+        let import_all_but = |width: u32| {
+            streams.snapshots("app-1", |dmabuf| {
+                if dmabuf.width() == width {
+                    Err(FillError::NotABuffer)
+                } else {
+                    Ok(shot_of((200, 100), Transform::Normal).snapshot)
+                }
+            })
+        };
+
+        let snapshots = import_all_but(20).expect("the window's own imports");
+        assert_eq!(snapshots.into_keys().collect::<Vec<_>>(), ["app-1"]);
+        assert!(import_all_but(200).is_err());
+    }
+
+    /// A 100x50 window cast at two pixels a point, with a subsurface over it
+    /// that reaches 10 points past its right edge, and one nested in that.
+    fn a_cast_window_with_subsurfaces() -> Streams {
+        let mut streams = streams();
+        let child = |app_id: &str, position, size| Child {
+            app_id: app_id.into(),
+            position,
+            size,
+            above: true,
+        };
+        streams.children(
+            "app-1",
+            vec![child("subsurface-1", (30.0, 5.0), (30.0, 10.0))],
+        );
+        streams.children(
+            "subsurface-1",
+            vec![child("subsurface-2", (1.0, 1.0), (2.0, 2.0))],
+        );
+        streams.restacked.clear();
+        for (surface, size) in [
+            ("app-1", (100, 50)),
+            ("subsurface-1", (60, 20)),
+            ("subsurface-2", (4, 4)),
+        ] {
+            streams.shots.insert(
+                surface.into(),
+                Shot {
+                    pixels_a_point: (2.0, 2.0),
+                    ..shot_of(size, Transform::Normal)
+                },
+            );
+        }
+        streams
+            .casts
+            .insert(StreamId(1), cast(Shows::Window("app-1".into())));
+        streams
+    }
+
+    /// The layers of a cast of `app-1`, each from and to where.
+    fn layers(streams: &Streams) -> Vec<(Rect, Rect)> {
+        view(
+            &Shows::Window("app-1".into()),
+            &streams.shots,
+            &streams.children,
+            &streams.captures,
+            &streams.pages,
+            &streams.screens,
+            None,
+            &EnginePointer::default(),
+        )
+        .expect("a frame to show")
+        .layers
+        .iter()
+        .map(|layer| (layer.from, layer.to))
+        .collect()
+    }
+
+    #[test]
+    fn a_window_cast_draws_its_subsurfaces_cut_to_the_window() {
+        assert_eq!(
+            layers(&a_cast_window_with_subsurfaces()),
+            [
+                ((0, 0, 100, 50), (0, 0, 100, 50)),
+                ((0, 0, 40, 20), (60, 10, 40, 20)),
+                ((0, 0, 4, 4), (62, 12, 4, 4)),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_subsurface_that_has_drawn_nothing_is_left_out_of_a_cast() {
+        let mut streams = a_cast_window_with_subsurfaces();
+        streams.shots.remove("subsurface-1");
+
+        assert_eq!(layers(&streams).len(), 1, "nor are its own drawn");
+    }
+
+    #[test]
+    fn a_subsurfaces_frame_is_its_windows_cast() {
+        let streams = a_cast_window_with_subsurfaces();
+
+        for surface in ["app-1", "subsurface-1", "subsurface-2"] {
+            assert_eq!(
+                streams.streams_of(surface),
+                [(StreamId(1), "app-1".to_string())],
+                "{surface}"
+            );
+        }
+        assert!(streams.streams_of("subsurface-3").is_empty());
+    }
+
+    #[test]
+    fn a_subsurfaces_frame_damages_where_it_is_in_the_window() {
+        let streams = a_cast_window_with_subsurfaces();
+
+        assert_eq!(
+            streams.place_in("app-1", "subsurface-1"),
+            [(60, 10, 40, 20)]
+        );
+        assert_eq!(
+            streams.place_in("app-1", "subsurface-3"),
+            [(0, 0, 100, 50)],
+            "not placed yet: all of it"
+        );
+    }
+
+    /// [`a_cast_window_with_subsurfaces`] cast by a client that has had its
+    /// first frame and lent a buffer for the next, and what the client hears.
+    fn a_filling_cast() -> (Streams, Channel<ToPipewire>, Instant) {
+        let mut streams = a_cast_window_with_subsurfaces();
+        let (to_clients, heard) = channel();
+        streams.to_clients = to_clients;
+        let stream = StreamId(1);
+        streams.clients.insert(stream);
+        let now = Instant::now();
+        streams.news(
+            ToWayland::Format {
+                stream,
+                format: StreamFormat {
+                    pixel: Pixel::Bgrx,
+                    size: (100, 50),
+                    modifier: None,
+                },
+                framerate: 1000,
+            },
+            None,
+            None,
+            now,
+        );
+        streams.news(ToWayland::Filling { stream, on: true }, None, None, now);
+        for id in [0, 1] {
+            let buffer = BufferId(id);
+            let mapping = Mapping::new(c"test", 100 * 50 * 4).expect("a memfd");
+            let target = Target::Shm(Arc::new(mapping));
+            for news in [
+                ToWayland::Added {
+                    stream,
+                    buffer,
+                    target,
+                },
+                ToWayland::Lent { stream, buffer },
+            ] {
+                streams.news(news, None, None, now);
+            }
+        }
+        assert_eq!(told(&heard), [Told::Filled(vec![(0, 0, 100, 50)])]);
+        (streams, heard, now + Duration::from_secs(1))
+    }
+
+    /// What a cast's client is told.
+    #[derive(Debug, PartialEq)]
+    enum Told {
+        /// A frame, damaged there.
+        Filled(Vec<Rect>),
+        Ended,
+        Other,
+    }
+
+    /// What a cast's client was told since it last read.
+    fn told(heard: &Channel<ToPipewire>) -> Vec<Told> {
+        std::iter::from_fn(|| heard.try_recv().ok())
+            .map(|request| match request {
+                ToPipewire::Filled { damage, .. } => Told::Filled(damage),
+                ToPipewire::End { .. } => Told::Ended,
+                _ => Told::Other,
+            })
+            .collect()
+    }
+
+    /// A commit of `surface` at two pixels a point, all of a `size` buffer.
+    fn commit(surface: &str, size: (i32, i32)) -> Committed<'_> {
+        let whole = (0, 0, size.0, size.1);
+        Committed {
+            app_id: surface,
+            sampled: Sampled {
+                crop: whole,
+                transform: Transform::Normal,
+            },
+            pixels_a_point: (2.0, 2.0),
+            damage: Some(whole),
+        }
+    }
+
+    #[test]
+    fn a_subsurfaces_frame_fills_its_windows_cast() {
+        let (mut streams, heard, now) = a_filling_cast();
+
+        streams.kept(
+            commit("subsurface-1", (60, 20)),
+            Ok(shot_of((60, 20), Transform::Normal).snapshot),
+            None,
+            now,
+        );
+
+        assert_eq!(told(&heard), [Told::Filled(vec![(60, 10, 40, 20)])]);
+    }
+
+    /// A `wp_single_pixel_buffer` is neither shm nor a dmabuf, so the engine
+    /// does not show it either.
+    #[test]
+    fn a_subsurface_that_cannot_be_read_leaves_its_windows_cast() {
+        let (mut streams, heard, now) = a_filling_cast();
+
+        streams.kept(
+            commit("subsurface-1", (1, 1)),
+            Err(FillError::NotABuffer),
+            None,
+            now,
+        );
+
+        assert_eq!(told(&heard), [Told::Filled(vec![(0, 0, 100, 50)])]);
+        assert_eq!(layers(&streams).len(), 1, "nor are its own drawn");
+    }
+
+    /// An unmapped subsurface that is mapped again shows its new frame, which
+    /// it committed while its window did not list it.
+    #[test]
+    fn a_subsurface_listed_again_does_not_show_its_old_frame() {
+        let (mut streams, heard, now) = a_filling_cast();
+        let listed = streams.children["app-1"].clone();
+
+        streams.children("app-1", Vec::new());
+        streams.restacked("app-1", None, now);
+        assert_eq!(told(&heard), [Told::Filled(vec![(0, 0, 100, 50)])]);
+        streams.children("app-1", listed);
+
+        assert_eq!(layers(&streams).len(), 1, "nor do its own");
+    }
+
+    /// A fill between the two would draw the subsurfaces' new places over the
+    /// window's old frame.
+    #[test]
+    fn a_frame_that_moves_a_subsurface_is_cast_once_and_whole() {
+        let (mut streams, heard, now) = a_filling_cast();
+        let mut moved = streams.children["app-1"].clone();
+        moved[0].position = (0.0, 0.0);
+
+        streams.children("app-1", moved);
+        assert_eq!(told(&heard), []);
+        streams.kept(
+            Committed {
+                damage: Some((0, 0, 1, 1)),
+                ..commit("app-1", (100, 50))
+            },
+            Ok(shot_of((100, 50), Transform::Normal).snapshot),
+            None,
+            now,
+        );
+        streams.restacked("app-1", None, now);
+
+        assert_eq!(told(&heard), [Told::Filled(vec![(0, 0, 100, 50)])]);
+    }
+
+    /// A resize through its viewport or geometry, without a new buffer.
+    #[test]
+    fn a_cast_window_mapped_otherwise_is_drawn_so() {
+        let (mut streams, heard, now) = a_filling_cast();
+
+        streams.remapped(
+            "app-1",
+            (100, 50),
+            |_| Remapped {
+                sampled: Sampled {
+                    crop: (0, 0, 100, 50),
+                    transform: Transform::Normal,
+                },
+                pixels_a_point: (1.0, 1.0),
+            },
+            None,
+            now,
+        );
+
+        assert_eq!(told(&heard), [Told::Filled(vec![(0, 0, 100, 50)])]);
+        assert_eq!(
+            layers(&streams),
+            [
+                ((0, 0, 100, 50), (0, 0, 100, 50)),
+                ((0, 0, 60, 20), (30, 5, 30, 10)),
+                ((0, 0, 4, 4), (31, 6, 2, 2)),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_cast_subsurface_mapped_otherwise_is_drawn_so() {
+        let (mut streams, heard, now) = a_filling_cast();
+
+        streams.remapped(
+            "subsurface-2",
+            (4, 4),
+            |(width, height)| Remapped {
+                sampled: Sampled {
+                    crop: (0, 0, width as i32 / 2, height as i32 / 2),
+                    transform: Transform::Normal,
+                },
+                pixels_a_point: (1.0, 1.0),
+            },
+            None,
+            now,
+        );
+
+        assert_eq!(told(&heard), [Told::Filled(vec![(0, 0, 100, 50)])]);
+        assert_eq!(layers(&streams)[2], ((0, 0, 2, 2), (62, 12, 4, 4)));
+    }
+
+    /// Keeps what `app-1`'s surfaces show through an import that fails for a
+    /// 20 pixel wide dmabuf. Returns the width of each it imports.
+    fn keep_what_is_shown(streams: &mut Streams) -> (Result<(), FillError>, Vec<u32>) {
+        let mut imported = Vec::new();
+        let kept = streams.keep_what_is_shown("app-1", |dmabuf| {
+            imported.push(dmabuf.width());
+            match dmabuf.width() {
+                20 => Err(FillError::Dmabuf),
+                _ => Ok(shot_of((1, 1), Transform::Normal).snapshot),
+            }
+        });
+        (kept, imported)
+    }
+
+    /// A still toplevel may never commit while it is cast.
+    #[test]
+    fn a_cast_keeps_what_its_window_shows_where_no_commit_has_left_a_frame() {
+        let mut streams = a_cast_window_with_subsurfaces();
+        streams.shots.remove("app-1");
+        streams.shown("app-1", shown((100, 50), (1.5, 1.5)));
+        streams.shown("subsurface-1", shown((60, 20), (1.5, 1.5)));
+
+        let (kept, imported) = keep_what_is_shown(&mut streams);
+
+        assert!(kept.is_ok());
+        assert_eq!(imported, [100], "a subsurface's commit is newer");
+        assert_eq!(streams.shots["app-1"].pixels_a_point, (1.5, 1.5));
+        assert_eq!(streams.shots["app-1"].sampled.crop, (0, 0, 100, 50));
+    }
+
+    #[test]
+    fn a_shown_subsurface_that_does_not_import_waits_for_its_next_commit() {
+        let (mut streams, _heard, now) = a_filling_cast();
+        streams.shots.remove("subsurface-2");
+        streams.shown("subsurface-2", shown((20, 20), (2.0, 2.0)));
+
+        let (kept, imported) = keep_what_is_shown(&mut streams);
+        assert!(kept.is_ok());
+        assert_eq!(imported, [20]);
+        let (_, imported) = keep_what_is_shown(&mut streams);
+        assert!(imported.is_empty(), "not tried again");
+
+        streams.kept(
+            commit("subsurface-2", (4, 4)),
+            Ok(shot_of((4, 4), Transform::Normal).snapshot),
+            None,
+            now,
+        );
+        assert_eq!(layers(&streams).len(), 3);
+    }
+
+    #[test]
+    fn a_shown_window_that_does_not_import_cannot_be_cast() {
+        let mut streams = a_cast_window_with_subsurfaces();
+        streams.shots.remove("app-1");
+        streams.shown("app-1", shown((20, 20), (2.0, 2.0)));
+
+        let (kept, _) = keep_what_is_shown(&mut streams);
+
+        assert!(kept.is_err());
+    }
+
+    #[test]
+    fn a_window_that_cannot_be_read_ends_its_cast() {
+        let (mut streams, heard, now) = a_filling_cast();
+
+        streams.kept(
+            commit("app-1", (1, 1)),
+            Err(FillError::NotABuffer),
+            None,
+            now,
+        );
+
+        assert_eq!(told(&heard), [Told::Ended]);
+    }
+
+    #[test]
+    fn what_a_cast_kept_of_a_window_goes_with_its_last_cast() {
+        let mut streams = a_cast_window_with_subsurfaces();
+        streams
+            .casts
+            .insert(StreamId(2), cast(Shows::Window("app-1".into())));
+        let mut end = |stream| {
+            streams.news(
+                ToWayland::Ended {
+                    stream: StreamId(stream),
+                },
+                None,
+                None,
+                Instant::now(),
+            );
+            streams.shots.len()
+        };
+
+        assert_eq!(end(1), 3);
+        assert_eq!(end(2), 0);
     }
 
     #[test]
@@ -2764,6 +3611,7 @@ mod tests {
             view(
                 &streams.casts[&StreamId(4)].shows,
                 &streams.shots,
+                &streams.children,
                 &streams.captures,
                 &streams.pages,
                 &streams.screens,
@@ -2827,6 +3675,7 @@ mod tests {
         let shown = view(
             &streams.casts[&StreamId(4)].shows,
             &streams.shots,
+            &streams.children,
             &streams.captures,
             &streams.pages,
             &streams.screens,
@@ -3220,6 +4069,7 @@ mod tests {
             view(
                 &shows,
                 &streams.shots,
+                &streams.children,
                 &streams.captures,
                 &streams.pages,
                 &streams.screens,

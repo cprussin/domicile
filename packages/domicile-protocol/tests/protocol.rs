@@ -4,10 +4,10 @@
 //! pinned because the JS client hard-codes them.
 
 use domicile_protocol::{
-    negotiate, AdaptiveSync, AppCursorImage, AppFrame, Appearance, BrowserProfile, ChromeMessage,
-    ClipboardEntry, CursorHiding, CursorImage, CursorShape, CursorTheme, DisplayHdr, DisplayInfo,
-    DisplayTransform, HostMessage, Owner, Passphrase, PointerConstraint, PointerOverWindow,
-    SurfaceRect, PROTOCOL_VERSION,
+    negotiate, ActivityKind, AdaptiveSync, AppCursorImage, AppFrame, Appearance, BrowserProfile,
+    ChromeMessage, ClipboardEntry, CursorHiding, CursorImage, CursorShape, CursorTheme, DisplayHdr,
+    DisplayInfo, DisplayTransform, HostMessage, Owner, Passphrase, PointerConstraint,
+    PointerOverWindow, SurfaceRect, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -20,6 +20,42 @@ fn host_round_trip(msg: &HostMessage) {
     let json = serde_json::to_string(msg).unwrap();
     let back: HostMessage = serde_json::from_str(&json).unwrap();
     assert_eq!(*msg, back, "round-trip changed the message (json: {json})");
+}
+
+#[test]
+fn activity_says_what_it_came_from_as_the_engine_names_it() {
+    for (named, kind) in [
+        ("key", ActivityKind::Key),
+        ("pointer", ActivityKind::Pointer),
+        ("pointer_motion", ActivityKind::PointerMotion),
+        ("touch", ActivityKind::Touch),
+        ("other", ActivityKind::Other),
+    ] {
+        let wire = serde_json::json!({ "type": "activity", "kind": named });
+        let said: ChromeMessage = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(
+            said,
+            ChromeMessage::Activity {
+                input: None,
+                kind: Some(kind),
+            }
+        );
+        assert_eq!(serde_json::to_value(&said).unwrap(), wire);
+    }
+}
+
+#[test]
+fn activity_from_an_engine_that_names_no_kind_is_heard() {
+    let wire = serde_json::json!({ "type": "activity", "input": "MouseMoved" });
+    let said: ChromeMessage = serde_json::from_value(wire.clone()).unwrap();
+    assert_eq!(
+        said,
+        ChromeMessage::Activity {
+            input: Some("MouseMoved".into()),
+            kind: None,
+        }
+    );
+    assert_eq!(serde_json::to_value(&said).unwrap(), wire);
 }
 
 #[test]
@@ -49,9 +85,13 @@ fn chrome_messages_round_trip() {
     });
     chrome_round_trip(&ChromeMessage::SetDevicePixelRatio { ratio: 1.5 });
     chrome_round_trip(&ChromeMessage::FocusChrome);
-    chrome_round_trip(&ChromeMessage::Activity { input: None });
+    chrome_round_trip(&ChromeMessage::Activity {
+        input: None,
+        kind: None,
+    });
     chrome_round_trip(&ChromeMessage::Activity {
         input: Some("KeyPressed from AT Translated Set 2 keyboard".into()),
+        kind: Some(ActivityKind::Key),
     });
     chrome_round_trip(&ChromeMessage::EngineFault {
         what: "A page stayed in fullscreen.".into(),

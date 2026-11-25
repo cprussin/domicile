@@ -96,6 +96,8 @@ source_set("domicile") {
     "domicile_media_devices.h",
     "domicile_modifier_taps.cc",
     "domicile_modifier_taps.h",
+    "domicile_page_unloading.cc",
+    "domicile_page_unloading.h",
     "domicile_permissions.cc",
     "domicile_permissions.h",
     "domicile_picture_in_picture.cc",
@@ -152,9 +154,11 @@ source_set("domicile") {
     # Marks the renderer an Electron page with Node.js starts.
     "//components/domicile:electron_node_switches",
     "//components/domicile:common",
-    # Somebody at the desk, from ui::UserActivityDetector in //ui/base.
+    # Somebody at the desk, from ui::UserActivityDetector in //ui/base and
+    # ui::PlatformEventSource in //ui/events/platform.
     "//components/domicile:cursor_display",
     "//components/domicile:desk_activity",
+    "//components/domicile:desk_activity_reporter",
     # The desk's downloads, for the shell's Downloads pipe.
     "//components/domicile:desk_downloads",
     # Electron apps' windows, for the Electron socket.
@@ -298,6 +302,8 @@ source_set("domicile") {
     # The Settings app's site data, through Chrome's BrowsingDataModel.
     "//chrome/browser/browsing_data",
     "//components/browsing_data/content",
+    # Writing the pages' localStorage before the browser exits.
+    "//components/services/storage/public/mojom",
     # DevTools for a guest's page: Chrome's front end and its bindings.
     "//chrome/browser/devtools",
     # Printing a guest's page: Chrome's PrintViewManager and its system
@@ -318,6 +324,7 @@ source_set("domicile") {
     "//ui/display",
     # The pointer moves `StartDeskPointer` reports.
     "//ui/events",
+    "//ui/events/platform",
     # Names the device an input came from, for the idle clock's log.
     "//ui/events/devices",
     # `gfx::NativeView`, which `display::Screen::GetDisplayNearestView` takes.

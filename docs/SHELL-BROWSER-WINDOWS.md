@@ -968,7 +968,8 @@ frame.addEventListener(WEBVIEW_PERMISSION_REQUEST_EVENT, (event) => {
 - **Site settings:** `view.sitePermissions()` maps each permission to `ask`,
   `allow` or `block` for the page's site, `{}` for a page that is not `http`,
   `https` or `chrome-extension`. An extension's pages share one origin, so a
-  choice made in a browser window holds in its action popup. `view.setSitePermission(permission, setting)` stores one.
+  choice made in a browser window holds in its action popup. `view.setSitePermission(permission, setting)` stores one, and
+  lets a site ask again that Chrome blocked for unanswered requests.
   `domicile-site-permissions-change` signals a change.
 - **Camera and microphone device:** `view.mediaDevices()` resolves with
   `{cameras, microphones}`, each `{id, name}`, most preferred first. A page

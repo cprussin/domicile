@@ -24,11 +24,45 @@ input, and locks the desktop after `idle.lock_after_seconds`
   client's window is forwarded, so without it a key typed into a browser
   window or the shell's page would not reset the clock, and the desk would
   lock under somebody typing.
-- **Input is a key, a click, a scroll or a pointer that moved on the
-  screen.** aura synthesizes a move under a still pointer after a window
-  changes or the displays are configured, and blanking can be such a change. The
-  engine forwards it with `moved: false` (Blink's `movementX/Y` are zero), so
-  the client still hears it and the clock does not.
+- **Input is a key, a touch, a click, a scroll or a pointer that moved on the
+  screen**, less that motion when [it is ignored](#ignoring-pointer-motion).
+  aura synthesizes a move under a still pointer after a window changes or the
+  displays are configured, and blanking can be such a change. The engine
+  forwards it with `moved: false` (Blink's `movementX/Y` are zero), so the
+  client still hears it and the clock does not.
+
+## Ignoring pointer motion
+
+`idle.ignore_pointer_motion` is for a mouse that reports motion by itself. With
+it on, `crate::idle::somebody_is_here` counts no pointer motion, for both
+timeouts, the shell's idle watches, the idle time apps read, and lighting
+screens that are blanked or [asleep](#sleeping-on-demand).
+
+| Input | Counts |
+|---|---|
+| `key`, `touch`, `pointer_button`, `pointer_axis`, `pointer_pinch`, `pointer_swipe`, `pointer_hold` | Yes |
+| `pointer_motion`, `pointer_relative` | No |
+| `activity` with kind `key`, `touch` or `pointer` | Yes |
+| `activity` with kind `pointer_motion` or `other`, or no kind | No |
+| An unlock attempt, `wake-displays`, `displays.wake()` | Yes |
+
+- **The kind decides, never `input`**, which is a string for the log.
+- **The engine reports keys, touches and the pointer's own input on their own
+  throttle.** `ui::UserActivityDetector` reports one event of any kind each
+  200 ms, so a moving mouse would hide them.
+- **A gesture the shell takes counts for nothing**, with the option on or off: a
+  touchpad swipe, hold or pinch it listens for, or a touch screen edge swipe.
+  The engine reads it before it is an event.
+- **An engine that sends no kind** therefore counts no key typed into a browser
+  window or the shell's page, and no click there. The desk can lock under
+  somebody typing there, and those keys do not light a dark screen. Nobody is
+  locked out: the lock screen takes keys while dark, and the unlock attempt
+  lights the screens. Keys to a native window count.
+- **Idle inhibitors are unaffected.**
+- **So is `local_seconds`** of
+  [`domicile idle-time`](CLI.md#domicile-idle-time---json): agents wait on it,
+  and a hand on the mouse is somebody to keep out of the way of. A mouse that
+  reports motion by itself therefore keeps agents waiting.
 
 ## Blanking
 

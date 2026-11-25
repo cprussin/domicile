@@ -27,7 +27,8 @@ inline constexpr int kCurrentWindowId = -2;
 
 // The chrome.tabs calls a desk refuses, by ExtensionFunctionRegistry name.
 //
-// Moves, groups, splits, duplicates and discards have no desktop meaning.
+// Moves, groups, splits, duplicates and discards have no desktop meaning, and a
+// desk does not translate, so it detects no language.
 // Reporting success without acting would hide the failure from the extension.
 base::span<const char* const> RefusedOnDesk();
 bool IsRefusedOnDesk(std::string_view function_name);

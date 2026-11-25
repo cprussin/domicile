@@ -15,6 +15,7 @@
 #include "base/callback_list.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
@@ -69,6 +70,7 @@ namespace content {
 class BrowserContext;
 class NavigationHandle;
 class RenderWidgetHost;
+class RenderWidgetHostView;
 }  // namespace content
 
 namespace domicile {
@@ -228,6 +230,13 @@ using AddToDictionaryCallback =
 // //chrome/browser/domicile/domicile_printing.h.
 using PrintCallback =
     base::RepeatingCallback<void(content::WebContents& guest)>;
+
+// Stores `site`'s `setting` for `permission`, and lets the site ask again if
+// Chrome stopped it for requests left unanswered.
+void StoreSitePermission(content::BrowserContext& context,
+                         const GURL& site,
+                         mojom::WebViewPermission permission,
+                         mojom::WebViewPermissionSetting setting);
 
 // Answers a guest page's camera and microphone requests. Implemented in
 // //chrome (//chrome/browser/domicile/domicile_permissions.h), whose
@@ -605,6 +614,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   // RunBeforeUnloadDialog); BeforeUnloadFired closes on its answer. A page
   // with no `beforeunload` handler closes at once.
   void AskToClose();
+
+  // Runs `pagehide` and `unload` in the page's main frame, and no
+  // `beforeunload`, then calls `unloaded`, or calls it once content gives up on
+  // the page, after 500 ms, or the page is destroyed. The browser is about to
+  // exit: the window stays open and listed.
+  void UnloadForExit(base::OnceClosure unloaded);
 
   // chrome.windows.create for popup window `window_id`: opens a browser window
   // as its one tab. `width` and `height` are 0 when the extension set none.
@@ -1240,6 +1255,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // The pointer in the page's coordinates. `pointer_` is in the tooltip
   // widget's, which for a frame in another process are the frame's own.
   gfx::Point PointerInPage(content::RenderWidgetHost& widget) const;
+  // `point`, in `view`'s coordinates, in the page's.
+  gfx::Point InPage(content::RenderWidgetHostView& view,
+                    const gfx::Point& point) const;
   // Withdraws the shell's picker when its page closes the pipe that asked.
   void PagePickerClosed();
 
@@ -1460,6 +1478,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   std::optional<mojo::ReceiverId> open_picker_;
   // Whether AskToClose is waiting on the page's beforeunload.
   bool asked_to_close_ = false;
+  // Whether UnloadForExit ran, and its callback until the page is done. A page
+  // destroyed first is done too: every page waits on the last one.
+  bool unloading_for_exit_ = false;
+  base::ScopedClosureRunner unloaded_for_exit_;
 
   // The current find's text, or empty. Decides whether a Find is the next
   // match or a new search.

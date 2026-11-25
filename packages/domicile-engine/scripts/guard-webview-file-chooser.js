@@ -117,7 +117,7 @@ export const HostShell = (_root, host) => {
   if (picker !== null) {
     document.addEventListener("domicile-picker", (event) => {
       say(
-        `picker kind=${event.kind} value=${event.value} options=${event.options.join(",")} anchor=${event.anchorWidth}x${event.anchorHeight}`,
+        `picker kind=${event.kind} value=${event.value} options=${event.options.join(",")} anchor=${event.anchorX},${event.anchorY} ${event.anchorWidth}x${event.anchorHeight}`,
       );
       event.preventDefault();
       if (picker === "choose") {

@@ -5,10 +5,15 @@
 
 #include <optional>
 
+#include "base/memory/scoped_refptr.h"
+#include "base/test/task_environment.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
+#include "components/permissions/permission_decision_auto_blocker.h"
 #include "components/permissions/request_type.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
 #include "url/gurl.h"
@@ -96,6 +101,33 @@ TEST(SitePermissionsTest, AnythingElseIsStoredAsItself) {
   EXPECT_EQ(StoredSetting(mojom::WebViewPermissionSetting::kAsk,
                           CONTENT_SETTING_ALLOW),
             CONTENT_SETTING_ASK);
+}
+
+TEST(SitePermissionsTest, AChoiceLetsASiteChromeStoppedAskAgain) {
+  base::test::SingleThreadTaskEnvironment task_environment;
+  sync_preferences::TestingPrefServiceSyncable prefs;
+  HostContentSettingsMap::RegisterProfilePrefs(prefs.registry());
+  const auto map = base::MakeRefCounted<HostContentSettingsMap>(
+      &prefs, /*is_off_the_record=*/false, /*store_last_modified=*/false,
+      /*restore_session=*/false, /*should_record_metrics=*/false);
+  {
+    permissions::PermissionDecisionAutoBlocker auto_blocker(map.get());
+    const GURL site("https://example.com/");
+    const ContentSettingsType camera = ContentSettingsType::MEDIASTREAM_CAMERA;
+    for (int dismissal = 0; dismissal < 3; ++dismissal) {
+      auto_blocker.RecordDismissAndEmbargo(
+          site, camera, /*dismissed_prompt_was_quiet=*/false);
+    }
+    ASSERT_TRUE(auto_blocker.IsEmbargoed(site, camera));
+
+    StoreSitePermission(*map, auto_blocker, site,
+                        mojom::WebViewPermission::kCamera,
+                        mojom::WebViewPermissionSetting::kAsk);
+
+    EXPECT_FALSE(auto_blocker.IsEmbargoed(site, camera));
+    EXPECT_EQ(auto_blocker.GetDismissCount(site, camera), 0);
+  }
+  map->ShutdownOnUIThread();
 }
 
 TEST(SitePermissionsTest, OnlyWebAndExtensionPagesHaveSitePermissions) {
