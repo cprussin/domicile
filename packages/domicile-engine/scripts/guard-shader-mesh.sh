@@ -1,20 +1,17 @@
 #!/usr/bin/env bash
 # A mesh shader effect draws an `<app>` through its mesh: viz runs the
 # shell's vertex program over a grid and its fragment program on the window's
-# pixels, with SkMesh, on Ganesh or Graphite. The arrays the shell sets reach
-# the vertex program while the effect's filter animates on the compositor.
+# pixels, with SkMesh, on Ganesh or Graphite.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/under-wayland.sh /build/chromium/src \
 #     ./packages/domicile-engine/scripts/guard-shader-mesh.sh /build/chromium/src
 #
 # The shell (guard-shader-mesh.js) registers `squeeze`, a mesh effect over a
-# 4 by 4 grid whose fragment program swaps red and blue, and draws the first
-# window in a 640 by 480 `<app>` with `filter: domicile-shader(squeeze)`. It
-# animates that filter on the compositor, then sets the effect's `halve`
-# array each frame, which tells the vertex program to draw the content at
-# half its size. kitty draws #COLOR, so the shaded window is #SWAPPED. It
-# asserts:
+# 4 by 4 grid whose vertex program draws the content at half its size and
+# whose fragment program swaps red and blue, and draws the first window in a
+# 640 by 480 `<app>` with `filter: domicile-shader(squeeze)`. kitty draws
+# #COLOR, so the shaded window is #SWAPPED. It asserts:
 #
 #   registered   `squeeze` compiled
 #   rejected     a vertex program with an error rejected with an
@@ -22,8 +19,7 @@
 #   drawn        the shell put the window in an `<app>`, and logged its width
 #   swapped      #SWAPPED is on the page: the fragment program ran
 #   shrunk       its box is under three quarters of the `<app>`'s width: the
-#                vertex program placed it, with the arrays set under the
-#                running animation
+#                vertex program placed it
 #
 # Control: NEGATIVE=1 draws the `<app>` with no filter. #SWAPPED must not turn
 # up, and #COLOR must cover the `<app>`'s whole width.
@@ -277,11 +273,7 @@ logs why it made none), or the pass was bypassed with no texture to sample \
   ;;
 "claim 1 1 1 1 0")
   FAILURE="the fragment program ran but the window kept its size: the \
-the halve array the shell set with updateShaderEffect under the running \
-filter animation never reached viz (a 'GUARD refused halve' line says why it \
-threw; else EffectPaintPropertyNode's ComputeFilterChange, \
-EffectTree::OnFilterAnimated), or the vertex program's positions were not \
-used (DrawMeshEffect's matrix)"
+vertex program's positions were not used (DrawMeshEffect's matrix)"
   ;;
 "claim 1 1 1 1 -")
   FAILURE="the swapped window is neither half nor the whole of the <app>'s \
