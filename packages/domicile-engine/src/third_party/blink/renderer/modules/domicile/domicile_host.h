@@ -55,6 +55,7 @@ class DomicileDisplay;
 class DomicileDownload;
 class DomicilePictureInPictureVideo;
 class DomicileClipboardEntry;
+class DomicileSeat;
 class DomicileTrayItem;
 class DomicileNotification;
 class DomicileExtension;
@@ -191,6 +192,8 @@ class MODULES_EXPORT DomicileHost final
                    DOMRectReadOnly* unless_over,
                    ExceptionState&);
   void closeApp(ScriptState*, const String& app_id, ExceptionState&);
+  void takeOver(ScriptState*, const String& app_id, ExceptionState&);
+  void giveBack(ScriptState*, const String& app_id, ExceptionState&);
   void pointerConstrained(ScriptState*,
                           const String& app_id,
                           bool active,
@@ -428,6 +431,7 @@ class MODULES_EXPORT DomicileHost final
   // The desk's state: what the compositor last said, null until it has said
   // anything. See the IDL.
   const FrozenArray<DomicileClipboardEntry>* clipboard() const;
+  const FrozenArray<DomicileSeat>* seats() const;
   const FrozenArray<DomicileTrayItem>* tray() const;
   const FrozenArray<DomicileNotification>* notifications() const;
   const FrozenArray<DomicileExtension>* extensions() const;
@@ -502,6 +506,7 @@ class MODULES_EXPORT DomicileHost final
              bool indexing) override;
   void Clipboard(
       Vector<domicile::mojom::blink::ClipboardEntryPtr> entries) override;
+  void Seats(Vector<domicile::mojom::blink::AgentSeatPtr> seats) override;
   void Tray(Vector<domicile::mojom::blink::TrayItemPtr> items) override;
   void Notifications(
       Vector<domicile::mojom::blink::NotificationPtr> items) override;
@@ -728,6 +733,10 @@ class MODULES_EXPORT DomicileHost final
   // for `extensions_`, the browser -- last said, and null or nullopt until it
   // has said anything. Each list replaced wholesale, for `displays_`'s reason.
   Member<FrozenArray<DomicileClipboardEntry>> clipboard_;
+  Member<FrozenArray<DomicileSeat>> seats_;
+  // The seat id holding each window an agent holds, by app id, from the last
+  // `seats`: a window announced after it is held from the start.
+  HashMap<String, String> held_by_;
   Member<FrozenArray<DomicileTrayItem>> tray_items_;
   Member<FrozenArray<DomicileNotification>> notifications_;
   Member<FrozenArray<DomicileExtension>> extensions_;

@@ -8,6 +8,12 @@ in the manganese desktop is in
 
 _Unreleased_
 
+### Shells see agents' seats
+
+`domicile.seats.list` lists the agent seats: each agent's name, where its pointer is, the window its keyboard is in, the windows it holds and the windows the user took from it. Each window's `heldBy` names the agent seat holding it. `domicile.seats.takeOver(appId)` takes a window from an agent, as the user's click or key in it does, and the agent can't drive it until `domicile.seats.giveBack(appId)`. A window the user takes stays theirs after they leave it. `useSeats()` in `@domicile-desktop/react/seats` follows the list. `domicile list-windows` and the MCP server's `list_windows` add `held_by`.
+
+[Writing a shell](WRITING-A-SHELL.md#agents-beside-the-user) · [Agent seats](architecture/AGENT-SEATS.md#shell-primitives) · [`domicile list-windows`](CLI.md#domicile-list-windows---json)
+
 ### Agents copy and paste on a clipboard of their own
 
 An agent session's seat has its own clipboard and middle-click selection. An app the agent types in copies to and pastes from the agent's, so an agent's copy never replaces the user's, and clipboard managers and the clipboard history see only the user's. The agent's go when its session ends.

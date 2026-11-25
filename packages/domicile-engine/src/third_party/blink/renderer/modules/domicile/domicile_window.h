@@ -53,6 +53,8 @@ struct DomicileWindowState {
   // Null for no anchor.
   String anchor;
   bool urgent = false;
+  // The agent seat holding the window; null for the user's.
+  String held_by;
   bool inhibits_shortcuts = false;
   V8DomicileCursorShape cursor =
       V8DomicileCursorShape(V8DomicileCursorShape::Enum::kDefault);
@@ -103,6 +105,7 @@ class MODULES_EXPORT DomicileWindow final : public ScriptWrappable {
   const String& transientFor() const { return state_.transient_for; }
   const String& anchor() const { return state_.anchor; }
   bool urgent() const { return state_.urgent; }
+  const String& heldBy() const { return state_.held_by; }
   bool inhibitsShortcuts() const { return state_.inhibits_shortcuts; }
   V8DomicileCursorShape cursor() const { return state_.cursor; }
   const String& cursorImage() const { return state_.cursor_image; }

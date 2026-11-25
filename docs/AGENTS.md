@@ -49,7 +49,9 @@ it, as `domicile pointer --agent <session>` and the like:
 - One seat drives an app at a time. They are refused in an app the user's
   keyboard is in, or for the pointer tools, their pointer.
 - The user wins. Their pointer entering an app takes it from the agent's
-  pointer, and their keyboard, from both.
+  pointer, and their keyboard, from both. A window the user's keyboard took
+  from the agent, or the shell took with `domicile.seats.takeOver`, refuses
+  the agent's pointer and keys until the shell gives it back.
 - The seat has its own clipboard and middle-click selection. An app the
   agent types in copies to and pastes from the agent's, never the user's,
   and the clipboard history leaves them out. They go when the session ends.

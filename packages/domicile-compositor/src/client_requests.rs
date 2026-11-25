@@ -228,6 +228,15 @@ pub enum ClientRequest {
     AgentGone {
         session: u32,
     },
+    /// The shell took window `app_id` from the agent holding it. See
+    /// [`ChromeMessage::TakeOver`](domicile_protocol::ChromeMessage::TakeOver).
+    TakeOver {
+        app_id: String,
+    },
+    /// The shell gave window `app_id` back to agents.
+    GiveBack {
+        app_id: String,
+    },
     /// The chrome, or `domicile exec`, asked to start a program.
     ///
     /// Handled here because the lock state lives here, and a locked desktop
@@ -688,6 +697,7 @@ impl DomicileCompositor {
                 // An empty clipboard is a valid message, so the normal
                 // broadcast works.
                 self.tell_the_chromes_the_clipboard();
+                self.tell_the_chromes_the_seats(true);
                 // A shell that reloaded while the screens were dark would
                 // otherwise assume someone is present.
                 self.tell_a_new_chrome_whether_anybody_is_here();
@@ -780,6 +790,8 @@ impl DomicileCompositor {
                 answer,
             } => answer.give(self.agent_input(session, steps, let_go)),
             ClientRequest::AgentGone { session } => self.agent_gone(session),
+            ClientRequest::TakeOver { app_id } => self.take_over(&app_id),
+            ClientRequest::GiveBack { app_id } => self.give_back(&app_id),
             ClientRequest::Spawn { command, answer } => {
                 let started = spawn_client(
                     &command,

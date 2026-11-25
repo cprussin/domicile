@@ -130,6 +130,7 @@ NAMES=$(grep -oE '"GUARD names missing=[^"]*"' "$ENGINE_LOG" | head -1)
 WINDOWS=$(grep -oE '"GUARD windows .*"' "$ENGINE_LOG" | head -1)
 BROWSER=$(grep -oE '"GUARD browser .*"' "$ENGINE_LOG" | head -1)
 FOCUSED=$(grep -oE '"GUARD focused [^"]*"' "$ENGINE_LOG" | head -1)
+SEATS=$(grep -oE '"GUARD seats .*"' "$ENGINE_LOG" | head -1)
 APPEARANCE=$(grep -oE '"GUARD appearance [^"]*"' "$ENGINE_LOG" | head -1)
 CHANGED=$(grep -oE '"GUARD changed n=[0-9]+"' "$ENGINE_LOG" | head -1)
 SYSTEM_IN=$(grep -cE '"GUARD system data=\{"type": ?"system_reply"' "$ENGINE_LOG")
@@ -138,6 +139,7 @@ SYSTEM_LEAKED=$(grep -cE '^said: .*"id":2' "$SOCKET_LOG")
 SYNC_FRAMES=$(grep -cE '^said: \{"type":"sync_frames"\}$' "$SOCKET_LOG")
 
 FAILURE=$(NAMES="$NAMES" WINDOWS="$WINDOWS" BROWSER="$BROWSER" FOCUSED="$FOCUSED" CHANGED="$CHANGED" \
+  SEATS="$SEATS" \
   APPEARANCE="$APPEARANCE" SYNC_FRAMES="$SYNC_FRAMES" \
   SYSTEM_IN="$SYSTEM_IN" SYSTEM_OUT="$SYSTEM_OUT" SYSTEM_LEAKED="$SYSTEM_LEAKED" python3 - <<'PY'
 import json, os
@@ -154,7 +156,7 @@ by_id = {w["appId"]: w for w in windows}
 
 def default(**fields):
     window = {"clientFrame": False, "cursor": "default", "desktopId": "", "dialog": False,
-              "frame": 0, "gid": None, "grab": False, "height": None, "inhibitsShortcuts": False,
+              "frame": 0, "gid": None, "grab": False, "height": None, "heldBy": None, "inhibitsShortcuts": False,
               "maxHeight": None,
               "maxWidth": None, "minHeight": None, "minWidth": None, "parent": None,
               "pid": None, "pidfdInode": None, "sandboxAppId": None, "sandboxed": None,
@@ -173,9 +175,11 @@ wanted = [
             height=480, cursor="grab", dialog=True, clientFrame=True, pid=4242,
             uid=4294967294, gid=100, pidfdInode=5021, sandboxed=False,
             transientFor="first", inhibitsShortcuts=True, frame=5,
-            toplevelId="second-listed"),
+            toplevelId="second-listed", heldBy="agent-3"),
     default(appId="menu", parent="second", x=10, y=20, width=120, height=90, grab=True,
             frame=1),
+    default(appId="late", title="Late", width=200, height=100, toplevelId="late-listed",
+            heldBy="agent-3"),
 ]
 
 # THE CURSOR ARMS FIRST, AND IN THIS ORDER. An unknown name reaching the page
@@ -186,7 +190,7 @@ if by_id.get("second", {}).get("cursor") not in (None, "grab"):
 elif by_id.get("first", {}).get("cursor") != "zoom-out":
     print("the cursor sent after the unknown one never reached `first` (%s), so the unknown name was not refused but fatal: the channel stopped on it" % by_id.get("first", {}).get("cursor"))
 elif [w["appId"] for w in windows] != [w["appId"] for w in wanted]:
-    print("`windows` lists %s where the compositor left first, second and menu, in the order they appeared; a closed window kept, or one lost, is a shell drawing the wrong desk" % [w["appId"] for w in windows])
+    print("`windows` lists %s where the compositor left first, second, menu and late, in the order they appeared; a closed window kept, or one lost, is a shell drawing the wrong desk" % [w["appId"] for w in windows])
 elif windows != wanted:
     wrong = [w["appId"] for w, v in zip(windows, wanted) if w != v]
     print("`windows` has the right windows but not what the compositor said about %s: got %s" % (", ".join(wrong), json.dumps([by_id[i] for i in wrong])))
@@ -194,6 +198,8 @@ elif os.environ["BROWSER"] != '"GUARD browser [{\"id\":\"1\",\"toplevelId\":\"br
     print("`browserWindows` is %s where the page opened window 1 and the compositor listed it as browser-listed: ControlChannel or DomicileHost::BrowserToplevelIds lost it" % (os.environ["BROWSER"] or "no GUARD browser line"))
 elif os.environ["FOCUSED"] != '"GUARD focused second"':
     print("`focusedWindow` is %s where the compositor focused second" % os.environ["FOCUSED"])
+elif os.environ["SEATS"] != '"GUARD seats [{\"focused\":\"second\",\"holds\":[\"second\",\"late\"],\"id\":\"agent-3\",\"name\":\"Claude Code\",\"pointer\":[100.5,20],\"taken\":[\"first\"]}]"':
+    print("`seats` is %s where the compositor said agent-3, Claude Code, pointing at 100.5,20, typing in second and holding it and late, and first taken from it: ControlChannel or DomicileHost::Seats lost it" % (os.environ["SEATS"] or "no GUARD seats line"))
 elif os.environ["APPEARANCE"] != '"GUARD appearance #3584e4 true false"':
     print("the page's appearance is %s where the compositor said #3584e4, high contrast, no reduced motion: ControlChannel or DomicileHost::AppearanceChanged lost it" % (os.environ["APPEARANCE"] or "no GUARD appearance line"))
 elif os.environ["CHANGED"] != '"GUARD changed n=0"':
@@ -209,7 +215,7 @@ elif os.environ["SYSTEM_IN"] == "0":
 PY
 )
 
-echo "page: $NAMES $WINDOWS $BROWSER $FOCUSED $APPEARANCE $CHANGED"
+echo "page: $NAMES $WINDOWS $BROWSER $FOCUSED $SEATS $APPEARANCE $CHANGED"
 echo "system: out=$SYSTEM_OUT leaked=$SYSTEM_LEAKED in=$SYSTEM_IN"
 
 if [ -n "$FAILURE" ]; then

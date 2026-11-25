@@ -51,6 +51,7 @@
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_clipboard_entry.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_seat.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_browser_profile.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_browser_window.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_cast_sink.h"
@@ -401,6 +402,10 @@ const FrozenArray<DomicileClipboardEntry>* DomicileHost::clipboard() const {
   return clipboard_.Get();
 }
 
+const FrozenArray<DomicileSeat>* DomicileHost::seats() const {
+  return seats_.Get();
+}
+
 const FrozenArray<DomicileTrayItem>* DomicileHost::tray() const {
   return tray_items_.Get();
 }
@@ -466,6 +471,10 @@ DomicileWindowState& DomicileHost::WindowNamed(const String& app_id) {
   }
   DomicileWindowState state;
   state.app_id = app_id;
+  const auto held = held_by_.find(app_id);
+  if (held != held_by_.end()) {
+    state.held_by = held->value;
+  }
   window_states_.push_back(std::move(state));
   return window_states_.back();
 }
@@ -737,6 +746,20 @@ void DomicileHost::closeApp(ScriptState*, const String& app_id,
                             ExceptionState& exception_state) {
   if (ReadyForApp(app_id, exception_state)) {
     channel_->CloseApp(app_id);
+  }
+}
+
+void DomicileHost::takeOver(ScriptState*, const String& app_id,
+                            ExceptionState& exception_state) {
+  if (ReadyForApp(app_id, exception_state)) {
+    channel_->TakeOver(app_id);
+  }
+}
+
+void DomicileHost::giveBack(ScriptState*, const String& app_id,
+                            ExceptionState& exception_state) {
+  if (ReadyForApp(app_id, exception_state)) {
+    channel_->GiveBack(app_id);
   }
 }
 
@@ -2191,6 +2214,42 @@ void DomicileHost::Clipboard(
   DispatchEvent(*Event::Create(domicile_event_names::Clipboardchanged()));
 }
 
+// Pushed, like Clipboard: the agents drive their seats without the page.
+// Each window's heldBy follows, so a shell reading windows alone can draw
+// who holds one.
+void DomicileHost::Seats(
+    Vector<domicile::mojom::blink::AgentSeatPtr> seats) {
+  HeapVector<Member<DomicileSeat>> listed;
+  listed.reserve(seats.size());
+  held_by_.clear();
+  for (const auto& seat : seats) {
+    // The first seat listed holding a window wins, as the compositor lists
+    // them in session order.
+    for (const String& held : seat->holds) {
+      held_by_.insert(held, seat->id);
+    }
+    listed.push_back(MakeGarbageCollected<DomicileSeat>(
+        seat->id, seat->name,
+        seat->pointer ? std::make_optional(seat->pointer->x()) : std::nullopt,
+        seat->pointer ? std::make_optional(seat->pointer->y()) : std::nullopt,
+        seat->focused, seat->holds, seat->taken));
+  }
+  bool moved = false;
+  for (DomicileWindowState& state : window_states_) {
+    const auto held = held_by_.find(state.app_id);
+    const String held_by = held == held_by_.end() ? String() : held->value;
+    if (held_by != state.held_by) {
+      state.held_by = held_by;
+      moved = true;
+    }
+  }
+  seats_ = MakeGarbageCollected<FrozenArray<DomicileSeat>>(std::move(listed));
+  if (moved) {
+    WindowsChanged();
+  }
+  DispatchEvent(*Event::Create(domicile_event_names::Seatschanged()));
+}
+
 // Pushed, like Clipboard: an icon is the session bus's, which the compositor
 // hears without anybody asking.
 void DomicileHost::Tray(Vector<domicile::mojom::blink::TrayItemPtr> items) {
@@ -3266,6 +3325,7 @@ void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(held_);
   visitor->Trace(file_search_);
   visitor->Trace(clipboard_);
+  visitor->Trace(seats_);
   visitor->Trace(tray_items_);
   visitor->Trace(notifications_);
   visitor->Trace(extensions_);

@@ -351,7 +351,7 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
         json!({"type": "string", "description": "An element's ref, from app_snapshot."});
     match tool {
         Tool::Listing("list-windows") => (
-            "List the windows, native and browser, as JSON: id, kind, title, app, pid, size, focused, url, private, and the views a browser window holds.",
+            "List the windows, native and browser, as JSON: id, kind, title, app, pid, size, focused, url, private, held_by (the agent seat whose pointer or keyboard is in it, absent when it is the user's), and the views a browser window holds.",
             json!({}),
             vec![],
         ),

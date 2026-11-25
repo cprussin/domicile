@@ -25,7 +25,7 @@ The engine has two channels to the rest of Domicile:
   `answer_portal_request`, `copy_clipboard_entry`, `remove_clipboard_entry`,
   `activate_tray_item`, `dismiss_notifications`, `invoke_notification_action`,
   `reply_to_notification`, `focus_app`,
-  `focus_chrome`, `sync_frames`, `close_app`, `set_app_bounds`, `set_desktop_size`,
+  `focus_chrome`, `sync_frames`, `close_app`, `take_over`, `give_back`, `set_app_bounds`, `set_desktop_size`,
   `set_device_pixel_ratio`, `set_theme`, `theme_captured`, `unlock`, `lock`,
   `key`, `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`,
   `pointer_pinch`, `touch`.
@@ -43,7 +43,7 @@ The engine has two channels to the rest of Domicile:
   `app_cursor`, `app_presented`, `app_suspended`, `app_transient_for`,
   `app_urgent`, `app_inhibits_shortcuts`, `browser_toplevel_ids`, `modifiers`,
   `found_files`,
-  `clipboard`, `theme`,
+  `clipboard`, `seats`, `theme`,
   `windows_theme`, `appearance`, `focus_changed`, `focus_requested`,
   `displays`, `keymap`, `extensions`, `force_dark`, `spellcheck`, `tray`, `notifications`, `shell_config`,
   `idle`, `locked`, `system`, `portal_requests`.

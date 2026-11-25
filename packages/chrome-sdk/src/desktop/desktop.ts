@@ -38,6 +38,8 @@ import type { Portals } from "./portals";
 import { portals } from "./portals";
 import type { Processes } from "./processes";
 import { processes } from "./processes";
+import type { Seats } from "./seats";
+import { seats } from "./seats";
 import type { Session } from "./session";
 import { session } from "./session";
 import type { ShellNamespace } from "./shell";
@@ -83,6 +85,7 @@ export type Domicile = {
   readonly pointer: Pointer;
   readonly portals: Portals;
   readonly processes: Processes;
+  readonly seats: Seats;
   readonly session: Session;
   readonly shell: ShellNamespace;
   readonly theme: Theme;
@@ -132,6 +135,7 @@ const build = (host: DomicileHost): Domicile => {
     pointer: pointer(host),
     portals: portals(host, calls),
     processes: processes(host, calls),
+    seats: seats(host),
     session: session(host, calls),
     shell: shell(host, calls),
     theme: theme(host),

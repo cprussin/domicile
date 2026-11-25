@@ -815,6 +815,14 @@ fn read_chrome_messages(
                 hub.send_request(ClientRequest::CloseApp { app_id });
                 Vec::new()
             }
+            Ok(ChromeMessage::TakeOver { app_id }) => {
+                hub.send_request(ClientRequest::TakeOver { app_id });
+                Vec::new()
+            }
+            Ok(ChromeMessage::GiveBack { app_id }) => {
+                hub.send_request(ClientRequest::GiveBack { app_id });
+                Vec::new()
+            }
             // Held per connection, since every chrome hears each move. See
             // `ChromeHub::syncs_frames`.
             Ok(ChromeMessage::TextInput { field }) => {

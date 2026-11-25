@@ -575,6 +575,22 @@ const clipboardSchema = z.looseObject({
   type: z.literal("clipboard"),
 });
 
+// The agent seats, each driving its own pointer and keyboard beside the
+// user's. Pushed on change and on connect. `pointer` is in desk coordinates.
+const agentSeatSchema = z.looseObject({
+  focused: z.string().optional(),
+  holds: z.array(z.string()),
+  id: z.string(),
+  name: z.string(),
+  pointer: z.tuple([z.number(), z.number()]).optional(),
+  taken: z.array(z.string()),
+});
+
+const seatsSchema = z.looseObject({
+  seats: z.array(agentSeatSchema),
+  type: z.literal("seats"),
+});
+
 // The full system tray (StatusNotifierItem), in registration order. Pushed on
 // change and on connect. Activate an item with `activate_tray_item`. `icon` is
 // a `data:` URL, absent when it could not be rendered. `menu` is the object
@@ -1039,6 +1055,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   modifiersSchema,
   foundFilesSchema,
   clipboardSchema,
+  seatsSchema,
   traySchema,
   notificationsSchema,
   portalRequestsSchema,

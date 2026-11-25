@@ -36,6 +36,7 @@
 #include "components/domicile/common/domicile_scheme.h"
 #include "components/domicile/common/theme.h"
 #include "net/base/net_errors.h"
+#include "ui/gfx/geometry/point_f.h"
 
 namespace domicile {
 namespace {
@@ -747,6 +748,14 @@ void ControlChannel::ShellFailed(const std::string& serial,
 
 void ControlChannel::CloseApp(const std::string& app_id) {
   SendMessage(ForApp("close_app", app_id));
+}
+
+void ControlChannel::TakeOver(const std::string& app_id) {
+  SendMessage(ForApp("take_over", app_id));
+}
+
+void ControlChannel::GiveBack(const std::string& app_id) {
+  SendMessage(ForApp("give_back", app_id));
 }
 
 void ControlChannel::SetAppBounds(const std::string& app_id,
@@ -1887,6 +1896,52 @@ void ControlChannel::DispatchLine(const std::string& line,
     // desktop nothing has been copied on is an answer, and a panel that never
     // heard one would wait for a message that has already been sent.
     client_->Clipboard(std::move(entries));
+    return;
+  }
+
+  if (*type == "seats") {
+    const base::ListValue* listed = message.FindList("seats");
+    if (!listed) {
+      return;
+    }
+    // The window ids a seat lists, skipping anything that is not one.
+    auto ids = [](const base::DictValue& seat, std::string_view key) {
+      std::vector<std::string> ids;
+      if (const base::ListValue* list = seat.FindList(key)) {
+        for (const base::Value& id : *list) {
+          if (const std::string* named = id.GetIfString()) {
+            ids.push_back(*named);
+          }
+        }
+      }
+      return ids;
+    };
+    std::vector<mojom::AgentSeatPtr> seats;
+    seats.reserve(listed->size());
+    for (const base::Value& row : *listed) {
+      const base::DictValue* seat = row.GetIfDict();
+      if (!seat) {
+        continue;
+      }
+      // A seat with no id is one no window could name as its holder.
+      const std::string* id = seat->FindString("id");
+      const std::string* name = seat->FindString("name");
+      if (!id || !name) {
+        continue;
+      }
+      std::optional<gfx::PointF> pointer;
+      if (const base::ListValue* at = seat->FindList("pointer");
+          at && at->size() == 2u) {
+        pointer = gfx::PointF(Number((*at)[0]), Number((*at)[1]));
+      }
+      const std::string* focused = seat->FindString("focused");
+      seats.push_back(mojom::AgentSeat::New(
+          *id, *name, pointer,
+          focused ? std::make_optional(*focused) : std::nullopt,
+          ids(*seat, "holds"), ids(*seat, "taken")));
+    }
+    // Sent even when empty, as the clipboard is: no agent is an answer.
+    client_->Seats(std::move(seats));
     return;
   }
 

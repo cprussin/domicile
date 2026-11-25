@@ -67,14 +67,23 @@ pub fn windows_table(paint: Paint, windows: &[ListedWindow]) -> String {
             "" => none(),
             title => plain(title),
         };
+        let held = window
+            .held_by
+            .as_deref()
+            .map(|seat| format!("held by {seat}"));
         let marks = [
-            (window.focused, "● focused", Style::Good),
-            (!window.focused && window.urgent, "▲ urgent", Style::Warn),
-            (window.private, "private", Style::Accent),
+            (window.focused, "● focused".to_string(), Style::Good),
+            (
+                !window.focused && window.urgent,
+                "▲ urgent".to_string(),
+                Style::Warn,
+            ),
+            (window.private, "private".to_string(), Style::Accent),
+            (held.is_some(), held.unwrap_or_default(), Style::Accent),
         ]
         .into_iter()
         .filter(|(shown, _, _)| *shown)
-        .flat_map(|(_, mark, style)| [(" ".to_string(), Style::Plain), (mark.to_string(), style)]);
+        .flat_map(|(_, mark, style)| [(" ".to_string(), Style::Plain), (mark, style)]);
         vec![
             vec![(window.id.clone(), Style::Dim)],
             plain(&wire_word(window.kind)),

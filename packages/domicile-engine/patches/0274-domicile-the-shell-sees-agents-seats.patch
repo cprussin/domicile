@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Connor Prussin <connor@prussin.net>
+Date: Wed, 25 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the shell sees agents' seats
+
+DomicileHost.seats lists the agent seats, each a DomicileSeat, so a shell
+can draw an agent's pointer and the windows it holds. The new interface's
+IDL and bindings join the module lists.
+---
+ third_party/blink/renderer/bindings/generated_in_modules.gni | 2 ++
+ third_party/blink/renderer/bindings/idl_in_modules.gni       | 1 +
+ 2 files changed, 3 insertions(+)
+
+diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+--- a/third_party/blink/renderer/bindings/generated_in_modules.gni
++++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
+@@ -2371,6 +2371,8 @@ generated_interface_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_picture_in_picture_video.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_picture_in_picture_video.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_seat.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_seat.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_item.cc",
+diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+--- a/third_party/blink/renderer/bindings/idl_in_modules.gni
++++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
+@@ -295,6 +295,7 @@ static_idl_files_in_modules = [
+   "//third_party/blink/renderer/modules/domicile/domicile_download.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_host.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_picture_in_picture_video.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_seat.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_display.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event_init.idl",

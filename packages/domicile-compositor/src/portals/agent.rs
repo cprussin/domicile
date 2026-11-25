@@ -549,6 +549,7 @@ mod tests {
             size: None,
             focused: false,
             urgent: false,
+            held_by: None,
             url: None,
             private,
             engine_id: None,

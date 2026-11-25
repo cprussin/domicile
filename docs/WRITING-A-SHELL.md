@@ -502,6 +502,9 @@ Each entry in `domicile.windows.list` describes one client window.
   and the window has not had the keyboard since. It clears when the window gets
   the keyboard, and is never set on the window holding it. Draw it as an
   attention hint, such as a highlighted workspace or title.
+- **Agent seats:** `heldBy` is the id of the agent seat whose pointer or
+  keyboard is in the window, or `undefined` when it is the user's. See
+  [Agents beside the user](#agents-beside-the-user).
 - **Client frames:** `clientFrame` is `true` when the client asked to draw its
   own frame. `shell-manganese` leaves its title bar off such a window while it
   floats.
@@ -749,6 +752,32 @@ while the page holds it; `windows.on("focuschange")` reports changes. Use it,
 not your own idea of the active window, to know where keys go. If a focused
 client crashes, the compositor gives the keyboard to the page; `windows.list`
 drops the window first, so you can focus another.
+
+### Agents beside the user
+
+An agent let in with `domicile agent` drives native windows with a pointer
+and keyboard of its own, and never moves the user's
+([AGENT-SEATS.md](architecture/AGENT-SEATS.md)). `domicile.seats.list` lists
+the agent seats, `undefined` until the compositor says, and
+`seats.on("change")` reports each change. In React, `useSeats()` from
+`@domicile-desktop/react/seats` does both. Each seat has:
+
+- `id` (`agent-<session>`) and `name`, the agent's name as it asked to be let
+  in.
+- `pointer`, `{ x, y }` in desk coordinates (those of `domicile.displays`), or
+  `undefined` before it first points. Draw the agent's cursor there: the
+  hardware cursor stays the user's.
+- `focused`, the window its keyboard is in, and `holds`, the windows its
+  pointer or keyboard is in. Each window in `holds` has `heldBy` set to the
+  seat's `id`.
+- `taken`, the windows the user took from it.
+
+The user wins any window both want. Their click or key in a window an agent
+holds takes it, as `domicile.seats.takeOver(appId)` does. Every agent's raw
+input there, and in its popups, is then refused until
+`domicile.seats.giveBack(appId)`, the window closes, or the agent it was
+taken from leaves. A shell offers both, for example a "Give back" button on
+a window in `taken`.
 
 ### Focus follows the mouse
 

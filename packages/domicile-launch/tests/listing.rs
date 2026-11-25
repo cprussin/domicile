@@ -79,6 +79,7 @@ fn windows_print_as_one_table_whoever_draws_them() {
         size: Some([640.0, 480.5]),
         focused: true,
         urgent: false,
+        held_by: None,
         url: None,
         private: false,
         engine_id: None,
@@ -91,6 +92,7 @@ fn windows_print_as_one_table_whoever_draws_them() {
         pid: Some(7),
         focused: false,
         urgent: true,
+        held_by: Some("agent-3".to_string()),
         ..editor.clone()
     };
     let mail = ListedWindow {
@@ -102,6 +104,7 @@ fn windows_print_as_one_table_whoever_draws_them() {
         size: None,
         focused: false,
         urgent: false,
+        held_by: None,
         url: Some("https://mail.example/".to_string()),
         private: true,
         engine_id: Some("3".to_string()),
@@ -113,7 +116,7 @@ fn windows_print_as_one_table_whoever_draws_them() {
         "\
 ID                                KIND     APP    PID   SIZE     TITLE
 kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA  native   emacs  4242  640x481  notes.org ● focused
-nW1zT5yB8vC2xF6hJ9pL4sR0gAkD3mQ7  native   -      7     640x481  - ▲ urgent
+nW1zT5yB8vC2xF6hJ9pL4sR0gAkD3mQ7  native   -      7     640x481  - ▲ urgent held by agent-3
 Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox private
 "
     );
@@ -361,6 +364,7 @@ fn on_a_terminal_states_are_colored_and_detail_dimmed() {
         size: None,
         focused: true,
         urgent: false,
+        held_by: None,
         private: false,
         url: None,
         engine_id: None,

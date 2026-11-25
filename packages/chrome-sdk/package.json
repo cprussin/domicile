@@ -130,6 +130,10 @@
       "types": "./dist/desktop/processes.d.ts",
       "default": "./dist/desktop/processes.js"
     },
+    "./desktop/seats": {
+      "types": "./dist/desktop/seats.d.ts",
+      "default": "./dist/desktop/seats.js"
+    },
     "./desktop/session": {
       "types": "./dist/desktop/session.d.ts",
       "default": "./dist/desktop/session.js"

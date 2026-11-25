@@ -315,8 +315,9 @@ pub const COMMANDS: &[Command] = &[
         about: &[
             "Prints each window: native windows in the order they opened, then \
              browser and app windows. `focused` marks the native window with the \
-             keyboard, `urgent` one that asked for it, and `private` a private \
-             browser window.",
+             keyboard, `urgent` one that asked for it, `private` a private \
+             browser window, and `held by` the agent seat whose pointer or keyboard \
+             is in it.",
         ],
         sections: &[JSON],
         examples: &[],
