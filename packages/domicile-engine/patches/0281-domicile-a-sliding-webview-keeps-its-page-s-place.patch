@@ -1,0 +1,121 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 25 Nov 2026 21:16:45 +0000
+Subject: [PATCH] domicile: a sliding webview keeps its page's place
+
+While a transform animation moved a <webview>'s window, each of the
+shell's main frames sent the page its new place in the local root. The
+page took a screen-rect update and ran a main frame for each, every
+frame of the slide. manganese slides a workspace's windows this way
+while its shell runs main frames, so a workspace switch made every
+sliding page work each frame.
+
+- While RemoteFrameView::HoldsScale, RemoteFrame::FrameRectsChanged
+  keeps the whole rect it last sent, place as well as size (patch 0233
+  kept only the size).
+- The first lifecycle update after the animation sends the held rect
+  (RemoteFrameView::ReleaseHeldRect), so the page learns its new place
+  even when nothing else changes after the animation.
+
+Guarded by `guard-webview-slide-screen-rects.sh`. The pinned engine
+fails it: 57 screen-rect updates for a one-second slide; its control
+(the same slide on `left`) sees 60.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on crux.
+
+Co-Authored-By: Connor Prussin <connor@prussin.net>
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LWjcAMc838V45Foqsa1RET
+---
+ .../blink/renderer/core/frame/remote_frame.cc     | 15 ++++++++++-----
+ .../renderer/core/frame/remote_frame_view.cc      | 13 +++++++++++++
+ .../blink/renderer/core/frame/remote_frame_view.h |  7 +++++++
+ 3 files changed, 30 insertions(+), 5 deletions(-)
+
+diff --git a/third_party/blink/renderer/core/frame/remote_frame.cc b/third_party/blink/renderer/core/frame/remote_frame.cc
+index a7ee444..56206a6 100644
+--- a/third_party/blink/renderer/core/frame/remote_frame.cc
++++ b/third_party/blink/renderer/core/frame/remote_frame.cc
+@@ -593,12 +593,17 @@ void RemoteFrame::SetInsecureRequestPolicy(
+ void RemoteFrame::FrameRectsChanged(const gfx::Size& local_frame_size,
+                                     const gfx::Rect& rect_in_local_root) {
+   pending_visual_properties_.rect_in_local_root = rect_in_local_root;
+-  // Domicile: a <webview>'s page keeps its size in the local root while an
+-  // animation scales its window (RemoteFrameView::HoldsScale); its place
+-  // still follows. The animation's end takes the new size.
++  // Domicile: a <webview>'s page keeps its size and place in the local root
++  // while an animation moves or scales its window
++  // (RemoteFrameView::HoldsScale). A new place is a screen-rect update and a
++  // main frame in the page, every frame of a workspace slide. The animation's
++  // end takes the new rect (RemoteFrameView::ReleaseHeldRect).
+   if (view_ && view_->HoldsScale() && sent_visual_properties_) {
+-    pending_visual_properties_.rect_in_local_root.set_size(
+-        sent_visual_properties_->rect_in_local_root.size());
++    if (rect_in_local_root != sent_visual_properties_->rect_in_local_root) {
++      view_->NoteHeldRect();
++    }
++    pending_visual_properties_.rect_in_local_root =
++        sent_visual_properties_->rect_in_local_root;
+   }
+   pending_visual_properties_.local_frame_size = local_frame_size;
+   SynchronizeVisualProperties();
+diff --git a/third_party/blink/renderer/core/frame/remote_frame_view.cc b/third_party/blink/renderer/core/frame/remote_frame_view.cc
+index cce00db..3a78cd8 100644
+--- a/third_party/blink/renderer/core/frame/remote_frame_view.cc
++++ b/third_party/blink/renderer/core/frame/remote_frame_view.cc
+@@ -144,6 +144,19 @@ void RemoteFrameView::UpdateViewportIntersectionsForSubtree(
+     IntersectionObservation::ComputeFlags parent_flags,
+     ComputeIntersectionsContext&) {
+   UpdateViewportIntersection(parent_flags, needs_occlusion_tracking_);
++  ReleaseHeldRect();
++}
++
++void RemoteFrameView::NoteHeldRect() {
++  holds_rect_ = true;
++}
++
++void RemoteFrameView::ReleaseHeldRect() {
++  if (!holds_rect_ || HoldsScale()) {
++    return;
++  }
++  holds_rect_ = false;
++  PropagateFrameRects();
+ }
+ 
+ void RemoteFrameView::SetViewportIntersection(
+diff --git a/third_party/blink/renderer/core/frame/remote_frame_view.h b/third_party/blink/renderer/core/frame/remote_frame_view.h
+index d103a58..9c35a5b 100644
+--- a/third_party/blink/renderer/core/frame/remote_frame_view.h
++++ b/third_party/blink/renderer/core/frame/remote_frame_view.h
+@@ -95,6 +95,9 @@ class CORE_EXPORT RemoteFrameView final
+   // whole page, every frame of the animation; the page's last frame is
+   // scaled instead.
+   bool HoldsScale() const;
++  // Domicile: RemoteFrame held back a new rect for HoldsScale. The first
++  // lifecycle update after the animation sends it.
++  void NoteHeldRect();
+ 
+   uint32_t Print(const gfx::Rect&, cc::PaintCanvas*) const;
+   uint32_t CapturePaintPreview(const gfx::Rect&, cc::PaintCanvas*) const;
+@@ -126,6 +129,7 @@ class CORE_EXPORT RemoteFrameView final
+   // Domicile: sends `visibility` to the browser unless it already has it.
+   void SendVisibility(blink::mojom::FrameVisibility visibility);
+   void SendHeldVisibility(TimerBase*);
++  void ReleaseHeldRect();
+ 
+   // The properties and handling of the cycle between RemoteFrame
+   // and its RemoteFrameView corresponds to that between LocalFrame
+@@ -148,6 +152,9 @@ class CORE_EXPORT RemoteFrameView final
+   std::optional<blink::mojom::FrameVisibility> sent_visibility_;
+   blink::mojom::FrameVisibility held_visibility_;
+   HeapTaskRunnerTimer<RemoteFrameView> held_visibility_timer_;
++
++  // Domicile: see NoteHeldRect.
++  bool holds_rect_ = false;
+ };
+ 
+ template <>
+-- 
+2.43.0
+

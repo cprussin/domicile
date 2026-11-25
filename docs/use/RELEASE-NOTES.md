@@ -50,6 +50,7 @@ An agent now clicks and types with a pointer and keyboard of its own, so it can 
 ### Fixes
 
 - Element no longer says it is open in another window after you log out and quickly in again.
+- Workspace switches stay smooth with busy pages open: a sliding page no longer redraws on every frame of the slide.
 
 ## 1.3.0
 
