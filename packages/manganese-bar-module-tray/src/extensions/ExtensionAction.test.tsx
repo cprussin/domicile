@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { appMenu } from "@domicile-desktop/sdk/app-menu";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type {
   Extension,
@@ -131,7 +132,76 @@ const askCamera = (view: HTMLWebViewElement, answers: string[]) => {
   );
 };
 
+/** A host whose Counter has an action menu, recording the items run. */
+const menuDomicile = (ran: number[]): Domicile =>
+  ({
+    extensions: {
+      activate: () => undefined,
+      menu: (id: string) =>
+        Promise.resolve(
+          id === COUNTER
+            ? appMenu(
+                JSON.stringify([
+                  {
+                    checked: false,
+                    enabled: true,
+                    id: 7,
+                    label: "Reset count",
+                    type: "normal",
+                    visible: true,
+                  },
+                ]),
+              )
+            : [],
+        ),
+      runMenuItem: (item: number) => {
+        ran.push(item);
+      },
+    },
+  }) as unknown as Domicile;
+
 describe("ExtensionAction", () => {
+  describe("its menu", () => {
+    it("opens the extension's items on a right click, and runs one", async () => {
+      const ran: number[] = [];
+      render(
+        <ExtensionAction
+          domicile={menuDomicile(ran)}
+          extension={counter}
+          onActivate={() => undefined}
+          onOpen={() => undefined}
+          opened={undefined}
+        />,
+      );
+
+      fireEvent.contextMenu(screen.getByRole("button", { name: "Counter" }));
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: "Reset count" }),
+      );
+
+      expect(ran).toStrictEqual([7]);
+    });
+
+    it("opens nothing for an extension with no items", async () => {
+      render(
+        <ExtensionAction
+          domicile={menuDomicile([])}
+          extension={blocker}
+          onActivate={() => undefined}
+          onOpen={() => undefined}
+          opened={undefined}
+        />,
+      );
+
+      fireEvent.contextMenu(
+        screen.getByRole("button", { name: "Blocker: on for this site" }),
+      );
+      await Promise.resolve();
+
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+  });
+
   describe("rendering", () => {
     it("draws a badge in its color, and none without text", () => {
       render(

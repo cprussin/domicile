@@ -621,5 +621,8 @@ extension with an action. See
     icon. An outside click or the popup's `window.close()` closes it.
     Escape closes it only if focus is on the shell, not inside the popup.
   - Without a popup, the click fires `action.onClicked`.
+  - Right-click opens the items the extension adds to its action's menu
+    (`chrome.contextMenus`), and nothing when it adds none. A chosen item runs
+    on the focused browser window.
   - Disabled actions are hidden. Action state follows the focused browser
     window. See [EXTENSIONS.md](../../../docs/architecture/EXTENSIONS.md).

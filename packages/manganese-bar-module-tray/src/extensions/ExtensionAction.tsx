@@ -1,6 +1,8 @@
 /// <reference types="@domicile-desktop/manganese-host/domicile-elements" />
 
 import { Button } from "@domicile-desktop/component-library/Button";
+import type { Point } from "@domicile-desktop/component-library/ContextMenu";
+import { ContextMenu } from "@domicile-desktop/component-library/ContextMenu";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { DeviceAsk } from "@domicile-desktop/manganese-page-requests/DeviceAsk";
 import { PageDialog } from "@domicile-desktop/manganese-page-requests/PageDialog";
@@ -8,6 +10,8 @@ import { PermissionAsk } from "@domicile-desktop/manganese-page-requests/Permiss
 import { useDeviceRequest } from "@domicile-desktop/manganese-page-requests/useDeviceRequest";
 import { useDialogRequest } from "@domicile-desktop/manganese-page-requests/useDialogRequest";
 import { usePermissionRequest } from "@domicile-desktop/manganese-page-requests/usePermissionRequest";
+import { AppMenuEntries } from "@domicile-desktop/manganese-window-management/browser/AppMenuBar";
+import type { AppMenuEntry } from "@domicile-desktop/sdk/app-menu";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type {
   Extension,
@@ -48,6 +52,9 @@ type Props = {
  * `action.openPopup()`, which `opened` carries. It is withheld until the
  * popup's page has loaded, as Chrome's is.
  *
+ * A right click opens the items the extension adds to its action's menu
+ * (`chrome.contextMenus`), as Chrome's does, and nothing when it adds none.
+ *
  * The panel closes on an outside press, Escape, or the popup's
  * `window.close()`. Escape works only while the shell page has the keyboard,
  * since keys pressed in the popup never reach it.
@@ -64,45 +71,90 @@ export const ExtensionAction = ({
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
   const shown = useShown(view);
   const shownPopup = opened?.id === id ? opened : undefined;
+  const [menu, setMenu] = useState<
+    { at: Point; entries: readonly AppMenuEntry[] } | undefined
+  >(undefined);
   return (
-    <Popover
-      align="start"
-      flush
-      onOpenChange={(opening) => {
-        if (opening) {
-          onActivate();
-          domicile.extensions.activate(id);
-          if (popup !== undefined) {
-            onOpen({ id, popup, profile });
-          }
-        } else {
-          onOpen(undefined);
-        }
-      }}
-      open={shownPopup !== undefined}
-      side="bottom"
-      trigger={
-        <Button label={extension.title} size="sm" variant="ghost">
-          <Icon extension={extension} />
-        </Button>
-      }
-      withheld={!shown}
-    >
-      {shownPopup !== undefined && (
-        <PopupView
-          // A popup in another profile is another page.
-          key={shownPopup.profile}
-          name={extension.name}
-          onClose={() => {
+    <>
+      <Popover
+        align="start"
+        flush
+        onOpenChange={(opening) => {
+          if (opening) {
+            onActivate();
+            domicile.extensions.activate(id);
+            if (popup !== undefined) {
+              onOpen({ id, popup, profile });
+            }
+          } else {
             onOpen(undefined);
+          }
+        }}
+        open={shownPopup !== undefined}
+        side="bottom"
+        trigger={
+          <Button
+            label={extension.title}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              const box = event.currentTarget.getBoundingClientRect();
+              const at = { x: box.left, y: box.bottom };
+              domicile.extensions
+                .menu(id)
+                .then((entries) => {
+                  setMenu(entries.length === 0 ? undefined : { at, entries });
+                })
+                .catch((error: unknown) => {
+                  // biome-ignore lint/suspicious/noConsole: the menu stays shut; say why
+                  console.error(
+                    `Could not read ${extension.name}'s menu`,
+                    error,
+                  );
+                });
+            }}
+            size="sm"
+            variant="ghost"
+          >
+            <Icon extension={extension} />
+          </Button>
+        }
+        withheld={!shown}
+      >
+        {shownPopup !== undefined && (
+          <PopupView
+            // A popup in another profile is another page.
+            key={shownPopup.profile}
+            name={extension.name}
+            onClose={() => {
+              onOpen(undefined);
+            }}
+            popup={shownPopup.popup}
+            profile={shownPopup.profile}
+            setView={setView}
+            view={view}
+          />
+        )}
+      </Popover>
+      {menu !== undefined && (
+        <ContextMenu
+          at={menu.at}
+          label={extension.name}
+          onOpenChange={(open) => {
+            if (!open) {
+              setMenu(undefined);
+            }
           }}
-          popup={shownPopup.popup}
-          profile={shownPopup.profile}
-          setView={setView}
-          view={view}
-        />
+          open
+        >
+          <AppMenuEntries
+            entries={menu.entries}
+            onChoose={(item) => {
+              domicile.extensions.runMenuItem(item);
+            }}
+          />
+        </ContextMenu>
       )}
-    </Popover>
+    </>
   );
 };
 

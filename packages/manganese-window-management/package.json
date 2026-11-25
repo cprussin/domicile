@@ -30,6 +30,7 @@
     "bun": ">=1.4.2"
   },
   "exports": {
+    "./browser/AppMenuBar": "./src/browser/AppMenuBar.tsx",
     "./browser/browser-command": "./src/browser/browser-command.ts",
     "./client-icons": "./src/client-icons.ts",
     "./direction": "./src/direction.ts",
