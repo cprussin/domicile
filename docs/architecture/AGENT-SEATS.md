@@ -53,7 +53,7 @@ resources per client.
 | Window | Agent pointer and keys |
 |---|---|
 | Native Wayland | Agent seat, multiplexed |
-| Browser and Electron windows | CDP `Input.dispatch*`, which moves neither the engine's pointer nor its focus |
+| Browser and Electron windows | CDP on the window's own page (the `browser_` tools, by ref), which moves neither the engine's pointer nor its focus (patch 0275) |
 | X11 apps | User's seat only. xwayland-satellite is one client with one X focus, so raw input waits for the user to step away, as today |
 | The shell | Refs only (`browser_*` on window `shell`) |
 
@@ -133,7 +133,9 @@ domicile.seats.giveBack(windowId);
 - [x] compositor: emulated input tagged with its seat (`ChromeMessage::Emulate`
       names the grant)
 - [x] compositor: a selection per seat (Smithay `share_selection_devices`)
-- [ ] engine: CDP raw input for browser windows from the agent seat
+- [x] engine: CDP input for browser windows leaves the user's focus (patch
+      0275): a press sent to a window's own page target does not focus its
+      WebContents, and keys and text go to the frame focused in that page
 - [x] protocol and SDK: `seats`, `heldBy`, `takeOver`, `giveBack`
 - [x] MCP: raw tools on the agent seat
 - [x] MCP: `heldBy` in `list_windows` (`held_by`)

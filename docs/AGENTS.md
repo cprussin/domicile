@@ -59,7 +59,10 @@ it, as `domicile pointer --agent <session>` and the like:
 `send_shell` acts on the user's focus, so it is refused until the user has left
 this computer's keyboard, pointer and touch alone for 30 seconds
 (`local_seconds` of [`domicile idle-time`](CLI.md#domicile-idle-time---json)).
-The `browser_` and `app_` tools act by ref and run any time.
+The `browser_` and `app_` tools act by ref and run any time. The `browser_`
+tools reach a browser window through DevTools on its own page, which gives
+that page focus of its own: the user's focus stays where it is, and typed
+text goes to the agent's page, never the one the user is typing in.
 
 ### Agents that sign in
 

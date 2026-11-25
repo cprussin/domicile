@@ -7,6 +7,10 @@ building shells is in [Domicile's release notes](../RELEASE-NOTES.md).
 
 _Unreleased_
 
+### Agents in browser windows don't take your typing
+
+When an agent clicks or types in a browser window, the window you're typing in keeps your keyboard, and the agent's typing never lands there.
+
 ### Apps an agent opens don't interrupt you
 
 An app an agent opens is the agent's from the start. It opens beside what you're doing, and your keyboard stays where it was.

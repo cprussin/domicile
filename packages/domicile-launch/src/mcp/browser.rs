@@ -45,12 +45,12 @@ pub(super) fn described(tool: Browser) -> (&'static str, Value, Vec<&'static str
             vec!["window"],
         ),
         Browser::Click => (
-            "Click an element of a browser window's page or view by its ref, scrolling it into view first. Answers what it changed in the window.",
+            "Click an element of a browser window's page or view by its ref, scrolling it into view first. The user's focus stays where it is. Answers what it changed in the window.",
             json!({"window": window, "ref": element}),
             vec!["window", "ref"],
         ),
         Browser::Type => (
-            "Type text into a browser window's page or view: into the element with ref, focusing it first, or where its focus is. Answers what it changed in the window.",
+            "Type text into a browser window's page or view: into the element with ref, focusing it first, or where its focus is. Never into the window the user is typing in. Answers what it changed in the window.",
             json!({"window": window, "ref": element, "view": view, "text": {"type": "string"}}),
             vec!["window", "text"],
         ),
