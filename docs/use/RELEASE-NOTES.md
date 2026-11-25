@@ -7,6 +7,18 @@ building shells is in [Domicile's release notes](../RELEASE-NOTES.md).
 
 _Unreleased_
 
+### Window effects
+
+![A workspace switch, the overview, a theme change and a window closing, with manganese's window effects](../media/release-window-effects.png)
+
+Closing windows dissolve away, windows blur a little as a workspace switch slides them, the overview throws your wallpaper out of focus, a theme change wipes in behind a soft edge, and the launcher's glass is frosted. Turn them off with Window effects in Settings.
+
+[Window effects](APPEARANCE.md#window-effects)
+
+### Smoother motion
+
+Windows, the overview, toasts, popovers and rows move on springs. A dialog grows out of the window that asked for it, a window sent to another workspace flies to it in the switcher, and a workspace switch or a four-finger pinch into the overview turns back midway when you change your mind. Panels grow from their bar buttons, toasts follow your swipe, and closed rows slide away.
+
 ### See when you've taken over from an agent
 
 Click or type in a window an agent is using and it's clear the window is now yours. Its ring turns amber and says the agent is paused, a banner slides in under the title bar with **Give back**, and the agent pill turns amber and says for a few seconds which window you took. Give the window back from the banner, the notice or the pill.
@@ -34,16 +46,6 @@ An agent now has a clipboard of its own. What it copies never replaces what you 
 ### Agents get their own pointer and keyboard
 
 An agent now clicks and types with a pointer and keyboard of its own, so it can work in one app while you work in another. It never moves your pointer or changes what you're typing in, and an app you're using stays yours.
-
-### Window effects
-
-Closing windows dissolve away, windows blur a little as a workspace switch slides them, the overview throws your wallpaper out of focus, a theme change wipes in behind a soft edge, and the launcher's glass is frosted. Turn them off with Window effects in Settings.
-
-[Window effects](APPEARANCE.md#window-effects)
-
-### Smoother motion
-
-Windows, the overview, toasts, popovers and rows move on springs. A dialog grows out of the window that asked for it, a window sent to another workspace flies to it in the switcher, and a workspace switch or a four-finger pinch into the overview turns back midway when you change your mind. Panels grow from their bar buttons, toasts follow your swipe, and closed rows slide away.
 
 ### Fixes
 

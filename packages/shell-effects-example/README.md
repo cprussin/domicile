@@ -19,6 +19,8 @@ that picks the close effect, and the close effect on every window that goes.
 - Meta+1 to Meta+4 turn the cube to a workspace.
 - Meta+Shift+Q closes the focused window.
 - Meta+Return opens `kitty`. The bar's box runs any command.
+- `domicile send-shell` runs the same commands, for scripts and agents:
+  `workspace 2`, `close-effect cloth`, `kill`.
 
 ## Run
 
