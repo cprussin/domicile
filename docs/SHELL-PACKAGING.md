@@ -311,7 +311,7 @@ export default defineConfig({ plugins: [tailwindcss()] });
 rules for your own calls, run Panda with manganese's config:
 
 ```sh
-bun add -d @pandacss/dev@1 @domicile-desktop/manganese
+bun add -d @pandacss/dev@2 @domicile-desktop/manganese
 ```
 
 ```ts

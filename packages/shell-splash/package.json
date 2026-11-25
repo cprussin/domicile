@@ -31,7 +31,7 @@
   "productName": "domicile-shell-splash",
   "scripts": {
     "build:vite": "vite build",
-    "prepare": "panda codegen --silent",
+    "prepare": "panda codegen --log-level silent",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test"
   },

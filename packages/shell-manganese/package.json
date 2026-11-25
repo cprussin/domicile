@@ -64,20 +64,20 @@
     ".": "./src/index.tsx",
     "./css": {
       "types": "./styled-system/css/index.d.ts",
-      "default": "./styled-system/css/index.mjs"
+      "default": "./styled-system/css/index.js"
     },
     "./panda.config": "./panda.config.ts",
     "./jsx": {
       "types": "./styled-system/jsx/index.d.ts",
-      "default": "./styled-system/jsx/index.mjs"
+      "default": "./styled-system/jsx/index.js"
     },
     "./patterns": {
       "types": "./styled-system/patterns/index.d.ts",
-      "default": "./styled-system/patterns/index.mjs"
+      "default": "./styled-system/patterns/index.js"
     },
     "./tokens": {
       "types": "./styled-system/tokens/index.d.ts",
-      "default": "./styled-system/tokens/index.mjs"
+      "default": "./styled-system/tokens/index.js"
     }
   },
   "files": [
@@ -101,11 +101,11 @@
   },
   "scripts": {
     "build:vite": "vite build",
-    "prepare": "panda codegen --silent && panda cssgen --silent",
+    "prepare": "panda codegen --log-level silent && panda cssgen --log-level silent",
     "start:dev": "dev-shell manganese",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test",
-    "watch:css": "panda cssgen --watch --silent"
+    "watch:css": "panda cssgen --watch --log-level silent"
   },
   "type": "module",
   "version": "1.3.0"

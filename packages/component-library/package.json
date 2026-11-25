@@ -5,13 +5,14 @@
     "@domicile-desktop/sdk": "workspace:*",
     "@domicile-desktop/system-apps": "workspace:*",
     "@pandacss/dev": "catalog:",
+    "@pandacss/preset-base": "catalog:",
+    "@pandacss/preset-panda": "catalog:",
     "@phosphor-icons/react": "catalog:"
   },
   "description": "React components and the Panda CSS design system that Domicile's shells are built from.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile-desktop/test-support": "workspace:*",
-    "@pandacss/preset-panda": "catalog:",
     "@storybook/addon-docs": "catalog:",
     "@storybook/addon-themes": "catalog:",
     "@storybook/react-vite": "catalog:",
@@ -163,7 +164,7 @@
   },
   "scripts": {
     "build:storybook": "storybook build",
-    "prepare": "panda codegen --silent && panda cssgen --silent",
+    "prepare": "panda codegen --log-level silent && panda cssgen --log-level silent",
     "start:dev": "storybook dev -p 4000",
     "start:prod": "http-server storybook-static -p 4000",
     "test:types": "tsc --noEmit",

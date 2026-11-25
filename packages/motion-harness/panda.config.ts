@@ -8,7 +8,7 @@ import { defineConfig } from "@pandacss/dev";
 export default defineConfig({
   // Tests and stories style nothing the stories draw, and some pass objects
   // the extractor reads as styles.
-  exclude: ["../../packages/*/src/**/*.{test,stories}.{ts,tsx}"],
+  exclude: ["**/*.{test,stories}.{ts,tsx}"],
   hash: true,
   include: [
     "./src/**/*.{ts,tsx}",
@@ -16,6 +16,8 @@ export default defineConfig({
     "../../packages/manganese-window-management/src/**/*.{ts,tsx}",
   ],
   jsxFramework: "react",
+  // Component props such as content are data; styles use Panda functions.
+  jsxStyleProps: "none",
   outdir: "styled-system",
   preflight: true,
   presets: [domicilePreset, windowManagementPreset],

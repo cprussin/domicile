@@ -1,7 +1,7 @@
 import { preset as presetPanda } from "@pandacss/preset-panda";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { css } from "../../styled-system/css";
-import type { FontSizeToken } from "../../styled-system/tokens";
+import type { FontSizeToken } from "../../styled-system/types";
 import { Variants } from "../__test__/Variants";
 
 import { Kbd as KbdComponent } from "./Kbd";

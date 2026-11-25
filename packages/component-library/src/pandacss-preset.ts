@@ -1,6 +1,7 @@
 import type { Preset } from "@pandacss/dev";
 import { definePreset, defineRecipe } from "@pandacss/dev";
-import pandacssPreset from "@pandacss/dev/presets";
+import presetBase from "@pandacss/preset-base";
+import pandaPreset from "@pandacss/preset-panda";
 import { iconKeyframes } from "./_icon/icon-keyframes";
 import type { Size } from "./control-sizes";
 import { CONTROL_HEIGHT, CONTROL_PADDING_INLINE } from "./control-sizes";
@@ -10,7 +11,7 @@ import { SPRINGS, springEasing } from "./springs";
 // The two packages' Preset types differ but are compatible at runtime. The
 // ts-expect-error fails once the types agree, so it can then be removed.
 // @ts-expect-error preset shape mismatch between @pandacss/preset-panda and @pandacss/dev
-const basePreset: Preset = pandacssPreset;
+const presetPanda: Preset = pandaPreset;
 
 // Adds every quarter step up to `MAX_SPACING_STEP` to the spacing scale. The
 // bound is high because numeric size props use this scale, and a missing step
@@ -227,7 +228,7 @@ export const domicilePreset = definePreset({
     },
   },
   name: "domicile",
-  presets: [basePreset],
+  presets: [presetBase, presetPanda],
   theme: {
     extend: {
       keyframes: {

@@ -32,7 +32,7 @@
   "productName": "domicile-shell-simple",
   "scripts": {
     "build:vite": "vite build",
-    "prepare": "panda codegen --silent",
+    "prepare": "panda codegen --log-level silent",
     "start:dev": "dev-shell simple",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test"

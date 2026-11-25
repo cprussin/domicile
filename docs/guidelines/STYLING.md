@@ -44,6 +44,8 @@ exemption: a package with a product UI is not a worked example.
      hash: true,
      include: ["./src/**/*.{ts,tsx}"],
      jsxFramework: "react",
+     // Component props such as content are data; styles use Panda functions.
+     jsxStyleProps: "none",
      outdir: "styled-system",
      preflight: true,
      presets: [domicilePreset],
@@ -81,7 +83,7 @@ exemption: a package with a product UI is not a worked example.
    @layer reset, base, tokens, recipes, utilities;
    ```
 5. Add a `prepare` script to `package.json`:
-   `"prepare": "panda codegen --silent"`. The turbo `prepare` task runs
+   `"prepare": "panda codegen --log-level silent"`. The turbo `prepare` task runs
    automatically as a dependency of `build` / `test:types` / `test:unit`.
 6. `styled-system/` is already covered by the root `.gitignore`.
 

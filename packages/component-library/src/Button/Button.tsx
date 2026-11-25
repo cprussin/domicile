@@ -4,7 +4,7 @@ import { useLayoutEffect, useState } from "react";
 import { css, cva, cx } from "../../styled-system/css";
 import type { ControlVariant } from "../../styled-system/recipes";
 import { control } from "../../styled-system/recipes";
-import type { ColorToken } from "../../styled-system/tokens";
+import type { ColorToken } from "../../styled-system/types";
 import { useStableRef } from "../_control/useStableRef";
 import type { ExtendProps } from "../extend-props";
 import "../stylesheet";

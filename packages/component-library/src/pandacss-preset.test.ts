@@ -456,14 +456,33 @@ const palette = (reference: string): string => {
   );
   const family = named?.groups?.family;
   const step = named?.groups?.step;
-  const hex =
+  const value =
     family === undefined || step === undefined
       ? undefined
       : at(at(at(panda.theme.tokens.colors, family), step), "value");
-  if (typeof hex === "string") {
-    return hex;
+  if (typeof value === "string") {
+    return hexOfOklch(value);
   } else {
     throw new Error(`${reference} is not a color the palette names`);
+  }
+};
+
+/** The `#rrggbb` of a palette value, `oklch(L% C H)` as Panda writes it. */
+const hexOfOklch = (value: string): string => {
+  const parts =
+    /^oklch\((?<lightness>[\d.]+)% (?<chroma>[\d.]+) (?<hue>[\d.]+)\)$/u.exec(
+      value,
+    )?.groups;
+  if (parts === undefined) {
+    throw new Error(`${value} is not an oklch color`);
+  } else {
+    const chroma = Number(parts.chroma);
+    const hue = (Number(parts.hue) * Math.PI) / 180;
+    return hexOf([
+      Number(parts.lightness) / 100,
+      chroma * Math.cos(hue),
+      chroma * Math.sin(hue),
+    ]);
   }
 };
 

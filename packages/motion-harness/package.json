@@ -32,7 +32,7 @@
   "private": true,
   "scripts": {
     "build:storybook": "storybook build",
-    "prepare": "panda codegen --silent && panda cssgen --silent",
+    "prepare": "panda codegen --log-level silent && panda cssgen --log-level silent",
     "start:dev": "storybook dev -p 4001",
     "test:shell": "check-runner tests/*.sh",
     "test:types": "tsc --noEmit",

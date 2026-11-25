@@ -57,7 +57,7 @@
     "url": "git+https://github.com/cprussin/domicile.git"
   },
   "scripts": {
-    "prepare": "panda codegen --silent && panda cssgen --silent",
+    "prepare": "panda codegen --log-level silent && panda cssgen --log-level silent",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test"
   },

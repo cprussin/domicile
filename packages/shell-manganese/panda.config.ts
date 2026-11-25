@@ -51,6 +51,8 @@ export default defineConfig({
     "../../packages/manganese-*/src/**/*.{ts,tsx}",
   ],
   jsxFramework: "react",
+  // Component props such as content are data; styles use Panda functions.
+  jsxStyleProps: "none",
   outdir: "styled-system",
   preflight: true,
   presets: [

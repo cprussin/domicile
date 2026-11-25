@@ -74,7 +74,7 @@ if [ -f "$manganese" ]; then
   [ "$(tar -xzOf "$manganese" package/package.json | jq -r '.dependencies["@domicile-desktop/sdk"]')" = "$version" ] &&
     ok "manganese depends on the sdk of its own commit" ||
     fail "manganese depends on the sdk of its own commit" "$(tar -xzOf "$manganese" package/package.json | jq .dependencies)"
-  tar -tzf "$manganese" | grep -q '^package/styled-system/css/index.mjs$' &&
+  tar -tzf "$manganese" | grep -q '^package/styled-system/css/index.js$' &&
     ok "manganese ships its generated styled-system" ||
     fail "manganese ships its generated styled-system" "$(tar -tzf "$manganese" | head)"
 fi
@@ -83,7 +83,7 @@ if [ -f "$tray" ]; then
   [ "$(tar -xzOf "$tray" package/package.json | jq -r '.dependencies["@domicile-desktop/manganese-host"]')" = "$version" ] &&
     ok "a bar module depends on manganese's packages of its own commit" ||
     fail "a bar module depends on manganese's packages of its own commit" "$(tar -xzOf "$tray" package/package.json | jq .dependencies)"
-  tar -tzf "$tray" | grep -q '^package/styled-system/css/index.mjs$' &&
+  tar -tzf "$tray" | grep -q '^package/styled-system/css/index.js$' &&
     ok "a bar module ships its generated styled-system" ||
     fail "a bar module ships its generated styled-system" "$(tar -tzf "$tray" | head)"
 fi

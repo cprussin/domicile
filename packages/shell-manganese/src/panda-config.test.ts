@@ -34,7 +34,9 @@ describe("manganese's panda config", () => {
       "html[data-theme-flip-to='light'][data-shader-effects~=theme-wipe]::view-transition-new(root)":
         { animationName: "themeSoftWipeFromBottom" },
     });
-    expect(config.theme?.extend?.keyframes).toStrictEqual({
+    // Panda's `defineConfig` keeps literal types; compare the values.
+    const keyframes: unknown = config.theme?.extend?.keyframes;
+    expect(keyframes).toStrictEqual({
       themeSoftWipeFromBottom: wipe(0),
       themeSoftWipeFromTop: wipe(1),
     });
