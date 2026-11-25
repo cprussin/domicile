@@ -512,7 +512,7 @@ fn the_user_focuses(
 fn an_agent_copies_and_pastes_on_its_own_clipboard() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
     let mut chrome = compositor.chrome();
-    let (_users_copier, users_copier) = a_window(
+    let (mut users_copying, users_copier) = a_window(
         &compositor,
         &mut chrome,
         "users copier",
@@ -523,7 +523,7 @@ fn an_agent_copies_and_pastes_on_its_own_clipboard() {
             "the user's selection",
         ],
     );
-    let (_agents_copier, agents_copier) = a_window(
+    let (mut agents_copying, agents_copier) = a_window(
         &compositor,
         &mut chrome,
         "agents copier",
@@ -538,21 +538,36 @@ fn an_agent_copies_and_pastes_on_its_own_clipboard() {
         a_window(&compositor, &mut chrome, "agents paste", &["--paste"]);
     let (mut users_paste, users_pasting) =
         a_window(&compositor, &mut chrome, "users paste", &["--paste"]);
+    // The protocol denies `set_selection` from a client without the
+    // keyboard, so each copier must have its copy handled before the
+    // keyboard that let it copy moves on.
     the_user_focuses(&compositor, &mut chrome, &users_copier, 1);
+    assert!(
+        users_copying.wait_for_trace("copy handled", 1),
+        "the window the user focused could not copy; it traced:\n{}",
+        users_copying.trace()
+    );
     let (_held, session) = an_agent_let_in(&compositor, &mut chrome);
 
-    for window in [&agents_copier, &agents_pasting] {
+    let agent_focuses = |window: &str| {
         assert_eq!(
             as_the_agent(
                 &compositor,
                 session,
                 vec![EmulatedInput::Focus {
-                    window: window.clone()
+                    window: window.to_string()
                 }]
             ),
             None
         );
-    }
+    };
+    agent_focuses(&agents_copier);
+    assert!(
+        agents_copying.wait_for_trace("copy handled", 1),
+        "the window the agent focused could not copy; it traced:\n{}",
+        agents_copying.trace()
+    );
+    agent_focuses(&agents_pasting);
     for (what, line) in [
         ("clipboard", "clipboard: the agent's copy"),
         ("middle-click selection", "primary: the agent's selection"),
