@@ -3041,6 +3041,11 @@
               HOST = "electron-host/src/main.ts"
 
 
+              def engine():
+                  """The pid of the desk's engine's browser process."""
+                  return machine.execute("pgrep -u alice -f -- '--app=domicile://shell/'")[1].strip()
+
+
               def in_the_desk(command):
                   """`command`, as alice, in the environment the desk's apps get."""
                   return (
@@ -3053,6 +3058,8 @@
 
               def starts(entry, open, on_the_engine):
                   log = f"/tmp/{entry}.log"
+                  engine_before = engine()
+                  assert engine_before, "the desk's engine isn't running"
                   machine.succeed(in_the_desk(f"domicile open --electron {open}") + f" >{log} 2>&1 &")
                   machine.sleep(60)
                   said = machine.succeed(f"cat {log}")
@@ -3091,14 +3098,16 @@
                       )
                   # An app handed back runs on its own Electron: stopped too, so
                   # the next app's single-instance lock is its own.
-                  # Not the engine's renderers, whose being killed takes the
-                  # engine down in a DCHECK build.
+                  # Nothing of the engine's: each of its processes names
+                  # `slack-webapp-dev` in its schemes switch, and killing one
+                  # ends the engine as the next app connects to it.
                   machine.execute(
                       f"pkill -u alice -f {HOST}; "
-                      "for p in $(pgrep -u alice -f -- '--type=renderer'); do "
+                      "for p in $(pgrep -u alice -f -- '--type=renderer|element|slack'); do "
                       "grep -q chrome-unwrapped /proc/$p/cmdline || kill $p; done; "
-                      "pkill -u alice -f 'element|slack'; sleep 5"
+                      "sleep 5"
                   )
+                  assert engine() == engine_before, f"stopping {entry} ended the desk's engine"
 
 
               machine.wait_for_unit("multi-user.target")
