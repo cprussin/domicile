@@ -37,6 +37,11 @@ license = "MIT"
 # The oldest rustc the locked dependencies build with.
 rust-version = "1.97"
 
+# A bare stderr write has no level, so the journal shows it always. Logs go
+# through a leveled logger; see docs/guidelines/LOGGING.md.
+[workspace.lints.clippy]
+print_stderr = "deny"
+
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

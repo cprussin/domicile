@@ -115,6 +115,10 @@ impl Recording {
 
 /// Moves each video frame's timestamp after the last one's, on the way out
 /// of [`FRAMES`]. See [`crate::stamps`].
+#[expect(
+    clippy::print_stderr,
+    reason = "domicile-recorder has no log levels; a frame out of order is a pipeline error"
+)]
 fn keep_stamps_increasing(pipeline: &gst::Element) {
     let frames = pipeline
         .downcast_ref::<gst::Bin>()

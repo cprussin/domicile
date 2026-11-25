@@ -58,6 +58,7 @@ pub mod config_path;
 pub mod config_watch;
 pub mod control;
 pub mod control_socket;
+pub mod desk_log;
 pub mod desktop_entry;
 pub mod dev;
 pub mod electron_app;

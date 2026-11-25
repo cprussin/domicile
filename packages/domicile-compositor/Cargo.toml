@@ -117,3 +117,6 @@ wayland-protocols-wlr = { version = "0.3", features = ["client"] }
 # The input method and virtual keyboard in `tests/text_input.rs`. Adds no
 # crates: the test client already pulls it in.
 wayland-protocols-misc = { version = "0.3", features = ["client"] }
+
+[lints]
+workspace = true

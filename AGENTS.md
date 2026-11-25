@@ -149,6 +149,7 @@ every TS file you write or modify.
 
 | Doc | Load when |
 |---|---|
+| [/docs/guidelines/LOGGING.md](/docs/guidelines/LOGGING.md) | You add, change or remove a log line, or write to stderr or the console. Quiet by default, a level and subsystem on every line, which logger each part uses, and what may print bare. |
 | [/docs/guidelines/RUST.md](/docs/guidelines/RUST.md) | You modify any crate in the cargo workspace (the `packages/domicile-*` packages). Workspace layout and the `default-members` split, required checks (`fmt`, `clippy -D warnings`, `test`), and the protocol crate's contract with the chrome SDK. |
 | [/docs/guidelines/REACT.md](/docs/guidelines/REACT.md) | You author or modify a component, hook, or JSX. No `className`/`style` prop, Phosphor icon imports, wrapping `@base-ui/react`, the error-boundary contract, and never suppress `useExhaustiveDependencies`. |
 | [/docs/guidelines/STYLING.md](/docs/guidelines/STYLING.md) | Any UI styling work. **Mandatory for any UI package.** Panda CSS is the only styling system; all packages extend the `@domicile-desktop/component-library` preset and use its components where possible. |

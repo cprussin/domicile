@@ -9,6 +9,11 @@
 //! - `packages/e2e-harness/tests/test-a-running-desktop-takes-a-new-shell.sh` (`load-shell`
 //!   end to end)
 
+#![allow(
+    clippy::print_stderr,
+    reason = "a command's stderr is for whoever ran it; the desktop's own lines go through launcher_log, and agents' through desk_log"
+)]
+
 use std::io::{BufRead, BufReader, IsTerminal, Write};
 use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt as _;
@@ -1326,41 +1331,17 @@ fn agents_served_over_http(http: domicile_launch::cli::McpHttp) -> Result<ExitCo
     let base = http
         .url
         .unwrap_or_else(|| format!("http://{}", http.listen));
+    eprintln!("domicile: serving agents at {base}/mcp");
     agents_served_at(listener, base)
 }
 
-/// Says `said` at debug for the `agents` subsystem, if the desktop's log
-/// levels, asked each time so `domicile set-log-level` applies at once, show
-/// it. This process is no part the desktop sets levels on itself.
-fn agents_debug(said: &str) {
-    let levels = advertised(std::env::var(VARIABLE).ok().as_deref())
-        .map_err(|why| why.to_string())
-        .and_then(|socket| {
-            ask(&socket, &Request::LogLevels, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
-        });
-    let levels = match levels {
-        Ok(Response::LogLevels { levels }) => levels,
-        Ok(other) => {
-            return launcher_log::error(&format!(
-                "the desktop answered {other:?} when asked its log levels"
-            ))
-        }
-        Err(why) => return launcher_log::error(&format!("could not ask the log levels: {why}")),
-    };
-    let level = domicile_protocol::LogLevel::Debug;
-    if launcher_log::shown(
-        level,
-        launcher_log::threshold_of(domicile_protocol::Subsystem::Agents, &levels),
-    ) {
-        eprintln!(
-            "{}",
-            launcher_log::line(
-                level,
-                said,
-                domicile_launch::journal::stderr_is_the_journal()
-            )
-        );
-    }
+/// Says `said` as an error of the agents this process serves.
+fn agents_error(said: &str) {
+    domicile_launch::desk_log::say(
+        domicile_protocol::Subsystem::Agents,
+        domicile_protocol::LogLevel::Error,
+        said,
+    );
 }
 
 /// Serves agents on the web through the relay at `relay`, or Domicile's: an
@@ -1395,7 +1376,6 @@ fn milliseconds_now() -> u64 {
 /// Serves agents on `listener`, which they reach at `base`.
 fn agents_served_at(listener: std::net::TcpListener, base: String) -> Result<ExitCode, String> {
     let binary = myself()?;
-    eprintln!("domicile: serving agents at {base}/mcp");
     let web = mcp::Web {
         listener,
         base,
@@ -1419,7 +1399,13 @@ fn agents_served_at(listener: std::net::TcpListener, base: String) -> Result<Exi
             bytes
         }),
         sweep_every: std::time::Duration::from_secs(60),
-        debug: Box::new(agents_debug),
+        debug: Box::new(|said: &str| {
+            domicile_launch::desk_log::say(
+                domicile_protocol::Subsystem::Agents,
+                domicile_protocol::LogLevel::Debug,
+                said,
+            )
+        }),
     };
     mcp::serve_http(web, move || {
         let binary = binary.clone();
@@ -1456,15 +1442,17 @@ fn sign_in_asked(client: &str, site: &str, matching: &str) -> mcp::Said {
         Ok(0) => mcp::Said::Allowed,
         Ok(1) => mcp::Said::Declined,
         Ok(response) => {
-            eprintln!(
-                "domicile: could not ask whether {client} may sign in: the portal answered {response}"
-            );
+            agents_error(&format!(
+                "could not ask whether {client} may sign in: the portal answered {response}"
+            ));
             mcp::Said::Failed(format!(
                 "Your desktop couldn't ask: its dialog ended without an answer ({response})."
             ))
         }
         Err(why) => {
-            eprintln!("domicile: could not ask whether {client} may sign in: {why}");
+            agents_error(&format!(
+                "could not ask whether {client} may sign in: {why}"
+            ));
             mcp::Said::Failed(format!("Your desktop couldn't ask: {why}"))
         }
     }
@@ -1523,7 +1511,7 @@ fn sign_in_dialog(
                 &(),
             );
             if let Err(closing) = closed {
-                eprintln!("domicile: could not close the sign-in dialog: {closing}");
+                agents_error(&format!("could not close the sign-in dialog: {closing}"));
             }
             match why {
                 // Unanswered in time counts as declined, as `Cancel` does.

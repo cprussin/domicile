@@ -11,6 +11,11 @@
 //!
 //! Exits zero after `FRAMES` frames.
 
+#![allow(
+    clippy::print_stderr,
+    reason = "a test tool: its tests read what it says"
+)]
+
 use std::cell::{Cell, RefCell};
 use std::process::ExitCode;
 use std::rc::Rc;

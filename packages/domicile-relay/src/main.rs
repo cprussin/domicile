@@ -7,6 +7,10 @@ use std::process::ExitCode;
 use domicile_relay::options::{options, USAGE};
 use domicile_relay::Relay;
 
+#[expect(
+    clippy::print_stderr,
+    reason = "the relay runs apart from any desktop; its host reads its stderr, which says it started or why it stopped"
+)]
 fn main() -> ExitCode {
     let options = match options(std::env::args().skip(1)) {
         Ok(options) => options,

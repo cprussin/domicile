@@ -4,6 +4,11 @@
 //! `domicile_launch::spawn` puts this first on every app's `PATH`, and the
 //! engine's. The logic is in `domicile_launch::email`.
 
+#![allow(
+    clippy::print_stderr,
+    reason = "a command: what it says on stderr is for the person or program that ran it"
+)]
+
 use std::os::unix::process::CommandExt as _;
 use std::process::{Command, ExitCode};
 

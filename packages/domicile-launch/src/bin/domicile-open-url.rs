@@ -5,6 +5,11 @@
 //! type's default, which is this. Many programs run `BROWSER` as one word, so
 //! it cannot hold a subcommand. See `domicile_launch::spawn`.
 
+#![allow(
+    clippy::print_stderr,
+    reason = "a command: what it says on stderr is for the person or program that ran it"
+)]
+
 use std::process::ExitCode;
 
 use domicile_launch::address::url_for;

@@ -30,10 +30,8 @@ impl Sink {
             true => match Journal::at(std::path::Path::new(journal::SOCKET)) {
                 Ok(journal) => Sink::Journal(journal),
                 Err(why) => {
-                    eprintln!(
-                        "domicile: stderr is the journal, but {} refused: {why}. Component logs go to stderr without priorities.",
-                        journal::SOCKET
-                    );
+                    crate::launcher_log::warn(&format!("stderr is the journal, but {} refused: {why}. Component logs go to stderr without priorities.",
+                        journal::SOCKET));
                     Sink::Stderr
                 }
             },

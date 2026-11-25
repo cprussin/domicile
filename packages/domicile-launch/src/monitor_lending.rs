@@ -79,7 +79,9 @@ pub fn lend(lent: Lent, chrome: &Path, patience: Duration) {
                 // Not what a monitor's connection carries; end it rather
                 // than guess.
                 _ => {
-                    eprintln!("domicile: a monitor's client sent '{line}', so it was removed");
+                    crate::launcher_log::error(&format!(
+                        "a monitor's client sent '{line}', so it was removed"
+                    ));
                     break;
                 }
             }

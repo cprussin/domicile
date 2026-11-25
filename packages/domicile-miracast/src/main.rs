@@ -34,6 +34,10 @@ fn main() -> Result<(), zbus::Error> {
             thread::spawn(move || {
                 let found = P2p::open(&system)
                     .and_then(|p2p| p2p.find(|peers| service::peers_found(&state, &served, peers)));
+                #[expect(
+                    clippy::print_stderr,
+                    reason = "domicile-miracast has no log levels; cast finding no TVs is an error"
+                )]
                 if let Err(why) = found {
                     eprintln!("domicile-miracast: no TVs over Wi-Fi Direct: {why}");
                 }
@@ -45,6 +49,10 @@ fn main() -> Result<(), zbus::Error> {
                 let found = mice::find(&system, |displays| {
                     service::displays_found(&state, &served, displays)
                 });
+                #[expect(
+                    clippy::print_stderr,
+                    reason = "domicile-miracast has no log levels; cast finding no TVs is an error"
+                )]
                 if let Err(why) = found {
                     eprintln!("domicile-miracast: no TVs over the LAN: {why}");
                 }

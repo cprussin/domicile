@@ -196,7 +196,9 @@ fn overhear(what: &'static str, said: impl std::io::Read, mut listener: Listener
             }
             // Unrecoverable. Report it; this thread has no caller to return to.
             Err(why) => {
-                eprintln!("domicile: lost the rest of what the {what} said: {why}");
+                crate::launcher_log::error(&format!(
+                    "lost the rest of what the {what} said: {why}"
+                ));
                 return;
             }
         }

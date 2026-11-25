@@ -51,3 +51,6 @@ zbus = { version = "5.0", default-features = false, features = [
     "blocking-api",
     "p2p",
 ] }
+
+[lints]
+workspace = true

@@ -821,6 +821,10 @@ fn shm_allocator(importer: &DmabufImporter) -> Option<Gbm> {
 /// which escapes newlines and wraps the variant name. Startup errors are what a
 /// user reads when the desktop will not come up, so print them with `Display`,
 /// as `bin/domicile.rs` does.
+#[expect(
+    clippy::print_stderr,
+    reason = "why the compositor could not start, before its tracing is up"
+)]
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,

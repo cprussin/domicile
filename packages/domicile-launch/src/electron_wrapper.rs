@@ -277,7 +277,7 @@ pub fn through_wrappers(
             let _ = stderr.read_to_string(&mut said);
         }
         if !said.trim().is_empty() {
-            eprintln!("domicile: {program} said: {}", said.trim());
+            crate::launcher_log::error(&format!("{program} said: {}", said.trim()));
         }
         return Err(WrapperError::NoLaunch {
             program,

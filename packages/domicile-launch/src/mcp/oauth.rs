@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
+use domicile_protocol::{LogLevel, Subsystem};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -565,9 +566,13 @@ impl Auth {
         let written = write(path, &self.saved);
         self.seen = modified(path);
         if let Err(why) = written {
-            eprintln!(
-                "domicile: could not save signed-in agents to {}: {why}",
-                path.display()
+            crate::desk_log::say(
+                Subsystem::Agents,
+                LogLevel::Error,
+                &format!(
+                    "could not save signed-in agents to {}: {why}",
+                    path.display()
+                ),
             );
         }
     }
@@ -595,9 +600,13 @@ fn write(path: &Path, saved: &Saved) -> io::Result<()> {
 fn load(path: &Path) -> Saved {
     match fs::read(path) {
         Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_else(|why| {
-            eprintln!(
-                "domicile: {} is unreadable, so every agent signs in again: {why}",
-                path.display()
+            crate::desk_log::say(
+                Subsystem::Agents,
+                LogLevel::Error,
+                &format!(
+                    "{} is unreadable, so every agent signs in again: {why}",
+                    path.display()
+                ),
             );
             Saved::default()
         }),

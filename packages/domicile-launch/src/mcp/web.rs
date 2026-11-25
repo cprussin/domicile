@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use domicile_protocol::{LogLevel, Subsystem};
 use domicile_relay::{hex, unhex, DeskSays, RelaySays, PROOF_CONTEXT};
 use ed25519_dalek::{Signer, SigningKey};
 use rustls::crypto::ring::sign::any_supported_type;
@@ -368,7 +369,13 @@ impl Kept {
         let kept: Option<Kept> = read.and_then(|bytes| match serde_json::from_slice(&bytes) {
             Ok(kept) => Some(kept),
             Err(why) => {
-                eprintln!("domicile: the relay's keys are unreadable, so the desk gets a new address: {why}");
+                crate::desk_log::say(
+                    Subsystem::Agents,
+                    LogLevel::Error,
+                    &format!(
+                        "the relay's keys are unreadable, so the desk gets a new address: {why}"
+                    ),
+                );
                 None
             }
         });
@@ -513,7 +520,11 @@ impl Told {
                 fs::rename(&fresh, path)
             });
         if let Err(why) = written {
-            eprintln!("domicile: could not write {}: {why}", path.display());
+            crate::desk_log::say(
+                Subsystem::Agents,
+                LogLevel::Error,
+                &format!("could not write {}: {why}", path.display()),
+            );
         }
     }
 }
@@ -555,8 +566,10 @@ pub fn reach(reach: Reach) -> io::Result<String> {
     let certificates = Arc::new(Certificates::default());
     if let Some(current) = kept.current(&host, (reach.clock)()) {
         if let Err(why) = certificates.set(&current.chain_pem, &current.key_pem) {
-            eprintln!(
-                "domicile: the kept certificate is unusable, so the desk gets another: {why}"
+            crate::desk_log::say(
+                Subsystem::Agents,
+                LogLevel::Warn,
+                &format!("the kept certificate is unusable, so the desk gets another: {why}"),
             );
         }
     }
@@ -589,14 +602,22 @@ fn first_dial(relay: &str, seed: &[u8; 32], told: &Told) -> Dialed {
         match dial(relay, seed) {
             Ok(dialed) => {
                 if said {
-                    eprintln!("domicile: reached the relay at {relay}");
+                    crate::desk_log::say(
+                        Subsystem::Agents,
+                        LogLevel::Info,
+                        &format!("reached the relay at {relay}"),
+                    );
                 }
                 return dialed;
             }
             Err(why) => {
                 if !said {
-                    eprintln!(
-                        "domicile: can't reach the relay at {relay} yet ({why}); trying until it answers"
+                    crate::desk_log::say(
+                        Subsystem::Agents,
+                        LogLevel::Warn,
+                        &format!(
+                            "can't reach the relay at {relay} yet ({why}); trying until it answers"
+                        ),
                     );
                     said = true;
                 }
@@ -625,7 +646,11 @@ fn kept_dialed(
     loop {
         let started = Instant::now();
         let ended = serve(dialed, relay, config, local);
-        eprintln!("domicile: the relay hung up ({ended:?}), dialing again");
+        crate::desk_log::say(
+            Subsystem::Agents,
+            LogLevel::Warn,
+            &format!("the relay hung up ({ended:?}), dialing again"),
+        );
         told.update(|status| status.problem = Some("Lost the relay; reconnecting".into()));
         if started.elapsed() > MOST_BACKOFF {
             backoff = Duration::from_secs(1);
@@ -636,7 +661,11 @@ fn kept_dialed(
             match dial(relay, seed) {
                 Ok(dialed) => break dialed,
                 Err(why) => {
-                    eprintln!("domicile: could not reach the relay at {relay}: {why}");
+                    crate::desk_log::say(
+                        Subsystem::Agents,
+                        LogLevel::Warn,
+                        &format!("could not reach the relay at {relay}: {why}"),
+                    );
                     told.update(|status| {
                         status.problem = Some(format!("Can't reach the relay: {why}"));
                     });
@@ -646,9 +675,13 @@ fn kept_dialed(
         if dialed.host != host {
             // Its certificate and the address agents have are for the old
             // one; starting over gets both for the new.
-            eprintln!(
-                "domicile: the relay moved the desk from {host} to {}; starting over",
-                dialed.host
+            crate::desk_log::say(
+                Subsystem::Agents,
+                LogLevel::Warn,
+                &format!(
+                    "the relay moved the desk from {host} to {}; starting over",
+                    dialed.host
+                ),
             );
             std::process::exit(1);
         }
@@ -689,7 +722,11 @@ fn kept_certified(
             host,
             &mut |challenge| {
                 if let Err(why) = certificates.challenge(challenge.as_ref()) {
-                    eprintln!("domicile: could not answer the certificate's challenge: {why}");
+                    crate::desk_log::say(
+                        Subsystem::Agents,
+                        LogLevel::Error,
+                        &format!("could not answer the certificate's challenge: {why}"),
+                    );
                 }
             },
             &mut || thread::sleep(Duration::from_secs(2)),
@@ -700,7 +737,11 @@ fn kept_certified(
         });
         match issued {
             Ok(issued) => {
-                eprintln!("domicile: got a certificate for {host}");
+                crate::desk_log::say(
+                    Subsystem::Agents,
+                    LogLevel::Info,
+                    &format!("got a certificate for {host}"),
+                );
                 wait = RETRY_ISSUE;
                 told.update(|status| {
                     status.ready = true;
@@ -714,17 +755,25 @@ fn kept_certified(
                 });
                 if let Some(path) = &reach.state {
                     if let Err(why) = kept.save(path) {
-                        eprintln!(
-                            "domicile: could not keep the certificate in {}: {why}",
-                            path.display()
+                        crate::desk_log::say(
+                            Subsystem::Agents,
+                            LogLevel::Error,
+                            &format!(
+                                "could not keep the certificate in {}: {why}",
+                                path.display()
+                            ),
                         );
                     }
                 }
             }
             Err(why) => {
                 let when = in_words(wait);
-                eprintln!(
-                    "domicile: could not get a certificate for {host}, trying again in {when}: {why}"
+                crate::desk_log::say(
+                    Subsystem::Agents,
+                    LogLevel::Error,
+                    &format!(
+                        "could not get a certificate for {host}, trying again in {when}: {why}"
+                    ),
                 );
                 // A renewal that fails leaves the current one working.
                 if !certificates.ready() {

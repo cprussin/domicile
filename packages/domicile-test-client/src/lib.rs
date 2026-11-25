@@ -8,6 +8,11 @@
 //! package's tests, but cannot depend on another package's binary, so this is
 //! how `cargo test -p domicile-compositor` gets the client it spawns.
 
+#![allow(
+    clippy::print_stderr,
+    reason = "a test fixture: the tests that start it read what it says"
+)]
+
 use std::ffi::OsString;
 use std::process::ExitCode;
 

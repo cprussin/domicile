@@ -27,3 +27,6 @@ globset.workspace = true
 zbus = { workspace = true, features = ["p2p"] }
 libc.workspace = true
 tempfile.workspace = true
+
+[lints]
+workspace = true

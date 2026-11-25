@@ -5,6 +5,11 @@
 //! environment, the files and the sockets. See `docs/SETTINGS.md` and
 //! `docs/HISTORY.md`.
 
+#![allow(
+    clippy::print_stderr,
+    reason = "each line is an error: stdout carries its replies to the app"
+)]
+
 use std::ffi::CString;
 use std::io::Write;
 use std::os::unix::ffi::OsStrExt as _;

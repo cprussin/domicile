@@ -80,7 +80,9 @@ pub fn admit(admission: Admission, chrome: &Path, patience: Duration) {
                 // Not what an agent's connection carries; end it rather than
                 // guess.
                 _ => {
-                    eprintln!("domicile: an agent's client sent '{line}', so it was let go");
+                    crate::launcher_log::error(&format!(
+                        "an agent's client sent '{line}', so it was let go"
+                    ));
                     break;
                 }
             }

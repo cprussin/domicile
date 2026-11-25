@@ -18,6 +18,11 @@
 //!
 //! Exits non-zero, saying why, at the first step that fails.
 
+#![allow(
+    clippy::print_stderr,
+    reason = "a test tool: its tests read what it says"
+)]
+
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::path::Path;

@@ -1,6 +1,11 @@
 //! `domicile-recorder --video <node> [--sound <node>] <file.webm>`: records a
 //! screen cast until stdin says `stop` or closes. See the crate's docs.
 
+#![allow(
+    clippy::print_stderr,
+    reason = "each line is why the recording failed, for the desktop that ran it"
+)]
+
 use std::io::BufRead;
 use std::process::ExitCode;
 use std::sync::mpsc;

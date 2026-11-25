@@ -17,3 +17,6 @@ thiserror.workspace = true
 [[bin]]
 name = "domicile-relay"
 path = "src/main.rs"
+
+[lints]
+workspace = true
