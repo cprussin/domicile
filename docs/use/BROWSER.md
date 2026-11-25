@@ -179,7 +179,7 @@ menus. So:
 - **Manifest V3 extensions only.** uBlock Origin Lite works; uBlock Origin
   does not.
 - **Some extension features are missing,** such as items in the right-click
-  menu, extension shortcuts and moving tabs.
+  menu and moving tabs.
 
 Sites are told the browser is Google Chrome, as some sign-ins require.
 

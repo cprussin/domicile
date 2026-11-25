@@ -127,6 +127,12 @@ void DomicileContextMenuEvent::replaceMisspelling(
   owner_->ReplaceMisspelling(*this, word, exception_state);
 }
 
+void DomicileContextMenuEvent::runExtensionItem(
+    int32_t item,
+    ExceptionState& exception_state) {
+  owner_->RunContextMenuExtensionItem(*this, item, exception_state);
+}
+
 bool DomicileContextMenuEvent::Offers(WebViewContextMenuAction action) const {
   const bool has_pixels = (menu_->media_type == WebViewMediaType::kImage ||
                            menu_->media_type == WebViewMediaType::kCanvas) &&

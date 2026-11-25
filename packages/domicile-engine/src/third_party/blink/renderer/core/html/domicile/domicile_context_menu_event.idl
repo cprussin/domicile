@@ -62,4 +62,15 @@
   // misspelled word, and InvalidStateError once a newer menu replaced this
   // one.
   [RaisesException] undefined replaceMisspelling(DOMString word);
+
+  // The items extensions add to this menu (chrome.contextMenus), as JSON: an
+  // array of entries as DomicileBrowserWindow.menu's, `[]` for none. The
+  // browser matched them to the click as Chrome does.
+  readonly attribute DOMString extensionItems;
+
+  // Run entry `item`, the `id` of one of `extensionItems`, on the page: its
+  // extension hears `contextMenus.onClicked` with the link, selection and tab.
+  // An entry not in this menu does nothing. Throws InvalidStateError once a
+  // newer menu replaced this one.
+  [RaisesException] undefined runExtensionItem(long item);
 };

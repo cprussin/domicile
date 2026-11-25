@@ -1253,6 +1253,20 @@ source_set("extension_settings") {
   public_deps = [ "//base" ]
 }
 
+# How extensions' menus and commands are spelled for the shell, as JSON.
+#
+# A target of its own for :extension_installer's reason: the spelling is here,
+# where a test reaches it with no profile, and reading them is in
+# //chrome/browser/domicile. //base only.
+source_set("extension_menu") {
+  sources = [
+    "browser/extension_menu.cc",
+    "browser/extension_menu.h",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
 # How an extension's action is spelled for the shell's tray: a badge color as
 # CSS and an icon as a data: URL.
 #
@@ -1631,6 +1645,7 @@ source_set("unit_tests") {
     "renderer/context_bridge_unittest.cc",
     "browser/browser_profiles_unittest.cc",
     "browser/extension_installer_unittest.cc",
+    "browser/extension_menu_unittest.cc",
     "browser/extension_settings_unittest.cc",
     "browser/extension_tray_entry_unittest.cc",
     "browser/force_dark_unittest.cc",
@@ -1735,6 +1750,7 @@ source_set("unit_tests") {
     ":electron_schemes",
     ":context_bridge",
     ":extension_installer",
+    ":extension_menu",
     ":extension_settings",
     ":extension_tray_entry",
     ":file_choice",

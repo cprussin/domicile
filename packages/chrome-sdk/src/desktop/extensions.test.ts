@@ -88,6 +88,135 @@ describe("extensions", () => {
     });
   });
 
+  it("keeps the shell's keys from extensions", () => {
+    const fake = new FakeDomicileHost();
+
+    desktop(fake.host).extensions.reserveKeys(["Ctrl+T", "Ctrl+W"]);
+
+    expect(fake.calls).toStrictEqual([
+      ["reserveExtensionKeys", ["Ctrl+T", "Ctrl+W"]],
+    ]);
+  });
+
+  it("says which command's keys were pressed in a page", () => {
+    const fake = new FakeDomicileHost();
+    const pressed = { id: action.id, name: "fill", profile: "work" };
+    const heard: unknown[] = [];
+    const stop = desktop(fake.host).extensions.on(
+      "commandPressed",
+      (command) => {
+        heard.push(command);
+      },
+    );
+
+    fake.dispatch("extensioncommandpressed", { data: JSON.stringify(pressed) });
+    stop();
+    fake.dispatch("extensioncommandpressed", { data: JSON.stringify(pressed) });
+
+    expect(heard).toStrictEqual([pressed]);
+  });
+
+  it("lists each extension's commands, with undefined for no keys", () => {
+    const fake = new FakeDomicileHost();
+    expect(desktop(fake.host).extensions.commands).toBeUndefined();
+    fake.set({
+      extensionCommands: JSON.stringify([
+        {
+          commands: [
+            {
+              description: "Fill in",
+              global: false,
+              keys: "Ctrl+Shift+Comma",
+              name: "fill",
+            },
+            { description: "", global: false, keys: "", name: "lock" },
+          ],
+          id: action.id,
+          name: "Vault",
+          profile: "default",
+        },
+      ]),
+    });
+
+    expect(desktop(fake.host).extensions.commands).toStrictEqual([
+      {
+        commands: [
+          {
+            description: "Fill in",
+            global: false,
+            keys: {
+              alt: false,
+              ctrl: true,
+              key: ",",
+              label: "Ctrl+Shift+,",
+              meta: false,
+              shift: true,
+            },
+            name: "fill",
+          },
+          {
+            description: "",
+            global: false,
+            keys: undefined,
+            name: "lock",
+          },
+        ],
+        id: action.id,
+        name: "Vault",
+        profile: "default",
+      },
+    ]);
+  });
+
+  it("says the commands changed", async () => {
+    const fake = new FakeDomicileHost();
+    const changed = new Promise((resolve) => {
+      desktop(fake.host).extensions.on("commands", () => {
+        resolve(undefined);
+      });
+    });
+    fake.set({ extensionCommands: "[]" });
+
+    expect(await changed).toBeUndefined();
+  });
+
+  it("runs a command and a menu item", () => {
+    const fake = new FakeDomicileHost();
+    const { extensions } = desktop(fake.host);
+    extensions.runCommand(action.id, "fill");
+    extensions.runMenuItem(3);
+
+    expect(fake.calls).toStrictEqual([
+      ["runExtensionCommand", action.id, "fill"],
+      ["runExtensionMenuItem", 3],
+    ]);
+  });
+
+  it("reads an action's menu", async () => {
+    const fake = new FakeDomicileHost();
+    fake.extensionMenus.set(
+      action.id,
+      JSON.stringify([
+        {
+          checked: false,
+          enabled: true,
+          id: 4,
+          label: "Fill",
+          type: "normal",
+          visible: true,
+        },
+      ]),
+    );
+    const { extensions } = desktop(fake.host);
+
+    expect(await extensions.menu(action.id)).toMatchObject([
+      { id: 4, label: "Fill" },
+    ]);
+    expect(await extensions.menu("ponmlkjihgfedcbaponmlkjihgfedcba")).toEqual(
+      [],
+    );
+  });
+
   it("shows a profile's actions", () => {
     const fake = new FakeDomicileHost();
     desktop(fake.host).extensions.setProfile("work");

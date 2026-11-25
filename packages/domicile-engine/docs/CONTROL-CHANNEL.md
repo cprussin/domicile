@@ -219,7 +219,8 @@ The engine has two channels to the rest of Domicile:
   pinned to that app. A compositor that hangs up ends its calls and is
   dialed again, as above, with no `compositorreplaced`. See
   [APP-MODULES.md](/docs/architecture/APP-MODULES.md).
-- **Extension tray:** the `extensions` event and `activateExtension()` use
+- **Extension tray:** the `extensions` event, `activateExtension()`, and
+  extensions' commands and menus use
   `components/domicile/mojom/extension_tray.mojom`, a separate browser-side
   pipe. Action state is the browser's own; the compositor never sees it. See
   `chrome/browser/domicile/domicile_extension_tray.h`.

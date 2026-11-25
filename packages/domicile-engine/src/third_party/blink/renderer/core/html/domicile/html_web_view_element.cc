@@ -688,6 +688,23 @@ void HTMLWebViewElement::ReplaceMisspelling(
   guest_->ReplaceMisspelling(menu.id(), word);
 }
 
+void HTMLWebViewElement::RunContextMenuExtensionItem(
+    const DomicileContextMenuEvent& menu,
+    int32_t item,
+    ExceptionState& exception_state) {
+  if (menu.id() != context_menu_id_) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "A newer context menu has replaced this one.");
+    return;
+  }
+  CHECK(guest_.is_bound());
+  // The extension may act on the focused field, so the page takes the focus
+  // back from the shell's menu first.
+  Element::Focus();
+  guest_->RunContextMenuExtensionItem(menu.id(), item);
+}
+
 // Does not change `site_permissions_`: the browser reports the stored result
 // in SitePermissionsChanged.
 void HTMLWebViewElement::setSitePermission(const String& permission,

@@ -134,6 +134,66 @@ panel.append(view);
   Unclaimed, the extension gets nothing. A choice is stored for the
   extension's `chrome-extension://` origin, so it holds in all its pages.
 
+## Commands
+
+The engine runs extensions' keys (`chrome.commands`) as Chrome does: a key
+pressed in a `<webview>` runs the command in that page's profile, and the page
+does not get the key. A shell needs no code for it.
+
+To run them yourself, listen. The engine then runs none:
+
+<!-- tab: React -->
+
+```tsx
+const ExtensionKeys = () => {
+  const { extensions } = useDomicile();
+  useEffect(
+    () =>
+      extensions.on("commandPressed", ({ id, name, profile }) => {
+        extensions.setProfile(profile);
+        extensions.runCommand(id, name);
+      }),
+    [extensions],
+  );
+  return null;
+};
+```
+
+<!-- tab: JavaScript -->
+
+```js
+domicile.extensions.on("commandPressed", ({ id, name, profile }) => {
+  domicile.extensions.setProfile(profile);
+  domicile.extensions.runCommand(id, name);
+});
+```
+
+<!-- /tabs -->
+
+- An extension may have any key, Chrome's own shortcuts too, such as Ctrl+T.
+  The desk's shortcuts (`grabShortcut`) come first, then extensions' keys, then
+  the page, then `domicile-guest-keydown`.
+- `extensions.reserveKeys(["Ctrl+T", "Ctrl+W"])` keeps keys your shell handles
+  from extensions. A command bound to one has no keys. Nothing is reserved
+  otherwise.
+- `extensions.commands` lists every extension with commands, with an action or
+  without, and the keys bound to them. `extensions.on("commands")` reports
+  changes. The list is that of the profile given to `extensions.setProfile`.
+- `runCommand` acts on the active tab, as a key does in Chrome.
+- `_execute_action` runs the action as Chrome's key does: nothing when it is
+  disabled, and `extensions.on("popup")` when it has a popup.
+
+## Menus
+
+- **The action's menu:** `await extensions.menu(id)` gives the items the
+  extension adds to it, as `appMenu` gives a menu bar's entries: submenus,
+  checkboxes, radio items and separators. `extensions.runMenuItem(entry.id)`
+  runs one on the active tab. Ask again for each menu you open: the items and
+  ids change.
+- **A page's menu:** `domicile-context-menu` carries the items that match the
+  click. `appMenu(event.extensionItems)` reads them, and
+  `event.runExtensionItem(entry.id)` runs one.
+
 ## Tabs and windows
 
 Every `<webview>` is a tab, and the desktop is one `chrome.windows` window.

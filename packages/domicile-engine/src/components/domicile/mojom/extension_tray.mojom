@@ -3,8 +3,8 @@
 
 module domicile.mojom;
 
-// Extensions for the shell's tray: their actions, and every installed
-// extension for a menu that switches and configures them.
+// Extensions for the shell's tray: their actions, commands and menus, and
+// every installed extension for a menu that switches and configures them.
 //
 // A separate interface from ControlChannel because action state lives in the
 // browser process (ExtensionActionManager), not the compositor.
@@ -105,6 +105,28 @@ interface ExtensionTray {
   // uninstall.
   Activate(string id);
 
+  // Keeps `keys` (`Ctrl+T`) from extensions, replacing those given before: a
+  // command bound to one has no keys, and the page gets them. Until this
+  // document goes.
+  ReserveKeys(array<string> keys);
+
+  // Runs command `name` of extension `id` (chrome.commands), as its keys do in
+  // Chrome: grants activeTab on the active tab, then dispatches
+  // `commands.onCommand` with that tab. The action's own command
+  // (`_execute_action`) runs the action, and is PopupRequested when the action
+  // has a popup there. Ignored for an extension or command that is gone, and over a
+  // private page the extension is not allowed in.
+  RunCommand(string id, string name);
+
+  // The items extension `id` adds to its action's menu, matched now: a JSON
+  // array, as an Electron app's menu is (BrowserWindow.menu). Empty for none.
+  ActionMenu(string id) => (string menu);
+
+  // Runs entry `item` of the newest ActionMenu on the active tab, granting
+  // activeTab on it. Ignored for an entry of an older menu, and for one that
+  // is gone or disabled since.
+  RunActionMenuItem(int32 item);
+
   // Switches extension `id` on or off, as its user would on
   // chrome://extensions. Answers with why not, or an empty string.
   SetEnabled(string id, bool enabled) => (string error);
@@ -124,6 +146,17 @@ interface ExtensionTrayClient {
   // The full list on every change, not a delta, so a missed message cannot
   // leave the page wrong.
   ExtensionsChanged(array<TrayExtension> extensions);
+
+  // Every extension with commands, as a JSON array of its `id`, `name`,
+  // `profile` and `commands`, each with its `name`, `description`, `keys`
+  // (`Ctrl+Shift+L`, or empty for none) and whether they are `global`. Of the
+  // profile whose actions the tray shows, with an action or without.
+  CommandsChanged(string commands);
+
+  // The keys of command `name` of extension `id` were pressed in a page of
+  // browser profile `profile`. `handled` when the shell runs it, by RunCommand;
+  // the browser runs it on that page when no document does.
+  CommandPressed(string id, string name, string profile) => (bool handled);
 
   // Every installed extension, on SetClient and on every change: one
   // installed, uninstalled, switched on or off, or reconfigured.

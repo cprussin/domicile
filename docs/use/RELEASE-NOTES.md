@@ -47,6 +47,10 @@ An agent now has a clipboard of its own. What it copies never replaces what you 
 
 An agent now clicks and types with a pointer and keyboard of its own, so it can work in one app while you work in another. It never moves your pointer or changes what you're typing in, and an app you're using stays yours.
 
+### Also new
+
+- Extensions' keyboard shortcuts work in browser windows, such as Bitwarden's Ctrl+Shift+L. The desk's shortcuts come first. [Extensions](BROWSER.md#extensions)
+
 ### Fixes
 
 - Element no longer says it is open in another window after you log out and quickly in again.

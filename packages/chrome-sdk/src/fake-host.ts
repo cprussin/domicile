@@ -42,6 +42,7 @@ const CHANGED: Readonly<
   ctrlKey: "modifierschanged",
   displays: "displayschanged",
   downloads: "downloadschanged",
+  extensionCommands: "extensioncommandschanged",
   extensions: "extensionschanged",
   focusedWindow: "focusedwindowchanged",
   highContrast: "appearancechanged",
@@ -72,6 +73,7 @@ const UNDESCRIBED: DomicileState = {
   ctrlKey: null,
   displays: null,
   downloads: null,
+  extensionCommands: null,
   extensions: null,
   focusedWindow: null,
   highContrast: null,
@@ -170,6 +172,9 @@ export class FakeDomicileHost {
   /** Every call the shell made, in order: the method's name, then its arguments. */
   readonly calls: (readonly [method: string, ...args: unknown[]])[] = [];
 
+  /** Each extension's action menu, as JSON, by its id. Empty for the rest. */
+  readonly extensionMenus = new Map<string, string>();
+
   /** The raw host the engine draws the desktop from. */
   readonly host: DomicileHost;
 
@@ -226,6 +231,11 @@ export class FakeDomicileHost {
           return (profile: string, id: string, enabled: boolean) => {
             calls.push([name, profile, id, enabled]);
             return this.switchExtension(profile, id, enabled);
+          };
+        } else if (name === "extensionMenu") {
+          return (id: string) => {
+            calls.push([name, id]);
+            return Promise.resolve(this.extensionMenus.get(id) ?? "[]");
           };
         } else if (name === "reopenBrowserWindow") {
           return (id: string, profile: string) => {
