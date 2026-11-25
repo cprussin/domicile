@@ -10,6 +10,7 @@
 #include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
+#include "chrome/browser/domicile/domicile_agent_input.h"
 #include "chrome/browser/domicile/domicile_browser_profiles.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_chrome_dialogs.h"
@@ -120,6 +121,8 @@ void StartDesk(Profile* profile) {
     // The config's spell checking, and the context menu's "Add to
     // dictionary".
     StartSpellcheck();
+    // Agents' own pointers and keyboards in the browser's pages.
+    StartAgentInput();
     // Camera and microphone requests, asked through the shell's prompt.
     UseChromeForGuestMedia();
     // WebHID, WebUSB and Web Serial choosers, drawn by the shell.

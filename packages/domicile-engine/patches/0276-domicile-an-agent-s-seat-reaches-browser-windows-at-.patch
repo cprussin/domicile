@@ -1,0 +1,82 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Connor Prussin <connor@prussin.net>
+Date: Wed, 25 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: an agent's seat reaches browser windows at desk
+ positions
+
+The compositor hands an agent seat's pointer and keys over the shell's
+page to the browser (the control channel's `agent_input`), and
+//chrome/browser/domicile/domicile_agent_input.cc delivers them to the
+page under the point, beside the user's and never moving them. Two things
+it needs are //content's:
+
+- content/browser/domicile/domicile_agent_input.cc, behind
+  content/public/browser/domicile_agent_input.h: the widget under a desk
+  point by the router's hit test, a point in a widget that keeps the
+  pointer, the page a widget draws, forwarding without the press focusing
+  the page (patch 0275's flag), a page's focused frame for keys, and page
+  focus for the agent beside the user's.
+- RenderWidgetHostImpl::StartDragging asks //chrome first whether a drag
+  is an agent's. A page the agent pressed in starts it after a move, and
+  the platform's drag would grab the user's pointer, so //chrome takes it
+  and carries it over the pages under the agent's pointer with the
+  DragTarget calls, as DevTools' Input.dispatchDragEvent does.
+---
+ content/browser/BUILD.gn                                 | 2 ++
+ content/browser/renderer_host/render_widget_host_impl.cc | 7 +++++++
+ content/public/browser/BUILD.gn                          | 1 +
+ 3 files changed, 10 insertions(+)
+
+diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
+index 00104be..7fb62e7 100644
+--- a/content/browser/BUILD.gn
++++ b/content/browser/BUILD.gn
+@@ -966,6 +966,8 @@ source_set("browser") {
+     "dom_storage/dom_storage_context_wrapper.h",
+     "dom_storage/session_storage_namespace_handle_impl.cc",
+     "dom_storage/session_storage_namespace_handle_impl.h",
++    "domicile/domicile_agent_input.cc",
++    "domicile/domicile_agent_input.h",
+     "domicile/domicile_code_cache.cc",
+     "domicile/domicile_desk.cc",
+     "domicile/domicile_desk.h",
+diff --git a/content/browser/renderer_host/render_widget_host_impl.cc b/content/browser/renderer_host/render_widget_host_impl.cc
+index a96148d..fa0c3b0 100644
+--- a/content/browser/renderer_host/render_widget_host_impl.cc
++++ b/content/browser/renderer_host/render_widget_host_impl.cc
+@@ -69,6 +69,7 @@
+ #include "content/browser/browser_main_loop.h"
+ #include "content/browser/compositor/surface_utils.h"
+ #include "content/browser/devtools/devtools_instrumentation.h"
++#include "content/browser/domicile/domicile_agent_input.h"
+ #include "content/browser/file_system/browser_file_system_helper.h"
+ #include "content/browser/gpu/compositor_util.h"
+ #include "content/browser/renderer_host/agent_scheduling_group_host.h"
+@@ -3492,6 +3493,12 @@ void RenderWidgetHostImpl::StartDragging(
+     }
+   }
+ 
++  // domicile: a drag an agent's press started is the agent's, carried over
++  // the pages under its own pointer. The platform's would grab the user's.
++  if (DomicileTakesDrag(this, filtered_data, drag_operations_mask)) {
++    return;
++  }
++
+   if (frame_tree_) {
+     bool intercepted = false;
+     devtools_instrumentation::WillStartDragging(
+diff --git a/content/public/browser/BUILD.gn b/content/public/browser/BUILD.gn
+index 3d62c23..7951e3d 100644
+--- a/content/public/browser/BUILD.gn
++++ b/content/public/browser/BUILD.gn
+@@ -168,6 +168,7 @@ source_set("browser_sources") {
+     "document_user_data.cc",
+     "document_user_data.h",
+     "dom_storage_context.h",
++    "domicile_agent_input.h",
+     "domicile_code_cache.h",
+     "domicile_desk.h",
+     "domicile_log_levels.h",
+-- 
+2.43.0
+

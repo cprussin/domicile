@@ -66,6 +66,7 @@ class FakeHost {
  */
 const sharing = (host: FakeHost, seats = new FakeDomicileHost()) => ({
   ...DOMICILE,
+  browser: desktop(seats.host).browser,
   portals: portals(host as unknown as PortalsHost, {
     agents: () => {
       throw new Error("the bar lists no remembered agents");
@@ -378,6 +379,33 @@ describe("Sharing", () => {
         }),
       );
       expect(seats.calls).toContainEqual(["takeOver", "report"]);
+    });
+
+    it("lists a browser window it uses, by its page", async () => {
+      const host = new FakeHost();
+      const seats = new FakeDomicileHost();
+      seats.openBrowser("https://example.com/canvas");
+      seats.set({ seats: [seat({ focused: "1", holds: ["1"] })] });
+      render(<Agents domicile={sharing(host, seats)} />);
+      host.capture([CLAUDE]);
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Claude Code" }),
+      );
+
+      const using = await screen.findByRole("list", {
+        name: "What Claude Code is using",
+      });
+      expect(
+        within(using)
+          .getAllByRole("listitem")
+          .map((item) => item.textContent),
+      ).toEqual(["https://example.com/canvasTypingTake over"]);
+      await userEvent.click(
+        within(using).getByRole("button", {
+          name: "Take over https://example.com/canvas",
+        }),
+      );
+      expect(seats.calls).toContainEqual(["takeOver", "1"]);
     });
 
     it("lists the windows the user took from it, and gives one back", async () => {

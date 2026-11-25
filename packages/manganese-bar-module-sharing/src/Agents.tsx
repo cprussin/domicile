@@ -1,5 +1,6 @@
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Popover } from "@domicile-desktop/component-library/Popover";
+import type { Browser } from "@domicile-desktop/sdk/desktop/browser";
 import type { Portals } from "@domicile-desktop/sdk/desktop/portals";
 import type { Seat, Seats } from "@domicile-desktop/sdk/desktop/seats";
 import type { Windows } from "@domicile-desktop/sdk/desktop/windows";
@@ -26,9 +27,10 @@ const TICK_MS = 15 * 1000;
 
 /**
  * What the agents item reads: the agents in control, their seats, and the
- * windows' titles.
+ * titles of the client and browser windows they use.
  */
 export type AgentsDesktop = {
+  readonly browser: Pick<Browser, "on" | "windows">;
   readonly portals: Pick<
     Portals,
     "capturing" | "changeAgent" | "on" | "stopCapturing"
@@ -86,7 +88,7 @@ type Use = { appId: string; how: How; title: string };
 const useUses = (
   domicile: AgentsDesktop,
 ): ((agent: Agent) => readonly Use[]) => {
-  const { seats, windows } = domicile;
+  const { browser, seats, windows } = domicile;
   const seatsChanged = useCallback(
     (changed: () => void) => seats.on("change", changed),
     [seats],
@@ -95,12 +97,28 @@ const useUses = (
     (changed: () => void) => windows.on("change", changed),
     [windows],
   );
+  const browserChanged = useCallback(
+    (changed: () => void) => browser.on("change", changed),
+    [browser],
+  );
   const list = useSyncExternalStore(seatsChanged, () => seats.list);
   const titled = useSyncExternalStore(windowsChanged, () => windows.list);
+  const pages = useSyncExternalStore(browserChanged, () => browser.windows);
   return (agent) => {
     const seat = list?.find(({ id }) => id === seatId(agent));
-    const title = (appId: string): string =>
-      titled.find((window) => window.appId === appId)?.title ?? "";
+    // Seats name a client window by its app id and a browser window by its
+    // own id. A page with no title goes by its address.
+    const title = (appId: string): string => {
+      const client = titled.find((window) => window.appId === appId);
+      if (client !== undefined) {
+        return client.title;
+      }
+      const page = pages?.find((window) => window.id === appId);
+      if (page === undefined) {
+        return "";
+      }
+      return page.title === "" ? page.url : page.title;
+    };
     return seat === undefined
       ? []
       : [

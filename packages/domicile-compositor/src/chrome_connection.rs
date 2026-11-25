@@ -854,6 +854,30 @@ fn read_chrome_messages(
                 hub.send_request(ClientRequest::DeskCursor { image });
                 Vec::new()
             }
+            Ok(ChromeMessage::AgentInputReached {
+                serial,
+                window,
+                refused,
+            }) => {
+                hub.send_request(ClientRequest::AgentPageReached {
+                    serial,
+                    window,
+                    refused,
+                });
+                Vec::new()
+            }
+            Ok(ChromeMessage::PersonInAgentsWindow {
+                seat,
+                window,
+                keyboard,
+            }) => {
+                hub.send_request(ClientRequest::PersonInAgentsWindow {
+                    seat,
+                    window,
+                    keyboard,
+                });
+                Vec::new()
+            }
             Ok(ChromeMessage::SyncFrames) => {
                 hub.chrome_syncs_frames(writer, true);
                 Vec::new()

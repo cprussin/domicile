@@ -68,7 +68,7 @@ describe("holdableWindows", () => {
     ).toStrictEqual([]);
   });
 
-  it("leaves out a browser window, which no agent seat holds", () => {
+  it("lists a browser window by the engine's id for it, which seats name", () => {
     expect(
       holdableWindows([
         drawn(
@@ -83,6 +83,6 @@ describe("holdableWindows", () => {
           ),
         ),
       ]),
-    ).toStrictEqual([]);
+    ).toStrictEqual([{ appId: "1", depth: 4, frame: FRAME }]);
   });
 });

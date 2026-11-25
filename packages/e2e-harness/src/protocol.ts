@@ -591,6 +591,38 @@ const seatsSchema = z.looseObject({
   type: z.literal("seats"),
 });
 
+// One event of an agent seat's input for the browser's pages, which the
+// browser process reads. It answers `agent_input_reached` with the same
+// serial unless `quiet`, and never delivers into a window in `barred`.
+const agentPageInputSchema = z.discriminatedUnion("kind", [
+  z.looseObject({ kind: z.literal("pointer"), x: z.number(), y: z.number() }),
+  z.looseObject({
+    button: z.number().int().nonnegative(),
+    kind: z.literal("button"),
+    pressed: z.boolean(),
+  }),
+  z.looseObject({ dx: z.number(), dy: z.number(), kind: z.literal("scroll") }),
+  z.looseObject({
+    keycode: z.number().int().nonnegative(),
+    kind: z.literal("key"),
+    pressed: z.boolean(),
+  }),
+  z.looseObject({ kind: z.literal("focus"), window: z.string() }),
+  z.looseObject({ kind: z.literal("leave") }),
+  z.looseObject({ kind: z.literal("blur") }),
+  z.looseObject({ kind: z.literal("let_go") }),
+  z.looseObject({ kind: z.literal("gone") }),
+]);
+
+const agentInputSchema = z.looseObject({
+  barred: z.array(z.string()).optional(),
+  input: agentPageInputSchema,
+  quiet: z.boolean().optional(),
+  seat: z.string(),
+  serial: z.number().int().nonnegative(),
+  type: z.literal("agent_input"),
+});
+
 // The full system tray (StatusNotifierItem), in registration order. Pushed on
 // change and on connect. Activate an item with `activate_tray_item`. `icon` is
 // a `data:` URL, absent when it could not be rendered. `menu` is the object
@@ -1056,6 +1088,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   foundFilesSchema,
   clipboardSchema,
   seatsSchema,
+  agentInputSchema,
   traySchema,
   notificationsSchema,
   portalRequestsSchema,

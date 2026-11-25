@@ -601,6 +601,33 @@ pub enum ChromeMessage {
         image: Option<CursorImage>,
     },
 
+    /// What an agent seat's input into the browser's pages reached, in
+    /// answer to the [`HostMessage::AgentInput`] of the same `serial`.
+    ///
+    /// `window` is the browser window the event reached, if any. `refused`
+    /// says why the browser delivered nothing: the shell is at that point,
+    /// which agents act on by ref, or no window is. Never both.
+    AgentInputReached {
+        #[serde(deserialize_with = "whole_number")]
+        serial: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        window: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        refused: Option<String>,
+    },
+
+    /// The user's own input reached browser window `window`, which agent
+    /// seat `seat` points or types in: the person wins. With `keyboard`, the
+    /// user's keyboard went there, so the window is the user's until they
+    /// give it back; otherwise only their pointer, which moves the agent's
+    /// off it. The browser sends it once each time, as a Wayland client's
+    /// seat yields when the user's enters it.
+    PersonInAgentsWindow {
+        seat: String,
+        window: String,
+        keyboard: bool,
+    },
+
     /// The browser's focused text field, as an editor for the desk's input
     /// method (`text-input-v3`'s state). Sent whole on every change, and with
     /// `enabled: false` when no field has focus. The browser's own, never the
@@ -1157,6 +1184,31 @@ pub enum HostMessage {
     /// seat does. Pushed whenever a seat comes, goes, moves its pointer or
     /// focus, or a window is taken or given back; and on connect.
     Seats { seats: Vec<AgentSeat> },
+
+    /// One event of an agent seat's input for the browser's pages: the
+    /// agent's pointer is over the shell's page rather than a native window,
+    /// or its keyboard is in a browser window.
+    ///
+    /// The browser finds the page at the point and hands it the event without
+    /// moving the user's pointer or focus, and refuses a point where the
+    /// shell itself is (agents act on the shell by ref), a window the user
+    /// is in, and a window in `barred`. It answers each with
+    /// [`ChromeMessage::AgentInputReached`] of the same `serial`, unless
+    /// `quiet`. Every page's channel hears it; the browser keeps the first of
+    /// each serial, which grows across compositor restarts.
+    AgentInput {
+        serial: u64,
+        /// `agent-<session>`, as in [`AgentSeat::id`].
+        seat: String,
+        input: AgentPageInput,
+        /// Browser windows the event must not reach: the user took them
+        /// from this agent, or another agent holds them. The browser refuses
+        /// the event there, as it does where the user is.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        barred: Vec<String>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        quiet: bool,
+    },
 
     /// The desktop's current theme.
     ///
@@ -3072,6 +3124,47 @@ pub enum SystemErrorKind {
     /// `docs/architecture/ENGINE-FORK.md`.
     CompositorGone,
     Other,
+}
+
+/// A whole number the browser wrote. Its JSON numbers are doubles, which it
+/// writes with a `.0`, and which hold every integer up to 2^53 exactly: a
+/// serial, which is microseconds since the epoch, is far below that.
+fn whole_number<'de, D: serde::Deserializer<'de>>(written: D) -> Result<u64, D::Error> {
+    let number = f64::deserialize(written)?;
+    if number < 0.0 || number.fract() != 0.0 || number > 9_007_199_254_740_992.0 {
+        return Err(serde::de::Error::custom(format!(
+            "{number} is not a whole number the browser writes exactly"
+        )));
+    }
+    // Checked above: whole, and within what a double holds exactly.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    Ok(number as u64)
+}
+
+/// One event of an agent seat's input, in [`HostMessage::AgentInput`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AgentPageInput {
+    /// The pointer moved to `x`, `y` on the desk, in the shell page's CSS
+    /// pixels. While a button is down the page it was pressed in keeps the
+    /// pointer, and a drag that page started goes over the pages under it.
+    Pointer { x: f64, y: f64 },
+    /// An evdev button code.
+    Button { button: u32, pressed: bool },
+    /// Scrolled by `dx`, `dy` logical pixels, down and right positive.
+    Scroll { dx: f64, dy: f64 },
+    /// An evdev key code, into the window the seat's keyboard is in.
+    Key { keycode: u32, pressed: bool },
+    /// The seat's keyboard goes to browser window `window`.
+    Focus { window: String },
+    /// The seat's pointer left the browser's pages, for a native window.
+    Leave,
+    /// The seat's keyboard left the browser's pages.
+    Blur,
+    /// Every button and key the seat holds in the pages comes up.
+    LetGo,
+    /// The seat is gone: it lets go, leaves and blurs.
+    Gone,
 }
 
 /// An agent seat, in [`HostMessage::Seats`].

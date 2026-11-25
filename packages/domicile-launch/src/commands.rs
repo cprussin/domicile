@@ -343,7 +343,8 @@ pub const COMMANDS: &[Command] = &[
              `list-windows` prints it. The shell decides how: Manganese switches \
              to its workspace.",
             "With `--agent`, gives the window that agent's own keyboard instead. \
-             The user's focus stays, and nothing is raised.",
+             The window may be native or a browser window. The user's focus \
+             stays, and nothing is raised.",
         ],
         sections: &[AGENT],
         examples: &[],
@@ -1037,7 +1038,7 @@ const AGENT: Section = Section {
     entries: &[(
         "--agent <session>",
         "Use that agent session's own pointer and keyboard, as `agent` prints it, not the user's. \
-         Reaches native windows the user isn't in",
+         Reaches native and browser windows the user isn't in, but not the shell",
     )],
 };
 

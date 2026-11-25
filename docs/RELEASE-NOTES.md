@@ -8,6 +8,12 @@ in the manganese desktop is in
 
 _Unreleased_
 
+### Agents' own pointer and keyboard reach browser windows
+
+An agent seat's `click`, `move_pointer`, `drag`, `scroll`, `key`, `type_text` and `focus_window` now reach browser windows at desk positions, not only native windows, so an agent can draw on a canvas or drag from one page to another. The compositor sends each step to the browser as `agent_input` on the control channel; the browser hit tests the desk point to the page under it and answers `agent_input_reached` with the window it reached or why it refused. A point on the shell's own page is refused: agents act on the shell by ref. The user's own press or key in a browser window an agent holds takes it (`person_in_agents_window`), and `domicile.seats.list` names browser windows in `holds` and `taken` by their ids.
+
+[Agents](AGENTS.md) · [Agent seats](architecture/AGENT-SEATS.md#browser-windows-at-desk-positions)
+
 ### An agent's input to a browser window leaves the user's focus
 
 DevTools input sent to a browser window's own page, as `domicile devtools <window>` and the MCP server's `browser_` tools send it, no longer moves the user's focus to that window: a press focuses the page for the agent only, and `Input.insertText` and keys go to the frame focused in that page rather than wherever the user is typing. Input sent to window `shell` still focuses what it presses, as a person's click does. `browser_click` also clicks at a point of the page, with any button and as a double-click, and `browser_drag` and `browser_scroll` drag and scroll there, for a canvas or anything else with no ref.

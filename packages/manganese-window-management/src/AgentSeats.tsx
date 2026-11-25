@@ -9,9 +9,12 @@ import { AGENT_POINTER, raised } from "./placement";
 import type { Rect } from "./rect";
 import { placedAt } from "./window-styles";
 
-/** A client window on screen, which an agent can hold or the user take. */
+/** A window on screen, which an agent can hold or the user take. */
 export type HoldableWindow = {
-  /** The host's id for its client, which seats name. */
+  /**
+   * The id seats name it by: its client's app id, or the engine's id for a
+   * browser window.
+   */
   appId: string;
   /** Its `z-index`. */
   depth: number;
@@ -24,7 +27,7 @@ type Props = {
   onGiveBack: (appId: string) => void;
   /** Every agent's seat. */
   seats: readonly Seat[];
-  /** The client windows on screen and at rest. */
+  /** The windows on screen and at rest. */
   windows: readonly HoldableWindow[];
 };
 

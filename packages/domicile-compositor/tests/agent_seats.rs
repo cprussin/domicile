@@ -8,8 +8,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 
 use domicile_protocol::{
-    AgentReach, ChromeMessage, EmulatedInput, HostMessage, PointerButton, PortalAnswer, PortalKind,
-    SystemReply, SystemRequest,
+    AgentPageInput, AgentReach, ChromeMessage, EmulatedInput, HostMessage, PointerButton,
+    PortalAnswer, PortalKind, SystemReply, SystemRequest,
 };
 
 use crate::running::{Client, Compositor};
@@ -79,7 +79,16 @@ fn as_the_agent(
     session: u32,
     input: Vec<EmulatedInput>,
 ) -> Option<String> {
-    let mut asking = UnixStream::connect(compositor.socket()).expect("the chrome socket is up");
+    as_the_agent_on(compositor.socket(), session, input)
+}
+
+/// [`as_the_agent`], on the compositor at `socket`.
+fn as_the_agent_on(
+    socket: &std::path::Path,
+    session: u32,
+    input: Vec<EmulatedInput>,
+) -> Option<String> {
+    let mut asking = UnixStream::connect(socket).expect("the chrome socket is up");
     let said = serde_json::to_string(&ChromeMessage::Emulate {
         input,
         agent: Some(session),
@@ -94,6 +103,64 @@ fn as_the_agent(
         Ok(HostMessage::Emulated { refused }) => refused,
         _ => panic!("not an answer to emulated input: {answer}"),
     }
+}
+
+/// Why the browser refuses a point where the shell itself is.
+const THE_SHELL: &str = "the shell is at that point: act on it by ref";
+
+/// [`as_the_agent`], with the test chrome as the browser: it answers the
+/// first `asks` questions the input asks of the browser's pages with
+/// `browser`, the window the event reached or why it refused, and returns
+/// why the input was refused.
+fn as_the_agent_over_pages(
+    compositor: &Compositor,
+    chrome: &mut domicile_test_chrome::Chrome,
+    session: u32,
+    input: Vec<EmulatedInput>,
+    asks: usize,
+    mut browser: impl FnMut(&AgentPageInput, &[String]) -> Result<String, String>,
+) -> Option<String> {
+    let socket = compositor.socket().to_path_buf();
+    let sent = std::thread::spawn(move || as_the_agent_on(&socket, session, input));
+    for _ in 0..asks {
+        let asked = chrome
+            .wait_for(|message| matches!(message, HostMessage::AgentInput { quiet: false, .. }))
+            .expect("the browser is asked");
+        let HostMessage::AgentInput {
+            serial,
+            seat,
+            input,
+            barred,
+            ..
+        } = asked
+        else {
+            unreachable!("the wait matched on this variant")
+        };
+        assert_eq!(seat, format!("agent-{session}"));
+        let (window, refused) = match browser(&input, &barred) {
+            Ok(window) => (Some(window), None),
+            Err(why) => (None, Some(why)),
+        };
+        chrome
+            .say(&ChromeMessage::AgentInputReached {
+                serial,
+                window,
+                refused,
+            })
+            .expect("the browser answers");
+    }
+    sent.join().expect("the agent's call ends")
+}
+
+/// The next quiet event an agent seat's input sent the browser.
+fn quietly_told(chrome: &mut domicile_test_chrome::Chrome) -> AgentPageInput {
+    let told = chrome
+        .wait_for(|message| matches!(message, HostMessage::AgentInput { quiet: true, .. }))
+        .expect("the browser is told");
+    let HostMessage::AgentInput { input, .. } = told else {
+        unreachable!("the wait matched on this variant")
+    };
+    input
 }
 
 fn click_at(x: f64, y: f64) -> Vec<EmulatedInput> {
@@ -228,7 +295,7 @@ fn an_agent_clicks_and_types_in_another_window_without_moving_the_user() {
 }
 
 /// An app the user is in is theirs: the agent is told to act on it by ref.
-/// So is nothing at all, under the agent's pointer.
+/// So is the shell, under the agent's pointer, which the browser refuses.
 #[test]
 fn an_agent_is_refused_the_users_app_and_the_empty_desk() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -242,11 +309,15 @@ fn an_agent_is_refused_the_users_app_and_the_empty_desk() {
             .is_some_and(|why| why.contains("the user is using this app")),
         "the agent clicked in the user's window: {refused:?}"
     );
-    let refused = as_the_agent(&compositor, session, click_at(900.0, 900.0));
-    assert!(
-        refused.as_deref().is_some_and(|why| why.contains("by ref")),
-        "the agent's pointer went to the empty desk: {refused:?}"
+    let refused = as_the_agent_over_pages(
+        &compositor,
+        &mut desk.chrome,
+        session,
+        click_at(900.0, 900.0),
+        1,
+        |_, _| Err(THE_SHELL.to_string()),
     );
+    assert_eq!(refused.as_deref(), Some(THE_SHELL));
     let refused = as_the_agent(&compositor, session, tap("a"));
     assert!(
         refused
@@ -269,12 +340,16 @@ fn an_agents_pointer_that_moved_off_a_window_clicks_nothing_there() {
         None
     );
 
-    let refused = as_the_agent(&compositor, session, click_at(900.0, 900.0));
-
-    assert!(
-        refused.as_deref().is_some_and(|why| why.contains("by ref")),
-        "the agent's click off its window went through: {refused:?}"
+    let refused = as_the_agent_over_pages(
+        &compositor,
+        &mut desk.chrome,
+        session,
+        click_at(900.0, 900.0),
+        1,
+        |_, _| Err(THE_SHELL.to_string()),
     );
+
+    assert_eq!(refused.as_deref(), Some(THE_SHELL));
     let other = &mut desk.other.0;
     assert!(other.wait_for_trace(&format!(", {BTN_LEFT}, 0)"), 1));
     assert_eq!(
@@ -868,4 +943,285 @@ fn a_window_an_agent_starts_is_held_by_it_from_the_start() {
     );
 
     assert_eq!(as_the_agent(&compositor, session, tap("a")), None);
+}
+
+/// Agent session `session`'s seat as the shell was last told it, once
+/// `until` holds for it.
+fn told_seat(
+    chrome: &mut domicile_test_chrome::Chrome,
+    session: u32,
+    until: impl Fn(&domicile_protocol::AgentSeat) -> bool,
+) -> domicile_protocol::AgentSeat {
+    let id = format!("agent-{session}");
+    told_seats(chrome, |seats| {
+        seats.iter().any(|seat| seat.id == id && until(seat))
+    })
+    .into_iter()
+    .find(|seat| seat.id == id)
+    .expect("the wait matched on this seat")
+}
+
+/// Off every native window the agent's pointer is over the shell's page: the
+/// browser takes its clicks and keys there, and the window it says they
+/// reached is held by the agent's seat.
+#[test]
+fn an_agent_clicks_and_types_in_a_browser_window_at_a_desk_position() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows(&compositor);
+    let (_held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+
+    let mut asked = Vec::new();
+    let refused = as_the_agent_over_pages(
+        &compositor,
+        &mut desk.chrome,
+        session,
+        click_at(900.0, 900.0),
+        2,
+        |input, _| {
+            asked.push(input.clone());
+            Ok("7".to_string())
+        },
+    );
+    assert_eq!(refused, None);
+    assert_eq!(
+        asked,
+        vec![
+            AgentPageInput::Pointer { x: 900.0, y: 900.0 },
+            AgentPageInput::Button {
+                button: BTN_LEFT,
+                pressed: true
+            },
+        ]
+    );
+    assert_eq!(
+        quietly_told(&mut desk.chrome),
+        AgentPageInput::Button {
+            button: BTN_LEFT,
+            pressed: false
+        }
+    );
+    let seat = told_seat(&mut desk.chrome, session, |seat| {
+        seat.focused.as_deref() == Some("7")
+    });
+    assert_eq!(seat.pointer, Some([900.0, 900.0]));
+    assert_eq!(seat.holds, vec!["7".to_string()]);
+
+    let mut asked = Vec::new();
+    let refused = as_the_agent_over_pages(
+        &compositor,
+        &mut desk.chrome,
+        session,
+        tap("a"),
+        1,
+        |input, _| {
+            asked.push(input.clone());
+            Ok("7".to_string())
+        },
+    );
+    assert_eq!(refused, None);
+    assert_eq!(
+        asked,
+        vec![AgentPageInput::Key {
+            keycode: EVDEV_KEY_A,
+            pressed: true
+        }]
+    );
+    assert_eq!(
+        quietly_told(&mut desk.chrome),
+        AgentPageInput::Key {
+            keycode: EVDEV_KEY_A,
+            pressed: false
+        }
+    );
+    // The user's windows heard none of it.
+    assert!(
+        !desk.users.0.trace().contains(&format!(", {BTN_LEFT}, 1)")),
+        "the user's window was clicked:\n{}",
+        desk.users.0.trace()
+    );
+}
+
+/// Moving from a browser window onto a native window tells the browser the
+/// pointer left its pages, and clicking there takes the agent's keyboard out
+/// of them.
+#[test]
+fn an_agents_pointer_leaves_the_pages_for_a_native_window() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows(&compositor);
+    let (_held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+    let refused = as_the_agent_over_pages(
+        &compositor,
+        &mut desk.chrome,
+        session,
+        click_at(900.0, 900.0),
+        2,
+        |_, _| Ok("7".to_string()),
+    );
+    assert_eq!(refused, None);
+    quietly_told(&mut desk.chrome);
+
+    assert_eq!(
+        as_the_agent(&compositor, session, click_at(1100.0, 100.0)),
+        None
+    );
+
+    assert_eq!(quietly_told(&mut desk.chrome), AgentPageInput::Leave);
+    assert_eq!(quietly_told(&mut desk.chrome), AgentPageInput::Blur);
+    let other = desk.other.1.clone();
+    let seat = told_seat(&mut desk.chrome, session, |seat| {
+        seat.focused.as_deref() == Some(other.as_str())
+    });
+    assert_eq!(seat.holds, vec![other]);
+}
+
+/// The person wins in a browser window too: the browser says their keyboard
+/// went to the window the agent types in, which is then theirs. The agent is
+/// refused it, and the browser is told never to let it in, until it is given
+/// back.
+#[test]
+fn the_user_takes_a_browser_window_from_an_agent() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows(&compositor);
+    let (_held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+    let refused = as_the_agent_over_pages(
+        &compositor,
+        &mut desk.chrome,
+        session,
+        click_at(900.0, 900.0),
+        2,
+        |_, _| Ok("7".to_string()),
+    );
+    assert_eq!(refused, None);
+    quietly_told(&mut desk.chrome);
+
+    desk.chrome
+        .say(&ChromeMessage::PersonInAgentsWindow {
+            seat: format!("agent-{session}"),
+            window: "7".to_string(),
+            keyboard: true,
+        })
+        .expect("the browser says the user is in the window");
+
+    assert_eq!(quietly_told(&mut desk.chrome), AgentPageInput::Leave);
+    assert_eq!(quietly_told(&mut desk.chrome), AgentPageInput::Blur);
+    let seat = told_seat(&mut desk.chrome, session, |seat| !seat.taken.is_empty());
+    assert_eq!(seat.taken, vec!["7".to_string()]);
+    assert!(seat.holds.is_empty(), "the agent still holds it: {seat:?}");
+    let refused = as_the_agent(
+        &compositor,
+        session,
+        vec![EmulatedInput::Focus {
+            window: "7".to_string(),
+        }],
+    );
+    assert!(
+        refused
+            .as_deref()
+            .is_some_and(|why| why.contains("took over")),
+        "the agent focused a window the user took: {refused:?}"
+    );
+    let mut barred = Vec::new();
+    as_the_agent_over_pages(
+        &compositor,
+        &mut desk.chrome,
+        session,
+        vec![EmulatedInput::PointTo { x: 800.0, y: 800.0 }],
+        1,
+        |_, told| {
+            barred = told.to_vec();
+            Ok("8".to_string())
+        },
+    );
+    assert_eq!(barred, vec!["7".to_string()]);
+}
+
+/// An agent can focus a browser window by its id, as it does a native one;
+/// the browser says whether it has it.
+#[test]
+fn an_agent_focuses_a_browser_window() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows(&compositor);
+    let (_held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+    let focus = |window: &str| {
+        vec![EmulatedInput::Focus {
+            window: window.to_string(),
+        }]
+    };
+
+    let refused = as_the_agent_over_pages(
+        &compositor,
+        &mut desk.chrome,
+        session,
+        focus("nine"),
+        1,
+        |_, _| Err("no browser window is nine".to_string()),
+    );
+    assert_eq!(refused.as_deref(), Some("no browser window is nine"));
+
+    let refused = as_the_agent_over_pages(
+        &compositor,
+        &mut desk.chrome,
+        session,
+        focus("7"),
+        1,
+        |input, _| match input {
+            AgentPageInput::Focus { window } => Ok(window.clone()),
+            other => Err(format!("asked {other:?}")),
+        },
+    );
+    assert_eq!(refused, None);
+    told_seat(&mut desk.chrome, session, |seat| {
+        seat.focused.as_deref() == Some("7")
+    });
+}
+
+/// An agent that leaves lets go of everything in the browser's pages too.
+#[test]
+fn an_agent_that_leaves_is_gone_from_the_pages() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows(&compositor);
+    let (held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+    let refused = as_the_agent_over_pages(
+        &compositor,
+        &mut desk.chrome,
+        session,
+        vec![EmulatedInput::PointTo { x: 900.0, y: 900.0 }],
+        1,
+        |_, _| Ok("7".to_string()),
+    );
+    assert_eq!(refused, None);
+
+    drop(held);
+
+    assert_eq!(quietly_told(&mut desk.chrome), AgentPageInput::Gone);
+}
+
+/// The shell takes a browser window from an agent as it does a native one.
+#[test]
+fn the_shell_takes_a_browser_window_from_an_agent() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows(&compositor);
+    let (_held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+    let refused = as_the_agent_over_pages(
+        &compositor,
+        &mut desk.chrome,
+        session,
+        click_at(900.0, 900.0),
+        2,
+        |_, _| Ok("7".to_string()),
+    );
+    assert_eq!(refused, None);
+    quietly_told(&mut desk.chrome);
+
+    desk.chrome
+        .say(&ChromeMessage::TakeOver {
+            app_id: "7".to_string(),
+        })
+        .expect("the chrome takes the window");
+
+    assert_eq!(quietly_told(&mut desk.chrome), AgentPageInput::Leave);
+    assert_eq!(quietly_told(&mut desk.chrome), AgentPageInput::Blur);
+    let seat = told_seat(&mut desk.chrome, session, |seat| !seat.taken.is_empty());
+    assert_eq!(seat.taken, vec!["7".to_string()]);
+    assert!(seat.holds.is_empty(), "the agent still holds it: {seat:?}");
 }

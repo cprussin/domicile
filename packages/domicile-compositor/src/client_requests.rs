@@ -224,6 +224,20 @@ pub enum ClientRequest {
         let_go: bool,
         answer: crate::configured_displays::Answer,
     },
+    /// The browser answered an agent seat's input into its pages. See
+    /// [`ChromeMessage::AgentInputReached`](domicile_protocol::ChromeMessage::AgentInputReached).
+    AgentPageReached {
+        serial: u64,
+        window: Option<String>,
+        refused: Option<String>,
+    },
+    /// The user's input reached a browser window an agent seat holds. See
+    /// [`ChromeMessage::PersonInAgentsWindow`](domicile_protocol::ChromeMessage::PersonInAgentsWindow).
+    PersonInAgentsWindow {
+        seat: String,
+        window: String,
+        keyboard: bool,
+    },
     /// Agent session `session` ended, and its seat with it.
     AgentGone {
         session: u32,
@@ -791,7 +805,17 @@ impl DomicileCompositor {
                 steps,
                 let_go,
                 answer,
-            } => answer.give(self.agent_input(session, steps, let_go)),
+            } => self.agent_input(session, steps, let_go, answer),
+            ClientRequest::AgentPageReached {
+                serial,
+                window,
+                refused,
+            } => self.agent_page_reached(serial, window, refused),
+            ClientRequest::PersonInAgentsWindow {
+                seat,
+                window,
+                keyboard,
+            } => self.person_in_agents_window(&seat, &window, keyboard),
             ClientRequest::AgentGone { session } => self.agent_gone(session),
             ClientRequest::TakeOver { app_id } => self.take_over(&app_id),
             ClientRequest::GiveBack { app_id } => self.give_back(&app_id),

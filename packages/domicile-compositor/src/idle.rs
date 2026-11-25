@@ -434,7 +434,10 @@ pub fn somebody_is_here(request: &ClientRequest) -> Option<&'static str> {
         | ClientRequest::HeldAwakeByThePortal { .. }
         // An agent, on its own seat.
         | ClientRequest::AgentInput { .. }
+        | ClientRequest::AgentPageReached { .. }
         | ClientRequest::AgentGone { .. }
+        // The browser saw the person's input, and sent `Activity` for it.
+        | ClientRequest::PersonInAgentsWindow { .. }
         // The shell's, on a button the person pressed, which the engine
         // already counted.
         | ClientRequest::TakeOver { .. }

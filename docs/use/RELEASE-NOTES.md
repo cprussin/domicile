@@ -7,6 +7,10 @@ building shells is in [Domicile's release notes](../RELEASE-NOTES.md).
 
 _Unreleased_
 
+### Agents use browser windows with their own pointer
+
+An agent's own pointer and keyboard now work in browser windows too, so it can draw, drag and click anywhere on a page while you keep working. Its ring and pointer show on the browser window it's using, and clicking or typing there makes the window yours.
+
 ### Agents in browser windows don't take your typing
 
 When an agent clicks or types in a browser window, the window you're typing in keeps your keyboard, and the agent's typing never lands there.

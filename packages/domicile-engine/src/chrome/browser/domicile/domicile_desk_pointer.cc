@@ -20,12 +20,9 @@
 #include "ui/gfx/native_ui_types.h"
 
 namespace domicile {
-namespace {
 
-// Where `event` is in the shell page's CSS pixels: the inverse of
-// `PointerWarpTarget`. `std::nullopt` while there is no shell to be over, or
-// for a move on another root window than the shell's.
-std::optional<gfx::PointF> OnTheShell(const ui::LocatedEvent& event) {
+// The inverse of `PointerWarpTarget`.
+std::optional<gfx::PointF> ShellPointOf(const ui::LocatedEvent& event) {
   content::WebContents* shell = DeskShellContents();
   if (shell == nullptr) {
     return std::nullopt;
@@ -40,6 +37,8 @@ std::optional<gfx::PointF> OnTheShell(const ui::LocatedEvent& event) {
   return event.root_location_f() - page.OffsetFromOrigin();
 }
 
+namespace {
+
 class DeskPointerReporter : public ui::EventObserver {
  public:
   DeskPointerReporter() {
@@ -50,7 +49,7 @@ class DeskPointerReporter : public ui::EventObserver {
 
   // ui::EventObserver:
   void OnEvent(const ui::Event& event) override {
-    const std::optional<gfx::PointF> at = OnTheShell(*event.AsLocatedEvent());
+    const std::optional<gfx::PointF> at = ShellPointOf(*event.AsLocatedEvent());
     DeskPointer::Get().MovedTo(DeskPointerAt{
         at, at ? BrowserWindowsAt(*at) : std::vector<PointerOverWindow>()});
   }

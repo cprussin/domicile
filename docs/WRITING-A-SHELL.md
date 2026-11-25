@@ -755,8 +755,8 @@ drops the window first, so you can focus another.
 
 ### Agents beside the user
 
-An agent let in with `domicile agent` drives native windows with a pointer
-and keyboard of its own, and never moves the user's
+An agent let in with `domicile agent` drives native and browser windows
+with a pointer and keyboard of its own, and never moves the user's
 ([AGENT-SEATS.md](architecture/AGENT-SEATS.md)). `domicile.seats.list` lists
 the agent seats, `undefined` until the compositor says, and
 `seats.on("change")` reports each change. In React, `useSeats()` from
@@ -771,6 +771,11 @@ the agent seats, `undefined` until the compositor says, and
   pointer or keyboard is in. Each window in `holds` has `heldBy` set to the
   seat's `id`.
 - `taken`, the windows the user took from it.
+
+`holds` and `taken` name a client window by its app id and a browser window
+by its id in `domicile.browser.windows`. Only client windows have `heldBy`;
+for a browser window, look it up in the seats. An agent's pointer and keys
+never reach the shell's own page, so a shell needs no guard against them.
 
 The user wins any window both want. Their click or key in a window an agent
 holds takes it, as `domicile.seats.takeOver(appId)` does. Every agent's raw

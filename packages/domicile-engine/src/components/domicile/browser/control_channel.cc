@@ -24,6 +24,7 @@
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/values.h"
 #include "components/domicile/browser/desk_lock.h"
 #include "components/domicile/browser/desk_pointer_hiding.h"
@@ -50,6 +51,12 @@ BrowserProfilesSink& BrowserProfilesSlot() {
 // Storage for SetSpellcheckSink's callback.
 SpellcheckSink& SpellcheckSlot() {
   static base::NoDestructor<SpellcheckSink> sink;
+  return *sink;
+}
+
+// Storage for SetAgentInputSink's callback.
+AgentInputSink& AgentInputSlot() {
+  static base::NoDestructor<AgentInputSink> sink;
   return *sink;
 }
 
@@ -1389,6 +1396,34 @@ void ControlChannel::DispatchLine(const std::string& line,
     return;
   }
 
+  // AN AGENT SEAT'S, for this process like `keymap`: the compositor hands
+  // the browser an agent's input over the shell's page, which the browser
+  // delivers to the page under it. Every page's channel hears it, and the
+  // sink keeps the first of each serial. Nothing goes on to the page: the
+  // shell sees an agent only through `seats`. See
+  // chrome/browser/domicile/domicile_agent_input.h.
+  if (*type == "agent_input") {
+    std::optional<AgentPageInput> input = ReadAgentInput(message);
+    if (!input) {
+      LOG(ERROR) << "domicile: the compositor sent an `agent_input` this "
+                    "engine cannot read; the agent's input is lost, and its "
+                    "call waits until it gives up.";
+    } else if (AgentInputSlot().is_null()) {
+      // //chrome sets the sink before the shell can bind a channel, as
+      // `spellcheck`'s.
+      LOG(ERROR) << "domicile: the compositor sent `agent_input` and this "
+                    "engine has nowhere to put it.";
+    } else {
+      AgentInputSlot().Run(
+          std::move(*input),
+          base::BindPostTask(
+              base::SequencedTaskRunner::GetCurrentDefault(),
+              base::BindRepeating(&ControlChannel::SendMessage,
+                                  weak_factory_.GetWeakPtr())));
+    }
+    return;
+  }
+
   // THE INPUT METHOD'S, for this process like `keymap`: the compositor is
   // the editor of the field focused in it on the desk's input method. Every
   // page's channel hears these, and the desk's input method keeps the first
@@ -2122,6 +2157,11 @@ void ControlChannel::DispatchLine(const std::string& line,
 void SetBrowserProfilesSink(BrowserProfilesSink sink) {
   CHECK(BrowserProfilesSlot().is_null() || sink.is_null());
   BrowserProfilesSlot() = std::move(sink);
+}
+
+void SetAgentInputSink(AgentInputSink sink) {
+  CHECK(AgentInputSlot().is_null() || sink.is_null());
+  AgentInputSlot() = std::move(sink);
 }
 
 void SetSpellcheckSink(SpellcheckSink sink) {

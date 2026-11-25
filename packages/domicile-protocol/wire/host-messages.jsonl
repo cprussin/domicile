@@ -59,6 +59,15 @@
 {"type":"appearance","high_contrast":false,"reduced_motion":false,"cursor_hiding":{"after_ms":1000,"when_typing":true}}
 {"type":"clipboard","entries":[{"id":3,"image":false,"preview":"ssh-rsa AAAAB3NzaC1yc2E","current":true},{"id":1,"image":true,"preview":"Image, 1920 × 1080","thumbnail":"data:image/png;base64,iVBORw0KGgo=","current":false}]}
 {"type":"seats","seats":[{"id":"agent-3","name":"Claude Code","pointer":[1100.5,240.0],"focused":"app-2","holds":["app-2","app-4"],"taken":["app-5"]},{"id":"agent-4","name":"Codex","holds":[],"taken":[]}]}
+{"type":"agent_input","serial":1764040000000001,"seat":"agent-3","input":{"kind":"pointer","x":640.5,"y":400.0}}
+{"type":"agent_input","serial":1764040000000002,"seat":"agent-3","input":{"kind":"button","button":272,"pressed":true},"barred":["w2","w5"]}
+{"type":"agent_input","serial":1764040000000003,"seat":"agent-3","input":{"kind":"scroll","dx":0.0,"dy":-15.0}}
+{"type":"agent_input","serial":1764040000000004,"seat":"agent-3","input":{"kind":"key","keycode":30,"pressed":false}}
+{"type":"agent_input","serial":1764040000000005,"seat":"agent-3","input":{"kind":"focus","window":"w7"}}
+{"type":"agent_input","serial":1764040000000006,"seat":"agent-3","input":{"kind":"leave"},"quiet":true}
+{"type":"agent_input","serial":1764040000000007,"seat":"agent-3","input":{"kind":"blur"},"quiet":true}
+{"type":"agent_input","serial":1764040000000008,"seat":"agent-3","input":{"kind":"let_go"},"quiet":true}
+{"type":"agent_input","serial":1764040000000009,"seat":"agent-3","input":{"kind":"gone"},"quiet":true}
 {"type":"idle","idle":true}
 {"type":"locked","locked":true}
 {"type":"tray","items":[{"id":":1.42/StatusNotifierItem","title":"Network","icon":"data:image/png;base64,iVBORw0KGgo=","bus":":1.42","menu":"/MenuBar","item_is_menu":false},{"id":"org.kde.StatusNotifierItem-4071-1/StatusNotifierItem","title":"Syncthing","bus":"org.kde.StatusNotifierItem-4071-1","item_is_menu":true}]}

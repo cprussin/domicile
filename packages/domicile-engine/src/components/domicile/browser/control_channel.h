@@ -16,6 +16,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/timer/timer.h"
+#include "components/domicile/browser/agent_input_lines.h"
 #include "components/domicile/browser/browser_profiles.h"
 #include "components/domicile/browser/desk_activity.h"
 #include "components/domicile/browser/desk_faults.h"
@@ -116,6 +117,20 @@ void SetBrowserProfilesSink(BrowserProfilesSink sink);
 using SpellcheckSink =
     base::RepeatingCallback<void(const SpellcheckSettings&)>;
 void SetSpellcheckSink(SpellcheckSink sink);
+
+// How an agent seat's input for the browser's pages (`agent_input`) reaches
+// //chrome, which finds the page and hands it the event. `tell` sends a
+// message back on the channel that heard it, from any thread: what the event
+// reached, and the user's own input reaching a window the seat holds. Every
+// page's channel hears each event, so the sink keeps the first of each serial.
+// Process-wide as SpellcheckSink: //chrome sets it once with
+// SetAgentInputSink, before any channel. A callback for KeymapSink's reason:
+// pages belong to the UI thread. See
+// chrome/browser/domicile/domicile_agent_input.h.
+using AgentInputTell = base::RepeatingCallback<void(base::DictValue)>;
+using AgentInputSink =
+    base::RepeatingCallback<void(AgentPageInput, AgentInputTell)>;
+void SetAgentInputSink(AgentInputSink sink);
 
 // The shell's control channel, in the browser process.
 //

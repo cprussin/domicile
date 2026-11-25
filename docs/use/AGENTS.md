@@ -61,17 +61,17 @@ ask to sign in again.
 
 - Agents can't use your desktop while it's locked.
 - An agent has a pointer and keyboard of its own, so it can click and type
-  in one app while you work in another. It never moves your pointer or
-  changes what you're typing in.
+  in one app or browser window while you work in another. It never moves
+  your pointer or changes what you're typing in.
 - An app an agent opens is the agent's from the start, and opens without
   taking you away from what you're doing.
 - An agent copies and pastes on a clipboard of its own, so it never
   replaces what you copied, and what it copies stays out of your clipboard
   history.
-- An app you're using is yours. Click or type in an app the agent is using
-  and it lets go at once. The app says **Yours now**, and the agent waits
-  until you click **Give back**. **Close** hides the note and keeps the app
-  yours, and the pill's panel can still give it back.
+- An app or browser window you're using is yours. Click or type in one the
+  agent is using and it lets go at once. The window says **Yours now**, and
+  the agent waits until you click **Give back**. **Close** hides the note and keeps
+  the window yours, and the pill's panel can still give it back.
 - An agent waits to run shell commands, like switching workspaces, until
   you've left the keyboard and mouse alone for 30 seconds.
 - Private browser windows are never offered to an agent.

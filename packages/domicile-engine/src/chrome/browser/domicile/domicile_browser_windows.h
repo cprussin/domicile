@@ -174,6 +174,11 @@ void LoadBrowserWindow(const std::string& id, const GURL& url);
 // window.
 content::WebContents* BrowserWindowContents(const std::string& id);
 
+// The browser window of the shell's profile whose page `page` is, or is a
+// frame or page within; an Electron app's view names the window holding it.
+// Empty for none, such as the shell itself.
+std::string BrowserWindowOfPage(content::WebContents* page);
+
 // Asks the shell to focus browser window `id` of the shell's profile.
 void FocusBrowserWindow(const std::string& id);
 

@@ -834,6 +834,49 @@ fn the_desk_pointer_is_a_point_or_nothing_on_the_wire() {
     );
 }
 
+/// The engine writes these lines itself (`AgentInputReachedMessage` and
+/// `PersonInAgentsWindowMessage`), its serial a double with a `.0`.
+#[test]
+fn the_browser_answers_an_agents_input_on_the_wire() {
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(
+            r#"{"type":"agent_input_reached","serial":1764040000000001.0,"window":"w7"}"#
+        )
+        .expect("parsed"),
+        ChromeMessage::AgentInputReached {
+            serial: 1_764_040_000_000_001,
+            window: Some("w7".into()),
+            refused: None,
+        }
+    );
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(
+            r#"{"type":"agent_input_reached","serial":7,"refused":"the shell"}"#
+        )
+        .expect("parsed"),
+        ChromeMessage::AgentInputReached {
+            serial: 7,
+            window: None,
+            refused: Some("the shell".into()),
+        }
+    );
+    assert!(serde_json::from_str::<ChromeMessage>(
+        r#"{"type":"agent_input_reached","serial":7.5}"#
+    )
+    .is_err());
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(
+            r#"{"type":"person_in_agents_window","seat":"agent-3","window":"w7","keyboard":true}"#
+        )
+        .expect("parsed"),
+        ChromeMessage::PersonInAgentsWindow {
+            seat: "agent-3".into(),
+            window: "w7".into(),
+            keyboard: true,
+        }
+    );
+}
+
 /// The engine writes these lines itself (`ControlChannel::DeskCursorChanged`).
 #[test]
 fn the_desk_cursor_is_an_image_or_nothing_on_the_wire() {

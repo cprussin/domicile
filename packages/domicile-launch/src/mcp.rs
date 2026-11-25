@@ -211,8 +211,9 @@ const INSTRUCTIONS: &str = "Read and act on windows as text first: list_windows,
     doesn't support accessibility. Zoom into an area rather than taking the whole desk \
     again. The user may be using the desktop as you work. click, key, type_text and the \
     other pointer tools use your own pointer and keyboard, which never move theirs, in \
-    native windows; they are refused in an app the user is in, and over the shell or a \
-    browser window, which you act on by ref. send_shell acts on the user's focus, so it \
+    native and browser windows alike, so they reach a canvas or anything else a tree \
+    can't. They are refused in a window the user is in, and over the shell, which you \
+    act on by ref. send_shell acts on the user's focus, so it \
     waits until they step away. When you are done with the desktop, call \
     stop_using_desktop.";
 
@@ -402,7 +403,7 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec!["target"],
         ),
         Tool::WindowAct("focus-window") => (
-            "Give a native window your own keyboard, for key and type_text. The user's focus stays where it is, and the window is not raised.",
+            "Give a window, native or browser, your own keyboard, for key and type_text. The user's focus stays where it is, and the window is not raised.",
             window_id,
             vec!["id"],
         ),
@@ -418,7 +419,7 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec![],
         ),
         Tool::Click => (
-            "Click at a point of the last screenshot with your own pointer, which never moves the user's, giving that window your keyboard. Works in native windows the user isn't in. In a window with a tree, browser_click or app_click by ref instead.",
+            "Click at a point of the last screenshot with your own pointer, which never moves the user's, giving that window your keyboard. Works in native and browser windows the user isn't in, but not on the shell. Where a tree has what you want, browser_click or app_click by ref is surer.",
             json!({
                 "x": coordinate,
                 "y": coordinate,
@@ -428,12 +429,12 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec!["x", "y"],
         ),
         Tool::MovePointer => (
-            "Move your own pointer to a point of the last screenshot, over a native window.",
+            "Move your own pointer to a point of the last screenshot, over a native or browser window.",
             json!({"x": coordinate, "y": coordinate}),
             vec!["x", "y"],
         ),
         Tool::Drag => (
-            "Press the left button at one point of the last screenshot and release it at another.",
+            "Press the left button at one point of the last screenshot and release it at another, in or across native and browser windows.",
             json!({"from": point, "to": point}),
             vec!["from", "to"],
         ),

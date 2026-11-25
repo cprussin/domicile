@@ -1240,6 +1240,8 @@ impl Host {
             | ChromeMessage::EngineFault { .. }
             | ChromeMessage::DeskPointer { .. }
             | ChromeMessage::DeskCursor { .. }
+            | ChromeMessage::AgentInputReached { .. }
+            | ChromeMessage::PersonInAgentsWindow { .. }
             | ChromeMessage::TextInput { .. }
             | ChromeMessage::KeyForInputMethod { .. }
             | ChromeMessage::SyncFrames

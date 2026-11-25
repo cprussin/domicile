@@ -305,6 +305,9 @@ impl DomicileCompositor {
                     self.casting.browser_windows(&windows, capturer);
                     let listed = self.foreign_toplevels.browser_windows(&windows);
                     self.browser_toplevels_listed(listed);
+                    let open: Vec<String> =
+                        windows.iter().map(|window| window.id.clone()).collect();
+                    self.agents_browser_windows(&open);
                 }
                 engine::Event::InputDevices(inputs) => {
                     tracing::debug!(target: "domicile::engine::input", devices = inputs.len(), "the engine's input devices changed");
@@ -322,6 +325,7 @@ impl DomicileCompositor {
                     self.casting.browser_windows(&[], None);
                     let listed = self.foreign_toplevels.browser_windows(&[]);
                     self.browser_toplevels_listed(listed);
+                    self.agents_browser_windows(&[]);
                 }
                 engine::Event::CaptureEnded { capture, why } => {
                     tracing::debug!(target: "domicile::engine::cast", ?capture, ?why, "the engine ended a capture");

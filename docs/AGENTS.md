@@ -44,12 +44,16 @@ the user's ([AGENT-SEATS.md](architecture/AGENT-SEATS.md)). `click`,
 `move_pointer`, `drag`, `scroll`, `key`, `type_text` and `focus_window` run on
 it, as `domicile pointer --agent <session>` and the like:
 
-- They reach native windows. Over the shell or a browser window they are
-  refused, pointing the agent at the `browser_` tools.
+- They reach native windows and browser windows at desk positions, so an
+  agent can draw on a canvas, drag between pages, or use anything else a
+  tree doesn't show. Over the shell they are refused, pointing the agent at
+  the `browser_` tools on window `shell`.
 - One seat drives an app at a time. They are refused in an app the user's
-  keyboard is in, or for the pointer tools, their pointer.
+  keyboard is in, or for the pointer tools, their pointer. A browser window
+  the user's keyboard is in, or another agent holds, refuses them too.
 - The user wins. Their pointer entering an app takes it from the agent's
-  pointer, and their keyboard, from both. A window the user's keyboard took
+  pointer, and their keyboard, from both. In a browser window, the user's
+  press or key takes it. A window the user's keyboard took
   from the agent, or the shell took with `domicile.seats.takeOver`, refuses
   the agent's pointer and keys until the shell gives it back.
 - The seat has its own clipboard and middle-click selection. An app the

@@ -48,6 +48,7 @@ TOGETHER=(
   guard-webview-framing
   guard-agent-devtools-shell
   guard-agent-input-keeps-focus
+  guard-agent-seat-in-pages
   guard-shell-local-network
   guard-webview-notifications
   guard-notification-server-late

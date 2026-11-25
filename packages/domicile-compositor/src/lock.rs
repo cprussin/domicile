@@ -427,6 +427,10 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             // Refused by `agent_input` itself, which first lets go of what
             // the agent holds and answers why.
             | ClientRequest::AgentInput { .. }
+            // Goes on with, or ends, input `agent_input` let through.
+            | ClientRequest::AgentPageReached { .. }
+            // Only takes from an agent what it held.
+            | ClientRequest::PersonInAgentsWindow { .. }
             // Reaches no client; a cast of the lock screen draws it.
             | ClientRequest::DeskPointer { .. }
             | ClientRequest::DeskCursor { .. }

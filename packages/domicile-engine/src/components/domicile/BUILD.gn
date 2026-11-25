@@ -1136,6 +1136,20 @@ source_set("private_pages") {
 #
 # Its own target beside :control_channel for :line_framer's reason: it is the
 # piece of the input method's crossing a test can reach with a string.
+# The control channel's agent seat messages, its own target for
+# :input_method_lines' reason.
+source_set("agent_input_lines") {
+  sources = [
+    "browser/agent_input_lines.cc",
+    "browser/agent_input_lines.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//ui/gfx/geometry",
+  ]
+}
+
 source_set("input_method_lines") {
   sources = [
     "browser/input_method_lines.cc",
@@ -1534,6 +1548,7 @@ source_set("control_channel") {
     ":desk_pointer_hiding",
     ":display_transform",
     ":extension_installer",
+    ":agent_input_lines",
     ":input_method_lines",
     ":line_framer",
     ":portal_request",
@@ -1603,6 +1618,7 @@ source_set("unit_tests") {
     "browser/guest_dialogs_unittest.cc",
     "browser/history_menu_unittest.cc",
     "browser/identity_dialog_unittest.cc",
+    "browser/agent_input_lines_unittest.cc",
     "browser/input_method_lines_unittest.cc",
     "browser/line_framer_unittest.cc",
     "browser/notification_window_unittest.cc",
@@ -1706,6 +1722,7 @@ source_set("unit_tests") {
     ":held_chords",
     ":history_menu",
     ":identity_dialog",
+    ":agent_input_lines",
     ":input_method_lines",
     ":keyboard_layout",
     ":line_framer",

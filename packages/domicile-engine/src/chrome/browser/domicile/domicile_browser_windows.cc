@@ -947,6 +947,18 @@ class DeskWindows final : public base::SupportsUserData::Data,
     return found == windows_.end() ? nullptr : found->guest.get();
   }
 
+  // The id of the window `page` is the page of, or empty when none: for an
+  // Electron app's view, the window holding it.
+  std::string WindowOf(const content::WebContents& page) const {
+    auto found = std::ranges::find_if(windows_, [&page](const Window& window) {
+      return &window.guest->contents() == &page;
+    });
+    if (found == windows_.end()) {
+      return std::string();
+    }
+    return found->view ? found->parent : found->id;
+  }
+
   // The id of the window showing `page`, or empty when none does.
   std::string IdOf(const content::WebContents& page) const {
     auto found = std::ranges::find_if(windows_, [&page](const Window& window) {
@@ -2036,6 +2048,20 @@ content::WebContents* BrowserWindowContents(const std::string& id) {
   DeskWindows* windows = ShellDeskWindows();
   WebViewGuest* guest = windows == nullptr ? nullptr : windows->Find(id);
   return guest == nullptr ? nullptr : &guest->contents();
+}
+
+std::string BrowserWindowOfPage(content::WebContents* page) {
+  DeskWindows* windows = ShellDeskWindows();
+  if (windows == nullptr) {
+    return std::string();
+  }
+  for (content::WebContents* at = page; at != nullptr;
+       at = at->GetOuterWebContents()) {
+    if (std::string id = windows->WindowOf(*at); !id.empty()) {
+      return id;
+    }
+  }
+  return std::string();
 }
 
 void FocusBrowserWindow(const std::string& id) {

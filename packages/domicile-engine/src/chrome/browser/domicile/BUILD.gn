@@ -28,6 +28,8 @@ source_set("domicile") {
   sources = [
     "domicile_agent_devtools.cc",
     "domicile_agent_devtools.h",
+    "domicile_agent_input.cc",
+    "domicile_agent_input.h",
     "domicile_browser_profiles.cc",
     "domicile_browser_profiles.h",
     "domicile_browser_windows.cc",
@@ -208,6 +210,13 @@ source_set("domicile") {
     "//components/crx_file",
     "//components/domicile:browser_profiles",
     "//components/domicile:control_channel",
+    # An agent seat's input into the browser's pages, from the control
+    # channel, as the pages' own keyboard and mouse events.
+    "//components/domicile:agent_input_lines",
+    "//components/input",
+    "//third_party/blink/public/common:headers",
+    "//ui/events/blink",
+    "//ui/events/ozone/layout",
     "//chrome/common:constants",
     "//components/domicile:extension_installer",
     # Each extension's chrome://extensions settings.

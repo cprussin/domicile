@@ -187,6 +187,12 @@ impl Input {
         self.lift().into_iter().chain(leave).collect()
     }
 
+    /// The window the pointer is over, if any: off every window it is over
+    /// the shell's page.
+    pub fn over(&self) -> Option<&str> {
+        self.over.as_deref()
+    }
+
     /// Where the pointer is on the desk, once it has moved.
     pub fn at(&self) -> Option<[f64; 2]> {
         self.pointer.map(|point| [point.x, point.y])

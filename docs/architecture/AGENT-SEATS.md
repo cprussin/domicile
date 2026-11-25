@@ -53,9 +53,40 @@ resources per client.
 | Window | Agent pointer and keys |
 |---|---|
 | Native Wayland | Agent seat, multiplexed |
-| Browser and Electron windows | CDP on the window's own page (the `browser_` tools, by ref), which moves neither the engine's pointer nor its focus (patch 0275) |
+| Browser and Electron windows | Agent seat at desk positions, routed compositor → browser (patch 0276); refs through CDP on the window's own page (the `browser_` tools), which moves neither the engine's pointer nor its focus (patch 0275) |
 | X11 apps | User's seat only. xwayland-satellite is one client with one X focus, so raw input waits for the user to step away, as today |
 | The shell | Refs only (`browser_*` on window `shell`) |
+
+### Browser windows at desk positions
+
+The engine draws every browser window inside the shell's one Wayland
+surface, so the compositor can't send a seat's events to a browser window as
+it does to a client. It asks the browser instead:
+
+- When an agent's pointer is over the shell's surface and no client window,
+  the compositor sends `agent_input` on the control channel: the seat, a
+  serial, the input (a pointer move to a desk point, a button, a scroll, a
+  key, a focus, or the agent leaving the pages), and the windows the agent
+  is barred from (the ones the user took, and the ones other agents hold).
+- The browser hit tests the desk point through the shell's views to the
+  widget under it. A point that lands in the shell's own page is refused:
+  agents act on the shell by ref. A point in a browser window, its views or
+  its popups is sent to that widget in its own coordinates, keeping the
+  user's focus (patch 0275), and gives that window's page focus of its own
+  for the agent's keys.
+- Keys go to the page the agent last clicked or focused, as evdev codes
+  through the desk's keyboard layout: a key down, the character it types,
+  and a key up.
+- A drag that starts from an agent's press is carried page to page by the
+  browser, never as a platform drag that would move the user's pointer
+  (patch 0276).
+- The browser answers each ask with `agent_input_reached`: the window it
+  reached, or why it refused. The compositor holds the agent's next steps
+  until it does, so the agent's tool call answers with the real outcome.
+- The person wins here too. The browser watches the user's own pointer and
+  keys; a press or key in a window an agent holds is reported with
+  `person_in_agents_window`, and the compositor takes it from the agent, as
+  it does for a client window.
 
 ### Taking over
 
@@ -121,6 +152,9 @@ domicile.seats.giveBack(windowId);
 - **One seat per client at a time**, because a client has one focus. Two
   windows of one app can't be split between the user and an agent.
 - **Person wins**, so an agent can never lock the user out of a window.
+- **The browser routes an agent's input in browser windows**, because only
+  it knows what is under a desk point inside the shell's surface. The
+  compositor still owns the seat, and the browser answers each step.
 - **The shell draws agent cursors**, because there is one hardware cursor
   plane per CRTC and the page already knows where windows are.
 
@@ -142,6 +176,11 @@ domicile.seats.giveBack(windowId);
 - [x] manganese: agent cursor, ring and name tag, "Yours now · Give back"
       strip, held windows in the agent pill
 - [x] new windows from an agent's `open`/`exec` start held by it
+- [x] engine and compositor: an agent seat's pointer, buttons, scrolls,
+      keys and drags reach browser windows at desk positions
+      (`agent_input`, patch 0276); the shell refuses them; the user's press
+      or key takes the window
+- [x] manganese: ring, name tag and cursor on browser windows too
 
 ## Open questions
 
