@@ -152,6 +152,25 @@ impl Door {
             self.remembered.lock().unwrap().used(&agent, (self.clock)());
         }
         debug!(%agent, ?reach, remembered, "an agent was let in");
+        Ok(self.listed(agent, reach, windows, told))
+    }
+
+    /// Lists `agent` as only working on this computer, reaching nothing,
+    /// without asking: it is let do nothing on the desk.
+    pub fn working(self: &Arc<Self>, agent: String, windows: OpenWindows, told: AgentTold) -> LetIn {
+        debug!(%agent, "an agent is working on this computer");
+        self.listed(agent, AgentReach::Nothing, windows, told)
+    }
+
+    /// Lists `agent`, let reach `reach`, until its lease drops. Apps build
+    /// accessibility trees while any agent reaches the desk.
+    fn listed(
+        self: &Arc<Self>,
+        agent: String,
+        reach: AgentReach,
+        windows: OpenWindows,
+        told: AgentTold,
+    ) -> LetIn {
         let session = Arc::new(Mutex::new(AgentSession {
             agent: agent.clone(),
             reach: reach.clone(),
@@ -175,13 +194,14 @@ impl Door {
         );
         listed.set(id).expect("a session is listed once");
         let mut connected = self.connected.lock().unwrap();
+        let reached = reaching(&connected);
         connected.push((id, Arc::clone(&session)));
-        if connected.len() == 1 && !(self.accessibility.enabled)() {
+        if reach != AgentReach::Nothing && reached == 0 && !(self.accessibility.enabled)() {
             (self.accessibility.enable)(true);
             *self.turned_on.lock().unwrap() = true;
         }
         drop(connected);
-        Ok(LetIn {
+        LetIn {
             reach,
             session: id,
             lease: Box::new(Lease {
@@ -189,7 +209,7 @@ impl Door {
                 door: Arc::clone(self),
                 session,
             }),
-        })
+        }
     }
 
     /// The agents in now, and those remembered.
@@ -314,16 +334,27 @@ struct Controls {
 }
 
 impl Controls {
+    /// Whether the agent only works on this computer, reaching nothing.
+    fn only_working(&self) -> bool {
+        self.session.lock().unwrap().reach == AgentReach::Nothing
+    }
+
     /// The shell's stop or change.
     fn take(&self, answer: &PortalAnswer) {
         match answer {
             PortalAnswer::Stop => {
-                if let Some(door) = self.door.upgrade() {
+                // One only working here was never asked, so its stop says
+                // nothing about letting it in.
+                if let (Some(door), false) = (self.door.upgrade(), self.only_working()) {
                     door.stopped.lock().unwrap().insert(self.agent.clone());
                 }
                 if let Some(stopped) = self.stopped.lock().unwrap().take() {
                     stopped();
                 }
+            }
+            // A shell's bug: there is nothing to ask about.
+            PortalAnswer::Change if self.only_working() => {
+                warn!(agent = %self.agent, "the shell asked to change what an agent only working here reaches");
             }
             PortalAnswer::Change => {
                 if let (Some(door), Some(id)) = (self.door.upgrade(), self.listed.get()) {
@@ -378,6 +409,10 @@ fn asked(queue: &Arc<Queue>, kind: PortalKind, patience: Duration) -> PortalAnsw
 fn offered_only(reach: AgentReach, offered: &[AgentWindow]) -> Result<AgentReach, SystemError> {
     match reach {
         AgentReach::Desk => Ok(AgentReach::Desk),
+        AgentReach::Nothing => Err(SystemError {
+            kind: SystemErrorKind::InvalidInput,
+            message: "the shell let an agent reach nothing, which no dialog offers".into(),
+        }),
         AgentReach::Windows { windows } => windows
             .into_iter()
             .map(|picked| {
@@ -433,7 +468,7 @@ impl Drop for Lease {
         let mut connected = self.door.connected.lock().unwrap();
         connected.retain(|(id, _)| *id != self.id);
         let mut turned_on = self.door.turned_on.lock().unwrap();
-        if connected.is_empty() && *turned_on {
+        if reaching(&connected) == 0 && *turned_on {
             (self.door.accessibility.enable)(false);
             *turned_on = false;
         }
@@ -443,6 +478,14 @@ impl Drop for Lease {
             gone(self.id);
         }
     }
+}
+
+/// How many of the agents in now reach anything on the desk.
+fn reaching(connected: &[(u32, Arc<Mutex<AgentSession>>)]) -> usize {
+    connected
+        .iter()
+        .filter(|(_, session)| session.lock().unwrap().reach != AgentReach::Nothing)
+        .count()
 }
 
 /// The agents let in without asking, as kept on disk.
@@ -999,5 +1042,84 @@ mod tests {
             .expect("the change is told");
 
         assert!(desk.door.known().remembered.is_empty());
+    }
+
+    /// Lists `agent` as only working here, with no windows open.
+    fn working(desk: &Desk, agent: &str) -> (LetIn, Heard) {
+        let (told, heard) = told();
+        (
+            desk.door.working(agent.into(), Arc::new(Vec::new), told),
+            heard,
+        )
+    }
+
+    #[test]
+    fn an_agent_only_working_here_is_listed_at_once_reaching_nothing() {
+        let desk = desk(None, PATIENCE);
+
+        let (let_in, _) = working(&desk, "Claude");
+
+        assert_eq!(let_in.reach, AgentReach::Nothing);
+        assert_eq!(
+            sessions(&desk)[0].kind,
+            CapturingKind::Agent(AgentSession {
+                agent: "Claude".into(),
+                reach: AgentReach::Nothing,
+                actions: vec![],
+            })
+        );
+        assert!(!desk.accessible.load(Ordering::SeqCst));
+        drop(let_in.lease);
+        assert!(sessions(&desk).is_empty());
+    }
+
+    #[test]
+    fn an_agent_only_working_here_leaves_accessibility_to_those_that_reach() {
+        let desk = desk(None, PATIENCE);
+        let (working, _) = working(&desk, "Claude");
+
+        let (reaching, _) = let_in_answering(&desk, vec![], |_| allow(AgentReach::Desk));
+        assert!(desk.accessible.load(Ordering::SeqCst));
+        drop(reaching.expect("let in").lease);
+
+        assert!(!desk.accessible.load(Ordering::SeqCst));
+        drop(working.lease);
+    }
+
+    #[test]
+    fn stopping_an_agent_only_working_here_keeps_its_namesake_from_asking() {
+        let desk = desk(None, PATIENCE);
+        let (_let_in, heard) = working(&desk, "Claude");
+        let id = sessions(&desk)[0].id;
+
+        desk.queue.answer(id, PortalAnswer::Stop);
+
+        heard
+            .stopped
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the stop is told");
+        assert!(desk.door.stopped.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn changing_an_agent_only_working_here_asks_nothing() {
+        let desk = desk(None, PATIENCE);
+        let (_let_in, _) = working(&desk, "Claude");
+        let id = sessions(&desk)[0].id;
+
+        desk.queue.answer(id, PortalAnswer::Change);
+
+        assert!(desk
+            .published
+            .try_iter()
+            .all(|(items, _)| items.is_empty()));
+    }
+
+    #[test]
+    fn a_dialog_answered_with_nothing_is_refused() {
+        assert_eq!(
+            offered_only(AgentReach::Nothing, &[]).unwrap_err().kind,
+            SystemErrorKind::InvalidInput
+        );
     }
 }

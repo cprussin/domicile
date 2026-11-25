@@ -92,9 +92,13 @@ const agentReachSchema = z.discriminatedUnion("type", [
     type: z.literal("windows"),
     windows: z.array(z.object({ id: z.string(), title: z.string() })),
   }),
+  z.object({ type: z.literal("nothing") }),
 ]);
 
-/** What an agent reaches: the whole desk, or these windows. */
+/**
+ * What an agent reaches: the whole desk, these windows, or nothing, for one
+ * only working on this computer.
+ */
 export type AgentReach = z.infer<typeof agentReachSchema>;
 
 const knownAgentsSchema = z

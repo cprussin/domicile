@@ -1062,3 +1062,18 @@ fn an_agent_is_remembered_only_with_the_whole_desk() {
         serde_json::json!({ "kind": "agent", "reach": { "type": "desk" }, "remember": true })
     );
 }
+
+#[test]
+fn an_agent_dialog_never_answers_with_nothing() {
+    use domicile_protocol::{AgentDialog, AgentReach};
+    let dialog = PortalKind::Agent(AgentDialog {
+        agent: "Claude Code".into(),
+        windows: vec![],
+        current: None,
+        remembered: false,
+    });
+    assert!(!dialog.accepts(&PortalAnswer::Agent {
+        reach: AgentReach::Nothing,
+        remember: false,
+    }));
+}

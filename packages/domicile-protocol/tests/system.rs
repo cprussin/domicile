@@ -1023,3 +1023,40 @@ fn the_shell_sets_one_displays_color_temperature() {
         }
     );
 }
+
+#[test]
+fn an_agent_only_working_on_this_computer_asks_nobody_and_reaches_nothing() {
+    use domicile_protocol::AgentReach;
+    assert_eq!(
+        chrome(r#"{"type":"system_request","id":7,"request":{"call":"agent","agent":"Claude"}}"#),
+        ChromeMessage::SystemRequest {
+            id: 7,
+            request: SystemRequest::Agent {
+                agent: "Claude".into(),
+                working: false,
+            },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":7,"request":{"call":"agent","agent":"Claude","working":true}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 7,
+            request: SystemRequest::Agent {
+                agent: "Claude".into(),
+                working: true,
+            },
+        }
+    );
+    assert_eq!(
+        host(&HostMessage::SystemReply {
+            id: 7,
+            reply: SystemReply::Agent {
+                reach: AgentReach::Nothing,
+                session: 3,
+            },
+        }),
+        r#"{"type":"system_reply","id":7,"reply":{"kind":"agent","reach":{"type":"nothing"},"session":3}}"#
+    );
+}

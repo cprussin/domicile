@@ -1759,6 +1759,47 @@ fn agent_takes_one_name() {
 }
 
 #[test]
+fn agent_working_names_the_agent_then_a_pid_or_a_command() {
+    use domicile_launch::cli::Working;
+    assert_eq!(
+        run(&["agent-working", "Claude", "--pid", "4321"]),
+        Ok(Invocation::AgentWorking {
+            name: "Claude".to_string(),
+            lasting: Working::Pid(4321),
+        })
+    );
+    assert_eq!(
+        run(&["agent-working", "Codex", "--", "codex", "--full-auto"]),
+        Ok(Invocation::AgentWorking {
+            name: "Codex".to_string(),
+            lasting: Working::Command(vec!["codex".to_string(), "--full-auto".to_string()]),
+        })
+    );
+    assert_eq!(
+        run(&["agent-working", "Codex", "codex"]),
+        Ok(Invocation::AgentWorking {
+            name: "Codex".to_string(),
+            lasting: Working::Command(vec!["codex".to_string()]),
+        })
+    );
+    for refused in [
+        &["agent-working"][..],
+        &["agent-working", " ", "--pid", "1"],
+        &["agent-working", "Claude"],
+        &["agent-working", "Claude", "--"],
+        &["agent-working", "Claude", "--pid"],
+        &["agent-working", "Claude", "--pid", "me"],
+        &["agent-working", "Claude", "--pid", "0"],
+        &["agent-working", "Claude", "--pid", "1", "more"],
+    ] {
+        assert!(
+            matches!(run(refused), Err(CliError::NotWorking)),
+            "{refused:?}"
+        );
+    }
+}
+
+#[test]
 fn agents_are_listed_stopped_by_session_and_forgotten_by_name() {
     use domicile_launch::control::Request;
     assert_eq!(

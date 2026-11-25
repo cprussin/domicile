@@ -39,6 +39,25 @@ The user guide's [Agents](use/AGENTS.md) page is the short version of this.
 
 Agents are refused while the desktop is locked.
 
+### Agents working on this computer
+
+An agent that runs here but doesn't use the desktop, such as a Claude Code
+Remote Control session or Codex, shows in the same pill with
+[`domicile agent-working`](CLI.md#domicile-agent-working-name---pid-pid):
+
+```sh
+domicile agent-working Claude --pid "$PPID"   # while that process runs
+domicile agent-working Codex -- codex         # while the command runs
+```
+
+- Nobody is asked: it reaches nothing on the desktop, so there's nothing to
+  allow. It is listed with reach `nothing` and has no Change.
+- **Stop** sends its process `SIGTERM`.
+- It doesn't turn on accessibility trees, and its stop doesn't make an agent
+  of the same name ask again.
+- To show the agent while it uses the desktop too, it connects through
+  `domicile mcp` as any agent does, and gets a second session.
+
 Each agent session has its own seat: a pointer and a keyboard that never move
 the user's ([AGENT-SEATS.md](architecture/AGENT-SEATS.md)). `click`,
 `move_pointer`, `drag`, `scroll`, `key`, `type_text` and `focus_window` run on
@@ -143,6 +162,11 @@ agent ── MCP (stdio) ── domicile mcp ── domicile agent <name> ──
   gets `SystemEvent::AgentReach`, which `domicile agent` prints as another
   line and `domicile mcp` applies from the next tool call. The whole desk
   with Remember on remembers it; anything else forgets it.
+- **An agent only working here is a session that reaches nothing.**
+  `SystemRequest::Agent { working: true }` lists it at once with
+  `AgentReach::Nothing`, which no dialog answers with. `domicile
+  agent-working` holds that call while its process runs, through a pid fd,
+  and sends the process `SIGTERM` when the compositor hangs up.
 - **Settings lists and forgets through system calls.** `agents` lists
   sessions and remembered agents, `stop_agent` ends a session and
   `forget_agent` forgets a name. `domicile list-agents`, `stop-agent` and
@@ -232,7 +256,8 @@ claude.ai ── TLS for <label>.<zone> ──▶ relay :443 ──── splice
 in its capturing indicator. A shell that shows agents itself, as Manganese's
 bar does, passes `omitAgents`. The SDK parses the dialog as `PortalKind.Agent`,
 answers it with `PortalAnswer.Agent(reach, remember)`, and lists a session as
-`CapturingKind.Agent`. `body.current` is set when the dialog changes a running
+`CapturingKind.Agent`. A session's reach may be `{ kind: "nothing" }`: an
+agent only working on this computer, with no Change. `body.current` is set when the dialog changes a running
 agent, and `body.remembered` when the agent is remembered.
 `domicile.portals.changeAgent(id)` asks again for a running agent;
 `agents()` and `forgetAgent(agent)` back a settings page.

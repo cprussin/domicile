@@ -29,9 +29,10 @@ use domicile_host::desk_terminal;
 use domicile_host::mime_apps::lists;
 use domicile_launch::accessibility::{self, AtSpi, Element};
 use domicile_launch::agent_lending::{admit, forward_actions, DECIDING_WITHIN};
+use domicile_launch::agent_working::{last, Ended, Worked};
 use domicile_launch::app_entry::app_entry;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
-use domicile_launch::cli::{invocation, CliError, Invocation, Listing, MonitorMode};
+use domicile_launch::cli::{invocation, CliError, Invocation, Listing, MonitorMode, Working};
 use domicile_launch::command_socket::{
     browser_profiles, clear_browsing_data, clear_site_data, config_extensions, configure_extension,
     delete_history, devtools, disable_while_typing, extensions, history, load_shell, load_unpacked,
@@ -302,6 +303,7 @@ fn run() -> Result<ExitCode, String> {
         Invocation::Mcp { http: Some(http) } => agents_served_over_http(http),
         Invocation::McpRelay { relay } => agents_served_through_relay(relay),
         Invocation::Agent { name } => admitted(name),
+        Invocation::AgentWorking { name, lasting } => worked(name, lasting),
         Invocation::Accessibility { window } => {
             let (pid, title) = native_window(&window)?;
             let mut bus = AtSpi::connected()?;
@@ -1692,7 +1694,10 @@ fn admitted(name: String) -> Result<ExitCode, String> {
     // As long as the user may take to decide.
     let (answer, held) = hold(
         &socket,
-        &Request::Agent { agent: name },
+        &Request::Agent {
+            agent: name,
+            working: false,
+        },
         Some(DECIDING_WITHIN + ANSWER_WITHIN),
     )
     .map_err(|why| why.to_string())?;
@@ -1738,6 +1743,55 @@ fn admitted(name: String) -> Result<ExitCode, String> {
     forward_actions(std::io::stdin().lock(), &held)
         .map_err(|why| format!("the agent's actions did not reach the desktop: {why}"))?;
     Ok(ExitCode::SUCCESS)
+}
+
+/// Lists agent `name` in the bar as working on this computer while
+/// `lasting` runs, and ends it when the user stops it there. Exits as a
+/// command it ran does.
+fn worked(name: String, lasting: Working) -> Result<ExitCode, String> {
+    let socket =
+        advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
+    let (answer, held) = hold(
+        &socket,
+        &Request::Agent {
+            agent: name.clone(),
+            working: true,
+        },
+        Some(ANSWER_WITHIN),
+    )
+    .map_err(|why| why.to_string())?;
+    match answer {
+        Response::Agent { .. } => {}
+        Response::Refused { why } => return Ok(fail(&why)),
+        answer => return Err(format!("the desktop answered {answer:?} to an agent")),
+    }
+    held.set_read_timeout(None)
+        .map_err(|why| format!("cannot keep {name} listed: {why}"))?;
+    let worked = match lasting {
+        Working::Pid(pid) => Worked::Pid(pid),
+        Working::Command(command) => {
+            let (program, arguments) = command
+                .split_first()
+                .expect("the command line gives agent-working a command");
+            Worked::Child(
+                std::process::Command::new(program)
+                    .args(arguments)
+                    .spawn()
+                    .map_err(|why| format!("could not run {program}: {why}"))?,
+            )
+        }
+    };
+    match last(&held, worked) {
+        Ended::Exited(code) => Ok(ExitCode::from(code)),
+        Ended::Stopped(code) => {
+            eprint!(
+                "{}",
+                error(err(), &format!("{name} was stopped from the desktop"))
+            );
+            Ok(ExitCode::from(code))
+        }
+        Ended::Gone => Ok(fail(&format!("{name}'s process is not running"))),
+    }
 }
 
 /// Prints what the running desktop says about `topics`, one JSON line each,

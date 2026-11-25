@@ -2603,6 +2603,7 @@ mod agents {
     fn claude() -> SystemRequest {
         SystemRequest::Agent {
             agent: "Claude Code".into(),
+            working: false,
         }
     }
 
@@ -2632,6 +2633,7 @@ mod agents {
     struct Door {
         answer: Answer,
         named: Sender<String>,
+        working: Sender<bool>,
         did: Sender<String>,
         gone: Sender<()>,
         stop: Arc<Mutex<Option<AgentStopped>>>,
@@ -2641,8 +2643,14 @@ mod agents {
     }
 
     impl Agents for Door {
-        fn let_in(&self, agent: String, told: AgentTold) -> Result<LetIn, SystemError> {
+        fn let_in(
+            &self,
+            agent: String,
+            working: bool,
+            told: AgentTold,
+        ) -> Result<LetIn, SystemError> {
             self.named.send(agent).unwrap();
+            self.working.send(working).unwrap();
             *self.stop.lock().unwrap() = Some(told.stopped);
             *self.change.lock().unwrap() = Some(told.changed);
             Ok(LetIn {
@@ -2684,6 +2692,7 @@ mod agents {
     /// change.
     struct Asked {
         named: Receiver<String>,
+        working: Receiver<bool>,
         did: Receiver<String>,
         gone: Receiver<()>,
         stop: Arc<Mutex<Option<AgentStopped>>>,
@@ -2698,6 +2707,7 @@ mod agents {
         answer: impl Fn() -> Result<AgentReach, SystemError> + Send + Sync + 'static,
     ) -> (System, Asked) {
         let (named_one, named) = channel();
+        let (working_one, working) = channel();
         let (did_one, did) = channel();
         let (gone_one, gone) = channel();
         let (stopped_one, stopped) = channel();
@@ -2707,6 +2717,7 @@ mod agents {
         let system = system.letting_agents_in(Door {
             answer: Box::new(answer),
             named: named_one,
+            working: working_one,
             did: did_one,
             gone: gone_one,
             stop: stop.clone(),
@@ -2718,6 +2729,7 @@ mod agents {
             system,
             Asked {
                 named,
+                working,
                 did,
                 gone,
                 stop,
@@ -2743,6 +2755,7 @@ mod agents {
             }
         );
         assert_eq!(asked.named.recv().unwrap(), "Claude Code");
+        assert!(!asked.working.recv().unwrap());
         assert_eq!(
             system.handle(
                 1,
@@ -2764,6 +2777,30 @@ mod agents {
             }
         );
         asked.gone.recv().unwrap();
+    }
+
+    #[test]
+    fn an_agent_only_working_on_this_computer_is_let_in_as_such() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let (system, asked) = letting(system, || Ok(AgentReach::Nothing));
+
+        system.handle(
+            1,
+            SystemRequest::Agent {
+                agent: "Claude".into(),
+                working: true,
+            },
+        );
+
+        assert_eq!(
+            reply(&heard, 1),
+            SystemReply::Agent {
+                reach: AgentReach::Nothing,
+                session: 7
+            }
+        );
+        assert_eq!(asked.named.recv().unwrap(), "Claude");
+        assert!(asked.working.recv().unwrap());
     }
 
     #[test]

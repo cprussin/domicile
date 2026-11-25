@@ -759,10 +759,23 @@ stdin is listed in the bar as what the agent did last. The agent stays in
 until stdin ends. Exits 1 if you cancel, don't answer within a minute, or stop
 it from the bar. `domicile mcp` runs this on its first tool call.
 
+## `domicile agent-working <name> --pid <pid>`
+
+Show agent `name` in the bar as working on this computer, for as long as
+process `pid` runs. With `[--] <command>...` instead, run the command and show
+it until the command exits, then exit as it did. It reaches nothing on the
+desktop, so nobody is asked. Stop in the bar sends the process `SIGTERM`, and
+this exits 1, or as the command did.
+
+```sh
+domicile agent-working Claude --pid "$PPID"
+domicile agent-working Codex -- codex
+```
+
 ## `domicile list-agents [--json]`
 
 Print the agents in now, with the session `stop-agent` takes and the windows
-they reach (or `desk`), then those remembered.
+they reach (`desk`, or `-` for one only working here), then those remembered.
 
 ```text
 SESSION  STATE       REACH  AGENT

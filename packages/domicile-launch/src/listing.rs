@@ -284,21 +284,24 @@ pub fn inputs_table(paint: Paint, inputs: &[ListedInput]) -> String {
 
 /// The agents let in now, then those remembered: each one's session (`-`
 /// for a remembered one not in now), whether it is in or remembered, what
-/// it reaches, and its name.
+/// it reaches (`-` for one only working on this computer), and its name.
 pub fn agents_table(paint: Paint, agents: &KnownAgents) -> String {
     let reach = |reach: &AgentReach| match reach {
-        AgentReach::Desk => "desk".to_string(),
-        AgentReach::Windows { windows } => windows
-            .iter()
-            .map(|window| window.id.as_str())
-            .collect::<Vec<_>>()
-            .join(","),
+        AgentReach::Desk => plain("desk"),
+        AgentReach::Windows { windows } => plain(
+            &windows
+                .iter()
+                .map(|window| window.id.as_str())
+                .collect::<Vec<_>>()
+                .join(","),
+        ),
+        AgentReach::Nothing => none(),
     };
     let connected = agents.connected.iter().map(|agent| {
         vec![
             plain(&agent.session.to_string()),
             vec![("● in".to_string(), Style::Good)],
-            plain(&reach(&agent.reach)),
+            reach(&agent.reach),
             plain(&agent.agent),
         ]
     });

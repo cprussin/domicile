@@ -1104,6 +1104,20 @@ describe(App, () => {
       ).toBeInTheDocument();
     });
 
+    it("says an agent working on this computer reaches nothing", async () => {
+      await renderApp("Agents", {
+        agents: {
+          connected: [
+            { agent: "Claude", reach: { type: "nothing" }, session: 5 },
+          ],
+          remembered: [],
+        },
+      });
+      expect(
+        await screen.findByText("Connected now · Working on this computer"),
+      ).toBeInTheDocument();
+    });
+
     it("stops a connected agent and forgets a remembered one", async () => {
       const { host, user } = await renderApp("Agents", { agents: AGENTS });
       await user.click(

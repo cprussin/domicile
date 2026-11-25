@@ -1542,6 +1542,7 @@ impl PortalKind {
             (PortalKind::Agent(_), PortalAnswer::Agent { reach, remember }) => match reach {
                 AgentReach::Desk => true,
                 AgentReach::Windows { windows } => !windows.is_empty() && !remember,
+                AgentReach::Nothing => false,
             },
             // A stop, pause, resume or discard answers a running session and
             // a press or release a bound shortcut, never a request.
@@ -1793,6 +1794,10 @@ pub enum AgentReach {
     /// These windows alone, through their accessibility trees and their own
     /// screenshots. Never the pointer or the keyboard.
     Windows { windows: Vec<AgentWindow> },
+    /// Nothing on the desk: it only works on this computer, such as a
+    /// coding agent's session. Never a dialog's answer: see
+    /// [`SystemRequest::Agent`]'s `working`.
+    Nothing,
 }
 
 /// A running [`CapturingKind::Agent`].
@@ -2774,7 +2779,15 @@ pub enum SystemRequest {
     /// [`CapturingKind::Agent`] until [`SystemRequest::Unwatch`] or the
     /// caller going away. When the shell stops it, ends with
     /// [`SystemEnd::Stopped`]. `domicile agent` sends this.
-    Agent { agent: String },
+    ///
+    /// `working` says the agent only works on this computer: it is listed
+    /// at once with [`AgentReach::Nothing`], asking nobody, since it is let
+    /// reach nothing. `domicile agent-working` sends this.
+    Agent {
+        agent: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        working: bool,
+    },
     /// Note that the agent this id let in did `said`, for the shell to list.
     /// No reply.
     AgentDid { said: String },

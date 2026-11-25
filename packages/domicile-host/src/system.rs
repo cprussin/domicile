@@ -167,8 +167,10 @@ fn no_agents() -> SystemError {
 pub trait Agents: Send + Sync {
     /// Asks the user whether agent `agent` may see and use the desk, unless
     /// it is remembered, and lists it while it may. Blocks while the user
-    /// decides. See [`SystemRequest::Agent`].
-    fn let_in(&self, agent: String, told: AgentTold) -> Result<LetIn, SystemError>;
+    /// decides. One only `working` on this computer is listed at once,
+    /// reaching nothing. See [`SystemRequest::Agent`].
+    fn let_in(&self, agent: String, working: bool, told: AgentTold)
+        -> Result<LetIn, SystemError>;
     /// The agents let in now and those remembered. See
     /// [`SystemRequest::Agents`].
     fn known(&self) -> KnownAgents;
@@ -1202,7 +1204,7 @@ impl System {
                 (self.tell)(HostMessage::SystemReply { id, reply });
                 Handled::Done
             }
-            SystemRequest::Agent { agent } => self.letting_in(id, agent),
+            SystemRequest::Agent { agent, working } => self.letting_in(id, agent, working),
             SystemRequest::Agents => {
                 let reply = match &self.agents {
                     Some(agents) => SystemReply::Agents(agents.known()),
@@ -1472,9 +1474,9 @@ impl System {
         })
     }
 
-    /// Ask the user to let agent `agent` in, on a thread, and hold it under
-    /// `id` while it is in.
-    fn letting_in(&self, id: u32, agent: String) -> Handled {
+    /// Ask the user to let agent `agent` in, or list it as only `working`
+    /// here, on a thread, and hold it under `id` while it is in.
+    fn letting_in(&self, id: u32, agent: String, working: bool) -> Handled {
         let fail = |message: String, kind| {
             (self.tell)(HostMessage::SystemReply {
                 id,
@@ -1533,6 +1535,7 @@ impl System {
             };
             let let_in = match agents.let_in(
                 agent,
+                working,
                 AgentTold {
                     stopped: stop,
                     changed,

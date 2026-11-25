@@ -206,11 +206,12 @@ fn serve(
             });
             Ok(())
         }
-        Ok(Request::Agent { agent }) => {
+        Ok(Request::Agent { agent, working }) => {
             // The client says what the agent did whenever it likes.
             stream.set_read_timeout(None)?;
             (lenders.agent)(Admission {
                 agent,
+                working,
                 lines: asking,
                 client: stream,
             });

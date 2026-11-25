@@ -235,6 +235,7 @@ describe(spawnedHost, () => {
         agents: {
           connected: [
             { agent: "Claude Code", reach: { type: "desk" }, session: 4 },
+            { agent: "Claude", reach: { type: "nothing" }, session: 5 },
           ],
           remembered: [{ agent: "Codex", last_used_ms: 9 }],
         },
@@ -244,6 +245,7 @@ describe(spawnedHost, () => {
       expect(await asked).toEqual({
         connected: [
           { agent: "Claude Code", reach: { type: "desk" }, session: 4 },
+          { agent: "Claude", reach: { type: "nothing" }, session: 5 },
         ],
         remembered: [{ agent: "Codex", lastUsedMs: 9 }],
       });

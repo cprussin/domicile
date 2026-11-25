@@ -182,14 +182,24 @@ struct HubAgents {
 }
 
 impl Agents for HubAgents {
-    fn let_in(&self, agent: String, told: AgentTold) -> Result<LetIn, SystemError> {
+    fn let_in(
+        &self,
+        agent: String,
+        working: bool,
+        told: AgentTold,
+    ) -> Result<LetIn, SystemError> {
         let hub = self.hub.clone();
         let windows: OpenWindows =
             Arc::new(move || match hub.host.lock().unwrap().list_windows() {
                 HostMessage::WindowList { windows } => windows,
                 listed => unreachable!("the host lists windows as a window list, not {listed:?}"),
             });
-        self.hub.portals.agents().let_in(agent, windows, told)
+        let door = self.hub.portals.agents();
+        if working {
+            Ok(door.working(agent, windows, told))
+        } else {
+            door.let_in(agent, windows, told)
+        }
     }
 
     fn known(&self) -> KnownAgents {

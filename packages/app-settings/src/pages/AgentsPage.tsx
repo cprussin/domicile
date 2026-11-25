@@ -281,18 +281,22 @@ export const said = (row: Row, now: number): string =>
   ].join(" · ");
 
 /** What its sessions reach, together. */
-const reaches = (reach: readonly AgentReach[]): string =>
-  reach.some(({ type }) => type === "desk")
-    ? "Your whole desktop"
-    : LIST.format(
-        reach.flatMap((each) =>
-          each.type === "windows"
-            ? each.windows.map(({ title }) =>
-                title === "" ? "an untitled window" : title,
-              )
-            : [],
-        ),
-      );
+const reaches = (reach: readonly AgentReach[]): string => {
+  const titles = reach.flatMap((each) =>
+    each.type === "windows"
+      ? each.windows.map(({ title }) =>
+          title === "" ? "an untitled window" : title,
+        )
+      : [],
+  );
+  if (reach.some(({ type }) => type === "desk")) {
+    return "Your whole desktop";
+  } else if (titles.length > 0) {
+    return LIST.format(titles);
+  } else {
+    return "Working on this computer";
+  }
+};
 
 /** When `time` was, in days, at `now`. */
 export const lastUsed = (time: number, now: number): string => {

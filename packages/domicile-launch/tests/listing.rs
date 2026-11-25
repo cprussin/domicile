@@ -338,6 +338,10 @@ fn agents_print_those_in_then_those_remembered() {
                         app: None,
                     }],
                 },
+            }, ConnectedAgent {
+                session: 13,
+                agent: "Claude".into(),
+                reach: AgentReach::Nothing,
             }],
             remembered: vec![RememberedAgent {
                 agent: "Codex".into(),
@@ -349,6 +353,7 @@ fn agents_print_those_in_then_those_remembered() {
         printed,
         "SESSION  STATE       REACH  AGENT\n\
          12       ● in        kD3m   Claude Code\n\
+         13       ● in        -      Claude\n\
          -        remembered  desk   Codex\n"
     );
 }

@@ -228,6 +228,13 @@ pub enum CliError {
     )]
     NothingToRun,
     #[error(
+        "agent-working takes the agent's name, then --pid and the process it \
+         works in, or a command to run:\n\n    \
+         domicile agent-working Claude --pid 4321\n    \
+         domicile agent-working Codex -- codex\n"
+    )]
+    NotWorking,
+    #[error(
         "exec takes a program to start and its arguments, and was given \
          nothing:\n\n    \
          domicile exec kitty --hold btop\n"
@@ -409,6 +416,10 @@ pub enum Invocation {
     /// list each line of stdin as what it did, until either side ends it;
     /// see [`crate::agent_lending`].
     Agent { name: String },
+    /// List agent `name` in the bar as working on this computer, reaching
+    /// nothing on the desk, for as long as `lasting` runs; see
+    /// [`crate::agent_working`].
+    AgentWorking { name: String, lasting: Working },
     /// Print native window `window`'s accessibility tree; see
     /// [`crate::accessibility`].
     Accessibility { window: String },
@@ -927,6 +938,7 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (Some(_), None) | (None, _) => Err(one(&first, "agent name", None)),
                 (said, Some(_)) => Err(one(&first, "agent name", said)),
             },
+            Verb::Working => working(args.collect()),
             Verb::StoppingAgent => match (args.next(), args.next()) {
                 (Some(session), None) => match session.parse() {
                     Ok(session) => Ok(Invocation::Ask {
@@ -1211,6 +1223,9 @@ enum Verb {
     DevTooling,
     /// `agent`, which takes a name.
     Admitting,
+    /// `agent-working`, which takes a name, then `--pid` and a pid or a
+    /// command.
+    Working,
     /// `stop-agent`, which takes a session.
     StoppingAgent,
     /// `forget-agent`, which takes a name.
@@ -1411,6 +1426,7 @@ fn verb(word: &str) -> Option<Verb> {
         "forget-agent" => Some(Verb::Forgetting),
         "mcp" => Some(Verb::Serving),
         "agent" => Some(Verb::Admitting),
+        "agent-working" => Some(Verb::Working),
         "pointer" => Some(Verb::Pointing),
         "drag" => Some(Verb::Dragging),
         "scroll" => Some(Verb::Scrolling),
@@ -1421,6 +1437,42 @@ fn verb(word: &str) -> Option<Verb> {
         "accessibility-act" => Some(Verb::Accessing),
         _ => None,
     }
+}
+
+/// What an agent works in, for as long as it runs: see
+/// [`Invocation::AgentWorking`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Working {
+    /// A process running already, such as the agent's own.
+    Pid(i32),
+    /// A command to run, as `inhibit-idle` runs one.
+    Command(Vec<String>),
+}
+
+/// `agent-working`'s arguments, after the verb.
+fn working(words: Vec<String>) -> Result<Invocation, CliError> {
+    let Some((name, rest)) = words.split_first() else {
+        return Err(CliError::NotWorking);
+    };
+    if name.trim().is_empty() {
+        return Err(CliError::NotWorking);
+    }
+    let lasting = match rest {
+        [flag, pid] if flag == "--pid" => match pid.parse() {
+            Ok(pid) if pid > 0 => Working::Pid(pid),
+            _ => return Err(CliError::NotWorking),
+        },
+        [flag, ..] if flag == "--pid" => return Err(CliError::NotWorking),
+        [dashes, command @ ..] if dashes == "--" && !command.is_empty() => {
+            Working::Command(command.to_vec())
+        }
+        [first, ..] if first != "--" => Working::Command(rest.to_vec()),
+        _ => return Err(CliError::NotWorking),
+    };
+    Ok(Invocation::AgentWorking {
+        name: name.clone(),
+        lasting,
+    })
 }
 
 /// The [`WatchTopic`] `word` names, if any.

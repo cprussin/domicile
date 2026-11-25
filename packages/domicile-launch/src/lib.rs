@@ -41,6 +41,7 @@
 pub mod accessibility;
 pub mod address;
 pub mod agent_lending;
+pub mod agent_working;
 pub mod app_entry;
 pub mod app_host;
 pub mod arguments;

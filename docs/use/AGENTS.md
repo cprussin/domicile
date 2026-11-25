@@ -29,6 +29,18 @@ Other agents that run on your computer take the same command, `domicile mcp`.
 
 Each chat asks to use your desktop on its own, and has its own pill.
 
+## Agents working on this computer
+
+An agent that runs on your computer without using your desktop, such as a
+Claude Code Remote Control session, can show in the bar too, with
+`domicile agent-working`:
+
+```sh
+domicile agent-working Codex -- codex
+```
+
+Its pill has a terminal icon instead of the robot. **Stop** ends it.
+
 ## Letting an agent in
 
 The first time an agent tries to use your desktop, you're asked whether to

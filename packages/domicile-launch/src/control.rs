@@ -295,7 +295,14 @@ pub enum Request {
     /// is open, as the user allows in the shell's dialog. Answered with
     /// [`Response::Agent`]; each later line is a [`Request::AgentDid`]. The
     /// desktop hangs up when the shell stops it. See `domicile agent`.
-    Agent { agent: String },
+    ///
+    /// `working` lists it as only working on this computer instead,
+    /// reaching nothing, without asking. See `domicile agent-working`.
+    Agent {
+        agent: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        working: bool,
+    },
     /// Note what the agent this connection holds did, for the shell to list.
     /// Not answered.
     AgentDid { said: String },
@@ -911,6 +918,8 @@ pub struct Lent {
 /// [`crate::agent_lending::admit`].
 pub struct Admission {
     pub agent: String,
+    /// Only working on this computer: see [`Request::Agent`].
+    pub working: bool,
     /// The client's lines after the request.
     pub lines: std::io::BufReader<std::os::unix::net::UnixStream>,
     /// Where the client hears back.

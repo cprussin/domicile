@@ -24,10 +24,11 @@ pub const DECIDING_WITHIN: Duration = Duration::from_secs(75);
 pub fn admit(admission: Admission, chrome: &Path, patience: Duration) {
     let Admission {
         agent: name,
+        working,
         lines,
         mut client,
     } = admission;
-    let held = match agent(chrome, &name, Some(patience)) {
+    let held = match agent(chrome, &name, working, Some(patience)) {
         Ok(held) => Arc::new(held),
         Err(why) => {
             // The client may be gone already; there is no one else to tell.

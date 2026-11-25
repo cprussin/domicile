@@ -923,7 +923,30 @@ pub const COMMANDS: &[Command] = &[
         ],
         sections: &[],
         examples: &[],
-        see_also: &["mcp", "list-agents"],
+        see_also: &["mcp", "agent-working", "list-agents"],
+    },
+    Command {
+        name: "agent-working",
+        group: Group::Agents,
+        takes: "<name> --pid <pid>",
+        summary: "Show an agent working here",
+        forms: &[
+            "agent-working <name> --pid <pid>",
+            "agent-working <name> [--] <command> [<arg>...]",
+        ],
+        about: &[
+            "Shows agent `<name>` in the bar as working on this computer, for as \
+             long as process `<pid>` runs, or `<command>`, which it runs. It \
+             reaches nothing on the desktop, so nobody is asked.",
+            "Stop in the bar ends the process. With a command, it exits as the \
+             command does.",
+        ],
+        sections: &[],
+        examples: &[
+            "domicile agent-working Claude --pid \"$PPID\"",
+            "domicile agent-working Codex -- codex",
+        ],
+        see_also: &["agent", "list-agents"],
     },
     Command {
         name: "list-agents",

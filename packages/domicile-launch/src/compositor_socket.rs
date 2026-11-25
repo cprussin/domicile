@@ -711,15 +711,18 @@ impl HeldAgent {
 }
 
 /// Asks the compositor at `socket` to let agent `agent` in, which asks the
-/// user, and holds it until [`HeldAgent::give_back`] or the drop. `patience`
+/// user, or to list it as only `working` on this computer, which asks
+/// nobody. Holds it until [`HeldAgent::give_back`] or the drop. `patience`
 /// covers the user deciding.
 pub fn agent(
     socket: &Path,
     agent: &str,
+    working: bool,
     patience: Option<Duration>,
 ) -> Result<HeldAgent, CompositorError> {
     let request = SystemRequest::Agent {
         agent: agent.to_owned(),
+        working,
     };
     let stream = connected(socket, patience)?;
     sent(
