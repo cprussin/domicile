@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/layout_iframe.h"
+#include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -340,6 +341,12 @@ void HTMLWebViewElement::ParseAttribute(
   // `src` goes to the guest. The base would navigate the placeholder frame,
   // which must stay on about:blank.
   if (params.name == html_names::kSrcAttr) {
+    // Navigating an unloaded window's page loads it, rendered or not.
+    if (shows_when_rendered_ && isConnected()) {
+      shows_when_rendered_ = false;
+      HTMLFrameElementBase::DidNotifySubtreeInsertionsToDocument();
+      RequestGuest(/*rendered=*/true);
+    }
     NavigateGuest();
   } else {
     HTMLFrameElementBase::ParseAttribute(params);
@@ -354,7 +361,7 @@ void HTMLWebViewElement::DidNotifySubtreeInsertionsToDocument() {
   // Creates the placeholder frame on about:blank, as AttachInnerWebContents
   // prefers (to avoid beforeunload problems).
   HTMLFrameElementBase::DidNotifySubtreeInsertionsToDocument();
-  RequestGuest();
+  RequestGuest(IsRendered());
   // A parsed `src` arrived before there was a guest, so send it now. A browser
   // window's page is already loaded and gets no `src` on attach.
   if (BrowserWindow().IsNull()) {
@@ -373,8 +380,23 @@ void HTMLWebViewElement::RemovedFrom(ContainerNode& insertion_point) {
 
 void HTMLWebViewElement::AttachLayoutTree(AttachContext& context) {
   HTMLFrameElementBase::AttachLayoutTree(context);
-  // Posted, as a frame is not made during layout.
-  if (shows_when_rendered_ && GetLayoutObject()) {
+  ShowSoonIfUnloaded();
+}
+
+// `visibility` changes with no new layout object.
+void HTMLWebViewElement::DidRecalcStyle(const StyleRecalcChange change) {
+  HTMLFrameElementBase::DidRecalcStyle(change);
+  ShowSoonIfUnloaded();
+}
+
+bool HTMLWebViewElement::IsRendered() const {
+  const LayoutObject* layout = GetLayoutObject();
+  return layout && layout->StyleRef().Visibility() == EVisibility::kVisible;
+}
+
+void HTMLWebViewElement::ShowSoonIfUnloaded() {
+  // Posted, as a frame is not made during style or layout.
+  if (shows_when_rendered_) {
     GetDocument()
         .GetTaskRunner(TaskType::kInternalDefault)
         ->PostTask(FROM_HERE, BindOnce(&HTMLWebViewElement::ShowIfRendered,
@@ -383,14 +405,14 @@ void HTMLWebViewElement::AttachLayoutTree(AttachContext& context) {
 }
 
 void HTMLWebViewElement::ShowIfRendered() {
-  if (!shows_when_rendered_ || !isConnected() || !GetLayoutObject()) {
+  if (!shows_when_rendered_ || !isConnected() || !IsRendered()) {
     return;
   }
   shows_when_rendered_ = false;
   DidNotifySubtreeInsertionsToDocument();
 }
 
-void HTMLWebViewElement::RequestGuest() {
+void HTMLWebViewElement::RequestGuest(bool rendered) {
   if (guest_.is_bound()) {
     return;
   }
@@ -417,7 +439,7 @@ void HTMLWebViewElement::RequestGuest() {
   host_->CreateGuest(placeholder->GetLocalFrameToken(),
                      guest_.BindNewPipeAndPassReceiver(task_runner),
                      client_receiver_.BindNewPipeAndPassRemote(task_runner),
-                     BrowserWindow(),
+                     BrowserWindow(), rendered,
                      hasAttribute(AtomicString(kExtensionPopupAttr)),
                      hasAttribute(AtomicString(kPrivateAttr)), Profile(),
                      Partition());
@@ -980,7 +1002,21 @@ void HTMLWebViewElement::Replaced(bool unloaded) {
   // makes a placeholder and asks for the window the same way, and the window
   // id now names the new page.
   DisconnectContentFrame();
-  shows_when_rendered_ = unloaded && !GetLayoutObject();
+  // The new page reports these only when set.
+  if (page_fullscreen_) {
+    PageFullscreenChanged(false);
+  }
+  if (wake_lock_) {
+    WakeLockChanged(false);
+  }
+  if (!render_process_gone_.empty()) {
+    RenderProcessChanged(
+        domicile::mojom::blink::WebViewRenderProcess::kRunning, 0);
+  }
+  if (!page_failure_.empty()) {
+    PageFailureChanged(nullptr);
+  }
+  shows_when_rendered_ = unloaded && !IsRendered();
   DidNotifySubtreeInsertionsToDocument();
 }
 

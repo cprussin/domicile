@@ -1890,9 +1890,10 @@ class BrowserWindowsService final
   void OnMemoryShort(const std::vector<std::string>& ids,
                      base::OnceCallback<void(bool)> handled) override {
     if (client_.is_bound()) {
-      // A document that goes first handles nothing.
+      // A document that goes first may have been a listener's, so nothing is
+      // unloaded until the next check.
       client_->MemoryShort(ids, mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-                                    std::move(handled), false));
+                                    std::move(handled), true));
     } else {
       std::move(handled).Run(false);
     }

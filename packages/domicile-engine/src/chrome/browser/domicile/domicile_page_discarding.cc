@@ -133,6 +133,35 @@ void PageDiscarding::OnChecked(bool is_short) {
   if (!is_short || !PerformanceManager::IsAvailable()) {
     return;
   }
+  const std::vector<std::string> ids = Discardable();
+  if (ids.empty()) {
+    return;
+  }
+  LOG(WARNING) << "domicile: short of memory.";
+  // A shell that did not answer since the last check decides nothing.
+  if (asking_.HasWeakPtrs()) {
+    asking_.InvalidateWeakPtrs();
+    discard_.Run(ids.front());
+    return;
+  }
+  ask_.Run(ids,
+           base::BindOnce(&PageDiscarding::OnAsked, asking_.GetWeakPtr()));
+}
+
+void PageDiscarding::OnAsked(bool handled) {
+  asking_.InvalidateWeakPtrs();
+  if (handled) {
+    LOG(INFO) << "domicile: the shell decides which pages to unload.";
+    return;
+  }
+  // Again, as pages may have been shown or used while it was asked.
+  const std::vector<std::string> ids = Discardable();
+  if (!ids.empty()) {
+    discard_.Run(ids.front());
+  }
+}
+
+std::vector<std::string> PageDiscarding::Discardable() {
   std::vector<std::pair<base::TimeTicks, std::string>> hidden;
   for (const Candidate& candidate : candidates_.Run()) {
     const base::WeakPtr<PageNode> node =
@@ -143,25 +172,12 @@ void PageDiscarding::OnChecked(bool is_short) {
     hidden.emplace_back(node->GetVisibilityState().last_change_time,
                         candidate.id);
   }
-  if (hidden.empty()) {
-    return;
-  }
-  LOG(WARNING) << "domicile: short of memory.";
   std::ranges::sort(hidden);
   std::vector<std::string> ids;
   for (auto& [since, id] : hidden) {
     ids.push_back(std::move(id));
   }
-  ask_.Run(ids, base::BindOnce(&PageDiscarding::OnAsked,
-                               weak_factory_.GetWeakPtr(), ids.front()));
-}
-
-void PageDiscarding::OnAsked(const std::string& id, bool handled) {
-  if (handled) {
-    LOG(INFO) << "domicile: the shell decides which pages to unload.";
-  } else {
-    discard_.Run(id);
-  }
+  return ids;
 }
 
 }  // namespace domicile

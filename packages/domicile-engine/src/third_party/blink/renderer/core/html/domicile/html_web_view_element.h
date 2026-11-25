@@ -282,6 +282,7 @@ class CORE_EXPORT HTMLWebViewElement final
 
   LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
   void AttachLayoutTree(AttachContext&) override;
+  void DidRecalcStyle(const StyleRecalcChange) override;
 
   // `src` never reaches HTMLFrameElementBase, which would navigate the
   // placeholder frame. Everything else does.
@@ -300,10 +301,14 @@ class CORE_EXPORT HTMLWebViewElement final
   // Shows the window's unloaded page if this is rendered. See
   // `shows_when_rendered_`.
   void ShowIfRendered();
+  void ShowSoonIfUnloaded();
+
+  // Whether it is laid out and not `visibility: hidden`.
+  bool IsRendered() const;
 
   // Requests a guest for the placeholder frame. Does nothing if there already
   // is one or there is no placeholder yet.
-  void RequestGuest();
+  void RequestGuest(bool rendered);
 
   // Sends the current `src` to the guest. Safe before the attach finishes.
   void NavigateGuest();

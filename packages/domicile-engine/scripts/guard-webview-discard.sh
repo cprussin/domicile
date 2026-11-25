@@ -303,7 +303,7 @@ and it was listed unloaded or loaded again"
   elif [ "$HEARD" != "0" ]; then
     FAILURE="THE CONTROL'S SHELL HEARD A SHORTAGE: the engine was never short \
 of memory"
-  elif [ "$AUTO_PLAIN$AUTO_TYPED" != "00" ]; then
+  elif [ "$AUTO_PLAIN$AUTO_TYPED$HANDLED_LISTED" != "000" ]; then
     FAILURE="THE CONTROL'S ENGINE UNLOADED A PAGE: it was never short of \
 memory, so the claim's unloading is not the shortage's"
   else

@@ -235,8 +235,13 @@ export const HostShell = (_root, desktop) => {
     }
     say("asked-hidden");
     await settled();
+    // A new element that is not visible does not load it either.
+    views[KEPT].remove();
+    const again = view(KEPT, "window", ids[KEPT]);
+    again.style.visibility = "hidden";
+    await settled();
     say("showing-hidden");
-    views[KEPT].style.display = "";
+    again.style.visibility = "";
     await settled();
     say("shown-hidden");
     say("done");

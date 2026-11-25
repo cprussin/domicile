@@ -46,12 +46,16 @@ class PageDiscarding {
  private:
   void Check();
   void OnChecked(bool is_short);
-  void OnAsked(const std::string& id, bool handled);
+  void OnAsked(bool handled);
+  // The candidates that may go now, hidden longest first.
+  std::vector<std::string> Discardable();
 
   const Candidates candidates_;
   const Ask ask_;
   const Discard discard_;
   base::RepeatingTimer timer_;
+  // Has a pointer out while an ask is unanswered.
+  base::WeakPtrFactory<PageDiscarding> asking_{this};
   base::WeakPtrFactory<PageDiscarding> weak_factory_{this};
 };
 

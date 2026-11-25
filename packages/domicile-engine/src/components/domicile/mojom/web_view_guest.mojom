@@ -529,6 +529,10 @@ interface WebViewGuestHost {
   // owned by the element. An unknown window, or one another element shows, is
   // refused: the pipes close and the browser logs why.
   //
+  // `rendered` is whether the element is. A window whose page is unloaded is
+  // not given to one that is not, as showing a page loads it: the client hears
+  // Replaced(true) and the pipes close. Ignored without `window`.
+  //
   // `extension_popup` is the element's `extensionpopup` attribute. The guest
   // is then an extension action popup, as in Chrome: popup view type, no tab
   // id, no window. Extensions that lay out differently in a popup (e.g.
@@ -553,6 +557,7 @@ interface WebViewGuestHost {
               pending_receiver<WebViewGuest> guest,
               pending_remote<WebViewGuestClient> client,
               string? window,
+              bool rendered,
               bool extension_popup,
               bool private_browsing,
               string profile,

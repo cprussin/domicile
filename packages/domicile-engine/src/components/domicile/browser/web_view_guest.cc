@@ -323,6 +323,7 @@ class WebViewGuestHost final
     mojo::PendingReceiver<mojom::WebViewGuest> guest;
     mojo::PendingRemote<mojom::WebViewGuestClient> client;
     std::optional<std::string> window;
+    bool rendered;
     bool extension_popup;
     bool private_browsing;
     std::string profile;
@@ -335,6 +336,7 @@ class WebViewGuestHost final
                    mojo::PendingReceiver<mojom::WebViewGuest> guest,
                    mojo::PendingRemote<mojom::WebViewGuestClient> client,
                    const std::optional<std::string>& window,
+                   bool rendered,
                    bool extension_popup,
                    bool private_browsing,
                    const std::string& profile,
@@ -379,6 +381,7 @@ class WebViewGuestHost final
                                   std::move(guest),
                                   std::move(client),
                                   window,
+                                  rendered,
                                   extension_popup,
                                   private_browsing,
                                   profile,
@@ -387,7 +390,7 @@ class WebViewGuestHost final
         return;
       case PlaceholderStage::kReady:
         Give(*placeholder, std::move(guest), std::move(client), window,
-             extension_popup, private_browsing, profile, *parsed);
+             rendered, extension_popup, private_browsing, profile, *parsed);
         return;
     }
   }
@@ -458,7 +461,7 @@ class WebViewGuestHost final
         return;
       case PlaceholderStage::kReady:
         Give(*placeholder, std::move(request.guest), std::move(request.client),
-             request.window, request.extension_popup,
+             request.window, request.rendered, request.extension_popup,
              request.private_browsing, request.profile, request.partition);
         return;
     }
@@ -498,6 +501,7 @@ class WebViewGuestHost final
             mojo::PendingReceiver<mojom::WebViewGuest> guest,
             mojo::PendingRemote<mojom::WebViewGuestClient> client,
             const std::optional<std::string>& window,
+            bool rendered,
             bool extension_popup,
             bool private_browsing,
             const std::string& profile,
@@ -519,6 +523,12 @@ class WebViewGuestHost final
     if (shown == nullptr) {
       LOG(WARNING) << "domicile: a <webview> named browser window \""
                    << *window << "\", which is not open; it shows nothing.";
+      return;
+    }
+    if (!rendered && !shown->IsAttached() &&
+        shown->contents().GetController().NeedsReload()) {
+      mojo::Remote<mojom::WebViewGuestClient>(std::move(client))
+          ->Replaced(/*unloaded=*/true);
       return;
     }
     shown->AttachToElement(render_frame_host(), placeholder, std::move(guest),
