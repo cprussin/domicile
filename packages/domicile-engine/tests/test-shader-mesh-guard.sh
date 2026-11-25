@@ -64,6 +64,8 @@ expect "the swapped color at the whole width is a failure" "fail" \
   "$(verdict "claim 1 1 1 1 0")"
 expect "and blames the vertex program's placing" "yes" \
   "$(says "claim 1 1 1 1 0" "DrawMeshEffect")"
+expect "and the arrays set under the running animation" "yes" \
+  "$(says "claim 1 1 1 1 0" "ComputeFilterChange")"
 expect "no swapped color is a failure" "fail" "$(verdict "claim 1 1 1 0 -")"
 expect "and names the renderer's mesh path" "yes" \
   "$(says "claim 1 1 1 0 -" "FindMeshEffect")"
