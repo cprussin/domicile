@@ -112,7 +112,9 @@ def serve_guard(path):
                         lambda asked=serial: asked in REACHED, timeout=15
                     )
                     answer = REACHED.get(serial, {"never": "answered"})
-            guard.sendall((json.dumps(answer) + "\n").encode("utf-8"))
+            guard.sendall(
+                (json.dumps(answer, separators=(",", ":")) + "\n").encode("utf-8")
+            )
 
 
 def main():
