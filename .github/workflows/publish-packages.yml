@@ -4,8 +4,9 @@ name: Publish packages
 #
 # - A push to main publishes every public `@domicile-desktop/*` package to npm
 #   as `0.0.0-alpha-<sha>` under `next` (.github/scripts/publish-packages.sh).
-# - Dispatched with `release`, promotes `stable` to `release`. It builds and
-#   installs the distribution packages at the versions changesets gave them,
+# - Dispatched with `release`, promotes `stable`, or `branch` for a patch
+#   release, to `release`. It builds and installs the distribution packages
+#   at the versions changesets gave them,
 #   publishes npm under `latest`, the signed repositories on R2 and the AUR's
 #   `domicile-bin`, then tags each new version, moves `release` and syncs
 #   `site` (site.yml). Every step skips what is already published, so a
@@ -44,6 +45,10 @@ on:
         description: With release, publish stable as a prerelease to the repositories and the AUR only
         type: boolean
         default: false
+      branch:
+        description: With release, the branch to release; a patch branch off `release` for a patch release
+        type: string
+        default: stable
 
 # One at a time and none thrown away: each run publishes its own commit.
 concurrency:
@@ -79,7 +84,7 @@ jobs:
       # The whole history, so release can be checked as an ancestor.
       - uses: actions/checkout@v7
         with:
-          ref: stable
+          ref: ${{ inputs.branch }}
           fetch-depth: 0
       - id: check
         if: ${{ !inputs.prerelease }}

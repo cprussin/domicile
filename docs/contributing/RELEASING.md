@@ -74,6 +74,20 @@ skips step 2 (`.github/scripts/release-dry-run.sh`), so run the dry run first.
 A "Version packages" merge that changes nothing in the engine but its
 `version` skips the engine build (`engine-proof.sh version-only`).
 
+## Patch releases
+
+A patch release ships fixes on top of the newest release without what `main`
+has added since:
+
+1. Merge each fix to main as usual, with a `domicile` patch changeset and its
+   notes under a `## <x.y.z+1>` entry.
+2. Branch `patch-<x.y>` off `release`, `cherry-pick -x` the fixes, run
+   `bun run version-packages` and date the entry.
+3. Run **Publish packages** with `release` and `branch: patch-<x.y>`, dry run
+   first. `release` fast-forwards to the branch.
+4. Merge `release` into main with a merge commit, so the next release from
+   `stable` has `release` as an ancestor.
+
 ## Prereleases
 
 Check `prerelease` too to publish `stable`, whose engine is the official,
