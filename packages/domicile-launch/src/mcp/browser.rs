@@ -95,11 +95,13 @@ pub(super) fn described(tool: Browser) -> (&'static str, Value, Vec<&'static str
 
 /// `tools/call`'s result for browser tool `tool` with `arguments`. A read
 /// keeps the window's outline in `read`; an act answers what it changed.
+/// Each read notes the title of the page the window shows in `titles`.
 pub(super) fn called(
     tool: Browser,
     arguments: &Map<String, Value>,
     domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
     read: &mut HashMap<String, String>,
+    titles: &mut HashMap<String, String>,
 ) -> io::Result<Value> {
     let window = match string(arguments, "window") {
         Ok(Some(window)) => window,
@@ -114,8 +116,13 @@ pub(super) fn called(
         window,
         view,
         domicile,
+        title: None,
     };
-    let answer = match carried_out(tool, arguments, element, &mut page)? {
+    let answer = carried_out(tool, arguments, element, &mut page);
+    if let Some(title) = page.title.take() {
+        titles.insert(page.window.clone(), title);
+    }
+    let answer = match answer? {
         Ok(answer) => answer,
         Err(why) => return Ok(said(false, why)),
     };
@@ -148,6 +155,9 @@ pub(super) fn called(
                     ))
                 }
             };
+            if let Some(title) = page.title.take() {
+                titles.insert(page.window.clone(), title);
+            }
             let changes = changed(
                 read.get(&page.window).map(String::as_str),
                 &after,
@@ -165,6 +175,8 @@ struct Page<'a, D> {
     window: String,
     view: Option<String>,
     domicile: &'a mut D,
+    /// The title of the window's page as last read, if it was.
+    title: Option<String>,
 }
 
 impl<D: FnMut(&[String]) -> io::Result<Ran>> Page<'_, D> {
@@ -252,6 +264,9 @@ fn outline_of<D: FnMut(&[String]) -> io::Result<Ran>>(
     page: &mut Page<'_, D>,
 ) -> io::Result<Result<String, String>> {
     let tree = sent!(page, "Accessibility.getFullAXTree", json!({}));
+    page.title = tree["nodes"][0]["name"]["value"]
+        .as_str()
+        .map(str::to_string);
     let mut lines = outline(&tree, 0, "");
     // The shell's page holds no views, and is no window list-windows lists.
     if page.window == SHELL {

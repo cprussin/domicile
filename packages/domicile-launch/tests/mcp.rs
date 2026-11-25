@@ -1283,6 +1283,43 @@ fn what_an_agent_did_is_listed_with_the_windows_title_and_never_what_it_typed() 
 }
 
 #[test]
+fn what_an_agent_did_in_a_browser_window_names_the_page_it_shows_now() {
+    // The title list_windows gave is the page before; a browser act reads the
+    // page again, so the activity names the page the window shows.
+    let (grant, did) = reaching(AgentReach::Desk);
+    let mut grant = Some(grant);
+    let new_page = json!({"nodes": [
+        {"nodeId": "1", "ignored": false, "role": {"value": "RootWebArea"}, "name": {"value": "Wayland"}, "childIds": [], "backendDOMNodeId": 1}
+    ]});
+    served_letting(
+        &[
+            call("list_windows", json!({})),
+            call(
+                "browser_navigate",
+                json!({"window": "w1", "url": "https://example.com/"}),
+            ),
+            call("browser_key", json!({"window": "w1", "key": "Tab"})),
+        ],
+        move |args| match args[0].as_str() {
+            "list-windows" => printed("[{\"id\": \"w1\", \"title\": \"Sway\", \"views\": []}]"),
+            "devtools" if args[2] == "Accessibility.getFullAXTree" => {
+                printed(&format!("{new_page}\n"))
+            }
+            _ => printed("{}"),
+        },
+        move |_| Ok(grant.take().expect("asked once")),
+    );
+    assert_eq!(
+        *did.borrow(),
+        [
+            "Listed the windows",
+            "Loaded a page in Wayland",
+            "Pressed a key in Wayland"
+        ]
+    );
+}
+
+#[test]
 fn with_only_some_windows_the_desk_wide_tools_are_refused() {
     for (name, arguments) in [
         ("screenshot", json!({})),

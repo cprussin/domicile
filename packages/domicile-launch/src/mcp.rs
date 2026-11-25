@@ -536,6 +536,7 @@ fn guarded(
         domicile,
         &mut session.view,
         &mut session.read,
+        &mut session.titles,
     )?;
     if answered["isError"] == json!(false) {
         if tool_is_listing_windows(tool) {
@@ -795,10 +796,13 @@ fn called(
     domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
     view: &mut Option<View>,
     read: &mut HashMap<String, String>,
+    titles: &mut HashMap<String, String>,
 ) -> io::Result<Value> {
     match tool {
         Tool::Screenshot => return screenshot(arguments, domicile, view),
-        Tool::Browser(browser) => return browser::called(browser, arguments, domicile, read),
+        Tool::Browser(browser) => {
+            return browser::called(browser, arguments, domicile, read, titles)
+        }
         _ => {}
     }
     let mut runs = match commands(tool, arguments, *view) {
