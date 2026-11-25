@@ -37,7 +37,7 @@ the same as a block instead.
 | `domicile-engine` | The engine and every process it starts. `DOMICILE_PID` is the process that said it. |
 | `domicile-shell` | The shell's `console` messages. |
 | `domicile` | The launcher: restarts, and what the desktop chose. |
-| `domicile-relay` | Agents on the web: reaching the relay, and its certificate. |
+| `domicile-relay` | Agents on the web: reaching the relay, its certificate, and how long each tool call took on the desk. |
 | `domicile-cli` | The `domicile` command when the desktop runs it, such as from a binding. |
 | An app's own name, such as `emacs` | What an app the desktop started writes, at `info`, or at the `<n>` priority a line starts with. An Electron app's is its entry's id, such as `element-desktop`; `electron-host` gives its own lines their priority. |
 

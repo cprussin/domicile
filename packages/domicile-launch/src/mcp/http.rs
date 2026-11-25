@@ -21,7 +21,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 use tiny_http::{Header, Method, Request, Response, Server};
@@ -323,17 +323,39 @@ fn mcp(
         (None, false) => return Ok(text(400, "Name the session with Mcp-Session-Id.")),
     };
     let (reply, answer) = mpsc::channel();
-    if asks.send((message, reply)).is_err() {
+    let asked = Instant::now();
+    if asks.send((message.clone(), reply)).is_err() {
         return Ok(text(404, "The session ended. Initialize again."));
     }
     let answered = answer
         .recv()
         .map_err(|_| io::Error::other("the session ended mid-call"))??;
     let response = match answered {
-        Some(answer) => as_json(200, &answer),
+        Some(answer) => {
+            let answer = serde_json::to_vec(&answer).expect("an answer serializes");
+            if let Some(line) = timed(&message, asked.elapsed(), answer.len()) {
+                eprintln!("{line}");
+            }
+            json_bytes(200, answer)
+        }
         None => text(202, ""),
     };
     Ok(response.with_header(header("Mcp-Session-Id", &id)))
+}
+
+/// The log line for `message` answered in `took` with `bytes` of JSON: a
+/// tool call's name, time on this desk and size, which tell this desk's
+/// part of an agent's pause from the client's and the model's.
+fn timed(message: &Value, took: Duration, bytes: usize) -> Option<String> {
+    if message["method"] != "tools/call" {
+        return None;
+    }
+    Some(format!(
+        "domicile: {} took {} ms on this desk, answering {:.1} KB",
+        message["params"]["name"],
+        took.as_millis(),
+        bytes as f64 / 1024.0
+    ))
 }
 
 /// Starts a thread for a session or conversation, with an agent made on it.
@@ -489,7 +511,11 @@ fn html(text: &str) -> String {
 }
 
 fn as_json(status: u16, value: &Value) -> Response<io::Cursor<Vec<u8>>> {
-    Response::from_string(value.to_string())
+    json_bytes(status, value.to_string().into_bytes())
+}
+
+fn json_bytes(status: u16, json: Vec<u8>) -> Response<io::Cursor<Vec<u8>>> {
+    Response::from_data(json)
         .with_status_code(status)
         .with_header(header("Content-Type", "application/json"))
 }
@@ -553,4 +579,27 @@ fn decoded(text: &str) -> String {
         at += 1;
     }
     String::from_utf8_lossy(&out).into_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_tool_call_is_timed_with_its_size() {
+        let call = json!({"method": "tools/call", "params": {"name": "browser_click"}});
+        assert_eq!(
+            timed(&call, Duration::from_millis(512), 3277),
+            Some(
+                "domicile: \"browser_click\" took 512 ms on this desk, answering 3.2 KB"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn other_messages_are_not_timed() {
+        let listing = json!({"method": "tools/list"});
+        assert_eq!(timed(&listing, Duration::from_millis(1), 10), None);
+    }
 }
