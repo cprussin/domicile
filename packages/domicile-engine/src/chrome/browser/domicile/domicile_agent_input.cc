@@ -15,6 +15,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
@@ -193,9 +194,9 @@ struct Seat {
 
 // What a desk point lands on, for one seat's event.
 struct Landed {
-  content::RenderWidgetHost* widget = nullptr;
+  raw_ptr<content::RenderWidgetHost> widget = nullptr;
   gfx::PointF in_widget;
-  content::WebContents* page = nullptr;
+  raw_ptr<content::WebContents> page = nullptr;
   std::string window;
 };
 
@@ -425,7 +426,7 @@ class AgentSeatsInPages : public ui::EventObserver {
   // The widget that takes the seat's pointer at `at`: the one pressed in,
   // while a button is down.
   struct Target {
-    content::RenderWidgetHost* widget = nullptr;
+    raw_ptr<content::RenderWidgetHost> widget = nullptr;
     gfx::PointF in_widget;
     std::string window;
   };
@@ -735,7 +736,8 @@ class AgentSeatsInPages : public ui::EventObserver {
     content::WebContents* page =
         found ? WindowPageOf(found->widget, shell) : nullptr;
     const std::string window = page ? BrowserWindowOfPage(page) : "";
-    content::RenderWidgetHost* under = window.empty() ? nullptr : found->widget;
+    content::RenderWidgetHost* under =
+        window.empty() ? nullptr : found->widget.get();
     content::RenderWidgetHost* was = drag.over ? drag.over->Get() : nullptr;
     if (was != nullptr && was != under) {
       was->DragTargetDragLeave(gfx::PointF(), gfx::PointF());

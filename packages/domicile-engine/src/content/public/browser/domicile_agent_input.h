@@ -7,6 +7,7 @@
 #include <optional>
 
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "content/common/content_export.h"
 #include "third_party/blink/public/common/page/drag_operation.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -26,7 +27,7 @@ struct DropData;
 // DIPs, and the point in that widget's view. Hit tests as a person's pointer
 // is, so a page drawn over another is the one found. nullopt over nothing.
 struct DomicileWidgetAt {
-  RenderWidgetHost* widget = nullptr;
+  raw_ptr<RenderWidgetHost> widget = nullptr;
   gfx::PointF in_widget;
 };
 CONTENT_EXPORT std::optional<DomicileWidgetAt> DomicileWidgetAtPoint(
