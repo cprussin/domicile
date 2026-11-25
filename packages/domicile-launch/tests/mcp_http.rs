@@ -29,6 +29,8 @@ struct Desk {
     gone: Arc<AtomicU8>,
     /// How many times the user was asked to let an agent in.
     admitted: Arc<AtomicU8>,
+    /// What it said at debug.
+    debugged: Arc<Mutex<Vec<String>>>,
 }
 
 /// What one request got back.
@@ -61,6 +63,7 @@ fn desk() -> Desk {
     let gone = Arc::new(AtomicU8::new(0));
     let admitted = Arc::new(AtomicU8::new(0));
     let counter = AtomicU8::new(0);
+    let debugged = Arc::new(Mutex::new(Vec::new()));
     let web = Web {
         listener,
         base: format!("http://127.0.0.1:{port}"),
@@ -82,6 +85,10 @@ fn desk() -> Desk {
         }),
         random: Box::new(move || [counter.fetch_add(1, Ordering::SeqCst); 32]),
         sweep_every: Duration::from_millis(10),
+        debug: Box::new({
+            let debugged = Arc::clone(&debugged);
+            move |said: &str| debugged.lock().unwrap().push(said.to_string())
+        }),
     };
     let gone_too = Arc::clone(&gone);
     let admitted_too = Arc::clone(&admitted);
@@ -120,6 +127,7 @@ fn desk() -> Desk {
         asked,
         gone,
         admitted,
+        debugged,
     }
 }
 
@@ -297,6 +305,26 @@ fn mcp_asks_a_client_to_sign_in_and_says_where() {
         json!(["S256"])
     );
     assert_eq!(desk.mcp("made-up", None, &initialize()).status, 401);
+}
+
+#[test]
+fn a_tool_call_says_its_time_on_the_desk_at_debug() {
+    let desk = desk();
+    let token = desk.signed_in();
+    let started = desk.mcp(&token, None, &initialize());
+    let session = started.headers["mcp-session-id"].clone();
+    desk.mcp(
+        &token,
+        Some(&session),
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "list_windows"}}),
+    );
+    let debugged = desk.debugged.lock().unwrap();
+    assert!(
+        debugged
+            .iter()
+            .any(|said| said.starts_with("\"list_windows\" took ")),
+        "{debugged:?}"
+    );
 }
 
 #[test]

@@ -55,6 +55,9 @@ pub struct Web {
     pub random: Box<dyn FnMut() -> [u8; 32] + Send>,
     /// How often idle sessions are ended between requests.
     pub sweep_every: Duration,
+    /// Says a line at debug for the `agents` subsystem, if the desk's log
+    /// levels show it (`domicile set-log-level debug agents`).
+    pub debug: Box<dyn Fn(&str) + Send + Sync>,
 }
 
 /// Makes each session's agent, on that session's thread.
@@ -92,6 +95,7 @@ struct Shared {
     clock: Arc<dyn Fn() -> u64 + Send + Sync>,
     base: String,
     port: u16,
+    debug: Box<dyn Fn(&str) + Send + Sync>,
 }
 
 /// Serves until the server fails. `agent` makes each session's agent, on
@@ -122,6 +126,7 @@ pub fn serve_http(
         conversations: Mutex::new(HashMap::new()),
         random,
         clock: web.clock,
+        debug: web.debug,
         base: web.base,
         port,
     });
@@ -334,7 +339,7 @@ fn mcp(
         Some(answer) => {
             let answer = serde_json::to_vec(&answer).expect("an answer serializes");
             if let Some(line) = timed(&message, asked.elapsed(), answer.len()) {
-                eprintln!("{line}");
+                (shared.debug)(&line);
             }
             json_bytes(200, answer)
         }
@@ -351,7 +356,7 @@ fn timed(message: &Value, took: Duration, bytes: usize) -> Option<String> {
         return None;
     }
     Some(format!(
-        "domicile: {} took {} ms on this desk, answering {:.1} KB",
+        "{} took {} ms on this desk, answering {:.1} KB",
         message["params"]["name"],
         took.as_millis(),
         bytes as f64 / 1024.0
@@ -394,15 +399,15 @@ fn joined(
             .as_object()
             .map(|meta| meta.keys().cloned().collect::<Vec<_>>())
             .unwrap_or_default();
-        eprintln!(
-            "domicile: {} ({}) called a tool; _meta keys: {keys:?}; {}",
+        (shared.debug)(&format!(
+            "{} ({}) called a tool; _meta keys: {keys:?}; {}",
             session.initialize["params"]["clientInfo"]["name"],
             session.initialize["params"]["clientInfo"]["version"],
             match named {
                 Some(_) => "it names its conversation",
                 None => "it names no conversation, so the session is its own",
             }
-        );
+        ));
     }
     let Some(named) = named else {
         return session.asks.clone();
@@ -590,10 +595,7 @@ mod tests {
         let call = json!({"method": "tools/call", "params": {"name": "browser_click"}});
         assert_eq!(
             timed(&call, Duration::from_millis(512), 3277),
-            Some(
-                "domicile: \"browser_click\" took 512 ms on this desk, answering 3.2 KB"
-                    .to_string()
-            )
+            Some("\"browser_click\" took 512 ms on this desk, answering 3.2 KB".to_string())
         );
     }
 

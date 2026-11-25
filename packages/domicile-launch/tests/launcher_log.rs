@@ -1,6 +1,6 @@
 //! Tests for how the launcher's own messages are leveled and written.
 
-use domicile_launch::launcher_log::{line, shown, threshold};
+use domicile_launch::launcher_log::{line, shown, threshold, threshold_of};
 use domicile_protocol::{LogLevel, LogLevels, Subsystem};
 
 #[test]
@@ -47,4 +47,24 @@ fn errors_alone_show_until_the_session_or_everything_is_turned_up() {
         subsystems: [(Subsystem::Input, LogLevel::Trace)].into(),
     });
     assert!(!shown(LogLevel::Warn, elsewhere));
+}
+
+#[test]
+fn a_subsystem_shows_at_its_own_level_over_everything() {
+    let agents = LogLevels {
+        all: Some(LogLevel::Info),
+        subsystems: [(Subsystem::Agents, LogLevel::Debug)].into(),
+    };
+    assert!(shown(
+        LogLevel::Debug,
+        threshold_of(Subsystem::Agents, &agents)
+    ));
+    assert!(!shown(
+        LogLevel::Debug,
+        threshold_of(Subsystem::Session, &agents)
+    ));
+    assert!(!shown(
+        LogLevel::Warn,
+        threshold_of(Subsystem::Agents, &LogLevels::default())
+    ));
 }

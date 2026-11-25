@@ -1329,6 +1329,40 @@ fn agents_served_over_http(http: domicile_launch::cli::McpHttp) -> Result<ExitCo
     agents_served_at(listener, base)
 }
 
+/// Says `said` at debug for the `agents` subsystem, if the desktop's log
+/// levels, asked each time so `domicile set-log-level` applies at once, show
+/// it. This process is no part the desktop sets levels on itself.
+fn agents_debug(said: &str) {
+    let levels = advertised(std::env::var(VARIABLE).ok().as_deref())
+        .map_err(|why| why.to_string())
+        .and_then(|socket| {
+            ask(&socket, &Request::LogLevels, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
+        });
+    let levels = match levels {
+        Ok(Response::LogLevels { levels }) => levels,
+        Ok(other) => {
+            return launcher_log::error(&format!(
+                "the desktop answered {other:?} when asked its log levels"
+            ))
+        }
+        Err(why) => return launcher_log::error(&format!("could not ask the log levels: {why}")),
+    };
+    let level = domicile_protocol::LogLevel::Debug;
+    if launcher_log::shown(
+        level,
+        launcher_log::threshold_of(domicile_protocol::Subsystem::Agents, &levels),
+    ) {
+        eprintln!(
+            "{}",
+            launcher_log::line(
+                level,
+                said,
+                domicile_launch::journal::stderr_is_the_journal()
+            )
+        );
+    }
+}
+
 /// Serves agents on the web through the relay at `relay`, or Domicile's: an
 /// HTTP server on this computer, which the relay's connections reach once
 /// the desk ends their TLS; see `domicile_launch::mcp::web`.
@@ -1385,6 +1419,7 @@ fn agents_served_at(listener: std::net::TcpListener, base: String) -> Result<Exi
             bytes
         }),
         sweep_every: std::time::Duration::from_secs(60),
+        debug: Box::new(agents_debug),
     };
     mcp::serve_http(web, move || {
         let binary = binary.clone();

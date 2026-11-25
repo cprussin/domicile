@@ -37,9 +37,15 @@ pub fn shown(level: LogLevel, threshold: LogLevel) -> bool {
 /// The most verbose level the launcher shows under `levels`: the session's,
 /// else everything's, else errors.
 pub fn threshold(levels: &LogLevels) -> LogLevel {
+    threshold_of(Subsystem::Session, levels)
+}
+
+/// The most verbose level `subsystem` shows under `levels`: its own, else
+/// everything's, else errors.
+pub fn threshold_of(subsystem: Subsystem, levels: &LogLevels) -> LogLevel {
     levels
         .subsystems
-        .get(&Subsystem::Session)
+        .get(&subsystem)
         .copied()
         .or(levels.all)
         .unwrap_or(LogLevel::Error)
