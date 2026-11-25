@@ -27,7 +27,7 @@ use serde_json::{json, Value};
 use tiny_http::{Header, Method, Request, Response, Server};
 
 use super::oauth::{base64url, Asks, Auth, Authorized, Params};
-use super::Agent;
+use super::{answered_until_idle, Agent};
 
 /// How long a session may go unused before it ends.
 pub const IDLE_MS: u64 = 30 * 60 * 1000;
@@ -55,6 +55,9 @@ pub struct Web {
     pub random: Box<dyn FnMut() -> [u8; 32] + Send>,
     /// How often idle sessions are ended between requests.
     pub sweep_every: Duration,
+    /// How long a session's agent may go without a message before it lets
+    /// go of the desk ([`super::LET_GO_AFTER`]).
+    pub let_go_after: Duration,
     /// Says a line at debug for the `agents` subsystem, if the desk's log
     /// levels show it (`domicile set-log-level debug agents`).
     pub debug: Box<dyn Fn(&str) + Send + Sync>,
@@ -96,6 +99,7 @@ struct Shared {
     base: String,
     port: u16,
     debug: Box<dyn Fn(&str) + Send + Sync>,
+    let_go_after: Duration,
 }
 
 /// Serves until the server fails. `agent` makes each session's agent, on
@@ -127,6 +131,7 @@ pub fn serve_http(
         random,
         clock: web.clock,
         debug: web.debug,
+        let_go_after: web.let_go_after,
         base: web.base,
         port,
     });
@@ -301,7 +306,7 @@ fn mcp(
     let (id, asks) = match (id, starting) {
         (_, true) => {
             let id = base64url(&(shared.random.lock().unwrap())());
-            let asks = started(agent);
+            let asks = started(agent, shared.let_go_after);
             shared.sessions.lock().unwrap().insert(
                 id.clone(),
                 Session {
@@ -363,17 +368,24 @@ fn timed(message: &Value, took: Duration, bytes: usize) -> Option<String> {
     ))
 }
 
-/// Starts a thread for a session or conversation, with an agent made on it.
-fn started(agent: &Maker) -> Sender<Asked> {
+/// Starts a thread for a session or conversation, with an agent made on it
+/// that lets go of the desk after `let_go_after` with no message.
+fn started(agent: &Maker, let_go_after: Duration) -> Sender<Asked> {
     let (asks, asked) = mpsc::channel::<Asked>();
     let agent = Arc::clone(agent);
     thread::spawn(move || {
         let mut agent = agent();
         // Ends when its session or conversation does, which drops the agent
         // and lets it go.
-        for (message, reply) in asked {
-            let _ = reply.send(agent.answer(&message));
-        }
+        answered_until_idle(
+            &asked,
+            let_go_after,
+            &mut agent,
+            |agent, (message, reply)| {
+                let _ = reply.send(agent.answer(&message));
+                Ok(())
+            },
+        )
     });
     asks
 }
@@ -416,7 +428,7 @@ fn joined(
     let conversation = conversations
         .entry((session.client.clone(), named.to_string()))
         .or_insert_with(|| {
-            let asks = started(agent);
+            let asks = started(agent, shared.let_go_after);
             // Its answer was the session's, long since sent.
             let (unheard, _) = mpsc::channel();
             let _ = asks.send((session.initialize.clone(), unheard));

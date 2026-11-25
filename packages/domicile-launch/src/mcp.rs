@@ -19,6 +19,9 @@ pub mod web;
 
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::thread;
+use std::time::Duration;
 
 use browser::Browser;
 pub use http::{serve_http, Web, IDLE_MS};
@@ -120,6 +123,19 @@ impl<'a> Agent<'a> {
         )
     }
 
+    /// Lets go of the desk after the agent called nothing for a while, ending
+    /// its `domicile agent` and its place in the bar. It keeps what it read
+    /// and its last screenshot, since its next call may still use them. A
+    /// grant the user stopped stays, so the next call says so rather than
+    /// asking again.
+    fn let_go_idle(&mut self) {
+        if let Some(Ok(grant)) = &self.session.grant {
+            if !(grant.stopped)() {
+                self.session.grant = None;
+            }
+        }
+    }
+
     /// The reply to one line of JSON-RPC, which may not parse.
     pub fn answer_line(&mut self, line: &str) -> io::Result<Option<Value>> {
         match serde_json::from_str::<Value>(line) {
@@ -129,26 +145,58 @@ impl<'a> Agent<'a> {
     }
 }
 
+/// How long an agent may go without a message before it lets go of the desk,
+/// as `stop_using_desktop` does. Its next tool call asks again.
+pub const LET_GO_AFTER: Duration = Duration::from_secs(2 * 60);
+
 /// Answers each JSON-RPC message on `input`, one per line, on `output`, until
-/// `input` ends, as one [`Agent`].
+/// `input` ends, as one [`Agent`], which lets go of the desk whenever no
+/// message comes for `let_go_after`.
 pub fn serve(
-    input: impl BufRead,
+    input: impl BufRead + Send + 'static,
     mut output: impl Write,
     domicile: impl FnMut(&[String]) -> io::Result<Ran>,
     admit: impl FnMut(&str) -> Result<Grant, String>,
+    let_go_after: Duration,
 ) -> io::Result<()> {
+    let (lines, read) = mpsc::channel();
+    // Read on a thread of its own, so the agent can let go while it waits.
+    thread::spawn(move || {
+        for line in input.lines() {
+            if lines.send(line).is_err() {
+                return;
+            }
+        }
+    });
     let mut agent = Agent::new(domicile, admit);
-    for line in input.lines() {
+    answered_until_idle(&read, let_go_after, &mut agent, |agent, line| {
         let line = line?;
         if line.trim().is_empty() {
-            continue;
+            return Ok(());
         }
         if let Some(reply) = agent.answer_line(&line)? {
             writeln!(output, "{reply}")?;
             output.flush()?;
         }
+        Ok(())
+    })
+}
+
+/// Hands `agent` each of `asked` to `answer`, until `asked` ends, letting go
+/// of the desk whenever none comes for `let_go_after`.
+fn answered_until_idle<T>(
+    asked: &Receiver<T>,
+    let_go_after: Duration,
+    agent: &mut Agent<'_>,
+    mut answer: impl FnMut(&mut Agent<'_>, T) -> io::Result<()>,
+) -> io::Result<()> {
+    loop {
+        match asked.recv_timeout(let_go_after) {
+            Ok(message) => answer(agent, message)?,
+            Err(RecvTimeoutError::Timeout) => agent.let_go_idle(),
+            Err(RecvTimeoutError::Disconnected) => return Ok(()),
+        }
     }
-    Ok(())
 }
 
 /// The reply to `message`, or `None` for a notification.
@@ -214,8 +262,11 @@ const INSTRUCTIONS: &str = "Read and act on windows as text first: list_windows,
     native and browser windows alike, so they reach a canvas or anything else a tree \
     can't. They are refused in a window the user is in, and over the shell, which you \
     act on by ref. send_shell acts on the user's focus, so it \
-    waits until they step away. When you are done with the desktop, call \
-    stop_using_desktop.";
+    waits until they step away. Call stop_using_desktop as soon as you are done with \
+    the desktop. Before you wait on anything else, such as an approval, a background \
+    job or the user, call stop_using_desktop too: asking again later is quick, and a \
+    remembered agent is not asked at all. An agent that calls nothing for two minutes \
+    is let go.";
 
 /// What the client calls itself in `initialize`: its title, else its name.
 fn named(params: &Value) -> String {
@@ -480,7 +531,7 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec![],
         ),
         Tool::StopUsing => (
-            "Let go of the desktop once you are done with it, so the user sees you are gone. Your next tool call asks the user again.",
+            "Let go of the desktop once you are done with it, or before you wait on anything else, so the user sees you are gone. Your next tool call asks the user again.",
             json!({}),
             vec![],
         ),

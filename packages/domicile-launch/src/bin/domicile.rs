@@ -1324,7 +1324,7 @@ fn native_window(id: &str) -> Result<(u32, String), String> {
 fn agents_served() -> Result<ExitCode, String> {
     let binary = myself()?;
     mcp::serve(
-        std::io::stdin().lock(),
+        std::io::BufReader::new(std::io::stdin()),
         std::io::stdout().lock(),
         |args| {
             let output = Command::new(&binary).args(args).output()?;
@@ -1335,6 +1335,7 @@ fn agents_served() -> Result<ExitCode, String> {
             })
         },
         |name| let_in(&binary, name),
+        mcp::LET_GO_AFTER,
     )
     .map_err(|why| format!("mcp: {why}"))?;
     Ok(ExitCode::SUCCESS)
@@ -1416,6 +1417,7 @@ fn agents_served_at(listener: std::net::TcpListener, base: String) -> Result<Exi
             bytes
         }),
         sweep_every: std::time::Duration::from_secs(60),
+        let_go_after: mcp::LET_GO_AFTER,
         debug: Box::new(|said: &str| {
             domicile_launch::desk_log::say(
                 domicile_protocol::Subsystem::Agents,

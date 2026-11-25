@@ -26,6 +26,12 @@ The component library's preset and manganese's Panda config are built for Panda 
 
 [Shell packaging](SHELL-PACKAGING.md#panda-with-manganeses-tokens)
 
+### Idle agents let go of the desktop
+
+An MCP session that calls nothing for two minutes lets go of the desktop: its pill leaves the bar, and its next tool call asks again. It keeps what it read and its last screenshot. The server's instructions tell agents to call `stop_using_desktop` before waiting on anything else. `browser_click` at a point, `browser_drag` and `browser_scroll` read the page's scale with `Page.getLayoutMetrics`, a method agents get, rather than `Runtime.evaluate`, which the engine refuses them.
+
+[Agents](AGENTS.md)
+
 ### Agents get shorter answers from browser windows
 
 The MCP server's `browser_snapshot` leaves out the `InlineTextBox` lines that repeat a text's words, and stops at 1500 elements with a line saying so. An act answers with at most 100 lines of what changed, then says how much more there is. `list_windows` gives a browser window an agent holds its seat in `held_by`, as it does a native window.

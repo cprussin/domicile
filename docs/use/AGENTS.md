@@ -60,6 +60,9 @@ ask to sign in again.
 ## Good to know
 
 - Agents can't use your desktop while it's locked.
+- An agent that does nothing for two minutes leaves your desktop, and its pill
+  goes from the bar. If it comes back, it asks again, unless you told it to
+  remember.
 - An agent has a pointer and keyboard of its own, so it can click and type
   in one app or browser window while you work in another. It never moves
   your pointer or changes what you're typing in.

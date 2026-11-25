@@ -23,6 +23,10 @@ Windows, the overview, toasts, popovers and rows move on springs. A dialog grows
 
 When your config file can't be changed from Settings, its switches now look plainly off, and the note at the top of the page has a lock and says why in plain words.
 
+### Idle agents leave your desktop
+
+An agent that does nothing for two minutes leaves your desktop, and its pill goes from the bar. If it comes back, it asks again, unless you told it to remember.
+
 ### See when you've taken over from an agent
 
 Click or type in a window an agent is using and it's clear the window is now yours. Its ring turns amber and says the agent is paused, a banner slides in under the title bar with **Give back**, and the agent pill turns amber and says for a few seconds which window you took. Give the window back from the banner, the notice or the pill.

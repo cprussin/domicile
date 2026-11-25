@@ -8,7 +8,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use domicile_launch::mcp::{serve_http, Agent, Answer, Grant, Ran, Said, Web, IDLE_MS};
+use domicile_launch::mcp::{
+    serve_http, Agent, Answer, Grant, Ran, Said, Web, IDLE_MS, LET_GO_AFTER,
+};
 use domicile_protocol::AgentReach;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -56,6 +58,11 @@ impl Drop for Counted {
 }
 
 fn desk() -> Desk {
+    desk_letting_go_after(LET_GO_AFTER)
+}
+
+/// [`desk`], its agents letting go after `let_go_after` with no message.
+fn desk_letting_go_after(let_go_after: Duration) -> Desk {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let now = Arc::new(AtomicU64::new(1_000));
@@ -85,6 +92,7 @@ fn desk() -> Desk {
         }),
         random: Box::new(move || [counter.fetch_add(1, Ordering::SeqCst); 32]),
         sweep_every: Duration::from_millis(10),
+        let_go_after,
         debug: Box::new({
             let debugged = Arc::clone(&debugged);
             move |said: &str| debugged.lock().unwrap().push(said.to_string())
@@ -395,6 +403,18 @@ fn an_idle_session_ends_and_lets_its_agent_go() {
         &json!({"jsonrpc": "2.0", "id": 2, "method": "ping"}),
     );
     assert_eq!(after.status, 404);
+}
+
+#[test]
+fn a_sessions_agent_that_calls_nothing_for_a_while_lets_go_and_its_next_call_asks_again() {
+    let desk = desk_letting_go_after(Duration::from_millis(50));
+    let token = desk.signed_in();
+    let session = desk.mcp(&token, None, &initialize()).headers["mcp-session-id"].clone();
+    let listing = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "list_windows"}});
+    desk.mcp(&token, Some(&session), &listing);
+    wait_until(|| desk.gone.load(Ordering::SeqCst) >= 1);
+    assert_eq!(desk.mcp(&token, Some(&session), &listing).status, 200);
+    assert_eq!(desk.admitted.load(Ordering::SeqCst), 2);
 }
 
 /// A tool call in the conversation ChatGPT names `chat`.

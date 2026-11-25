@@ -205,19 +205,21 @@ impl<D: FnMut(&[String]) -> io::Result<Ran>> Page<'_, D> {
 
     /// How many of a screenshot's pixels make one of the page's CSS pixels:
     /// its device pixel ratio, which Page.captureScreenshot draws at and
-    /// Input.dispatchMouseEvent divides out.
+    /// Input.dispatchMouseEvent divides out. Page.getLayoutMetrics gives the
+    /// visual viewport's width in device pixels and in CSS pixels, unrounded;
+    /// the layout viewport's are rounded.
     fn scale(&mut self) -> io::Result<Result<f64, String>> {
-        let answer = match self.send(
-            "Runtime.evaluate",
-            json!({"expression": "devicePixelRatio", "returnByValue": true}),
-        )? {
+        let answer = match self.send("Page.getLayoutMetrics", json!({}))? {
             Ok(answer) => answer,
             Err(why) => return Ok(Err(why)),
         };
-        Ok(answer["result"]["value"]
-            .as_f64()
-            .filter(|scale| *scale > 0.0)
-            .ok_or_else(|| format!("the page answered no device pixel ratio: {answer}")))
+        let device = answer["visualViewport"]["clientWidth"].as_f64();
+        let css = answer["cssVisualViewport"]["clientWidth"].as_f64();
+        Ok(device
+            .zip(css)
+            .filter(|(device, css)| *device > 0.0 && *css > 0.0)
+            .map(|(device, css)| device / css)
+            .ok_or_else(|| format!("the page answered no viewport width: {answer}")))
     }
 
     /// The views the window holds, as `domicile list-windows` lists them, or
