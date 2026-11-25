@@ -401,6 +401,12 @@ export const domicilePreset = definePreset({
           agent: {
             value: "{colors.violet.600}",
           },
+          // A window the user took from an agent, where the agent is paused:
+          // its ring, its name, the banner on it and the bar's pill. One
+          // amber in both themes, deep enough for `onAgent` text.
+          agentPaused: {
+            value: "{colors.amber.700}",
+          },
           backdrop: {
             // Black works in both themes.
             value: "rgb(from black r g b / 70%)",

@@ -6,10 +6,17 @@ import type { Seat, Seats } from "@domicile-desktop/sdk/desktop/seats";
 import type { Windows } from "@domicile-desktop/sdk/desktop/windows";
 import type { Capturing } from "@domicile-desktop/sdk/portal";
 import { CapturingKind } from "@domicile-desktop/sdk/portal";
+import { PauseIcon } from "@phosphor-icons/react/dist/ssr/Pause";
 import { RobotIcon } from "@phosphor-icons/react/dist/ssr/Robot";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
 import { StopIcon } from "@phosphor-icons/react/dist/ssr/Stop";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import { css } from "../styled-system/css";
 import { center, flex, hstack } from "../styled-system/patterns";
@@ -58,7 +65,8 @@ export const Agents = ({ domicile }: { domicile: AgentsDesktop }) => {
     heard();
     return portals.on("change", heard);
   }, [domicile]);
-  const uses = useUses(domicile);
+  const { taking, titleOf, uses } = useUses(domicile);
+  const notice = useTakenNotice(taking, titleOf);
 
   const [first, ...rest] = agents;
   // Nothing at all when none is in, so the bar closes the item.
@@ -69,6 +77,7 @@ export const Agents = ({ domicile }: { domicile: AgentsDesktop }) => {
         domicile.portals.changeAgent(agent.id);
       }}
       giveBack={domicile.seats.giveBack}
+      notice={notice}
       stop={(agent) => {
         domicile.portals.stopCapturing(agent.id);
       }}
@@ -87,7 +96,14 @@ type Use = { appId: string; how: How; title: string };
 /** The windows each agent uses, by its session's id. */
 const useUses = (
   domicile: AgentsDesktop,
-): ((agent: Agent) => readonly Use[]) => {
+): {
+  /** Each window the user has taken from an agent, by its seat. */
+  taking: readonly Taking[];
+  /** A window's title, by the id seats name it by. */
+  titleOf: (appId: string) => string;
+  /** The windows `agent` uses. */
+  uses: (agent: Agent) => readonly Use[];
+} => {
   const { browser, seats, windows } = domicile;
   const seatsChanged = useCallback(
     (changed: () => void) => seats.on("change", changed),
@@ -104,21 +120,21 @@ const useUses = (
   const list = useSyncExternalStore(seatsChanged, () => seats.list);
   const titled = useSyncExternalStore(windowsChanged, () => windows.list);
   const pages = useSyncExternalStore(browserChanged, () => browser.windows);
-  return (agent) => {
+  // Seats name a client window by its app id and a browser window by its own
+  // id. A page with no title goes by its address.
+  const title = (appId: string): string => {
+    const client = titled.find((window) => window.appId === appId);
+    if (client !== undefined) {
+      return client.title;
+    }
+    const page = pages?.find((window) => window.id === appId);
+    if (page === undefined) {
+      return "";
+    }
+    return page.title === "" ? page.url : page.title;
+  };
+  const uses = (agent: Agent): readonly Use[] => {
     const seat = list?.find(({ id }) => id === seatId(agent));
-    // Seats name a client window by its app id and a browser window by its
-    // own id. A page with no title goes by its address.
-    const title = (appId: string): string => {
-      const client = titled.find((window) => window.appId === appId);
-      if (client !== undefined) {
-        return client.title;
-      }
-      const page = pages?.find((window) => window.id === appId);
-      if (page === undefined) {
-        return "";
-      }
-      return page.title === "" ? page.url : page.title;
-    };
     return seat === undefined
       ? []
       : [
@@ -136,6 +152,96 @@ const useUses = (
           })),
         ];
   };
+  return {
+    taking: (list ?? []).flatMap((seat) =>
+      seat.taken.map((appId) => ({ appId, name: seat.name, seat: seat.id })),
+    ),
+    titleOf: title,
+    uses,
+  };
+};
+
+/** A window the user took from the agent in seat `seat`, named `name`. */
+type Taking = { appId: string; name: string; seat: string };
+
+/** How long the notice that the user took a window stays up, unless hovered. */
+export const NOTICE_MS = 6 * 1000;
+
+/** What the pill says for a moment when the user takes a window. */
+type Notice = {
+  /** The agent's name. */
+  name: string;
+  /** The window taken, by the id seats name it by. */
+  appId: string;
+  /** Its title, or "" for none. */
+  title: string;
+  /** Puts the notice away. */
+  dismiss: () => void;
+  /** Keeps it up while `held`, such as while the pointer is on it. */
+  hold: (held: boolean) => void;
+};
+
+/**
+ * The notice for the window the user took last, while it is up: from the
+ * moment they take it for {@link NOTICE_MS}, longer while held. Windows
+ * already taken when the bar starts never raise one.
+ */
+const useTakenNotice = (
+  taking: readonly Taking[],
+  titleOf: (appId: string) => string,
+): Notice | undefined => {
+  const keys = taking.map(({ appId, seat }) => `${seat}:${appId}`);
+  const seen = useRef<ReadonlySet<string> | undefined>(undefined);
+  const [shown, setShown] = useState<Taking | undefined>(undefined);
+  const [held, setHeld] = useState(false);
+
+  const latest = useRef(taking);
+  latest.current = taking;
+  const joined = keys.join("\n");
+  useEffect(() => {
+    const now = new Set(joined === "" ? [] : joined.split("\n"));
+    const before = seen.current;
+    seen.current = now;
+    if (before === undefined) {
+      return;
+    }
+    const fresh = latest.current.findLast(
+      ({ appId, seat }) => !before.has(`${seat}:${appId}`),
+    );
+    setShown(
+      (up) =>
+        fresh ??
+        // Given back already: nothing left to say.
+        (up !== undefined && now.has(`${up.seat}:${up.appId}`)
+          ? up
+          : undefined),
+    );
+  }, [joined]);
+
+  useEffect(() => {
+    if (shown === undefined || held) {
+      return undefined;
+    }
+    const timer = setTimeout(() => {
+      setShown(undefined);
+    }, NOTICE_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [shown, held]);
+
+  return shown === undefined
+    ? undefined
+    : {
+        appId: shown.appId,
+        dismiss: () => {
+          setShown(undefined);
+          setHeld(false);
+        },
+        hold: setHeld,
+        name: shown.name,
+        title: titleOf(shown.appId),
+      };
 };
 
 /** The seat id the compositor gives `agent`'s session. */
@@ -159,15 +265,34 @@ type Controls = {
   uses: (agent: Agent) => readonly Use[];
 };
 
-/** The one pill, and its panel. */
-const Pill = ({ agents, ...controls }: Controls & { agents: Sessions }) => {
+/**
+ * The one pill, and its panel. Amber, and "Paused", while the user has taken
+ * any window from an agent. Taking one drops a notice from it for a moment.
+ */
+const Pill = ({
+  agents,
+  notice,
+  ...controls
+}: Controls & { agents: Sessions; notice: Notice | undefined }) => {
   const [first] = agents;
   const names = new Set(agents.map((agent) => agent.agent));
   const label = names.size === 1 ? first.agent : "Agents";
   const several = agents.length > 1 ? sessionsName(agents, names) : undefined;
+  const paused = agents.some((agent) =>
+    controls.uses(agent).some(({ how }) => how === "taken"),
+  );
+  const [open, setOpen] = useState(false);
   return (
     <Popover
       align="center"
+      onHoverChange={notice?.hold}
+      onOpenChange={(opening) => {
+        // A press on the pill while the notice is up opens the whole panel.
+        notice?.dismiss();
+        setOpen(opening);
+      }}
+      open={open || notice !== undefined}
+      quiet={!open}
       side="bottom"
       tone="overPhoto"
       tooltip={
@@ -176,27 +301,88 @@ const Pill = ({ agents, ...controls }: Controls & { agents: Sessions }) => {
           : `${several} are in control`
       }
       trigger={
-        <button aria-label={several} className={triggerStyles} type="button">
-          <RobotIcon aria-hidden size={15} weight="bold" />
-          {label}
+        <button
+          aria-label={several}
+          className={triggerStyles}
+          data-paused={paused ? "" : undefined}
+          type="button"
+        >
+          {paused ? (
+            <PauseIcon aria-hidden size={15} weight="fill" />
+          ) : (
+            <RobotIcon aria-hidden size={15} weight="bold" />
+          )}
+          {paused ? `${label} · Paused` : label}
           {several !== undefined && (
             <span className={countStyles}>{agents.length}</span>
           )}
         </button>
       }
     >
-      {several === undefined ? (
-        <Panel agent={first} {...controls} />
+      {notice !== undefined && !open ? (
+        <TakenNotice giveBack={controls.giveBack} notice={notice} />
       ) : (
-        <SessionsPanel
-          agents={agents}
-          {...controls}
-          title={`${several} are in control`}
-        />
+        <Panels agents={agents} several={several} {...controls} />
       )}
     </Popover>
   );
 };
+
+/** One session's panel, or several sessions' with `several` naming them. */
+const Panels = ({
+  agents,
+  several,
+  ...controls
+}: Controls & { agents: Sessions; several: string | undefined }) =>
+  several === undefined ? (
+    <Panel agent={agents[0]} {...controls} />
+  ) : (
+    <SessionsPanel
+      agents={agents}
+      {...controls}
+      title={`${several} are in control`}
+    />
+  );
+
+/** For a moment after the user takes a window: the agent waits for it. */
+const TakenNotice = ({
+  giveBack,
+  notice,
+}: {
+  giveBack: (appId: string) => void;
+  notice: Notice;
+}) => (
+  <div className={noticeStyles} role="status">
+    <span className={noticeRowStyles}>
+      <span className={noticeIconStyles}>
+        <PauseIcon aria-hidden size={14} weight="fill" />
+      </span>
+      <span className={headStyles}>
+        <strong>{`${notice.name} paused`}</strong>
+        <span className={detailStyles}>
+          {`You took over ${
+            notice.title === "" ? "an untitled window" : notice.title
+          }. ${notice.name} will wait until you give it back.`}
+        </span>
+      </span>
+    </span>
+    <span className={buttonsStyles}>
+      <Button onClick={notice.dismiss} size="sm" variant="ghost">
+        Dismiss
+      </Button>
+      <Button
+        onClick={() => {
+          giveBack(notice.appId);
+          notice.dismiss();
+        }}
+        size="sm"
+        variant="solid"
+      >
+        Give back
+      </Button>
+    </span>
+  </div>
+);
 
 /** One session's panel. */
 const Panel = ({
@@ -326,7 +512,7 @@ const Using = ({
 /** What a row of {@link Using} says the agent does in its window. */
 const HOW: Readonly<Record<How, string>> = {
   pointing: "Pointing",
-  taken: "Yours now",
+  taken: "Paused: you're using it",
   typing: "Typing",
 };
 
@@ -433,6 +619,12 @@ const triggerStyles = hstack({
   _hover: {
     backgroundColor: "color-mix(in oklab, {colors.agent} 85%, black)",
   },
+  "&[data-paused]": {
+    _hover: {
+      backgroundColor: "color-mix(in oklab, {colors.agentPaused} 85%, black)",
+    },
+    backgroundColor: "agentPaused",
+  },
   backgroundColor: "agent",
   blockSize: 6,
   borderRadius: "lg",
@@ -468,6 +660,25 @@ const panelStyles = flex({
 });
 
 const headStyles = flex({ direction: "column", gap: 0.5 });
+
+const noticeStyles = flex({
+  direction: "column",
+  gap: 3,
+  inlineSize: 72,
+  paddingBlock: 1.5,
+});
+
+const noticeRowStyles = hstack({ alignItems: "flex-start", gap: 2.5 });
+
+// The pause on the pill's amber.
+const noticeIconStyles = center({
+  backgroundColor: "agentPaused",
+  blockSize: 7,
+  borderRadius: "full",
+  color: "onAgent",
+  flexShrink: 0,
+  inlineSize: 7,
+});
 
 // A rule above each session, so they read apart.
 const sessionStyles = flex({
