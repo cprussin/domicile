@@ -15,6 +15,7 @@
 #include "base/callback_list.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
@@ -613,6 +614,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   // RunBeforeUnloadDialog); BeforeUnloadFired closes on its answer. A page
   // with no `beforeunload` handler closes at once.
   void AskToClose();
+
+  // Runs `pagehide` and `unload` in the page's main frame, and no
+  // `beforeunload`, then calls `unloaded`, or calls it once content gives up on
+  // the page, after 500 ms, or the page is destroyed. The browser is about to
+  // exit: the window stays open and listed.
+  void UnloadForExit(base::OnceClosure unloaded);
 
   // chrome.windows.create for popup window `window_id`: opens a browser window
   // as its one tab. `width` and `height` are 0 when the extension set none.
@@ -1471,6 +1478,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   std::optional<mojo::ReceiverId> open_picker_;
   // Whether AskToClose is waiting on the page's beforeunload.
   bool asked_to_close_ = false;
+  // Whether UnloadForExit ran, and its callback until the page is done. A page
+  // destroyed first is done too: every page waits on the last one.
+  bool unloading_for_exit_ = false;
+  base::ScopedClosureRunner unloaded_for_exit_;
 
   // The current find's text, or empty. Decides whether a Find is the next
   // match or a new search.

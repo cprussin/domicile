@@ -188,6 +188,10 @@ void AskToCloseBrowserWindow(const std::string& id);
 // Closes browser window `id` of the shell's profile without asking.
 void CloseBrowserWindow(const std::string& id);
 
+// Unloads every window's page, as the browser is about to exit, then calls
+// `unloaded`. See WebViewGuest::UnloadForExit.
+void UnloadBrowserWindowsForExit(base::OnceClosure unloaded);
+
 // Runs `loaded` with a browser window's id each time its page finishes
 // loading, until the subscription goes.
 base::CallbackListSubscription WatchBrowserWindowLoads(

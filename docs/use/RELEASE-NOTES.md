@@ -41,6 +41,10 @@ Closing windows dissolve away, windows blur a little as a workspace switch slide
 
 Windows, the overview, toasts, popovers and rows move on springs. A dialog grows out of the window that asked for it, a window sent to another workspace flies to it in the switcher, and a workspace switch or a four-finger pinch into the overview turns back midway when you change your mind. Panels grow from their bar buttons, toasts follow your swipe, and closed rows slide away.
 
+### Fixes
+
+- Element no longer says it is open in another window after you log out and quickly in again.
+
 ## 1.3.0
 
 _November 24, 2026_

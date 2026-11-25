@@ -3299,6 +3299,12 @@ void WebViewGuest::ReportNewWindow(const GURL& target_url) {
 }
 
 void WebViewGuest::CloseContents(content::WebContents* source) {
+  // UnloadForExit's page is done. A window closed here would not open again
+  // in the next session.
+  if (unloading_for_exit_) {
+    unloaded_for_exit_.RunAndReset();
+    return;
+  }
   LOG(INFO) << "domicile: a <webview>'s page asked to close.";
   Close();
 }
@@ -3312,6 +3318,12 @@ void WebViewGuest::AskToClose() {
   } else {
     Close();
   }
+}
+
+void WebViewGuest::UnloadForExit(base::OnceClosure unloaded) {
+  unloading_for_exit_ = true;
+  unloaded_for_exit_.ReplaceClosure(std::move(unloaded));
+  guest_contents_->ClosePage();
 }
 
 void WebViewGuest::BeforeUnloadFired(content::WebContents* tab,

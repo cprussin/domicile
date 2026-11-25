@@ -96,6 +96,8 @@ source_set("domicile") {
     "domicile_media_devices.h",
     "domicile_modifier_taps.cc",
     "domicile_modifier_taps.h",
+    "domicile_page_unloading.cc",
+    "domicile_page_unloading.h",
     "domicile_permissions.cc",
     "domicile_permissions.h",
     "domicile_picture_in_picture.cc",
@@ -298,6 +300,8 @@ source_set("domicile") {
     # The Settings app's site data, through Chrome's BrowsingDataModel.
     "//chrome/browser/browsing_data",
     "//components/browsing_data/content",
+    # Writing the pages' localStorage before the browser exits.
+    "//components/services/storage/public/mojom",
     # DevTools for a guest's page: Chrome's front end and its bindings.
     "//chrome/browser/devtools",
     # Printing a guest's page: Chrome's PrintViewManager and its system

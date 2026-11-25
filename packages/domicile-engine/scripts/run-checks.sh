@@ -161,6 +161,7 @@ TOGETHER=(
   guard-video-codecs
   guard-browser-brand
   guard-clean-exit
+  guard-exit-unload
 )
 
 # Run one at a time, after the rest. Latency measures time, so it runs alone.
