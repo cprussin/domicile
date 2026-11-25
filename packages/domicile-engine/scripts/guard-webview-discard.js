@@ -14,9 +14,10 @@
 //   GUARD asked-attached              asked to unload a window a <webview>
 //                                     shows (manual)
 //   GUARD unmounted                   no <webview> shows the windows
-//   GUARD asked                       asked to unload the subject and an
-//                                     extension's popup window, or in the
-//                                     control only came this far (manual)
+//   GUARD asked                       asked to unload the subject, an
+//                                     extension's popup window and a DevTools
+//                                     window, or in the control only came this
+//                                     far (manual)
 //   GUARD quiet                       `settle` ms later
 //   GUARD remounting                  `settle` ms later, a <webview> shows the
 //                                     subject again (manual)
@@ -61,7 +62,8 @@ export const HostShell = (_root, desktop) => {
   const expected = required(parameters, "expect");
   const src = required(parameters, "src");
 
-  // Window names in open order, which is the list's.
+  // Window names in open order, which is the list's. The DevTools window comes
+  // after them.
   const names =
     mode === "manual" ? ["active", "subject-1"] : ["active", "plain", "typed"];
   const SUBJECT = 1;
@@ -139,7 +141,8 @@ export const HostShell = (_root, desktop) => {
         windows.forEach((window, index) => {
           if (was.get(window.id) !== window.isDiscarded) {
             was.set(window.id, window.isDiscarded);
-            say(`list name=${names[index]} discarded=${window.isDiscarded}`);
+            const name = names[index] ?? "devtools";
+            say(`list name=${name} discarded=${window.isDiscarded}`);
           }
         });
         if (windows.length === count) {
@@ -171,8 +174,23 @@ export const HostShell = (_root, desktop) => {
       subject.src = `${src}?subject-2`;
     });
 
+  /** Opens DevTools for `page`, and resolves with its window's id. */
+  const openDevTools = (page) =>
+    new Promise((resolve) => {
+      host.addEventListener("browserwindowschanged", () => {
+        const found = host.browserWindows.find((window) =>
+          window.url.startsWith("devtools://"),
+        );
+        if (found !== undefined) {
+          resolve(found.id);
+        }
+      });
+      page.inspect();
+    });
+
   const manual = async (ids, views) => {
     await goOn(views[SUBJECT]);
+    const devTools = await openDevTools(views[0]);
     await settled();
     view(2, "src", await extensionPage());
     await settled();
@@ -185,6 +203,7 @@ export const HostShell = (_root, desktop) => {
     if (discard) {
       host.discardBrowserWindow(ids[SUBJECT]);
       host.discardBrowserWindow(popupWindow());
+      host.discardBrowserWindow(devTools);
     }
     say("asked");
     await settled();

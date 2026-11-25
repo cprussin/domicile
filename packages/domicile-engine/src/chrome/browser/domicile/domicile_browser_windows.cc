@@ -69,6 +69,7 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/url_constants.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
@@ -1384,6 +1385,10 @@ class DeskWindows final : public base::SupportsUserData::Data,
     // Its window closes with its one tab.
     if (old.popup_window().has_value()) {
       return "it is an extension's popup window";
+    }
+    // What it inspects is not kept: its front end loads again with no page.
+    if (page.GetLastCommittedURL().SchemeIs(content::kChromeDevToolsScheme)) {
+      return "it is a DevTools window";
     }
     if (old.IsAttached()) {
       return "a <webview> shows it";

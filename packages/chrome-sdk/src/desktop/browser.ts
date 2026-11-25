@@ -186,8 +186,8 @@ export type Browser = {
    * Unload window `id`'s page to free its memory. Its history and scroll
    * stay, and it loads again when a `<webview>` next shows the window; what
    * was typed into it is not kept. A window a `<webview>` shows, an
-   * extension's popup window, and an app module's or Electron app's stay
-   * loaded.
+   * extension's popup window, a DevTools window, and an app module's or
+   * Electron app's stay loaded.
    */
   discard: (id: string) => void;
   /**

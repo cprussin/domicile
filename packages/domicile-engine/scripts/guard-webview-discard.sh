@@ -12,7 +12,8 @@
 # The manual engine has an extension (guard-webview-discard-extension), which
 # mutes the subject's tab and opens a popup window. The shell asks to unload
 # the subject while a <webview> shows it, unmounts it, asks again, asks for the
-# popup window too, and shows the subject again. Checks, in order:
+# popup window and a DevTools window too, and shows the subject again. Checks,
+# in order:
 #
 #   the shell, the subject and the       or nothing was set up
 #     extension came up
@@ -20,7 +21,8 @@
 #   the subject is listed isDiscarded
 #   its old page is gone                 it logs nothing between `quiet` and
 #                                        `remounting`
-#   the popup window stays               refused in the log
+#   the popup window and the DevTools    refused in the log
+#     window stay
 #   the extension heard one replaced     and no tab created or removed; the new
 #     tab                                one muted, at the subject's index
 #   shown again, it loads                the page says `restored`, with both
@@ -205,6 +207,7 @@ SAW_EXTENSION=$(saw "$MANUAL_LOG" '"GUARD extension-ready"')
 SAW_REMOUNT=$(saw "$MANUAL_LOG" '"GUARD remounting"')
 SAW_REFUSED=$(saw "$MANUAL_LOG" "; a <webview> shows it.")
 SAW_POPUP_REFUSED=$(saw "$MANUAL_LOG" "; it is an extension's popup window.")
+SAW_DEVTOOLS_REFUSED=$(saw "$MANUAL_LOG" "; it is a DevTools window.")
 EARLY=$(between "$MANUAL_LOG" asked-attached unmounted |
   count '"GUARD list name=subject-1 discarded=true"')
 LISTED=$(between "$MANUAL_LOG" unmounted remounting |
@@ -232,7 +235,7 @@ AUTO_ACTIVE=$(saw "$AUTOMATIC_LOG" '"GUARD list name=active discarded=true"')
 
 echo
 echo "manual: shell=$SAW_SHELL subject=$SAW_SUBJECT extension=$SAW_EXTENSION remount=$SAW_REMOUNT"
-echo "refused: attached=$SAW_REFUSED early=$EARLY popup=$SAW_POPUP_REFUSED"
+echo "refused: attached=$SAW_REFUSED early=$EARLY popup=$SAW_POPUP_REFUSED devtools=$SAW_DEVTOOLS_REFUSED"
 echo "unloaded: listed=$LISTED ticks=$TICKS"
 echo "tabs: replaced=$REPLACED of $REPLACED_ANY created=$CREATED removed=$REMOVED"
 echo "shown again: loaded=$LOADED restored=$RESTORED listed=$RELISTED"
@@ -291,6 +294,9 @@ DeskWindows::Reap did not destroy it"
 elif [ "$SAW_POPUP_REFUSED" != "1" ]; then
   FAILURE="an extension's popup window was not refused, so its page moves \
 into the desk's window and the popup closes (DeskWindows::DiscardWindow)"
+elif [ "$SAW_DEVTOOLS_REFUSED" != "1" ]; then
+  FAILURE="a DevTools window was not refused, so its front end loads again \
+inspecting nothing (DeskWindows::DiscardWindow), or it never loaded"
 elif [ "$REPLACED" != "1" ] || [ "$REPLACED_ANY" != "1" ]; then
   FAILURE="the extension did not hear one tab replaced, muted and at the \
 subject's index: DomicileWindowController::Replace, or the mute was not \

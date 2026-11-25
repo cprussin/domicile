@@ -1265,8 +1265,8 @@ export type DomicileHost = {
    * Unloads window `id`'s page to free its memory. Its history and scroll
    * stay, and it loads again when a <webview> next shows the window; what was
    * typed into it is not kept. Throws TypeError for an empty id. An unknown
-   * window, one a <webview> shows, an extension's popup window, and an app
-   * module's or Electron app's do nothing.
+   * window, one a <webview> shows, an extension's popup window, a DevTools
+   * window, and an app module's or Electron app's do nothing.
    */
   discardBrowserWindow(id: string): void;
   /**

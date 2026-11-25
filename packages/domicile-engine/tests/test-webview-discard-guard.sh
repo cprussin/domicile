@@ -65,6 +65,7 @@ judge() { # $1 NEGATIVE, then NAME=value overrides
     SAW_REMOUNT=1
     SAW_REFUSED=1
     SAW_POPUP_REFUSED=1
+    SAW_DEVTOOLS_REFUSED=1
     EARLY=0
     LISTED=1
     TICKS=0
@@ -110,8 +111,8 @@ blames() { # $1 word, then the args judge takes
 }
 
 # The control asks for nothing, so the page lives on and nothing is unloaded.
-CONTROL=(SAW_POPUP_REFUSED=0 LISTED=0 TICKS=4 REPLACED=0 REPLACED_ANY=0
-  LOADED=0 RESTORED=0 RELISTED=0 AUTO_PLAIN=0)
+CONTROL=(SAW_POPUP_REFUSED=0 SAW_DEVTOOLS_REFUSED=0 LISTED=0 TICKS=4
+  REPLACED=0 REPLACED_ANY=0 LOADED=0 RESTORED=0 RELISTED=0 AUTO_PLAIN=0)
 
 echo "reading the log"
 expect "only what the page said between the steps counts" "1" \
@@ -148,6 +149,8 @@ expect "a subject never listed names DiscardWindow" "yes" \
 expect "an old page that runs on names Reap" "yes" "$(blames "Reap" 0 TICKS=3)"
 expect "an unloaded popup window is a failure" "yes" \
   "$(blames "popup window" 0 SAW_POPUP_REFUSED=0)"
+expect "an unloaded DevTools window is a failure" "yes" \
+  "$(blames "DevTools window" 0 SAW_DEVTOOLS_REFUSED=0)"
 expect "a tab replaced wrong names Replace" "yes" \
   "$(blames "DomicileWindowController::Replace" 0 REPLACED=0)"
 expect "a tab replaced twice is a failure" "fail" "$(verdict 0 REPLACED_ANY=2)"
