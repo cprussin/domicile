@@ -55,6 +55,7 @@ constexpr char kClearSiteData[] = "clear_site_data";
 constexpr char kDisableWhileTyping[] = "disable_while_typing";
 constexpr char kSetLogLevels[] = "set_log_levels";
 constexpr char kDevTools[] = "devtools";
+constexpr char kBrowserWindows[] = "browser_windows";
 
 std::string Line(base::DictValue reply) {
   std::string line;
@@ -82,6 +83,8 @@ void AnswerOpenUrl(const base::DictValue& request,
                    HasBrowserProfile has_browser_profile,
                    CommandReply reply);
 void AnswerOpened(const std::string& refusal, CommandReply reply, bool opened);
+void AnswerOpenedWindow(CommandReply reply, std::optional<std::string> window);
+std::string AnswerBrowserWindows(ListBrowserWindowLayouts list_browser_windows);
 std::string AnswerSitePermissions(ListSitePermissions list_site_permissions);
 std::string AnswerSetSitePermission(const base::DictValue& request,
                                     SetSitePermission set_site_permission);
@@ -319,6 +322,10 @@ void AnswerCommand(std::string_view line,
     std::move(reply).Run(AnswerSetLogLevels(*request, actions.set_log_levels));
     return;
   }
+  if (*type == kBrowserWindows) {
+    std::move(reply).Run(AnswerBrowserWindows(actions.list_browser_windows));
+    return;
+  }
   std::move(reply).Run(RefusedCommand(base::StrCat(
       {"\"", *type, "\" is not a command this engine knows; it takes \"",
        kLoadShell, "\", \"", kRunApp, "\", \"", kOpenUrl, "\", \"",
@@ -330,8 +337,8 @@ void AnswerCommand(std::string_view line,
        kMediaDevices, "\", \"", kSetMediaDevice, "\", \"", kHistory, "\", \"",
        kVisits, "\", \"", kDeleteHistory, "\", \"", kClearBrowsingData,
        "\", \"", kSiteData, "\", \"", kClearSiteData, "\", \"",
-       kDisableWhileTyping, "\", \"", kDevTools, "\" and \"", kSetLogLevels,
-       "\""})));
+       kDisableWhileTyping, "\", \"", kDevTools, "\", \"", kSetLogLevels,
+       "\" and \"", kBrowserWindows, "\""})));
 }
 
 namespace {
@@ -512,16 +519,61 @@ void AnswerOpenUrl(const base::DictValue& request,
          "\"; the config's browser.profiles names them"})));
     return;
   }
-  open_url(
-      parsed, *launch,
-      profile != nullptr ? profile->GetString() : std::string(),
-      base::BindOnce(&AnswerOpened,
-                     std::string("this engine has no shell page to open it in"),
-                     std::move(reply)));
+  // Optional: none is the user's.
+  const base::Value* agent = request.Find("agent");
+  if (agent != nullptr &&
+      (!agent->is_string() || agent->GetString().empty())) {
+    std::move(reply).Run(RefusedCommand(
+        "open_url's \"agent\" is an agent seat's id, such as \"agent-3\""));
+    return;
+  }
+  if (agent != nullptr && is_app) {
+    std::move(reply).Run(RefusedCommand(
+        "open_url's \"agent\" is for a browser window; an app window may be "
+        "the user's open one"));
+    return;
+  }
+  open_url(parsed, *launch,
+           profile != nullptr ? profile->GetString() : std::string(),
+           agent != nullptr ? agent->GetString() : std::string(),
+           base::BindOnce(&AnswerOpenedWindow, std::move(reply)));
 }
 
-// Replies to `run_app` or `open_url` once its window opened, or with
-// `refusal` when there was no shell to own it.
+// Replies to `open_url` with the window it opened or reused, or refuses when
+// there was no shell to own it.
+void AnswerOpenedWindow(CommandReply reply, std::optional<std::string> window) {
+  if (!window.has_value()) {
+    std::move(reply).Run(
+        RefusedCommand("this engine has no shell page to open it in"));
+    return;
+  }
+  base::DictValue opened;
+  opened.Set("type", "opened");
+  opened.Set("window", *std::move(window));
+  std::move(reply).Run(Line(std::move(opened)));
+}
+
+std::string AnswerBrowserWindows(
+    ListBrowserWindowLayouts list_browser_windows) {
+  base::ListValue windows;
+  for (const BrowserWindowLayout& window : list_browser_windows()) {
+    base::DictValue entry;
+    entry.Set("id", window.id);
+    entry.Set("focused", window.focused);
+    if (window.width > 0 && window.height > 0) {
+      entry.Set("width", window.width);
+      entry.Set("height", window.height);
+    }
+    windows.Append(std::move(entry));
+  }
+  base::DictValue reply;
+  reply.Set("type", kBrowserWindows);
+  reply.Set("windows", std::move(windows));
+  return Line(std::move(reply));
+}
+
+// Replies to `run_app` once its window opened, or with `refusal` when there
+// was no shell to own it.
 void AnswerOpened(const std::string& refusal, CommandReply reply, bool opened) {
   std::move(reply).Run(opened ? Done("opened") : RefusedCommand(refusal));
 }

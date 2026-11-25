@@ -272,21 +272,23 @@ void RunAppInAnAppWindow(const base::FilePath& root,
                                              module, std::move(opened)));
 }
 
-// Opens a browser window at `url`, as for a page's target="_blank", or with
-// `app` an app window, or refuses when there is no shell page to own it. The
-// shell sees it in its window list. See domicile_browser_windows.h.
+// Opens a browser window at `url`, as for a page's target="_blank", for
+// `agent` when it isn't empty, or with `app` an app window, or refuses when
+// there is no shell page to own it. The shell sees it in its window list. See
+// domicile_browser_windows.h.
 void OpenUrlOnceTheShellHasAPage(const GURL& url,
                                  std::optional<AppLaunch> app,
                                  const std::string& profile,
-                                 WindowOpened opened,
+                                 const std::string& agent,
+                                 UrlOpened opened,
                                  bool has_a_page) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!has_a_page) {
-    std::move(opened).Run(false);
+    std::move(opened).Run(std::nullopt);
   } else if (app.has_value()) {
     std::move(opened).Run(OpenAppWindow(url, app->id, app->reuse, profile));
   } else {
-    std::move(opened).Run(OpenBrowserWindow(url, profile));
+    std::move(opened).Run(OpenBrowserWindow(url, profile, agent));
   }
 }
 
@@ -294,10 +296,24 @@ void OpenUrlOnceTheShellHasAPage(const GURL& url,
 void OpenUrlInABrowserWindow(const GURL& url,
                              std::optional<AppLaunch> app,
                              const std::string& profile,
-                             WindowOpened opened) {
+                             const std::string& agent,
+                             UrlOpened opened) {
   WhenTheShellWindowCanTakeIt(base::BindOnce(&OpenUrlOnceTheShellHasAPage, url,
-                                             std::move(app), profile,
+                                             std::move(app), profile, agent,
                                              std::move(opened)));
+}
+
+// Every browser window as the user has it now, for `domicile list-windows`.
+std::vector<BrowserWindowLayout> ListDeskBrowserWindows() {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  std::vector<BrowserWindowLayout> windows;
+  for (const BrowserWindowState& state : BrowserWindowStates()) {
+    windows.push_back({.id = state.id,
+                       .focused = state.focused,
+                       .width = state.size.width(),
+                       .height = state.size.height()});
+  }
+  return windows;
 }
 
 // Whether the config names browser profile `id`.
@@ -708,7 +724,8 @@ void AnswerOnUIThread(const std::string& line, CommandReply reply) {
                  .clear_site_data = &ClearShellSiteData,
                  .disable_while_typing = &DisableTouchpadsWhileTyping,
                  .send_devtools = &SendDevToolsToBrowserWindow,
-                 .set_log_levels = &SetEngineLogLevels},
+                 .set_log_levels = &SetEngineLogLevels,
+                 .list_browser_windows = &ListDeskBrowserWindows},
                 std::move(reply));
 }
 

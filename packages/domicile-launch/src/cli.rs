@@ -330,9 +330,9 @@ pub enum Invocation {
     /// Kept as typed; it is relative to the working directory. A web address
     /// opens in browser profile `profile`, or the one its site opens in.
     ///
-    /// What opens a file starts held by agent session `agent`'s seat when
-    /// given, without taking the user's focus. A web address opens in a
-    /// browser window, which no seat holds.
+    /// What opens it, a file's program or a web address's browser window,
+    /// starts held by agent session `agent`'s seat when given, without taking
+    /// the user's focus.
     Open {
         target: String,
         profile: Option<String>,

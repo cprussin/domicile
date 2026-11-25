@@ -43,7 +43,11 @@ fn browsed(target: &str) -> Result<(), String> {
     let url = url_for(target, &here);
     ask(
         &socket,
-        &Request::OpenUrl { url, profile: None },
+        &Request::OpenUrl {
+            url,
+            profile: None,
+            agent: None,
+        },
         Some(PATIENCE),
     )
     .map(|_| ())
