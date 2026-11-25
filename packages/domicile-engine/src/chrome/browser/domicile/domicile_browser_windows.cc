@@ -1062,7 +1062,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
   }
 
  private:
-  // Reports a change to a page's address or title, and its loads.
+  // Reports a change to a page's address or title, and its loads. Knows
+  // whether the page is unloaded.
   class Watch final : public content::WebContentsObserver {
    public:
     Watch(content::WebContents& contents,
@@ -1072,6 +1073,18 @@ class DeskWindows final : public base::SupportsUserData::Data,
           id_(std::move(id)),
           changed_(std::move(changed)) {}
 
+    // Whether Discard made the page and nothing has loaded in it yet. Not
+    // NavigationController::NeedsReload, which a crashed hidden subframe
+    // sets too, under a page that runs.
+    bool discarded() const { return discarded_; }
+    void SetDiscarded() { discarded_ = true; }
+
+    void DidStartNavigation(content::NavigationHandle* navigation) override {
+      if (discarded_ && navigation->IsInPrimaryMainFrame()) {
+        discarded_ = false;
+        changed_.Run();
+      }
+    }
     void DOMContentLoaded(content::RenderFrameHost* frame) override {
       if (frame->IsInPrimaryMainFrame()) {
         BrowserWindowDomReadies().Notify(id_);
@@ -1093,6 +1106,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
    private:
     const std::string id_;
     base::RepeatingClosure changed_;
+    bool discarded_ = false;
   };
 
   // A message box a window asks, and where its answer goes.
@@ -1208,8 +1222,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
         partition.has_value() ? WebViewPartitionAttribute(*partition)
                               : std::string(),
         window.app, window.app_id, window.captures > 0,
-        window.guest->contents().GetController().NeedsReload(), window.parent, window.x,
-        window.y, window.hidden, window.menu_bar.menu, window.menu_bar.visible,
+        window.watch->discarded(), window.parent, window.x, window.y,
+        window.hidden, window.menu_bar.menu, window.menu_bar.visible,
         window.menu_bar.auto_hide,
         window.message_boxes.empty()
             ? std::string()
@@ -1374,7 +1388,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
     if (old.IsAttached()) {
       return "a <webview> shows it";
     }
-    if (page.GetController().NeedsReload()) {
+    if (window.watch->discarded()) {
       return "it is unloaded already";
     }
     if (page.GetController().GetLastCommittedEntry()->IsInitialEntry()) {
@@ -1397,6 +1411,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
         base::BindRepeating(&DeskWindows::Changed, base::Unretained(this)));
     guest->contents().GetController().CopyStateFrom(&page.GetController(),
                                                     /*needs_reload=*/true);
+    watch->SetDiscarded();
     // Not now, which may be under the page's own call stack.
     ReapIn(base::TimeDelta(), std::exchange(window.guest, std::move(guest)));
     window.watch = std::move(watch);
@@ -1412,7 +1427,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
       content::WebContents& page = window.guest->contents();
       if (window.profiled && !window.app &&
           !window.guest->popup_window().has_value() &&
-          !window.guest->IsAttached() && !page.GetController().NeedsReload()) {
+          !window.guest->IsAttached() && !window.watch->discarded()) {
         candidates.push_back({window.id, raw_ref(page)});
       }
     }
