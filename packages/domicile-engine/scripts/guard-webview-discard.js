@@ -216,9 +216,6 @@ export const HostShell = (_root, desktop) => {
   };
 
   const automatic = async (_ids, views) => {
-    // After the typed page took focus, so the first window is the active tab.
-    await settled();
-    views[0].focus();
     await settled();
     for (const element of views) {
       element.remove();

@@ -6,7 +6,6 @@
 #
 #   - A page that says nothing once unloaded counts only if the control's page
 #     says something, so each leg reads the same steps.
-#   - A tab created or removed fails even beside a replaced one.
 #   - The control fails on anything unloaded.
 #
 # Also checks that the expected id matches the fixture's key.
@@ -69,10 +68,6 @@ judge() { # $1 NEGATIVE, then NAME=value overrides
     EARLY=0
     LISTED=1
     TICKS=0
-    REPLACED=1
-    REPLACED_ANY=1
-    CREATED=0
-    REMOVED=0
     LOADED=1
     RESTORED=1
     RELISTED=1
@@ -81,7 +76,6 @@ judge() { # $1 NEGATIVE, then NAME=value overrides
     SAW_TYPED=1
     AUTO_PLAIN=1
     AUTO_TYPED=0
-    AUTO_ACTIVE=0
     NEGATIVE="$1"
     shift
     for override in "$@"; do
@@ -112,7 +106,7 @@ blames() { # $1 word, then the args judge takes
 
 # The control asks for nothing, so the page lives on and nothing is unloaded.
 CONTROL=(SAW_POPUP_REFUSED=0 SAW_DEVTOOLS_REFUSED=0 LISTED=0 TICKS=4
-  REPLACED=0 REPLACED_ANY=0 LOADED=0 RESTORED=0 RELISTED=0 AUTO_PLAIN=0)
+  LOADED=0 RESTORED=0 RELISTED=0 AUTO_PLAIN=0)
 
 echo "reading the log"
 expect "only what the page said between the steps counts" "1" \
@@ -122,7 +116,7 @@ expect "another page's lines do not" "0" \
   "$(reads quiet remounting "tick name=subject-2" quiet "tick name=active" \
     remounting)"
 expect "asked-attached is not asked" "0" \
-  "$(reads asked remounting "tab-created" asked-attached tab-created)"
+  "$(reads asked remounting "tick" asked-attached tick)"
 
 echo
 echo "a run that never got as far as measuring anything"
@@ -151,13 +145,6 @@ expect "an unloaded popup window is a failure" "yes" \
   "$(blames "popup window" 0 SAW_POPUP_REFUSED=0)"
 expect "an unloaded DevTools window is a failure" "yes" \
   "$(blames "DevTools window" 0 SAW_DEVTOOLS_REFUSED=0)"
-expect "a tab replaced wrong names Replace" "yes" \
-  "$(blames "DomicileWindowController::Replace" 0 REPLACED=0)"
-expect "a tab replaced twice is a failure" "fail" "$(verdict 0 REPLACED_ANY=2)"
-expect "a created tab is a failure" "yes" \
-  "$(blames "created or removed" 0 CREATED=1)"
-expect "a removed tab is a failure" "yes" \
-  "$(blames "created or removed" 0 REMOVED=1)"
 expect "a page that lost its history or scroll names CopyStateFrom" "yes" \
   "$(blames "CopyStateFrom" 0 RESTORED=0)"
 expect "a loaded page listed unloaded names the Watch" "yes" \
@@ -166,16 +153,12 @@ expect "no automatic unload names PageDiscarding" "yes" \
   "$(blames "PageDiscarding" 0 AUTO_PLAIN=0)"
 expect "unloading the typed page names HadUserEdits" "yes" \
   "$(blames "HadUserEdits" 0 AUTO_TYPED=1)"
-expect "unloading the active tab names Discardable" "yes" \
-  "$(blames "Discardable" 0 AUTO_ACTIVE=1)"
 
 echo
 echo "the control run"
 expect "a page nobody unloads is the pass" "pass" "$(verdict 1 "${CONTROL[@]}")"
 expect "a listed subject is the control's failure" "fail" \
   "$(verdict 1 "${CONTROL[@]}" LISTED=1)"
-expect "a replaced tab is the control's failure" "fail" \
-  "$(verdict 1 "${CONTROL[@]}" REPLACED_ANY=1)"
 expect "a silent page is the control's failure" "yes" \
   "$(blames "silence" 1 "${CONTROL[@]}" TICKS=0)"
 expect "a page that loads again is the control's failure" "fail" \

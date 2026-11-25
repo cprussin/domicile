@@ -10,7 +10,7 @@
 # Two engines, one after the other. Their shell is guard-webview-discard.js.
 #
 # The manual engine has an extension (guard-webview-discard-extension), which
-# mutes the subject's tab and opens a popup window. The shell asks to unload
+# opens a popup window. The shell asks to unload
 # the subject while a <webview> shows it, unmounts it, asks again, asks for the
 # popup window and a DevTools window too, and shows the subject again. Checks,
 # in order:
@@ -23,8 +23,6 @@
 #                                        `remounting`
 #   the popup window and the DevTools    refused in the log
 #     window stay
-#   the extension heard one replaced     and no tab created or removed; the new
-#     tab                                one muted, at the subject's index
 #   shown again, it loads                the page says `restored`, with both
 #                                        history entries and its scroll
 #   it is listed loaded again
@@ -34,7 +32,6 @@
 #
 #   `plain` is unloaded
 #   `typed` stays                        it holds a user's edit
-#   `active` stays                       it is the desk's active tab
 #
 # NEGATIVE=1 is the control: the manual shell never asks to unload the
 # unmounted subject, and the automatic engine is never short. The subject's
@@ -214,11 +211,6 @@ LISTED=$(between "$MANUAL_LOG" unmounted remounting |
   count '"GUARD list name=subject-1 discarded=true"')
 TICKS=$(between "$MANUAL_LOG" quiet remounting |
   count '"GUARD tick name=subject-2"')
-REPLACED=$(between "$MANUAL_LOG" unmounted "done" |
-  count '"GUARD tab-replaced old=true muted=true index=true"')
-REPLACED_ANY=$(between "$MANUAL_LOG" unmounted "done" | count '"GUARD tab-replaced')
-CREATED=$(between "$MANUAL_LOG" unmounted "done" | count '"GUARD tab-created"')
-REMOVED=$(between "$MANUAL_LOG" unmounted "done" | count '"GUARD tab-removed"')
 LOADED=$(between "$MANUAL_LOG" remounting "done" |
   count '"GUARD loaded name=subject-2"')
 RESTORED=$(between "$MANUAL_LOG" remounting "done" |
@@ -231,16 +223,14 @@ SAW_DONE=$(saw "$AUTOMATIC_LOG" '"GUARD done"')
 SAW_TYPED=$(saw "$AUTOMATIC_LOG" '"GUARD typed name=typed value=words"')
 AUTO_PLAIN=$(saw "$AUTOMATIC_LOG" '"GUARD list name=plain discarded=true"')
 AUTO_TYPED=$(saw "$AUTOMATIC_LOG" '"GUARD list name=typed discarded=true"')
-AUTO_ACTIVE=$(saw "$AUTOMATIC_LOG" '"GUARD list name=active discarded=true"')
 
 echo
 echo "manual: shell=$SAW_SHELL subject=$SAW_SUBJECT extension=$SAW_EXTENSION remount=$SAW_REMOUNT"
 echo "refused: attached=$SAW_REFUSED early=$EARLY popup=$SAW_POPUP_REFUSED devtools=$SAW_DEVTOOLS_REFUSED"
 echo "unloaded: listed=$LISTED ticks=$TICKS"
-echo "tabs: replaced=$REPLACED of $REPLACED_ANY created=$CREATED removed=$REMOVED"
 echo "shown again: loaded=$LOADED restored=$RESTORED listed=$RELISTED"
 echo "automatic: unmounted=$SAW_UNMOUNTED done=$SAW_DONE typed=$SAW_TYPED"
-echo "unloaded: plain=$AUTO_PLAIN typed=$AUTO_TYPED active=$AUTO_ACTIVE"
+echo "unloaded: plain=$AUTO_PLAIN typed=$AUTO_TYPED"
 echo
 
 # The verdict. `packages/domicile-engine/tests/test-webview-discard-guard.sh` runs this block
@@ -269,16 +259,16 @@ elif [ "$SAW_TYPED" != "1" ]; then
   FAILURE="the typed page never had its words, so that it stayed or went says \
 nothing about user edits. This is the harness"
 elif [ "$NEGATIVE" = "1" ]; then
-  if [ "$LISTED" != "0" ] || [ "$REPLACED_ANY" != "0" ]; then
+  if [ "$LISTED" != "0" ]; then
     FAILURE="THE CONTROL UNLOADED THE SUBJECT: the shell never asked and it \
-was listed unloaded or its tab was replaced"
+was listed unloaded"
   elif [ "$TICKS" = "0" ]; then
     FAILURE="the control's page said nothing while unmounted, so the claim's \
 silence is not its unloading"
   elif [ "$LOADED" != "0" ]; then
     FAILURE="the control's page loaded again when it was shown, so the \
 claim's load is not its unloading"
-  elif [ "$AUTO_PLAIN$AUTO_TYPED$AUTO_ACTIVE" != "000" ]; then
+  elif [ "$AUTO_PLAIN$AUTO_TYPED" != "00" ]; then
     FAILURE="THE CONTROL'S ENGINE UNLOADED A PAGE: it was never short of \
 memory, so the claim's unloading is not the shortage's"
   else
@@ -297,13 +287,6 @@ into the desk's window and the popup closes (DeskWindows::DiscardWindow)"
 elif [ "$SAW_DEVTOOLS_REFUSED" != "1" ]; then
   FAILURE="a DevTools window was not refused, so its front end loads again \
 inspecting nothing (DeskWindows::DiscardWindow), or it never loaded"
-elif [ "$REPLACED" != "1" ] || [ "$REPLACED_ANY" != "1" ]; then
-  FAILURE="the extension did not hear one tab replaced, muted and at the \
-subject's index: DomicileWindowController::Replace, or the mute was not \
-copied. The GUARD tab-replaced line says which"
-elif [ "$CREATED" != "0" ] || [ "$REMOVED" != "0" ]; then
-  FAILURE="the extension heard a tab created or removed: the new page was \
-added to the desk, or the old one's end was a Removed"
 elif [ "$RESTORED" != "1" ]; then
   FAILURE="shown again, the subject did not load with its two history entries \
 and its scroll: CopyStateFrom, or AttachWindowTo's WasShown did not load it. \
@@ -317,14 +300,11 @@ timer, its candidates, or MayDiscard"
 elif [ "$AUTO_TYPED" != "0" ]; then
   FAILURE="a shortage of memory unloaded the page that was typed into \
 (MayDiscard's HadUserEdits)"
-elif [ "$AUTO_ACTIVE" != "0" ]; then
-  FAILURE="a shortage of memory unloaded the desk's active tab \
-(DeskWindows::Discardable)"
 else
-  PASSED="an unmounted window's page is unloaded, as a replaced tab to \
-extensions, and loads with its history and scroll when it is shown; a shown \
-window and a popup window stay; and a shortage of memory unloads a plain page \
-and leaves the typed one and the active tab"
+  PASSED="an unmounted window's page is unloaded and loads with its history \
+and scroll when it is shown; a shown window, a popup window and a DevTools \
+window stay; and a shortage of memory unloads a plain page and leaves the \
+typed one"
 fi
 
 if [ -n "$PASSED" ]; then

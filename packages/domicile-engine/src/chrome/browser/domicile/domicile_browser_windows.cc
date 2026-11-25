@@ -1369,9 +1369,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
     return listing;
   }
 
-  // Gives `window` a new page with its page's history, which loads when a
-  // <webview> next shows it, and ends the old one: how Chrome unloads a tab.
-  // Returns why not, or an empty string.
+  // Gives `window` a new page with its page's history and mute, which loads
+  // when a <webview> next shows it, and ends the old one. To extensions that is
+  // a new tab. Returns why not, or an empty string.
   //
   // Not WebContents::Discard, which keeps the page and ends its renderer:
   // content attaches no page whose renderer is gone to a <webview>.
@@ -1417,6 +1417,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
     guest->contents().GetController().CopyStateFrom(&page.GetController(),
                                                     /*needs_reload=*/true);
     watch->SetDiscarded();
+    guest->contents().SetAudioMuted(page.IsAudioMuted());
     // Not now, which may be under the page's own call stack.
     ReapIn(base::TimeDelta(), std::exchange(window.guest, std::move(guest)));
     window.watch = std::move(watch);
