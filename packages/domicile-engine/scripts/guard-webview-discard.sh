@@ -77,8 +77,9 @@ WHICH=""
 BROKER="${BROKER:-/tmp/domicile-webview-discard$WHICH-broker}"
 CONTROL="${CONTROL:-/tmp/domicile-webview-discard$WHICH-control}"
 PROFILE="${PROFILE:-/tmp/domicile-webview-discard$WHICH-profile}"
-MANUAL_LOG="${MANUAL_LOG:-/tmp/domicile-webview-discard$WHICH-manual-engine.log}"
-AUTOMATIC_LOG="${AUTOMATIC_LOG:-/tmp/domicile-webview-discard$WHICH-automatic-engine.log}"
+ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-webview-discard$WHICH-engine.log}"
+MANUAL_LOG="${ENGINE_LOG%.log}-manual.log"
+AUTOMATIC_LOG="${ENGINE_LOG%.log}-automatic.log"
 SOCKET_LOG="${SOCKET_LOG:-/tmp/domicile-webview-discard$WHICH-socket.log}"
 HTTP_LOG="${HTTP_LOG:-/tmp/domicile-webview-discard$WHICH-http.log}"
 FOR_SECONDS="${FOR_SECONDS:-120}"
@@ -141,8 +142,8 @@ wait_for_line 240 "listening on" "$SOCKET_LOG" || {
   exit 1
 }
 
-# 3. An engine: runs one, waits for its shell's last step, and ends it. `src`
-#    goes last: it is a URL.
+# 3. An engine: runs one, waits for its shell's last step, and ends it. Fails
+#    when that step never came. `src` goes last: it is a URL.
 engine() { # $1 mode, $2 log, then more switches
   local mode="$1" log="$2"
   shift 2
@@ -163,18 +164,23 @@ engine() { # $1 mode, $2 log, then more switches
     "$@" \
     --domicile-broker-socket="$BROKER" >"$log" 2>&1 &
   ENGINE=$!
-  wait_for_line $((FOR_SECONDS * 4)) '"GUARD done"' "$log" ||
+  local finished=0
+  wait_for_line $((FOR_SECONDS * 4)) '"GUARD done"' "$log" || {
+    finished=1
     echo "the $mode shell never finished; the verdict below says what that means" >&2
+  }
   kill "$ENGINE" 2>/dev/null
   wait "$ENGINE" 2>/dev/null
   ENGINE=""
+  return "$finished"
 }
 
-# The manual engine has the real thresholds' feature off, so only the shell
-# unloads a page.
+# The manual engine has the feature off, so only the shell unloads a page. One
+# that did not finish is a failure already, so the second does not run.
+rm -f "$AUTOMATIC_LOG"
 engine manual "$MANUAL_LOG" --domicile-control-socket="$CONTROL" \
-  --disable-features=DomicilePageDiscarding
-engine automatic "$AUTOMATIC_LOG" \
+  --disable-features=DomicilePageDiscarding &&
+  engine automatic "$AUTOMATIC_LOG" \
   --enable-features="DomicilePageDiscarding:$SHORT"
 
 # The readings, each anchored on the quotes Chromium puts around a console
