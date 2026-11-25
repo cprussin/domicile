@@ -7,6 +7,10 @@ building shells is in [Domicile's release notes](../RELEASE-NOTES.md).
 
 _Unreleased_
 
+### See what an agent is using
+
+A window an agent is using gets a violet ring with its name, and its pointer is violet with its name too. Click or type in that window and it's yours until you give it back. The agent pill lists the windows it's using, each with **Take over**.
+
 ### Agents copy and paste on their own clipboard
 
 An agent now has a clipboard of its own. What it copies never replaces what you copied, and stays out of your clipboard history.

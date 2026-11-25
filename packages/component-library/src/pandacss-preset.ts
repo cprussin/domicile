@@ -393,6 +393,13 @@ export const domicilePreset = definePreset({
             // background. `pandacss-preset.test.ts` checks this.
             value: { _light: "{colors.cyan.700}", base: "{colors.cyan.500}" },
           },
+          // An agent driving the desktop beside the user: the bar's agent
+          // pill, the ring and name on a window it uses, its pointer. One
+          // violet in both themes, so it reads as the same agent everywhere,
+          // apart from the accent that marks the user's own focus.
+          agent: {
+            value: "{colors.violet.600}",
+          },
           backdrop: {
             // Black works in both themes.
             value: "rgb(from black r g b / 70%)",
@@ -464,6 +471,10 @@ export const domicilePreset = definePreset({
               // checks this.
               base: "color-mix(in oklab, {colors.foreground} 65%, {colors.background})",
             },
+          },
+          // Text on an `agent` fill.
+          onAgent: {
+            value: "white",
           },
           // Text on a `danger` fill. Theme-independent, so it reads the same
           // on the red in either theme.

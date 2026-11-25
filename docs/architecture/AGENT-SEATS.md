@@ -132,7 +132,7 @@ domicile.seats.giveBack(windowId);
 - [x] protocol and SDK: `seats`, `heldBy`, `takeOver`, `giveBack`
 - [x] MCP: raw tools on the agent seat
 - [x] MCP: `heldBy` in `list_windows` (`held_by`)
-- [ ] manganese: agent cursor, ring and name tag, "Yours now · Give back"
+- [x] manganese: agent cursor, ring and name tag, "Yours now · Give back"
       strip, held windows in the agent pill
 - [ ] new windows from an agent's `open`/`exec` start held by it
 

@@ -164,6 +164,12 @@ export const FULLSCREEN = 2000;
 export const GRABBING = 3000;
 
 /**
+ * The depth of an agent's pointer, over every window and the grabbing sheet,
+ * as the user's own pointer is. See `AgentSeats`.
+ */
+export const AGENT_POINTER = 3001;
+
+/**
  * Everything a screen showing `workspace` shows, fullscreen included.
  *
  * A fullscreen window or group is placed at {@link FULLSCREEN} over the normal

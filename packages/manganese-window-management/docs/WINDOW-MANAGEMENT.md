@@ -97,6 +97,14 @@ Workspaces belong to the desktop, and screens show them, as in sway:
   or typing in any window, pressing a title bar or tab inside the group, or
   the pointer coming back from another screen ends the selection, leaving
   that window selected.
+- **Agents' windows stand out too** (`AgentSeats.tsx`). A client window an
+  agent's seat holds gets a violet ring and the agent's name on its top edge;
+  its pointer, named, shows while it is over one of them. A window the user
+  took from an agent gets a "Yours now" strip along its bottom, whose
+  **Give back** calls `seats.giveBack`. Each sits at its window's raised
+  depth; the pointer at `AGENT_POINTER`. Only windows at rest and shown are
+  marked (`holdable-windows.ts`), and none in the overview. See
+  [AGENT-SEATS.md](../../../docs/architecture/AGENT-SEATS.md).
 - **`xdg-activation` requests are granted.** The compositor forwards them as
   `focus_requested`. Manganese switches to that window's workspace, shows its
   tab, focuses it and warps the pointer to it. A browser window whose page or

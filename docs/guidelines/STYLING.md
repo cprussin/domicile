@@ -185,6 +185,7 @@ Stick to the **semantic** color tokens defined by the domicile preset:
 | `accent` | Primary brand / focus / selection |
 | `danger` / `warning` / `success` | Status colors |
 | `onDanger` | Text on a `danger` fill |
+| `agent` / `onAgent` | An agent driving the desktop beside the user: its pill, ring, name and pointer / text on them |
 | `private` | Marks a private browser window |
 | `backdrop` | Modal/popover backdrop overlay |
 | `skeleton` | Loading skeleton fills |
