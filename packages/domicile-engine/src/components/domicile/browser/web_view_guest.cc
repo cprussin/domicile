@@ -49,6 +49,7 @@
 #include "components/domicile/browser/shortcut_registry.h"
 #include "components/domicile/browser/site_permissions.h"
 #include "components/domicile/browser/unfocused_web_views.h"
+#include "components/permissions/permission_decision_auto_blocker.h"
 #include "components/permissions/permissions_client.h"
 #include "components/domicile/browser/web_view_url.h"
 #include "components/security_interstitials/content/security_interstitial_page.h"
@@ -2143,6 +2144,17 @@ void WebViewGuest::Print() {
   Printer().Run(*guest_contents_);
 }
 
+void StoreSitePermission(content::BrowserContext& context,
+                         const GURL& site,
+                         mojom::WebViewPermission permission,
+                         mojom::WebViewPermissionSetting setting) {
+  permissions::PermissionsClient* client =
+      permissions::PermissionsClient::Get();
+  StoreSitePermission(*client->GetSettingsMap(&context),
+                      *client->GetPermissionDecisionAutoBlocker(&context), site,
+                      permission, setting);
+}
+
 void WebViewGuest::SetSitePermission(
     mojom::WebViewPermission permission,
     mojom::WebViewPermissionSetting setting) {
@@ -2155,13 +2167,8 @@ void WebViewGuest::SetSitePermission(
                     "with no site; it is dropped.";
     return;
   }
-  HostContentSettingsMap* map =
-      permissions::PermissionsClient::Get()->GetSettingsMap(
-          guest_contents_->GetBrowserContext());
-  const ContentSettingsType type = SettingsTypeFor(permission);
-  map->SetContentSettingDefaultScope(
-      site, site, type,
-      StoredSetting(setting, map->GetDefaultContentSetting(type)));
+  StoreSitePermission(*guest_contents_->GetBrowserContext(), site, permission,
+                      setting);
 }
 
 void WebViewGuest::ListMediaDevices(ListMediaDevicesCallback callback) {

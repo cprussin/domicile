@@ -15,6 +15,12 @@
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
 #include "url/gurl.h"
 
+class HostContentSettingsMap;
+
+namespace permissions {
+class PermissionDecisionAutoBlocker;
+}  // namespace permissions
+
 namespace domicile {
 
 // How a <webview>'s permissions map to Chrome's. The shell answers prompts and
@@ -54,6 +60,15 @@ ContentSetting ContentSettingFor(mojom::WebViewPermissionSetting setting);
 // the default is stored as no exception, so the site follows it.
 ContentSetting StoredSetting(mojom::WebViewPermissionSetting setting,
                              ContentSetting default_setting);
+
+// Stores `site`'s `setting` for `permission` in `map`, and lets the site ask
+// again if `auto_blocker` stopped it for requests left unanswered.
+void StoreSitePermission(
+    HostContentSettingsMap& map,
+    permissions::PermissionDecisionAutoBlocker& auto_blocker,
+    const GURL& site,
+    mojom::WebViewPermission permission,
+    mojom::WebViewPermissionSetting setting);
 
 // The name a shell and the command socket give `permission`: "camera",
 // "microphone", "location", "notifications", "clipboard", "midi",

@@ -767,6 +767,8 @@ source_set("site_permissions") {
     "//third_party/blink/public/common",
     "//url",
   ]
+
+  deps = [ "//components/content_settings/core/browser" ]
 }
 
 # A <webview>'s answer to `getDisplayMedia()`, and the portal picker that
@@ -1772,6 +1774,10 @@ source_set("unit_tests") {
     "//components/input",
     "//components/autofill/core/common",
     "//components/password_manager/core/common",
+    # A profile's site permissions, in their tests.
+    "//components/content_settings/core/browser",
+    "//components/permissions",
+    "//components/sync_preferences:test_support",
     "//components/prefs:test_support",
     "//components/translate/core/browser:translate_pref_names",
     "//base",

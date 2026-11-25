@@ -30,7 +30,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
 # SystemCall 6, PortalRequest 3, FileChoice 13, DisplayCapture 9,
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, ForwardedKeys 5,
-# SitePermissions 11,
+# SitePermissions 12,
 # ControlChannel 32, DeviceChoices 9, SurfaceFrames 8, SurfaceHolds 6,
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4, SurfaceBacklog 4,
 # PrivatePages 3, ShellOrigin 4, AppRoots 4, AppChannel 3, AppDocument 3,
@@ -53,6 +53,8 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # ShaderFilter 11, ShaderEffects 7, ShadedImageFilter 11, ShaderEffectsHost 9,
 # MeshVertices 2, MeshEffectBounds 1.
 #
+# 1100, and it was 1099 — a choice that lets a site Chrome stopped ask again is
+# one SitePermissions case. Before that
 # 1099, and it was 1093 — the control channel's agent seat messages are six
 # AgentInputLines cases. Before that
 # 1093, and it was 1063 — a shader effect's meshes, images and arrays are 25
@@ -380,7 +382,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=1099
+FLOOR=1100
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

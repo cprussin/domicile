@@ -4,7 +4,9 @@
 #include "components/domicile/browser/site_permissions.h"
 
 #include "base/notreached.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
+#include "components/permissions/permission_decision_auto_blocker.h"
 
 namespace domicile {
 
@@ -92,6 +94,21 @@ ContentSetting StoredSetting(mojom::WebViewPermissionSetting setting,
                              ContentSetting default_setting) {
   const ContentSetting stored = ContentSettingFor(setting);
   return stored == default_setting ? CONTENT_SETTING_DEFAULT : stored;
+}
+
+void StoreSitePermission(
+    HostContentSettingsMap& map,
+    permissions::PermissionDecisionAutoBlocker& auto_blocker,
+    const GURL& site,
+    mojom::WebViewPermission permission,
+    mojom::WebViewPermissionSetting setting) {
+  const ContentSettingsType type = SettingsTypeFor(permission);
+  map.SetContentSettingDefaultScope(
+      site, site, type,
+      StoredSetting(setting, map.GetDefaultContentSetting(type)));
+  // Chrome stops a site from asking once it was ignored or dismissed some
+  // times, over a setting of ask. The user just chose, so it counts anew.
+  auto_blocker.RemoveEmbargoAndResetCounts(site, type);
 }
 
 std::string_view PermissionName(mojom::WebViewPermission permission) {

@@ -230,6 +230,13 @@ using AddToDictionaryCallback =
 using PrintCallback =
     base::RepeatingCallback<void(content::WebContents& guest)>;
 
+// Stores `site`'s `setting` for `permission`, and lets the site ask again if
+// Chrome stopped it for requests left unanswered.
+void StoreSitePermission(content::BrowserContext& context,
+                         const GURL& site,
+                         mojom::WebViewPermission permission,
+                         mojom::WebViewPermissionSetting setting);
+
 // Answers a guest page's camera and microphone requests. Implemented in
 // //chrome (//chrome/browser/domicile/domicile_permissions.h), whose
 // MediaCaptureDevicesDispatcher asks through the guest's permission prompt.

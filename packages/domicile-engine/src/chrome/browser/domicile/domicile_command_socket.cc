@@ -48,6 +48,7 @@
 #include "components/domicile/browser/shell_window_wait.h"
 #include "components/domicile/browser/shortcut_registry.h"
 #include "components/domicile/browser/site_permissions.h"
+#include "components/domicile/browser/web_view_guest.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/permissions/permissions_client.h"
 #include "components/domicile/common/domicile_scheme.h"
@@ -358,15 +359,12 @@ bool SetShellSitePermission(const url::Origin& origin,
                             mojom::WebViewPermissionSetting setting) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  HostContentSettingsMap* map = ShellSettings();
-  if (map == nullptr) {
+  content::WebContents* shell = FindShellContents();
+  if (shell == nullptr) {
     return false;
   }
-  const GURL site = origin.GetURL();
-  const ContentSettingsType type = SettingsTypeFor(permission);
-  map->SetContentSettingDefaultScope(
-      site, site, type,
-      StoredSetting(setting, map->GetDefaultContentSetting(type)));
+  StoreSitePermission(*shell->GetBrowserContext(), origin.GetURL(), permission,
+                      setting);
   return true;
 }
 
