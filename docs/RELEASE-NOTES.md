@@ -26,6 +26,12 @@ The component library's preset and manganese's Panda config are built for Panda 
 
 [Shell packaging](SHELL-PACKAGING.md#panda-with-manganeses-tokens)
 
+### Agents run several tools in one call
+
+The MCP server's `batch` tool runs up to 20 tool calls in order, such as clicking a field, typing and pressing Enter, and stops at the first that fails. Its acts wait for the page to settle and read each window once, after the last step, so a batch of three acts costs one round trip and one quarter-second wait instead of three of each. The server's instructions tell agents to batch steps they know ahead.
+
+[`domicile mcp`](CLI.md#domicile-mcp)
+
 ### Idle agents let go of the desktop
 
 An MCP session that calls nothing for two minutes lets go of the desktop: its pill leaves the bar, and its next tool call asks again. It keeps what it read and its last screenshot. The server's instructions tell agents to call `stop_using_desktop` before waiting on anything else. `browser_click` at a point, `browser_drag` and `browser_scroll` read the page's scale with `Page.getLayoutMetrics`, a method agents get, rather than `Runtime.evaluate`, which the engine refuses them.

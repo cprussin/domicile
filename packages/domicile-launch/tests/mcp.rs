@@ -210,6 +210,7 @@ fn tools_list_describes_each_tool() {
             "app_set_text",
             "ask_to_use_desktop",
             "stop_using_desktop",
+            "batch",
         ]
     );
     for tool in tools {
@@ -610,6 +611,168 @@ fn page<'a>(
             .find(|(method, _)| *method == args[2])
             .map_or(json!({}), |(_, answer)| answer.clone());
         printed(&format!("{answer}\n"))
+    }
+}
+
+/// A reply's text parts, a line each.
+fn texts(reply: &Value) -> String {
+    reply["result"]["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|part| part["text"].as_str())
+        .map(|text| format!("{text}\n"))
+        .collect()
+}
+
+/// DOM.getContentQuads's answer for an element at 10,20 to 110,40.
+fn quads() -> (&'static str, Value) {
+    (
+        "DOM.getContentQuads",
+        json!({"quads": [[10, 20, 110, 20, 110, 40, 10, 40]]}),
+    )
+}
+
+#[test]
+fn a_batch_runs_its_steps_in_order_and_reads_the_window_once_at_the_end() {
+    let mut ran = Vec::new();
+    let replies = served(
+        &[call(
+            "batch",
+            json!({"steps": [
+                {"tool": "browser_click", "arguments": {"window": "w1", "ref": "12"}},
+                {"tool": "browser_type", "arguments": {"window": "w1", "text": "hi"}},
+                {"tool": "browser_key", "arguments": {"window": "w1", "key": "Enter"}},
+            ]}),
+        )],
+        page(&[quads()], &mut ran),
+    );
+    assert_eq!(replies[0]["result"]["isError"], false, "{replies:?}");
+    let methods: Vec<&str> = ran.iter().map(|(method, _)| method.as_str()).collect();
+    assert_eq!(
+        methods
+            .iter()
+            .filter(|method| **method == "Accessibility.getFullAXTree")
+            .count(),
+        1,
+        "{methods:?}"
+    );
+    assert_eq!(methods.last(), Some(&"Accessibility.getFullAXTree"));
+    assert!(methods.contains(&"Input.insertText"));
+    let text = texts(&replies[0]);
+    assert!(
+        text.starts_with("1. clicked element 12\n2. typed\n3. pressed Enter\nIn w1: "),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_batch_stops_at_the_first_step_that_fails() {
+    let mut ran = Vec::new();
+    let replies = served(
+        &[call(
+            "batch",
+            json!({"steps": [
+                {"tool": "browser_click", "arguments": {"window": "w1", "ref": "12"}},
+                {"tool": "browser_type", "arguments": {"window": "w1"}},
+                {"tool": "browser_key", "arguments": {"window": "w1", "key": "Enter"}},
+            ]}),
+        )],
+        page(&[quads()], &mut ran),
+    );
+    assert_eq!(replies[0]["result"]["isError"], true);
+    let text = texts(&replies[0]);
+    assert!(text.contains("1. clicked element 12"), "{text}");
+    assert!(text.contains("2. browser_type takes text"), "{text}");
+    assert!(text.contains("Step 3 did not run"), "{text}");
+    assert!(!ran.iter().any(|(_, params)| params["type"] == "keyDown"));
+    // What the click changed is still read.
+    assert_eq!(ran.last().unwrap().0, "Accessibility.getFullAXTree");
+}
+
+#[test]
+fn a_batch_reads_a_native_window_once_and_says_which_steps_did_not_run() {
+    let mut ran: Vec<Vec<String>> = Vec::new();
+    let replies = served(
+        &[call(
+            "batch",
+            json!({"steps": [
+                {"tool": "app_click", "arguments": {"window": "n1", "ref": ":1.7/w/1"}},
+                {"tool": "app_focus", "arguments": {"window": "n1", "ref": ":1.7/w/2"}},
+                {"tool": "app_click", "arguments": {"window": "n1"}},
+                {"tool": "app_click", "arguments": {"window": "n1", "ref": ":1.7/w/3"}},
+                {"tool": "app_click", "arguments": {"window": "n1", "ref": ":1.7/w/4"}},
+            ]}),
+        )],
+        |args| {
+            ran.push(args.to_vec());
+            printed("- button \"OK\"\n")
+        },
+    );
+    let reads = ran.iter().filter(|args| args[0] == "accessibility").count();
+    assert_eq!(reads, 1, "{ran:?}");
+    let text = texts(&replies[0]);
+    assert!(text.contains("Steps 4 to 5 did not run."), "{text}");
+    assert!(text.contains("In n1: "), "{text}");
+}
+
+#[test]
+fn a_batch_reads_nothing_again_once_the_user_stops_it() {
+    let stopped = Rc::new(Cell::new(false));
+    let stopping = Rc::clone(&stopped);
+    let mut ran = Vec::new();
+    let answers = [quads()];
+    let mut acting = page(&answers, &mut ran);
+    let replies = served_letting(
+        &[call(
+            "batch",
+            json!({"steps": [
+                {"tool": "browser_click", "arguments": {"window": "w1", "ref": "12"}},
+                {"tool": "browser_key", "arguments": {"window": "w1", "key": "Enter"}},
+            ]}),
+        )],
+        |args| {
+            // The user presses Stop as the agent clicks.
+            stopping.set(true);
+            acting(args)
+        },
+        |_| {
+            let stopped = Rc::clone(&stopped);
+            Ok(Grant {
+                session: 7,
+                reach: Box::new(|| AgentReach::Desk),
+                stopped: Box::new(move || stopped.get()),
+                did: Box::new(|_| {}),
+            })
+        },
+    );
+    drop(acting);
+    assert_eq!(replies[0]["result"]["isError"], true);
+    assert!(!ran
+        .iter()
+        .any(|(method, _)| method == "Accessibility.getFullAXTree"));
+}
+
+#[test]
+fn a_batch_takes_one_to_twenty_steps() {
+    let step = json!({"tool": "status", "arguments": {}});
+    for steps in [json!(null), json!([]), json!(vec![step; 21])] {
+        let replies = served(&[call("batch", json!({"steps": steps}))], never_run);
+        assert_eq!(replies[0]["result"]["isError"], true, "{steps}");
+    }
+}
+
+#[test]
+fn a_batch_holds_no_batch_and_neither_asks_nor_lets_go() {
+    for tool in ["batch", "ask_to_use_desktop", "stop_using_desktop", "nope"] {
+        let replies = served(
+            &[call(
+                "batch",
+                json!({"steps": [{"tool": tool, "arguments": {}}]}),
+            )],
+            never_run,
+        );
+        assert_eq!(replies[0]["result"]["isError"], true, "{tool}");
     }
 }
 

@@ -220,7 +220,7 @@ fn answer(
         Some("tools/call") => match params["name"].as_str().and_then(tool) {
             Some(tool) => result(
                 id,
-                guarded(tool, &params["arguments"], domicile, admit, session)?,
+                guarded(tool, &params["arguments"], domicile, admit, session, false)?,
             ),
             None => error(id, INVALID_PARAMS, &format!("no tool {}", params["name"])),
         },
@@ -255,6 +255,8 @@ const INSTRUCTIONS: &str = "Read and act on windows as text first: list_windows,
     browser_snapshot or app_snapshot, then the browser_ and app_ tools by ref. The \
     browser_ tools reach the shell's own bars, panels and dialogs as window \"shell\". \
     Each act answers what it changed in the window, so there is no need to look again. \
+    Each call costs a round trip, so when you know several steps ahead, such as click a \
+    field, type, then press Enter, run them in one batch. \
     Use screenshot only for what a tree can't show: images, layout, or an app that \
     doesn't support accessibility. Zoom into an area rather than taking the whole desk \
     again. The user may be using the desktop as you work. click, key, type_text and the \
@@ -315,6 +317,8 @@ enum Tool {
     AskToUse,
     /// Lets go of the desktop, ending the agent's grant.
     StopUsing,
+    /// Runs other tools in order, reading the windows they act on once.
+    Batch,
 }
 
 /// Where the last screenshot's top-left corner is on the desk, and how many
@@ -332,7 +336,7 @@ struct View {
 const FIT: u32 = 1280;
 
 /// Each tool, by name, in the order `tools/list` gives them.
-const TOOLS: [(&str, Tool); 33] = [
+const TOOLS: [(&str, Tool); 34] = [
     ("list_windows", Tool::Listing("list-windows")),
     ("list_displays", Tool::Listing("list-displays")),
     ("list_inputs", Tool::Listing("list-inputs")),
@@ -366,6 +370,7 @@ const TOOLS: [(&str, Tool); 33] = [
     ("app_set_text", Tool::AppAct("set-text")),
     ("ask_to_use_desktop", Tool::AskToUse),
     ("stop_using_desktop", Tool::StopUsing),
+    ("batch", Tool::Batch),
 ];
 
 fn tool(name: &str) -> Option<Tool> {
@@ -535,17 +540,36 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             json!({}),
             vec![],
         ),
+        Tool::Batch => (
+            "Run several tools in one call, in order, such as clicking a field, typing into it and pressing Enter. Stops at the first step that fails. Answers each step's result, numbered, then what changed in each window the steps acted on, read once at the end. Use it whenever you know the next steps without seeing what the first ones did.",
+            json!({"steps": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": MOST_STEPS,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "tool": {"type": "string", "description": "Any tool but batch, ask_to_use_desktop and stop_using_desktop."},
+                        "arguments": {"type": "object"},
+                    },
+                    "required": ["tool"],
+                },
+            }}),
+            vec!["steps"],
+        ),
     }
 }
 
 /// `tools/call`'s result for `tool` with `arguments`, once the user lets the
-/// agent in and only within what they allowed.
+/// agent in and only within what they allowed. An act on a window answers
+/// what it changed, unless `quiet`.
 fn guarded(
     tool: Tool,
     arguments: &Value,
     domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
     admit: &mut impl FnMut(&str) -> Result<Grant, String>,
     session: &mut Session,
+    quiet: bool,
 ) -> io::Result<Value> {
     // A call with no arguments may leave them out.
     let none = Map::new();
@@ -558,6 +582,7 @@ fn guarded(
     match tool {
         Tool::AskToUse => return Ok(asked_again(admit, session)),
         Tool::StopUsing => return Ok(let_go(session)),
+        Tool::Batch => return batched(arguments, domicile, admit, session),
         _ => {}
     }
     let grant = match session.grant.get_or_insert_with(|| admitted(admit, &name)) {
@@ -588,6 +613,7 @@ fn guarded(
         &mut session.view,
         &mut session.read,
         &mut session.titles,
+        quiet,
     )?;
     if answered["isError"] == json!(false) {
         if tool_is_listing_windows(tool) {
@@ -596,6 +622,112 @@ fn guarded(
         (grant.did)(&what_it_did(tool, arguments, &session.titles));
     }
     Ok(answered)
+}
+
+/// The most steps a batch takes.
+const MOST_STEPS: usize = 20;
+
+/// `batch`'s result: each step's answer, numbered, up to the first that
+/// fails, then what changed in each window its steps acted on, read once
+/// after one wait for the windows to settle.
+fn batched(
+    arguments: &Map<String, Value>,
+    domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
+    admit: &mut impl FnMut(&str) -> Result<Grant, String>,
+    session: &mut Session,
+) -> io::Result<Value> {
+    let steps = match stepped(arguments) {
+        Ok(steps) => steps,
+        Err(why) => return Ok(said(false, why)),
+    };
+    let mut content = Vec::new();
+    let mut failed = false;
+    // Each window a step acted on, in order, and whether it is a browser's.
+    let mut acted: Vec<(String, bool)> = Vec::new();
+    for (number, (tool, arguments)) in steps.iter().enumerate() {
+        let answer = guarded(*tool, arguments, domicile, admit, session, true)?;
+        // Each step's text numbered, with its images after it.
+        for part in answer["content"].as_array().into_iter().flatten() {
+            match part["text"].as_str() {
+                Some(said) => content.push(
+                    json!({"type": "text", "text": format!("{}. {}", number + 1, said.trim_end())}),
+                ),
+                None => content.push(part.clone()),
+            }
+        }
+        if answer["isError"] != json!(false) {
+            failed = true;
+            let (next, last) = (number + 2, steps.len());
+            match next.cmp(&last) {
+                std::cmp::Ordering::Less => content.push(
+                    json!({"type": "text", "text": format!("Steps {next} to {last} did not run.")}),
+                ),
+                std::cmp::Ordering::Equal => content
+                    .push(json!({"type": "text", "text": format!("Step {next} did not run.")})),
+                std::cmp::Ordering::Greater => {}
+            }
+            break;
+        }
+        let browser = match tool {
+            Tool::Browser(browser) if browser::acts(*browser) => true,
+            Tool::AppAct(_) => false,
+            _ => continue,
+        };
+        if let Some(window) = arguments["window"].as_str() {
+            if !acted.iter().any(|(seen, _)| seen == window) {
+                acted.push((window.to_string(), browser));
+            }
+        }
+    }
+    // Read again only what the user still lets the agent reach.
+    let reach = match &session.grant {
+        Some(Ok(grant)) if !(grant.stopped)() => Some((grant.reach)()),
+        _ => None,
+    };
+    acted.retain(|(window, _)| match &reach {
+        Some(AgentReach::Desk) => true,
+        Some(AgentReach::Windows { windows }) => windows.iter().any(|shared| shared.id == *window),
+        None => false,
+    });
+    if !acted.is_empty() {
+        std::thread::sleep(changes::SETTLE);
+    }
+    for (window, browser) in acted {
+        let changes = match browser {
+            true => browser::read_again(&window, domicile, &mut session.read, &mut session.titles)?,
+            false => app_read_again(&window, domicile, &mut session.read)?,
+        };
+        content
+            .push(json!({"type": "text", "text": format!("In {window}: {}", changes.trim_end())}));
+    }
+    Ok(json!({"content": content, "isError": failed}))
+}
+
+/// A batch's steps, each a tool and its arguments, or why `arguments` hold
+/// none it runs.
+fn stepped(arguments: &Map<String, Value>) -> Result<Vec<(Tool, Value)>, String> {
+    let steps = arguments
+        .get("steps")
+        .and_then(Value::as_array)
+        .ok_or("batch takes steps, an array of {tool, arguments}")?;
+    if steps.is_empty() || steps.len() > MOST_STEPS {
+        return Err(format!("batch takes 1 to {MOST_STEPS} steps"));
+    }
+    steps
+        .iter()
+        .enumerate()
+        .map(|(number, step)| {
+            let name = step["tool"].as_str().unwrap_or_default();
+            match tool(name) {
+                Some(Tool::Batch | Tool::AskToUse | Tool::StopUsing) => Err(format!(
+                    "step {}: a batch holds no {name}; call it on its own",
+                    number + 1
+                )),
+                Some(tool) => Ok((tool, step["arguments"].clone())),
+                None => Err(format!("step {}: no tool {}", number + 1, step["tool"])),
+            }
+        })
+        .collect()
 }
 
 /// The grant the user gives agent `name` when asked, or why there is none.
@@ -774,8 +906,8 @@ fn what_it_did(
         Tool::Browser(Browser::Navigate) => format!("Loaded a page in {}", window("window")),
         Tool::Browser(Browser::Screenshot) => format!("Took a screenshot of {}", window("window")),
         Tool::AppAct(_) => format!("Moved the focus in {}", window("window")),
-        Tool::AskToUse | Tool::StopUsing => {
-            unreachable!("guarded answers ask_to_use_desktop and stop_using_desktop itself")
+        Tool::AskToUse | Tool::StopUsing | Tool::Batch => {
+            unreachable!("guarded answers ask_to_use_desktop, stop_using_desktop and batch itself")
         }
     }
 }
@@ -839,7 +971,9 @@ fn in_use(domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>) -> io::Result
     }))
 }
 
-/// `tools/call`'s result for `tool` with `arguments`.
+/// `tools/call`'s result for `tool` with `arguments`. An act on a window
+/// answers what it changed, unless `quiet`.
+#[allow(clippy::too_many_arguments)] // Each is a separate part of the session.
 fn called(
     tool: Tool,
     arguments: &Map<String, Value>,
@@ -848,11 +982,12 @@ fn called(
     view: &mut Option<View>,
     read: &mut HashMap<String, String>,
     titles: &mut HashMap<String, String>,
+    quiet: bool,
 ) -> io::Result<Value> {
     match tool {
         Tool::Screenshot => return screenshot(arguments, domicile, view),
         Tool::Browser(browser) => {
-            return browser::called(browser, arguments, domicile, read, titles)
+            return browser::called(browser, arguments, domicile, read, titles, quiet)
         }
         _ => {}
     }
@@ -884,23 +1019,33 @@ fn called(
         (Tool::AppSnapshot, Some(window)) => {
             read.insert(window, printed.clone());
         }
-        (Tool::AppAct(_), Some(window)) => {
+        (Tool::AppAct(_), Some(window)) if !quiet => {
             std::thread::sleep(changes::SETTLE);
-            let ran = domicile(&["accessibility".to_string(), window.clone()])?;
-            if !ran.success {
-                printed.push_str(&format!("It could not be read again: {}", ran.stderr));
-                return Ok(said(true, printed));
-            }
-            printed.push_str(&changes::changed(
-                read.get(&window).map(String::as_str),
-                &ran.stdout,
-                "app_snapshot",
-            ));
-            read.insert(window, ran.stdout);
+            printed.push_str(&app_read_again(&window, domicile, read)?);
         }
         _ => {}
     }
     Ok(said(true, printed))
+}
+
+/// What changed in native window `window` since it was last read, reading
+/// it again into `read`, or that it could not be read again.
+fn app_read_again(
+    window: &str,
+    domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
+    read: &mut HashMap<String, String>,
+) -> io::Result<String> {
+    let ran = domicile(&["accessibility".to_string(), window.to_string()])?;
+    if !ran.success {
+        return Ok(format!("It could not be read again: {}", ran.stderr));
+    }
+    let changes = changes::changed(
+        read.get(window).map(String::as_str),
+        &ran.stdout,
+        "app_snapshot",
+    );
+    read.insert(window.to_string(), ran.stdout);
+    Ok(changes)
 }
 
 /// The runs of `domicile` that carry out `tool`, or why `arguments` don't
@@ -1024,8 +1169,8 @@ fn commands(
             ]
             .concat()])
         }
-        Tool::AskToUse | Tool::StopUsing => {
-            unreachable!("guarded answers ask_to_use_desktop and stop_using_desktop itself")
+        Tool::AskToUse | Tool::StopUsing | Tool::Batch => {
+            unreachable!("guarded answers ask_to_use_desktop, stop_using_desktop and batch itself")
         }
     }
 }
