@@ -127,6 +127,7 @@ TOGETHER=(
   guard-one-spare-renderer
   guard-webview-scale-animation
   guard-webview-reshown-tiles
+  guard-webview-slide-screen-rects
   guard-webview-crash
   guard-desktop-geometry
   guard-windows-state
