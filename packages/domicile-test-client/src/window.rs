@@ -3079,7 +3079,8 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
                 }
                 ask_for_focus_or_stop(client, handle, AskForFocus::WhenEntered, Some(serial));
             }
-            wl_keyboard::Event::Leave { .. } => {
+            wl_keyboard::Event::Leave { surface, .. } => {
+                crate::say!(keyboard.id(), "keys_left({})", surface.id());
                 let entered_at = client.entered_at;
                 ask_for_focus_or_stop(client, handle, AskForFocus::WhenLeft, entered_at);
             }

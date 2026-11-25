@@ -238,6 +238,9 @@ impl XdgShellHandler for DomicileCompositor {
                 .last()
                 .map(|popup| popup.wl_surface().clone())
                 .or_else(|| root.and_then(|app_id| self.surface_for(&app_id)));
+            if let Some(next) = next.as_ref() {
+                self.yield_to_the_person(next, true);
+            }
             let keyboard = self.seat.get_keyboard().unwrap();
             let serial = SERIAL_COUNTER.next_serial();
             keyboard.set_focus(self, next, serial);
@@ -358,6 +361,9 @@ impl XdgShellHandler for DomicileCompositor {
             menus = self.grabbing.len(),
             "a menu grabbed the keyboard"
         );
+        // The user's keyboard enters the menu's app, so any agent's leaves
+        // it first, as for any other way in.
+        self.yield_to_the_person(surface.wl_surface(), true);
         let keyboard = self.seat.get_keyboard().unwrap();
         let serial = SERIAL_COUNTER.next_serial();
         keyboard.set_focus(self, Some(surface.wl_surface().clone()), serial);

@@ -510,3 +510,61 @@ fn an_agent_copies_and_pastes_on_its_own_clipboard() {
         "the agent's clipboard reached the user:\n{users}"
     );
 }
+
+/// A menu the user opens in the app an agent types in takes the app from the
+/// agent: the agent's keys there are refused, rather than both keyboards
+/// sharing the app and its clipboard.
+#[test]
+fn a_menu_the_user_opens_takes_the_app_from_the_agents_keyboard() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows_with(&compositor, &["--grabbing-menu"]);
+    let (_held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+    assert_eq!(
+        as_the_agent(
+            &compositor,
+            session,
+            vec![EmulatedInput::Focus {
+                window: desk.other.1.clone()
+            }]
+        ),
+        None
+    );
+
+    let app_id = desk.other.1.clone();
+    desk.chrome
+        .say(&ChromeMessage::PointerMotion {
+            app_id: app_id.clone(),
+            x: 100.0,
+            y: 100.0,
+            moved: true,
+        })
+        .expect("the chrome forwards the user's pointer");
+    for pressed in [true, false] {
+        desk.chrome
+            .say(&ChromeMessage::PointerButton {
+                app_id: app_id.clone(),
+                button: BTN_LEFT,
+                pressed,
+            })
+            .expect("the chrome forwards the user's click");
+    }
+    let menu = menu_surface(&mut desk.other.0);
+    assert!(
+        desk.other.0.wait_for_trace(&format!("enter({menu})"), 1),
+        "the user's keyboard did not go to their menu:\n{}",
+        desk.other.0.trace()
+    );
+    let traced = desk.other.0.trace();
+    let left = traced.find("keys_left(");
+    let menu_entered = traced.find(&format!("enter({menu})"));
+    assert!(
+        left.is_some() && left < menu_entered,
+        "the agent's keyboard stayed in the app while the user's entered it:\n{traced}"
+    );
+
+    let refused = as_the_agent(&compositor, session, tap("a"));
+    assert!(
+        refused.is_some(),
+        "the agent kept typing in the app the user opened a menu in"
+    );
+}

@@ -171,13 +171,14 @@ impl DomicileCompositor {
         for menu in agent.menus.iter().rev() {
             menu.send_popup_done();
         }
+        // What it copied goes with it: the app that copied it is told it
+        // no longer holds a clipboard, and the app it types in that there is
+        // nothing to paste. Before its keyboard leaves, which ends the offers.
+        clear_data_device_selection(&self.display_handle, &agent.seat);
+        clear_primary_selection(&self.display_handle, &agent.seat);
         let (keyboard, pointer) = agent.devices();
         keyboard.set_focus(self, None, SERIAL_COUNTER.next_serial());
         self.agent_pointer_leaves(&pointer);
-        // What it copied goes with it: the app that copied it is told it
-        // no longer holds a clipboard.
-        clear_data_device_selection(&self.display_handle, &agent.seat);
-        clear_primary_selection(&self.display_handle, &agent.seat);
         self.seat_state.remove_seat(&agent.seat);
         debug!(session, "an agent's seat went with its session");
         self.activate(self.seat.get_keyboard().unwrap().current_focus().as_ref());
