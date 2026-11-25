@@ -162,7 +162,11 @@ if [ "$NEGATIVE" = "1" ]; then
   ADDRESS="domicile://app-$(printf '%s' "$APP_ROOT" | sha256sum | cut -c1-32)/"
   OPEN="$(command_line "{\"type\":\"open_url\",\"version\":1,\"url\":\"$ADDRESS\",\"app\":true}")"
   echo "open_url $ADDRESS was answered: $OPEN"
-  [ "$OPEN" = '{"type":"opened"}' ] || ANSWERED=0
+  # open_url names the window it opened.
+  case "$OPEN" in
+    '{"type":"opened","window":"'*'"}') ;;
+    *) ANSWERED=0 ;;
+  esac
   sleep "$WATCH_SECONDS"
 fi
 

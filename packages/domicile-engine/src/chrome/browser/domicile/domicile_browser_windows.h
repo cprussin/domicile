@@ -16,6 +16,7 @@
 #include "components/domicile/mojom/browser_windows.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/size.h"
 
 class GURL;
 
@@ -51,18 +52,23 @@ class ElectronPage;
 void StartBrowserWindows();
 
 // Opens a browser window at `url`, for `domicile open`: in browser profile
-// `profile`, or for an empty one the profile `url`'s site opens in. Returns
-// false when there is no shell to own it.
-bool OpenBrowserWindow(const GURL& url, const std::string& profile);
+// `profile`, or for an empty one the profile `url`'s site opens in. With an
+// `agent`, an agent seat's id (`agent-<session>`), the window is listed as
+// that agent's, which the shell opens without the user's focus. Returns the
+// window's id, or nothing when there is no shell to own it.
+std::optional<std::string> OpenBrowserWindow(const GURL& url,
+                                             const std::string& profile,
+                                             const std::string& agent);
 
 // Opens an app window at `url` with `app_id`, or reuses one as `reuse` says,
 // for `domicile open --app`, in browser profile `profile` or for an empty
 // one the profile `url`'s site opens in. See mojom::BrowserWindows.OpenApp.
-// Returns false when there is no shell to own it.
-bool OpenAppWindow(const GURL& url,
-                   const std::string& app_id,
-                   mojom::AppReuse reuse,
-                   const std::string& profile);
+// Returns the id of the window it opened or reused, or nothing when there is
+// no shell to own it.
+std::optional<std::string> OpenAppWindow(const GURL& url,
+                                         const std::string& app_id,
+                                         mojom::AppReuse reuse,
+                                         const std::string& profile);
 
 // Opens an app window at `url`, an app module's address, pinned to the app
 // at `app_host` so it may show that app and no other domicile:// address.
@@ -178,6 +184,21 @@ content::WebContents* BrowserWindowContents(const std::string& id);
 // frame or page within; an Electron app's view names the window holding it.
 // Empty for none, such as the shell itself.
 std::string BrowserWindowOfPage(content::WebContents* page);
+
+// A browser window as the user has it now.
+struct BrowserWindowState {
+  std::string id;
+  // Whether the shell's focused page is this window's. The user's keyboard is
+  // in it only while no native window has it, which the compositor knows.
+  bool focused = false;
+  // Its page's size in CSS pixels, as the shell lays it out; empty while the
+  // shell doesn't draw it.
+  gfx::Size size;
+};
+
+// Every browser window of the shell's profile, in open order, for `domicile
+// list-windows`. Empty when there is no shell.
+std::vector<BrowserWindowState> BrowserWindowStates();
 
 // Asks the shell to focus browser window `id` of the shell's profile.
 void FocusBrowserWindow(const std::string& id);

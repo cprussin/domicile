@@ -3420,10 +3420,11 @@ pub struct ListedWindow {
     pub app: Option<String>,
     /// A native window's process.
     pub pid: Option<i32>,
-    /// A native window's size, logical.
+    /// A native window's size, logical, or a browser window's page's in CSS
+    /// pixels while the shell draws it.
     pub size: Option<[f64; 2]>,
-    /// It has the keyboard. Only a native window can: the shell's page holds
-    /// the keyboard for browser windows.
+    /// It has the user's keyboard: a native window, or the browser window
+    /// whose page the shell's page focused while no native window has it.
     pub focused: bool,
     /// It asked for the keyboard and was refused.
     pub urgent: bool,

@@ -21,6 +21,7 @@ use domicile_protocol::{
 use serde::{Deserialize, Serialize};
 
 use crate::browser_profiles::BrowserProfileList;
+use crate::command::BrowserWindowLayout;
 use crate::extensions::{ExtensionSettings, InstalledExtension};
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
 use crate::log_export::{report, Report};
@@ -58,10 +59,16 @@ pub enum Request {
     /// Open this URL in a browser window: in browser profile `profile`, or
     /// with none in the one its site opens in. The client converts paths
     /// with [`crate::address`].
+    ///
+    /// With `agent`, it opens for that agent session: the shell opens it
+    /// without the user's focus, and the agent's seat holds it (`domicile
+    /// open --agent`).
     OpenUrl {
         url: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         profile: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent: Option<u32>,
     },
     /// Open this URL in an app window: a browser window the shell draws
     /// without an address bar. See `docs/architecture/WEB-APPS.md`.
@@ -541,10 +548,13 @@ pub fn parse_response(line: &str) -> Result<Response, serde_json::Error> {
 pub type LoadShell<'a> = &'a dyn Fn(&Shell) -> Result<(), String>;
 
 /// Tells the engine to open an address in the shell, in a browser profile or
-/// with none in the one its site opens in.
+/// with none in the one its site opens in, for an agent session if one is
+/// named. Returns the window it opened, which an engine that predates agents'
+/// browser windows doesn't name.
 ///
 /// [`crate::command_socket::open_url`] in a desktop; a closure in tests.
-pub type OpenUrl<'a> = &'a dyn Fn(&str, Option<&str>) -> Result<(), String>;
+pub type OpenUrl<'a> =
+    &'a dyn Fn(&str, Option<&str>, Option<u32>) -> Result<Option<String>, String>;
 
 /// Tells the engine to open an address in an app window with an id, or to
 /// reuse the open one as [`AppReuse`] says, a new one in a browser profile or
@@ -779,6 +789,13 @@ pub type ListDisplays<'a> = &'a dyn Fn() -> Result<Vec<ListedDisplay>, String>;
 /// [`crate::compositor_socket::windows`] in a desktop; a closure in tests.
 pub type ListWindows<'a> = &'a dyn Fn() -> Result<Vec<ListedWindow>, String>;
 
+/// Asks the engine for each browser window's focus and size, which the
+/// compositor's list lacks.
+///
+/// [`crate::command_socket::browser_windows`] in a desktop; a closure in
+/// tests.
+pub type ListBrowserLayouts<'a> = &'a dyn Fn() -> Result<Vec<BrowserWindowLayout>, String>;
+
 /// Asks the compositor how the desktop is.
 ///
 /// [`crate::compositor_socket::status`] in a desktop; a closure in tests.
@@ -884,6 +901,7 @@ pub struct Desktop<'a> {
     pub monitors: ListMonitors<'a>,
     pub displays: ListDisplays<'a>,
     pub windows: ListWindows<'a>,
+    pub browser_layouts: ListBrowserLayouts<'a>,
     pub status: AskStatus<'a>,
     pub shell_commands: ListShellCommands<'a>,
     pub shell_bindings: ListShellBindings<'a>,
@@ -971,12 +989,14 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
                 Err(why) => Response::Refused { why },
             })
         }
-        Ok(Request::OpenUrl { url, profile }) => {
-            to_line(&match (desktop.open)(&url, profile.as_deref()) {
-                Ok(()) => Response::Opened,
-                Err(why) => Response::Refused { why },
-            })
-        }
+        Ok(Request::OpenUrl {
+            url,
+            profile,
+            agent,
+        }) => to_line(&match opened(desktop, &url, profile.as_deref(), agent) {
+            Ok(()) => Response::Opened,
+            Err(why) => Response::Refused { why },
+        }),
         Ok(Request::OpenApp {
             url,
             id,
@@ -1142,7 +1162,7 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(displays) => Response::Displays { displays },
             Err(why) => Response::Refused { why },
         }),
-        Ok(Request::Windows) => to_line(&match (desktop.windows)() {
+        Ok(Request::Windows) => to_line(&match laid_out_windows(desktop) {
             Ok(windows) => Response::Windows { windows },
             Err(why) => Response::Refused { why },
         }),
@@ -1290,6 +1310,71 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             ),
         }),
     }
+}
+
+/// Opens `url` as [`Request::OpenUrl`] asks. For agent session `agent`, its
+/// seat's keyboard then goes in the window, so the seat holds it from the
+/// start.
+///
+/// A seat that can't take the window is refused, saying the window is open
+/// all the same, so the agent doesn't open the address again.
+fn opened(
+    desktop: &Desktop,
+    url: &str,
+    profile: Option<&str>,
+    agent: Option<u32>,
+) -> Result<(), String> {
+    let window = (desktop.open)(url, profile, agent)?;
+    let Some(session) = agent else {
+        return Ok(());
+    };
+    let window = window.ok_or(
+        "the address opened, but the engine didn't name its window, so your seat can't \
+         hold it. Don't open it again",
+    )?;
+    (desktop.emulate)(
+        &[EmulatedInput::Focus {
+            window: window.clone(),
+        }],
+        Some(session),
+    )
+    .map_err(|why| {
+        format!(
+            "the address opened in browser window {window}, but your seat can't hold it \
+                 yet: {why}. Don't open it again; act in window {window} once you can"
+        )
+    })
+}
+
+/// The compositor's windows, each browser window with the engine's focus
+/// and size for it. The shell's focused page has the user's keyboard only
+/// while no native window has it.
+fn laid_out_windows(desktop: &Desktop) -> Result<Vec<ListedWindow>, String> {
+    let windows = (desktop.windows)()?;
+    let layouts = (desktop.browser_layouts)()?;
+    let native_focused = windows
+        .iter()
+        .any(|window| window.kind == WindowKind::Native && window.focused);
+    Ok(windows
+        .into_iter()
+        .map(|window| {
+            let Some(layout) = window
+                .engine_id
+                .as_ref()
+                .and_then(|id| layouts.iter().find(|layout| layout.id == *id))
+            else {
+                return window;
+            };
+            ListedWindow {
+                focused: layout.focused && !native_focused,
+                size: layout
+                    .width
+                    .zip(layout.height)
+                    .map(|(width, height)| [f64::from(width), f64::from(height)]),
+                ..window
+            }
+        })
+        .collect())
 }
 
 /// Writes the desktop's logs to `file` for `Request::ExportLogs`, answering

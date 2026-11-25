@@ -196,12 +196,18 @@ most() {
   sed -n "s/.*GUARD list .*$1=\([0-9][0-9]*\).*/\1/p" "$ENGINE_LOG" | sort -n | tail -1
 }
 
-OPENED='{"type":"opened"}'
+# open_url names the window it opened or reused.
+opened() { # $1 answer
+  case "$1" in
+    '{"type":"opened","window":"'*'"}') return 0 ;;
+    *) return 1 ;;
+  esac
+}
 SAW_SHELL=$(saw "GUARD shell-loaded" "$ENGINE_LOG")
 SAW_CRASH=$(saw "Received signal" "$ENGINE_LOG")
 OPENED_MAIL=0
-[ "$FIRST_ANSWER" = "$OPENED" ] && [ "$SECOND_ANSWER" = "$OPENED" ] &&
-  [ "$THIRD_ANSWER" = "$OPENED" ] && OPENED_MAIL=1
+opened "$FIRST_ANSWER" && opened "$SECOND_ANSWER" &&
+  opened "$THIRD_ANSWER" && OPENED_MAIL=1
 SAW_MAIL=0
 [ -n "$MAIL_ID" ] && SAW_MAIL=1
 DREW_MAIL=$(saw "attached browser window ${MAIL_ID:-none} to a <webview>" "$ENGINE_LOG")

@@ -21,7 +21,7 @@ When an agent clicks or types in a browser window, the window you're typing in k
 
 ### Apps an agent opens don't interrupt you
 
-An app an agent opens is the agent's from the start. It opens beside what you're doing, and your keyboard stays where it was.
+An app or web page an agent opens is the agent's from the start. It opens in its own window beside what you're doing, not as a tab behind yours (in a floating window you're using, it joins that window's tabs, which stay the size you left them), and your keyboard stays where it was.
 
 ### See what an agent is using
 
