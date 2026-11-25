@@ -48,6 +48,7 @@ Windows, the overview, toasts, popovers and rows move on springs. A dialog grows
 ### Fixes
 
 - Element no longer says it is open in another window after you log out and quickly in again.
+- Moving the pointer into an embedded frame, such as an artifact on claude.ai, no longer shows the frame's label far away from the pointer.
 
 ## 1.3.0
 

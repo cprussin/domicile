@@ -7,6 +7,8 @@
 #   - A tooltip away from the pointer fails: it is in the frame's coordinates.
 #   - A tooltip with no delay fails: Chrome waits before showing one.
 #   - In the control, any tooltip fails: the pointer never crossed the title.
+#   - The iframe element's title fails in either run: the pointer is in the
+#     frame's widget, not the page's.
 #
 # Runs the verdict block from the real guard, so moving it fails here.
 set -u
@@ -46,6 +48,7 @@ judge() { # $1 NEGATIVE, then NAME=value overrides
     SAW_TOOLTIP=1
     SAW_PLACED=1
     SAW_DELAYED=1
+    SAW_ELEMENT=0
     NEGATIVE="$1"
     shift
     for override in "$@"; do
@@ -74,7 +77,7 @@ blames() { # $1 word, then the args judge takes
   esac
 }
 
-# The control rests beside the frame, so it hears nothing.
+# The control rests on the frame's untitled side, so it hears nothing.
 control() { verdict 1 SAW_TOOLTIP=0 SAW_PLACED=0 SAW_DELAYED=0 "$@"; }
 
 echo "a run that never got as far as measuring anything"
@@ -99,11 +102,18 @@ expect "an immediate tooltip says to wait" "yes" \
   "$(blames "must wait" 0 SAW_DELAYED=0)"
 
 echo
-echo "the control run: the pointer beside the frame"
+echo "the control run: the pointer on the frame's untitled side"
 expect "hearing nothing is the pass" "pass" "$(control)"
 expect "any tooltip is the control's failure" "fail" "$(control SAW_TOOLTIP=1)"
 expect "an empty window is the control's failure too" "fail" \
   "$(control SAW_PAGE=0)"
+
+echo
+echo "the iframe element's title, with the pointer in the frame"
+expect "is the positive run's failure" "fail" "$(verdict 0 SAW_ELEMENT=1)"
+expect "is the control's failure" "fail" "$(control SAW_ELEMENT=1)"
+expect "names the widget under the pointer" "yes" \
+  "$(blames "widget under the" 0 SAW_ELEMENT=1)"
 
 echo
 if [ "$FAILED" -eq 0 ]; then
