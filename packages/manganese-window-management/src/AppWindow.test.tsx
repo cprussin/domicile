@@ -359,7 +359,7 @@ describe("AppWindow", () => {
         ["closing", "dissolve", "windowDissolving"],
         ["arriving-from-end", "", "windowArrivingFromEnd "],
         ["arriving-from-end", "slide-blur", "windowArrivingFromEndBlurred"],
-        ["retreating-to-start", "slide-blur", "windowRetreatingToStartBlurred"],
+        ["leaving-to-start", "slide-blur", "windowLeavingToStartBlurred"],
         ["closing", "slide-blur", "windowClosing"],
       ] as const)(
         "plays %s with effects '%s' as %s",

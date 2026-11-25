@@ -1,4 +1,8 @@
 import { describe, expect, it } from "bun:test";
+import {
+  SPRINGS,
+  turnedBack,
+} from "@domicile-desktop/component-library/springs";
 import { act, renderHook } from "@testing-library/react";
 
 import { token } from "../styled-system/tokens";
@@ -505,11 +509,9 @@ describe("useWindowMotion", () => {
       ).toBeUndefined();
     });
 
-    // Each slide is the other played backwards, so the new one starts where
-    // the one it cuts short had got to.
+    // Each slide goes the other's way on the same spring, so the new one
+    // starts where the one it cuts short had got to.
     describe("a slide cut short by the other", () => {
-      const SLIDE = Number.parseFloat(token("durations.springs.smooth"));
-
       it("slides a window hidden partway down back up from where it is", () => {
         const { clock, rerender, result } = clocked(stowed);
         act(() => {
@@ -523,7 +525,7 @@ describe("useWindowMotion", () => {
 
         expect(drawnOf(result, EDITOR.id)).toMatchObject({
           motion: "stowing",
-          rewound: SLIDE - 200,
+          rewound: turnedBack(SPRINGS.smooth, 200),
         });
       });
 
@@ -542,7 +544,7 @@ describe("useWindowMotion", () => {
 
         expect(drawnOf(result, EDITOR.id)).toMatchObject({
           motion: "dropping",
-          rewound: SLIDE - 100,
+          rewound: turnedBack(SPRINGS.smooth, 100),
         });
       });
 
@@ -1227,10 +1229,10 @@ describe("useWindowMotion", () => {
       expect(motionOf(result, TERMINAL.id)).toBe("resting");
     });
 
-    // Each half plays the other's slide backwards, so starting it as far in
-    // as the cut slide had left puts every window where it is on screen.
+    // A switch back is a switch the other way, started as far in as puts
+    // every window where it is on screen.
     describe("switched back before it has finished", () => {
-      const SWITCH = Number.parseFloat(token("durations.springs.smooth"));
+      const BACK = turnedBack(SPRINGS.smooth, 200);
       const ON_ONE = desktop("1", [TERMINAL, EDITOR], [TERMINAL]);
       const ON_TWO = desktop("2", [TERMINAL, EDITOR], [EDITOR]);
 
@@ -1251,8 +1253,8 @@ describe("useWindowMotion", () => {
         const { result } = switchedBack();
 
         expect(drawnOf(result, EDITOR.id)).toMatchObject({
-          motion: "retreating-to-end",
-          rewound: SWITCH - 200,
+          motion: "leaving-to-end",
+          rewound: BACK,
         });
       });
 
@@ -1260,9 +1262,9 @@ describe("useWindowMotion", () => {
         const { result } = switchedBack();
 
         expect(drawnOf(result, TERMINAL.id)).toMatchObject({
-          motion: "returning-from-start",
-          rewound: SWITCH - 200,
-          shownRewound: SWITCH - 200,
+          motion: "arriving-from-start",
+          rewound: BACK,
+          shownRewound: BACK,
         });
       });
 
@@ -1274,14 +1276,34 @@ describe("useWindowMotion", () => {
           rerender(ON_TWO);
         });
 
+        const again = turnedBack(SPRINGS.smooth, BACK + 100);
         expect(drawnOf(result, EDITOR.id)).toMatchObject({
           motion: "arriving-from-end",
-          rewound: 100,
+          rewound: expect.closeTo(again, 6),
         });
         expect(drawnOf(result, TERMINAL.id)).toMatchObject({
           motion: "leaving-to-start",
-          rewound: 100,
+          rewound: expect.closeTo(again, 6),
         });
+      });
+
+      // The spring's tail barely moves: a switch back started there would
+      // hold the windows still before they move.
+      it("starts at once when switched back as it lands", () => {
+        const length = Number.parseFloat(token("durations.springs.smooth"));
+        const { clock, rerender, result } = clocked(ON_ONE);
+        act(() => {
+          rerender(ON_TWO);
+        });
+        clock.now = length * 0.8;
+
+        act(() => {
+          rerender(ON_ONE);
+        });
+
+        expect(drawnOf(result, TERMINAL.id)?.rewound).toBeLessThan(
+          length * 0.05,
+        );
       });
 
       it("slides the tabs back with their windows", () => {
@@ -1331,8 +1353,8 @@ describe("useWindowMotion", () => {
             rewound,
           ]),
         ).toStrictEqual([
-          [TERMINAL.id, "returning-from-start", SWITCH - 200],
-          [EDITOR.id, "retreating-to-end", SWITCH - 200],
+          [TERMINAL.id, "arriving-from-start", BACK],
+          [EDITOR.id, "leaving-to-end", BACK],
         ]);
       });
 
@@ -1342,7 +1364,7 @@ describe("useWindowMotion", () => {
         act(() => {
           result.current.onPlayedOut(
             EDITOR.id,
-            "retreating-to-end",
+            "leaving-to-end",
             SCREEN,
             "contents",
           );
@@ -1357,7 +1379,7 @@ describe("useWindowMotion", () => {
         act(() => {
           result.current.onPlayedOut(
             EDITOR.id,
-            "retreating-to-end",
+            "leaving-to-end",
             SCREEN,
             "contents",
           );

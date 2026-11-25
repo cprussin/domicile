@@ -123,6 +123,7 @@
     "./shown-windows": "./src/PortalDialogs/shown-windows.ts",
     "./source-name": "./src/PortalDialogs/source-name.ts",
     "./spacing": "./src/spacing.ts",
+    "./springs": "./src/springs.ts",
     "./standalone-theme-source": "./src/ThemeSwitch/standalone-theme-source.ts",
     "./TabRail": "./src/TabRail/TabRail.tsx",
     "./Tabs": "./src/Tabs/Tabs.tsx",

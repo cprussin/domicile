@@ -471,14 +471,14 @@ condition in `panda-preset.ts`:
 - Sending away a tab: it shrinks and fades with its contents, as a sent
   window does, while the tabs after it slide back.
 - Sending to the scratchpad: slide up off the top of the screen. Showing it
-  slides the window back down. Each slide is the other played backwards, so
-  one that cuts the other short starts where the window is
-  (`DrawnWindow.rewound`). The backdrop fades with the slides.
+  slides the window back down. Each slide goes the other's way on the same
+  spring, so one that cuts the other short starts where the window is
+  (`DrawnWindow.rewound`, `turnedBack`). The backdrop fades with the slides.
 - Workspace switch: the new workspace slides in; the old one slides out.
   Each window is clipped to its screen meanwhile, so it never shows on the
   next one, and to its workspace, so a float hanging off the screen never
-  slides into view. Switching back before it ends plays it backwards from
-  where it is (`Reversal`), as the scratchpad's slides do.
+  slides into view. Switching back before it ends is a switch the other way,
+  started where the windows are, as the scratchpad's slides do.
 - Tab switch: the revealed tab slides a short way in from its tab's side of
   the hidden one and fades in over it. On a workspace sliding in, the tab
   switched to slides with it instead. Parts first drawn partway through (a hidden tab's

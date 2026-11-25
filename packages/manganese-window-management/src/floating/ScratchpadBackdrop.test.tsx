@@ -63,6 +63,24 @@ describe("ScratchpadBackdrop", () => {
     },
   );
 
+  // Played backwards, the spring would start in its slow tail, holding the
+  // fade still before the window moves.
+  it("fades out forwards", () => {
+    const { container } = render(
+      <ScratchpadBackdrop
+        depth={1}
+        motion="stowing"
+        onDismiss={nothing}
+        rewound={0}
+        screen={SCREEN}
+      />,
+    );
+
+    expect(
+      globalThis.getComputedStyle(backdrop(container)).animation,
+    ).not.toMatch(/\breverse\b/);
+  });
+
   // A slide that cuts the other short starts partway in, like the window's.
   it("starts its fade as far in as the window's slide", () => {
     const { container } = render(

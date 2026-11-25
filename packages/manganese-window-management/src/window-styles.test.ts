@@ -184,19 +184,11 @@ describe("movingStyles", () => {
       expect(styled(motion, contents)).toMatch(spring);
     });
 
-    // A reversal plays the slide it cuts short backwards, from as far in as
-    // that one had left (`--motion-delay`). Under a name of its own: the
-    // browser restarts an animation only when its name changes. See
-    // `panda-preset.ts` for the frames each shares.
-    it.each([
-      ["retreating-to-end", "windowRetreatingToEnd"],
-      ["retreating-to-start", "windowRetreatingToStart"],
-      ["returning-from-end", "windowReturningFromEnd"],
-      ["returning-from-start", "windowReturningFromStart"],
-    ] as const)("plays %s as %s backwards", (motion, keyframes) => {
-      expect(movingStyles.raw({ motion }).animation).toBe(
-        `${keyframes} {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards`,
-      );
+    // Played backwards, a spring starts in its slow tail and holds still
+    // before it moves. A motion that turns another back goes the other way
+    // forwards instead (see `rewoundAfter`).
+    it.each(movingStyles.variantMap.motion)("plays %s forwards", (motion) => {
+      expect(styled(motion)).not.toMatch(/\breverse\b/);
     });
 
     // The tab under a moving tab's contents holds its depth as long as they

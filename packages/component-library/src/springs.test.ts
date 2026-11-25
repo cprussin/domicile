@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { SPRINGS, springEasing } from "./springs";
+import { SPRINGS, springEasing, turnedBack } from "./springs";
 
 describe("springEasing", () => {
   it("runs from the start to the end", () => {
@@ -36,6 +36,42 @@ describe("springEasing", () => {
       (spring) => Number.parseInt(springEasing(spring).duration, 10),
     );
     expect(durations).toStrictEqual(durations.toSorted((a, b) => a - b));
+  });
+});
+
+describe("turnedBack", () => {
+  const { duration, easing } = springEasing(SPRINGS.smooth);
+  const length = Number.parseFloat(duration);
+  const stops = stopsOf(easing);
+  /** Where the `linear()` easing puts a motion `ms` in, as CSS samples it. */
+  const progressAt = (ms: number): number => {
+    const at = (Math.min(ms, length) / length) * (stops.length - 1);
+    const index = Math.min(Math.floor(at), stops.length - 2);
+    const from = stops[index] ?? Number.NaN;
+    const to = stops[index + 1] ?? Number.NaN;
+    return from + (to - from) * (at - index);
+  };
+
+  it.each([0, 30, 100, 250, 400])(
+    "starts the opposite motion where one %i ms in has got to",
+    (into) => {
+      expect(
+        progressAt(turnedBack(SPRINGS.smooth, into)) + progressAt(into),
+      ).toBeCloseTo(1, 6);
+    },
+  );
+
+  it("starts the opposite motion from rest once the cut one has all but landed", () => {
+    // The spring's tail moves too little to see; starting the way back
+    // there would hold the window still before it moves.
+    expect(turnedBack(SPRINGS.smooth, length * 0.8)).toBeLessThan(
+      length * 0.05,
+    );
+    expect(turnedBack(SPRINGS.smooth, length * 2)).toBe(0);
+  });
+
+  it("refuses a spring that overshoots, which passes a point twice", () => {
+    expect(() => turnedBack(SPRINGS.bouncy, 100)).toThrow(/overshoots/);
   });
 });
 

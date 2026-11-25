@@ -25,15 +25,22 @@ const RESTACKING_DEPTH = {
 // The scratchpad is a drop-down: a window shown from it slides down from above
 // the screen's top edge, `--lift` away (see `slidAcross`). It is clear of the
 // edge only in the last stretch, so it fades in there and does not show on a
-// screen above. Played backwards, it stows the window again. Registered under
-// two names so one restarts the other; see `movingStyles`.
-const SCRATCHPAD_SLIDE = {
+// screen above. Stowing slides it back up the same way.
+const SCRATCHPAD_DROP = {
   "0%": {
     opacity: "0",
     transform: "translateY(calc(-1 * var(--lift)))",
   },
   "15%": { opacity: "1" },
   "100%": { opacity: "1", transform: "translateY(0)" },
+};
+const SCRATCHPAD_STOW = {
+  "0%": { opacity: "1", transform: "translateY(0)" },
+  "85%": { opacity: "1" },
+  "100%": {
+    opacity: "0",
+    transform: "translateY(calc(-1 * var(--lift)))",
+  },
 };
 
 /**
@@ -50,9 +57,7 @@ const TRAVELED_TO_06 = traveledTo("0.6");
 // (`--workspace-width`; see `slidAcross`). The arriving workspace starts where
 // the leaving one ends, so they never overlap and nothing needs to fade.
 //
-// A switch turned back plays these backwards (see `Reversal`). Each is
-// registered under a second name for that: the browser restarts an animation
-// only when its name changes.
+// A switch turned back is a switch the other way (see `rewoundAfter`).
 const ARRIVING_FROM_END = {
   "0%": { transform: "translateX(var(--workspace-width))" },
   "100%": { transform: "translateX(0)" },
@@ -90,11 +95,14 @@ const blurred = (slide: Record<"0%" | "100%", { transform: string }>) => ({
 });
 
 // The scratchpad backdrop fades in with a window's drop, and out with its
-// stow by playing this backwards. Two names for the same reason as
-// `SCRATCHPAD_SLIDE`.
+// stow.
 const BACKDROP_FADE = {
   "0%": { opacity: "0" },
   "100%": { opacity: "1" },
+};
+const BACKDROP_FADE_OUT = {
+  "0%": { opacity: "1" },
+  "100%": { opacity: "0" },
 };
 
 /** Keyframes and tokens for windows: opening, closing, restacking, workspace switches and the scratchpad. */
@@ -113,7 +121,7 @@ export const windowManagementPreset = definePreset({
   theme: {
     extend: {
       keyframes: {
-        backdropHiding: BACKDROP_FADE,
+        backdropHiding: BACKDROP_FADE_OUT,
         backdropShowing: BACKDROP_FADE,
         // A drop indicator's box fades out where it was as the line between
         // two tabs fades in; see `DropIndicator`.
@@ -233,7 +241,7 @@ export const windowManagementPreset = definePreset({
             transform: "scale(0.96)",
           },
         },
-        windowDropping: SCRATCHPAD_SLIDE,
+        windowDropping: SCRATCHPAD_DROP,
         // Holds a window at the tiled depth. The tab a close uncovers, and the
         // tab a switch reveals, keep it while the other tab fades over or
         // under them, whatever `settlingStyles` does with their depth, so no
@@ -281,14 +289,6 @@ export const windowManagementPreset = definePreset({
         windowRestackingAgain: RESTACKING,
         windowRestackingDepth: RESTACKING_DEPTH,
         windowRestackingDepthAgain: RESTACKING_DEPTH,
-        windowRetreatingToEnd: ARRIVING_FROM_END,
-        windowRetreatingToEndBlurred: blurred(ARRIVING_FROM_END),
-        windowRetreatingToStart: ARRIVING_FROM_START,
-        windowRetreatingToStartBlurred: blurred(ARRIVING_FROM_START),
-        windowReturningFromEnd: LEAVING_TO_END,
-        windowReturningFromEndBlurred: blurred(LEAVING_TO_END),
-        windowReturningFromStart: LEAVING_TO_START,
-        windowReturningFromStartBlurred: blurred(LEAVING_TO_START),
         // A tab switch: the revealed tab slides a short way in from its tab's
         // side of the hidden one, `--tab-slide-x` and `--tab-slide-y` (see
         // `tabSlidFrom`), as it fades in over it.
@@ -308,7 +308,7 @@ export const windowManagementPreset = definePreset({
           "0%": { opacity: "1", transform: "none" },
           "100%": { opacity: "0", transform: TRAVELED_TO_06 },
         },
-        windowStowing: SCRATCHPAD_SLIDE,
+        windowStowing: SCRATCHPAD_STOW,
       },
       semanticTokens: {
         colors: {

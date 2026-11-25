@@ -28,15 +28,22 @@ describe("window keyframes", () => {
     expect(mixed).toStrictEqual([]);
   });
 
-  // A reversed switch plays the frames of the slide it cuts short backwards,
-  // under another name so the browser starts it anew.
+  // A stow is a drop the other way, played forwards so it starts on the
+  // spring from rest rather than in its tail.
   it.each([
-    ["windowRetreatingToEnd", "windowArrivingFromEnd"],
-    ["windowRetreatingToStart", "windowArrivingFromStart"],
-    ["windowReturningFromEnd", "windowLeavingToEnd"],
-    ["windowReturningFromStart", "windowLeavingToStart"],
-  ] as const)("plays %s on the frames of %s", (reversal, slide) => {
-    expect(keyframes[reversal]).toStrictEqual(keyframes[slide]);
+    ["windowStowing", "windowDropping"],
+    ["backdropHiding", "backdropShowing"],
+  ] as const)("plays %s on the frames of %s mirrored", (mirrored, frames) => {
+    expect(keyframes[mirrored]).toStrictEqual(
+      Object.fromEntries(
+        Object.entries(keyframes[frames] ?? {})
+          .map(([offset, frame]) => [
+            `${100 - Number.parseFloat(offset)}%`,
+            frame,
+          ])
+          .toReversed(),
+      ),
+    );
   });
 
   // With the slide blur on, each slide blurs most as it moves fastest,
@@ -46,10 +53,6 @@ describe("window keyframes", () => {
     ["windowArrivingFromStartBlurred", "windowArrivingFromStart"],
     ["windowLeavingToEndBlurred", "windowLeavingToEnd"],
     ["windowLeavingToStartBlurred", "windowLeavingToStart"],
-    ["windowRetreatingToEndBlurred", "windowArrivingFromEnd"],
-    ["windowRetreatingToStartBlurred", "windowArrivingFromStart"],
-    ["windowReturningFromEndBlurred", "windowLeavingToEnd"],
-    ["windowReturningFromStartBlurred", "windowLeavingToStart"],
   ] as const)("blurs %s along the frames of %s", (blurred, slide) => {
     expect(keyframes[blurred]).toStrictEqual({
       "0%": {

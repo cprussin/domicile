@@ -425,7 +425,7 @@ export const movingStyles = cva({
         animation:
           "windowConcealing {durations.springs.smooth} {easings.springs.smooth}",
       },
-      // Stowing plays the drop backwards, so either can take over from the
+      // Stowing is the drop the other way, so either can take over from the
       // other where it was cut short (`--motion-delay`, see `slidAcross`).
       dropping: {
         animation:
@@ -468,41 +468,6 @@ export const movingStyles = cva({
           "windowRestackingAgain {durations.springs.smooth} {easings.springs.smooth}, windowRestackingDepthAgain {durations.springs.smooth} {easings.springs.smooth}",
       },
       resting: {},
-      // A switch turned back plays each slide it cuts short backwards (see
-      // `Reversal`). The spring runs backwards too, which keeps the two
-      // workspaces side by side.
-      "retreating-to-end": {
-        _slideBlur: {
-          animation:
-            "windowRetreatingToEndBlurred {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
-        },
-        animation:
-          "windowRetreatingToEnd {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
-      },
-      "retreating-to-start": {
-        _slideBlur: {
-          animation:
-            "windowRetreatingToStartBlurred {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
-        },
-        animation:
-          "windowRetreatingToStart {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
-      },
-      "returning-from-end": {
-        _slideBlur: {
-          animation:
-            "windowReturningFromEndBlurred {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
-        },
-        animation:
-          "windowReturningFromEnd {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
-      },
-      "returning-from-start": {
-        _slideBlur: {
-          animation:
-            "windowReturningFromStartBlurred {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
-        },
-        animation:
-          "windowReturningFromStart {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
-      },
       // Slides a short way in from the side of the tab it was switched to
       // from, fading in over the hidden tab in the same box. See
       // `tabSlidFrom`.
@@ -525,7 +490,7 @@ export const movingStyles = cva({
       },
       stowing: {
         animation:
-          "windowStowing {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) reverse forwards",
+          "windowStowing {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms) forwards",
       },
       // Lasts as long as a closing tab's contents, which it is drawn under.
       uncovering: {

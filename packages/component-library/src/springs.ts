@@ -34,15 +34,73 @@ const STOPS = 64;
 export const springEasing = (
   spring: Spring,
 ): { readonly duration: string; readonly easing: string } => {
-  const position = springPosition(spring);
-  const settleS = settleTime(position);
-  const stops = Array.from({ length: STOPS + 1 }, (_, index) =>
-    index === STOPS ? 1 : round(position((settleS * index) / STOPS)),
-  );
+  const { settleS, stops } = sampled(spring);
   return {
     duration: `${Math.round(settleS * 1000)}ms`,
     easing: `linear(${stops.join(", ")})`,
   };
+};
+
+/**
+ * How far into a motion on `spring`, in milliseconds, to start it so it begins
+ * where an opposite motion on the same spring, cut short `intoMs` in, has got
+ * to. Both run forwards from rest, so a motion turned back as it lands starts
+ * at once rather than in the spring's slow tail.
+ *
+ * Reads the `linear()` stops CSS plays, so the two meet exactly.
+ */
+export const turnedBack = (spring: Spring, intoMs: number): number => {
+  const { settleS, stops } = sampled(spring);
+  const lengthMs = Math.round(settleS * 1000);
+  if (
+    stops.some((stop, index) => index > 0 && stop < stopAt(stops, index - 1))
+  ) {
+    throw new Error("a spring that overshoots passes a point twice");
+  } else {
+    const at = (Math.min(intoMs, lengthMs) / lengthMs) * STOPS;
+    const before = Math.min(Math.floor(at), STOPS - 1);
+    const left = 1 - lerp(stops, before, at - before);
+    const after = stops.findIndex(
+      (_, index) => index < STOPS && stopAt(stops, index + 1) >= left,
+    );
+    const from = stopAt(stops, after);
+    const fraction = (left - from) / (stopAt(stops, after + 1) - from);
+    return ((after + fraction) / STOPS) * lengthMs;
+  }
+};
+
+/** The spring's settle time and its `linear()` stops over that time. */
+const sampled = (
+  spring: Spring,
+): { readonly settleS: number; readonly stops: readonly number[] } => {
+  const position = springPosition(spring);
+  const settleS = settleTime(position);
+  return {
+    settleS,
+    stops: Array.from({ length: STOPS + 1 }, (_, index) =>
+      index === STOPS ? 1 : round(position((settleS * index) / STOPS)),
+    ),
+  };
+};
+
+/** The value `fraction` of the way from stop `index` to the next. */
+const lerp = (
+  stops: readonly number[],
+  index: number,
+  fraction: number,
+): number => {
+  const from = stopAt(stops, index);
+  return from + (stopAt(stops, index + 1) - from) * fraction;
+};
+
+/** Stop `index`, which every caller keeps in range. */
+const stopAt = (stops: readonly number[], index: number): number => {
+  const stop = stops[index];
+  if (stop === undefined) {
+    throw new Error(`no linear() stop ${index}`);
+  } else {
+    return stop;
+  }
 };
 
 /** The spring's position at a time in seconds, solved in closed form. */
