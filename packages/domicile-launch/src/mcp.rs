@@ -45,6 +45,8 @@ pub struct Ran {
 
 /// What the user let an agent do, from `domicile agent`.
 pub struct Grant {
+    /// Its session, whose own seat its pointer and keys go to.
+    pub session: u32,
     /// What the user lets it reach now; they may change it.
     pub reach: Box<dyn Fn() -> AgentReach>,
     /// Whether the user has stopped it since.
@@ -207,9 +209,12 @@ const INSTRUCTIONS: &str = "Read and act on windows as text first: list_windows,
     Each act answers what it changed in the window, so there is no need to look again. \
     Use screenshot only for what a tree can't show: images, layout, or an app that \
     doesn't support accessibility. Zoom into an area rather than taking the whole desk \
-    again. The user may be using the desktop as you work, so the tools that move the \
-    pointer, keyboard focus or windows are refused until they step away. When you are \
-    done with the desktop, call stop_using_desktop.";
+    again. The user may be using the desktop as you work. click, key, type_text and the \
+    other pointer tools use your own pointer and keyboard, which never move theirs, in \
+    native windows; they are refused in an app the user is in, and over the shell or a \
+    browser window, which you act on by ref. send_shell acts on the user's focus, so it \
+    waits until they step away. When you are done with the desktop, call \
+    stop_using_desktop.";
 
 /// What the client calls itself in `initialize`: its title, else its name.
 fn named(params: &Value) -> String {
@@ -395,7 +400,7 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec!["target"],
         ),
         Tool::WindowAct("focus-window") => (
-            "Show and focus a window.",
+            "Give a native window your own keyboard, for key and type_text. The user's focus stays where it is, and the window is not raised.",
             window_id,
             vec!["id"],
         ),
@@ -411,7 +416,7 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec![],
         ),
         Tool::Click => (
-            "Click at a point of the last screenshot. In a window with a tree, browser_click or app_click by ref instead.",
+            "Click at a point of the last screenshot with your own pointer, which never moves the user's, giving that window your keyboard. Works in native windows the user isn't in. In a window with a tree, browser_click or app_click by ref instead.",
             json!({
                 "x": coordinate,
                 "y": coordinate,
@@ -421,7 +426,7 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec!["x", "y"],
         ),
         Tool::MovePointer => (
-            "Move the pointer to a point of the last screenshot.",
+            "Move your own pointer to a point of the last screenshot, over a native window.",
             json!({"x": coordinate, "y": coordinate}),
             vec!["x", "y"],
         ),
@@ -436,12 +441,12 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec!["x", "y", "dx", "dy"],
         ),
         Tool::Key => (
-            "Press a chord of XKB keysym names, such as ctrl+l, Return or alt+Tab.",
+            "Press a chord of XKB keysym names, such as ctrl+l or Return, with your own keyboard, in the window you last clicked or focused. The shell's own bindings are the user's: use send_shell.",
             json!({"chord": {"type": "string"}}),
             vec!["chord"],
         ),
         Tool::TypeText => (
-            "Type text on the keyboard, where the focus is. In a window with a tree, browser_type or app_set_text instead.",
+            "Type text with your own keyboard, into the window you last clicked or focused. In a window with a tree, browser_type or app_set_text instead.",
             json!({"text": {"type": "string"}}),
             vec!["text"],
         ),
@@ -524,6 +529,7 @@ fn guarded(
     let mut answered = called(
         tool,
         arguments,
+        grant.session,
         domicile,
         &mut session.view,
         &mut session.read,
@@ -723,8 +729,15 @@ fn what_it_did(
 const AWAY: u64 = 30;
 
 /// Whether `tool` moves the pointer, keyboard focus or windows the user is
-/// using. The desk has one seat, shared with the user.
+/// using. A shell command acts on the user's focus. The pointer and keys
+/// go to the agent's own seat instead: see [`on_its_own_seat`].
 fn moves_the_users_hands(tool: Tool) -> bool {
+    matches!(tool, Tool::SendShell)
+}
+
+/// Whether `tool` points or types with the agent's own pointer and
+/// keyboard, which never move the user's (`--agent`).
+fn on_its_own_seat(tool: Tool) -> bool {
     matches!(
         tool,
         Tool::Click
@@ -733,7 +746,6 @@ fn moves_the_users_hands(tool: Tool) -> bool {
             | Tool::Scroll
             | Tool::Key
             | Tool::TypeText
-            | Tool::SendShell
             | Tool::WindowAct("focus-window")
     )
 }
@@ -758,10 +770,11 @@ fn in_use(domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>) -> io::Result
         })?;
     Ok((local_seconds < AWAY).then(|| {
         format!(
-            "The user is using this computer, and this tool would move their pointer, \
-             keyboard focus or windows. Use the browser_ and app_ tools by ref, which \
-             don't, or try again once the user has left the keyboard and mouse alone \
-             for {AWAY} seconds."
+            "The user is using this computer, and shell commands act on their keyboard \
+             focus and windows. Use the browser_ and app_ tools by ref, or your own \
+             pointer and keys (click, key, type_text), which don't move theirs, or try \
+             again once the user has left the keyboard and mouse alone for {AWAY} \
+             seconds."
         )
     }))
 }
@@ -770,6 +783,7 @@ fn in_use(domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>) -> io::Result
 fn called(
     tool: Tool,
     arguments: &Map<String, Value>,
+    seat: u32,
     domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
     view: &mut Option<View>,
     read: &mut HashMap<String, String>,
@@ -779,10 +793,15 @@ fn called(
         Tool::Browser(browser) => return browser::called(browser, arguments, domicile, read),
         _ => {}
     }
-    let runs = match commands(tool, arguments, *view) {
+    let mut runs = match commands(tool, arguments, *view) {
         Ok(runs) => runs,
         Err(why) => return Ok(said(false, why)),
     };
+    if on_its_own_seat(tool) {
+        for run in &mut runs {
+            run.splice(1..1, ["--agent".to_string(), seat.to_string()]);
+        }
+    }
     if moves_the_users_hands(tool) {
         if let Some(why) = in_use(domicile)? {
             return Ok(said(false, why));

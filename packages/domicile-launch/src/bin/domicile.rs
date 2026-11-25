@@ -49,7 +49,7 @@ use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
 use domicile_launch::config_watch;
 use domicile_launch::control::{
-    answer, Desktop as ControlDesktop, Request, Response, SettingsFiles,
+    answer, AgentLetIn, Desktop as ControlDesktop, Request, Response, SettingsFiles,
 };
 use domicile_launch::control_socket::{
     address, advertised, ask, hold, listen, serve_one, take, Control, Lenders,
@@ -1512,8 +1512,8 @@ fn let_in(binary: &Path, name: &str) -> Result<mcp::Grant, String> {
     let mut said = BufReader::new(agent.stdout.take().expect("stdout is piped"));
     let mut allowed = String::new();
     let _ = said.read_line(&mut allowed);
-    let reach = match serde_json::from_str(allowed.trim()) {
-        Ok(reach) => reach,
+    let AgentLetIn { reach, session } = match serde_json::from_str(allowed.trim()) {
+        Ok(let_in) => let_in,
         Err(_) => {
             let mut why = String::new();
             if let Some(mut stderr) = agent.stderr.take() {
@@ -1548,6 +1548,7 @@ fn let_in(binary: &Path, name: &str) -> Result<mcp::Grant, String> {
         }
     });
     Ok(mcp::Grant {
+        session,
         reach: Box::new(move || reach.lock().unwrap().clone()),
         stopped: Box::new(move || stopped.load(Ordering::SeqCst)),
         did: Box::new(move |said| {
@@ -1656,12 +1657,12 @@ fn admitted(name: String) -> Result<ExitCode, String> {
     )
     .map_err(|why| why.to_string())?;
     match answer {
-        Response::Agent { reach } => {
+        Response::Agent { reach, session } => {
             let mut stdout = std::io::stdout().lock();
             let _ = writeln!(
                 stdout,
                 "{}",
-                serde_json::to_string(&reach).expect("a reach serializes")
+                serde_json::to_string(&AgentLetIn { session, reach }).expect("a reach serializes")
             )
             .and_then(|()| stdout.flush());
         }
@@ -1677,7 +1678,7 @@ fn admitted(name: String) -> Result<ExitCode, String> {
     // first was; anything else, or a hang-up, is the user stopping it.
     std::thread::spawn(move || {
         for line in BufReader::new(told).lines() {
-            let Ok(Response::Agent { reach }) = line
+            let Ok(Response::Agent { reach, session }) = line
                 .map_err(|_| ())
                 .and_then(|line| serde_json::from_str(&line).map_err(|_| ()))
             else {
@@ -1687,7 +1688,7 @@ fn admitted(name: String) -> Result<ExitCode, String> {
             let _ = writeln!(
                 stdout,
                 "{}",
-                serde_json::to_string(&reach).expect("a reach serializes")
+                serde_json::to_string(&AgentLetIn { session, reach }).expect("a reach serializes")
             )
             .and_then(|()| stdout.flush());
         }
@@ -2598,8 +2599,8 @@ fn answer_a_command(
                         shoot_desk(chrome, file, fit, area, Some(CAPTURE_WITHIN))
                             .map_err(|why| why.to_string())?
                     },
-                    emulate: &|input| {
-                        emulate(chrome, input, Some(ANSWER_WITHIN))
+                    emulate: &|input, agent| {
+                        emulate(chrome, input, agent, Some(ANSWER_WITHIN))
                             .map_err(|why| why.to_string())?
                     },
                     devtools: &|window, method, params| {

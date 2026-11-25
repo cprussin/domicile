@@ -332,8 +332,10 @@ pub const COMMANDS: &[Command] = &[
             "Asks the shell to show and focus native window `<id>`, as \
              `list-windows` prints it. The shell decides how: Manganese switches \
              to its workspace.",
+            "With `--agent`, gives the window that agent's own keyboard instead. \
+             The user's focus stays, and nothing is raised.",
         ],
-        sections: &[],
+        sections: &[AGENT],
         examples: &[],
         see_also: &["list-windows"],
     },
@@ -525,7 +527,7 @@ pub const COMMANDS: &[Command] = &[
             "Moves the pointer to `<x>,<y>`, in logical pixels from the desk's \
              top-left corner, then clicks there.",
         ],
-        sections: &[],
+        sections: &[AGENT],
         examples: &["domicile pointer 640,360 click"],
         see_also: &["drag", "scroll", "screenshot"],
     },
@@ -539,7 +541,7 @@ pub const COMMANDS: &[Command] = &[
             "Presses the left button at the first point, moves to the second \
              holding it, and lets go there.",
         ],
-        sections: &[],
+        sections: &[AGENT],
         examples: &["domicile drag 640,360 800,360"],
         see_also: &["pointer"],
     },
@@ -550,7 +552,7 @@ pub const COMMANDS: &[Command] = &[
         summary: "Scroll where the pointer is",
         forms: &[],
         about: &["Scrolls where the pointer is, in logical pixels: positive is right and down."],
-        sections: &[],
+        sections: &[AGENT],
         examples: &["domicile scroll 0,120"],
         see_also: &["pointer"],
     },
@@ -565,7 +567,7 @@ pub const COMMANDS: &[Command] = &[
              Each key is an XKB keysym name in any case; `ctrl`, `shift`, `alt` \
              and `super` name the left modifiers.",
         ],
-        sections: &[],
+        sections: &[AGENT],
         examples: &["domicile key ctrl+shift+Tab"],
         see_also: &["type"],
     },
@@ -579,7 +581,7 @@ pub const COMMANDS: &[Command] = &[
             "Types `<text>` on the desk's keyboard, holding Shift where a character \
              needs it. A line break presses Return.",
         ],
-        sections: &[],
+        sections: &[AGENT],
         examples: &["domicile type 'hello, world'"],
         see_also: &["key"],
     },
@@ -885,6 +887,8 @@ pub const COMMANDS: &[Command] = &[
             "Asks to let agent `<name>` see and use the desktop, and prints what \
              you allowed, then each change, as JSON lines. Each line read from \
              stdin shows in the bar as what it did. It stays in until stdin ends.",
+            "Each line's `session` is what `--agent` takes, for its own pointer \
+             and keyboard.",
         ],
         sections: &[],
         examples: &[],
@@ -1015,6 +1019,16 @@ pub const COMMANDS: &[Command] = &[
 const JSON: Section = Section {
     title: "Options",
     entries: &[("--json", "Print JSON for scripts")],
+};
+
+/// `--agent`, which the input commands take.
+const AGENT: Section = Section {
+    title: "Options",
+    entries: &[(
+        "--agent <session>",
+        "Use that agent session's own pointer and keyboard, as `agent` prints it, not the user's. \
+         Reaches native windows the user isn't in",
+    )],
 };
 
 /// The command named `name`.

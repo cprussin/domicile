@@ -13,8 +13,15 @@ use crate::keymap::Keyboard;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Step {
     Send(Emulated),
-    Keysym { keysym: u32, pressed: bool },
+    Keysym {
+        keysym: u32,
+        pressed: bool,
+    },
     Wait(Duration),
+    /// Give a window the keyboard: an agent's own, for `focus-window --agent`.
+    Focus {
+        window: String,
+    },
 }
 
 /// The events that send `input` on `keyboard`, or why one cannot be sent.
@@ -44,6 +51,9 @@ fn steps_of(event: &EmulatedInput, keyboard: &Keyboard) -> Result<Vec<Step>, Str
             Ok([steps, typed(character, keyboard)?].concat())
         }),
         EmulatedInput::Wait { ms } => Ok(vec![Step::Wait(Duration::from_millis(u64::from(*ms)))]),
+        EmulatedInput::Focus { window } => Ok(vec![Step::Focus {
+            window: window.clone(),
+        }]),
     }
 }
 

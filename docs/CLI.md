@@ -136,22 +136,28 @@ $ domicile screenshot --fit 1280 desk.png
 A point in the PNG is a point for `pointer`, scaled by `place.size` over
 `width` and `height`.
 
-## `domicile pointer <x>,<y> [click|double-click|right-click|middle-click]`
+## `domicile pointer [--agent <session>] <x>,<y> [click|double-click|right-click|middle-click]`
 
 Move the pointer to `<x>,<y>`, in logical pixels from the desk's top-left
 corner, then click the left, right or middle button there.
 
-## `domicile drag <x>,<y> <x>,<y>`
+`--agent` sends it on agent `<session>`'s own pointer and keyboard instead of
+the user's, as `pointer`, `drag`, `scroll`, `key`, `type` and `focus-window`
+take it. The session is the one [`agent`](#domicile-agent-name) prints. Only a
+native window takes it, and not one the user is in; a click gives the window
+the agent's keyboard. Refused, with why, otherwise.
+
+## `domicile drag [--agent <session>] <x>,<y> <x>,<y>`
 
 Press the left button at the first point, move to the second in steps over
 about a sixth of a second holding it, and let go there. Points are as
 `pointer` takes them.
 
-## `domicile scroll <dx>,<dy>`
+## `domicile scroll [--agent <session>] <dx>,<dy>`
 
 Scroll where the pointer is, in logical pixels: positive is right and down.
 
-## `domicile key <chord>`
+## `domicile key [--agent <session>] <chord>`
 
 Press the keys of a chord in order, then release them in reverse. Each key is
 an XKB keysym name, such as `Return`, `Tab`, `l` or `F4`, in any case;
@@ -161,7 +167,7 @@ an XKB keysym name, such as `Return`, `Tab`, `l` or `F4`, in any case;
 domicile key ctrl+shift+Tab
 ```
 
-## `domicile type <text>`
+## `domicile type [--agent <session>] <text>`
 
 Type `<text>` on the desk's keyboard, holding Shift where a character needs
 it. A line break presses Return. Refused, typing nothing, when no key types a
@@ -474,11 +480,14 @@ ID  KIND         CONNECTION  VENDOR:PRODUCT  NAME
 Lock the desktop now, as its lock timeout does. The compositor owns the lock,
 so this works with any shell that draws a lock screen.
 
-## `domicile focus-window <id>`
+## `domicile focus-window [--agent <session>] <id>`
 
 Ask the shell to show and focus the native window `id`, as `list-windows`
 prints it. This is the request a window makes for itself when it wants
 attention, so the shell decides: Manganese switches to its workspace.
+
+With `--agent`, give the window agent `<session>`'s own keyboard instead. The
+user's focus stays, and nothing is raised.
 
 ## `domicile close-window <id>`
 
@@ -700,9 +709,9 @@ See [AGENTS.md](AGENTS.md#agents-on-the-web).
 ## `domicile agent <name>`
 
 Ask, in Domicile's dialog, to let the agent `name` see and use the desktop,
-and print what you allowed as a JSON line: `{"type":"desk"}`, or
-`{"type":"windows","windows":[...]}` with each window's `id`, `kind`, `title`
-and `app`. A remembered agent is let in without asking. Each time you change
+and print what you allowed as a JSON line: `{"session":12,"type":"desk"}`, or
+`{"session":12,"type":"windows","windows":[...]}` with each window's `id`,
+`kind`, `title` and `app`. `session` is what `--agent` and `stop-agent` take. A remembered agent is let in without asking. Each time you change
 what it reaches from the bar, another such line follows. Each line read from
 stdin is listed in the bar as what the agent did last. The agent stays in
 until stdin ends. Exits 1 if you cancel, don't answer within a minute, or stop

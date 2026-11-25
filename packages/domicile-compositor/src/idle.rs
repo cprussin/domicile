@@ -432,6 +432,9 @@ pub fn somebody_is_here(request: &ClientRequest) -> Option<&'static str> {
         | ClientRequest::DeskCursor { .. }
         // An application, not a person.
         | ClientRequest::HeldAwakeByThePortal { .. }
+        // An agent, on its own seat.
+        | ClientRequest::AgentInput { .. }
+        | ClientRequest::AgentGone { .. }
         | ClientRequest::HeldAwakeByTheScreenSaver { .. }
         // The lock chord landed on the shell, and locking must not light the
         // screens.

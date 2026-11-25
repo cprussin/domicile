@@ -19,6 +19,7 @@ const MODULES: [(Subsystem, &[&str]); 13] = [
             "touch",
             "pinch",
             "swipe",
+            "agent_seats",
             "emulated_input",
             "eis",
             "pointer_constraints",

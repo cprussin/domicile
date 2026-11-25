@@ -43,6 +43,7 @@ pub fn admit(admission: Admission, chrome: &Path, patience: Duration) {
     let answered = client.write_all(
         to_line(&Response::Agent {
             reach: held.reach().clone(),
+            session: held.session(),
         })
         .as_bytes(),
     );
@@ -54,7 +55,10 @@ pub fn admit(admission: Admission, chrome: &Path, patience: Duration) {
             let held = Arc::clone(&held);
             Some(std::thread::spawn(move || {
                 while let Some(reach) = held.changed() {
-                    let told = to_line(&Response::Agent { reach });
+                    let told = to_line(&Response::Agent {
+                        reach,
+                        session: held.session(),
+                    });
                     if telling.write_all(told.as_bytes()).is_err() {
                         break;
                     }

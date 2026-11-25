@@ -63,6 +63,7 @@ use smithay::wayland::{
 use tracing::{debug, error, info, warn};
 
 mod activation;
+mod agent_seats;
 mod anchors;
 mod app_scope;
 mod bell;
@@ -536,6 +537,8 @@ struct DomicileCompositor {
     /// Smithay keeps this list too but does not expose it. See
     /// [`DomicileCompositor::let_go_of_lost_presses`].
     held_buttons: Vec<u32>,
+    /// Each agent session's own pointer and keyboard.
+    agent_seats: agent_seats::AgentSeats,
     pinch: Option<pinch::ActivePinch>,
     swipe: Option<swipe::ActiveSwipe>,
     touches: Option<touch::ActiveTouches>,
@@ -1224,6 +1227,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     hub.portals.hold_idle_through(move |by| {
         waking.send_request(ClientRequest::HeldAwakeByThePortal { by });
     });
+    // Each agent's seat ends with its session.
+    let leaving = Arc::clone(&hub);
+    hub.portals.when_agents_leave(move |session| {
+        leaving.send_request(ClientRequest::AgentGone { session });
+    });
     // Browsers' screen wake locks, to the same clock.
     let waking = Arc::clone(&hub);
     screen_saver::serve(in_a_window, move |by, change| {
@@ -1481,6 +1489,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         cursor_surface: None,
         pointer_surface: None,
         held_buttons: Vec::new(),
+        agent_seats: Default::default(),
         pinch: None,
         swipe: None,
         touches: None,

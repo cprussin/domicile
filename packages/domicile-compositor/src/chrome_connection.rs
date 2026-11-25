@@ -14,11 +14,13 @@ use domicile_host::system::{
 };
 use domicile_launch::handshake::Handshake;
 use domicile_protocol::{
-    negotiate, ChromeMessage, DeskRect, DeskShot, DisplayChange, EmulatedInput, HostMessage,
-    KnownAgents, SystemError, SystemErrorKind, SystemRequest, Theme, WindowAct, PROTOCOL_VERSION,
+    negotiate, AgentReach, ChromeMessage, DeskRect, DeskShot, DisplayChange, EmulatedInput,
+    HostMessage, KnownAgents, SystemError, SystemErrorKind, SystemRequest, Theme, WindowAct,
+    PROTOCOL_VERSION,
 };
 use tracing::{debug, error, info, warn};
 
+use crate::agent_seats::AgentStep;
 use crate::chrome_hub::{broadcast_focus_request, Chrome, ChromeHub};
 use crate::client_requests::ClientRequest;
 use crate::configured_displays::Answer;
@@ -547,8 +549,12 @@ fn read_chrome_messages(
                     refused: shot.err(),
                 }]
             }
-            Ok(ChromeMessage::Emulate { input }) => vec![HostMessage::Emulated {
-                refused: emulate(hub, &input).err(),
+            Ok(ChromeMessage::Emulate { input, agent }) => vec![HostMessage::Emulated {
+                refused: match agent {
+                    None => emulate(hub, &input),
+                    Some(session) => emulate_for_an_agent(hub, &input, session),
+                }
+                .err(),
             }],
             // For `domicile subscribe`. Not checked against the lock: each
             // topic is one a `which_*` answers while locked. The writer thread
@@ -982,6 +988,11 @@ fn emulate(hub: &ChromeHub, input: &[EmulatedInput]) -> Result<(), String> {
     let keyboard = Keyboard::from_text(&keymap)
         .expect("the compositor wrote this keymap, so xkb reads it back");
     let steps = steps(input, &keyboard)?;
+    if steps.iter().any(|step| matches!(step, Step::Focus { .. })) {
+        return Err("only an agent's own keyboard is focused this way: \
+             give --agent, or use focus-window"
+            .to_string());
+    }
     let eis = hub.eis.get().ok_or("the desktop takes no input yet")?;
     // Dropped at the end, which lets go of every key and button it holds.
     let emulator = eis.emulate();
@@ -990,6 +1001,88 @@ fn emulate(hub: &ChromeHub, input: &[EmulatedInput]) -> Result<(), String> {
             Step::Send(emulated) => emulator.send(emulated),
             Step::Keysym { keysym, pressed } => emulator.keysym(keysym, pressed),
             Step::Wait(time) => std::thread::sleep(time),
+            Step::Focus { .. } => unreachable!("refused above"),
+        }
+    }
+    Ok(())
+}
+
+/// How long an agent's input waits for the Wayland thread to carry it out.
+const AGENT_INPUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Send `input` on agent session `session`'s own seat, or say why not. It
+/// goes as far as it can and stops at the first step its seat can't take;
+/// every key and button it held comes up at the end. Only an agent the user
+/// let reach the whole desk has a seat: one let reach some windows acts on
+/// them by ref.
+fn emulate_for_an_agent(
+    hub: &ChromeHub,
+    input: &[EmulatedInput],
+    session: u32,
+) -> Result<(), String> {
+    if hub.the_desk_is_locked() {
+        return Err("the desktop is locked".to_string());
+    }
+    let known = hub.portals.agents().known();
+    let Some(agent) = known
+        .connected
+        .iter()
+        .find(|agent| agent.session == session)
+    else {
+        return Err(format!("no agent is in as session {session}"));
+    };
+    if agent.reach != AgentReach::Desk {
+        return Err(
+            "the user let this agent reach some windows, by ref: not the pointer or \
+             the keyboard"
+                .to_string(),
+        );
+    }
+    let keymap = match hub.host.lock().unwrap().describe_keymap() {
+        Some(HostMessage::Keymap { keymap }) => keymap,
+        _ => return Err("the desktop has no keyboard yet".to_string()),
+    };
+    let keyboard = Keyboard::from_text(&keymap)
+        .expect("the compositor wrote this keymap, so xkb reads it back");
+    // Each run between waits goes to the Wayland thread at once.
+    let mut runs = vec![(Vec::new(), None)];
+    for step in steps(input, &keyboard)? {
+        match step {
+            Step::Wait(time) => {
+                runs.last_mut().expect("never empty").1 = Some(time);
+                runs.push((Vec::new(), None));
+            }
+            Step::Send(emulated) => runs
+                .last_mut()
+                .expect("never empty")
+                .0
+                .push(AgentStep::Send(emulated)),
+            Step::Keysym { keysym, pressed } => runs
+                .last_mut()
+                .expect("never empty")
+                .0
+                .push(AgentStep::Keysym { keysym, pressed }),
+            Step::Focus { window } => runs
+                .last_mut()
+                .expect("never empty")
+                .0
+                .push(AgentStep::Focus { window }),
+        }
+    }
+    let last = runs.len() - 1;
+    for (at, (steps, then_wait)) in runs.into_iter().enumerate() {
+        let (answer, answered) = Answer::new();
+        hub.send_request(ClientRequest::AgentInput {
+            session,
+            steps,
+            let_go: at == last,
+            answer,
+        });
+        answered
+            .recv_timeout(AGENT_INPUT)
+            .map_err(|_| "the desktop did not answer in time".to_string())??;
+        if let Some(time) = then_wait {
+            std::thread::sleep(time);
         }
     }
     Ok(())

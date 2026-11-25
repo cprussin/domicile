@@ -269,17 +269,20 @@ pub fn shoot_desk(
     }
 }
 
-/// Tells the compositor at `socket` to send `input` to the desk. The outer
-/// error is the compositor's; the inner, why it refused.
+/// Tells the compositor at `socket` to send `input` to the desk, on agent
+/// session `agent`'s own seat when given. The outer error is the
+/// compositor's; the inner, why it refused.
 pub fn emulate(
     socket: &Path,
     input: &[EmulatedInput],
+    agent: Option<u32>,
     patience: Option<Duration>,
 ) -> Result<Result<(), String>, CompositorError> {
     let said = exchanged(
         socket,
         &[ChromeMessage::Emulate {
             input: input.to_vec(),
+            agent,
         }],
         patience,
     )?;
@@ -639,6 +642,7 @@ pub fn virtual_monitor(
 /// An agent the compositor lets in while this connection is open.
 pub struct HeldAgent {
     reach: AgentReach,
+    session: u32,
     stream: UnixStream,
     /// What the compositor says after letting it in.
     told: Mutex<BufReader<UnixStream>>,
@@ -649,6 +653,11 @@ impl HeldAgent {
     /// What the user let it reach.
     pub fn reach(&self) -> &AgentReach {
         &self.reach
+    }
+
+    /// Its session: the number `--agent` and `stop-agent` take.
+    pub fn session(&self) -> u32 {
+        self.session
     }
 
     /// Lists `said` as what it did last.
@@ -731,7 +740,7 @@ pub fn agent(
         }
     };
     match reply {
-        SystemReply::Agent { reach } => {
+        SystemReply::Agent { reach, session } => {
             // It lasts until the shell stops it, however long that is.
             stream
                 .set_read_timeout(None)
@@ -741,6 +750,7 @@ pub fn agent(
                 })?;
             Ok(HeldAgent {
                 reach,
+                session,
                 stream,
                 told: Mutex::new(told),
                 path: socket.to_path_buf(),

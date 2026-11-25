@@ -128,6 +128,12 @@ pub enum CliError {
     )]
     NotAPoint { said: String },
     #[error(
+        "{said} is not an agent session. --agent takes the session's number, \
+         as domicile list-agents prints it:\n\n    \
+         domicile pointer --agent 3 640,360 click\n"
+    )]
+    NotAnAgentSession { said: String },
+    #[error(
         "{said} is not something pointer does: click, double-click, \
          right-click or middle-click. To hold the button while moving, use \
          drag."
@@ -742,12 +748,22 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 }),
                 (Some(extra), _) => Err(CliError::Extra { verb: first, extra }),
             },
-            Verb::Acting(act) => match (args.next(), args.next()) {
-                (None, _) => Err(CliError::NoWindow { verb: first }),
-                (Some(id), None) => Ok(Invocation::Ask {
+            Verb::Acting(act) => match (
+                matches!(act, WindowAct::Focus)
+                    .then(|| agent_flag(&mut args))
+                    .transpose()?
+                    .flatten(),
+                args.next(),
+                args.next(),
+            ) {
+                (_, None, _) => Err(CliError::NoWindow { verb: first }),
+                (Some(agent), Some(window), None) => {
+                    emulated(vec![EmulatedInput::Focus { window }], Some(agent))
+                }
+                (None, Some(id), None) => Ok(Invocation::Ask {
                     request: Request::ActOnWindow { id, act },
                 }),
-                (Some(id), Some(extra)) => Err(CliError::Extra {
+                (_, Some(id), Some(extra)) => Err(CliError::Extra {
                     verb: format!("{first} {id}"),
                     extra,
                 }),
@@ -763,6 +779,7 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 })
             }
             Verb::Pointing => {
+                let agent = agent_flag(&mut args)?;
                 let point = args.next().ok_or(CliError::NotAPoint {
                     said: "nothing".to_string(),
                 })?;
@@ -780,13 +797,17 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                         })
                     }
                 };
-                emulated([vec![EmulatedInput::PointTo { x, y }], then].concat())
+                emulated(
+                    [vec![EmulatedInput::PointTo { x, y }], then].concat(),
+                    agent,
+                )
             }
             Verb::Dragging => {
+                let agent = agent_flag(&mut args)?;
                 let said: Vec<String> = args.collect();
                 match said.as_slice() {
                     [from, to] => match (pair(from), pair(to)) {
-                        (Some(from), Some(to)) => emulated(drag(from, to)),
+                        (Some(from), Some(to)) => emulated(drag(from, to), agent),
                         _ => Err(CliError::NotADrag {
                             said: said.join(" "),
                         }),
@@ -799,20 +820,20 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     }),
                 }
             }
-            Verb::Scrolling => match (args.next(), args.next()) {
-                (Some(said), None) => match pair(&said) {
-                    Some((dx, dy)) => emulated(vec![EmulatedInput::Scroll { dx, dy }]),
+            Verb::Scrolling => match (agent_flag(&mut args)?, args.next(), args.next()) {
+                (agent, Some(said), None) => match pair(&said) {
+                    Some((dx, dy)) => emulated(vec![EmulatedInput::Scroll { dx, dy }], agent),
                     None => Err(CliError::NotADistance { said }),
                 },
-                (said, _) => Err(one(&first, "distance", said)),
+                (_, said, _) => Err(one(&first, "distance", said)),
             },
-            Verb::Keying => match (args.next(), args.next()) {
-                (Some(chord), None) => emulated(chord_input(&chord)),
-                (said, _) => Err(one(&first, "chord", said)),
+            Verb::Keying => match (agent_flag(&mut args)?, args.next(), args.next()) {
+                (agent, Some(chord), None) => emulated(chord_input(&chord), agent),
+                (_, said, _) => Err(one(&first, "chord", said)),
             },
-            Verb::Typing => match (args.next(), args.next()) {
-                (Some(text), None) => emulated(vec![EmulatedInput::Text { text }]),
-                (said, _) => Err(one(&first, "text, quoted", said)),
+            Verb::Typing => match (agent_flag(&mut args)?, args.next(), args.next()) {
+                (agent, Some(text), None) => emulated(vec![EmulatedInput::Text { text }], agent),
+                (_, said, _) => Err(one(&first, "text, quoted", said)),
             },
             Verb::DevTooling => {
                 let mut args = args.peekable();
@@ -1193,11 +1214,30 @@ enum Verb {
 /// The verb `word` names, if any.
 ///
 /// Every [`Request`] variant needs a verb here, or nobody can send it.
-/// Asks the running desktop to send `input`.
-fn emulated(input: Vec<EmulatedInput>) -> Result<Invocation, CliError> {
+/// Asks the running desktop to send `input`, to agent session `agent`'s
+/// own seat when given.
+fn emulated(input: Vec<EmulatedInput>, agent: Option<u32>) -> Result<Invocation, CliError> {
     Ok(Invocation::Ask {
-        request: Request::Emulate { input },
+        request: Request::Emulate { input, agent },
     })
+}
+
+/// The flag that sends emulated input to an agent session's own seat.
+const AGENT: &str = "--agent";
+
+/// The agent session `--agent` names, if it leads `args`.
+fn agent_flag(
+    args: &mut std::iter::Peekable<impl Iterator<Item = String>>,
+) -> Result<Option<u32>, CliError> {
+    if args.next_if(|said| said == AGENT).is_none() {
+        return Ok(None);
+    }
+    let said = args.next().ok_or(CliError::NotAnAgentSession {
+        said: "nothing".to_string(),
+    })?;
+    said.parse()
+        .map(Some)
+        .map_err(|_| CliError::NotAnAgentSession { said })
 }
 
 /// A [`CliError::NotOne`] for `verb`, given nothing or `said` and more.

@@ -111,17 +111,17 @@ domicile.seats.giveBack(windowId);
 
 ## Plan
 
-- [ ] Smithay fork: a seat that sends through another seat's resources for a
+- [x] Smithay fork: a seat that sends through another seat's resources for a
       client
-- [ ] compositor: agent seats per grant, held windows, per-client routing,
-      person-wins takeover
-- [ ] compositor: emulated input tagged with its seat (`ChromeMessage::Emulate`
+- [x] compositor: agent seats per grant, per-client routing, person-wins
+      takeover (`src/agent_seats.rs`)
+- [x] compositor: emulated input tagged with its seat (`ChromeMessage::Emulate`
       names the grant)
 - [ ] compositor: a selection per seat
 - [ ] engine: CDP raw input for browser windows from the agent seat
 - [ ] protocol and SDK: `seats`, `heldBy`, `takeOver`, `giveBack`
-- [ ] MCP: raw tools on the agent seat, `heldBy` in `list_windows`, X11 keeps
-      the wait
+- [x] MCP: raw tools on the agent seat
+- [ ] MCP: `heldBy` in `list_windows`
 - [ ] manganese: agent cursor, ring and name tag, "Yours now · Give back"
       strip, held windows in the agent pill
 - [ ] new windows from an agent's `open`/`exec` start held by it

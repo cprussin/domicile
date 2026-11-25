@@ -264,6 +264,11 @@ impl Portals {
 
     /// Call `hold` with the applications holding idle inhibitors, one name
     /// per inhibitor, on each change.
+    /// Tells `gone` each agent session that ends.
+    pub fn when_agents_leave(&self, gone: impl Fn(u32) + Send + Sync + 'static) {
+        self.agents().when_gone(gone);
+    }
+
     pub fn hold_idle_through(&self, hold: impl Fn(Vec<String>) + Send + Sync + 'static) {
         self.backends.inhibitors.hold_idle_through(hold);
     }

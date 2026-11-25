@@ -237,8 +237,13 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         area: Option<DeskRect>,
     },
-    /// Send `input` to the desk. See `domicile pointer`, `key` and `type`.
-    Emulate { input: Vec<EmulatedInput> },
+    /// Send `input` to the desk, or to agent session `agent`'s own seat.
+    /// See `domicile pointer`, `key` and `type`.
+    Emulate {
+        input: Vec<EmulatedInput>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent: Option<u32>,
+    },
     /// Send DevTools Protocol `method` with `params` to browser window
     /// `window`, as `domicile list-windows` prints it, or to its view
     /// `view`. See `domicile devtools`.
@@ -500,8 +505,9 @@ pub enum Response {
     /// The compositor added the virtual monitor, on this output.
     VirtualMonitor { output: String },
 
-    /// The user let the agent reach this.
-    Agent { reach: AgentReach },
+    /// The user let the agent reach this, as agent session `session`: the
+    /// number `--agent` and `stop-agent` take.
+    Agent { reach: AgentReach, session: u32 },
 
     /// The request was unknown or could not be carried out.
     ///
@@ -712,10 +718,21 @@ pub type ActingOnWindows<'a> = &'a dyn Fn(&str, WindowAct) -> Result<(), String>
 /// [`crate::compositor_socket::shoot_desk`] in a desktop; a closure in tests.
 pub type ShootingTheDesk<'a> = &'a dyn Fn(&Path, u32, Option<DeskRect>) -> Result<DeskShot, String>;
 
+/// A line `domicile agent` prints: what the user let it reach, with the
+/// session `--agent` takes, e.g. `{"session":12,"type":"desk"}`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentLetIn {
+    pub session: u32,
+    #[serde(flatten)]
+    pub reach: AgentReach,
+}
+
 /// Asks the compositor to send input to the desk.
 ///
 /// [`crate::compositor_socket::emulate`] in a desktop; a closure in tests.
-pub type Emulating<'a> = &'a dyn Fn(&[EmulatedInput]) -> Result<(), String>;
+/// The second argument is the agent session whose seat takes it, or `None`
+/// for the user's.
+pub type Emulating<'a> = &'a dyn Fn(&[EmulatedInput], Option<u32>) -> Result<(), String>;
 
 /// Sends a DevTools Protocol method to a browser window, by its id in the
 /// engine, and returns its result.
@@ -1175,7 +1192,7 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
                 Err(why) => Response::Refused { why },
             })
         }
-        Ok(Request::Emulate { input }) => to_line(&match (desktop.emulate)(&input) {
+        Ok(Request::Emulate { input, agent }) => to_line(&match (desktop.emulate)(&input, agent) {
             Ok(()) => Response::Done,
             Err(why) => Response::Refused { why },
         }),

@@ -7,9 +7,9 @@ building shells is in [Domicile's release notes](../RELEASE-NOTES.md).
 
 _Unreleased_
 
-### Agents leave your pointer alone
+### Agents get their own pointer and keyboard
 
-An agent no longer moves your pointer, types into your window or changes what's focused while you're using the computer. It waits until you've stepped away for 30 seconds.
+An agent now clicks and types with a pointer and keyboard of its own, so it can work in one app while you work in another. It never moves your pointer or changes what you're typing in, and an app you're using stays yours.
 
 ## 1.3.0
 

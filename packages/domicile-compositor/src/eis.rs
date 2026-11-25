@@ -49,7 +49,7 @@ pub use self::capture::Captured;
 pub use self::desk::{Desk, Window};
 pub use self::devices::Capabilities;
 use self::devices::{devices, Kind};
-use self::translation::Input;
+pub use self::translation::Input;
 pub use self::translation::{DeskInput, Emulated};
 use crate::client_requests::ClientRequest;
 

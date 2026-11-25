@@ -101,6 +101,7 @@ fn desk() -> Desk {
                     admitted.fetch_add(1, Ordering::SeqCst);
                     let held = Counted(Arc::clone(&counted.0));
                     Ok(Grant {
+                        session: 7,
                         reach: Box::new(|| AgentReach::Desk),
                         stopped: Box::new(move || {
                             let _ = &held;

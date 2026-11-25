@@ -215,6 +215,19 @@ pub enum ClientRequest {
     CloseApp {
         app_id: String,
     },
+    /// Input for agent session `session`'s own seat, from `domicile pointer
+    /// --agent` and the like. `let_go` ends the call. See
+    /// [`crate::agent_seats`].
+    AgentInput {
+        session: u32,
+        steps: Vec<crate::agent_seats::AgentStep>,
+        let_go: bool,
+        answer: crate::configured_displays::Answer,
+    },
+    /// Agent session `session` ended, and its seat with it.
+    AgentGone {
+        session: u32,
+    },
     /// The chrome, or `domicile exec`, asked to start a program.
     ///
     /// Handled here because the lock state lives here, and a locked desktop
@@ -378,6 +391,7 @@ impl DomicileCompositor {
                     (x, y),
                 );
                 let (surface, (x, y)) = self.input_target(surface, (x, y));
+                self.yield_to_the_person(&surface, false);
                 self.pointer_app = Some(app_id);
                 self.cursor_surface = None;
                 self.pointer_surface = Some(surface.clone());
@@ -512,6 +526,7 @@ impl DomicileCompositor {
                 // anywhere else dismisses it, like a click elsewhere.
                 if let Some(menu) = self.grabbing.last().cloned() {
                     if app_id.is_some() && app_id == self.window_under(&menu) {
+                        self.yield_to_the_person(menu.wl_surface(), true);
                         let keyboard = self.seat.get_keyboard().unwrap();
                         let serial = SERIAL_COUNTER.next_serial();
                         keyboard.set_focus(self, Some(menu.wl_surface().clone()), serial);
@@ -539,6 +554,9 @@ impl DomicileCompositor {
                         .as_ref()
                         .map(|toplevel| toplevel.wl_surface().clone())
                 });
+                if let Some(surface) = &surface {
+                    self.yield_to_the_person(surface, true);
+                }
                 let keyboard = self.seat.get_keyboard().unwrap();
                 let serial = SERIAL_COUNTER.next_serial();
                 keyboard.set_focus(self, surface, serial);
@@ -755,6 +773,13 @@ impl DomicileCompositor {
             } => answer.give(self.configure_display(&display, &change)),
             // A launch from a key or the launcher, so it may raise the
             // window of an app already running.
+            ClientRequest::AgentInput {
+                session,
+                steps,
+                let_go,
+                answer,
+            } => answer.give(self.agent_input(session, steps, let_go)),
+            ClientRequest::AgentGone { session } => self.agent_gone(session),
             ClientRequest::Spawn { command, answer } => {
                 let started = spawn_client(
                     &command,

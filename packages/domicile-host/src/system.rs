@@ -195,6 +195,8 @@ pub type AgentChanged = Box<dyn Fn(AgentReach) + Send + Sync>;
 /// An agent the user let in.
 pub struct LetIn {
     pub reach: AgentReach,
+    /// Its session's id, which its input names to reach its own seat.
+    pub session: u32,
     pub lease: Box<dyn AgentLease>,
 }
 
@@ -1555,6 +1557,7 @@ impl System {
                 id,
                 reply: SystemReply::Agent {
                     reach: let_in.reach,
+                    session: let_in.session,
                 },
             });
             if stopped.load(Ordering::SeqCst) {

@@ -56,9 +56,13 @@ ask to sign in again.
 ## Good to know
 
 - Agents can't use your desktop while it's locked.
-- While you're using the computer, an agent won't move your pointer, type
-  into your window or change what's focused. It waits until you've left the
-  keyboard and mouse alone for 30 seconds.
+- An agent has a pointer and keyboard of its own, so it can click and type
+  in one app while you work in another. It never moves your pointer or
+  changes what you're typing in.
+- An app you're using is yours. Click or type in an app the agent is using
+  and it lets go at once.
+- An agent waits to run shell commands, like switching workspaces, until
+  you've left the keyboard and mouse alone for 30 seconds.
 - Private browser windows are never offered to an agent.
 - An agent you cancel or stop asks again the next time it tries.
 - An agent can leave on its own when it's done, and its pill goes away. It

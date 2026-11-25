@@ -354,13 +354,13 @@ fn pointer_tools_take_the_last_screenshots_pixels_to_the_desks() {
     assert_eq!(
         ran,
         [
-            vec!["pointer", "300,150", "click"],
-            vec!["pointer", "300,150", "right-click"],
-            vec!["pointer", "300,150", "double-click"],
-            vec!["pointer", "3,6"],
-            vec!["drag", "30,30", "60,61.5"],
-            vec!["pointer", "3,3"],
-            vec!["scroll", "0,120"],
+            vec!["pointer", "--agent", "7", "300,150", "click"],
+            vec!["pointer", "--agent", "7", "300,150", "right-click"],
+            vec!["pointer", "--agent", "7", "300,150", "double-click"],
+            vec!["pointer", "--agent", "7", "3,6"],
+            vec!["drag", "--agent", "7", "30,30", "60,61.5"],
+            vec!["pointer", "--agent", "7", "3,3"],
+            vec!["scroll", "--agent", "7", "0,120"],
         ]
     );
 }
@@ -384,11 +384,9 @@ fn a_screenshot_of_an_area_of_the_last_zooms_in_and_points_go_there() {
         ran,
         [
             vec!["--area".to_string(), "300,150,600x300".to_string()],
-            vec![
-                "pointer".to_string(),
-                "310,160".to_string(),
-                "click".to_string()
-            ],
+            ["pointer", "--agent", "7", "310,160", "click"]
+                .map(str::to_string)
+                .to_vec(),
         ]
     );
     let replies = served(
@@ -402,17 +400,21 @@ fn a_screenshot_of_an_area_of_the_last_zooms_in_and_points_go_there() {
 fn keys_and_text_go_to_key_and_type() {
     assert_eq!(
         ran_for("key", json!({"chord": "ctrl+l"})),
-        ["key", "ctrl+l"]
+        ["key", "--agent", "7", "ctrl+l"]
     );
     assert_eq!(
         ran_for("type_text", json!({"text": "Hi there"})),
-        ["type", "Hi there"]
+        ["type", "--agent", "7", "Hi there"]
+    );
+    assert_eq!(
+        ran_for("focus_window", json!({"id": "n1"})),
+        ["focus-window", "--agent", "7", "n1"]
     );
 }
 
-/// Each tool that moves the user's pointer, keyboard focus or windows, with
-/// arguments it takes after a screenshot.
-fn moving_the_users_hands() -> [(&'static str, Value); 8] {
+/// Each tool that points or types on the agent's own seat, with arguments it
+/// takes after a screenshot.
+fn on_its_own_seat() -> [(&'static str, Value); 7] {
     [
         ("click", json!({"x": 1, "y": 1})),
         ("move_pointer", json!({"x": 1, "y": 1})),
@@ -421,8 +423,31 @@ fn moving_the_users_hands() -> [(&'static str, Value); 8] {
         ("key", json!({"chord": "ctrl+l"})),
         ("type_text", json!({"text": "hi"})),
         ("focus_window", json!({"id": "n1"})),
-        ("send_shell", json!({"words": ["focus", "left"]})),
     ]
+}
+
+/// Each tool that moves the user's pointer, keyboard focus or windows.
+fn moving_the_users_hands() -> [(&'static str, Value); 1] {
+    [("send_shell", json!({"words": ["focus", "left"]}))]
+}
+
+#[test]
+fn tools_on_the_agents_own_seat_run_while_the_user_uses_the_desktop() {
+    for (name, arguments) in on_its_own_seat() {
+        let mut ran = Vec::new();
+        let replies = served(
+            &[call("screenshot", json!({})), call(name, arguments)],
+            |args: &[String]| match args[0].as_str() {
+                "idle-time" => panic!("{name} waited for the user"),
+                _ => desk(&mut ran)(args),
+            },
+        );
+        assert_eq!(replies[1]["result"]["isError"], false, "{name}");
+        assert!(
+            ran.iter().all(|args| args[1..3] == ["--agent", "7"]),
+            "{name} ran {ran:?}"
+        );
+    }
 }
 
 #[test]
@@ -873,6 +898,7 @@ fn reaching(reach: AgentReach) -> (Grant, Rc<RefCell<Vec<String>>>) {
     let told = Rc::clone(&did);
     (
         Grant {
+            session: 7,
             reach: Box::new(move || reach.clone()),
             stopped: Box::new(|| false),
             did: Box::new(move |said| told.borrow_mut().push(said.to_string())),
@@ -952,6 +978,7 @@ fn an_agent_the_user_did_not_let_in_is_refused_every_call_without_asking_again()
 fn an_agent_the_user_stopped_is_refused() {
     let replies = served_letting(&[call("status", json!({}))], never_run, |_| {
         Ok(Grant {
+            session: 7,
             reach: Box::new(|| AgentReach::Desk),
             stopped: Box::new(|| true),
             did: Box::new(|_| ()),
@@ -979,6 +1006,7 @@ fn a_stopped_agent_asks_again_only_through_ask_to_use_desktop() {
             // The first grant the user stops at once; the second holds.
             let stopped = asking.get() == 1;
             Ok(Grant {
+                session: 7,
                 reach: Box::new(|| AgentReach::Desk),
                 stopped: Box::new(move || stopped),
                 did: Box::new(|_| ()),
@@ -1067,6 +1095,7 @@ fn stop_using_desktop_lets_go_of_the_grant_and_the_next_call_asks_again() {
             }
             let ends = Ends(Rc::clone(&ending));
             Ok(Grant {
+                session: 7,
                 reach: Box::new(|| AgentReach::Desk),
                 stopped: Box::new(|| false),
                 did: Box::new(move |_| {
@@ -1174,6 +1203,7 @@ fn a_change_the_user_makes_applies_from_the_next_call() {
     let reach = Rc::new(RefCell::new(AgentReach::Desk));
     let changing = Rc::clone(&reach);
     let mut grant = Some(Grant {
+        session: 7,
         reach: Box::new(move || changing.borrow().clone()),
         stopped: Box::new(|| false),
         did: Box::new(|_| ()),

@@ -1393,8 +1393,9 @@ fn screenshot_fit_shrinks_the_desk_into_a_file() {
 }
 
 fn emulated(input: Vec<EmulatedInput>) -> Result<Invocation, CliError> {
+    // The user's seat, as no --agent says.
     Ok(Invocation::Ask {
-        request: Request::Emulate { input },
+        request: Request::Emulate { input, agent: None },
     })
 }
 
@@ -1447,7 +1448,7 @@ fn pointer_moves_then_clicks_presses_or_releases() {
 #[test]
 fn drag_holds_the_left_button_while_moving_there_a_step_at_a_time() {
     let Ok(Invocation::Ask {
-        request: Request::Emulate { input },
+        request: Request::Emulate { input, agent: None },
     }) = run(&["drag", "0,0", "100,50"])
     else {
         panic!("drag emulates input");
@@ -1475,6 +1476,54 @@ fn drag_holds_the_left_button_while_moving_there_a_step_at_a_time() {
         .any(|event| matches!(event, EmulatedInput::Wait { .. })));
     assert!(run(&["drag", "0,0"]).is_err());
     assert!(run(&["drag", "0,0", "1,1", "2,2"]).is_err());
+}
+
+#[test]
+fn agent_sends_input_to_an_agent_sessions_own_seat() {
+    let agent = |input| {
+        Ok(Invocation::Ask {
+            request: Request::Emulate {
+                input,
+                agent: Some(7),
+            },
+        })
+    };
+    assert_eq!(
+        run(&["pointer", "--agent", "7", "10,20"]),
+        agent(vec![EmulatedInput::PointTo { x: 10.0, y: 20.0 }])
+    );
+    assert_eq!(
+        run(&["scroll", "--agent", "7", "0,5"]),
+        agent(vec![EmulatedInput::Scroll { dx: 0.0, dy: 5.0 }])
+    );
+    assert_eq!(
+        run(&["type", "--agent", "7", "hi"]),
+        agent(vec![EmulatedInput::Text {
+            text: "hi".to_string()
+        }])
+    );
+    assert_eq!(
+        run(&["focus-window", "--agent", "7", "abc"]),
+        agent(vec![EmulatedInput::Focus {
+            window: "abc".to_string()
+        }])
+    );
+    assert!(matches!(
+        run(&["key", "--agent", "7", "Return"]),
+        Ok(Invocation::Ask {
+            request: Request::Emulate { agent: Some(7), .. }
+        })
+    ));
+    assert!(matches!(
+        run(&["drag", "--agent", "7", "0,0", "1,1"]),
+        Ok(Invocation::Ask {
+            request: Request::Emulate { agent: Some(7), .. }
+        })
+    ));
+    assert!(run(&["pointer", "--agent", "seven", "10,20"]).is_err());
+    assert!(run(&["pointer", "--agent"]).is_err());
+    // Only focus-window takes it: closing is the same for anyone.
+    assert!(run(&["close-window", "--agent", "7", "abc"]).is_err());
 }
 
 #[test]

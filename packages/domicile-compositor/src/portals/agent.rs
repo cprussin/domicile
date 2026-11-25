@@ -79,6 +79,8 @@ pub struct Door {
     /// Whether the door turned accessibility on, to turn it off once the
     /// last agent goes. Left alone if the user had it on.
     turned_on: Mutex<bool>,
+    /// Told each session that ends, so its seat goes with it.
+    gone: OnceLock<Box<dyn Fn(u32) + Send + Sync>>,
 }
 
 impl Door {
@@ -101,7 +103,15 @@ impl Door {
             stopped: Mutex::new(HashSet::new()),
             accessibility,
             turned_on: Mutex::new(false),
+            gone: OnceLock::new(),
         })
+    }
+
+    /// Tells `gone` each agent session that ends. Set once, at startup.
+    pub fn when_gone(&self, gone: impl Fn(u32) + Send + Sync + 'static) {
+        if self.gone.set(Box::new(gone)).is_err() {
+            panic!("the door is told where agents go once");
+        }
     }
 
     /// Lets `agent` in: at once when it is remembered, else when the user
@@ -173,6 +183,7 @@ impl Door {
         drop(connected);
         Ok(LetIn {
             reach,
+            session: id,
             lease: Box::new(Lease {
                 id,
                 door: Arc::clone(self),
@@ -428,6 +439,9 @@ impl Drop for Lease {
         }
         drop((connected, turned_on));
         self.door.queue.end(self.id);
+        if let Some(gone) = self.door.gone.get() {
+            gone(self.id);
+        }
     }
 }
 

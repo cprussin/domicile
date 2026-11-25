@@ -332,6 +332,12 @@ impl DomicileCompositor {
         typing
             .set_keymap_from_string(self, compiled.clone())
             .expect("xkb reads back the keymap text it has just written");
+        // Agents' keyboards share the clients' keymap; only the user's sends it.
+        for agents in self.agent_seats.keyboards() {
+            agents
+                .set_keymap_from_string(self, compiled.clone())
+                .expect("xkb reads back the keymap text it has just written");
+        }
         // Then the browser process. Store then broadcast, so the next
         // chrome to connect gets the new keymap.
         let told = {

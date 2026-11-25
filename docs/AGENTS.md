@@ -39,12 +39,22 @@ The user guide's [Agents](use/AGENTS.md) page is the short version of this.
 
 Agents are refused while the desktop is locked.
 
-The desk has one seat, so `click`, `move_pointer`, `drag`, `scroll`, `key`,
-`type_text`, `focus_window` and `send_shell` move the user's own pointer and
-focus. They are refused until the user has left this computer's keyboard,
-pointer and touch alone for 30 seconds (`local_seconds` of
-[`domicile idle-time`](CLI.md#domicile-idle-time---json)). The `browser_` and
-`app_` tools act by ref, without the seat, and run any time.
+Each agent session has its own seat: a pointer and a keyboard that never move
+the user's ([AGENT-SEATS.md](architecture/AGENT-SEATS.md)). `click`,
+`move_pointer`, `drag`, `scroll`, `key`, `type_text` and `focus_window` run on
+it, as `domicile pointer --agent <session>` and the like:
+
+- They reach native windows. Over the shell or a browser window they are
+  refused, pointing the agent at the `browser_` tools.
+- One seat drives an app at a time. They are refused in an app the user's
+  keyboard is in, or for the pointer tools, their pointer.
+- The user wins. Their pointer entering an app takes it from the agent's
+  pointer, and their keyboard, from both.
+
+`send_shell` acts on the user's focus, so it is refused until the user has left
+this computer's keyboard, pointer and touch alone for 30 seconds
+(`local_seconds` of [`domicile idle-time`](CLI.md#domicile-idle-time---json)).
+The `browser_` and `app_` tools act by ref and run any time.
 
 ### Agents that sign in
 

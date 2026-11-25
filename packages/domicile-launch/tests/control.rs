@@ -1397,7 +1397,7 @@ fn nothing_dialed() -> Desktop<'static> {
         lock: &|| panic!("only lock locks the desktop"),
         act_on_window: &|_, _| panic!("only act_on_window acts on a window"),
         shoot_desk: &|_, _, _| panic!("only shoot_desk shoots the desk"),
-        emulate: &|_| panic!("only emulate sends input"),
+        emulate: &|_, _| panic!("only emulate sends input"),
         devtools: &|_, _, _| panic!("only devtools sends DevTools methods"),
         configure_display: &|_, _| panic!("only configure_display configures a display"),
         log_levels: &|| panic!("only the log level requests read the log levels"),
@@ -1554,8 +1554,9 @@ fn emulated_input_is_sent_or_refused_with_why() {
         reply_to(
             "{\"type\":\"emulate\",\"input\":[{\"kind\":\"point_to\",\"x\":1.0,\"y\":2.0}]}",
             &Desktop {
-                emulate: &|input| {
+                emulate: &|input, agent| {
                     assert_eq!(input, [EmulatedInput::PointTo { x: 1.0, y: 2.0 }]);
+                    assert_eq!(agent, None);
                     Err("the desktop is locked".to_string())
                 },
                 ..nothing_dialed()

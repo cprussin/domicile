@@ -805,7 +805,7 @@ fn a_held_agent_hears_each_change_then_its_end() {
         answering
             .write_all(
                 b"{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"agent\",\
-                  \"reach\":{\"type\":\"desk\"}}}\n\
+                  \"reach\":{\"type\":\"desk\"},\"session\":12}}\n\
                   {\"type\":\"system_event\",\"id\":1,\"event\":{\"kind\":\"agent_reach\",\
                   \"reach\":{\"type\":\"windows\",\"windows\":[]}}}\n\
                   {\"type\":\"system_end\",\"id\":1,\"end\":{\"kind\":\"stopped\"}}\n",
@@ -816,6 +816,7 @@ fn a_held_agent_hears_each_change_then_its_end() {
     compositor.join().expect("the compositor answered");
 
     assert_eq!(held.reach(), &AgentReach::Desk);
+    assert_eq!(held.session(), 12);
     assert_eq!(
         held.changed(),
         Some(AgentReach::Windows { windows: vec![] })

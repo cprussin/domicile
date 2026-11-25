@@ -8,11 +8,11 @@ in the manganese desktop is in
 
 _Unreleased_
 
-### Agents leave the user's pointer alone
+### Agents get their own pointer and keyboard
 
-While the user is at the computer, agents can't click, type, scroll, focus windows or run shell commands, since those move the user's pointer and focus. They work through windows' accessibility trees instead, and the rest waits until the user has been away for 30 seconds. `domicile idle-time --json` adds `local_seconds`, which counts only the computer's own keyboard, pointer and touch.
+Each agent session has a seat of its own, so an agent clicks and types in one native window while the user works in another, and never moves the user's pointer or focus. `domicile pointer`, `drag`, `scroll`, `key`, `type` and `focus-window` take `--agent <session>`, and `domicile agent` prints the session. One seat drives an app at a time, and the user wins an app both want. Shell commands still wait until the user has been away for 30 seconds: `domicile idle-time --json` adds `local_seconds`, which counts only the computer's own keyboard, pointer and touch.
 
-[Agents](AGENTS.md) · [`domicile idle-time`](CLI.md#domicile-idle-time---json)
+[Agents](AGENTS.md) · [Agent seats](architecture/AGENT-SEATS.md) · [`domicile pointer`](CLI.md#domicile-pointer---agent-session-xy-clickdouble-clickright-clickmiddle-click) · [`domicile idle-time`](CLI.md#domicile-idle-time---json)
 
 ## 1.3.0
 

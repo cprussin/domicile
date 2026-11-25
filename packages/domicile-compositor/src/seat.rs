@@ -40,7 +40,11 @@ impl SeatHandler for DomicileCompositor {
     // The web engine draws the pointer, so forward a client's cursor request to
     // the chrome as a CSS cursor for the element under the pointer, or the
     // image the client drew on its own surface (`crate::cursor_surface`).
-    fn cursor_image(&mut self, _seat: &Seat<Self>, image: CursorImageStatus) {
+    fn cursor_image(&mut self, seat: &Seat<Self>, image: CursorImageStatus) {
+        // The hardware cursor is the user's; the shell draws an agent's.
+        if seat != &self.seat {
+            return;
+        }
         let Some(app_id) = self.pointer_app.clone() else {
             return;
         };
@@ -67,13 +71,24 @@ impl SeatHandler for DomicileCompositor {
     ///
     /// `None` means no surface is focused. The chrome is an ordinary client
     /// here and gets the clipboard the same way.
+    ///
+    /// An agent's seat has no clipboard here: only the windows it holds
+    /// change, which stay activated.
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {
+        if seat != &self.seat {
+            let users = self.seat.get_keyboard().unwrap().current_focus();
+            let mut activated = self.agent_seats.focused(seat);
+            activated.extend(focused.cloned());
+            self.activate_with(users.as_ref(), &activated);
+            return;
+        }
         let client = focused.and_then(|on| on.client());
         set_data_device_focus(&self.display_handle, seat, client.clone());
         // The primary selection follows the same rule, so both pastes work in
         // the same client.
         set_primary_focus(&self.display_handle, seat, client);
-        self.activate(focused);
+        let agents = self.agent_seats.focused(seat);
+        self.activate_with(focused, &agents);
         self.report_running_apps(focused);
         self.read_notifications(focused);
     }
@@ -112,13 +127,8 @@ impl eis::Compositor for CalloopData {
         self.state.handle_client_request(request);
     }
 
-    /// From the keysym table the shell's keybindings resolve against.
     fn keycode(&self, keysym: u32) -> Option<u32> {
-        let name = smithay::input::keyboard::xkb::keysym_get_name(keysym.into());
-        match self.state.hub.host.lock().unwrap().describe_shell_config() {
-            Some(HostMessage::ShellConfig { keys, .. }) => keys.get(&name).copied(),
-            _ => None,
-        }
+        self.state.keycode_of(keysym)
     }
 
     fn engine_takes_input(&self) -> bool {
@@ -193,6 +203,16 @@ pub fn cursor_shape(icon: CursorIcon) -> CursorShape {
 }
 
 impl DomicileCompositor {
+    /// The evdev key that types `keysym`, from the keysym table the shell's
+    /// keybindings resolve against.
+    pub fn keycode_of(&self, keysym: u32) -> Option<u32> {
+        let name = smithay::input::keyboard::xkb::keysym_get_name(keysym.into());
+        match self.hub.host.lock().unwrap().describe_shell_config() {
+            Some(HostMessage::ShellConfig { keys, .. }) => keys.get(&name).copied(),
+            _ => None,
+        }
+    }
+
     /// The displays and windows, as EIS sees them.
     pub fn desk(&self) -> eis::Desk {
         let state = self;
@@ -236,10 +256,24 @@ impl DomicileCompositor {
     ///
     /// A menu with the keyboard activates its window; toolkits close menus when
     /// their window deactivates.
+    ///
+    /// Each agent's keyboard window is activated as well, so it takes the
+    /// agent's keys as focused. See [`crate::agent_seats`].
     pub fn activate(&self, focused: Option<&WlSurface>) {
-        let window = focused.map(|on| self.window_under_menus(on));
+        let agents = self.agent_seats.focused(&self.seat);
+        self.activate_with(focused, &agents);
+    }
+
+    /// [`Self::activate`], with the agents' keyboards in `agents`. An agent's
+    /// keyboard is locked while its focus changes, so that one is passed in.
+    fn activate_with(&self, focused: Option<&WlSurface>, agents: &[WlSurface]) {
+        let windows: Vec<WlSurface> = focused
+            .into_iter()
+            .chain(agents)
+            .map(|on| self.window_under_menus(on))
+            .collect();
         for (_, toplevel) in &self.toplevels {
-            let active = window.as_ref() == Some(toplevel.wl_surface());
+            let active = windows.contains(toplevel.wl_surface());
             toplevel.with_pending_state(|state| {
                 if active {
                     state.states.set(xdg_toplevel::State::Activated);

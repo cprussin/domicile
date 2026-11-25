@@ -2647,6 +2647,7 @@ mod agents {
             *self.change.lock().unwrap() = Some(told.changed);
             Ok(LetIn {
                 reach: (self.answer)()?,
+                session: 7,
                 lease: Box::new(Lease {
                     did: self.did.clone(),
                     gone: self.gone.clone(),
@@ -2737,7 +2738,8 @@ mod agents {
         assert_eq!(
             reply(&heard, 1),
             SystemReply::Agent {
-                reach: AgentReach::Desk
+                reach: AgentReach::Desk,
+                session: 7
             }
         );
         assert_eq!(asked.named.recv().unwrap(), "Claude Code");

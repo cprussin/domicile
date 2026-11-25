@@ -479,7 +479,15 @@ pub enum ChromeMessage {
     /// lets go of what it held once done. Answered with
     /// [`HostMessage::Emulated`] on this connection only. Sent by `domicile
     /// pointer`, `key` and `type`.
-    Emulate { input: Vec<EmulatedInput> },
+    ///
+    /// With `agent`, an agent session's id, the input goes to that agent's
+    /// own seat and never moves the user's pointer or focus. See
+    /// `docs/architecture/AGENT-SEATS.md`.
+    Emulate {
+        input: Vec<EmulatedInput>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent: Option<u32>,
+    },
 
     /// Change how the monitor `display` is set up until the desktop restarts,
     /// over what its config's profile says, like `swaymsg output`. `display`
@@ -1941,6 +1949,10 @@ pub enum EmulatedInput {
     /// Wait `ms` milliseconds before the next event, as a hand would between
     /// the moves of a drag.
     Wait { ms: u32 },
+    /// Give the native window `window`, a `list-windows` id, the agent's
+    /// keyboard focus. Only an [`ChromeMessage::Emulate`] with an `agent`
+    /// takes it.
+    Focus { window: String },
 }
 
 /// A pointer button.
@@ -2869,9 +2881,9 @@ pub enum SystemReply {
     Set,
     /// The virtual monitor was added, as the `wl_output` named `output`.
     VirtualMonitor { output: String },
-    /// The user let the agent reach this. A
+    /// The user let the agent reach this, as agent session `session`. A
     /// [`SystemEvent::AgentReach`] follows each time they change it.
-    Agent { reach: AgentReach },
+    Agent { reach: AgentReach, session: u32 },
     /// The agents the desk knows.
     Agents(KnownAgents),
     /// The call failed. Nothing else follows under this id.
