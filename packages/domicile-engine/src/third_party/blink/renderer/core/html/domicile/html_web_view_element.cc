@@ -347,6 +347,10 @@ void HTMLWebViewElement::ParseAttribute(
 }
 
 void HTMLWebViewElement::DidNotifySubtreeInsertionsToDocument() {
+  // Nothing is rendered yet as it is inserted.
+  if (shows_when_rendered_) {
+    return;
+  }
   // Creates the placeholder frame on about:blank, as AttachInnerWebContents
   // prefers (to avoid beforeunload problems).
   HTMLFrameElementBase::DidNotifySubtreeInsertionsToDocument();
@@ -365,6 +369,25 @@ void HTMLWebViewElement::RemovedFrom(ContainerNode& insertion_point) {
     guest_.reset();
     client_receiver_.reset();
   }
+}
+
+void HTMLWebViewElement::AttachLayoutTree(AttachContext& context) {
+  HTMLFrameElementBase::AttachLayoutTree(context);
+  // Posted, as a frame is not made during layout.
+  if (shows_when_rendered_ && GetLayoutObject()) {
+    GetDocument()
+        .GetTaskRunner(TaskType::kInternalDefault)
+        ->PostTask(FROM_HERE, BindOnce(&HTMLWebViewElement::ShowIfRendered,
+                                       WrapWeakPersistent(this)));
+  }
+}
+
+void HTMLWebViewElement::ShowIfRendered() {
+  if (!shows_when_rendered_ || !isConnected() || !GetLayoutObject()) {
+    return;
+  }
+  shows_when_rendered_ = false;
+  DidNotifySubtreeInsertionsToDocument();
 }
 
 void HTMLWebViewElement::RequestGuest() {
@@ -936,7 +959,7 @@ void HTMLWebViewElement::UnhandledModifierUp(const String& key,
       AtomicString(kGuestKeyupEvent), init));
 }
 
-void HTMLWebViewElement::Replaced() {
+void HTMLWebViewElement::Replaced(bool unloaded) {
   // The old page's asks go with it, as when it withdraws them.
   PermissionRequestWithdrawn();
   DeviceRequestWithdrawn();
@@ -957,6 +980,7 @@ void HTMLWebViewElement::Replaced() {
   // makes a placeholder and asks for the window the same way, and the window
   // id now names the new page.
   DisconnectContentFrame();
+  shows_when_rendered_ = unloaded && !GetLayoutObject();
   DidNotifySubtreeInsertionsToDocument();
 }
 

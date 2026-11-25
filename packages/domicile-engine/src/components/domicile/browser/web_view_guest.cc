@@ -955,6 +955,14 @@ bool WebViewGuest::IsAttached() const {
   return attaching_ || guest_contents_->GetOuterWebContents() != nullptr;
 }
 
+bool WebViewGuest::IsShown() const {
+  const content::WebContents* outer = guest_contents_->GetOuterWebContents();
+  return attaching_ ||
+         (outer != nullptr &&
+          (guest_contents_->GetVisibility() != content::Visibility::HIDDEN ||
+           outer->GetVisibility() == content::Visibility::HIDDEN));
+}
+
 void WebViewGuest::ElementGone() {
   receiver_.reset();
   Unclient();
@@ -1629,14 +1637,15 @@ void WebViewGuest::MoveHistoryFrom(WebViewGuest& source,
             << " took its old page's history.";
 }
 
-void WebViewGuest::Replaced() {
+void WebViewGuest::Replaced(bool unloaded) {
   // Before the pipe closes, so the element hears it.
-  client_->Replaced();
+  client_->Replaced(unloaded);
   receiver_.reset();
   Unclient();
   find_text_.clear();
   LOG(INFO) << "domicile: browser window " << window_id_
-            << "'s page was replaced by one in another browser profile.";
+            << "'s page was replaced by one "
+            << (unloaded ? "that is unloaded." : "in another browser profile.");
 }
 
 std::optional<std::string> WebViewGuest::ProfileToMoveTo(const GURL& from,

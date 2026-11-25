@@ -907,7 +907,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
     found->watch = std::move(watch);
     found->opened_at = GURL();
     // Its <webview> asks for the window again, and gets the new page.
-    replaced->Replaced();
+    replaced->Replaced(/*unloaded=*/false);
     replaced->contents().SetAudioMuted(true);
     ReapIn(kLinger, std::move(replaced));
     // The profile-routing guard greps for this.
@@ -1390,7 +1390,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
     if (page.GetLastCommittedURL().SchemeIs(content::kChromeDevToolsScheme)) {
       return "it is a DevTools window";
     }
-    if (old.IsAttached()) {
+    if (old.IsShown()) {
       return "a <webview> shows it";
     }
     if (window.watch->discarded()) {
@@ -1418,10 +1418,18 @@ class DeskWindows final : public base::SupportsUserData::Data,
                                                     /*needs_reload=*/true);
     watch->SetDiscarded();
     guest->contents().SetAudioMuted(page.IsAudioMuted());
-    // Not now, which may be under the page's own call stack.
-    ReapIn(base::TimeDelta(), std::exchange(window.guest, std::move(guest)));
+    std::unique_ptr<WebViewGuest> replaced =
+        std::exchange(window.guest, std::move(guest));
     window.watch = std::move(watch);
     window.opened_at = GURL();
+    // Not now, which may be under the page's own call stack. A <webview> that
+    // is not rendered holds it until it hears of this.
+    base::TimeDelta linger;
+    if (replaced->IsAttached()) {
+      replaced->Replaced(/*unloaded=*/true);
+      linger = kLinger;
+    }
+    ReapIn(linger, std::move(replaced));
     return std::string();
   }
 
@@ -1433,7 +1441,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
       content::WebContents& page = window.guest->contents();
       if (window.profiled && !window.app &&
           !window.guest->popup_window().has_value() &&
-          !window.guest->IsAttached() && !window.watch->discarded()) {
+          !window.guest->IsShown() && !window.watch->discarded()) {
         candidates.push_back({window.id, raw_ref(page)});
       }
     }
