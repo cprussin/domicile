@@ -177,16 +177,22 @@ saw() { # $1 pattern, $2 log
   grep -qF -- "$1" "$2" && echo 1 || echo 0
 }
 
-OPENED='{"type":"opened"}'
+# open_url names the window it opened.
+opened() { # $1 answer
+  case "$1" in
+    '{"type":"opened","window":"'*'"}') return 0 ;;
+    *) return 1 ;;
+  esac
+}
 SAW_SHELL=$(saw "GUARD shell-loaded" "$ENGINE_LOG")
 SAW_CRASH=$(saw "Received signal" "$ENGINE_LOG")
 OPENED_SUBJECT=0
-[ "$SUBJECT_ANSWER" = "$OPENED" ] && OPENED_SUBJECT=1
+opened "$SUBJECT_ANSWER" && OPENED_SUBJECT=1
 SAW_WINDOW=$(saw " url=$SITE/subject" "$ENGINE_LOG")
 WINDOW_APP=$(saw "app=true url=$SITE/subject" "$ENGINE_LOG")
 SAW_SUBJECT=$(saw "GUARD loaded as=subject" "$HTTP_LOG")
 OPENED_SENTINEL=0
-[ "$SENTINEL_ANSWER" = "$OPENED" ] && OPENED_SENTINEL=1
+opened "$SENTINEL_ANSWER" && OPENED_SENTINEL=1
 SAW_SENTINEL=$(saw "sentinel=1" "$HTTP_LOG")
 SUBJECT_RECORDED=$(saw "subject=1" "$HTTP_LOG")
 SAW_LAUNCHED=$(saw " url=$SITE/launched" "$ENGINE_LOG")

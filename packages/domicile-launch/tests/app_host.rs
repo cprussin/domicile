@@ -537,7 +537,8 @@ fn an_address_is_opened_in_a_browser_window_on_the_desktop() {
         host.asked.take().last(),
         Some(&Request::OpenUrl {
             url: options,
-            profile: None
+            profile: None,
+            agent: None,
         })
     );
 }

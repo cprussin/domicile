@@ -32,6 +32,18 @@ DevTools input sent to a browser window's own page, as `domicile devtools <windo
 
 [Agent seats](architecture/AGENT-SEATS.md#taking-over) · [`domicile exec`](CLI.md#domicile-exec---agent-session-program-arg)
 
+### Browser windows an agent opens are held by it
+
+`domicile open --agent <session> <url>` opens a new browser window held by the agent's seat, with the agent's keyboard in it. The window lists its seat as `agent` (`agent-<session>`), so a shell can open it without taking the user's focus. The engine's `open_url` takes `"agent"` and answers with the window it opened. Manganese opens a window an agent holds in a group of its own beside the user's.
+
+[Browser windows](SHELL-BROWSER-WINDOWS.md) · [`domicile open`](CLI.md#domicile-open)
+
+### `list-windows` says which browser window is focused, and its size
+
+`domicile list-windows` and the MCP server's `list_windows` give a browser window `focused` while the user's keyboard is in it, and its page's `size` in CSS pixels while the shell draws it. The engine's new `browser_windows` command reports both.
+
+[`domicile list-windows`](CLI.md#domicile-list-windows---json)
+
 ### Shells see agents' seats
 
 `domicile.seats.list` lists the agent seats: each agent's name, where its pointer is, the window its keyboard is in, the windows it holds and the windows the user took from it. Each window's `heldBy` names the agent seat holding it. `domicile.seats.takeOver(appId)` takes a window from an agent, as the user's click or key in it does, and the agent can't drive it until `domicile.seats.giveBack(appId)`. A window the user takes stays theirs after they leave it. `useSeats()` in `@domicile-desktop/react/seats` follows the list. `domicile list-windows` and the MCP server's `list_windows` add `held_by`.
