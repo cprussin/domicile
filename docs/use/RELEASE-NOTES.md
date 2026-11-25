@@ -7,53 +7,23 @@ building shells is in [Domicile's release notes](../RELEASE-NOTES.md).
 
 _Unreleased_
 
-### Window effects
+### Window effects and smoother motion
 
 ![A workspace switch, the overview, a theme change and a window closing, with manganese's window effects](../media/release-window-effects.png)
 
-Closing windows dissolve away, windows blur a little as a workspace switch slides them, the overview throws your wallpaper out of focus, a theme change wipes in behind a soft edge, and the launcher's glass is frosted. Turn them off with Window effects in Settings.
+Closing windows dissolve, the overview blurs your wallpaper, and windows, panels and toasts move on springs that turn back midway when you change your mind. Turn the effects off with Window effects in Settings.
 
 [Window effects](APPEARANCE.md#window-effects)
 
-### Smoother motion
+### Agents work beside you
 
-Windows, the overview, toasts, popovers and rows move on springs. A dialog grows out of the window that asked for it, a window sent to another workspace flies to it in the switcher, and a workspace switch or a four-finger pinch into the overview turns back midway when you change your mind. Panels grow from their bar buttons, toasts follow your swipe, and closed rows slide away.
+An agent now has its own pointer, keyboard and clipboard, so it can work in any app or browser window while you keep working in yours, without ever taking your typing. A ring shows which windows it's using: click or type in one to take it over, and give it back from the banner. An idle agent leaves after two minutes.
 
-### Locked settings look locked
+[Agents](AGENTS.md)
 
-When your config file can't be changed from Settings, its switches now look plainly off, and the note at the top of the page has a lock and says why in plain words.
+### Also new
 
-### Idle agents leave your desktop
-
-An agent that does nothing for two minutes leaves your desktop, and its pill goes from the bar. If it comes back, it asks again, unless you told it to remember.
-
-### See when you've taken over from an agent
-
-Click or type in a window an agent is using and it's clear the window is now yours. Its ring turns amber and says the agent is paused, a banner slides in under the title bar with **Give back**, and the agent pill turns amber and says for a few seconds which window you took. Give the window back from the banner, the notice or the pill.
-
-### Agents use browser windows with their own pointer
-
-An agent's own pointer and keyboard now work in browser windows too, so it can draw, drag and click anywhere on a page while you keep working. Its ring and pointer show on the browser window it's using, and clicking or typing there makes the window yours.
-
-### Agents in browser windows don't take your typing
-
-When an agent clicks or types in a browser window, the window you're typing in keeps your keyboard, and the agent's typing never lands there. A page the agent is using can't pull your keyboard over to it either.
-
-### Apps an agent opens don't interrupt you
-
-An app an agent opens is the agent's from the start. It opens beside what you're doing, and your keyboard stays where it was.
-
-### See what an agent is using
-
-A window an agent is using gets a violet ring with its name, and its pointer is violet with its name too. Click or type in that window and it's yours until you give it back. The agent pill lists the windows it's using, each with **Take over**.
-
-### Agents copy and paste on their own clipboard
-
-An agent now has a clipboard of its own. What it copies never replaces what you copied, and stays out of your clipboard history.
-
-### Agents get their own pointer and keyboard
-
-An agent now clicks and types with a pointer and keyboard of its own, so it can work in one app while you work in another. It never moves your pointer or changes what you're typing in, and an app you're using stays yours.
+- When your config file can't be changed from Settings, its switches look plainly off, and the note at the top says why.
 
 ### Fixes
 

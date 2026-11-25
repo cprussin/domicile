@@ -12,85 +12,26 @@ _Unreleased_
 
 ![Windows closing in smoke, cloth and a swarm, and workspaces on a cube, all drawn by shader effects in the example shell](media/release-effects.png)
 
-Your shell can draw its own SkSL over any element. Register it with `domicile.effects.register(name, { sksl, outset })`, then use it with `filter: domicile-shader(name, …)` or `backdrop-filter`. Its numbers animate with CSS transitions, and it composes with the built-in filters. When the GPU hangs on an effect, the engine drops it and `effects.on("lost")` names it.
+Draw your own SkSL shaders over any element, including closing windows: register one with `domicile.effects.register()`, then use it in `filter: domicile-shader(…)`.
 
-An effect can draw the element through a mesh, a grid for cloth or instances for particles, placed by its own `vertex` program. It samples `images`, takes arrays you set for each element with `update(element, { points })`, and with `outset: "screen"` draws as far as the screen. A closed window's last frame stays while its `<app>` is in the page, up to 10 seconds, so a close effect plays on it. Windows say where they came from, so an open can start there: `launchedFrom` for a launch, `opener` for a browser window a page opened.
+[Shader effects](SHELL-SHADER-EFFECTS.md) · [`shell-effects-example`](/packages/shell-effects-example) · [Design](architecture/MOTION.md#shader-primitive)
 
-[Shader effects](SHELL-SHADER-EFFECTS.md) is the guide, and [`shell-effects-example`](/packages/shell-effects-example) builds smoke, cloth, swarm, liquid glass and a workspace cube with it. The effect types are in `@domicile-desktop/sdk/desktop/effects`.
+### Agents work beside the user
 
-[Design](architecture/MOTION.md#shader-primitive)
+Each agent gets its own pointer, keyboard and clipboard, in native and browser windows alike, so it never moves the user's pointer, focus or typing. Your shell sees agents' seats and hands windows back and forth with `domicile.seats`. Agents also get shorter, faster answers, run several tools in one call with `batch`, and let go of the desktop after two idle minutes.
 
-### Panda CSS 2
+[Agents](AGENTS.md) · [Writing a shell](WRITING-A-SHELL.md#agents-beside-the-user) · [Agent seats](architecture/AGENT-SEATS.md)
 
-The component library's preset and manganese's Panda config are built for Panda CSS 2. A shell that runs Panda with either needs `@pandacss/dev@2`. `@domicile-desktop/manganese/css` and its other generated entry points are `index.js` files, as Panda 2 writes them.
+### Also new
 
-[Shell packaging](SHELL-PACKAGING.md#panda-with-manganeses-tokens)
+- Shader effects can draw through a mesh, sample images, take per-element arrays and draw past the element's bounds. A closed window's last frame stays while its `<app>` does, and windows say where they came from with `launchedFrom` and `opener`. [Shader effects](SHELL-SHADER-EFFECTS.md)
+- `domicile pointer`, `drag`, `scroll`, `key`, `type`, `focus-window`, `exec` and `open` take `--agent <session>`. `domicile list-windows` adds `held_by`, and `domicile idle-time --json` adds `local_seconds`. [The domicile command](CLI.md)
+- `domicile load-extension <directory>` loads or reloads an unpacked extension in every browser profile. [`domicile load-extension`](CLI.md#domicile-load-extension-directory)
+- `idle.ignore_pointer_motion` keeps a drifting mouse from holding the desktop awake. [`idle`](SHELL-CONFIG.md#idle)
 
-### Agents run several tools in one call
+### Breaking changes
 
-The MCP server's `batch` tool runs up to 20 tool calls in order, such as clicking a field, typing and pressing Enter, and stops at the first that fails. Its acts wait for the page to settle and read each window once, after the last step, so a batch of three acts costs one round trip and one quarter-second wait instead of three of each. The server's instructions tell agents to batch steps they know ahead.
-
-[`domicile mcp`](CLI.md#domicile-mcp)
-
-### Idle agents let go of the desktop
-
-An MCP session that calls nothing for two minutes lets go of the desktop: its pill leaves the bar, and its next tool call asks again. It keeps what it read and its last screenshot. The server's instructions tell agents to call `stop_using_desktop` before waiting on anything else. `browser_click` at a point, `browser_drag` and `browser_scroll` read the page's scale with `Page.getLayoutMetrics`, a method agents get, rather than `Runtime.evaluate`, which the engine refuses them.
-
-[Agents](AGENTS.md)
-
-### Agents get shorter answers from browser windows
-
-The MCP server's `browser_snapshot` leaves out the `InlineTextBox` lines that repeat a text's words, and stops at 1500 elements with a line saying so. An act answers with at most 100 lines of what changed, then says how much more there is. `list_windows` gives a browser window an agent holds its seat in `held_by`, as it does a native window.
-
-[Agents](AGENTS.md)
-
-### Agents' own pointer and keyboard reach browser windows
-
-An agent seat's `click`, `move_pointer`, `drag`, `scroll`, `key`, `type_text` and `focus_window` now reach browser windows at desk positions, not only native windows, so an agent can draw on a canvas or drag from one page to another. The compositor sends each step to the browser as `agent_input` on the control channel; the browser hit tests the desk point to the page under it and answers `agent_input_reached` with the window it reached or why it refused. A point on the shell's own page is refused: agents act on the shell by ref. The user's own press or key in a browser window an agent holds takes it (`person_in_agents_window`), and `domicile.seats.list` names browser windows in `holds` and `taken` by their ids.
-
-[Agents](AGENTS.md) · [Agent seats](architecture/AGENT-SEATS.md#browser-windows-at-desk-positions)
-
-### An agent's input to a browser window leaves the user's focus
-
-DevTools input sent to a browser window's own page, as `domicile devtools <window>` and the MCP server's `browser_` tools send it, no longer moves the user's focus to that window: a press focuses the page for the agent only, and `Input.insertText` and keys go to the frame focused in that page rather than wherever the user is typing. Input sent to window `shell` still focuses what it presses, as a person's click does. `browser_click` also clicks at a point of the page, with any button and as a double-click, and `browser_drag` and `browser_scroll` drag and scroll there, for a canvas or anything else with no ref.
-
-[Agents](AGENTS.md) · [Agent seats](architecture/AGENT-SEATS.md#what-each-kind-of-window-gets)
-
-### Windows an agent starts are held by it
-
-`domicile exec --agent <session>` and `domicile open --agent <session>` start a program for an agent session: its windows, and those of programs it starts, open held by the agent's seat with the agent's keyboard in them. They get no activation token, and `heldBy` is set when the shell first hears of the window, so a shell can open it without focusing it. The MCP server's `exec` and `open` use them.
-
-[Agent seats](architecture/AGENT-SEATS.md#taking-over) · [`domicile exec`](CLI.md#domicile-exec---agent-session-program-arg)
-
-### Shells see agents' seats
-
-`domicile.seats.list` lists the agent seats: each agent's name, where its pointer is, the window its keyboard is in, the windows it holds and the windows the user took from it. Each window's `heldBy` names the agent seat holding it. `domicile.seats.takeOver(appId)` takes a window from an agent, as the user's click or key in it does, and the agent can't drive it until `domicile.seats.giveBack(appId)`. A window the user takes stays theirs after they leave it. `useSeats()` in `@domicile-desktop/react/seats` follows the list. `domicile list-windows` and the MCP server's `list_windows` add `held_by`.
-
-[Writing a shell](WRITING-A-SHELL.md#agents-beside-the-user) · [Agent seats](architecture/AGENT-SEATS.md#shell-primitives) · [`domicile list-windows`](CLI.md#domicile-list-windows---json)
-
-### Agents copy and paste on a clipboard of their own
-
-An agent session's seat has its own clipboard and middle-click selection. An app the agent types in copies to and pastes from the agent's, so an agent's copy never replaces the user's, and clipboard managers and the clipboard history see only the user's. The agent's go when its session ends.
-
-[Agents](AGENTS.md) · [Agent seats](architecture/AGENT-SEATS.md#clipboard)
-
-### Agents get their own pointer and keyboard
-
-Each agent session has a seat of its own, so an agent clicks and types in one native window while the user works in another, and never moves the user's pointer or focus. `domicile pointer`, `drag`, `scroll`, `key`, `type` and `focus-window` take `--agent <session>`, and `domicile agent` prints the session. One seat drives an app at a time, and the user wins an app both want. Shell commands still wait until the user has been away for 30 seconds: `domicile idle-time --json` adds `local_seconds`, which counts only the computer's own keyboard, pointer and touch.
-
-[Agents](AGENTS.md) · [Agent seats](architecture/AGENT-SEATS.md) · [`domicile pointer`](CLI.md#domicile-pointer---agent-session-xy-clickdouble-clickright-clickmiddle-click) · [`domicile idle-time`](CLI.md#domicile-idle-time---json)
-
-### `domicile load-extension`
-
-`domicile load-extension <directory>` loads an unpacked extension into every browser profile of the running desktop, or reloads it in place after an edit.
-
-[`domicile load-extension`](CLI.md#domicile-load-extension-directory)
-
-### The idle clock can ignore pointer motion
-
-`idle.ignore_pointer_motion`, off by default, keeps a drifting mouse or a shaking desk from holding a desktop awake. Keys, touches, clicks and scrolling still do.
-
-[`idle`](SHELL-CONFIG.md#idle)
+- Panda CSS 2: a shell that runs Panda with the component library's preset or manganese's config needs `@pandacss/dev@2`, and `@domicile-desktop/manganese/css`'s generated entry points are `index.js` files. [Shell packaging](SHELL-PACKAGING.md#panda-with-manganeses-tokens)
 
 ### Fixes
 
