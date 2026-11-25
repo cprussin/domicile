@@ -179,6 +179,31 @@ fn a_message_passed_over_by_one_wait_is_still_there_for_the_next() {
     );
 }
 
+/// A wait for the state after a change must not match a message from before.
+#[test]
+fn messages_passed_over_before_a_change_are_left_out_of_later_waits() {
+    let (host, ours) = a_host();
+    welcome(&host);
+    let mut chrome = Chrome::on(ours, Duration::from_millis(200)).expect("the handshake works");
+    let mut host = host;
+    writeln!(host, "{{\"type\":\"focus_changed\",\"app_id\":null}}").expect("write");
+    writeln!(host, "{{\"type\":\"app_closed\",\"app_id\":\"app-1\"}}").expect("write");
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::AppClosed { .. }))
+        .expect("the message, found behind the focus change");
+
+    chrome.pass_over_heard();
+    writeln!(host, "{{\"type\":\"focus_changed\",\"app_id\":\"app-2\"}}").expect("write");
+    let after = chrome
+        .wait_for(|message| matches!(message, HostMessage::FocusChanged { .. }))
+        .expect("the focus change after");
+
+    assert!(
+        matches!(after, HostMessage::FocusChanged { app_id: Some(ref id) } if id == "app-2"),
+        "a wait matched a message from before: {after:?}"
+    );
+}
+
 /// An unparseable line is reported with the line itself.
 #[test]
 fn a_line_that_is_not_a_message_is_reported_with_the_line() {

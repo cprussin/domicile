@@ -78,6 +78,15 @@ impl Chrome {
         say(&mut self.writer, message)
     }
 
+    /// Leave every message heard so far out of later waits, so a wait for the
+    /// state after a change can't match one from before it.
+    ///
+    /// Covers what this chrome has read: call it after a wait that read past
+    /// the last message from before the change.
+    pub fn pass_over_heard(&mut self) {
+        self.returned.fill(true);
+    }
+
     /// The next message the host sent that `wanted` accepts.
     ///
     /// Checks messages already heard before reading the socket, since some

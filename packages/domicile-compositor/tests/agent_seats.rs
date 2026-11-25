@@ -739,6 +739,8 @@ fn the_shell_takes_a_window_from_an_agent_and_gives_it_back() {
         "the agent clicked in a window the user took: {refused:?}"
     );
 
+    // Seats from before the takeover also have nothing taken.
+    desk.chrome.pass_over_heard();
     desk.chrome
         .say(&ChromeMessage::GiveBack {
             app_id: other.clone(),
@@ -893,6 +895,8 @@ fn a_closed_window_leaves_the_agents_seats() {
         seats.iter().any(|seat| seat.holds.contains(&closing_id))
     });
 
+    // Seats from before the agent's click also hold nothing.
+    chrome.pass_over_heard();
     drop(closing);
     let seats = told_seats(&mut chrome, |seats| {
         !seats.is_empty() && seats.iter().all(|seat| seat.holds.is_empty())
