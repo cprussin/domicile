@@ -191,8 +191,10 @@ else
   sleep 3
 fi
 
-ACTIVE="$(devtools shell Runtime.evaluate \
-  '{"expression":"document.activeElement?.id || document.activeElement?.localName","returnByValue":true}')"
+# The shell's last activeElement, as its module reports it: agents' devtools
+# has no Runtime.evaluate.
+sleep 0.5
+ACTIVE="$(sed -n 's/.*GUARD active=\([^" ]*\).*/\1/p' "$ENGINE_LOG" | tail -1)"
 
 saw() { # $1 pattern
   grep -qF "$1" "$ENGINE_LOG" && echo 1 || echo 0
@@ -206,7 +208,7 @@ SAW_USER_INPUT=$(saw "GUARD user-input")
 SAW_REACHED=$(saw "GUARD window-reached")
 SAW_FOCUSIN=$(saw "GUARD focusin target=webview")
 case "$ACTIVE" in
-*'"value":"user"'*) KEPT=1 ;;
+user) KEPT=1 ;;
 *) KEPT=0 ;;
 esac
 

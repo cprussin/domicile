@@ -14,6 +14,10 @@
 //                                (`domicile-guest-focus`), which is what a
 //                                shell raises and focuses a window on
 //   GUARD focusin target=…       an ordinary focus event in this document
+//   GUARD active=…               what the shell's activeElement became, by id
+//                                or tag, at load and after each change. The
+//                                command socket's devtools gives agents no
+//                                Runtime.evaluate, so the guard reads this.
 //
 // The engine's document calls `HostShell` once the module loads.
 
@@ -71,5 +75,16 @@ export const HostShell = (root, desktop) => {
   });
 
   field.focus();
+  let active = "";
+  const sayActive = () => {
+    const now =
+      document.activeElement?.id || document.activeElement?.localName || "none";
+    if (now !== active) {
+      active = now;
+      say(`active=${now}`);
+    }
+  };
+  sayActive();
+  setInterval(sayActive, 100);
   say("shell-loaded");
 };
