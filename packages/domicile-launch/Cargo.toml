@@ -28,7 +28,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 serde.workspace = true
 serde_json.workspace = true
 # PKCE challenges and refresh token hashes, for `domicile mcp --http`.
-sha2 = "0.10"
+sha2 = "0.11"
 tempfile.workspace = true
 thiserror.workspace = true
 # `domicile mcp --http`. Blocking, as the rest of `domicile` is.
