@@ -4,10 +4,10 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use domicile_launch::command::{
-    browser_profiles_line, clear_browsing_data_line, clear_site_data_line, config_extensions_line,
-    configure_extension_line, delete_history_line, devtools_line, disable_while_typing_line,
-    extensions_line, history_line, load_shell_line, load_unpacked_line, media_devices_line,
-    open_app_line, open_url_line, pin_browser_site_line, reply, run_app_line,
+    browser_profiles_line, browser_windows_line, clear_browsing_data_line, clear_site_data_line,
+    config_extensions_line, configure_extension_line, delete_history_line, devtools_line,
+    disable_while_typing_line, extensions_line, history_line, load_shell_line, load_unpacked_line,
+    media_devices_line, open_app_line, open_url_line, pin_browser_site_line, reply, run_app_line,
     set_extension_enabled_line, set_log_levels_line, set_media_device_line,
     set_site_permission_line, site_data_line, site_permissions_line, uninstall_extension_line,
     visits_line, Reply,
@@ -62,7 +62,7 @@ fn a_run_app_names_the_apps_root_and_module() {
 #[test]
 fn an_open_url_names_the_version_it_is_written_in() {
     assert_eq!(
-        open_url_line("https://example.com/?q=\"x\"", None),
+        open_url_line("https://example.com/?q=\"x\"", None, None),
         "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/?q=\\\"x\\\"\"}\n"
     );
 }
@@ -70,7 +70,7 @@ fn an_open_url_names_the_version_it_is_written_in() {
 #[test]
 fn an_open_url_names_its_browser_profile_when_it_has_one() {
     assert_eq!(
-        open_url_line("https://example.com/", Some("work")),
+        open_url_line("https://example.com/", Some("work"), None),
         "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/\",\"profile\":\"work\"}\n"
     );
 }
@@ -102,7 +102,32 @@ fn an_open_app_with_an_id_names_it_and_how_to_reuse_its_window() {
 
 #[test]
 fn an_engine_that_opened_the_address_says_so() {
-    assert_eq!(reply("{\"type\":\"opened\"}").unwrap(), Reply::Opened);
+    assert_eq!(
+        reply("{\"type\":\"opened\"}").unwrap(),
+        Reply::Opened { window: None }
+    );
+    assert_eq!(
+        reply("{\"type\":\"opened\",\"window\":\"7\"}").unwrap(),
+        Reply::Opened {
+            window: Some("7".to_string())
+        }
+    );
+}
+
+#[test]
+fn an_open_url_for_an_agent_names_its_seat() {
+    assert_eq!(
+        open_url_line("https://example.com/", None, Some(3)),
+        "{\"type\":\"open_url\",\"version\":1,\"url\":\"https://example.com/\",\"agent\":\"agent-3\"}\n"
+    );
+}
+
+#[test]
+fn browser_windows_names_the_version_it_is_written_in() {
+    assert_eq!(
+        browser_windows_line(),
+        "{\"type\":\"browser_windows\",\"version\":1}\n"
+    );
 }
 
 #[test]

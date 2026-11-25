@@ -11,7 +11,8 @@ import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
 import type { BrowserWindow as ListedBrowserWindow } from "@domicile-desktop/sdk/desktop/browser";
 import type { InhibitorAction } from "@domicile-desktop/sdk/inhibitor-action";
 import type { KeymapChoice } from "@domicile-desktop/sdk/keymap-choice";
-import type { Axis, Direction } from "./direction";
+import type { Direction } from "./direction";
+import { Axis } from "./direction";
 import type { Float } from "./floating/float";
 import { floatHolds, limitedTo, movedTo } from "./floating/float";
 import type { MediaKey } from "./keyboard/media-key";
@@ -1391,6 +1392,7 @@ const reduceAction = (
         state,
         openApp(state, action.appId, action.title, action.opener),
         action.held,
+        true,
       );
     }
     case WindowActionKind.AppAppearedFloating: {
@@ -1927,18 +1929,30 @@ const stepWindow = (state: WindowState, direction: Direction): WindowState => {
 
 // A window an agent holds opens without taking the user's focus: the window
 // focused `before` keeps it, so the shell never hands the user's keyboard to
-// the agent's window. On an empty workspace the user's keyboard has nowhere
-// else to be, so the new window keeps the focus it opened with.
+// the agent's window. A tiled one opens `apart`, in a group of its own beside
+// the user's, so it shows rather than waiting behind their tab. On an empty
+// workspace the user's keyboard has nowhere else to be, so the new window
+// keeps the focus it opened with.
 const focusKept = (
   before: WindowState,
   opened: WindowState,
   held: boolean,
+  apart = false,
 ): WindowState => {
   const focused = activeIdOf(before);
   return held &&
+    opened !== before &&
     focused !== undefined &&
     currentHere(opened) === currentHere(before)
-    ? onCurrent(opened, (workspace) => reached(workspace, focused))
+    ? onCurrent(opened, (workspace) =>
+        reached(
+          // A float keeps its box: splitting in it would squeeze the user's.
+          apart && workspace.floatFocus === undefined
+            ? containerSplit(workspace, Axis.Horizontal)
+            : workspace,
+          focused,
+        ),
+      )
     : opened;
 };
 
@@ -2010,9 +2024,15 @@ const listBrowsers = (
           // Its app hid it: listed, on no workspace until the app shows it.
           return { ...opening, windows: [...opening.windows, window] };
         }
+        // An agent opened it: it opens as a window it holds.
+        const held = entry.agent !== undefined;
         return entry.width === 0 && entry.height === 0
-          ? openWindow(opening, window)
-          : openPopupWindow(opening, window, entry.width, entry.height);
+          ? focusKept(opening, openWindow(opening, window), held, true)
+          : focusKept(
+              opening,
+              openPopupWindow(opening, window, entry.width, entry.height),
+              held,
+            );
       },
       appsHidOrShowed(
         pagesShown(

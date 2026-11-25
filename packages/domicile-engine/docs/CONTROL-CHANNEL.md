@@ -286,7 +286,11 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 
 {"type":"open_url","version":1,"url":"https://example.com/"}
 {"type":"open_url","version":1,"url":"https://example.com/","app":true}
-{"type":"opened"}   |   {"type":"refused","why":"…"}
+{"type":"open_url","version":1,"url":"https://example.com/","agent":"agent-3"}
+{"type":"opened","window":"7"}   |   {"type":"refused","why":"…"}
+
+{"type":"browser_windows","version":1}
+{"type":"browser_windows","windows":[{"id":"7","focused":true,"width":1280,"height":720}]}
 
 {"type":"site_permissions","version":1}
 {"type":"site_permissions","defaults":{"camera":"ask",…},"sites":[{"origin":"https://meet.example","permission":"camera","setting":"allow"}]}
@@ -378,6 +382,16 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
   `target="_blank"` does. The shell gets it in `browserwindowschanged`, so a
   shell mid-reload gets it with every other window. An unparsable URL, a
   non-boolean `app`, or a desk with no shell to own the window, is refused.
+- `open_url` answers with the id of the window it opened, or the app window
+  it reused.
+- `"agent"` opens a browser window for that agent seat, listed with `agent`:
+  the shell opens it without the user's focus, and `domicile` then puts the
+  seat's keyboard in it. Refused with `"app":true`, as an app window may be
+  the user's, reused.
+- `browser_windows` lists each browser window in open order: whether the
+  shell's focused page is its, and its page's size in CSS pixels, left out
+  while the shell doesn't draw it. `domicile list-windows` merges it into the
+  compositor's list.
 - `"app":true` opens an app window, listed with `isApp`
   ([WEB-APPS.md](/docs/architecture/WEB-APPS.md)). An engine without it
   ignores the key and opens a browser window.

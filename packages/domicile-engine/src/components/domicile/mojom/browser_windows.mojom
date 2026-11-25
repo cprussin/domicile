@@ -153,6 +153,10 @@ struct BrowserWindow {
   // `target="_blank"`; empty for none, as for a window the shell opened or
   // one a plain `<webview>`'s page opened.
   string opener;
+  // The agent seat that opened this window (`domicile open --agent`), as
+  // `agent-<session>`; empty for none. The shell opens it without taking the
+  // user's focus. The compositor's seats say who holds it from then on.
+  string agent;
 };
 
 // What OpenApp does when an app window with its `app_id` is already open.

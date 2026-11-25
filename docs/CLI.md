@@ -99,7 +99,7 @@ window ([LAUNCHER.md](LAUNCHER.md#opening-files)).
 - `domicile open --agent <session> <file|folder|url>` opens a file or folder
   for that agent session, as [`exec --agent`](#domicile-exec---agent-session-program-arg)
   does: its app's windows open held by the agent's seat and never take the
-  user's focus. A link opens in a browser window, which no seat holds.
+  user's focus. A link opens in a new browser window held the same way.
 - `domicile open --electron <entry|path> [-- <command>...]` runs an installed
   Electron app on the desktop's engine instead of the Electron it ships:
   `domicile open --electron slack.desktop`. `<entry>` is a desktop entry id;
@@ -436,15 +436,17 @@ and app windows.
 
 ```
 ID                                KIND     APP    PID   SIZE     TITLE
-kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA  native   emacs  4242  640x480  notes.org (focused)
-Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     -        Inbox (private)
+kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA  native   emacs  4242  640x480   notes.org
+Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     1280x720  Inbox (focused)
 ```
 
 - `ID` is the window's `ext-foreign-toplevel-list-v1` identifier, which
   capture tools see too.
 - `APP` is a native window's desktop entry id, or an app window's id.
-- `focused` marks the native window with the keyboard. The shell's page holds
-  the keyboard for browser windows, so none is marked.
+- `SIZE` is a native window's logical size, or a browser window's page in
+  CSS pixels; `-` for a browser window the shell doesn't draw.
+- `focused` marks the window with the user's keyboard: a native window, or
+  the browser window the shell focused while no native window has it.
 - `urgent` marks a window that asked for the keyboard and was refused.
 - `private` marks a private browser window.
 - `held by agent-<session>` marks a window an agent's own pointer or keyboard

@@ -52,6 +52,7 @@ const listed = (
     width: 0,
   },
 ) => ({
+  agent: undefined,
   appId: "",
   height: popup.height,
   id,
@@ -1023,6 +1024,80 @@ describe("the workspaces", () => {
       APP("browser"),
     ]);
     expect(activeIdOf(state)).toBe(APP("kitty"));
+  });
+
+  it("opens a window an agent holds in a group of its own beside the user's", () => {
+    // Not a tab behind the user's, where nobody could watch the agent.
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.AppAppeared("browser", "browser", undefined, true),
+    );
+
+    expect(workspaceHere(state).tiling.root).toMatchObject({
+      children: [
+        { children: [{ id: APP("kitty") }], layout: Layout.Tabbed },
+        { children: [{ id: APP("browser") }], layout: Layout.Tabbed },
+      ],
+      layout: Layout.SplitH,
+    });
+  });
+
+  it("leaves the user's floating window whole when an agent's window opens", () => {
+    const before = reduce(
+      desktop("kitty"),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("notes", "notes"),
+      WindowAction.ParentFocused(),
+      // The tab group floats, so a new window tabs into it.
+      WindowAction.FloatToggled(),
+    );
+
+    const state = reduce(
+      before,
+      WindowAction.AppAppeared("browser", "browser", undefined, true),
+    );
+
+    // It tabs into the float, whose box stays as the user left it.
+    const [float] = workspaceHere(state).floats;
+    expect(float?.root).toMatchObject({ layout: Layout.Tabbed });
+    expect(float?.width).toBe(workspaceHere(before).floats[0]?.width);
+    expect(activeIdOf(state)).toBe(APP("notes"));
+  });
+
+  it("opens a browser window an agent opened beside the user's, keeping their focus", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.BrowserWindowsListed([
+        { ...listed("1", "https://example.com/"), agent: "agent-3" },
+      ]),
+    );
+
+    expect(workspaceHere(state).tiling.root).toMatchObject({
+      children: [
+        { children: [{ id: APP("kitty") }] },
+        { children: [{ id: BROWSER("1") }] },
+      ],
+      layout: Layout.SplitH,
+    });
+    expect(activeIdOf(state)).toBe(APP("kitty"));
+  });
+
+  it("keeps the user's focus when an agent's browser window is listed again", () => {
+    const opened = reduce(
+      desktop("kitty"),
+      WindowAction.BrowserWindowsListed([
+        { ...listed("1", "https://example.com/"), agent: "agent-3" },
+      ]),
+    );
+
+    const state = reduce(
+      opened,
+      WindowAction.BrowserWindowsListed([
+        { ...listed("1", "https://example.com/a"), agent: "agent-3" },
+      ]),
+    );
+
+    expect(workspaceHere(state).tiling).toEqual(workspaceHere(opened).tiling);
   });
 
   it("opens a floating window an agent holds without taking the user's focus", () => {

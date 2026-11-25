@@ -499,6 +499,12 @@ export type DomicileBrowserWindow = {
    * plain `<webview>`'s page opened.
    */
   readonly opener: string | null;
+  /**
+   * The agent seat that opened this window (`domicile open --agent`), as
+   * `agent-<session>`, so the shell opens it without taking the user's focus.
+   * Null for none. Who holds it from then on is the desk's seats'.
+   */
+  readonly agent: string | null;
 };
 
 /**

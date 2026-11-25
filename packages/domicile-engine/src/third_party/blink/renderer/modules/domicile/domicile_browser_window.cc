@@ -35,7 +35,8 @@ DomicileBrowserWindow::DomicileBrowserWindow(
     bool urgent,
     bool ignores_pointer,
     const String& shape,
-    const String& opener)
+    const String& opener,
+    const String& agent)
     : id_(id),
       url_(url),
       title_(title),
@@ -65,7 +66,8 @@ DomicileBrowserWindow::DomicileBrowserWindow(
       urgent_(urgent),
       ignores_pointer_(ignores_pointer),
       shape_(shape),
-      opener_(opener) {}
+      opener_(opener),
+      agent_(agent) {}
 
 DomicileBrowserWindow::~DomicileBrowserWindow() = default;
 

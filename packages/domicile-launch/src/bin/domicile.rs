@@ -33,11 +33,11 @@ use domicile_launch::app_entry::app_entry;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation, Listing, MonitorMode};
 use domicile_launch::command_socket::{
-    browser_profiles, clear_browsing_data, clear_site_data, config_extensions, configure_extension,
-    delete_history, devtools, disable_while_typing, extensions, history, load_shell, load_unpacked,
-    media_devices, open_app, open_url, pin_browser_site, run_app, set_extension_enabled,
-    set_log_levels as set_engine_log_levels, set_media_device, set_site_permission, site_data,
-    site_permissions, uninstall_extension, visits,
+    browser_profiles, browser_windows, clear_browsing_data, clear_site_data, config_extensions,
+    configure_extension, delete_history, devtools, disable_while_typing, extensions, history,
+    load_shell, load_unpacked, media_devices, open_app, open_url, pin_browser_site, run_app,
+    set_extension_enabled, set_log_levels as set_engine_log_levels, set_media_device,
+    set_site_permission, site_data, site_permissions, uninstall_extension, visits,
 };
 use domicile_launch::commands;
 use domicile_launch::component_log::{self, Sink};
@@ -510,7 +510,8 @@ fn versioned() -> Result<ExitCode, String> {
 /// Opens `target` with what opens its type, started by the running desktop's
 /// compositor, or in a browser window of the running desktop, in browser profile `profile` when
 /// given; see `domicile_launch::open`. Only a web address takes a profile.
-/// What opens a file starts held by agent session `agent`'s seat, if given.
+/// What opens it, a browser window or a program's windows, starts held by
+/// agent session `agent`'s seat, if given.
 fn opened(target: &str, profile: Option<String>, agent: Option<u32>) -> Result<ExitCode, String> {
     // A shell page that claims the link's scheme, such as manganese's inbox
     // picker for `mailto:`, opens it instead of an application.
@@ -518,7 +519,11 @@ fn opened(target: &str, profile: Option<String>, agent: Option<u32>) -> Result<E
         return Ok(ExitCode::SUCCESS);
     }
     match opening(target, &typed_in()?, &places()).map_err(|why| why.to_string())? {
-        Opening::Browse(url) => asked(&Request::OpenUrl { url, profile }),
+        Opening::Browse(url) => asked(&Request::OpenUrl {
+            url,
+            profile,
+            agent,
+        }),
         Opening::Run(_) if profile.is_some() => Err(CliError::ProfileForAFile {
             target: target.to_string(),
         }
@@ -2531,8 +2536,9 @@ fn answer_a_command(
                     // plus `ANSWER_WITHIN`, so a retry could load a shell after
                     // it reported a failure.
                     load: &|page| load_the_shell(engine, page, serving, &|| true),
-                    open: &|url, profile| {
-                        open_url(engine, url, profile, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    open: &|url, profile, agent| {
+                        open_url(engine, url, profile, agent, ANSWER_WITHIN)
+                            .map_err(|why| why.to_string())
                     },
                     open_app: &|url, id, reuse, profile| {
                         open_app(engine, url, id, reuse, profile, ANSWER_WITHIN)
@@ -2692,6 +2698,9 @@ fn answer_a_command(
                     },
                     windows: &|| {
                         windows(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
+                    },
+                    browser_layouts: &|| {
+                        browser_windows(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
                     },
                     status: &|| status(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string()),
                     shell_commands: &|| {

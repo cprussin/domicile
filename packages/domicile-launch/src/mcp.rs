@@ -451,7 +451,7 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec!["argv"],
         ),
         Tool::Open => (
-            "Open a file, folder or URL with its default app. A file's app opens held by your own pointer and keyboard, and never takes the user's; a URL opens in a browser window.",
+            "Open a file, folder or URL with its default app. What it opens, a file's app or a URL's new browser window, is held by your own pointer and keyboard from the start, and never takes the user's. A site opened as an app is the user's, since it may be their open one.",
             json!({
                 "target": {"type": "string", "description": "An absolute path or a URL."},
                 "app": {"type": "boolean", "description": "Open a site as an app, with no address bar."},

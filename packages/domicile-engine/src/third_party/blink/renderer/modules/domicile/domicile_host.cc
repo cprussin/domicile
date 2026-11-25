@@ -3199,7 +3199,8 @@ void DomicileHost::ListBrowserWindows() {
         window->wants_maximized, window->wants_minimized,
         window->wants_fullscreen, window->urgent, window->ignores_pointer,
         window->shape.empty() ? String() : window->shape,
-        window->opener.empty() ? String() : window->opener));
+        window->opener.empty() ? String() : window->opener,
+        window->agent.empty() ? String() : String(window->agent)));
   }
   browser_windows_ = MakeGarbageCollected<FrozenArray<DomicileBrowserWindow>>(
       std::move(listed));

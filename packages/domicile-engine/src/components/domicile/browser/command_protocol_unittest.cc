@@ -38,10 +38,11 @@ struct Told {
   // Set to hold `load_shell`'s answer in `held_load` instead of giving it.
   bool hold_load = false;
   ShellLoaded held_load;
-  // Set to hold `run_app`'s or `open_url`'s answer in `held_open` instead of
-  // giving it.
+  // Set to hold `run_app`'s answer in `held_open`, or `open_url`'s in
+  // `held_url`, instead of giving it.
   bool hold_open = false;
   WindowOpened held_open;
+  UrlOpened held_url;
   // Set to hold `media_devices`'s and `set_media_device`'s answers, as until
   // the devices are listed, in `held_devices` and `held_device` instead of
   // giving them.
@@ -61,6 +62,7 @@ struct Told {
   std::string url;
   std::optional<AppLaunch> app;
   std::string profile;
+  std::string agent;
   bool set = false;
   std::string origin;
   std::optional<WebViewPermission> permission;
@@ -197,19 +199,23 @@ std::string Answer(std::string_view line,
     }
     std::move(opened).Run(has_window);
   };
+  // Opens window "7".
   auto open_url = [told, has_window](const GURL& url,
                                      std::optional<AppLaunch> app,
                                      const std::string& profile,
-                                     WindowOpened opened) {
+                                     const std::string& agent,
+                                     UrlOpened opened) {
     told->opened = true;
     told->url = url.spec();
     told->app = app;
     told->profile = profile;
+    told->agent = agent;
     if (told->hold_open) {
-      told->held_open = std::move(opened);
+      told->held_url = std::move(opened);
       return;
     }
-    std::move(opened).Run(has_window);
+    std::move(opened).Run(has_window ? std::optional<std::string>("7")
+                                     : std::nullopt);
   };
   // The desk's profiles are `default` and `work`.
   auto has_browser_profile = [](const std::string& id) {
@@ -426,6 +432,15 @@ std::string Answer(std::string_view line,
     told->min_log_level = min_level;
     told->vmodule = vmodule;
   };
+  // Window "3" has the shell's focus; window "7" isn't drawn.
+  auto list_browser_windows = [has_window]() {
+    return has_window ? std::vector<BrowserWindowLayout>{{.id = "3",
+                                                          .focused = true,
+                                                          .width = 1280,
+                                                          .height = 720},
+                                                         {.id = "7"}}
+                      : std::vector<BrowserWindowLayout>();
+  };
   told->reply.clear();
   AnswerCommand(line,
                 {.load_shell = load_shell,
@@ -452,7 +467,8 @@ std::string Answer(std::string_view line,
                  .clear_site_data = clear_site_data,
                  .disable_while_typing = disable_while_typing,
                  .send_devtools = send_devtools,
-                 .set_log_levels = set_log_levels},
+                 .set_log_levels = set_log_levels,
+                 .list_browser_windows = list_browser_windows},
                 base::BindOnce([](std::string* out,
                                   std::string line) { *out = std::move(line); },
                                &told->reply));
@@ -885,8 +901,83 @@ TEST(CommandProtocolTest, AnswersAnAddressOnceTheShellWindowCanTakeIt) {
              &told),
       "");
 
-  std::move(told.held_open).Run(true);
+  std::move(told.held_url).Run("7");
   EXPECT_EQ(TypeOf(told.reply), "opened");
+}
+
+TEST(CommandProtocolTest, AnswersWithTheWindowItOpened) {
+  // An agent drives the window it opened by this id.
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"open_url","version":1,"url":"https://example.com/"})",
+      &told);
+  EXPECT_EQ(base::JSONReader::ReadDict(reply, base::JSON_PARSE_RFC),
+            base::JSONReader::ReadDict(R"({"type":"opened","window":"7"})",
+                                       base::JSON_PARSE_RFC));
+}
+
+TEST(CommandProtocolTest, OpensABrowserWindowForTheAgentARequestNames) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"open_url","version":1,"url":"https://example.com/",)"
+      R"("agent":"agent-3"})",
+      &told);
+  EXPECT_EQ(TypeOf(reply), "opened");
+  EXPECT_EQ(told.agent, "agent-3");
+
+  // None is the user's.
+  Answer(R"({"type":"open_url","version":1,"url":"https://example.com/"})",
+         &told);
+  EXPECT_EQ(told.agent, "");
+}
+
+TEST(CommandProtocolTest, RefusesAnAgentThatIsNoSeat) {
+  for (const char* agent : {R"("")", "3", "null"}) {
+    Told told;
+    const std::string reply =
+        Answer(base::StrCat({R"({"type":"open_url","version":1,)",
+                             R"("url":"https://example.com/","agent":)", agent,
+                             "}"}),
+               &told);
+    EXPECT_EQ(TypeOf(reply), "refused") << agent;
+    EXPECT_THAT(WhyOf(reply), HasSubstr("\"agent\"")) << agent;
+    EXPECT_FALSE(told.opened) << agent;
+  }
+}
+
+TEST(CommandProtocolTest, RefusesAnAgentForAnAppWindow) {
+  // An app window may be the user's open one, reused.
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"open_url","version":1,"url":"https://example.com/",)"
+      R"("app":true,"agent":"agent-3"})",
+      &told);
+  EXPECT_EQ(TypeOf(reply), "refused");
+  EXPECT_THAT(WhyOf(reply), HasSubstr("browser window"));
+  EXPECT_FALSE(told.opened);
+}
+
+TEST(CommandProtocolTest, ListsEachBrowserWindowsFocusAndSize) {
+  Told told;
+  const std::string reply =
+      Answer(R"({"type":"browser_windows","version":1})", &told);
+  EXPECT_EQ(
+      base::JSONReader::ReadDict(reply, base::JSON_PARSE_RFC),
+      base::JSONReader::ReadDict(
+          R"({"type":"browser_windows","windows":[)"
+          R"({"id":"3","focused":true,"width":1280,"height":720},)"
+          R"({"id":"7","focused":false}]})",
+          base::JSON_PARSE_RFC));
+}
+
+TEST(CommandProtocolTest, ListsNoBrowserWindowsWithoutAShell) {
+  Told told;
+  const std::string reply = Answer(R"({"type":"browser_windows","version":1})",
+                                   &told, /*has_window=*/false);
+  EXPECT_EQ(base::JSONReader::ReadDict(reply, base::JSON_PARSE_RFC),
+            base::JSONReader::ReadDict(
+                R"({"type":"browser_windows","windows":[]})",
+                base::JSON_PARSE_RFC));
 }
 
 TEST(CommandProtocolTest, ListsEachPermissionsDefaultAndEachSitesSetting) {

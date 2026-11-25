@@ -50,7 +50,8 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
                         bool urgent,
                         bool ignores_pointer,
                         const String& shape,
-                        const String& opener);
+                        const String& opener,
+                        const String& agent);
   ~DomicileBrowserWindow() override;
 
   const String& id() const { return id_; }
@@ -89,6 +90,8 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   const String& shape() const { return shape_; }
   // Null for none, as the empty string the browser sends.
   const String& opener() const { return opener_; }
+  // Null for none, as the empty string the browser sends.
+  const String& agent() const { return agent_; }
 
   void Trace(Visitor*) const override;
 
@@ -123,6 +126,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   bool ignores_pointer_ = false;
   String shape_;
   String opener_;
+  String agent_;
 };
 
 }  // namespace blink

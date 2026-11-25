@@ -50,8 +50,15 @@ namespace domicile {
 //    "profile":"work"}
 //   {"type":"open_url","version":1,"url":"https://example.com/","app":true,
 //    "app_id":"mail","reuse":"focus","profile":"work"}
-//   -> {"type":"opened"}
+//   {"type":"open_url","version":1,"url":"https://example.com/",
+//    "agent":"agent-3"}
+//   -> {"type":"opened","window":"7"}
 //   -> {"type":"refused","why":"..."}
+//
+//   {"type":"browser_windows","version":1}
+//   -> {"type":"browser_windows","windows":[{"id":"7","focused":true,
+//       "width":1280,"height":720}]}      (no width or height while the
+//                                          shell doesn't draw it)
 //
 //   {"type":"site_permissions","version":1}
 //   -> {"type":"site_permissions","defaults":{"camera":"ask",...},
@@ -213,8 +220,8 @@ using LoadShell = base::FunctionRef<void(const base::FilePath& root,
                                          ShellFiles files,
                                          ShellLoaded loaded)>;
 
-// Runs once with whether `run_app` or `open_url` opened its window: false if
-// there is no shell to own it.
+// Runs once with whether `run_app` opened its window: false if there is no
+// shell to own it.
 using WindowOpened = base::OnceCallback<void(bool opened)>;
 
 // Carries out `run_app`: serves the app module `module` under `root` and opens
@@ -235,15 +242,22 @@ struct AppLaunch {
   friend bool operator==(const AppLaunch&, const AppLaunch&) = default;
 };
 
+// Runs once with the id of the window `open_url` opened or reused, or with
+// nothing when there is no shell to own it.
+using UrlOpened =
+    base::OnceCallback<void(std::optional<std::string> window)>;
+
 // Carries out `open_url`: opens a browser window at `url`, or with `app` an app
 // window, which the shell draws without an address bar. A new window is in
 // browser profile `profile`, one the desk has, or for an empty one the
-// profile `url`'s site opens in. Runs `opened` once, possibly after
-// returning, as for `run_app`.
+// profile `url`'s site opens in. A browser window opened for `agent`, an agent
+// seat's id when not empty, is listed as that agent's. Runs `opened` once,
+// possibly after returning, as for `run_app`.
 using OpenUrl = base::FunctionRef<void(const GURL& url,
                                        std::optional<AppLaunch> app,
                                        const std::string& profile,
-                                       WindowOpened opened)>;
+                                       const std::string& agent,
+                                       UrlOpened opened)>;
 
 // Whether the desk has browser profile `id`, so `open_url` can refuse one it
 // does not instead of opening the window elsewhere.
@@ -609,6 +623,21 @@ using SendDevTools = base::FunctionRef<void(const std::string& window,
                                             base::DictValue params,
                                             DevToolsAnswered answered)>;
 
+// A browser window as the user has it now, for `browser_windows`.
+struct BrowserWindowLayout {
+  std::string id;
+  // Whether the shell's focused page is this window's.
+  bool focused = false;
+  // Its page's size in CSS pixels as the shell lays it out; 0 by 0 while the
+  // shell doesn't draw it.
+  int width = 0;
+  int height = 0;
+};
+
+// Carries out `browser_windows`: every browser window, in open order.
+using ListBrowserWindowLayouts =
+    base::FunctionRef<std::vector<BrowserWindowLayout>()>;
+
 // Carries out `set_log_levels`: logs at `min_level` and VLOGs at `vmodule` in
 // every engine process, and in those started later.
 using SetLogLevels =
@@ -641,6 +670,7 @@ struct CommandActions {
   DisableWhileTyping disable_while_typing;
   SendDevTools send_devtools;
   SetLogLevels set_log_levels;
+  ListBrowserWindowLayouts list_browser_windows;
 };
 
 // Receives the reply line, including its trailing newline.

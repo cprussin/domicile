@@ -103,9 +103,13 @@ it does to a client. It asks the browser instead:
   does not take the user's focus. The compositor knows it by the process
   that `exec` started, or a descendant of it, and sends the seats before it
   announces the window, so `heldBy` is set when the shell first sees it. A
-  shell opens such a window without focusing it. Manganese still focuses one
+  shell opens such a window without focusing it. Manganese opens a tiled one
+  in a group of its own beside the user's, so it shows, and still focuses one
   that opens on an empty workspace, where the user's keyboard has nowhere
   else to be.
+- A URL an agent opens gets a new browser window. The engine lists it with
+  `agent` set, so the shell opens it unfocused, and answers its id; `domicile`
+  then puts the seat's keyboard in it, as `focus_window` does.
 
 ### Clipboard
 

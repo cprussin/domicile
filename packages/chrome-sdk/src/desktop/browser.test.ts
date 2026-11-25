@@ -16,6 +16,7 @@ describe("browser", () => {
 
     expect(desktop(fake.host).browser.windows).toStrictEqual([
       {
+        agent: undefined,
         appId: "",
         height: 0,
         id: "1",
@@ -58,6 +59,16 @@ describe("browser", () => {
     expect(
       desktop(fake.host).browser.windows?.map((window) => window.opener),
     ).toStrictEqual([undefined, "1"]);
+  });
+
+  it("lists the agent seat that opened each one", () => {
+    const fake = new FakeDomicileHost();
+    fake.openBrowser("https://a.example/");
+    fake.openBrowser("https://b.example/", { agent: "agent-3" });
+
+    expect(
+      desktop(fake.host).browser.windows?.map((window) => window.agent),
+    ).toStrictEqual([undefined, "agent-3"]);
   });
 
   it("lists an Electron app's views apart from the windows", () => {

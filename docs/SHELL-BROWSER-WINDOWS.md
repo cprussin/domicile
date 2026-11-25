@@ -485,6 +485,11 @@ The new window's `opener` is the `id` of the browser window whose page opened
 it, so you can open it from there, or `undefined` for a window nothing opened
 and one a plain `<webview>`'s page opened.
 
+A window an agent opened (`domicile open --agent`) lists its seat as `agent`,
+such as `agent-3`. Open it without taking the user's focus: the agent's own
+keyboard goes in it, and the desk's seats say it holds it
+([AGENT-SEATS.md](architecture/AGENT-SEATS.md)).
+
 ## Views
 
 An Electron app's window can be made of several pages: its own, and views

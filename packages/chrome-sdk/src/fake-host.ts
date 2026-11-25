@@ -303,7 +303,7 @@ export class FakeDomicileHost {
    * and `appId`. Ids count up from `"1"`; the asked-for size is 0 unless
    * `width` and `height` give one. With a `parent`, it is an Electron app's
    * view in that window, at `x` and `y`. An `opener` names the window whose
-   * page opened it. It is in `profile`, or as the
+   * page opened it, and an `agent` the seat that did. It is in `profile`, or as the
    * engine picks: none for an app window (an app module's or Electron
    * app's; `openApp` names one), else the default private profile
    * when `isPrivate` and the default one otherwise, from `browserProfiles`
@@ -312,6 +312,7 @@ export class FakeDomicileHost {
   openBrowser(
     url: string,
     {
+      agent = null,
       appId = "",
       isApp = false,
       isHidden = false,
@@ -328,6 +329,7 @@ export class FakeDomicileHost {
     }: Partial<
       Pick<
         DomicileBrowserWindow,
+        | "agent"
         | "appId"
         | "height"
         | "isApp"
@@ -353,6 +355,7 @@ export class FakeDomicileHost {
       browserWindows: [
         ...(this.#state.browserWindows ?? []),
         {
+          agent,
           appId,
           height,
           id: this.#browsersOpened.toString(),

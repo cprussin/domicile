@@ -29,6 +29,8 @@ Each agent gets its own pointer, keyboard and clipboard, in native and browser w
 - `domicile load-extension <directory>` loads or reloads an unpacked extension in every browser profile. [`domicile load-extension`](CLI.md#domicile-load-extension-directory)
 - Agents answer the file choosers their presses open: `devtools` methods `Domicile.fileChooser` and `Domicile.chooseFiles`, and the MCP server's `browser_choose_files`. [Agents](AGENTS.md) · [Agent seats](architecture/AGENT-SEATS.md#file-choosers)
 - Pages no `<webview>` shows are unloaded while the computer is short of memory, and load again when they are shown. A window has `isDiscarded`, and `browser.discard(id)` unloads one by hand. [Browser windows](SHELL-BROWSER-WINDOWS.md)
+- `domicile open --agent <session> <url>` opens a browser window held by the agent's seat (seat `agent-<session>`); the engine's `open_url` takes `"agent"` and answers with the window. [Browser windows](SHELL-BROWSER-WINDOWS.md) · [`domicile open`](CLI.md#domicile-open)
+- `domicile list-windows` and the MCP server's `list_windows` give a browser window `focused` and its page's `size`, from the engine's new `browser_windows` command. [`domicile list-windows`](CLI.md#domicile-list-windows---json)
 - `idle.ignore_pointer_motion` keeps a drifting mouse from holding the desktop awake. [`idle`](SHELL-CONFIG.md#idle)
 
 ### Breaking changes

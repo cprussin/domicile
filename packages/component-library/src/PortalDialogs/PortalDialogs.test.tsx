@@ -434,6 +434,7 @@ const iconed = (id: string, favicon: string): HTMLElement => {
 
 /** Browser window `id`, titled `title`, as the engine lists it. */
 const browserWindow = (id: string, title: string) => ({
+  agent: null,
   appId: "",
   height: 0,
   id,
