@@ -813,12 +813,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
     // each.
     std::deque<AskedMessageBox> boxes = std::move(found->message_boxes);
     std::optional<ShownPopup> popup = std::move(found->popup_menu);
-    closing_.push_back({id, std::move(found->guest)});
-    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(&DeskWindows::Reap, weak_factory_.GetWeakPtr(),
-                       closing_.back().id),
-        kLinger);
+    ReapIn(kLinger, std::move(found->guest));
     windows_.erase(found);
     // Its views stay open, unlisted, as an Electron app's WebContentsViews
     // outlive the window that held them until the app closes them.
@@ -913,11 +908,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
     // Its <webview> asks for the window again, and gets the new page.
     replaced->Replaced();
     replaced->contents().SetAudioMuted(true);
-    closing_.push_back({id, std::move(replaced)});
-    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(&DeskWindows::Reap, weak_factory_.GetWeakPtr(), id),
-        kLinger);
+    ReapIn(kLinger, std::move(replaced));
     // The profile-routing guard greps for this.
     LOG(INFO) << "domicile: moved browser window " << id
               << " to browser profile " << profile << ".";
@@ -1283,14 +1274,24 @@ class DeskWindows final : public base::SupportsUserData::Data,
     return made;
   }
 
-  // Destroys a closed window's page once its linger is over. A profile
+  // Destroys `guest`, which its window no longer shows, after `linger`.
+  void ReapIn(base::TimeDelta linger, std::unique_ptr<WebViewGuest> guest) {
+    const int serial = next_closing_++;
+    closing_.push_back({serial, std::move(guest)});
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&DeskWindows::Reap, weak_factory_.GetWeakPtr(), serial),
+        linger);
+  }
+
+  // Destroys a closed or replaced page once its linger is over. A profile
   // destroyed first already took it.
   //
   // Takes it out of the list first: destroying a page can close another
   // window, as DevTools closes its own with the page it inspects, and that
   // Close adds to `closing_` and posts its own Reap.
-  void Reap(const std::string& id) {
-    auto found = std::ranges::find(closing_, id, &Closing::id);
+  void Reap(int serial) {
+    auto found = std::ranges::find(closing_, serial, &Closing::serial);
     if (found == closing_.end()) {
       return;
     }
@@ -1396,14 +1397,10 @@ class DeskWindows final : public base::SupportsUserData::Data,
         base::BindRepeating(&DeskWindows::Changed, base::Unretained(this)));
     guest->contents().GetController().CopyStateFrom(&page.GetController(),
                                                     /*needs_reload=*/true);
-    closing_.push_back(
-        {window.id, std::exchange(window.guest, std::move(guest))});
+    // Not now, which may be under the page's own call stack.
+    ReapIn(base::TimeDelta(), std::exchange(window.guest, std::move(guest)));
     window.watch = std::move(watch);
     window.opened_at = GURL();
-    // Not now, which may be under the page's own call stack.
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(&DeskWindows::Reap,
-                                  weak_factory_.GetWeakPtr(), window.id));
     return std::string();
   }
 
@@ -1453,11 +1450,13 @@ class DeskWindows final : public base::SupportsUserData::Data,
   // close animation, which draws its <webview> until the end.
   static constexpr base::TimeDelta kLinger = base::Seconds(1);
 
-  // A closed window awaiting Reap, by its old id. Ids are never reused.
+  // A page awaiting Reap. By a serial of its own, not its window's id: one
+  // window can have several, moved to another profile and then unloaded.
   struct Closing {
-    std::string id;
+    int serial;
     std::unique_ptr<WebViewGuest> guest;
   };
+  int next_closing_ = 0;
 
   // Closed and awaiting Reap. Held here, not in a DeleteSoon, so a profile
   // destroyed first takes them with it, before its desk's window.
