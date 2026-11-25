@@ -63,6 +63,8 @@ ask to sign in again.
 - An agent has a pointer and keyboard of its own, so it can click and type
   in one app while you work in another. It never moves your pointer or
   changes what you're typing in.
+- An app an agent opens is the agent's from the start, and opens without
+  taking you away from what you're doing.
 - An agent copies and pastes on a clipboard of its own, so it never
   replaces what you copied, and what it copies stays out of your clipboard
   history.

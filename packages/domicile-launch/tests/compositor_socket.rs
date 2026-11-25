@@ -326,6 +326,7 @@ fn the_compositor_is_told_to_start_a_program_and_heard_to_start_it() {
         launch(
             &path,
             &["slack".to_string(), "slack://T1/magic-login/1".to_string()],
+            None,
             Some(BRIEFLY)
         ),
         Ok(())
@@ -340,6 +341,21 @@ fn the_compositor_is_told_to_start_a_program_and_heard_to_start_it() {
 }
 
 #[test]
+fn a_program_started_for_an_agent_names_its_session() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked(&path, "exec", "{\"type\":\"executed\"}\n");
+
+    assert_eq!(
+        launch(&path, &["kitty".to_string()], Some(3), Some(BRIEFLY)),
+        Ok(())
+    );
+    assert_eq!(
+        heard.join().expect("the compositor was listening"),
+        vec!["{\"type\":\"exec\",\"command\":[\"kitty\"],\"agent\":3}\n".to_string()]
+    );
+}
+
+#[test]
 fn a_program_that_did_not_start_says_why() {
     let (_scratch, path) = scratch();
     let heard = a_compositor_asked(
@@ -349,7 +365,7 @@ fn a_program_that_did_not_start_says_why() {
     );
 
     assert_eq!(
-        launch(&path, &["kitty".to_string()], Some(BRIEFLY)),
+        launch(&path, &["kitty".to_string()], None, Some(BRIEFLY)),
         Err(CompositorError::Refused {
             why: "kitty is not on the desktop's PATH".to_string()
         })

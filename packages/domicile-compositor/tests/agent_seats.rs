@@ -809,3 +809,63 @@ fn a_closed_window_leaves_the_agents_seats() {
     assert_eq!(seats[0].focused, None);
     drop(users);
 }
+
+/// Starts `domicile-test-client --title <title>` as `domicile exec --agent
+/// <session>` does, under a shell so the window is the started program's
+/// child's, and returns why it was refused.
+fn the_agent_starts(compositor: &Compositor, session: u32, title: &str) -> Option<String> {
+    let mut asking = UnixStream::connect(compositor.socket()).expect("the chrome socket is up");
+    let said = serde_json::to_string(&ChromeMessage::Exec {
+        command: vec![
+            "sh".to_string(),
+            "-c".to_string(),
+            format!(
+                "{} --title {title}; true",
+                env!("CARGO_BIN_EXE_domicile-test-client")
+            ),
+        ],
+        agent: Some(session),
+    })
+    .unwrap();
+    writeln!(asking, "{said}").expect("the compositor reads the exec");
+    let mut answer = String::new();
+    BufReader::new(asking)
+        .read_line(&mut answer)
+        .expect("the compositor answers");
+    match serde_json::from_str(&answer) {
+        Ok(HostMessage::Executed { refused }) => refused,
+        _ => panic!("not an answer to exec: {answer}"),
+    }
+}
+
+/// A window from a program an agent started is held by the agent from its
+/// first frame, before the shell hears of it, so the shell need not give it
+/// the user's keyboard: the agent types in it at once, and the user's
+/// keyboard stays where it was.
+#[test]
+fn a_window_an_agent_starts_is_held_by_it_from_the_start() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows(&compositor);
+    let (_held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+
+    assert_eq!(the_agent_starts(&compositor, session, "started"), None);
+    let known = [desk.users.1.clone(), desk.other.1.clone()];
+    let first = desk
+        .chrome
+        .wait_for(|message| match message {
+            HostMessage::AppAppeared { title: Some(t), .. } => t == "started",
+            HostMessage::Seats { seats } => seats.iter().any(|seat| {
+                seat.focused
+                    .as_ref()
+                    .is_some_and(|focused| !known.contains(focused))
+            }),
+            _ => false,
+        })
+        .expect("the started program's window is announced");
+    assert!(
+        matches!(first, HostMessage::Seats { .. }),
+        "the shell heard of the agent's window before it was held: {first:?}"
+    );
+
+    assert_eq!(as_the_agent(&compositor, session, tap("a")), None);
+}

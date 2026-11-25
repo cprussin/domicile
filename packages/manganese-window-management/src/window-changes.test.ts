@@ -109,6 +109,41 @@ describe("windowChanges", () => {
       ]);
     });
 
+    it("says an agent holds it, when one opened it", () => {
+      expect(
+        windowChanges(NO_RULES, [], [{ ...TERM, heldBy: "agent-3" }]),
+      ).toStrictEqual([
+        WindowAction.AppAppeared("term", "Terminal", undefined, true),
+      ]);
+    });
+
+    it("says an agent holds it when it opens floating", () => {
+      expect(
+        windowChanges(
+          NO_RULES,
+          [],
+          [
+            {
+              ...TERM,
+              dialog: true,
+              height: 300,
+              heldBy: "agent-3",
+              width: 400,
+            },
+          ],
+        ),
+      ).toStrictEqual([
+        WindowAction.AppAppearedFloating(
+          "term",
+          "Terminal",
+          [400, 300],
+          false,
+          undefined,
+          true,
+        ),
+      ]);
+    });
+
     it("names the window it is tiled for", () => {
       expect(
         windowChanges(NO_RULES, [], [{ ...TERM, transientFor: "editor" }]),

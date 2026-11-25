@@ -1341,6 +1341,7 @@ mod tests {
                 ClientRequest::Spawn {
                     command: vec!["foot".into()],
                     answer: None,
+                    agent: None,
                 },
             ),
             (

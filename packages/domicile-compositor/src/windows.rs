@@ -121,6 +121,8 @@ impl DomicileCompositor {
     ) {
         self.unannounced.remove(app_id);
         self.presentations.appeared(app_id);
+        // Before the chromes hear of it, so they hear it held first.
+        self.agents_window_appeared(app_id, toplevel.wl_surface());
         let mapped = domicile_host::Mapped {
             size,
             has_parent: toplevel.parent().is_some(),

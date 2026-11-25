@@ -69,7 +69,12 @@ resources per client.
 - **Give back** returns it. **Take over** in the bar pill's list does the
   same as a click.
 - A window an agent opens with `open` or `exec` starts held by the agent and
-  does not take the user's focus.
+  does not take the user's focus. The compositor knows it by the process
+  that `exec` started, or a descendant of it, and sends the seats before it
+  announces the window, so `heldBy` is set when the shell first sees it. A
+  shell opens such a window without focusing it. Manganese still focuses one
+  that opens on an empty workspace, where the user's keyboard has nowhere
+  else to be.
 
 ### Clipboard
 
@@ -134,7 +139,7 @@ domicile.seats.giveBack(windowId);
 - [x] MCP: `heldBy` in `list_windows` (`held_by`)
 - [x] manganese: agent cursor, ring and name tag, "Yours now · Give back"
       strip, held windows in the agent pill
-- [ ] new windows from an agent's `open`/`exec` start held by it
+- [x] new windows from an agent's `open`/`exec` start held by it
 
 ## Open questions
 

@@ -96,6 +96,10 @@ window ([LAUNCHER.md](LAUNCHER.md#opening-files)).
 - A link of a scheme the shell claims, such as manganese's `mailto:`, goes to
   the shell instead of an app ([Links](WRITING-A-SHELL.md#links)).
 - `domicile open --which <file|url>` prints the app `open` would use.
+- `domicile open --agent <session> <file|folder|url>` opens a file or folder
+  for that agent session, as [`exec --agent`](#domicile-exec---agent-session-program-arg)
+  does: its app's windows open held by the agent's seat and never take the
+  user's focus. A link opens in a browser window, which no seat holds.
 - `domicile open --electron <entry|path> [-- <command>...]` runs an installed
   Electron app on the desktop's engine instead of the Electron it ships:
   `domicile open --electron slack.desktop`. `<entry>` is a desktop entry id;
@@ -506,12 +510,18 @@ that is `xwayland-satellite` and every X11 window.
 `focus-window`, `close-window` and `kill-window` take only native windows.
 The shell shows and closes browser windows.
 
-## `domicile exec <program> [<arg>...]`
+## `domicile exec [--agent <session>] <program> [<arg>...]`
 
 Start a program as the desktop starts apps: with the desktop's environment, in
 its own scope, without a shell. A `<program>` with no `/` is found on the
 desktop's `PATH`. Fails saying why when it does not start, such as a program
 not on that `PATH`.
+
+With `--agent <session>`, it is started for that agent session, as `domicile
+agent` printed it. Its windows, and those of programs it starts, open held by
+the agent's own seat, with the agent's keyboard in them. It gets no activation
+token, so it never takes the user's focus. A shell leaves a new window whose
+`heldBy` is set unfocused.
 
 ```
 domicile exec kitty --hold btop

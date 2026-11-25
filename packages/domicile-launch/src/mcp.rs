@@ -386,12 +386,12 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec!["words"],
         ),
         Tool::Exec => (
-            "Start a program as the desktop starts apps, without a shell, its name found on the desktop's PATH. Fails saying why when it does not start.",
+            "Start a program as the desktop starts apps, without a shell, its name found on the desktop's PATH. Its windows open held by your own pointer and keyboard, with your keyboard in them, and never take the user's. Fails saying why when it does not start.",
             json!({"argv": {"type": "array", "items": {"type": "string"}, "minItems": 1, "description": "The program and its arguments, such as [\"kitty\", \"--hold\", \"btop\"]."}}),
             vec!["argv"],
         ),
         Tool::Open => (
-            "Open a file, folder or URL with its default app; a URL opens in a browser window.",
+            "Open a file, folder or URL with its default app. A file's app opens held by your own pointer and keyboard, and never takes the user's; a URL opens in a browser window.",
             json!({
                 "target": {"type": "string", "description": "An absolute path or a URL."},
                 "app": {"type": "boolean", "description": "Open a site as an app, with no address bar."},
@@ -736,11 +736,14 @@ fn moves_the_users_hands(tool: Tool) -> bool {
 }
 
 /// Whether `tool` points or types with the agent's own pointer and
-/// keyboard, which never move the user's (`--agent`).
+/// keyboard, which never move the user's (`--agent`), or starts a program
+/// whose windows that seat holds.
 fn on_its_own_seat(tool: Tool) -> bool {
     matches!(
         tool,
-        Tool::Click
+        Tool::Exec
+            | Tool::Open
+            | Tool::Click
             | Tool::MovePointer
             | Tool::Drag
             | Tool::Scroll

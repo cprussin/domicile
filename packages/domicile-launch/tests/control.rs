@@ -220,8 +220,8 @@ fn a_desktop_told_to_launch_a_program_has_the_compositor_start_it() {
     let answered = reply_to(
         "{\"type\":\"launch\",\"command\":[\"slack\",\"slack://T1\"]}",
         &Desktop {
-            launch: &|command| {
-                *told.borrow_mut() = Some(command.to_vec());
+            launch: &|command, agent| {
+                *told.borrow_mut() = Some((command.to_vec(), agent));
                 Ok(())
             },
             ..nothing_dialed()
@@ -230,9 +230,26 @@ fn a_desktop_told_to_launch_a_program_has_the_compositor_start_it() {
 
     assert_eq!(
         told.take(),
-        Some(vec!["slack".to_string(), "slack://T1".to_string()])
+        Some((vec!["slack".to_string(), "slack://T1".to_string()], None))
     );
     assert_eq!(answered, Response::Opened);
+}
+
+#[test]
+fn a_program_launched_for_an_agent_names_its_session_to_the_compositor() {
+    let told = RefCell::new(None);
+    reply_to(
+        "{\"type\":\"launch\",\"command\":[\"kitty\"],\"agent\":3}",
+        &Desktop {
+            launch: &|_, agent| {
+                *told.borrow_mut() = Some(agent);
+                Ok(())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(told.take(), Some(Some(3)));
 }
 
 #[test]
@@ -1391,7 +1408,7 @@ fn nothing_dialed() -> Desktop<'static> {
         open: &|_, _| panic!("only open_url opens a browser window"),
         open_app: &|_, _, _, _| panic!("only open_app opens an app window"),
         run_app: &|_, _| panic!("only run_app runs an app module"),
-        launch: &|_| panic!("only launch starts a program"),
+        launch: &|_, _| panic!("only launch starts a program"),
         open_link: &|_| panic!("only open_link hands over a link"),
         permissions: &|| panic!("only site_permissions lists site permissions"),
         power_displays: &|_, _| panic!("only sleep_displays and wake_displays power them"),

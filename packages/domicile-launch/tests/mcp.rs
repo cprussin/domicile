@@ -235,25 +235,25 @@ fn send_shell_passes_its_words() {
 }
 
 #[test]
-fn exec_runs_its_argv() {
+fn exec_runs_its_argv_for_the_agents_seat() {
     assert_eq!(
         ran_for("exec", json!({"argv": ["kitty", "--hold", "btop"]})),
-        ["exec", "kitty", "--hold", "btop"]
+        ["exec", "--agent", "7", "kitty", "--hold", "btop"]
     );
 }
 
 #[test]
-fn open_takes_an_app_flag_and_a_profile() {
+fn open_takes_an_app_flag_and_a_profile_for_the_agents_seat() {
     assert_eq!(
         ran_for("open", json!({"target": "https://example.com"})),
-        ["open", "https://example.com"]
+        ["open", "--agent", "7", "https://example.com"]
     );
     assert_eq!(
         ran_for(
             "open",
             json!({"target": "https://example.com", "app": true, "profile": "work"})
         ),
-        ["open", "--app", "--profile", "work", "https://example.com"]
+        ["open", "--agent", "7", "--app", "--profile", "work", "https://example.com"]
     );
 }
 

@@ -245,6 +245,9 @@ pub enum ClientRequest {
     Spawn {
         command: Vec<String>,
         answer: Option<crate::configured_displays::Answer>,
+        /// The agent session it is started for, whose seat holds its
+        /// windows. See [`DomicileCompositor::agents_window_appeared`].
+        agent: Option<u32>,
     },
     /// A chrome's page said `hello`. It holds no pixels yet.
     ///
@@ -792,16 +795,28 @@ impl DomicileCompositor {
             ClientRequest::AgentGone { session } => self.agent_gone(session),
             ClientRequest::TakeOver { app_id } => self.take_over(&app_id),
             ClientRequest::GiveBack { app_id } => self.give_back(&app_id),
-            ClientRequest::Spawn { command, answer } => {
+            ClientRequest::Spawn {
+                command,
+                answer,
+                agent,
+            } => {
+                // An agent's program gets no token: its window is the
+                // agent's, and must not take the user's focus.
+                let token = agent
+                    .is_none()
+                    .then(|| activation::mint(&mut self.xdg_activation_state, None));
                 let started = spawn_client(
                     &command,
                     &self.hub.wayland_display,
                     self.scope_clients,
                     self.hub.child_nice,
-                    Some(&activation::mint(&mut self.xdg_activation_state, None)),
+                    token.as_deref(),
                     self.launched.as_ref(),
                 );
-                match (started, answer) {
+                if let (Ok(pid), Some(session)) = (&started, agent) {
+                    self.agent_seats.started(*pid, session);
+                }
+                match (started.map(|_| ()), answer) {
                     (started, Some(answer)) => answer.give(started),
                     (Ok(()), None) => {}
                     (Err(why), None) => {

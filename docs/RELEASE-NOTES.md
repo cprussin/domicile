@@ -8,6 +8,12 @@ in the manganese desktop is in
 
 _Unreleased_
 
+### Windows an agent starts are held by it
+
+`domicile exec --agent <session>` and `domicile open --agent <session>` start a program for an agent session: its windows, and those of programs it starts, open held by the agent's seat with the agent's keyboard in them. They get no activation token, and `heldBy` is set when the shell first hears of the window, so a shell can open it without focusing it. The MCP server's `exec` and `open` use them.
+
+[Agent seats](architecture/AGENT-SEATS.md#taking-over) · [`domicile exec`](CLI.md#domicile-exec---agent-session-program-arg)
+
 ### Shells see agents' seats
 
 `domicile.seats.list` lists the agent seats: each agent's name, where its pointer is, the window its keyboard is in, the windows it holds and the windows the user took from it. Each window's `heldBy` names the agent seat holding it. `domicile.seats.takeOver(appId)` takes a window from an agent, as the user's click or key in it does, and the agent can't drive it until `domicile.seats.giveBack(appId)`. A window the user takes stays theirs after they leave it. `useSeats()` in `@domicile-desktop/react/seats` follows the list. `domicile list-windows` and the MCP server's `list_windows` add `held_by`.

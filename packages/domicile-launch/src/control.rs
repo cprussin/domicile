@@ -86,8 +86,14 @@ pub enum Request {
     /// Start `command` as the compositor starts an app from the launcher,
     /// with the desktop's environment, in its own scope. `domicile open`
     /// asks this for the handler it picks, so a link the engine opens starts
-    /// its app as one the user started.
-    Launch { command: Vec<String> },
+    /// its app as one the user started. With `agent`, it is started for
+    /// that agent session, whose seat holds its windows (`domicile exec
+    /// --agent`).
+    Launch {
+        command: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent: Option<u32>,
+    },
     /// Hand `url` to the shell page that claims its scheme, such as
     /// `mailto`. Answered [`Response::Opened`], or [`Response::Unclaimed`]
     /// when no page claims it. `domicile open` asks this before it picks
@@ -552,10 +558,11 @@ pub type OpenApp<'a> = &'a dyn Fn(&str, Option<&str>, AppReuse, Option<&str>) ->
 /// [`crate::command_socket::run_app`] in a desktop; a closure in tests.
 pub type RunApp<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
 
-/// Tells the compositor to start a program as an app.
+/// Tells the compositor to start a program as an app, for an agent session
+/// if one is named.
 ///
 /// [`crate::compositor_socket::launch`] in a desktop; a closure in tests.
-pub type Launch<'a> = &'a dyn Fn(&[String]) -> Result<(), String>;
+pub type Launch<'a> = &'a dyn Fn(&[String], Option<u32>) -> Result<(), String>;
 
 /// Hands a link to the shell page that claims its scheme: true when one took
 /// it, false when none claims it.
@@ -985,10 +992,12 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(()) => Response::Opened,
             Err(why) => Response::Refused { why },
         }),
-        Ok(Request::Launch { command }) => to_line(&match (desktop.launch)(&command) {
-            Ok(()) => Response::Opened,
-            Err(why) => Response::Refused { why },
-        }),
+        Ok(Request::Launch { command, agent }) => {
+            to_line(&match (desktop.launch)(&command, agent) {
+                Ok(()) => Response::Opened,
+                Err(why) => Response::Refused { why },
+            })
+        }
         Ok(Request::OpenLink { url }) => to_line(&match (desktop.open_link)(&url) {
             Ok(true) => Response::Opened,
             Ok(false) => Response::Unclaimed,
