@@ -296,7 +296,11 @@ fn carried_out<D: FnMut(&[String]) -> io::Result<Ran>>(
                 Ok((x, y)) => (x / scale, y / scale),
                 Err(why) => return Ok(Err(why)),
             };
-            sent!(page, "Input.dispatchMouseEvent", json!({"type": "mouseMoved", "x": x, "y": y}));
+            sent!(
+                page,
+                "Input.dispatchMouseEvent",
+                json!({"type": "mouseMoved", "x": x, "y": y})
+            );
             for click in 1..=count {
                 for kind in ["mousePressed", "mouseReleased"] {
                     sent!(
@@ -320,7 +324,11 @@ fn carried_out<D: FnMut(&[String]) -> io::Result<Ran>>(
                 ),
                 (Err(why), _) | (_, Err(why)) => return Ok(Err(why)),
             };
-            sent!(page, "Input.dispatchMouseEvent", json!({"type": "mouseMoved", "x": x1, "y": y1}));
+            sent!(
+                page,
+                "Input.dispatchMouseEvent",
+                json!({"type": "mouseMoved", "x": x1, "y": y1})
+            );
             sent!(
                 page,
                 "Input.dispatchMouseEvent",
@@ -348,10 +356,7 @@ fn carried_out<D: FnMut(&[String]) -> io::Result<Ran>>(
                 Err(why) => return Ok(Err(why)),
             };
             let ((x, y), (dx, dy)) = match (pair(arguments, "at"), pair(arguments, "by")) {
-                (Ok(at), Ok(by)) => (
-                    (at.0 / scale, at.1 / scale),
-                    (by.0 / scale, by.1 / scale),
-                ),
+                (Ok(at), Ok(by)) => ((at.0 / scale, at.1 / scale), (by.0 / scale, by.1 / scale)),
                 (Err(why), _) | (_, Err(why)) => return Ok(Err(why)),
             };
             sent!(

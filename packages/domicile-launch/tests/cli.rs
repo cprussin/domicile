@@ -249,17 +249,22 @@ fn open_with_agent_names_the_seat_its_app_opens_held_by() {
         }
     );
     assert_eq!(
-        run(&["open", "--agent", "3", "--profile", "work", "https://example.com"]).unwrap(),
+        run(&[
+            "open",
+            "--agent",
+            "3",
+            "--profile",
+            "work",
+            "https://example.com"
+        ])
+        .unwrap(),
         Invocation::Open {
             target: "https://example.com".to_string(),
             profile: Some("work".to_string()),
             agent: Some(3),
         }
     );
-    assert_eq!(
-        run(&["open", "--agent", "3"]),
-        Err(CliError::NothingToOpen)
-    );
+    assert_eq!(run(&["open", "--agent", "3"]), Err(CliError::NothingToOpen));
     assert!(run(&["open", "--agent", "three", "a.txt"]).is_err());
     // A site as an app opens in a browser window, which no seat holds.
     assert_eq!(

@@ -255,7 +255,15 @@ fn open_takes_an_app_flag_and_a_profile_for_the_agents_seat() {
             "open",
             json!({"target": "https://example.com", "app": true, "profile": "work"})
         ),
-        ["open", "--agent", "7", "--app", "--profile", "work", "https://example.com"]
+        [
+            "open",
+            "--agent",
+            "7",
+            "--app",
+            "--profile",
+            "work",
+            "https://example.com"
+        ]
     );
 }
 
@@ -719,7 +727,10 @@ fn a_browser_drag_presses_moves_in_steps_and_lets_go() {
     let last = mouse.len() - 1;
     // The last move is at the end, with the button still held.
     assert_eq!(mouse[last - 1]["type"], "mouseMoved");
-    assert_eq!((mouse[last - 1]["x"].as_f64(), mouse[last - 1]["y"].as_f64()), (Some(80.0), Some(40.0)));
+    assert_eq!(
+        (mouse[last - 1]["x"].as_f64(), mouse[last - 1]["y"].as_f64()),
+        (Some(80.0), Some(40.0))
+    );
     assert_eq!(mouse[last - 1]["buttons"], 1);
     assert_eq!(mouse[last]["type"], "mouseReleased");
     assert_eq!(mouse.len(), 3 + 8);
