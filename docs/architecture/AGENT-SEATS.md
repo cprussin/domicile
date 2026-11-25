@@ -115,6 +115,23 @@ user's clipboard. Clipboard managers (data control) and the clipboard
 history see only the user's. An agent's selection ends with its session. Copying
 between them is explicit: a future `clipboard_read` / `clipboard_write` tool.
 
+### File choosers
+
+A file request an agent's input sets off is the agent's to answer, never a
+picker in the user's shell: an `<input type="file">`, a page's
+`showOpenFilePicker()` or `showSaveFilePicker()`, or a download's save.
+
+- Each browser window's page remembers who last pressed or keyed in it: an
+  agent (DevTools input or its seat) or the person. A request made while an
+  agent did is held for the agent; the shell gets no
+  `domicile-file-chooser`.
+- The agent reads it with `Domicile.fileChooser` and answers it with
+  `Domicile.chooseFiles`, the engine's own `devtools` methods. A path that
+  isn't there is refused and the request keeps waiting. A newer request
+  cancels the older one.
+- MCP: an act that leaves the page waiting says so, and
+  `browser_choose_files` answers it.
+
 ### Shell primitives
 
 Any shell can build the mockup's UX from these:
@@ -155,6 +172,8 @@ domicile.seats.giveBack(windowId);
 - **The browser routes an agent's input in browser windows**, because only
   it knows what is under a desk point inside the shell's surface. The
   compositor still owns the seat, and the browser answers each step.
+- **An agent's file chooser skips the shell**, because the agent can't use a
+  picker drawn in the user's shell, and the picker would interrupt the user.
 - **The shell draws agent cursors**, because there is one hardware cursor
   plane per CRTC and the page already knows where windows are.
 
@@ -181,6 +200,9 @@ domicile.seats.giveBack(windowId);
       (`agent_input`, patch 0277); the shell refuses them; the user's press
       or key takes the window
 - [x] manganese: ring, name tag and cursor on browser windows too
+- [x] engine and MCP: file choosers an agent's input opens wait for the
+      agent (`Domicile.fileChooser`, `Domicile.chooseFiles`,
+      `browser_choose_files`)
 
 ## Open questions
 

@@ -25,6 +25,7 @@
 #include "chrome/browser/domicile/domicile_desk_pointer.h"
 #include "components/domicile/browser/agent_input_lines.h"
 #include "components/domicile/browser/control_channel.h"
+#include "components/domicile/browser/web_view_guest.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -199,6 +200,23 @@ struct Landed {
   raw_ptr<content::WebContents> page = nullptr;
   std::string window;
 };
+
+// Notes who last pressed or keyed in browser window `window`'s page, an agent
+// or a person: a file request the page makes next goes to the agent only if
+// an agent did. See WebViewGuest::NoteAgentInput.
+void NoteInputIn(const std::string& window, bool agent) {
+  content::WebContents* page = BrowserWindowContents(window);
+  WebViewGuest* guest =
+      page == nullptr ? nullptr : WebViewGuest::FromWebContents(page);
+  if (guest == nullptr) {
+    return;
+  }
+  if (agent) {
+    guest->NoteAgentInput();
+  } else {
+    guest->NotePersonInput();
+  }
+}
 
 class AgentSeatsInPages : public ui::EventObserver {
  public:
@@ -554,6 +572,7 @@ class AgentSeatsInPages : public ui::EventObserver {
     if (page != nullptr) {
       TypeIn(seat, page, window);
     }
+    NoteInputIn(window, /*agent=*/true);
     SendMouse(widget, blink::WebInputEvent::Type::kMouseDown, in_widget,
               button, seat.clicks, Modifiers(seat));
     return Window(window);
@@ -614,6 +633,9 @@ class AgentSeatsInPages : public ui::EventObserver {
     }
     if (page == nullptr) {
       return {};
+    }
+    if (input.pressed) {
+      NoteInputIn(seat.typing_window, /*agent=*/true);
     }
     SendKey(page, input.code, input.pressed, Flags(seat));
     return Window(seat.typing_window);
@@ -837,6 +859,18 @@ class AgentSeatsInPages : public ui::EventObserver {
     if (event.IsLocatedEvent()) {
       users_pointer_ = ShellPointOf(*event.AsLocatedEvent());
     }
+    const bool pressed = event.type() == ui::EventType::kMousePressed;
+    // The user's own press or key takes the window's file requests back from
+    // any agent, whether or not an agent seat is here now.
+    if (pressed) {
+      NoteInputIn(UsersPointerWindow(), /*agent=*/false);
+    } else if (event.type() == ui::EventType::kKeyPressed) {
+      content::WebContents* shell = DeskShellContents();
+      content::WebContents* users = content::DomicileUsersFocusedPage(shell);
+      if (users != nullptr && users != shell) {
+        NoteInputIn(BrowserWindowOfPage(users), /*agent=*/false);
+      }
+    }
     if (seats_.empty() || !tell_) {
       return;
     }
@@ -845,7 +879,6 @@ class AgentSeatsInPages : public ui::EventObserver {
       if (window.empty()) {
         return;
       }
-      const bool pressed = event.type() == ui::EventType::kMousePressed;
       for (auto& [id, seat] : seats_) {
         const bool pointing = seat.pointing == window;
         const bool typing = pressed && seat.typing_window == window;

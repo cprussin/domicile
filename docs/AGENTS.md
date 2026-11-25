@@ -70,6 +70,12 @@ tools reach a browser window through DevTools on its own page, which gives
 that page focus of its own: the user's focus stays where it is, and typed
 text goes to the agent's page, never the one the user is typing in.
 
+A file chooser an agent's click or key opens, such as an upload button's,
+goes to the agent, never to a picker in the user's shell. The act says the
+page waits on it, and `browser_choose_files` answers it with absolute paths
+or cancels it. The user's own press or key in that page sends its next
+chooser to the shell again.
+
 ### Agents that sign in
 
 An agent that connects to a URL, rather than running `domicile mcp` itself,

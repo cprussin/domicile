@@ -847,7 +847,9 @@ save all fire `domicile-file-chooser`. The browser shows no dialog; you draw
 the picker. A dialog from the shell's own page asks the desktop's
 FileChooser portal instead, as an application's does
 ([PORTALS.md](PORTALS.md)). A folder dropped on a page's `webkitdirectory`
-input uploads its files, with no picker.
+input uploads its files, with no picker. A chooser an agent's press or key
+opened never reaches the shell: the agent answers it
+([AGENT-SEATS.md](/docs/architecture/AGENT-SEATS.md#file-choosers)).
 
 <!-- tab: React -->
 

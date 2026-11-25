@@ -18,6 +18,11 @@
 //                                or tag, at load and after each change. The
 //                                command socket's devtools gives agents no
 //                                Runtime.evaluate, so the guard reads this.
+//   GUARD shell-asked-for-files mode=…
+//                                a browser window's page asked this shell for
+//                                files (`domicile-file-chooser`), which it
+//                                leaves unclaimed, so the engine cancels it.
+//                                guard-agent-file-chooser.sh reads it.
 //
 // The engine's document calls `HostShell` once the module loads.
 
@@ -68,6 +73,9 @@ export const HostShell = (root, desktop) => {
         view.style.blockSize = `calc(100% - ${strip}px)`;
         view.style.border = "0";
         view.setAttribute("window", window.id);
+        view.addEventListener("domicile-file-chooser", (event) => {
+          say(`shell-asked-for-files mode=${event.mode}`);
+        });
         root.append(view);
         say(`window id=${window.id}`);
       }

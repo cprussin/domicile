@@ -1588,6 +1588,21 @@ TEST(CommandProtocolTest, PassesOnWhyABrowserWindowCouldNotAnswer) {
   EXPECT_THAT(WhyOf(refused), HasSubstr("no browser window w9"));
 }
 
+// A file request an agent's input set off waits for the agent, which reads
+// and answers it with Domicile's own methods.
+TEST(CommandProtocolTest, SendsDomicilesFileChooserMethodsToABrowserWindow) {
+  Told told;
+  for (const char* method : {"Domicile.fileChooser", "Domicile.chooseFiles"}) {
+    EXPECT_EQ(TypeOf(Answer(base::StrCat({R"({"type":"devtools","version":1,)",
+                                          R"("window":"w1","method":")",
+                                          method, R"("})"}),
+                            &told)),
+              "devtools")
+        << method;
+    EXPECT_EQ(told.devtools_method, method);
+  }
+}
+
 // An agent drives pages, but reads no cookies and runs no script of its own.
 TEST(CommandProtocolTest, RefusesADevToolsMethodAgentsDoNotGet) {
   Told told;

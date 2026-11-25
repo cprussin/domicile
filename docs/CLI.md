@@ -706,6 +706,7 @@ Each tool runs a verb and answers what it printed, or its error:
 | `browser_key` | `devtools` pressing and releasing Enter, Tab, Escape, an arrow or another named key |
 | `browser_navigate` | `devtools <window> Page.navigate` |
 | `browser_screenshot` | `devtools [--view <view>] <window> Page.captureScreenshot`, answered as a WebP |
+| `browser_choose_files` | `devtools [--view <view>] <window> Domicile.chooseFiles` with `paths` or `cancel`: answers the file chooser the agent's press or key opened, which never reaches the shell. `browser_click`, `browser_drag` and `browser_key` ask `Domicile.fileChooser` after and say when the page waits on one |
 | `app_snapshot` | `accessibility <window>` |
 | `app_click`, `app_focus`, `app_set_text` | `accessibility-act <window> <ref> click\|focus\|set-text <text>` |
 | `ask_to_use_desktop` | nothing: asks the user again, after they stopped the agent or turned it away |

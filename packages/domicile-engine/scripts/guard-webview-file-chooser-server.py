@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Serves the pages for guard-webview-upload.sh, guard-webview-download.sh,
-guard-webview-save-picker.sh, guard-webview-file-access.sh and
-guard-webview-page-picker.sh.
+guard-webview-save-picker.sh, guard-webview-file-access.sh,
+guard-webview-page-picker.sh and guard-agent-file-chooser.sh.
 
   /upload    a full-page `<input type="file">`. Logs `GUARD picked name=<name>
              text=<contents>` for a chosen file; reading the contents proves the

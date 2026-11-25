@@ -336,7 +336,7 @@ struct View {
 const FIT: u32 = 1280;
 
 /// Each tool, by name, in the order `tools/list` gives them.
-const TOOLS: [(&str, Tool); 34] = [
+const TOOLS: [(&str, Tool); 35] = [
     ("list_windows", Tool::Listing("list-windows")),
     ("list_displays", Tool::Listing("list-displays")),
     ("list_inputs", Tool::Listing("list-inputs")),
@@ -364,6 +364,7 @@ const TOOLS: [(&str, Tool); 34] = [
     ("browser_key", Tool::Browser(Browser::Key)),
     ("browser_navigate", Tool::Browser(Browser::Navigate)),
     ("browser_screenshot", Tool::Browser(Browser::Screenshot)),
+    ("browser_choose_files", Tool::Browser(Browser::ChooseFiles)),
     ("app_snapshot", Tool::AppSnapshot),
     ("app_click", Tool::AppAct("click")),
     ("app_focus", Tool::AppAct("focus")),
@@ -642,8 +643,9 @@ fn batched(
     };
     let mut content = Vec::new();
     let mut failed = false;
-    // Each window a step acted on, in order, and whether it is a browser's.
-    let mut acted: Vec<(String, bool)> = Vec::new();
+    // Each window a step acted on, in order, whether it is a browser's, and
+    // whether a step pressed or keyed in it.
+    let mut acted: Vec<(String, bool, bool)> = Vec::new();
     for (number, (tool, arguments)) in steps.iter().enumerate() {
         let answer = guarded(*tool, arguments, domicile, admit, session, true)?;
         // Each step's text numbered, with its images after it.
@@ -668,14 +670,15 @@ fn batched(
             }
             break;
         }
-        let browser = match tool {
-            Tool::Browser(browser) if browser::acts(*browser) => true,
-            Tool::AppAct(_) => false,
+        let (browser, pressed) = match tool {
+            Tool::Browser(browser) if browser::acts(*browser) => (true, browser::presses(*browser)),
+            Tool::AppAct(_) => (false, false),
             _ => continue,
         };
         if let Some(window) = arguments["window"].as_str() {
-            if !acted.iter().any(|(seen, _)| seen == window) {
-                acted.push((window.to_string(), browser));
+            match acted.iter_mut().find(|(seen, _, _)| seen == window) {
+                Some((_, _, was)) => *was |= pressed,
+                None => acted.push((window.to_string(), browser, pressed)),
             }
         }
     }
@@ -684,7 +687,7 @@ fn batched(
         Some(Ok(grant)) if !(grant.stopped)() => Some((grant.reach)()),
         _ => None,
     };
-    acted.retain(|(window, _)| match &reach {
+    acted.retain(|(window, _, _)| match &reach {
         Some(AgentReach::Desk) => true,
         Some(AgentReach::Windows { windows }) => windows.iter().any(|shared| shared.id == *window),
         None => false,
@@ -692,10 +695,18 @@ fn batched(
     if !acted.is_empty() {
         std::thread::sleep(changes::SETTLE);
     }
-    for (window, browser) in acted {
+    for (window, browser, pressed) in acted {
+        let note = match pressed {
+            true => browser::chooser_note(&window, None, domicile)?,
+            false => None,
+        };
         let changes = match browser {
             true => browser::read_again(&window, domicile, &mut session.read, &mut session.titles)?,
             false => app_read_again(&window, domicile, &mut session.read)?,
+        };
+        let changes = match note {
+            Some(note) => format!("{note}\n{changes}"),
+            None => changes,
         };
         content
             .push(json!({"type": "text", "text": format!("In {window}: {}", changes.trim_end())}));
@@ -905,6 +916,9 @@ fn what_it_did(
         Tool::Browser(Browser::Key) => format!("Pressed a key in {}", window("window")),
         Tool::Browser(Browser::Navigate) => format!("Loaded a page in {}", window("window")),
         Tool::Browser(Browser::Screenshot) => format!("Took a screenshot of {}", window("window")),
+        Tool::Browser(Browser::ChooseFiles) => {
+            format!("Answered a file chooser in {}", window("window"))
+        }
         Tool::AppAct(_) => format!("Moved the focus in {}", window("window")),
         Tool::AskToUse | Tool::StopUsing | Tool::Batch => {
             unreachable!("guarded answers ask_to_use_desktop, stop_using_desktop and batch itself")

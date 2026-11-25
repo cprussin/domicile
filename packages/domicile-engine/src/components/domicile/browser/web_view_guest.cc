@@ -26,6 +26,7 @@
 #include "base/memory/self_deleting.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -1120,13 +1121,10 @@ void WebViewGuest::ChooseDownloadPath(
   //
   // Wrapped so a pipe closing unanswered still answers //chrome, which holds
   // the download until then.
-  client_->FileChooserRequested(
-      mojom::WebViewFileChooserMode::kSave, {},
-      suggested_path.BaseName().AsUTF8Unsafe(),
-      base::GetHomeDir().AsUTF8Unsafe(), StartFolder(suggested_path),
-      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          base::BindOnce(&DownloadPathChosen, std::move(chosen)),
-          std::nullopt));
+  AskForFiles(mojom::WebViewFileChooserMode::kSave, {},
+              suggested_path.BaseName().AsUTF8Unsafe(),
+              StartFolder(suggested_path),
+              base::BindOnce(&DownloadPathChosen, std::move(chosen)));
 }
 
 void WebViewGuest::ChooseFiles(
@@ -1135,13 +1133,86 @@ void WebViewGuest::ChooseFiles(
     const base::FilePath& suggested_path,
     base::OnceCallback<void(std::optional<std::vector<base::FilePath>>)>
         chosen) {
-  // Wrapped, as in ChooseDownloadPath: the dialog waits for an answer.
-  client_->FileChooserRequested(
-      mode, accept, suggested_path.BaseName().AsUTF8Unsafe(),
-      base::GetHomeDir().AsUTF8Unsafe(), StartFolder(suggested_path),
-      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          base::BindOnce(&DialogFilesChosen, mode, std::move(chosen)),
-          std::nullopt));
+  AskForFiles(mode, accept, suggested_path.BaseName().AsUTF8Unsafe(),
+              StartFolder(suggested_path),
+              base::BindOnce(&DialogFilesChosen, mode, std::move(chosen)));
+}
+
+void WebViewGuest::NoteAgentInput() {
+  agent_drove_last_ = true;
+}
+
+void WebViewGuest::NotePersonInput() {
+  agent_drove_last_ = false;
+}
+
+std::optional<WebViewGuest::AgentFileRequest>
+WebViewGuest::agent_file_request() const {
+  return agent_file_request_;
+}
+
+base::expected<void, std::string> WebViewGuest::AnswerAgentFileRequest(
+    std::optional<std::vector<std::string>> paths) {
+  if (!agent_file_request_.has_value()) {
+    return base::unexpected(base::StrCat(
+        {"browser window ", window_id_,
+         "'s page is waiting on no file chooser; a click or key that opens "
+         "one makes it wait"}));
+  }
+  if (paths.has_value() &&
+      !ChosenPaths(agent_file_request_->mode, *paths).has_value()) {
+    return base::unexpected(std::string(
+        agent_file_request_->mode == mojom::WebViewFileChooserMode::kOpenMultiple
+            ? "the file chooser takes one or more paths, absolute or under "
+              "the home, with no \"..\""
+            : "the file chooser takes one path, absolute or under the home, "
+              "with no \"..\""));
+  }
+  LOG(INFO) << "domicile: an agent "
+            << (paths.has_value() ? "answered" : "canceled")
+            << " browser window " << window_id_ << "'s file chooser"
+            << (paths.has_value()
+                    ? base::StrCat({" with ", base::NumberToString(paths->size()),
+                                    " path(s)"})
+                    : std::string())
+            << ".";
+  agent_file_request_.reset();
+  std::move(agent_files_answered_).Run(paths);
+  return base::ok();
+}
+
+void WebViewGuest::AskForFiles(mojom::WebViewFileChooserMode mode,
+                               std::vector<std::string> accept,
+                               std::string suggested_name,
+                               std::string folder,
+                               FilesAnswered answered) {
+  // Wrapped so a pipe closing, a guest going away or a newer request
+  // replacing this one still answers: the page, or //chrome holding a
+  // download, waits for it.
+  FilesAnswered once = mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+      std::move(answered), std::nullopt);
+  if (!agent_drove_last_) {
+    client_->FileChooserRequested(mode, accept, suggested_name,
+                                  base::GetHomeDir().AsUTF8Unsafe(), folder,
+                                  std::move(once));
+    return;
+  }
+  // Logged before holding; the agent file chooser guard greps for it.
+  LOG(INFO) << "domicile: an agent's input in browser window " << window_id_
+            << " asked for a file; holding it for the agent, not the shell.";
+  // A newer request replaces the one held, which is canceled, as a shell's
+  // picker does.
+  FilesAnswered replaced = std::move(agent_files_answered_);
+  agent_file_request_ = AgentFileRequest{
+      .mode = mode,
+      .accept = std::move(accept),
+      .suggested_name = std::move(suggested_name),
+      .folder = std::move(folder),
+  };
+  agent_files_answered_ = std::move(once);
+  if (replaced) {
+    std::move(replaced).Run(std::nullopt);
+  }
 }
 
 void WebViewGuest::AskPermission(
@@ -2262,14 +2333,11 @@ void WebViewGuest::RunFileChooser(
   //
   // Wrapped, as in ChooseDownloadPath, so an unanswered pipe cancels the
   // chooser instead of leaving the page waiting.
-  client_->FileChooserRequested(
-      AsWebViewFileChooserMode(params.mode),
-      AcceptedExtensions(params.accept_types),
-      params.default_file_name.BaseName().AsUTF8Unsafe(),
-      base::GetHomeDir().AsUTF8Unsafe(), StartFolder(params.default_file_name),
-      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          base::BindOnce(&FilesChosen, std::move(listener), params.mode),
-          std::nullopt));
+  AskForFiles(AsWebViewFileChooserMode(params.mode),
+              AcceptedExtensions(params.accept_types),
+              params.default_file_name.BaseName().AsUTF8Unsafe(),
+              StartFolder(params.default_file_name),
+              base::BindOnce(&FilesChosen, std::move(listener), params.mode));
 }
 
 void WebViewGuest::EnumerateDirectory(
