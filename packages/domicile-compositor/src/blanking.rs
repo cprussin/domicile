@@ -67,9 +67,15 @@ impl DomicileCompositor {
     /// Record user activity, and wake the screens if they were dark.
     ///
     /// All input passes through the page and arrives here.
-    /// [`crate::idle::somebody_is_here`] decides which requests count.
+    /// [`crate::idle::somebody_is_here`] decides which requests count, for the
+    /// screens, the clock, the shell's watches and the hub's idle time. The
+    /// hub's local idle time counts this computer's pointer motion even when
+    /// they ignore it, since agents wait on it to keep out of the user's way.
     pub fn keep_the_desktop_awake(&mut self, request: &ClientRequest) {
-        let Some(input) = somebody_is_here(request) else {
+        if from_this_computer(request, self.engine_takes_input) {
+            self.hub.touched(Instant::now());
+        }
+        let Some(input) = somebody_is_here(request, self.idle.ignores_pointer_motion()) else {
             return;
         };
         if self.display_sleep.stirred(Instant::now()) {
@@ -84,7 +90,7 @@ impl DomicileCompositor {
         if idle.worth_noting(still) {
             // The browser names its own input, and the device it came from.
             let detail = match request {
-                ClientRequest::Activity { input } => input.as_deref(),
+                ClientRequest::Activity { input, .. } => input.as_deref(),
                 _ => None,
             };
             debug!(
@@ -94,8 +100,7 @@ impl DomicileCompositor {
                 "input restarts the idle clock"
             );
         }
-        self.hub
-            .stirred(now, from_this_computer(request, self.engine_takes_input));
+        self.hub.stirred(now);
         match idle.stirred(now) {
             Some(Blanking::ComeBack) => {
                 info!("somebody is at this desktop again; its screens come back on");

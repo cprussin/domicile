@@ -118,11 +118,13 @@ pub struct ChromeHub {
     /// The connections `domicile subscribe` holds. The writer thread tells
     /// them; see [`serve_outbound`].
     pub watchers: Watchers,
-    /// The last input, or when the hub was made if there has been none. The
-    /// Wayland thread sets it with [`ChromeHub::stirred`]; see
-    /// [`ChromeHub::idle_time`].
+    /// The last input the idle clock counts, or when the hub was made if there
+    /// has been none. The Wayland thread sets it with [`ChromeHub::stirred`];
+    /// see [`ChromeHub::idle_time`].
     stirred_at: Mutex<Instant>,
-    /// [`ChromeHub::stirred_at`], for input from this computer's own devices.
+    /// The last input from this computer's own devices, whether or not the
+    /// idle clock counts it, or when the hub was made if there has been none.
+    /// The Wayland thread sets it with [`ChromeHub::touched`].
     touched_at: Mutex<Instant>,
 }
 
@@ -242,14 +244,17 @@ impl ChromeHub {
         )
     }
 
-    /// Records input at `now`, for [`ChromeHub::idle_time`]. `local` when
-    /// it came from this computer's own devices; see
-    /// [`crate::idle::from_this_computer`].
-    pub fn stirred(&self, now: Instant, local: bool) {
+    /// Records input at `now` that the idle clock counts, for
+    /// [`ChromeHub::idle_time`]'s `seconds`.
+    pub fn stirred(&self, now: Instant) {
         *self.stirred_at.lock().unwrap() = now;
-        if local {
-            *self.touched_at.lock().unwrap() = now;
-        }
+    }
+
+    /// Records input at `now` from this computer's own devices, for
+    /// [`ChromeHub::idle_time`]'s `local_seconds`. See
+    /// [`crate::idle::from_this_computer`].
+    pub fn touched(&self, now: Instant) {
+        *self.touched_at.lock().unwrap() = now;
     }
 
     /// How long nobody has used the desktop as of `now`, answering
@@ -671,7 +676,8 @@ mod tests {
         let (hub, _outbound, _) = hub_with_an_app();
         let input = std::time::Instant::now();
 
-        hub.stirred(input, true);
+        hub.touched(input);
+        hub.stirred(input);
 
         assert_eq!(
             hub.idle_time(input + Duration::from_millis(90_700)),
@@ -694,8 +700,9 @@ mod tests {
         let (hub, _outbound, _) = hub_with_an_app();
         let input = std::time::Instant::now();
 
-        hub.stirred(input, true);
-        hub.stirred(input + Duration::from_secs(60), false);
+        hub.touched(input);
+        hub.stirred(input);
+        hub.stirred(input + Duration::from_secs(60));
 
         assert_eq!(
             hub.idle_time(input + Duration::from_secs(90)),

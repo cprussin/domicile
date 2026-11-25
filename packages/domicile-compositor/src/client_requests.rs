@@ -100,6 +100,7 @@ pub enum ClientRequest {
     /// Somebody used the desk; see [`ChromeMessage::Activity`](domicile_protocol::ChromeMessage::Activity).
     Activity {
         input: Option<String>,
+        kind: Option<domicile_protocol::ActivityKind>,
     },
     /// Where the pointer is on the desk; see
     /// [`ChromeMessage::DeskPointer`](domicile_protocol::ChromeMessage::DeskPointer).

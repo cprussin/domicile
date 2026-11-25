@@ -473,7 +473,8 @@ pub const COMMANDS: &[Command] = &[
         about: &[
             "Turns every monitor off until a key, a click or a pointer move, or \
              `wake-displays`. Windows and programs carry on. Input in the first \
-             second is ignored.",
+             second is ignored, and so are pointer moves with \
+             `idle.ignore_pointer_motion`.",
             "With a display, turns only that one off, until `wake-displays` names \
              it or names none.",
         ],

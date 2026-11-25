@@ -31,7 +31,7 @@ The engine has two channels to the rest of Domicile:
   `pointer_pinch`, `touch`.
   The browser also sends `hello` on connect, with `checked` saying whether
   it is a checked build (DCHECKs on), `activity` for its own
-  input, at most every 200 ms, for the idle clock, `desk_pointer` for
+  input, with its kind, for the idle clock, `desk_pointer` for
   each pointer move, `desk_cursor` for each change of the pointer's
   image, for screen casts, and `pointer_swipe` and `pointer_hold` for each
   touchpad swipe or hold the shell did not grab, and `engine_fault` for a
@@ -186,8 +186,12 @@ The engine has two channels to the rest of Domicile:
   [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#a-compositor-restart).
 - **`activity`** is the browser's, not the page's. `StartDeskActivity`
   (`chrome/browser/domicile/domicile_desk_activity.h`) watches
-  `ui::UserActivityDetector`, and every control channel sends it while a
-  compositor is connected. See `components/domicile/browser/desk_activity.h`.
+  `ui::UserActivityDetector` for pointer motion, and `ui::PlatformEventSource`
+  for keys, touches and the pointer's other input, each at most every 200 ms.
+  Every control channel sends it while a compositor is connected, with `kind`:
+  `key`, `pointer`, `pointer_motion`, `touch` or `other`
+  ([IDLE.md](/docs/IDLE.md#ignoring-pointer-motion)). See
+  `components/domicile/browser/desk_activity.h` and `desk_activity_reporter.h`.
 - **`desk_pointer`** is the browser's too. `StartDeskPointer`
   (`chrome/browser/domicile/domicile_desk_pointer.h`) watches aura's mouse
   moves and drags, and sends `at`, in the shell page's CSS pixels, or no `at`

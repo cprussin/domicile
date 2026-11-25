@@ -3,17 +3,19 @@
 
 #include "chrome/browser/domicile/domicile_desk_activity.h"
 
-#include <string>
 #include <string_view>
 
+#include "base/functional/bind.h"
 #include "base/no_destructor.h"
+#include "base/time/default_tick_clock.h"
 #include "components/domicile/browser/desk_activity.h"
+#include "components/domicile/browser/desk_activity_reporter.h"
 #include "content/public/browser/browser_thread.h"
 #include "ui/base/user_activity/user_activity_detector.h"
-#include "ui/base/user_activity/user_activity_observer.h"
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/events/devices/input_device.h"
 #include "ui/events/event.h"
+#include "ui/events/platform/platform_event_source.h"
 
 namespace domicile {
 namespace {
@@ -42,26 +44,22 @@ std::string_view DeviceNamed(int id) {
   return {};
 }
 
-class DeskActivityReporter : public ui::UserActivityObserver {
- public:
-  DeskActivityReporter() { ui::UserActivityDetector::Get()->AddObserver(this); }
-
-  // ui::UserActivityObserver:
-  void OnUserActivity(const ui::Event* event) override {
-    // `event` is null for activity reported with no event.
-    DeskActivity::Get().Heard(
-        event == nullptr ? std::string("activity")
-                         : DescribeInput(event->GetName(),
-                                         DeviceNamed(event->source_device_id())));
-  }
-};
+void Report(const ui::Event* event, ActivityKind kind) {
+  DeskActivity::Get().Heard(
+      event == nullptr ? "activity"
+                       : DescribeInput(event->GetName(),
+                                       DeviceNamed(event->source_device_id())),
+      kind);
+}
 
 }  // namespace
 
 void StartDeskActivity() {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   // Lives for the life of the browser.
-  static base::NoDestructor<DeskActivityReporter> reporter;
+  static base::NoDestructor<DeskActivityReporter> reporter(
+      ui::UserActivityDetector::Get(), ui::PlatformEventSource::GetInstance(),
+      base::DefaultTickClock::GetInstance(), base::BindRepeating(&Report));
 }
 
 }  // namespace domicile

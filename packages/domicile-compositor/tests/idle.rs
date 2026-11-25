@@ -8,7 +8,9 @@
 
 mod running;
 
-use domicile_protocol::{ChromeMessage, HostMessage, SystemEvent, SystemReply, SystemRequest};
+use domicile_protocol::{
+    ActivityKind, ChromeMessage, HostMessage, SystemEvent, SystemReply, SystemRequest,
+};
 
 use crate::running::bus::Bus;
 use crate::running::Compositor;
@@ -35,6 +37,14 @@ const A_DESK_THAT_BLANKS_LATER: &str = r#"
 {
   "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
   "idle": { "blank_after_seconds": 30 }
+}
+"#;
+
+/// A desk that blanks after one second, however its pointer moves.
+const A_DESK_THAT_IGNORES_POINTER_MOTION: &str = r#"
+{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "idle": { "blank_after_seconds": 1, "ignore_pointer_motion": true }
 }
 "#;
 
@@ -183,6 +193,78 @@ fn a_timeout_added_on_disk_blanks_a_desk_that_had_no_clock() {
     compositor.reconfigure(A_DESK_THAT_BLANKS);
 
     compositor.wait_for_log("nobody is at this desktop; its screens go dark");
+}
+
+/// Motion ignored by reload ends no idle spell, and a click still does.
+#[test]
+fn motion_ignored_on_disk_leaves_a_dark_desk_to_other_input() {
+    let compositor = Compositor::started_with(NOBODY_MENTIONED_IDLE);
+    let mut chrome = compositor.chrome();
+    compositor.reconfigure(A_DESK_THAT_IGNORES_POINTER_MOTION);
+    let dark = |message: &HostMessage| matches!(message, HostMessage::Idle { idle: true });
+    let lit = |message: &HostMessage| matches!(message, HostMessage::Idle { idle: false });
+    chrome.wait_for(dark).expect("the desk goes dark");
+
+    for kind in [Some(ActivityKind::PointerMotion), None] {
+        chrome
+            .say(&ChromeMessage::Activity { input: None, kind })
+            .expect("the chrome socket takes activity");
+    }
+    // Settled on the Wayland thread, after the activity, which would have lit
+    // the desk first.
+    watch(&mut chrome, 3, 1);
+    let heard = chrome
+        .wait_for(|message| lit(message) || idle(3, true)(message))
+        .expect("the page hears something");
+    assert!(!lit(&heard), "pointer motion lit the desk");
+
+    chrome
+        .say(&ChromeMessage::Activity {
+            input: None,
+            kind: Some(ActivityKind::Pointer),
+        })
+        .expect("the chrome socket takes activity");
+    let heard = chrome.wait_for(lit);
+    heard.expect("the click lights the desk");
+}
+
+/// Ignored pointer motion is still a hand on this computer: agents wait on
+/// `local_seconds`, whatever the idle clock counts.
+#[test]
+fn ignored_pointer_motion_is_still_local_input() {
+    let compositor = Compositor::started_with(A_DESK_THAT_IGNORES_POINTER_MOTION);
+    let mut chrome = compositor.chrome();
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::Idle { idle: true }))
+        .expect("the desk goes dark");
+
+    chrome
+        .say(&ChromeMessage::Activity {
+            input: None,
+            kind: Some(ActivityKind::PointerMotion),
+        })
+        .expect("the chrome socket takes activity");
+    // Settled on the Wayland thread, after the activity.
+    watch(&mut chrome, 3, 1);
+    chrome
+        .wait_for(idle(3, true))
+        .expect("the desk is still idle");
+    chrome
+        .say(&ChromeMessage::WhichIdleTime)
+        .expect("the chrome socket takes a query");
+    let heard = chrome
+        .wait_for(|message| matches!(message, HostMessage::IdleTime { .. }))
+        .expect("the page hears the idle time");
+
+    let HostMessage::IdleTime {
+        seconds,
+        local_seconds,
+    } = heard
+    else {
+        unreachable!("only an idle time was waited for")
+    };
+    assert!(seconds >= 1, "the pointer ended the idle spell");
+    assert_eq!(local_seconds, 0, "the pointer is at this computer");
 }
 
 /// Changing the timeout while the screens are off turns them back on.

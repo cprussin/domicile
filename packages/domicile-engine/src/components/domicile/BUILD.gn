@@ -1346,6 +1346,25 @@ source_set("desk_activity") {
   public_deps = [ "//base" ]
 }
 
+# Which of the browser's own input is reported, and as what kind. Its own target
+# for :pointer_warp's reason: the decisions are here with their tests, and
+# //chrome/browser/domicile names the devices and tells :desk_activity.
+source_set("desk_activity_reporter") {
+  sources = [
+    "browser/desk_activity_reporter.cc",
+    "browser/desk_activity_reporter.h",
+  ]
+
+  public_deps = [
+    ":desk_activity",
+    "//base",
+    "//ui/base",
+    "//ui/events",
+    "//ui/events:platform_event",
+    "//ui/events/platform",
+  ]
+}
+
 # Bugs the engine catches in itself, from wherever it caught one to a control
 # channel, which tells the compositor. Its own target for :desk_activity's
 # reason.
@@ -1587,6 +1606,7 @@ source_set("unit_tests") {
     "browser/context_menu_unittest.cc",
     "browser/control_channel_unittest.cc",
     "browser/cursor_display_unittest.cc",
+    "browser/desk_activity_reporter_unittest.cc",
     "browser/desk_activity_unittest.cc",
     "browser/desk_faults_unittest.cc",
     "browser/desk_gestures_unittest.cc",
@@ -1696,6 +1716,7 @@ source_set("unit_tests") {
     ":cursor_display",
     ":cursor_shape",
     ":desk_activity",
+    ":desk_activity_reporter",
     ":desk_faults",
     ":desk_geometry",
     ":desk_gestures",
