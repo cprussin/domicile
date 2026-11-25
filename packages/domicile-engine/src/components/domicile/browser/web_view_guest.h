@@ -69,6 +69,7 @@ namespace content {
 class BrowserContext;
 class NavigationHandle;
 class RenderWidgetHost;
+class RenderWidgetHostView;
 }  // namespace content
 
 namespace domicile {
@@ -1240,6 +1241,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // The pointer in the page's coordinates. `pointer_` is in the tooltip
   // widget's, which for a frame in another process are the frame's own.
   gfx::Point PointerInPage(content::RenderWidgetHost& widget) const;
+  // `point`, in `view`'s coordinates, in the page's.
+  gfx::Point InPage(content::RenderWidgetHostView& view,
+                    const gfx::Point& point) const;
   // Withdraws the shell's picker when its page closes the pipe that asked.
   void PagePickerClosed();
 

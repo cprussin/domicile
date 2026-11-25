@@ -1324,14 +1324,13 @@ void WebViewGuest::BindPagePicker(
 
 void WebViewGuest::Pick(mojom::WebViewPickerPtr picker,
                         PickCallback callback) {
-  // The anchor arrives in the frame's local root's DIPs. A frame in another
-  // process has a view of its own; the page's root is the element's box.
+  // The anchor arrives in the frame's local root's DIPs. The frame and its view
+  // can go before its message is read.
   content::RenderFrameHost* frame =
       content::RenderFrameHost::FromID(page_pickers_.current_context());
   if (frame && frame->GetView()) {
-    const gfx::PointF origin = frame->GetView()->TransformPointToRootCoordSpaceF(
-        gfx::PointF(picker->anchor.origin()));
-    picker->anchor.set_origin(gfx::ToFlooredPoint(origin));
+    picker->anchor.set_origin(
+        InPage(*frame->GetView(), picker->anchor.origin()));
   }
   open_picker_ = page_pickers_.current_receiver();
   // Logged before asking; the picker guard greps for it.
@@ -2348,16 +2347,21 @@ void WebViewGuest::SendTooltip() {
 
 gfx::Point WebViewGuest::PointerInPage(
     content::RenderWidgetHost& widget) const {
+  // The widget just drew a tooltip in the page.
+  CHECK(widget.GetView());
+  return InPage(*widget.GetView(), pointer_);
+}
+
+gfx::Point WebViewGuest::InPage(content::RenderWidgetHostView& view,
+                                const gfx::Point& point) const {
   CHECK(guest_contents_);
-  // Both views exist: the widget just drew a tooltip in the page, and the
-  // page's main frame view is the element's box.
+  // The main frame's view is the element's box. The root is the shell's page,
+  // which the element is somewhere in.
   content::RenderWidgetHostView* page =
       guest_contents_->GetPrimaryMainFrame()->GetView();
   CHECK(page);
-  CHECK(widget.GetView());
   return gfx::ToFlooredPoint(page->TransformRootPointToViewCoordSpace(
-      widget.GetView()->TransformPointToRootCoordSpaceF(
-          gfx::PointF(pointer_))));
+      view.TransformPointToRootCoordSpaceF(gfx::PointF(point))));
 }
 
 bool WebViewGuest::ShowRepostFormWarningDialog(content::WebContents* source) {

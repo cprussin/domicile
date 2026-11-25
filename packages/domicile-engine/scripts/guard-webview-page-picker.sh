@@ -27,7 +27,7 @@
 #                                      not Chrome's popup
 #   the shell heard it                 `domicile-picker` reached it, as color,
 #                                      with the value, the suggestion and the
-#                                      input's box
+#                                      input's box, in the element's pixels
 #   the shell answered                 its answer did not throw
 #   the browser got the answer         WebViewGuest logged it
 #   the page holds the shell's color   the main claim
@@ -189,7 +189,7 @@ SAW_GUEST=$(saw "GUARD guest-mousedown")
 # Logged by WebViewGuest::Pick. Separates "the page never asked the shell"
 # from "it asked and the element did not fire".
 SAW_ASKED=$(saw "picker; asking the shell.")
-SAW_HEARD=$(saw "GUARD picker kind=color value=$BEFORE options=#1971c2 anchor=$WIDTH"x"$((HEIGHT - STRIP_HEIGHT))")
+SAW_HEARD=$(saw "GUARD picker kind=color value=$BEFORE options=#1971c2 anchor=0,0 $WIDTH"x"$((HEIGHT - STRIP_HEIGHT))")
 SAW_ANSWERED=$(saw "GUARD picker-answered")
 SAW_PICKED=$(saw "domicile: a <webview>'s picker was answered: picked.")
 SAW_KEPT=$(saw "domicile: a <webview>'s picker was answered: kept.")
