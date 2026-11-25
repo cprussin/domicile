@@ -1,6 +1,6 @@
 import { css } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
-import { MATRIX } from "../page/community";
+import { DISCORD, MATRIX } from "../page/community";
 import { REPO, repoFile } from "../page/repo";
 import { Section } from "../page/Section";
 
@@ -30,6 +30,11 @@ const PATHS: readonly { href: string; title: string; body: string }[] = [
     body: "Show what you built, ask questions, or help out.",
     href: MATRIX,
     title: "Join the chat",
+  },
+  {
+    body: "The same, if you'd rather be on Discord.",
+    href: DISCORD,
+    title: "Join the Discord",
   },
   {
     body: "Building it, testing it, and how changes land.",

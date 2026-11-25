@@ -8,7 +8,7 @@
 
 Domicile is an experimental Linux desktop where a modified Chromium is the Wayland compositor. Native apps, websites and the desktop's own interface are elements on one web page, laid out with CSS and composited together.
 
-**[See it in action](https://www.domicile-desktop.com/) · [How it works](https://www.domicile-desktop.com/docs/how-it-works) · [Install](https://www.domicile-desktop.com/docs/install) · [Build your desktop](https://www.domicile-desktop.com/docs/shells/quickstart) · [Community](https://matrix.to/#/%23domicile:domicile-desktop.com)**
+**[See it in action](https://www.domicile-desktop.com/) · [How it works](https://www.domicile-desktop.com/docs/how-it-works) · [Install](https://www.domicile-desktop.com/docs/install) · [Build your desktop](https://www.domicile-desktop.com/docs/shells/quickstart) · [Matrix](https://matrix.to/#/%23domicile:domicile-desktop.com) · [Discord](https://discord.gg/bpsu8DpBVc)**
 
 ## What becomes possible
 

@@ -8,3 +8,9 @@ test("every footer links the privacy policy and the terms", () => {
   expect(html).toContain('href="/privacy"');
   expect(html).toContain('href="/terms"');
 });
+
+test("every footer links both chats", () => {
+  const html = renderToStaticMarkup(<SiteFooter links={[]}>Hi</SiteFooter>);
+  expect(html).toContain("https://matrix.to/");
+  expect(html).toContain('href="https://discord.gg/bpsu8DpBVc"');
+});
