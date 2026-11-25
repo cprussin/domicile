@@ -237,6 +237,11 @@ export class FakeDomicileHost {
             calls.push([name, id]);
             this.closeBrowser(id);
           };
+        } else if (name === "discardBrowserWindow") {
+          return (id: string) => {
+            calls.push([name, id]);
+            this.discardBrowser(id);
+          };
         } else if (
           name === "addEventListener" ||
           name === "removeEventListener" ||
@@ -354,6 +359,7 @@ export class FakeDomicileHost {
           ignoresPointer: false,
           isApp,
           isCaptured: false,
+          isDiscarded: false,
           isHidden,
           isPrivate,
           menu: null,
@@ -423,6 +429,19 @@ export class FakeDomicileHost {
     this.set({
       browserWindows: (this.#state.browserWindows ?? []).map((window) =>
         window.id === id ? { ...window, isCaptured: captured } : window,
+      ),
+    });
+  }
+
+  /**
+   * The engine unloaded browser window `id`'s page, or with `discarded` false
+   * loaded it again, as when a `<webview>` shows it. `discardBrowserWindow`
+   * calls this too.
+   */
+  discardBrowser(id: string, discarded = true): void {
+    this.set({
+      browserWindows: (this.#state.browserWindows ?? []).map((window) =>
+        window.id === id ? { ...window, isDiscarded: discarded } : window,
       ),
     });
   }

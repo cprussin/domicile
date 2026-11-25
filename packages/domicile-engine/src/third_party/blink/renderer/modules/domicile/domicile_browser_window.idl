@@ -60,6 +60,11 @@
   // a window you hide, such as behind a tab, laid out while it is captured.
   readonly attribute boolean isCaptured;
 
+  // Whether the page is unloaded to free its memory, by discardBrowserWindow()
+  // or by the engine while memory is short. It loads when a <webview> shows
+  // the window.
+  readonly attribute boolean isDiscarded;
+
   // The window's identifier on ext-foreign-toplevel-list-v1, which a capture
   // tool such as `grim -T` names it by, as DomicileWindow.toplevelId. Null
   // until the compositor has listed the window.

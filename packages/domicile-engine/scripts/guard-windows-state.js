@@ -36,6 +36,7 @@ const EVENT_NAMES = [
   "gesture",
   "focusrequested",
   "browserprofileschanged",
+  "browsermemoryshort",
   "browserwindowschanged",
   "castsinkschanged",
   "pictureinpicturevideoschanged",

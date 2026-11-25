@@ -25,6 +25,10 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 
 - When your config file can't be changed from Settings, its switches look plainly off, and the note at the top says why.
 
+### Hidden pages free memory when it runs low
+
+When your computer runs low on memory, pages you can't see, like background tabs and browser windows on other workspaces, unload as in Chrome. They load again, where you left off, when you switch to them. Pages playing sound, sharing your screen, or holding something you typed stay loaded.
+
 ### Fixes
 
 - Element no longer says it is open in another window after you log out and quickly in again.

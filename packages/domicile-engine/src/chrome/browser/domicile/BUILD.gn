@@ -96,6 +96,8 @@ source_set("domicile") {
     "domicile_media_devices.h",
     "domicile_modifier_taps.cc",
     "domicile_modifier_taps.h",
+    "domicile_page_discarding.cc",
+    "domicile_page_discarding.h",
     "domicile_page_unloading.cc",
     "domicile_page_unloading.h",
     "domicile_permissions.cc",
@@ -140,6 +142,9 @@ source_set("domicile") {
     "//chrome/browser/media/router:media_router_feature",
     "//components/media_router/browser",
     "//components/media_router/common",
+    # What a page is doing, for which pages a shortage of memory may unload.
+    "//components/domicile:memory_stall",
+    "//components/performance_manager",
     "//third_party/webrtc_overrides:webrtc_component",
     "//chrome/browser/ui/browser_window",
     "//chrome/browser/web_applications",

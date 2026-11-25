@@ -398,6 +398,12 @@ export type DomicileBrowserWindow = {
    */
   readonly isCaptured: boolean;
   /**
+   * Whether the page is unloaded to free its memory, by discardBrowserWindow()
+   * or by the engine while memory is short. It loads when a <webview> shows
+   * the window.
+   */
+  readonly isDiscarded: boolean;
+  /**
    * The window's identifier on ext-foreign-toplevel-list-v1, which a capture
    * tool such as `grim -T` names it by, as DomicileWindow.toplevelId. Null
    * until the compositor has listed the window.
@@ -817,6 +823,14 @@ export type DomicileHostEventMap = {
    * `browserWindows` for the current list.
    */
   browserwindowschanged: Event;
+  /**
+   * A MessageEvent whose `data` is the ids of the windows whose pages may be
+   * unloaded, hidden longest first, as a JSON array. Fires every few seconds
+   * while the computer is short of memory. The engine unloads the first one's
+   * page, unless this has a listener: the shell then decides, by
+   * discardBrowserWindow().
+   */
+  browsermemoryshort: MessageEvent<string>;
   /**
    * Fires when a profile is added, removed, renamed or recolored, the
    * defaults move, a site is pinned, or an extension is installed,
@@ -1255,6 +1269,14 @@ export type DomicileHost = {
    * on its <webview>; Cancel keeps the window. An unknown id does nothing.
    */
   closeBrowserWindow(id: string): void;
+  /**
+   * Unloads window `id`'s page to free its memory. Its history and scroll
+   * stay, and it loads again when a <webview> next shows the window; what was
+   * typed into it is not kept. Throws TypeError for an empty id. An unknown
+   * window, one a <webview> shows, an extension's popup window, a DevTools
+   * window, and an app module's or Electron app's do nothing.
+   */
+  discardBrowserWindow(id: string): void;
   /**
    * Moves window `id`'s page to browser profile `profile`, one of
    * `browserProfiles`, as a new page under the same id: the window keeps its

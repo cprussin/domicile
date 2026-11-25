@@ -422,6 +422,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   // This guest's WebContents. Lives as long as the guest.
   content::WebContents& contents() const { return *guest_contents_; }
 
+  // Whether a <webview> shows this browser window's page, or is about to.
+  bool IsAttached() const;
+  // Whether a <webview> shows this window's page, or would but for the shell's
+  // own page being hidden. One that is not rendered does not.
+  bool IsShown() const;
+
   // Gives a new window's page a copy of `source`'s history and takes `step`
   // there, as Chrome's middle-clicked back button does with a cloned tab. In
   // place of the first Navigate. See BrowserWindowHost::OpenHistoryStep.
@@ -435,9 +441,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   // BrowserWindowHost::Reopen.
   void MoveHistoryFrom(WebViewGuest& source, const PageMove& move);
 
-  // This window's page was replaced by `MoveHistoryFrom`'s: tells its
-  // <webview>, which asks for the window again, and lets go of it.
-  void Replaced();
+  // This window's page was replaced, by `MoveHistoryFrom`'s or by an
+  // `unloaded` one: tells its <webview>, which asks for the window again, and
+  // lets go of it.
+  void Replaced(bool unloaded);
 
   // The browser profile this window's page moves to as the user takes it
   // from `from` to `to`, or nothing; see BrowserWindowHost::ProfileToMoveTo.

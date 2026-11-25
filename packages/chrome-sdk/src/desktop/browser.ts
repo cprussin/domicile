@@ -1,6 +1,7 @@
 // The desk's browser windows, which the browser holds and a shell draws with
 // `<webview window="id">`, and fetches with the browser's cookies.
 
+import { z } from "zod";
 import type {
   DomicileBrowserProfile,
   DomicileBrowserWindow,
@@ -13,6 +14,9 @@ import { defined } from "./defined";
 import { memoizeLast } from "./memoize-last";
 import type { On } from "./subscribe";
 import { hostEvent, on } from "./subscribe";
+
+// `browsermemoryshort`'s `data`: window ids, hidden longest first.
+const memoryShortSchema = z.array(z.string());
 
 export type BrowserWindow = Defined<DomicileBrowserWindow>;
 
@@ -92,6 +96,13 @@ export type BrowserListeners = {
    * in one.
    */
   profilesChange: () => void;
+  /**
+   * The computer is short of memory, every few seconds while it is. `ids` are
+   * the windows whose pages may be unloaded, the one hidden longest first.
+   * The engine unloads the first one's page, unless the shell listens: the
+   * shell then decides what to `discard`.
+   */
+  memoryShort: (ids: readonly string[]) => void;
 };
 
 export type Browser = {
@@ -183,6 +194,15 @@ export type Browser = {
   /** Close window `id`. Its page may ask to stay. */
   close: (id: string) => void;
   /**
+   * Unload window `id`'s page to free its memory. Its history and scroll
+   * stay, and it loads again when a `<webview>` next shows the window; what
+   * was typed into it is not kept. A mounted `<webview>` that is not rendered
+   * (`display: none`) does not show it. A window a `<webview>` shows, an
+   * extension's popup window, a DevTools window, and an app module's or
+   * Electron app's stay loaded.
+   */
+  discard: (id: string) => void;
+  /**
    * The user clicked entry `command` (its `id`) of window `id`'s menu bar;
    * its Electron app runs the entry.
    */
@@ -231,6 +251,7 @@ export type BrowserHost = Pick<
   | "clickBrowserWindowMenu"
   | "closeBrowserWindow"
   | "countBrowserWindowMatches"
+  | "discardBrowserWindow"
   | "fetchWithCookies"
   | "openAppWindow"
   | "openBrowserWindow"
@@ -273,6 +294,9 @@ export const browser = (host: BrowserHost): Browser => {
     },
     countMatches: (id, selector) =>
       host.countBrowserWindowMatches(id, selector),
+    discard: (id) => {
+      host.discardBrowserWindow(id);
+    },
     fetch: (
       url,
       {
@@ -294,6 +318,10 @@ export const browser = (host: BrowserHost): Browser => {
     on: on<BrowserListeners>({
       change: (listener) =>
         hostEvent(host, "browserwindowschanged", () => listener()),
+      memoryShort: (listener) =>
+        hostEvent(host, "browsermemoryshort", (event) =>
+          listener(memoryShortSchema.parse(JSON.parse(event.data))),
+        ),
       profilesChange: (listener) =>
         hostEvent(host, "browserprofileschanged", () => listener()),
     }),

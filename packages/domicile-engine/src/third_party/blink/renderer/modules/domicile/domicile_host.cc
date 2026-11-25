@@ -2581,6 +2581,18 @@ void DomicileHost::closeBrowserWindow(ScriptState*,
   }
 }
 
+void DomicileHost::discardBrowserWindow(ScriptState*,
+                                        const String& id,
+                                        ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a browser window's id");
+    return;
+  }
+  if (Ready(exception_state)) {
+    windows_->Discard(id);
+  }
+}
+
 namespace {
 
 // The browser's answer to browserProfileFor().
@@ -3161,7 +3173,7 @@ void DomicileHost::ListBrowserWindows() {
         window->width, window->height, window->private_browsing,
         window->partition,
         window->profile.empty() ? String() : String(window->profile),
-        window->app, window->app_id, window->captured,
+        window->app, window->app_id, window->captured, window->discarded,
         toplevel_id == browser_toplevel_ids_.end() ? String()
                                                    : toplevel_id->value,
         window->parent.empty() ? String() : String(window->parent), window->x,
@@ -3182,6 +3194,26 @@ void DomicileHost::ListBrowserWindows() {
 }
 
 // Stored, like WindowsChanged.
+void DomicileHost::MemoryShort(const Vector<String>& windows,
+                               MemoryShortCallback handled) {
+  const AtomicString& type = domicile_event_names::Browsermemoryshort();
+  if (!HasEventListeners(type)) {
+    std::move(handled).Run(false);
+    return;
+  }
+  auto ids = std::make_unique<JSONArray>();
+  for (const String& id : windows) {
+    ids->PushString(id);
+  }
+  MessageEvent* event = MessageEvent::Create();
+  event->initMessageEvent(type, /*bubbles=*/false, /*cancelable=*/false,
+                          ids->ToJSONString(), /*origin=*/nullptr,
+                          /*last_event_id=*/String(), /*source=*/nullptr,
+                          /*ports=*/nullptr);
+  DispatchEvent(*event);
+  std::move(handled).Run(true);
+}
+
 void DomicileHost::ProfilesChanged(
     Vector<domicile::mojom::blink::BrowserProfilePtr> profiles,
     const String& default_profile,

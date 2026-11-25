@@ -418,6 +418,7 @@ const browserWindow = (id: string, title: string): DomicileBrowserWindow => ({
   ignoresPointer: false,
   isApp: false,
   isCaptured: false,
+  isDiscarded: false,
   isHidden: false,
   isPrivate: false,
   menu: null,

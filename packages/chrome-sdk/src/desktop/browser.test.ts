@@ -22,6 +22,7 @@ describe("browser", () => {
         ignoresPointer: false,
         isApp: false,
         isCaptured: false,
+        isDiscarded: false,
         isHidden: false,
         isPrivate: false,
         menu: undefined,
@@ -121,6 +122,13 @@ describe("browser", () => {
     ]);
   });
 
+  it("unloads a window's page", () => {
+    const fake = new FakeDomicileHost();
+    desktop(fake.host).browser.discard("1");
+
+    expect(fake.calls).toStrictEqual([["discardBrowserWindow", "1"]]);
+  });
+
   it("opens a window in a profile and moves one to another", () => {
     const fake = new FakeDomicileHost();
     const { browser } = desktop(fake.host);
@@ -166,6 +174,20 @@ describe("browser", () => {
     expect(browser.profiles).toStrictEqual([work]);
     expect(changes).toBe(1);
     stop();
+  });
+
+  it("says which pages may be unloaded while memory is short", () => {
+    const fake = new FakeDomicileHost();
+    const heard: (readonly string[])[] = [];
+    const stop = desktop(fake.host).browser.on("memoryShort", (ids) => {
+      heard.push(ids);
+    });
+
+    fake.dispatch("browsermemoryshort", { data: '["2","1"]' });
+    stop();
+    fake.dispatch("browsermemoryshort", { data: '["2"]' });
+
+    expect(heard).toStrictEqual([["2", "1"]]);
   });
 
   it("pins a site to a profile and finds the site that routes an address", async () => {

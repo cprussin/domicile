@@ -99,6 +99,9 @@ struct BrowserWindow {
   // laid out, so a shell keeps a window it hides, such as behind a tab, laid
   // out while it is captured.
   bool captured;
+  // Whether the page is unloaded (Discard). It loads when a <webview> shows
+  // it, so a shell that would rather not draws something else.
+  bool discarded;
   // For an Electron app's view (a WebContentsView), the window that holds
   // it; empty for every window. A view is listed right after its window,
   // bottom first, and only while a window holds it. Its app asks for it at
@@ -212,6 +215,15 @@ interface BrowserWindows {
   // close that raced another, and does nothing.
   Close(string id);
 
+  // Unloads window `id`'s page: its renderer goes, and its history and scroll
+  // stay. The page loads again when a <webview> next shows the window; what
+  // was typed into it is not kept. A <webview> that is mounted and not
+  // rendered (`display: none`) does not show it. An unknown window, one a
+  // <webview> shows,
+  // an extension's popup window, a DevTools window, and an app module's or
+  // Electron app's do nothing, logged.
+  Discard(string id);
+
   // The user clicked entry `command` of window `id`'s menu bar; its app runs
   // the entry. A window that closed meanwhile, or has no menu, is a click
   // that raced it and does nothing. A `command` below 1 is a bad message.
@@ -281,4 +293,10 @@ interface BrowserWindowsClient {
   ProfilesChanged(array<BrowserProfile> profiles,
                   string default_profile,
                   string default_private_profile);
+
+  // The computer is short of memory, and `windows` are those whose pages may
+  // be unloaded, the one hidden longest first. Asked every few seconds while
+  // it is short. `handled` when the shell decides what goes, by Discard; the
+  // browser unloads the first window's page when no document does.
+  MemoryShort(array<string> windows) => (bool handled);
 };

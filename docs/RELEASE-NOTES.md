@@ -33,6 +33,10 @@ Each agent gets its own pointer, keyboard and clipboard, in native and browser w
 
 - Panda CSS 2: a shell that runs Panda with the component library's preset or manganese's config needs `@pandacss/dev@2`, and `@domicile-desktop/manganese/css`'s generated entry points are `index.js` files. [Shell packaging](SHELL-PACKAGING.md#panda-with-manganeses-tokens)
 
+### Also new
+
+- Pages no `<webview>` shows are unloaded while the computer is short of memory, and load again when they are shown. A window has `isDiscarded`, and `browser.discard(id)` unloads one by hand. [Browser windows](SHELL-BROWSER-WINDOWS.md)
+
 ### Fixes
 
 - A `Popover` grows no taller than the room on its screen, and its body scrolls the rest; a child with `min-block-size: 0` shrinks to scroll a part of itself. `Select` and `Autocomplete` lists cap at the room too.

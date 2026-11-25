@@ -323,6 +323,7 @@ class WebViewGuestHost final
     mojo::PendingReceiver<mojom::WebViewGuest> guest;
     mojo::PendingRemote<mojom::WebViewGuestClient> client;
     std::optional<std::string> window;
+    bool rendered;
     bool extension_popup;
     bool private_browsing;
     std::string profile;
@@ -335,6 +336,7 @@ class WebViewGuestHost final
                    mojo::PendingReceiver<mojom::WebViewGuest> guest,
                    mojo::PendingRemote<mojom::WebViewGuestClient> client,
                    const std::optional<std::string>& window,
+                   bool rendered,
                    bool extension_popup,
                    bool private_browsing,
                    const std::string& profile,
@@ -379,6 +381,7 @@ class WebViewGuestHost final
                                   std::move(guest),
                                   std::move(client),
                                   window,
+                                  rendered,
                                   extension_popup,
                                   private_browsing,
                                   profile,
@@ -387,7 +390,7 @@ class WebViewGuestHost final
         return;
       case PlaceholderStage::kReady:
         Give(*placeholder, std::move(guest), std::move(client), window,
-             extension_popup, private_browsing, profile, *parsed);
+             rendered, extension_popup, private_browsing, profile, *parsed);
         return;
     }
   }
@@ -458,7 +461,7 @@ class WebViewGuestHost final
         return;
       case PlaceholderStage::kReady:
         Give(*placeholder, std::move(request.guest), std::move(request.client),
-             request.window, request.extension_popup,
+             request.window, request.rendered, request.extension_popup,
              request.private_browsing, request.profile, request.partition);
         return;
     }
@@ -498,6 +501,7 @@ class WebViewGuestHost final
             mojo::PendingReceiver<mojom::WebViewGuest> guest,
             mojo::PendingRemote<mojom::WebViewGuestClient> client,
             const std::optional<std::string>& window,
+            bool rendered,
             bool extension_popup,
             bool private_browsing,
             const std::string& profile,
@@ -519,6 +523,12 @@ class WebViewGuestHost final
     if (shown == nullptr) {
       LOG(WARNING) << "domicile: a <webview> named browser window \""
                    << *window << "\", which is not open; it shows nothing.";
+      return;
+    }
+    if (!rendered && !shown->IsAttached() &&
+        shown->contents().GetController().NeedsReload()) {
+      mojo::Remote<mojom::WebViewGuestClient>(std::move(client))
+          ->Replaced(/*unloaded=*/true);
       return;
     }
     shown->AttachToElement(render_frame_host(), placeholder, std::move(guest),
@@ -899,7 +909,7 @@ void WebViewGuest::AttachToElement(
   CHECK(!window_id_.empty());
 
   // A window shows in one frame at a time; a second element shows nothing.
-  if (attaching_ || guest_contents_->GetOuterWebContents() != nullptr) {
+  if (IsAttached()) {
     LOG(WARNING) << "domicile: a <webview> named browser window " << window_id_
                  << ", which another <webview> is already showing; it shows "
                     "nothing.";
@@ -949,6 +959,18 @@ void WebViewGuest::AttachWindowTo(
             << " to a <webview>.";
 
   ReportEverything();
+}
+
+bool WebViewGuest::IsAttached() const {
+  return attaching_ || guest_contents_->GetOuterWebContents() != nullptr;
+}
+
+bool WebViewGuest::IsShown() const {
+  content::WebContents* outer = guest_contents_->GetOuterWebContents();
+  return attaching_ ||
+         (outer != nullptr &&
+          (guest_contents_->GetVisibility() != content::Visibility::HIDDEN ||
+           outer->GetVisibility() == content::Visibility::HIDDEN));
 }
 
 void WebViewGuest::ElementGone() {
@@ -1625,14 +1647,15 @@ void WebViewGuest::MoveHistoryFrom(WebViewGuest& source,
             << " took its old page's history.";
 }
 
-void WebViewGuest::Replaced() {
+void WebViewGuest::Replaced(bool unloaded) {
   // Before the pipe closes, so the element hears it.
-  client_->Replaced();
+  client_->Replaced(unloaded);
   receiver_.reset();
   Unclient();
   find_text_.clear();
   LOG(INFO) << "domicile: browser window " << window_id_
-            << "'s page was replaced by one in another browser profile.";
+            << "'s page was replaced by one "
+            << (unloaded ? "that is unloaded." : "in another browser profile.");
 }
 
 std::optional<std::string> WebViewGuest::ProfileToMoveTo(const GURL& from,

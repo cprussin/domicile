@@ -529,6 +529,10 @@ interface WebViewGuestHost {
   // owned by the element. An unknown window, or one another element shows, is
   // refused: the pipes close and the browser logs why.
   //
+  // `rendered` is whether the element is. A window whose page is unloaded is
+  // not given to one that is not, as showing a page loads it: the client hears
+  // Replaced(true) and the pipes close. Ignored without `window`.
+  //
   // `extension_popup` is the element's `extensionpopup` attribute. The guest
   // is then an extension action popup, as in Chrome: popup view type, no tab
   // id, no window. Extensions that lay out differently in a popup (e.g.
@@ -553,6 +557,7 @@ interface WebViewGuestHost {
               pending_receiver<WebViewGuest> guest,
               pending_remote<WebViewGuestClient> client,
               string? window,
+              bool rendered,
               bool extension_popup,
               bool private_browsing,
               string profile,
@@ -899,10 +904,12 @@ interface WebViewGuestClient {
 
   // The browser window this element shows was given a new page in its
   // place, in another browser profile (BrowserWindows.Reopen, or a link to
-  // another profile's site), and this pipe is closed. The element asks for
-  // the window again, in a new placeholder frame, and shows the new page.
-  // Whatever the old page asked the shell is withdrawn.
-  Replaced();
+  // another profile's site) or `unloaded` (BrowserWindows.Discard), and this
+  // pipe is closed. The element asks for the window again, in a new
+  // placeholder frame, and shows the new page: an unloaded one once the
+  // element is rendered, which loads it. Whatever the old page asked the shell
+  // is withdrawn.
+  Replaced(bool unloaded);
 };
 
 // One guest, for the life of the element that requested it.

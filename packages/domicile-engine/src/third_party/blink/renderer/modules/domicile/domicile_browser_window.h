@@ -33,6 +33,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
                         bool is_app,
                         const String& app_id,
                         bool is_captured,
+                        bool is_discarded,
                         const String& toplevel_id,
                         const String& parent,
                         int32_t x,
@@ -64,6 +65,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   bool isApp() const { return is_app_; }
   const String& appId() const { return app_id_; }
   bool isCaptured() const { return is_captured_; }
+  bool isDiscarded() const { return is_discarded_; }
   const String& toplevelId() const { return toplevel_id_; }
   // Null for a window, as the empty string the browser sends for none.
   const String& parent() const { return parent_; }
@@ -103,6 +105,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   bool is_app_ = false;
   String app_id_;
   bool is_captured_ = false;
+  bool is_discarded_ = false;
   String toplevel_id_;
   String parent_;
   int32_t x_ = 0;

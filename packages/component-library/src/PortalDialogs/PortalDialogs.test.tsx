@@ -440,6 +440,7 @@ const browserWindow = (id: string, title: string) => ({
   ignoresPointer: false,
   isApp: false,
   isCaptured: false,
+  isDiscarded: false,
   isHidden: false,
   isPrivate: false,
   menu: null,
