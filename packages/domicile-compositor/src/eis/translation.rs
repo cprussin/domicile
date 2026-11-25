@@ -183,6 +183,13 @@ impl Input {
     /// Release every key and button held down, and leave the window under the
     /// pointer.
     pub fn let_go(&mut self) -> Vec<ClientRequest> {
+        let leave = self.over.take().map(|_| ClientRequest::PointerLeave);
+        self.lift().into_iter().chain(leave).collect()
+    }
+
+    /// Release every key and button held down. The pointer stays where it is,
+    /// over the same window.
+    pub fn lift(&mut self) -> Vec<ClientRequest> {
         self.finger = None;
         let keys = std::mem::take(&mut self.keys)
             .into_iter()
@@ -196,8 +203,7 @@ impl Input {
                 pressed: false,
             }
         });
-        let leave = self.over.take().map(|_| ClientRequest::PointerLeave);
-        keys.chain(buttons).chain(leave).collect()
+        keys.chain(buttons).collect()
     }
 
     /// The engine's events for one event, on a desk where the engine takes

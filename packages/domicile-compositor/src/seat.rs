@@ -227,6 +227,15 @@ impl DomicileCompositor {
                     focused: focused.as_ref() == Some(toplevel.wl_surface()),
                 })
             })
+            // Menus, over their windows: smaller, so they win where they
+            // overlap.
+            .chain(self.popups.iter().filter_map(|(app_id, popup)| {
+                Some(eis::Window {
+                    app_id: app_id.clone(),
+                    bounds: self.popup_bounds(popup)?,
+                    focused: focused.as_ref() == Some(popup.wl_surface()),
+                })
+            }))
             .collect();
         eis::Desk::new(state.screens.outputs().cloned().collect(), windows)
     }

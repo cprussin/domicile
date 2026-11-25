@@ -222,6 +222,7 @@ impl XdgShellHandler for DomicileCompositor {
             debug!(%app_id, "popup destroyed -> Host::app_closed");
             self.forget(&app_id);
         }
+        self.an_agents_menu_went(&surface);
         // A grabbing menu hands the keyboard to its parent menu, or to its
         // window after the last one.
         if let Some(at) = self.grabbing.iter().position(|popup| *popup == surface) {
@@ -345,6 +346,9 @@ impl XdgShellHandler for DomicileCompositor {
     /// The serial is not checked: all presses come from the chrome, and a
     /// refused grab would be a menu that silently never opens.
     fn grab(&mut self, surface: PopupSurface, _seat: wl_seat::WlSeat, _serial: Serial) {
+        if self.an_agents_menu_grabbed(&surface) {
+            return;
+        }
         if !self.grabbing.contains(&surface) {
             self.grabbing.push(surface.clone());
         }

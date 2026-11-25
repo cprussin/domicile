@@ -128,9 +128,14 @@ struct TwoWindows {
 }
 
 fn two_windows(compositor: &Compositor) -> TwoWindows {
+    two_windows_with(compositor, &[])
+}
+
+/// [`two_windows`], the other window's client started with `extra`.
+fn two_windows_with(compositor: &Compositor, extra: &[&str]) -> TwoWindows {
     let mut chrome = compositor.chrome();
-    let mut opened = |title: &str| {
-        let client = compositor.client(title);
+    let mut opened = |title: &str, extra: &[&str]| {
+        let client = compositor.client_with(title, extra);
         let appeared = chrome
             .wait_for(|message| {
                 matches!(message, HostMessage::AppAppeared { title: Some(t), .. } if t == title)
@@ -141,8 +146,8 @@ fn two_windows(compositor: &Compositor) -> TwoWindows {
         };
         (client, app_id)
     };
-    let users = opened("users");
-    let other = opened("other");
+    let users = opened("users", &[]);
+    let other = opened("other", extra);
     for (app_id, x) in [(&users.1, 0.0), (&other.1, 1000.0)] {
         chrome
             .say(&ChromeMessage::SetAppBounds {
@@ -248,6 +253,96 @@ fn an_agent_is_refused_the_users_app_and_the_empty_desk() {
             .as_deref()
             .is_some_and(|why| why.contains("in no window")),
         "the agent typed with no window of its own: {refused:?}"
+    );
+}
+
+/// A pointer that left a window between calls is not still over it: a click
+/// on the empty desk after one in a window is refused, and the window hears
+/// one click.
+#[test]
+fn an_agents_pointer_that_moved_off_a_window_clicks_nothing_there() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows(&compositor);
+    let (_held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+    assert_eq!(
+        as_the_agent(&compositor, session, click_at(1100.0, 100.0)),
+        None
+    );
+
+    let refused = as_the_agent(&compositor, session, click_at(900.0, 900.0));
+
+    assert!(
+        refused.as_deref().is_some_and(|why| why.contains("by ref")),
+        "the agent's click off its window went through: {refused:?}"
+    );
+    let other = &mut desk.other.0;
+    assert!(other.wait_for_trace(&format!(", {BTN_LEFT}, 0)"), 1));
+    assert_eq!(
+        other.trace().matches(&format!(", {BTN_LEFT}, 1)")).count(),
+        1,
+        "the window under the agent's last call was clicked again:\n{}",
+        other.trace()
+    );
+}
+
+/// The surface a client's menu is, from its trace.
+fn menu_surface(client: &mut Client) -> String {
+    assert!(
+        client.wait_for_trace(".opened(", 1),
+        "no menu opened:\n{}",
+        client.trace()
+    );
+    client
+        .trace()
+        .lines()
+        .find_map(|line| line.split_once(".opened(").map(|(_, rest)| rest))
+        .and_then(|rest| rest.strip_suffix(')'))
+        .expect("the client says which surface its menu is")
+        .to_string()
+}
+
+/// A menu the agent opens grabs the agent's keyboard, not the user's: the
+/// user keeps typing in their window, and the agent's clicks reach the menu.
+#[test]
+fn a_menu_an_agent_opens_takes_the_agents_keyboard_and_pointer() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows_with(&compositor, &["--grabbing-menu"]);
+    let (_held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+    assert_eq!(
+        as_the_agent(&compositor, session, click_at(1100.0, 100.0)),
+        None
+    );
+    let menu = menu_surface(&mut desk.other.0);
+    assert!(
+        desk.other.0.wait_for_trace(&format!("enter({menu})"), 1),
+        "the agent's keyboard did not go to its menu:\n{}",
+        desk.other.0.trace()
+    );
+
+    desk.chrome
+        .say(&ChromeMessage::Key {
+            app_id: desk.users.1.clone(),
+            keycode: EVDEV_KEY_B,
+            pressed: true,
+        })
+        .expect("the chrome forwards the user's key");
+    assert!(
+        desk.users
+            .0
+            .wait_for_trace(&format!(", {EVDEV_KEY_B}, 1)"), 1),
+        "the agent's menu took the user's keyboard; their window traced:\n{}",
+        desk.users.0.trace()
+    );
+
+    // The menu is at 10,20 in its window, 120 by 80.
+    assert_eq!(
+        as_the_agent(&compositor, session, click_at(1050.0, 60.0)),
+        None
+    );
+    assert!(
+        desk.other.0.wait_for_trace(&format!("{menu}, 40, 40)"), 1),
+        "the agent's pointer did not enter its menu:\n{}",
+        desk.other.0.trace()
     );
 }
 

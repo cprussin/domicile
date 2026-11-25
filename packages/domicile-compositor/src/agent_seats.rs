@@ -19,7 +19,7 @@
 //! windows take it: the shell and browser windows are the engine's, and the
 //! agent reaches them by ref.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use smithay::backend::input::{Axis, AxisSource, ButtonState, KeyState, Keycode};
 use smithay::input::keyboard::{FilterResult, KeyboardHandle, XkbConfig};
@@ -29,6 +29,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::Resource;
 use smithay::utils::SERIAL_COUNTER;
 use smithay::wayland::compositor::with_states;
+use smithay::wayland::shell::xdg::PopupSurface;
 use tracing::debug;
 
 use domicile_protocol::{HostMessage, PointerAxisSource};
@@ -59,7 +60,12 @@ pub const NOTHING_NATIVE: &str = "nothing at that point takes the agent's own po
 
 /// Every agent's seat, by its session.
 #[derive(Default)]
-pub struct AgentSeats(HashMap<u32, AgentSeat>);
+pub struct AgentSeats {
+    seats: HashMap<u32, AgentSeat>,
+    /// Sessions that ended, which never get a seat again: input from one
+    /// can still be on its way.
+    gone: HashSet<u32>,
+}
 
 struct AgentSeat {
     seat: Seat<DomicileCompositor>,
@@ -69,6 +75,8 @@ struct AgentSeat {
     pointing_at: Option<String>,
     /// The window its keyboard is in.
     typing_in: Option<String>,
+    /// Menus it opened that grabbed its keyboard, innermost last.
+    menus: Vec<PopupSurface>,
 }
 
 impl AgentSeat {
@@ -93,7 +101,7 @@ impl AgentSeat {
 impl AgentSeats {
     /// Agent `session`'s seat, which its input made first.
     fn mine(&mut self, session: u32) -> &mut AgentSeat {
-        self.0
+        self.seats
             .get_mut(&session)
             .expect("an agent's seat is made before its input")
     }
@@ -101,7 +109,7 @@ impl AgentSeats {
     /// The surfaces agents' keyboards are in, but `except`'s, whose focus
     /// may be changing (its keyboard is locked meanwhile).
     pub fn focused(&self, except: &Seat<DomicileCompositor>) -> Vec<WlSurface> {
-        self.0
+        self.seats
             .values()
             .filter(|agent| &agent.seat != except)
             .filter_map(|agent| agent.devices().0.current_focus())
@@ -110,7 +118,7 @@ impl AgentSeats {
 
     /// Every agent's keyboard.
     pub fn keyboards(&self) -> Vec<KeyboardHandle<DomicileCompositor>> {
-        self.0.values().map(|agent| agent.devices().0).collect()
+        self.seats.values().map(|agent| agent.devices().0).collect()
     }
 }
 
@@ -124,6 +132,12 @@ impl DomicileCompositor {
         steps: Vec<AgentStep>,
         let_go: bool,
     ) -> Result<(), String> {
+        if self.the_desk_is_locked() {
+            if self.agent_seats.seats.contains_key(&session) {
+                self.agent_lets_go(session);
+            }
+            return Err("the desktop is locked".to_string());
+        }
         self.agent_seat(session)?;
         let done = steps
             .into_iter()
@@ -136,12 +150,20 @@ impl DomicileCompositor {
 
     /// Agent session `session` ended: its seat lets go of everything and goes.
     pub fn agent_gone(&mut self, session: u32) {
+        self.agent_seats.gone.insert(session);
         // An agent that never pointed or typed has no seat.
-        if !self.agent_seats.0.contains_key(&session) {
+        if !self.agent_seats.seats.contains_key(&session) {
             return;
         }
         self.agent_lets_go(session);
-        let agent = self.agent_seats.0.remove(&session).expect("checked above");
+        let agent = self
+            .agent_seats
+            .seats
+            .remove(&session)
+            .expect("checked above");
+        for menu in agent.menus.iter().rev() {
+            menu.send_popup_done();
+        }
         let (keyboard, pointer) = agent.devices();
         keyboard.set_focus(self, None, SERIAL_COUNTER.next_serial());
         self.agent_pointer_leaves(&pointer);
@@ -159,9 +181,9 @@ impl DomicileCompositor {
         };
         let in_client =
             |on: Option<WlSurface>| on.and_then(|on| on.client()) == Some(client.clone());
-        let sessions: Vec<u32> = self.agent_seats.0.keys().copied().collect();
+        let sessions: Vec<u32> = self.agent_seats.seats.keys().copied().collect();
         for session in sessions {
-            let (typing, pointer) = self.agent_seats.0[&session].devices();
+            let (typing, pointer) = self.agent_seats.seats[&session].devices();
             if in_client(pointer.current_focus()) {
                 debug!(session, "the user's pointer took an app from an agent's");
                 self.agent_lets_go(session);
@@ -172,7 +194,13 @@ impl DomicileCompositor {
                 debug!(session, "the user's keyboard took an app from an agent's");
                 self.agent_lets_go(session);
                 typing.set_focus(self, None, SERIAL_COUNTER.next_serial());
-                self.agent_seats.mine(session).typing_in = None;
+                let agent = self.agent_seats.mine(session);
+                agent.typing_in = None;
+                // Its menus close, as a menu does when its window loses the
+                // keyboard.
+                for menu in std::mem::take(&mut agent.menus).iter().rev() {
+                    menu.send_popup_done();
+                }
             }
         }
     }
@@ -180,8 +208,11 @@ impl DomicileCompositor {
     /// Agent session `session`'s seat, made on first use with the user's
     /// keymap.
     fn agent_seat(&mut self, session: u32) -> Result<(), String> {
-        if self.agent_seats.0.contains_key(&session) {
+        if self.agent_seats.seats.contains_key(&session) {
             return Ok(());
+        }
+        if self.agent_seats.gone.contains(&session) {
+            return Err(format!("no agent is in as session {session}"));
         }
         let keymap = match self.hub.host.lock().unwrap().describe_keymap() {
             Some(HostMessage::Keymap { keymap }) => keymap,
@@ -200,13 +231,14 @@ impl DomicileCompositor {
             .expect("the compositor wrote this keymap, so xkb reads it back");
         seat.add_pointer_sharing_objects(&self.seat.get_pointer().unwrap());
         debug!(session, "an agent's seat was made");
-        self.agent_seats.0.insert(
+        self.agent_seats.seats.insert(
             session,
             AgentSeat {
                 seat,
                 input: Input::default(),
                 pointing_at: None,
                 typing_in: None,
+                menus: Vec::new(),
             },
         );
         Ok(())
@@ -253,8 +285,8 @@ impl DomicileCompositor {
         let (serial, time) = (SERIAL_COUNTER.next_serial(), self.now_ms());
         match request {
             ClientRequest::PointerMotion { app_id, x, y, .. } => {
-                let Some(surface) = self.toplevel_for(&app_id).map(|on| on.wl_surface().clone())
-                else {
+                // A window, or a menu over one.
+                let Some(surface) = self.surface_for(&app_id) else {
                     return Err(format!("window {app_id} has closed"));
                 };
                 self.someone_else_holds(session, &surface, false)?;
@@ -284,8 +316,11 @@ impl DomicileCompositor {
                 match (pressed, pointing_at) {
                     (true, None) => return Err(NOTHING_NATIVE.to_string()),
                     // A click gives the window the keyboard, as it would a
-                    // hand's.
-                    (true, Some(window)) => self.agent_focuses(session, &window)?,
+                    // hand's. A menu has the keyboard already.
+                    (true, Some(window)) if self.toplevel_for(&window).is_some() => {
+                        self.agent_focuses(session, &window)?
+                    }
+                    (true, Some(_)) => {}
                     (false, _) => {}
                 }
                 let state = if pressed {
@@ -339,7 +374,8 @@ impl DomicileCompositor {
             }
             ClientRequest::Key { keycode, pressed } => {
                 // A release always goes, so no key stays down.
-                match (pressed, keyboard.current_focus()) {
+                // A window that closed leaves its surface behind.
+                match (pressed, keyboard.current_focus().filter(|on| on.is_alive())) {
                     (true, None) => {
                         return Err("the agent's keyboard is in no window: click in one, or \
                              focus_window, first"
@@ -386,10 +422,19 @@ impl DomicileCompositor {
         surface: &WlSurface,
         keys: bool,
     ) -> Result<(), String> {
-        let client = surface.client();
-        let in_client = |on: Option<WlSurface>| on.and_then(|on| on.client()) == client;
+        let Some(client) = surface.client() else {
+            return Err("that window has closed".to_string());
+        };
+        let in_client =
+            |on: Option<WlSurface>| on.and_then(|on| on.client()).as_ref() == Some(&client);
         let users_keyboard = self.seat.get_keyboard().unwrap().current_focus();
-        if in_client(users_keyboard) || (!keys && in_client(self.pointer_surface.clone())) {
+        // A held button keeps the user's pointer in its client wherever the
+        // page says it went.
+        let users_pointer = [
+            self.pointer_surface.clone(),
+            self.seat.get_pointer().unwrap().current_focus(),
+        ];
+        if in_client(users_keyboard) || (!keys && users_pointer.into_iter().any(&in_client)) {
             return Err(
                 "the user is using this app, so the agent's own pointer and keys can't \
                  reach it now. Act on it by ref (app_snapshot, browser_snapshot), or try again \
@@ -397,7 +442,7 @@ impl DomicileCompositor {
                     .to_string(),
             );
         }
-        let other_agent = self.agent_seats.0.iter().any(|(other, agent)| {
+        let other_agent = self.agent_seats.seats.iter().any(|(other, agent)| {
             *other != session
                 && (in_client(agent.devices().0.current_focus())
                     || in_client(agent.devices().1.current_focus()))
@@ -414,11 +459,8 @@ impl DomicileCompositor {
             .agent_seats
             .mine(session)
             .input
-            .let_go()
-            .into_iter()
             // Its pointer stays where it is: the next call goes on from there.
-            .filter(|request| !matches!(request, ClientRequest::PointerLeave))
-            .collect();
+            .lift();
         for request in requests {
             self.agent_request(session, request)
                 .expect("a release goes to its seat wherever its pointer and keyboard are");
@@ -437,5 +479,63 @@ impl DomicileCompositor {
             },
         );
         pointer.frame(self);
+    }
+
+    /// A menu grabbing the keyboard, in an app an agent is using and the user
+    /// isn't: the agent's keyboard goes to it, not the user's. `false` for a
+    /// menu that is the user's.
+    pub fn an_agents_menu_grabbed(&mut self, menu: &PopupSurface) -> bool {
+        let Some(client) = menu.wl_surface().client() else {
+            return false;
+        };
+        let in_client =
+            |on: Option<WlSurface>| on.and_then(|on| on.client()).as_ref() == Some(&client);
+        let users = [
+            self.seat.get_keyboard().unwrap().current_focus(),
+            self.seat.get_pointer().unwrap().current_focus(),
+        ];
+        if users.into_iter().any(&in_client) {
+            return false;
+        }
+        let Some(session) = self.agent_seats.seats.iter().find_map(|(session, agent)| {
+            let (keyboard, pointer) = agent.devices();
+            (in_client(keyboard.current_focus()) || in_client(pointer.current_focus()))
+                .then_some(*session)
+        }) else {
+            return false;
+        };
+        debug!(session, "a menu grabbed an agent's keyboard");
+        let agent = self.agent_seats.mine(session);
+        if !agent.menus.contains(menu) {
+            agent.menus.push(menu.clone());
+        }
+        let (keyboard, _) = agent.devices();
+        keyboard.set_focus(
+            self,
+            Some(menu.wl_surface().clone()),
+            SERIAL_COUNTER.next_serial(),
+        );
+        true
+    }
+
+    /// A menu went. If it had an agent's keyboard, that goes to the menu or
+    /// window under it.
+    pub fn an_agents_menu_went(&mut self, menu: &PopupSurface) {
+        let Some((session, at)) = self.agent_seats.seats.iter().find_map(|(session, agent)| {
+            agent
+                .menus
+                .iter()
+                .position(|held| held == menu)
+                .map(|at| (*session, at))
+        }) else {
+            return;
+        };
+        let root = self.window_under(menu);
+        let agent = self.agent_seats.mine(session);
+        agent.menus.remove(at);
+        let next = agent.menus.last().map(|popup| popup.wl_surface().clone());
+        let (keyboard, _) = agent.devices();
+        let next = next.or_else(|| root.and_then(|window| self.surface_for(&window)));
+        keyboard.set_focus(self, next, SERIAL_COUNTER.next_serial());
     }
 }

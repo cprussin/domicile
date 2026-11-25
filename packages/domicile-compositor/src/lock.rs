@@ -370,8 +370,7 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::PointerHold { .. }
             | ClientRequest::Touch { .. }
             | ClientRequest::PointerButton { .. }
-            | ClientRequest::PointerAxis { .. }
-            | ClientRequest::AgentInput { .. },
+            | ClientRequest::PointerAxis { .. },
         ) => Some(Refusal::Hand),
         Asked::OnTheWaylandThread(
             ClientRequest::CloseApp { .. }
@@ -422,6 +421,9 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::Activity { .. }
             // Lets go of what an agent held, which the lock lets through.
             | ClientRequest::AgentGone { .. }
+            // Refused by `agent_input` itself, which first lets go of what
+            // the agent holds and answers why.
+            | ClientRequest::AgentInput { .. }
             // Reaches no client; a cast of the lock screen draws it.
             | ClientRequest::DeskPointer { .. }
             | ClientRequest::DeskCursor { .. }

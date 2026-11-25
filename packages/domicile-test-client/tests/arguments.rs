@@ -334,6 +334,13 @@ fn a_menu_can_be_asked_to_take_the_keyboard_and_pointer() {
 }
 
 #[test]
+fn a_client_can_be_asked_for_menus_on_presses_that_grab() {
+    let asked = given(&["--grabbing-menu"]).unwrap();
+    assert!(asked.sliding_menu && asked.menus_grab && !asked.popup);
+    assert!(!given(&["--sliding-menu"]).unwrap().menus_grab);
+}
+
+#[test]
 fn a_client_can_be_asked_to_open_sliding_menus_on_presses() {
     assert!(
         given(&["--sliding-menu"])

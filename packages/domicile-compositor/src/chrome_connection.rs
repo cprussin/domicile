@@ -1078,9 +1078,20 @@ fn emulate_for_an_agent(
             let_go: at == last,
             answer,
         });
-        answered
-            .recv_timeout(AGENT_INPUT)
-            .map_err(|_| "the desktop did not answer in time".to_string())??;
+        match answered.recv_timeout(AGENT_INPUT) {
+            Ok(done) => done?,
+            Err(_) => {
+                // Whatever it holds comes up once the Wayland thread gets to
+                // it.
+                hub.send_request(ClientRequest::AgentInput {
+                    session,
+                    steps: Vec::new(),
+                    let_go: true,
+                    answer: Answer::new().0,
+                });
+                return Err("the desktop did not answer in time".to_string());
+            }
+        }
         if let Some(time) = then_wait {
             std::thread::sleep(time);
         }

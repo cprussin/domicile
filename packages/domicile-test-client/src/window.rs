@@ -346,6 +346,8 @@ struct Client {
     anchor: Option<String>,
     /// See [`crate::arguments::Arguments::sliding_menu`].
     sliding_menu: bool,
+    /// See [`crate::arguments::Arguments::menus_grab`].
+    menus_grab: bool,
     /// See [`crate::arguments::Arguments::cursor_surface`]. `drawn` keeps
     /// the cursor surface and its buffers' backing files.
     cursor_surface: bool,
@@ -680,6 +682,7 @@ impl Client {
             repositions: asked.repositioned_popup,
             anchor: asked.anchor.clone(),
             sliding_menu: asked.sliding_menu,
+            menus_grab: asked.menus_grab,
             cursor_surface: asked.cursor_surface,
             cursor_drawn: None,
             ask_to_drag: asked.ask_to_drag,
@@ -1629,7 +1632,7 @@ fn open_a_popup(
     // Grab before the first commit, as xdg-shell requires. The serial
     // should be the press that opened the menu; there is none, and a
     // compositor that validated it would dismiss the popup.
-    if client.popup_grab {
+    if client.popup_grab || (slides && client.menus_grab) {
         if let Some(seat) = &client.globals.seat {
             popup.grab(seat, 0);
             crate::say!(popup.id(), "grab()");
