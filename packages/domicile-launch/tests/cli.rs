@@ -220,6 +220,37 @@ fn load_shell_takes_one_shell_and_the_extra_word_is_named() {
 }
 
 #[test]
+fn load_extension_is_the_verb_that_takes_an_extension_directory() {
+    // Kept as typed, like load-shell's shell: the client makes it absolute.
+    assert_eq!(
+        run(&["load-extension", "./my-extension"]).unwrap(),
+        Invocation::LoadExtension {
+            directory: "./my-extension".to_string()
+        }
+    );
+}
+
+#[test]
+fn load_extension_takes_one_directory() {
+    assert_eq!(
+        run(&["load-extension"]),
+        Err(CliError::NotOne {
+            verb: "load-extension".to_string(),
+            what: "extension directory".to_string(),
+            said: "nothing".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["load-extension", "./a", "./b"]),
+        Err(CliError::NotOne {
+            verb: "load-extension".to_string(),
+            what: "extension directory".to_string(),
+            said: "./a and more".to_string()
+        })
+    );
+}
+
+#[test]
 fn open_takes_one_thing_to_open_as_typed() {
     assert_eq!(
         run(&["open", "~/notes.org"]).unwrap(),
@@ -847,6 +878,7 @@ fn every_command_in_the_help_parses_as_a_verb() {
     let verbs = [
         "which-shell",
         "load-shell",
+        "load-extension",
         "dev",
         "open",
         "install-app",

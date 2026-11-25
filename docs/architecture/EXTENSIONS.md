@@ -99,6 +99,22 @@ uninstalls through the engine's command socket, relayed by
 | `uninstall_extension` | `UNINSTALL_REASON_USER_INITIATED`. Refuses an id in `domicile.extensions.added`, which reconciling would install again. |
 | `config_extensions` | The ids in `domicile.extensions.added`. The app shows no uninstall button for these unless the config is writable and lists the id. |
 
+`domicile load-extension <directory>` sends the same `load_unpacked` from a
+terminal, through the control socket, and prints the id
+([CLI.md](/docs/CLI.md#domicile-load-extension-directory)). For a directory
+already loaded, `UnpackedInstaller::Load` reloads the extension in place with
+the same id, so an extension author picks up an edit without a restart.
+
+`load_unpacked` loads into the default browser profile first. Then:
+
+- Each profile with an unpacked copy of the extension reloads it from the same
+  directory, which is another one when an extension with a manifest `key`
+  moved. A copy from the Web Store stays.
+- Each other running profile installs it
+  ([BROWSER-PROFILES.md](BROWSER-PROFILES.md#engine)).
+- The reply follows the default profile's load. Another profile's failure is
+  logged.
+
 Chromium disables unpacked extensions outside developer mode
 (`DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION`). The installer sets
 `prefs::kExtensionsUIDeveloperMode` before loading a directory and leaves it
@@ -432,6 +448,7 @@ Engine guards in `packages/domicile-engine/scripts/`:
 
 - `guard-extension-installer.sh`
 - `guard-extension-in-private.sh`
+- `guard-extension-reload.sh`
 - `guard-extension-tray.sh`
 - `guard-extension-open-popup.sh`
 - `guard-extension-side-panel.sh`

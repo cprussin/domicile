@@ -1,0 +1,14 @@
+{
+  "content_scripts": [
+    {
+      "js": ["content.js"],
+      "matches": ["http://127.0.0.1/*", "http://localhost/*"],
+      "run_at": "document_start"
+    }
+  ],
+  "description": "Marks every page on this machine with its edit, for guard-extension-reload.sh. The key fixes its id, so it is the same extension in another directory.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApDiMu8d9j7lG3RFCiiZF3f4TTfVCYWwcTmOgTRdN5RfMYm92/9khPI0xFE2a/HTNymaxlhZ7R9X5a8dEx1wAmtl2TcV0ndK3w3Fy3zckQJ6J1nd1ryJOhil/tcCEXlCOWfVCo8vAC/N/myMxFc8FA81iNJ6qISxCIDVYduJ9R8PzjbOIi6kxNU8yZ43ZNGapTEpRzULA3FcRcp/txBke+Dw63a31sAi4JE6SN6ykWqfKF5tmVIFyFcNQXxw2LMfe1sYkLNBtSuhtNePA56m4QJBju2s9tWw6k469rMUV6eFIQ4KOvkINWRRxxSeGaGLdHiFCAFwJnxQh1/ISuNUqPQIDAQAB",
+  "manifest_version": 3,
+  "name": "Domicile reload guard",
+  "version": "1"
+}

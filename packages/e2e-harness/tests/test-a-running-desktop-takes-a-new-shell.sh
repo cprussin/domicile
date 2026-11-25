@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Checks a running desktop loads a new shell, opens URLs and apps, takes
-# screenshots and sends the shell commands on command, via `domicile
-# load-shell`, `BROWSER`, `domicile open --app`, `domicile-settings`,
-# `domicile-history`, the `xdg-open` shim on its apps' PATH, `domicile
-# screenshot` with and without a file, and `domicile send-shell`.
+# Checks a running desktop loads a new shell and an unpacked extension, opens
+# URLs and apps, takes screenshots and sends the shell commands on command, via
+# `domicile load-shell`, `domicile load-extension`, `BROWSER`, `domicile open
+# --app`, `domicile-settings`, `domicile-history`, the `xdg-open` shim on its
+# apps' PATH, `domicile screenshot` with and without a file, and `domicile
+# send-shell`.
 #
 #   packages/e2e-harness/tests/test-a-running-desktop-takes-a-new-shell.sh
 #
@@ -101,6 +102,8 @@ while True:
     answer = open("$WORK/answer").read().strip()
     done = ({"type": "opened"}
             if b'"type":"open_url"' in line or b'"type":"run_app"' in line
+            else {"type": "loaded_unpacked", "id": "abcdefghijklmnopabcdefghijklmnop"}
+            if b'"type":"load_unpacked"' in line
             else {"type": "loaded"})
     reply = (done if answer == "loaded"
              else {"type": "refused", "why": answer})
@@ -273,6 +276,43 @@ elif grep -q "no shell at" "$MISSING" &&
 else
   echo "FAIL: it failed for some other reason, or it reached the engine:"
   sed 's/^/    /' "$MISSING"
+  FAILED=1
+fi
+
+echo "== load-extension reaches the engine with the directory made absolute =="
+# The engine does not share the terminal's working directory.
+echo loaded >"$WORK/answer"
+SAID="$(cd "$WORK" && env DOMICILE_SOCK="$SOCK" "$DOMICILE" load-extension my-extension)"
+HEARD="$(tail -n 1 "$WORK/engine-heard" 2>/dev/null)"
+WANT="{\"type\":\"load_unpacked\",\"version\":1,\"directory\":\"$WORK/my-extension\"}"
+if [ "$HEARD" = "$WANT" ]; then
+  echo "PASS: $HEARD"
+else
+  echo "FAIL: the engine heard '$HEARD'"
+  echo "      and the protocol says  $WANT"
+  FAILED=1
+fi
+
+echo "== and its stdout is the extension's id =="
+if [ "$SAID" = "abcdefghijklmnopabcdefghijklmnop" ]; then
+  echo "PASS: $SAID"
+else
+  echo "FAIL: load-extension printed '$SAID', and the engine loaded"
+  echo "      abcdefghijklmnopabcdefghijklmnop"
+  FAILED=1
+fi
+
+echo "== an extension the engine refuses is an error on stderr =="
+echo "the manifest is missing" >"$WORK/answer"
+if SAID="$(env DOMICILE_SOCK="$SOCK" "$DOMICILE" load-extension "$WORK/my-extension" \
+             2>"$REFUSED")"; then
+  echo "FAIL: an extension the engine refused was reported loaded: $SAID"
+  FAILED=1
+elif [ -z "$SAID" ] && grep -q "the manifest is missing" "$REFUSED"; then
+  echo "PASS: $(grep -m1 'the manifest is missing' "$REFUSED")"
+else
+  echo "FAIL: stdout was '$SAID', and stderr:"
+  sed 's/^/    /' "$REFUSED"
   FAILED=1
 fi
 

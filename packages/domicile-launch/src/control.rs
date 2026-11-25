@@ -118,8 +118,8 @@ pub enum Request {
     SitePermissions,
     /// Store one site's setting in the engine.
     SetSitePermission { site: SitePermission },
-    /// Load the unpacked extension in this absolute directory into the
-    /// engine's profile. It stays until uninstalled.
+    /// Load the unpacked extension in this absolute directory into every
+    /// browser profile. It stays until uninstalled.
     LoadUnpacked { directory: PathBuf },
     /// Uninstall an extension the config did not install.
     UninstallExtension { id: String },

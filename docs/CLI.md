@@ -565,6 +565,28 @@ answers: `window_list` (with `windows`), `display_list` (`displays`),
 Most changes arrive at once; what holds the screens on or captures the
 desktop may take up to five seconds. It ends when the desktop does.
 
+## `domicile load-extension <directory>`
+
+Load the unpacked Chrome extension in `<directory>` into every browser profile,
+and print its id. Nothing restarts.
+
+```
+$ domicile load-extension ~/src/my-extension
+abcdefghijklmnopabcdefghijklmnop
+```
+
+- An extension already loaded from that directory reloads in place and keeps
+  its id. Run it again after each edit.
+- The id follows the directory, with symlinks resolved, unless the manifest has
+  a `key`. Without one, a link that points elsewhere loads a second extension
+  beside the first.
+- It returns once the default profile has
+  reloaded; a failure in another is in `domicile logs`.
+- A relative directory is relative to where the command runs.
+- It stays across restarts until it is uninstalled, as one loaded from the
+  Settings app does ([Extensions](architecture/EXTENSIONS.md#from-the-settings-app)).
+- A directory the engine cannot load prints why and exits nonzero.
+
 ## `domicile status [--json]`
 
 Print how the desktop is: the shell it serves, theme, keymap, whether it is

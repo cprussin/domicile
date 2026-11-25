@@ -286,8 +286,9 @@ using UnpackedLoaded =
     base::OnceCallback<void(base::expected<std::string, std::string>)>;
 
 // Carries out `load_unpacked`: loads the extension in `directory` into the
-// shell's profile, where it stays until uninstalled. Runs `loaded` once,
-// possibly after returning.
+// shell's profile, then into the other browser profiles, where it stays until
+// uninstalled. Runs `loaded` once, possibly after returning, when the shell's
+// has it.
 using LoadUnpacked =
     base::FunctionRef<void(const base::FilePath& directory,
                            UnpackedLoaded loaded)>;

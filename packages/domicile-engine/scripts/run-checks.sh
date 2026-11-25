@@ -63,6 +63,7 @@ TOGETHER=(
   guard-webview-content-script
   guard-extension-installer
   guard-extension-in-private
+  guard-extension-reload
   guard-extension-tray
   guard-extension-menu
   guard-extension-open-popup

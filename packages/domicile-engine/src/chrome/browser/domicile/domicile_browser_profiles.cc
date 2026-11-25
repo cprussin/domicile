@@ -663,6 +663,45 @@ void BrowserProfileRegistry::OnMirroredUnpackedLoaded(
   }
 }
 
+void BrowserProfileRegistry::ReloadUnpackedElsewhere(Profile& from,
+                                                     const std::string& id) {
+  const extensions::Extension* loaded =
+      extensions::ExtensionRegistry::Get(&from)->GetInstalledExtension(id);
+  // Chromium reports a load as done with extensions disabled too, and adds
+  // none.
+  if (loaded == nullptr) {
+    return;
+  }
+  // Not each copy's own: a manifest `key` fixes the id wherever the directory
+  // is.
+  const base::FilePath directory = loaded->path();
+  for (Profile* profile : ReadyExtensionProfiles()) {
+    const extensions::Extension* extension =
+        extensions::ExtensionRegistry::Get(profile)->GetInstalledExtension(id);
+    if (profile == &from || extension == nullptr ||
+        extension->location() !=
+            extensions::mojom::ManifestLocation::kUnpacked) {
+      continue;
+    }
+    const BrowserProfile* as = AsBrowserProfile(*profile);
+    LoadUnpackedInto(
+        *profile, directory,
+        base::BindOnce(
+            [](const std::string& name, const std::string& id,
+               base::expected<std::string, std::string> loaded) {
+              if (!loaded.has_value()) {
+                LOG(ERROR) << "domicile: the unpacked extension " << id
+                           << " did not reload in browser profile " << name
+                           << ": " << loaded.error();
+              }
+            },
+            as == nullptr ? std::string() : as->id, id));
+  }
+  // A profile where an earlier load failed still lacks it, and a reload is no
+  // install that mirrors it.
+  MirrorUserExtensions();
+}
+
 void BrowserProfileRegistry::UninstallEverywhere(Profile& from,
                                                  const std::string& id) {
   for (Profile* profile : ReadyExtensionProfiles()) {

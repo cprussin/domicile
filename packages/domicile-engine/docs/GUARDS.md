@@ -202,6 +202,7 @@ Headless.
 | `guard-webview-content-script.sh` | a `--load-extension` content script runs in a `<webview>` |
 | `guard-extension-installer.sh` | an extension named in the compositor's `extensions` message is installed (patch 0055) |
 | `guard-extension-in-private.sh` | an extension the private profile switches on runs in a `<webview private>`; switched off there it does not |
+| `guard-extension-reload.sh` | `load_unpacked` on the command socket reloads an extension in both of two browser profiles, after an edit and from another directory; an edit it is not sent for runs in neither |
 | `guard-extension-tray.sh` | the tray event, popup, its auto-resized size and `window.close()` (patch 0056) |
 | `guard-extension-menu.sh` | `installedExtensions` lists every extension with its settings; `configureExtension()`, `setExtensionEnabled()` and `uninstallExtension()` change it, and refuse what the config owns |
 | `guard-extension-open-popup.sh` | `action.openPopup()` reaches the shell as `extensionpopuprequested` |

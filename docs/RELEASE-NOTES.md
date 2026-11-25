@@ -60,6 +60,12 @@ An effect can draw the element through a mesh, a grid for cloth or instances for
 
 [Design](architecture/MOTION.md#shader-primitive)
 
+### `domicile load-extension`
+
+`domicile load-extension <directory>` loads an unpacked extension into every browser profile of the running desktop, or reloads it in place after an edit.
+
+[`domicile load-extension`](CLI.md#domicile-load-extension-directory)
+
 ### The idle clock can ignore pointer motion
 
 `idle.ignore_pointer_motion`, off by default, keeps a drifting mouse or a shaking desk from holding a desktop awake. Keys, touches, clicks and scrolling still do.

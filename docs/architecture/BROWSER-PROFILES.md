@@ -82,9 +82,10 @@ every page and keep one state (one Bitwarden login).
 - **Extensions** are installed into every profile and switched on or off in
   each, so one switched off keeps its data. That is the config's, and every
   one the user installs in any profile: from the Web Store page in a profile's
-  window, or the Settings app's "load unpacked". The others install it from
-  the Web Store, or from its directory. One the user uninstalls leaves every
-  profile. A profile whose config names its `extensions` has the config's
+  window, the Settings app's "load unpacked", or `domicile load-extension`.
+  The others install it from the Web Store, or from its directory, and an
+  unpacked one loaded again reloads in each. One the user uninstalls leaves
+  every profile. A profile whose config names its `extensions` has the config's
   switches set and locked; any other extension starts at its default the
   first time it is installed there and the user switches it from then on,
   which Chrome keeps. `extensions.settings` applies in every profile.

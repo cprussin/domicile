@@ -25,6 +25,9 @@ Part of [WRITING-A-SHELL.md](WRITING-A-SHELL.md). Design:
   manifest declares. Camera, microphone and the other site permissions are
   asked for like a site's.
 - Removing one from the list uninstalls it on reload.
+- `domicile load-extension <directory>` loads an unpacked extension, or
+  reloads it after an edit, without a restart
+  ([CLI.md](CLI.md#domicile-load-extension-directory)).
 
 ## The list
 

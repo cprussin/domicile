@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""The compositor's end of the control socket, for guard-extension-installer.sh
-and guard-extension-in-private.sh.
+"""The compositor's end of the control socket, for guard-extension-installer.sh,
+guard-extension-in-private.sh and guard-extension-reload.sh.
 
 It answers the browser's `hello` with a `welcome`, the `browser_profiles` it
 was given as JSON if any, and one `extensions` message naming the directories

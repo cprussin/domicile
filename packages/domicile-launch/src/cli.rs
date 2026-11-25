@@ -313,6 +313,11 @@ pub enum Invocation {
     ///
     /// Kept as typed; `shell_path` resolves it against the filesystem.
     Load { shell: String },
+    /// Tell the running desktop to load the unpacked extension in this
+    /// directory, or reload it in place when it is loaded.
+    ///
+    /// Kept as typed; the client makes it absolute.
+    LoadExtension { directory: String },
     /// Serve the shell whose source starts at this entry from a dev server,
     /// with hot module replacement, until stopped; then load the shell it
     /// replaced again.
@@ -544,6 +549,10 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (None, _) => Err(CliError::NoShellToLoad),
                 (Some(shell), None) => Ok(Invocation::Load { shell }),
                 (Some(_), Some(extra)) => Err(CliError::ExtraToLoad { extra }),
+            },
+            Verb::LoadingExtension => match (args.next(), args.next()) {
+                (Some(directory), None) => Ok(Invocation::LoadExtension { directory }),
+                (said, _) => Err(one(&first, "extension directory", said)),
             },
             Verb::Developing => match (args.next(), args.next()) {
                 (None, _) => Err(CliError::NoEntryToServe),
@@ -1164,6 +1173,8 @@ enum Verb {
     Asking(Request),
     /// `load-shell`, which takes a shell.
     Loading,
+    /// `load-extension`, which takes a directory.
+    LoadingExtension,
     /// `dev`, which takes an entry.
     Developing,
     /// `open`, which takes `--app` or nothing, then a target.
@@ -1359,6 +1370,7 @@ fn verb(word: &str) -> Option<Verb> {
     match word {
         "which-shell" => Some(Verb::Asking(Request::WhichShell)),
         "load-shell" => Some(Verb::Loading),
+        "load-extension" => Some(Verb::LoadingExtension),
         "dev" => Some(Verb::Developing),
         "open" => Some(Verb::Opening),
         "install-app" => Some(Verb::Installing),
