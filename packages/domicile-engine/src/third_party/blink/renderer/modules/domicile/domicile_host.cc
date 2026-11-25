@@ -3194,6 +3194,26 @@ void DomicileHost::ListBrowserWindows() {
 }
 
 // Stored, like WindowsChanged.
+void DomicileHost::MemoryShort(const Vector<String>& windows,
+                               MemoryShortCallback handled) {
+  const AtomicString& type = domicile_event_names::Browsermemoryshort();
+  if (!HasEventListeners(type)) {
+    std::move(handled).Run(false);
+    return;
+  }
+  auto ids = std::make_unique<JSONArray>();
+  for (const String& id : windows) {
+    ids->PushString(id);
+  }
+  MessageEvent* event = MessageEvent::Create();
+  event->initMessageEvent(type, /*bubbles=*/false, /*cancelable=*/false,
+                          ids->ToJSONString(), /*origin=*/nullptr,
+                          /*last_event_id=*/String(), /*source=*/nullptr,
+                          /*ports=*/nullptr);
+  DispatchEvent(*event);
+  std::move(handled).Run(true);
+}
+
 void DomicileHost::ProfilesChanged(
     Vector<domicile::mojom::blink::BrowserProfilePtr> profiles,
     const String& default_profile,

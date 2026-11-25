@@ -824,6 +824,14 @@ export type DomicileHostEventMap = {
    */
   browserwindowschanged: Event;
   /**
+   * A MessageEvent whose `data` is the ids of the windows whose pages may be
+   * unloaded, hidden longest first, as a JSON array. Fires every few seconds
+   * while the computer is short of memory. The engine unloads the first one's
+   * page, unless this has a listener: the shell then decides, by
+   * discardBrowserWindow().
+   */
+  browsermemoryshort: MessageEvent<string>;
+  /**
    * Fires when a profile is added, removed, renamed or recolored, the
    * defaults move, a site is pinned, or an extension is installed,
    * uninstalled or switched in one. Read `browserProfiles` for the current

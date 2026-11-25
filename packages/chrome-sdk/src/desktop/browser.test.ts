@@ -176,6 +176,20 @@ describe("browser", () => {
     stop();
   });
 
+  it("says which pages may be unloaded while memory is short", () => {
+    const fake = new FakeDomicileHost();
+    const heard: (readonly string[])[] = [];
+    const stop = desktop(fake.host).browser.on("memoryShort", (ids) => {
+      heard.push(ids);
+    });
+
+    fake.dispatch("browsermemoryshort", { data: '["2","1"]' });
+    stop();
+    fake.dispatch("browsermemoryshort", { data: '["2"]' });
+
+    expect(heard).toStrictEqual([["2", "1"]]);
+  });
+
   it("pins a site to a profile and finds the site that routes an address", async () => {
     const fake = new FakeDomicileHost();
     const { browser } = desktop(fake.host);

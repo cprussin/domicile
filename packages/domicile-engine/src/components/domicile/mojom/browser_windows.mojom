@@ -293,4 +293,10 @@ interface BrowserWindowsClient {
   ProfilesChanged(array<BrowserProfile> profiles,
                   string default_profile,
                   string default_private_profile);
+
+  // The computer is short of memory, and `windows` are those whose pages may
+  // be unloaded, the one hidden longest first. Asked every few seconds while
+  // it is short. `handled` when the shell decides what goes, by Discard; the
+  // browser unloads the first window's page when no document does.
+  MemoryShort(array<string> windows) => (bool handled);
 };

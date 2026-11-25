@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/barrier_callback.h"
 #include "base/barrier_closure.h"
 #include "base/callback_list.h"
 #include "base/check.h"
@@ -70,6 +71,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/url_constants.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
@@ -269,6 +271,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
   class Observer : public base::CheckedObserver {
    public:
     virtual void OnWindowsChanged() = 0;
+    // See mojom::BrowserWindowsClient.MemoryShort.
+    virtual void OnMemoryShort(const std::vector<std::string>& ids,
+                               base::OnceCallback<void(bool)> handled) = 0;
   };
 
   // Returns `profile`'s windows, creating them on first use.
@@ -288,6 +293,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
     // Unretained: it is a member.
     discarding_.emplace(
         base::BindRepeating(&DeskWindows::Discardable, base::Unretained(this)),
+        base::BindRepeating(&DeskWindows::AskMemoryShort,
+                            base::Unretained(this)),
         base::BindRepeating(&DeskWindows::Discard, base::Unretained(this)));
   }
   DeskWindows(const DeskWindows&) = delete;
@@ -1433,6 +1440,22 @@ class DeskWindows final : public base::SupportsUserData::Data,
     return std::string();
   }
 
+  // Asks every document whether its shell decides which of `ids` to unload.
+  void AskMemoryShort(const std::vector<std::string>& ids,
+                      base::OnceCallback<void(bool)> handled) {
+    size_t documents = 0;
+    for ([[maybe_unused]] Observer& observer : observers_) {
+      ++documents;
+    }
+    const auto answered = base::BarrierCallback<bool>(
+        documents, base::BindOnce([](std::vector<bool> answers) {
+                     return std::ranges::find(answers, true) != answers.end();
+                   }).Then(std::move(handled)));
+    for (Observer& observer : observers_) {
+      observer.OnMemoryShort(ids, answered);
+    }
+  }
+
   // The windows a shortage of memory may unload: no app's, whose notifications
   // would stop, and no extension's popup window.
   std::vector<PageDiscarding::Candidate> Discardable() {
@@ -1862,6 +1885,16 @@ class BrowserWindowsService final
   void OnWindowsChanged() override {
     if (client_.is_bound()) {
       client_->WindowsChanged(windows_->List());
+    }
+  }
+  void OnMemoryShort(const std::vector<std::string>& ids,
+                     base::OnceCallback<void(bool)> handled) override {
+    if (client_.is_bound()) {
+      // A document that goes first handles nothing.
+      client_->MemoryShort(ids, mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+                                    std::move(handled), false));
+    } else {
+      std::move(handled).Run(false);
     }
   }
 

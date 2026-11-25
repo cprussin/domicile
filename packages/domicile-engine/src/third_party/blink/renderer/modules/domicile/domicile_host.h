@@ -557,6 +557,8 @@ class MODULES_EXPORT DomicileHost final
       Vector<domicile::mojom::blink::BrowserProfilePtr> profiles,
       const String& default_profile,
       const String& default_private_profile) override;
+  void MemoryShort(const Vector<String>& windows,
+                   MemoryShortCallback handled) override;
 
   // domicile::mojom::blink::CastSinksClient:
   void SinksChanged(

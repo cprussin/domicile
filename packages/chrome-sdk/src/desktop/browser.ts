@@ -92,6 +92,13 @@ export type BrowserListeners = {
    * in one.
    */
   profilesChange: () => void;
+  /**
+   * The computer is short of memory, every few seconds while it is. `ids` are
+   * the windows whose pages may be unloaded, the one hidden longest first.
+   * The engine unloads the first one's page, unless the shell listens: the
+   * shell then decides what to `discard`.
+   */
+  memoryShort: (ids: readonly string[]) => void;
 };
 
 export type Browser = {
@@ -185,7 +192,8 @@ export type Browser = {
   /**
    * Unload window `id`'s page to free its memory. Its history and scroll
    * stay, and it loads again when a `<webview>` next shows the window; what
-   * was typed into it is not kept. A window a `<webview>` shows, an
+   * was typed into it is not kept. A mounted `<webview>` that is not rendered
+   * (`display: none`) does not show it. A window a `<webview>` shows, an
    * extension's popup window, a DevTools window, and an app module's or
    * Electron app's stay loaded.
    */
@@ -306,6 +314,10 @@ export const browser = (host: BrowserHost): Browser => {
     on: on<BrowserListeners>({
       change: (listener) =>
         hostEvent(host, "browserwindowschanged", () => listener()),
+      memoryShort: (listener) =>
+        hostEvent(host, "browsermemoryshort", (event) =>
+          listener(JSON.parse(event.data) as string[]),
+        ),
       profilesChange: (listener) =>
         hostEvent(host, "browserprofileschanged", () => listener()),
     }),

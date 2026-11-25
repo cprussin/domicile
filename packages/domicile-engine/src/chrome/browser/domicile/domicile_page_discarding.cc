@@ -3,9 +3,11 @@
 
 #include "chrome/browser/domicile/domicile_page_discarding.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/byte_size.h"
 #include "base/feature_list.h"
@@ -104,8 +106,10 @@ bool MayDiscard(content::WebContents& page, const PageNode& node) {
 
 }  // namespace
 
-PageDiscarding::PageDiscarding(Candidates candidates, Discard discard)
-    : candidates_(std::move(candidates)), discard_(std::move(discard)) {
+PageDiscarding::PageDiscarding(Candidates candidates, Ask ask, Discard discard)
+    : candidates_(std::move(candidates)),
+      ask_(std::move(ask)),
+      discard_(std::move(discard)) {
   if (base::FeatureList::IsEnabled(kDomicilePageDiscarding)) {
     timer_.Start(FROM_HERE, kInterval,
                  base::BindRepeating(&PageDiscarding::Check,
@@ -129,23 +133,34 @@ void PageDiscarding::OnChecked(bool is_short) {
   if (!is_short || !PerformanceManager::IsAvailable()) {
     return;
   }
-  std::string oldest;
-  base::TimeTicks hidden_at = base::TimeTicks::Max();
+  std::vector<std::pair<base::TimeTicks, std::string>> hidden;
   for (const Candidate& candidate : candidates_.Run()) {
     const base::WeakPtr<PageNode> node =
         PerformanceManager::GetPrimaryPageNodeForWebContents(&*candidate.page);
     if (!node || !MayDiscard(*candidate.page, *node)) {
       continue;
     }
-    const base::TimeTicks since = node->GetVisibilityState().last_change_time;
-    if (since < hidden_at) {
-      hidden_at = since;
-      oldest = candidate.id;
-    }
+    hidden.emplace_back(node->GetVisibilityState().last_change_time,
+                        candidate.id);
   }
-  if (!oldest.empty()) {
-    LOG(WARNING) << "domicile: short of memory.";
-    discard_.Run(oldest);
+  if (hidden.empty()) {
+    return;
+  }
+  LOG(WARNING) << "domicile: short of memory.";
+  std::ranges::sort(hidden);
+  std::vector<std::string> ids;
+  for (auto& [since, id] : hidden) {
+    ids.push_back(std::move(id));
+  }
+  ask_.Run(ids, base::BindOnce(&PageDiscarding::OnAsked,
+                               weak_factory_.GetWeakPtr(), ids.front()));
+}
+
+void PageDiscarding::OnAsked(const std::string& id, bool handled) {
+  if (handled) {
+    LOG(INFO) << "domicile: the shell decides which pages to unload.";
+  } else {
+    discard_.Run(id);
   }
 }
 
