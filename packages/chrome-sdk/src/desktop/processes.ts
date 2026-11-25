@@ -9,8 +9,12 @@ export type Processes = {
   spawn: System["spawn"];
   /** Run `argv` and collect its output as text once it ends. */
   run: System["run"];
-  /** Start `argv`, such as an application, and leave it running on its own. */
-  launch: (argv: readonly string[]) => void;
+  /**
+   * Start `argv`, such as an application, and leave it running on its own.
+   * `from` names where the launch started, such as `"launcher"`; the window
+   * that answers it says so in its `launchedFrom`.
+   */
+  launch: (argv: readonly string[], from?: string) => void;
 };
 
 export const processes = (
@@ -18,8 +22,12 @@ export const processes = (
   calls: Pick<System, "run" | "spawn">,
 ): Processes => ({
   ...processCalls(calls),
-  launch: (argv) => {
-    host.spawn(argv);
+  launch: (argv, from) => {
+    if (from === undefined) {
+      host.spawn(argv);
+    } else {
+      host.spawn(argv, from);
+    }
   },
 });
 

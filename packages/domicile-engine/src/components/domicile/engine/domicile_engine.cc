@@ -515,6 +515,13 @@ class Surface : public mojom::SurfaceObserver,
   // Sent only when the browser owns the sink, which this does not request.
   void OnBufferReleased(uint64_t buffer_id) override {}
 
+  // Forwarded as `showing`, which ends a closed window's linger.
+  void OnSurfaceShown(bool shown) override {
+    queue_->Push({.type = EngineEvent::Type::kShowing,
+                  .surface = id_,
+                  .showing = shown});
+  }
+
   // viz::mojom::CompositorFrameSinkClient:
   //
   // Frames follow the client's commits, so this sink never asks for
@@ -1398,6 +1405,12 @@ struct DomicileEngine {
                                       event.why.c_str());
           } else if (callbacks_.capture_ended) {
             callbacks_.capture_ended(callbacks_.user_data, event.capture);
+          }
+          break;
+        case domicile::EngineEvent::Type::kShowing:
+          if (callbacks_.showing) {
+            callbacks_.showing(callbacks_.user_data, event.surface,
+                               event.showing ? 1 : 0);
           }
           break;
         case domicile::EngineEvent::Type::kFrameDone:

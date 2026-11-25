@@ -469,6 +469,10 @@ the opener, the window name and a form's POST body are kept. It is listed once
 the page shows it, at the address it opens. A middle click opens the link with
 no opener, as in Chrome.
 
+The new window's `opener` is the `id` of the browser window whose page opened
+it, so you can open it from there, or `undefined` for a window nothing opened
+and one a plain `<webview>`'s page opened.
+
 ## Views
 
 An Electron app's window can be made of several pages: its own, and views

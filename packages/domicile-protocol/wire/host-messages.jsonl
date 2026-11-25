@@ -20,6 +20,7 @@
 {"type":"app_transient_for","app_id":"app-4","transient_for":null}
 {"type":"app_anchored","app_id":"app-4","anchor":"bar"}
 {"type":"app_anchored","app_id":"app-4","anchor":null}
+{"type":"app_launched_from","app_id":"app-4","from":"launcher"}
 {"type":"app_urgent","app_id":"app-2","urgent":true}
 {"type":"app_inhibits_shortcuts","app_id":"app-2","inhibits":true}
 {"type":"displays","displays":[{"name":"left","position":[0,0],"size":[1920,1080],"scale":1,"mode":[1920,1080],"refresh_mhz":60000,"adaptive_sync":"unsupported","hdr":"unsupported","peak_luminance":0,"sdr_white":0,"transform":"normal"},{"name":"right","position":[1920,0],"size":[2560,1440],"scale":2,"mode":[5120,2880],"refresh_mhz":59951,"adaptive_sync":"on","hdr":"on","peak_luminance":1000,"sdr_white":203,"transform":"normal"}]}

@@ -245,8 +245,11 @@ pub struct WindowGone {
     /// Buffers to release now: frames that never went up.
     pub releases: Vec<Release>,
     /// The surface left on screen, for the caller to end with
-    /// [`EngineSession::linger_over`] after [`crate::engine_lingering::LINGER`].
+    /// [`EngineSession::linger_over`] after `lasts`.
     pub linger: Option<Linger>,
+    /// How long the surface may linger: no time when no `<app>` element
+    /// shows it. See `engine_lingering`.
+    pub lasts: std::time::Duration,
 }
 
 impl EngineSession {
@@ -775,6 +778,13 @@ impl EngineSession {
                 | Event::Compositing { .. }
                 | Event::BrowserWindows(_)
                 | Event::InputDevices(_) => {}
+                // The last `<app>` showing a closed window left the page, so
+                // its linger ends now.
+                Event::Showing { surface, showing } => {
+                    if let Some(linger) = self.lingering.showing(*surface, *showing) {
+                        dispatched.releases.extend(self.linger_over(linger));
+                    }
+                }
             }
         }
         dispatched.events = events;
@@ -863,6 +873,7 @@ impl EngineSession {
                 })
                 .collect(),
             linger: Some(self.lingering.start(surface, gone.ids)),
+            lasts: self.lingering.lasts(surface),
         }
     }
 

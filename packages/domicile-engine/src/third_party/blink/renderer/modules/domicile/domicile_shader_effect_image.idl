@@ -1,0 +1,12 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// An image a shader effect samples as `uniform shader <name>`, which repeats
+// across the content: `width` by `height` pixels of unpremultiplied RGBA,
+// rows top first, at most 2048 on a side.
+dictionary DomicileShaderEffectImage {
+  required DOMString name;
+  required unsigned long width;
+  required unsigned long height;
+  required Uint8Array pixels;
+};

@@ -401,7 +401,8 @@ void ControlChannel::SetClient(
   }
 }
 
-void ControlChannel::Spawn(const std::vector<std::string>& command) {
+void ControlChannel::Spawn(const std::vector<std::string>& command,
+                           const std::string& from) {
   // An empty argv is refused here as well as in the renderer, because the
   // renderer's check is advice: this process is the one that must not hand an
   // empty command to the compositor.
@@ -416,6 +417,10 @@ void ControlChannel::Spawn(const std::vector<std::string>& command) {
   base::DictValue message;
   message.Set("type", "spawn");
   message.Set("command", std::move(argv));
+  // Left out for none, as a compositor before it expects.
+  if (!from.empty()) {
+    message.Set("from", from);
+  }
 
   std::string line;
   if (!base::JSONWriter::Write(message, &line)) {
@@ -1571,6 +1576,15 @@ void ControlChannel::DispatchLine(const std::string& line,
     // parent.
     const std::string* anchor = message.FindString("anchor");
     client_->AppAnchored(*app_id, anchor ? *anchor : std::string());
+    return;
+  }
+
+  if (*type == "app_launched_from") {
+    const std::string* app_id = message.FindString("app_id");
+    const std::string* from = message.FindString("from");
+    if (app_id && from) {
+      client_->AppLaunchedFrom(*app_id, *from);
+    }
     return;
   }
 

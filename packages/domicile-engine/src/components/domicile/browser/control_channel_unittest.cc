@@ -173,6 +173,11 @@ class FakeClient : public mojom::ControlChannelClient {
     heard_.push_back(base::StringPrintf("anchored %s at %s", app_id.c_str(),
                                         anchor.c_str()));
   }
+  void AppLaunchedFrom(const std::string& app_id,
+                       const std::string& from) override {
+    heard_.push_back(base::StringPrintf("launched %s from %s", app_id.c_str(),
+                                        from.c_str()));
+  }
   void AppUrgent(const std::string& app_id, bool urgent) override {
     heard_.push_back(base::StringPrintf("urgent %s %s", app_id.c_str(),
                                         urgent ? "true" : "false"));
@@ -546,6 +551,36 @@ TEST_F(ControlChannelTest, AWindowsAnchorReachesThePage) {
   EXPECT_EQ(client_.heard_,
             (std::vector<std::string>{"anchored app-4 at bar",
                                       "anchored app-4 at ", "locked false"}));
+}
+
+// Where a window's launch started reaches the page, and a line naming no
+// place is malformed.
+TEST_F(ControlChannelTest, WhereAWindowsLaunchStartedReachesThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"app_launched_from\",\"app_id\":\"app-4\","
+      "\"from\":\"launcher\"}\n"
+      "{\"type\":\"app_launched_from\",\"app_id\":\"app-4\"}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{"launched app-4 from launcher",
+                                      "locked false"}));
+}
+
+// A launch names where it started, and one from nowhere in particular sends
+// no `from`, as a compositor before it expects.
+TEST_F(ControlChannelTest, ALaunchNamesWhereItStarted) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), kHello);
+  control_->Spawn({"foot"}, "launcher");
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), R"({"command":["foot"],"from":"launcher","type":"spawn"})");
+  control_->Spawn({"foot"}, "");
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), R"({"command":["foot"],"type":"spawn"})");
 }
 
 // A cursor a client drew reaches the page with its PNG, hotspot and scale. A

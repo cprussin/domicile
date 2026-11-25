@@ -38,20 +38,36 @@ pub const MINTED_FOR: Duration = Duration::from_secs(10);
 struct Minted {
     /// The process whose notification was pressed, if one was.
     sender: Option<u32>,
+    /// Where the chrome said a launch started, if this token is a launch's.
+    launch: Option<String>,
 }
 
 /// Mint a token for the user's latest press in the chrome, dropping any older
-/// one. `sender` is the process whose notification was pressed, if one was.
-pub fn mint(state: &mut XdgActivationState, sender: Option<u32>) -> String {
+/// one. `sender` is the process whose notification was pressed, if one was;
+/// `launch` is where the chrome said a launch started, if this is one.
+pub fn mint(state: &mut XdgActivationState, sender: Option<u32>, launch: Option<String>) -> String {
     state.retain_tokens(|_, data| data.user_data.get::<Minted>().is_none());
-    state.create_external_token(minted(sender)).0.to_string()
+    state
+        .create_external_token(minted(sender, launch))
+        .0
+        .to_string()
 }
 
 /// The data of a token the compositor mints.
-fn minted(sender: Option<u32>) -> XdgActivationTokenData {
+fn minted(sender: Option<u32>, launch: Option<String>) -> XdgActivationTokenData {
     let data = XdgActivationTokenData::default();
-    data.user_data.insert_if_missing(|| Minted { sender });
+    data.user_data
+        .insert_if_missing(|| Minted { sender, launch });
     data
+}
+
+/// Where the launch that minted `data` started, while the token is good, so
+/// the window that answers it can say what opened it.
+pub fn launched_from(data: &XdgActivationTokenData) -> Option<String> {
+    data.user_data
+        .get::<Minted>()
+        .filter(|_| data.timestamp.elapsed() < MINTED_FOR)
+        .and_then(|minted| minted.launch.clone())
 }
 
 /// Whether the minted token `data` lets process `pid` raise its window with
@@ -117,14 +133,14 @@ mod tests {
     fn a_token_minted_for_the_user_moves_it_after_the_keyboard_moved() {
         // Closing the drawer hands the keyboard back to a window after the
         // notification click minted the token.
-        assert!(granted(&minted(None), Some(Serial::from(5)), false));
+        assert!(granted(&minted(None, None), Some(Serial::from(5)), false));
     }
 
     #[test]
     fn a_token_minted_for_the_user_expires() {
         let stale = XdgActivationTokenData {
             timestamp: Instant::now() - MINTED_FOR,
-            ..minted(None)
+            ..minted(None, None)
         };
         assert!(!granted(&stale, Some(Serial::from(5)), false));
     }
@@ -133,22 +149,45 @@ mod tests {
     fn a_press_lets_its_notifications_process_raise_its_window() {
         // An app that ignores `ActivationToken` and asks with its own token,
         // as Electron before 42 does.
-        assert!(invites(&minted(Some(42)), 42));
+        assert!(invites(&minted(Some(42), None), 42));
     }
 
     #[test]
     fn a_press_lets_no_other_process() {
-        assert!(!invites(&minted(Some(42)), 7));
-        assert!(!invites(&minted(None), 42));
+        assert!(!invites(&minted(Some(42), None), 7));
+        assert!(!invites(&minted(None, None), 42));
     }
 
     #[test]
     fn a_press_stops_letting_it_once_the_token_expires() {
         let stale = XdgActivationTokenData {
             timestamp: Instant::now() - MINTED_FOR,
-            ..minted(Some(42))
+            ..minted(Some(42), None)
         };
         assert!(!invites(&stale, 42));
+    }
+
+    #[test]
+    fn a_launch_token_names_where_the_launch_started() {
+        assert_eq!(
+            launched_from(&minted(None, Some("launcher".to_string()))),
+            Some("launcher".to_string())
+        );
+    }
+
+    #[test]
+    fn a_press_token_or_a_clients_own_names_no_launch() {
+        assert_eq!(launched_from(&minted(Some(42), None)), None);
+        assert_eq!(launched_from(&XdgActivationTokenData::default()), None);
+    }
+
+    #[test]
+    fn a_launch_token_names_nothing_once_it_expires() {
+        let stale = XdgActivationTokenData {
+            timestamp: Instant::now() - MINTED_FOR,
+            ..minted(None, Some("launcher".to_string()))
+        };
+        assert_eq!(launched_from(&stale), None);
     }
 
     #[test]

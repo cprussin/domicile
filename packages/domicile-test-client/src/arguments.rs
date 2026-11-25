@@ -286,6 +286,9 @@ pub enum AskForFocus {
     /// When the keyboard leaves it, with the serial of the `enter` before: a
     /// window taking the keyboard back after the user moved on.
     WhenLeft,
+    /// Once its window is up, with the token it was started with
+    /// (`XDG_ACTIVATION_TOKEN`), as a launched app answers its launch.
+    WithItsLaunchToken,
 }
 
 /// Why a command line was rejected.
@@ -397,6 +400,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             }
             "--ask-for-focus-when-left" => {
                 take(&mut ask_for_focus, &flag, AskForFocus::WhenLeft)?;
+            }
+            "--ask-for-focus-with-its-launch-token" => {
+                take(&mut ask_for_focus, &flag, AskForFocus::WithItsLaunchToken)?;
             }
             "--hold-the-screens-on" => {
                 take(

@@ -30,9 +30,16 @@ class VIZ_HOST_EXPORT ShaderEffectsHost
     : public mojom::DomicileShaderEffectsClient {
  public:
   struct Registered {
+    Registered();
+    Registered(Registered&&);
+    Registered& operator=(Registered&&);
+    ~Registered();
+
     uint32_t id = 0;
     // How many floats the effect takes after `size`.
     uint32_t arguments = 0;
+    // Its array uniforms, in the order it declares them.
+    std::vector<mojom::DomicileShaderEffectArrayPtr> arrays;
   };
   using RegisterCallback =
       base::OnceCallback<void(base::expected<Registered, std::string>)>;
@@ -52,10 +59,10 @@ class VIZ_HOST_EXPORT ShaderEffectsHost
   // Runs with an effect's id when the engine drops it.
   using LostCallback = base::OnceCallback<void(uint32_t)>;
 
-  // Compiles `sksl` in viz as an effect only `owner`'s frames draw. `lost`
+  // Compiles `source` in viz as an effect only `owner`'s frames draw. `lost`
   // runs if the engine drops it after a GPU hang.
   void Register(const FrameSinkId& owner,
-                std::string sksl,
+                mojom::DomicileShaderEffectSourcePtr source,
                 LostCallback lost,
                 RegisterCallback done);
 
@@ -66,22 +73,25 @@ class VIZ_HOST_EXPORT ShaderEffectsHost
 
  private:
   struct Effect {
-    Effect(FrameSinkId owner, std::string sksl, LostCallback lost);
+    Effect(FrameSinkId owner,
+           mojom::DomicileShaderEffectSourcePtr source,
+           LostCallback lost);
     Effect(Effect&&);
     Effect& operator=(Effect&&);
     ~Effect();
 
     FrameSinkId owner;
-    std::string sksl;
+    mojom::DomicileShaderEffectSourcePtr source;
     LostCallback lost;
   };
 
   void OnRegistered(uint32_t id,
                     FrameSinkId owner,
-                    std::string sksl,
+                    mojom::DomicileShaderEffectSourcePtr source,
                     LostCallback lost,
                     RegisterCallback done,
                     uint32_t arguments,
+                    std::vector<mojom::DomicileShaderEffectArrayPtr> arrays,
                     const std::string& error);
 
   uint32_t next_id_ = 1;

@@ -93,12 +93,16 @@ The shell's SkSL, drawn as `filter: domicile-shader()`. Design:
 | `components/domicile/mojom/shader_effects.mojom` | what a shell document calls: register an effect's source, and hear one was lost |
 | `content/browser/domicile/domicile_shader_effects.{h,cc}` | that interface's browser side, bound for the shell only; registers under the shell frame's `FrameSinkId` |
 | `components/viz/host/domicile/shader_effects_host.{h,cc}` | the browser's end of viz's registry in `HostFrameSinkManager`; keeps each source to register again after a GPU restart, and drops what was drawing when the GPU process went |
-| `components/viz/service/display/domicile/shader_effects.{h,cc}` | viz's registry, on `SurfaceManager`: compiles strict ES2 SkSL, attaches a program to its owner's passes for the aggregator, and builds the `SkImageFilter` `SkiaRenderer` runs |
-| `third_party/blink/renderer/core/css/domicile/domicile_shader_effects.{h,cc}` | a document's effects by name; turns `domicile-shader(name, …)` into a filter |
+| `components/viz/service/display/domicile/shader_effects.{h,cc}` | viz's registry, on `SurfaceManager`: compiles strict ES2 SkSL, a mesh's specification and vertices and an effect's images, attaches them to its owner's passes for the aggregator, builds the `SkImageFilter` `SkiaRenderer` runs, and draws a mesh effect |
+| `third_party/blink/renderer/core/css/domicile/domicile_shader_effects.{h,cc}` | a document's effects by name; turns `domicile-shader(name, …)` into a filter, and keeps each element's arrays for its filters |
+| `third_party/blink/renderer/modules/domicile/domicile_shader_effect_{init,image}.idl` | what `registerShaderEffect` takes: the programs, the mesh, the outset and the images |
 | `third_party/blink/renderer/core/style/domicile/domicile_shader_filter_operation.{h,cc}` | that filter in style: name, viz's id, outset and arguments |
 
 Patch 0273 adds `cc::FilterOperation::SHADER` and its mojo, the aggregator
-and renderer hooks, the CSS parsing and interpolation, and the binder.
+and renderer hooks, the CSS parsing and interpolation, and the binder. Patch
+0274 adds the filter's arrays and inputs, the mesh draw in `SkiaRenderer`,
+the mipmapped pass in the aggregator, the arrays in `PaintLayer`'s filters,
+and shader effects animating on the compositor.
 `DomicileHost.registerShaderEffect` and `shadereffectlost` are in
 `modules/domicile/`.
 
@@ -117,4 +121,5 @@ and renderer hooks, the CSS parsing and interpolation, and the binder.
 - The Blink side and the probe have no unit tests. They need a display
   compositor. `spike.sh` and `guard-css-and-resize.sh` cover them.
   `guard-shader-effect.sh` covers a shader effect's Blink side and the
-  browser's service.
+  browser's service; `guard-shader-mesh.sh` and `guard-shader-image.sh` a
+  mesh effect and an effect's images.

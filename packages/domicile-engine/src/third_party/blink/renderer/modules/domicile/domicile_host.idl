@@ -22,7 +22,10 @@
   //
   // Sequence<DOMString> rather than a single string: splitting a command line
   // is a shell's job and there is no shell in this path.
-  [CallWith=ScriptState, RaisesException] undefined spawn(sequence<DOMString> command);
+  //
+  // `from` names where the launch started, such as "launcher"; the window
+  // that answers the launch's activation token carries it as `launchedFrom`.
+  [CallWith=ScriptState, RaisesException] undefined spawn(sequence<DOMString> command, optional DOMString from = "");
 
   // Ask what in the compositor's index of the home matches `query`. Resolves
   // with the answer. A newer call supersedes this one, which rejects with an
@@ -665,12 +668,12 @@
                                   unsigned long width,
                                   unsigned long height);
 
-  // Compiles `sksl`, strict ES2 SkSL of at most 32 KiB, in the GPU process
-  // as shader effect `name`, which `filter: domicile-shader(name, …)` and
-  // `backdrop-filter` then draw. Its child is `uniform shader content`, its
-  // first uniform `uniform float2 size`, and the rest are the function's
-  // numbers in order, at most 16 floats. `outset` is how many CSS pixels it
-  // may draw outside the content.
+  // Compiles `init` in the GPU process as shader effect `name`, which
+  // `filter: domicile-shader(name, …)` and `backdrop-filter` then draw. Its
+  // fragment program's children are `uniform shader content` and the
+  // images, its first uniform `uniform float2 size`, then the function's
+  // numbers in order, at most 16 floats, then its arrays, which
+  // updateShaderEffect() sets. A `vertex` program makes it a mesh effect.
   //
   // Resolves with how many numbers it takes. Rejects with an OperationError
   // whose message is the compiler's. A second register of `name` replaces
@@ -679,7 +682,17 @@
   // Handled by the browser process, over its own pipe: see
   // components/domicile/mojom/shader_effects.mojom.
   [CallWith=ScriptState, RaisesException] Promise<unsigned long>
-      registerShaderEffect(DOMString name, DOMString sksl, double outset);
+      registerShaderEffect(DOMString name, DomicileShaderEffectInit init);
+
+  // Sets array `uniform` of shader effect `name` for `element`'s filters to
+  // `values`, and the rest of that array to zero; the element draws them in
+  // its next frame. An element's arrays hold at most 64 KiB. Throws a
+  // NotFoundError for an unknown effect or array, and a RangeError for too
+  // many values.
+  [RaisesException] undefined updateShaderEffect(Element element,
+                                                 DOMString name,
+                                                 DOMString uniform,
+                                                 Float32Array values);
 
   // Sends `method`, "GET" or "POST", to `url` from the browser process with
   // the cookies of browser profile `profile`, one of `browserProfiles`, or

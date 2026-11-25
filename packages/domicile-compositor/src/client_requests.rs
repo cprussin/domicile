@@ -244,6 +244,9 @@ pub enum ClientRequest {
     /// asker hears why it did not start; without one the person is told.
     Spawn {
         command: Vec<String>,
+        /// Where the chrome said the launch started, for the window that
+        /// answers its activation token.
+        from: Option<String>,
         answer: Option<crate::configured_displays::Answer>,
         /// The agent session it is started for, whose seat holds its
         /// windows. See [`DomicileCompositor::agents_window_appeared`].
@@ -584,13 +587,15 @@ impl DomicileCompositor {
             // with a token so the application can raise its window.
             ClientRequest::ActivateTrayItem { id, action } => {
                 if let Some(tray) = self.hub.tray.get() {
-                    let token = activation::mint(&mut self.xdg_activation_state, tray.pid(&id));
+                    let token =
+                        activation::mint(&mut self.xdg_activation_state, tray.pid(&id), None);
                     tray.activate(id, action, token);
                 }
             }
             ClientRequest::TrayMenuClicked { bus } => {
                 if let Some(tray) = self.hub.tray.get() {
-                    let token = activation::mint(&mut self.xdg_activation_state, tray.pid_on(&bus));
+                    let token =
+                        activation::mint(&mut self.xdg_activation_state, tray.pid_on(&bus), None);
                     tray.provide(bus, token);
                 }
             }
@@ -604,7 +609,7 @@ impl DomicileCompositor {
             ClientRequest::InvokeNotificationAction { id, action } => {
                 if let Some(server) = self.hub.notifications.get() {
                     let pid = server.pid(id);
-                    let token = activation::mint(&mut self.xdg_activation_state, pid);
+                    let token = activation::mint(&mut self.xdg_activation_state, pid, None);
                     let windowed = pid.is_some_and(|pid| self.has_a_window(pid));
                     server.invoke(id, action, token, windowed);
                 }
@@ -784,8 +789,6 @@ impl DomicileCompositor {
                 change,
                 answer,
             } => answer.give(self.configure_display(&display, &change)),
-            // A launch from a key or the launcher, so it may raise the
-            // window of an app already running.
             ClientRequest::AgentInput {
                 session,
                 steps,
@@ -795,8 +798,11 @@ impl DomicileCompositor {
             ClientRequest::AgentGone { session } => self.agent_gone(session),
             ClientRequest::TakeOver { app_id } => self.take_over(&app_id),
             ClientRequest::GiveBack { app_id } => self.give_back(&app_id),
+            // A launch from a key or the launcher, so it may raise the
+            // window of an app already running.
             ClientRequest::Spawn {
                 command,
+                from,
                 answer,
                 agent,
             } => {
@@ -804,7 +810,7 @@ impl DomicileCompositor {
                 // agent's, and must not take the user's focus.
                 let token = agent
                     .is_none()
-                    .then(|| activation::mint(&mut self.xdg_activation_state, None));
+                    .then(|| activation::mint(&mut self.xdg_activation_state, None, from));
                 let started = spawn_client(
                     &command,
                     &self.hub.wayland_display,

@@ -155,7 +155,8 @@ class ControlChannel : public mojom::ControlChannel {
   // mojom::ControlChannel:
   void SetClient(
       mojo::PendingRemote<mojom::ControlChannelClient> client) override;
-  void Spawn(const std::vector<std::string>& command) override;
+  void Spawn(const std::vector<std::string>& command,
+             const std::string& from) override;
   void SearchFiles(const std::string& query) override;
   void CallSystem(uint32_t id, const std::string& request) override;
   void AnswerPortalRequest(uint32_t id, const std::string& answer) override;

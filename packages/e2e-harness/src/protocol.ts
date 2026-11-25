@@ -226,6 +226,14 @@ const appAnchoredSchema = z.looseObject({
   type: z.literal("app_anchored"),
 });
 
+// The launch a window answered: the `from` of the spawn whose activation
+// token it used.
+const appLaunchedFromSchema = z.looseObject({
+  app_id: z.string(),
+  from: z.string(),
+  type: z.literal("app_launched_from"),
+});
+
 // Whether a window wants attention: set when the compositor drops its
 // activation request, cleared when it gets the keyboard.
 const appUrgentSchema = z.looseObject({
@@ -1025,6 +1033,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appSuspendedSchema,
   appTransientForSchema,
   appAnchoredSchema,
+  appLaunchedFromSchema,
   appUrgentSchema,
   displaysSchema,
   monitorsSchema,
@@ -1096,6 +1105,7 @@ export type AppPointerConstraintMessage = z.infer<
 >;
 export type AppTransientForMessage = z.infer<typeof appTransientForSchema>;
 export type AppAnchoredMessage = z.infer<typeof appAnchoredSchema>;
+export type AppLaunchedFromMessage = z.infer<typeof appLaunchedFromSchema>;
 export type AppUrgentMessage = z.infer<typeof appUrgentSchema>;
 export type DisplaysMessage = z.infer<typeof displaysSchema>;
 export type MonitorsMessage = z.infer<typeof monitorsSchema>;

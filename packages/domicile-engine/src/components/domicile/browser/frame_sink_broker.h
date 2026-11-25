@@ -200,8 +200,14 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
 
   // Drops `requester`'s waiting embeds without running their callbacks. For a
   // page that disconnected: its app may never connect, and an answer would
-  // embed the window under a page that is gone.
+  // embed the window under a page that is gone. Its element no longer shows
+  // the sink it embedded.
   void DropEmbeds(uint64_t requester);
+
+  // Records whether `requester`'s element is in its page. A sink is shown
+  // while an element that embedded it last is, and its producer hears when
+  // that changes, so a closed window's last frame stays only while one is.
+  void SetShown(uint64_t requester, bool shown);
 
   // Runs `callback` once `frame_sink_id` is no longer brokered, with why. Runs
   // it at once if it is not brokered.
@@ -347,6 +353,13 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // The sink `frame_sink_id` names, if this producer owns one.
   BrokeredFrameSink* OwnedFrameSink(const viz::FrameSinkId& frame_sink_id);
 
+  // Records that `requester` last embedded `frame_sink_id`.
+  void Embedded(uint64_t requester, const viz::FrameSinkId& frame_sink_id);
+
+  // Tells `frame_sink_id`'s producer whether an element shows it, if that
+  // changed.
+  void UpdateShown(const viz::FrameSinkId& frame_sink_id);
+
   const raw_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
   const FrameSinkIdAllocator allocate_frame_sink_id_;
   const SharedImageInterfaceGetter get_shared_image_interface_;
@@ -385,6 +398,12 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
 
   std::vector<PendingEmbed> pending_embeds_;
   uint64_t next_embed_requester_ = 1;
+
+  // The sink each page's element embedded last, by requester. An entry for
+  // an ended sink stays until its page goes: sink ids are never reused.
+  base::flat_map<uint64_t, viz::FrameSinkId> embedded_by_;
+  // Requesters whose element left its page.
+  base::flat_set<uint64_t> hidden_requesters_;
 
   // WaitForEnd callbacks, by the brokered sink they wait on.
   base::flat_map<viz::FrameSinkId, std::vector<EndCallback>> end_waiters_;

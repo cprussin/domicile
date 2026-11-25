@@ -64,4 +64,10 @@ interface ExternalSurfaceProvider {
   // two frame sinks, so on kProducerGone the page needs a new LocalSurfaceId
   // before it embeds that app again.
   WaitForEnd(viz.mojom.FrameSinkId frame_sink_id) => (FrameSinkEnd end);
+
+  // Whether the element this pipe embeds for is in its page. The producer
+  // hears when no element in a page shows its surface, so a closed window's
+  // last frame stays only while one does. An element starts out shown; one
+  // that goes away, closing this pipe, no longer shows anything.
+  SetShown(bool shown);
 };

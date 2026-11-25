@@ -287,8 +287,14 @@ pub enum ChromeMessage {
     /// `domicile open`.
     ///
     /// The child inherits the compositor's environment, so it connects to
-    /// Domicile's Wayland display.
-    Spawn { command: Vec<String> },
+    /// Domicile's Wayland display. `from` names where the launch started,
+    /// such as `"launcher"`: the window that answers the launch's activation
+    /// token says so in [`HostMessage::AppLaunchedFrom`].
+    Spawn {
+        command: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        from: Option<String>,
+    },
 
     /// Start a program (argv) as [`ChromeMessage::Spawn`] does, `argv[0]`
     /// looked up on the compositor's `PATH`. Answered with
@@ -902,6 +908,16 @@ pub enum HostMessage {
         app_id: String,
         anchor: Option<String>,
     },
+
+    /// The launch a window answered: it activated with the token the
+    /// compositor minted for a [`ChromeMessage::Spawn`] that named a `from`.
+    ///
+    /// Sent right after [`HostMessage::AppAppeared`] when the window activated
+    /// before its first frame, and when it activates after. A running app
+    /// launched again raises its window with the new launch's token, so a
+    /// window names the latest launch that raised it. A client that never
+    /// activates with its token names none.
+    AppLaunchedFrom { app_id: String, from: String },
 
     /// Whether a window wants attention, sent whenever that changes.
     ///

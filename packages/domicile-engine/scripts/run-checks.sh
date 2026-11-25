@@ -32,6 +32,9 @@ FIRST=(
   guard-buffer-transform
   guard-buffer-formats
   guard-shader-effect
+  guard-shader-mesh
+  guard-shader-image
+  guard-app-3d-transform
   guard-scrolling-bubble
   guard-webview-permissions
   guard-electron-permissions
@@ -213,12 +216,15 @@ ONCE=(
 UNDER_WAYLAND=(
   guard-app-survives-compositor-restart
   guard-electron-permissions
+  guard-app-3d-transform
   guard-app-survives-load-shell
   guard-buffer-formats
   guard-buffer-transform
   guard-client-window
   guard-scrolling-bubble
   guard-shader-effect
+  guard-shader-image
+  guard-shader-mesh
   guard-shell
   guard-shortcuts-inhibitor
   guard-shortcuts-inhibitor-chord

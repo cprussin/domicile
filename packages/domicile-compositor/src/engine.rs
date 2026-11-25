@@ -533,6 +533,12 @@ pub enum Event {
     /// connects, and when one is plugged or unplugged. An older engine never
     /// sends it.
     InputDevices(Vec<ListedInput>),
+
+    /// Whether an `<app>` element in a page shows `surface`: false once the
+    /// last one showing it leaves the page, true once one shows it again. A
+    /// closed window lingers only while one does. See `engine_lingering`. An
+    /// older engine never sends it.
+    Showing { surface: SurfaceId, showing: bool },
 }
 
 /// One of the browser's windows: a page it holds, which the shell draws with
@@ -649,6 +655,7 @@ struct Callbacks {
             u32,
         ),
     >,
+    showing: Option<extern "C" fn(*mut c_void, SurfaceId, c_int)>,
 }
 
 /// `DomicileInputDevice`, laid out as in the C header. Its strings are
@@ -2116,6 +2123,7 @@ fn join(
         input_devices: Some(on_input_devices),
         capture_failed: Some(on_capture_failed),
         viewed_browser_windows: Some(on_viewed_browser_windows),
+        showing: Some(on_showing),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -2624,6 +2632,16 @@ fn input_connection(connection: u8) -> InputConnection {
     }
 }
 
+extern "C" fn on_showing(user_data: *mut c_void, surface: SurfaceId, showing: c_int) {
+    push(
+        user_data,
+        Event::Showing {
+            surface,
+            showing: showing != 0,
+        },
+    );
+}
+
 extern "C" fn on_frame_done(user_data: *mut c_void, surface: SurfaceId, frame: u64) {
     push(user_data, Event::FrameDone { surface, frame });
 }
@@ -3052,10 +3070,10 @@ mod tests {
     }
 
     #[test]
-    fn the_callbacks_are_the_user_data_and_twenty_five_pointers_the_c_header_declares() {
-        // `released` follows `configure`, and `viewed_browser_windows` is
-        // last, as in the header.
-        assert_eq!(std::mem::size_of::<Callbacks>(), 26 * 8);
+    fn the_callbacks_are_the_user_data_and_twenty_six_pointers_the_c_header_declares() {
+        // `released` follows `configure`, and `showing` is last, as in the
+        // header.
+        assert_eq!(std::mem::size_of::<Callbacks>(), 27 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, copied_items), 9 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, frame_done), 10 * 8);
@@ -3080,6 +3098,7 @@ mod tests {
             std::mem::offset_of!(Callbacks, viewed_browser_windows),
             25 * 8
         );
+        assert_eq!(std::mem::offset_of!(Callbacks, showing), 26 * 8);
     }
 
     #[test]

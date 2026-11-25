@@ -15,18 +15,22 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace viz::domicile {
 namespace {
 
 const FrameSinkId kShell(1, 1);
 
-// Viz's end: every source compiles but "bad", taking two floats.
+// Viz's end: every source compiles but "bad", taking two floats, and
+// "arrays" takes an array of eight.
 class FakeViz : public TestFrameSinkManagerImpl,
                 public mojom::DomicileShaderEffects {
  public:
   // Ids registered, in order.
   std::vector<uint32_t> registered;
+  // What each register sent, in order.
+  std::vector<mojom::DomicileShaderEffectSourcePtr> sources;
   std::vector<uint32_t> unregistered;
   // When false, Register never answers.
   bool answers = true;
@@ -45,15 +49,21 @@ class FakeViz : public TestFrameSinkManagerImpl,
   // mojom::DomicileShaderEffects:
   void Register(uint32_t id,
                 const FrameSinkId& owner,
-                const std::string& sksl,
+                mojom::DomicileShaderEffectSourcePtr source,
                 RegisterCallback callback) override {
     registered.push_back(id);
+    const std::string sksl = source->sksl;
+    sources.push_back(std::move(source));
+    std::vector<mojom::DomicileShaderEffectArrayPtr> arrays;
+    if (sksl == "arrays") {
+      arrays.push_back(mojom::DomicileShaderEffectArray::New("points", 8u));
+    }
     if (!answers) {
       unanswered_.push_back(std::move(callback));
     } else if (sksl == "bad") {
-      std::move(callback).Run(0, "error: 1: bad");
+      std::move(callback).Run(0, {}, "error: 1: bad");
     } else {
-      std::move(callback).Run(2, "");
+      std::move(callback).Run(2, std::move(arrays), "");
     }
   }
   void Unregister(uint32_t id) override { unregistered.push_back(id); }
@@ -71,13 +81,21 @@ class ShaderEffectsHostTest : public testing::Test {
   base::expected<ShaderEffectsHost::Registered, std::string> Register(
       const std::string& sksl,
       ShaderEffectsHost::LostCallback lost = base::DoNothing()) {
+    auto source = mojom::DomicileShaderEffectSource::New();
+    source->sksl = sksl;
+    return Register(std::move(source), std::move(lost));
+  }
+
+  base::expected<ShaderEffectsHost::Registered, std::string> Register(
+      mojom::DomicileShaderEffectSourcePtr source,
+      ShaderEffectsHost::LostCallback lost = base::DoNothing()) {
     base::expected<ShaderEffectsHost::Registered, std::string> answer =
         base::unexpected("no answer");
     host_.Register(
-        kShell, sksl, std::move(lost),
+        kShell, std::move(source), std::move(lost),
         base::BindLambdaForTesting(
             [&answer](base::expected<ShaderEffectsHost::Registered, std::string>
-                          said) { answer = said; }));
+                          said) { answer = std::move(said); }));
     task_environment_.RunUntilIdle();
     return answer;
   }
@@ -108,6 +126,35 @@ TEST_F(ShaderEffectsHostTest, NamesEachEffect) {
   EXPECT_EQ(viz_->registered, std::vector<uint32_t>({first->id, second->id}));
 }
 
+TEST_F(ShaderEffectsHostTest, SaysWhichArraysAnEffectTakes) {
+  Relaunch();
+
+  auto registered = Register("arrays");
+
+  ASSERT_TRUE(registered.has_value());
+  ASSERT_EQ(registered->arrays.size(), 1u);
+  EXPECT_EQ(registered->arrays[0]->name, "points");
+  EXPECT_EQ(registered->arrays[0]->floats, 8u);
+}
+
+TEST_F(ShaderEffectsHostTest, GivesARelaunchedGpuProcessAMeshAndItsImages) {
+  Relaunch();
+  auto source = mojom::DomicileShaderEffectSource::New();
+  source->sksl = "ok";
+  source->vertex = "vertex";
+  source->instances = 3;
+  source->images.push_back(mojom::DomicileShaderEffectImage::New(
+      "noise", gfx::Size(1, 1), std::vector<uint8_t>({1, 2, 3, 4})));
+  const mojom::DomicileShaderEffectSourcePtr sent = source.Clone();
+  ASSERT_TRUE(Register(std::move(source)).has_value());
+
+  host_.OnConnectionLost();
+  FakeViz& relaunched = Relaunch();
+
+  ASSERT_EQ(relaunched.sources.size(), 1u);
+  EXPECT_EQ(relaunched.sources[0], sent);
+}
+
 TEST_F(ShaderEffectsHostTest, SaysWhatTheCompilerSaid) {
   Relaunch();
 
@@ -122,12 +169,14 @@ TEST_F(ShaderEffectsHostTest, AnswersARegisterTheGpuProcessCutShort) {
   Relaunch().answers = false;
   base::expected<ShaderEffectsHost::Registered, std::string> answer =
       base::unexpected("no answer");
+  auto source = mojom::DomicileShaderEffectSource::New();
+  source->sksl = "ok";
   host_.Register(
-      kShell, "ok", base::DoNothing(),
+      kShell, std::move(source), base::DoNothing(),
       base::BindLambdaForTesting(
           [&answer](
               base::expected<ShaderEffectsHost::Registered, std::string> said) {
-            answer = said;
+            answer = std::move(said);
           }));
   task_environment_.RunUntilIdle();
 

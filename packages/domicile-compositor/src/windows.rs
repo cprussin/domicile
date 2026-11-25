@@ -20,7 +20,7 @@ use crate::chrome_hub::broadcast_closed;
 use crate::clients::owner_of;
 use crate::configure_answers::Resize;
 use crate::decorations::asks_to_draw_its_frame;
-use crate::engine_lingering::{Linger, LINGER};
+use crate::engine_lingering::Linger;
 use crate::surface_commit::Role;
 use crate::{CalloopData, DomicileCompositor};
 
@@ -320,7 +320,7 @@ impl DomicileCompositor {
             self.returned(release.buffer);
         }
         if let Some(linger) = gone.linger {
-            self.end_linger_after(linger, LINGER);
+            self.end_linger_after(linger, gone.lasts);
         }
         // The engine has its own fds for the uploads its last frame shows.
         self.uploads.forget(app_id);
