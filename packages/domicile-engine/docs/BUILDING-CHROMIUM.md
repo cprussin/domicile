@@ -69,6 +69,22 @@ import("//build/args/domicile_codecs.gn")
 - `--disable-gpu` is the default. `GPU=1` uses the GPU; see
   [ENGINE-FORK-CHROMIUM-NOTES.md](/docs/architecture/ENGINE-FORK-CHROMIUM-NOTES.md#running-on-the-gpu).
 
+## Incremental builds with Nix
+
+Lillecarl's out-of-tree setup builds the engine as Nix derivations that reuse
+one Chromium tree, so a change to a few engine files builds in about six
+minutes:
+[Lillecarl/domicile `local-nix`](https://github.com/Lillecarl/domicile/tree/local-nix)
+(`nix/local-build.nix`). CI does not use it. Background:
+[#2558](https://github.com/cprussin/domicile/issues/2558).
+
+- Needs `sandbox = relaxed` in `nix.conf`: its derivations set
+  `__noChroot = true` to use a checkout outside the store.
+- The output is not reproducible, and is neither of CI's builds (no LTO, PGO or
+  DCHECKs).
+- Its `nix build .#engine-unit-tests` runs the C++ unit tests in that tree.
+  `scripts/unit-tests.sh` runs them against any engine build tree too.
+
 ## Rolling the pin
 
 - A repin is a pull request. The engine workflows sync the checkout (see
