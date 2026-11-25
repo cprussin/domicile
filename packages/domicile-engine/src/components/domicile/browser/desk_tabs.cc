@@ -21,6 +21,10 @@ constexpr auto kRefused = std::to_array<const char*>({
     "tabs.duplicate",
     "tabs.createSplit",
     "tabs.unsplit",
+    // Chrome's reads the tab's ChromeTranslateClient, which no desk tab has,
+    // and crashes the browser. One would also offer translations in a bubble
+    // on a browser window, which a desk has not.
+    "tabs.detectLanguage",
 });
 
 // Whether `asked` allows `is`; an absent filter allows anything.

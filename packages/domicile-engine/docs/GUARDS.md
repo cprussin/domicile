@@ -205,7 +205,7 @@ Headless.
 | `guard-extension-menu.sh` | `installedExtensions` lists every extension with its settings; `configureExtension()`, `setExtensionEnabled()` and `uninstallExtension()` change it, and refuse what the config owns |
 | `guard-extension-open-popup.sh` | `action.openPopup()` reaches the shell as `extensionpopuprequested` |
 | `guard-extension-side-panel.sh` | `sidePanel.open()` opens the side panel's page as a popup window with no size, which the shell tiles |
-| `guard-webview-tabs.sh` | `tabs.query` and `tabs.setZoom` target the focused `<webview>` (patch 0057), and `webNavigation.getAllFrames` lists its page |
+| `guard-webview-tabs.sh` | `tabs.query` and `tabs.setZoom` target the focused `<webview>` (patch 0057), `webNavigation.getAllFrames` lists its page, and `tabs.detectLanguage` is refused |
 | `guard-webview-active-tab.sh` | a tray click grants `activeTab` to the focused tab |
 | `guard-webview-popup-window.sh` | `windows.create({type: "popup"})` opens a browser window the shell draws at the requested size |
 

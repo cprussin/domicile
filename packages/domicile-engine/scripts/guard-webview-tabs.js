@@ -14,6 +14,7 @@
 //                              tabs.setZoom on that tab
 //   GUARD answer frames=…      the top frame's url in the popup's
 //                              webNavigation.getAllFrames for that tab
+//   GUARD answer language=…    what the popup's tabs.detectLanguage answered
 //   GUARD zoom name=… factor=… window `a` or `b`'s element saw its zoom
 //                              change, to two decimal places
 //
@@ -91,6 +92,7 @@ export const HostShell = (_root, desktop) => {
             say(`answer active=${active}`);
             say(`answer zoom=${answered.get("zoom")}`);
             say(`answer frames=${answered.get("frames")}`);
+            say(`answer language=${answered.get("language")}`);
           }
         });
       }, SETTLE_MS);

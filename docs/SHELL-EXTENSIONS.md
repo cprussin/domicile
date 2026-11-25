@@ -152,7 +152,7 @@ The browser carries out some extension calls. Others fire an event on a
 | `sidePanel.open()` | A popup window showing the side panel, with no size (0 by 0), in `browserwindowschanged`: tile it; a second call sends `domicile-focus-request` for it. `sidePanel.close()` closes it |
 
 Calls with no desktop meaning (`tabs.move`, `tabs.group`, `tabs.discard`, …)
-fail with `not supported on a Domicile desk`.
+and `tabs.detectLanguage` fail with `not supported on a Domicile desk`.
 
 ## Extension popup windows
 

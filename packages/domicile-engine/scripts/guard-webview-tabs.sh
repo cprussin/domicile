@@ -26,10 +26,15 @@
 # password managers such as 1Password fill through. A guest without Chrome's
 # WebNavigationTabObserver lists none.
 #
+# And it asks for the tab's language with `tabs.detectLanguage`, as Ghostery
+# does. Chrome's own crashes the browser on a desk, where no tab has a
+# ChromeTranslateClient.
+#
 # WHAT IT ASSERTS. That the popup's answer is the address of window `a`, the
 # one the shell focused; that `a`'s element, and not `b`'s, heard the zoom
 # (WebViewGuestClient.ZoomChanged, as `domicile-zoom-change`); that getZoom
-# read back 1.5; and that getAllFrames' top frame is `a`'s address.
+# read back 1.5; that getAllFrames' top frame is `a`'s address; and that
+# detectLanguage was refused.
 #
 # HOW IT CAN FAIL. NEGATIVE=1 runs the control: the same run, focusing window
 # `b` instead. The answer must be `b`'s and NOT `a`'s, and so must the zoom.
@@ -229,8 +234,10 @@ else
   FRAMED=$(saw "\"GUARD answer frames=$B\"")
 fi
 
+REFUSED=$(saw '"GUARD answer language=error-not supported on a Domicile desk"')
+
 MEASURED="$LEG $SENT $TRAY $SHOWN $FOCUSED $ANSWERED $NAMED_A $NAMED_B \
-$ZOOMED_A $ZOOMED_B $READ $FRAMED"
+$ZOOMED_A $ZOOMED_B $READ $FRAMED $REFUSED"
 echo
 echo "measured: $MEASURED"
 echo "what the popup answered, and the zoom the windows heard:"
@@ -238,17 +245,17 @@ grep -F -e '"GUARD answer ' -e '"GUARD zoom ' "$ENGINE_LOG" | tail -7 || true
 
 # WHICH END TO BLAME. `packages/domicile-engine/tests/test-webview-tabs-guard.sh` runs this block
 # directly. MEASURED is "<leg> <sent> <tray> <shown> <focused> <answered>
-# <named-a> <named-b> <zoomed-a> <zoomed-b> <read> <framed>".
+# <named-a> <named-b> <zoomed-a> <zoomed-b> <read> <framed> <refused>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"tabs 1 1 1 1 1 1 0 1 0 1 1")
+"tabs 1 1 1 1 1 1 0 1 0 1 1 1")
   PASSED="the popup's tabs.query({active: true, currentWindow: true}) named \
 the <webview> the shell focused, its tabs.setZoom zoomed that window and no \
-other, tabs.getZoom read it back, and webNavigation.getAllFrames listed its \
-page"
+other, tabs.getZoom read it back, webNavigation.getAllFrames listed its page, \
+and tabs.detectLanguage was refused"
   ;;
-"control 1 1 1 1 1 0 1 0 1 1 1")
+"control 1 1 1 1 1 0 1 0 1 1 1 1")
   PASSED="the control is sharp: with the other window focused, the same \
 popup named and zoomed that one and not the claim's -- so the claim's answer \
 is focus's, not the first window's or the last's, and its zoom the named tab's"
@@ -320,11 +327,16 @@ of order"
 -- the GUARD answer zoom= line says what it read instead"
   ;;
 # The zoom is right. What is left is the frames.
-"tabs 1 1 1 1 1 1 0 1 0 1 0" | "control 1 1 1 1 1 0 1 0 1 1 0")
+"tabs 1 1 1 1 1 1 0 1 0 1 0 "* | "control 1 1 1 1 1 0 1 0 1 1 0 "*)
   FAILURE="webNavigation.getAllFrames did not list the named tab's page -- \
 the GUARD answer frames= line says what it listed: count-0 is a guest with no \
 WebNavigationTabObserver (AttachTabHelpers), so no frame has a navigation \
 state; no-tab is the lookups not finding the tab"
+  ;;
+"tabs 1 1 1 1 1 1 0 1 0 1 1 0" | "control 1 1 1 1 1 0 1 0 1 1 1 0")
+  FAILURE="tabs.detectLanguage was not refused -- the GUARD answer language= \
+line says what it answered: RefusedOnDesk does not name it, or Chrome's own is \
+still registered over it"
   ;;
 *)
   FAILURE="there is no measurement here of any kind ($MEASURED) -- the run did \
