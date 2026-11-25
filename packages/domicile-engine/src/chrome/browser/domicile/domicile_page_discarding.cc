@@ -116,6 +116,9 @@ PageDiscarding::PageDiscarding(Candidates candidates, Discard discard)
 PageDiscarding::~PageDiscarding() = default;
 
 void PageDiscarding::Check() {
+  if (candidates_.Run().empty()) {
+    return;
+  }
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&IsShortOfMemory),
