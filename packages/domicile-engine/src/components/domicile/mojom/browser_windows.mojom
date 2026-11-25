@@ -218,7 +218,8 @@ interface BrowserWindows {
   // Unloads window `id`'s page: its renderer goes, and its history and scroll
   // stay. The page loads again when a <webview> next shows the window; what
   // was typed into it is not kept. An unknown window, one a <webview> shows,
-  // and an Electron app's do nothing, logged.
+  // an extension's popup window, and an app module's or Electron app's do
+  // nothing, logged.
   Discard(string id);
 
   // The user clicked entry `command` of window `id`'s menu bar; its app runs

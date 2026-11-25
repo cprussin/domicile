@@ -1366,6 +1366,10 @@ class DeskWindows final : public base::SupportsUserData::Data,
     if (!window.profiled) {
       return "it is in no browser profile";
     }
+    // Its window closes with its one tab.
+    if (old.popup_window().has_value()) {
+      return "it is an extension's popup window";
+    }
     if (old.IsAttached()) {
       return "a <webview> shows it";
     }
@@ -1381,8 +1385,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
     }
     content::BrowserContext& context = *page.GetBrowserContext();
     std::unique_ptr<WebViewGuest> guest = WebViewGuest::MakeWindow(
-        *shell, window.id, old.popup_window(), context.IsOffTheRecord(),
-        BrowserProfileRegistry::Get().IdOf(context), old.partition(),
+        *shell, window.id, /*popup_window=*/std::nullopt,
+        context.IsOffTheRecord(), BrowserProfileRegistry::Get().IdOf(context),
+        old.partition(),
         base::BindRepeating(window.app ? &AttachAppTabHelpers
                                        : &AttachTabHelpers));
     WatchProfileOf(*guest);
