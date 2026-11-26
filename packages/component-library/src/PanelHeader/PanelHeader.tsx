@@ -15,6 +15,11 @@ type Props = {
   onBack?: (() => void) | undefined;
   /** A state the panel is in, such as paused, on a line under the title. */
   status?: ReactNode | undefined;
+  /**
+   * Keeps the status's line while there is none, for a panel whose status
+   * comes and goes, so its header holds one height.
+   */
+  reserveStatus?: boolean | undefined;
   title: ReactNode;
 };
 
@@ -27,6 +32,7 @@ type Props = {
 export const PanelHeader = ({
   action,
   onBack,
+  reserveStatus,
   status,
   title,
   titleId,
@@ -41,7 +47,9 @@ export const PanelHeader = ({
       <h2 className={titleStyles} id={titleId}>
         {title}
       </h2>
-      {status !== undefined && <p className={statusStyles}>{status}</p>}
+      {(status !== undefined || reserveStatus === true) && (
+        <p className={statusStyles}>{status}</p>
+      )}
     </div>
     {action !== undefined && <span className={actionStyles}>{action}</span>}
   </div>
@@ -60,8 +68,10 @@ const titleStyles = css({
   whiteSpace: "nowrap",
 });
 
-// In the accent, as a lit tile is: a state the user put the panel in.
+// In the accent, as a lit tile is: a state the user put the panel in. Empty,
+// it holds a line's height.
 const statusStyles = css({
+  _empty: { _before: { content: '"\\00a0"' } },
   color: "accent",
   margin: 0,
   overflow: "hidden",

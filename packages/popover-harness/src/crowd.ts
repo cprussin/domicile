@@ -17,6 +17,11 @@ export type Crowd = {
   drawer?: string | undefined;
   /** Text in the panel's last row, which must scroll into view. */
   last: string;
+  /**
+   * Buttons and menu items pressed, in turn, to put the open panel in another
+   * state and back, such as paused, which must move nothing in it.
+   */
+  toggle?: { on: readonly string[]; off: readonly string[] } | undefined;
   /** Draws its bar along the top of the screen. */
   Scene: ComponentType;
 };

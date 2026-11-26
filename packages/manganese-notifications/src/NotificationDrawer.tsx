@@ -68,7 +68,7 @@ type Props = {
  * The notification drawer, a panel under the bell. Each notification can be
  * pressed or cleared, or all cleared at once. A press closes the drawer,
  * which would cover the window it raises. Its header pauses notifications from
- * a menu of lengths, and says until when while paused.
+ * a menu of lengths, and says until when while paused, on a line kept for it.
  *
  * A notification stays here after its toast is gone, until it is cleared or its
  * application withdraws it. See docs/architecture/NOTIFICATIONS.md.
@@ -139,6 +139,8 @@ export const NotificationDrawer = memo(
                 </Button>
               )
             }
+            // Pausing fills the line, so it moves nothing.
+            reserveStatus
             status={pause === undefined ? undefined : pausedFor(pause, now)}
             title="Notifications"
             titleId={TITLE_ID}

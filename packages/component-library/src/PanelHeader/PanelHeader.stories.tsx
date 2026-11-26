@@ -8,12 +8,14 @@ const meta = {
   args: {
     action: <Switch checked hideLabel label="Bluetooth" />,
     onBack: () => undefined,
+    reserveStatus: undefined,
     status: undefined,
     title: "Bluetooth",
   },
   argTypes: {
     action: { control: false, table: { category: "Contents" } },
     onBack: { action: "back", table: { category: "Events" } },
+    reserveStatus: { control: "boolean", table: { category: "Layout" } },
     status: { control: "text", table: { category: "Contents" } },
     title: { control: "text", table: { category: "Contents" } },
   },

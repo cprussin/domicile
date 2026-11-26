@@ -13,6 +13,7 @@ export const CROWDS: readonly Crowd[] = [
     last: "Message 1",
     presses: ["Notifications"],
     Scene: NotificationsScene,
+    toggle: { off: ["Resume"], on: ["Pause", "For 1 hour"] },
   },
   {
     id: "agents",

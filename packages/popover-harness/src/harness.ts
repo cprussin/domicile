@@ -1,8 +1,9 @@
 // Opens each crowded bar popover from the built Storybook, in Chromium through
 // Playwright, on a small screen. Fails a popover that runs off the screen,
 // whose last row can't be scrolled into view, that scrolls sideways, whose
-// buttons are too narrow for their labels, or whose drawer's height jumps as
-// it opens or shuts. See the package README.
+// buttons are too narrow for their labels, whose drawer's height jumps as it
+// opens or shuts, or that moves when put in another state and back. See the
+// package README.
 //
 //   bun src/harness.ts [--chromium <path>] [<crowd>...]
 
@@ -100,16 +101,16 @@ const checked = async (
   const page = await browser.newPage({ viewport: DESK });
   await page.goto(url);
   await page.locator("[data-crowd-scene]").waitFor();
-  for (const name of crowd.presses) {
-    await page.getByRole("button", { exact: true, name }).first().click();
-    await settled(page);
-  }
+  await pressed(page, crowd.presses);
   const panel = page.locator("[role=dialog][data-open]").last();
   const problems = [
     ...offScreen("the panel", await boxOf(panel)),
     ...(crowd.drawer === undefined
       ? []
       : await drawerProblems(panel, crowd.drawer)),
+    ...(crowd.toggle === undefined
+      ? []
+      : await toggleProblems(page, panel, crowd.toggle)),
     ...(await lastRowProblems(page, panel, crowd.last)),
     ...(await sidewaysProblems(panel)),
     ...(await squeezedButtons(panel)),
@@ -117,7 +118,7 @@ const checked = async (
   await page.close();
   if (problems.length === 0) {
     said(
-      `PASS: ${crowd.id}: fits a ${describe(SCREEN)} screen beside a taller one, and scrolls${crowd.drawer === undefined ? "" : `; its ${crowd.drawer} drawer grows and shrinks`}`,
+      `PASS: ${crowd.id}: fits a ${describe(SCREEN)} screen beside a taller one, and scrolls${crowd.drawer === undefined ? "" : `; its ${crowd.drawer} drawer grows and shrinks`}${crowd.toggle === undefined ? "" : "; it holds still when toggled"}`,
     );
     return true;
   } else {
@@ -127,6 +128,72 @@ const checked = async (
     return false;
   }
 };
+
+/** Presses each button or menu item named in `names`, in turn. */
+const pressed = async (page: Page, names: readonly string[]) => {
+  for (const name of names) {
+    await page
+      .getByRole("button", { exact: true, name })
+      .or(page.getByRole("menuitem", { exact: true, name }))
+      .first()
+      .click();
+    await settled(page);
+  }
+};
+
+/**
+ * What in `panel` moves when `toggle` puts it in another state, and then back:
+ * the panel and each of its headings must keep their places.
+ */
+const toggleProblems = async (
+  page: Page,
+  panel: Locator,
+  { off, on }: NonNullable<Crowd["toggle"]>,
+): Promise<string[]> => {
+  const before = await layoutOf(panel);
+  await pressed(page, on);
+  const toggled = await layoutOf(panel);
+  await pressed(page, off);
+  const after = await layoutOf(panel);
+  return [
+    ...moved(`pressing ${on.join(", ")}`, before, toggled),
+    ...moved(`pressing ${off.join(", ")}`, toggled, after),
+  ];
+};
+
+/**
+ * Where `panel` and each heading in it are, by name, to the pixel. A heading's
+ * width is left out: it stretches to the controls beside it, which may change.
+ */
+const layoutOf = async (panel: Locator): Promise<Map<string, string>> => {
+  const headings = await Promise.all(
+    (await panel.getByRole("heading").all()).map(async (heading) => {
+      const { height, x, y } = await boxOf(heading);
+      return [
+        `"${await heading.innerText()}"`,
+        `${px(height)} high at ${px(x)},${px(y)}`,
+      ] as const;
+    }),
+  );
+  const { height, width, x, y } = await boxOf(panel);
+  return new Map([
+    ["the panel", `${px(width)}x${px(height)} at ${px(x)},${px(y)}`],
+    ...headings,
+  ]);
+};
+
+/** What moved or changed size between `before` and `after`, on `what`. */
+const moved = (
+  what: string,
+  before: Map<string, string>,
+  after: Map<string, string>,
+): string[] =>
+  [...before].flatMap(([name, place]) => {
+    const now = after.get(name);
+    return now === place
+      ? []
+      : [`${what} moves ${name} from ${place} to ${now ?? "nowhere"}`];
+  });
 
 /** Waits until every animation on `page` has ended. */
 const settled = (page: Page) =>

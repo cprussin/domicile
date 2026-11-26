@@ -5,6 +5,7 @@ import { Notifications } from "@domicile-desktop/manganese-bar-module-notificati
 import { NotificationDrawer } from "@domicile-desktop/manganese-notifications/NotificationDrawer";
 import { NotificationsContext } from "@domicile-desktop/manganese-notifications/notifications-context";
 import type { Notification } from "@domicile-desktop/sdk/notification";
+import type { ComponentProps } from "react";
 import { useState } from "react";
 
 import { Bar } from "../Bar";
@@ -32,6 +33,8 @@ const DRAWER = { handle: createHandle(), paused: false, unread: 0 };
 
 export const NotificationsScene = () => {
   const [screen, setScreen] = useState<string | undefined>(undefined);
+  const [pause, setPause] =
+    useState<ComponentProps<typeof NotificationDrawer>["pause"]>(undefined);
   return (
     <NotificationsContext value={DRAWER}>
       <Bar>
@@ -47,11 +50,15 @@ export const NotificationsScene = () => {
         }}
         onDismiss={ignored}
         onOpen={setScreen}
-        onPause={ignored}
+        onPause={() => {
+          setPause({});
+        }}
         onReply={ignored}
-        onResume={ignored}
+        onResume={() => {
+          setPause(undefined);
+        }}
         open={screen !== undefined}
-        pause={undefined}
+        pause={pause}
         screen={screen}
       />
     </NotificationsContext>

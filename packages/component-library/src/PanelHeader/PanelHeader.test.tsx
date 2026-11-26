@@ -27,6 +27,11 @@ describe(PanelHeader, () => {
       expect(screen.getByText("Paused")).toBeInTheDocument();
     });
 
+    it("keeps the status's line without one, when asked to", () => {
+      render(<PanelHeader reserveStatus title="Notifications" />);
+      expect(screen.getByRole("paragraph")).toBeEmptyDOMElement();
+    });
+
     it("has no back button with nowhere to go back to", () => {
       render(<PanelHeader title="Notifications" />);
       expect(

@@ -12,7 +12,8 @@ Chromium through Playwright, and fails on any that runs off the screen.
   can't be scrolled into view, any part of it scrolls sideways, or a button
   is too narrow for its label. A crowd with a `drawer` also has that
   disclosure opened and shut, and fails when the drawer's height jumps rather
-  than growing and shrinking.
+  than growing and shrinking. A crowd with a `toggle` is put in another state
+  and back, such as paused, and fails when the panel or a heading in it moves.
 - **`viewport-units.test.ts`** fails any popover's content sized in `vh` or
   `vw`, which measure the whole desk, not the panel's screen.
 
@@ -20,7 +21,7 @@ Chromium through Playwright, and fails on any that runs off the screen.
 
 Write a scene in `src/scenes/` that draws a bar item under `Bar` with more
 rows than fit, and add it to `CROWDS` in `src/crowds.ts` with the buttons that
-open it and its last row's text.
+open it, its last row's text and any `toggle` that must not move it.
 
 ## Running
 
