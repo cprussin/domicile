@@ -316,6 +316,12 @@ impl Host {
         self.agent_holds = holds;
     }
 
+    /// The agent seat that holds window `window`, by app id or a browser
+    /// window's engine id, as [`Host::describe_agent_holds`] last said.
+    pub fn held_by(&self, window: &str) -> Option<&str> {
+        self.agent_holds.get(window).map(String::as_str)
+    }
+
     /// Record which monitors are off: every one when `all`, else those named
     /// in `asleep`.
     pub fn describe_darkness(&mut self, all: bool, asleep: Vec<String>) {

@@ -7,7 +7,7 @@ import { Axis, Direction } from "../direction";
 import { Layout } from "../tree/node";
 import type { WindowAction as Action } from "../window-state";
 import { WindowAction } from "../window-state";
-import { COMMAND_HELP, parseCommand } from "./command";
+import { COMMAND_HELP, parseCommand, parseWindowCommand } from "./command";
 import { MediaKey } from "./media-key";
 
 /** Parse a command as written after `send-shell`. */
@@ -231,5 +231,31 @@ describe("COMMAND_HELP", () => {
     ].filter((command) => !described.includes(command));
 
     expect(undescribed).toStrictEqual([]);
+  });
+});
+
+describe("parseWindowCommand", () => {
+  it("sends the window it names to a workspace, not the focused one", () => {
+    expect(
+      parseWindowCommand(
+        ["move", "container", "to", "workspace", "3"],
+        "app:app-3",
+      ),
+    ).toStrictEqual(Ok(WindowAction.WindowMovedToWorkspace("app:app-3", "3")));
+  });
+
+  it("refuses a command it can't run on a given window", () => {
+    // Run on the focus, it would act on the user's window instead.
+    expect(parseWindowCommand(["focus", "left"], "app:app-3")).toStrictEqual(
+      Err(
+        "manganese: `focus left` acts on the focus; on a given window it runs only `move container to workspace <name>`",
+      ),
+    );
+  });
+
+  it("refuses a command it does not know", () => {
+    expect(parseWindowCommand(["teleport"], "app:app-3")).toStrictEqual(
+      Err("manganese: no command `teleport`"),
+    );
   });
 });

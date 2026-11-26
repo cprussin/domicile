@@ -305,7 +305,7 @@ domicile export-logs
 domicile export-logs --show-everything ~/bug.txt
 ```
 
-## `domicile send-shell <word>...`
+## `domicile send-shell [--agent <session>] [--window <id>] <word>...`
 
 Run a shell command, as a keybinding bound to it does:
 `domicile send-shell workspace 2`. Manganese's commands are in
@@ -321,6 +321,17 @@ answer with JSON, as `swaymsg -t get_workspaces` and `get_tree` do:
 ```
 domicile send-shell get-workspaces | jq '.[] | select(.visible) | .name'
 domicile send-shell get-tree
+```
+
+With `--window`, by its `list-windows` id, the command acts on that window
+instead of the user's focus. Only a page that runs commands on a given window
+(`bindKeys`' `onWindowCommand`) hears it; manganese runs `move container to
+workspace <name>` there. With `--agent` too, which needs `--window`, it is
+refused unless agent `<session>`'s seat holds the window: its pointer or
+keyboard is in it.
+
+```sh
+domicile send-shell --agent 3 --window <id> move container to workspace 2
 ```
 
 ## `domicile list-shell-commands [--json]`
@@ -695,7 +706,7 @@ Each tool runs a verb and answers what it printed, or its error:
 | Tool | Runs |
 |---|---|
 | `list_windows`, `list_displays`, `list_inputs`, `status`, `list_shell_commands`, `list_bindings` | that verb with `--json` |
-| `send_shell` | `send-shell <words>...` |
+| `send_shell` | `send-shell <words>...`; given `window`, `focus-window --agent` on it, then `send-shell --agent --window <window> <words>...` |
 | `exec` | `exec <argv>...` |
 | `open` | `open [--app] [--profile <id>] <target>` |
 | `focus_window`, `close_window` | that verb with the window's id |

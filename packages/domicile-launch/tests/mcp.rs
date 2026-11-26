@@ -265,6 +265,61 @@ fn send_shell_passes_its_words() {
 }
 
 #[test]
+fn send_shell_on_a_window_takes_it_with_the_agents_keyboard_then_aims_at_it() {
+    // A command on the agent's own window moves nothing of the user's, so it
+    // doesn't wait for them.
+    let mut ran = Vec::new();
+    let replies = served(
+        &[call(
+            "send_shell",
+            json!({"words": ["move", "container", "to", "workspace", "3"], "window": "n1"}),
+        )],
+        |args: &[String]| match args[0].as_str() {
+            "idle-time" => panic!("a command on the agent's own window waited for the user"),
+            _ => desk(&mut ran)(args),
+        },
+    );
+    assert_eq!(replies[0]["result"]["isError"], false, "{replies:?}");
+    assert_eq!(
+        ran,
+        [
+            vec!["focus-window", "--agent", "7", "n1"],
+            vec![
+                "send-shell",
+                "--agent",
+                "7",
+                "--window",
+                "n1",
+                "move",
+                "container",
+                "to",
+                "workspace",
+                "3"
+            ],
+        ]
+    );
+}
+
+#[test]
+fn send_shell_on_a_window_the_agent_cant_take_says_why() {
+    let replies = served(
+        &[call(
+            "send_shell",
+            json!({"words": ["kill"], "window": "n1"}),
+        )],
+        |args: &[String]| match args[0].as_str() {
+            "focus-window" => refused("the user is using window n1"),
+            other => panic!("ran {other} after the window was refused"),
+        },
+    );
+    assert_eq!(replies[0]["result"]["isError"], true);
+    assert_eq!(
+        replies[0]["result"]["content"][0]["text"],
+        "the user is using window n1"
+    );
+}
+
+#[test]
 fn exec_runs_its_argv_for_the_agents_seat() {
     assert_eq!(
         ran_for("exec", json!({"argv": ["kitty", "--hold", "btop"]})),

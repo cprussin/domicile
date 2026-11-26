@@ -476,6 +476,7 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
             request: SystemRequest::ShellCommands {
                 commands: Vec::new(),
                 bindings: Vec::new(),
+                on_a_window: false,
             },
         }
     );
@@ -491,6 +492,7 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
                     description: "Lock the desktop.".into(),
                 }],
                 bindings: Vec::new(),
+                on_a_window: false,
             },
         }
     );
@@ -515,6 +517,8 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
             id: 1,
             request: SystemRequest::SendShell {
                 command: vec!["focus".into(), "right".into()],
+                window: None,
+                agent: None,
             },
         }
     );
@@ -547,6 +551,7 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
                     chord: "Meta+l".into(),
                     action: "send-shell lock".into(),
                 }],
+                on_a_window: false,
             },
         }
     );
@@ -556,9 +561,56 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
             event: SystemEvent::ShellCommand {
                 command: vec!["focus".into(), "right".into()],
                 sent: 4,
+                window: None,
             },
         }),
         r#"{"type":"system_event","id":12,"event":{"kind":"shell_command","command":["focus","right"],"sent":4}}"#
+    );
+}
+
+/// A command can name the window it acts on, for an agent session that holds
+/// it; it goes only to pages that run commands on a given window, naming the
+/// window as the shell knows it.
+#[test]
+fn a_shell_command_can_act_on_a_window_it_names() {
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":1,"request":{"call":"send_shell","command":["move","container","to","workspace","3"],"window":"Xy7pQ2mN","agent":4}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 1,
+            request: SystemRequest::SendShell {
+                command: ["move", "container", "to", "workspace", "3"]
+                    .map(String::from)
+                    .to_vec(),
+                window: Some("Xy7pQ2mN".into()),
+                agent: Some(4),
+            },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":12,"request":{"call":"shell_commands","on_a_window":true}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 12,
+            request: SystemRequest::ShellCommands {
+                commands: Vec::new(),
+                bindings: Vec::new(),
+                on_a_window: true,
+            },
+        }
+    );
+    assert_eq!(
+        host(&HostMessage::SystemEvent {
+            id: 12,
+            event: SystemEvent::ShellCommand {
+                command: vec!["kill".into()],
+                sent: 5,
+                window: Some("app-3".into()),
+            },
+        }),
+        r#"{"type":"system_event","id":12,"event":{"kind":"shell_command","command":["kill"],"sent":5,"window":"app-3"}}"#
     );
 }
 

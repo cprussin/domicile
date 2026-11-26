@@ -74,6 +74,7 @@ const bound = (launcherOpen = false, overviewOpen = false) => {
         report: (error) => {
           reported.push(error);
         },
+        windowNamed: () => undefined,
       });
     },
     { initialProps: { mode: "default" } },

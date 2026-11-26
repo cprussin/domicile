@@ -18,6 +18,12 @@ export type ShellCommand = {
   readonly words: readonly string[];
   /** Its number, which `answerShellCommand` names. */
   readonly sent: number;
+  /**
+   * The window it acts on, by app id or a browser window's engine id as seats
+   * name windows, or `undefined` for the user's focus. Only a page listening
+   * for commands on a window hears one.
+   */
+  readonly window: string | undefined;
 };
 
 /** One key or gesture a shell binds, as `domicile list-bindings` prints it. */

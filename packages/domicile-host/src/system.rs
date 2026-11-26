@@ -52,7 +52,7 @@ use crate::keymaps::Keymaps;
 use crate::links::Links;
 use crate::lock_screen_readouts::is_a_readout;
 use crate::priority;
-use crate::shell_commands::ShellCommands;
+use crate::shell_commands::{Heard, ShellCommands};
 use crate::unlock_refusals::UnlockRefusals;
 use crate::white_point::{white_point, WhitePoint, NEUTRAL, WARMEST};
 use crate::window_requests::WindowRequests;
@@ -1032,12 +1032,17 @@ impl System {
                     })
                 })
             }
-            SystemRequest::ShellCommands { commands, bindings } => self.starting(id, |system| {
+            SystemRequest::ShellCommands {
+                commands,
+                bindings,
+                on_a_window,
+            } => self.starting(id, |system| {
                 let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
                 let listener = system.shell_commands.listen(
                     commands,
                     bindings,
-                    Arc::new(move |(command, sent): &(Vec<String>, u64)| {
+                    on_a_window,
+                    Arc::new(move |(command, sent, window): &Heard| {
                         let Some(running) = running.upgrade() else {
                             return;
                         };
@@ -1050,6 +1055,7 @@ impl System {
                                 event: SystemEvent::ShellCommand {
                                     command: command.clone(),
                                     sent: *sent,
+                                    window: window.clone(),
                                 },
                             });
                         }
@@ -1128,10 +1134,14 @@ impl System {
                 seconds,
                 Mark::BeforeBlanking(Duration::from_secs(seconds)),
             ),
-            SystemRequest::SendShell { command } => {
+            // The compositor checked `agent` holds `window`.
+            SystemRequest::SendShell {
+                command, window, ..
+            } => {
                 let tell = self.tell.clone();
                 let sent = self.shell_commands.send(
                     &command,
+                    window,
                     Box::new(move |outcome| {
                         let reply = match outcome {
                             Ok(output) => SystemReply::Sent { output },

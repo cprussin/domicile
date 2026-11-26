@@ -264,7 +264,8 @@ const INSTRUCTIONS: &str = "Read and act on windows as text first: list_windows,
     native and browser windows alike, so they reach a canvas or anything else a tree \
     can't. They are refused in a window the user is in, and over the shell, which you \
     act on by ref. send_shell acts on the user's focus, so it \
-    waits until they step away. Call stop_using_desktop as soon as you are done with \
+    waits until they step away, unless you give it a window of your own, such as one you \
+    opened: then it acts on that window, to move it to another workspace say, at once. Call stop_using_desktop as soon as you are done with \
     the desktop. Before you wait on anything else, such as an approval, a background \
     job or the user, call stop_using_desktop too: asking again later is quick, and a \
     remembered agent is not asked at all. An agent that calls nothing for two minutes \
@@ -441,8 +442,11 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec![],
         ),
         Tool::SendShell => (
-            "Run a shell command, as a keybinding does, and answer what it printed. list_shell_commands lists them.",
-            json!({"words": {"type": "array", "items": {"type": "string"}, "description": "The command and its arguments, such as [\"focus\", \"left\"]."}}),
+            "Run a shell command, as a keybinding does, and answer what it printed. list_shell_commands lists them. Without a window it acts on the user's focus, so it waits until they step away. With a window, it takes that window with your own keyboard, as focus_window does, and acts on it at once: refused in a window the user is in, and for a command the shell doesn't run on a given window.",
+            json!({
+                "words": {"type": "array", "items": {"type": "string"}, "description": "The command and its arguments, such as [\"focus\", \"left\"] or [\"move\", \"container\", \"to\", \"workspace\", \"3\"]."},
+                "window": {"type": "string", "description": "The id of the window to act on, from list_windows, rather than the user's focus."}
+            }),
             vec!["words"],
         ),
         Tool::Exec => (
@@ -931,29 +935,32 @@ fn what_it_did(
 /// while the user reads.
 const AWAY: u64 = 30;
 
-/// Whether `tool` moves the pointer, keyboard focus or windows the user is
-/// using. A shell command acts on the user's focus. The pointer and keys
-/// go to the agent's own seat instead: see [`on_its_own_seat`].
-fn moves_the_users_hands(tool: Tool) -> bool {
-    matches!(tool, Tool::SendShell)
+/// Whether `tool` with `arguments` moves the pointer, keyboard focus or
+/// windows the user is using. A shell command acts on the user's focus,
+/// unless it names a window. The pointer and keys go to the agent's own seat
+/// instead: see [`on_its_own_seat`].
+fn moves_the_users_hands(tool: Tool, arguments: &Map<String, Value>) -> bool {
+    matches!(tool, Tool::SendShell) && !arguments.contains_key("window")
 }
 
-/// Whether `tool` points or types with the agent's own pointer and
-/// keyboard, which never move the user's (`--agent`), or starts a program
-/// whose windows that seat holds.
-fn on_its_own_seat(tool: Tool) -> bool {
-    matches!(
-        tool,
-        Tool::Exec
-            | Tool::Open
-            | Tool::Click
-            | Tool::MovePointer
-            | Tool::Drag
-            | Tool::Scroll
-            | Tool::Key
-            | Tool::TypeText
-            | Tool::WindowAct("focus-window")
-    )
+/// Whether `tool` with `arguments` points or types with the agent's own
+/// pointer and keyboard, which never move the user's (`--agent`), starts a
+/// program whose windows that seat holds, or sends a shell command on a
+/// window that seat holds.
+fn on_its_own_seat(tool: Tool, arguments: &Map<String, Value>) -> bool {
+    (matches!(tool, Tool::SendShell) && arguments.contains_key("window"))
+        || matches!(
+            tool,
+            Tool::Exec
+                | Tool::Open
+                | Tool::Click
+                | Tool::MovePointer
+                | Tool::Drag
+                | Tool::Scroll
+                | Tool::Key
+                | Tool::TypeText
+                | Tool::WindowAct("focus-window")
+        )
 }
 
 /// Why an agent may not move the user's pointer or focus now, or `None` once
@@ -1010,12 +1017,12 @@ fn called(
         Ok(runs) => runs,
         Err(why) => return Ok(said(false, why)),
     };
-    if on_its_own_seat(tool) {
+    if on_its_own_seat(tool, arguments) {
         for run in &mut runs {
             run.splice(1..1, ["--agent".to_string(), seat.to_string()]);
         }
     }
-    if moves_the_users_hands(tool) {
+    if moves_the_users_hands(tool, arguments) {
         if let Some(why) = in_use(domicile)? {
             return Ok(said(false, why));
         }
@@ -1121,7 +1128,15 @@ fn commands(
                 .map(|word| word.as_str().map(str::to_string))
                 .collect::<Option<Vec<_>>>()
                 .ok_or("send_shell's words are strings")?;
-            Ok(vec![[words(&["send-shell"]), said].concat()])
+            match string(arguments, "window")? {
+                None => Ok(vec![[words(&["send-shell"]), said].concat()]),
+                // The seat takes the window first: the compositor sends only
+                // a command on a window the seat holds.
+                Some(window) => Ok(vec![
+                    words(&["focus-window", &window]),
+                    [words(&["send-shell", "--window", &window]), said].concat(),
+                ]),
+            }
         }
         Tool::Exec => {
             let argv = arguments

@@ -2742,18 +2742,33 @@ pub enum SystemRequest {
     /// `commands` describes what the page runs, for
     /// `domicile list-shell-commands`, and `bindings` the keys and gestures
     /// that run them, for `domicile list-bindings`, while it listens.
+    /// `on_a_window` says it runs commands on a window they name; a page
+    /// without it never hears one.
     ShellCommands {
         #[serde(default)]
         commands: Vec<ShellCommandHelp>,
         #[serde(default)]
         bindings: Vec<ShellBinding>,
+        #[serde(default)]
+        on_a_window: bool,
     },
     /// Send `command` to every page listening with
     /// [`SystemRequest::ShellCommands`], as a `send-shell` keybinding would
     /// run it. Answered with [`SystemReply::Sent`] once a page ran it, or a
     /// failure when every page refused it or none answered in time.
     /// `domicile send-shell` sends this.
-    SendShell { command: Vec<String> },
+    ///
+    /// With `window`, by its `list-windows` id or the shell's, the command
+    /// acts on that window rather than the user's focus, and goes only to
+    /// pages listening `on_a_window`. With `agent` too, it is agent session
+    /// `agent`'s, refused unless that agent's seat holds the window.
+    SendShell {
+        command: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        window: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent: Option<u32>,
+    },
     /// Open links of `schemes` for the desktop: report each one
     /// [`SystemRequest::OpenLink`] hands over. `domicile open`, and so
     /// `xdg-open` and applications' links, and the Email portal hand them
@@ -3116,8 +3131,15 @@ pub enum SystemEvent {
     /// `path` is absolute.
     Changed { path: String },
     /// A command sent with [`SystemRequest::SendShell`], numbered `sent` for
-    /// [`SystemRequest::AnswerShellCommand`].
-    ShellCommand { command: Vec<String>, sent: u64 },
+    /// [`SystemRequest::AnswerShellCommand`]. With `window`, it acts on that
+    /// window, by its app id or a browser window's engine id, not the
+    /// user's focus.
+    ShellCommand {
+        command: Vec<String>,
+        sent: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        window: Option<String>,
+    },
     /// A link handed over with [`SystemRequest::OpenLink`], for the page to
     /// open. `app_id` is the asking application's desktop file id, when
     /// known.

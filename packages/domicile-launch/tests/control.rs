@@ -521,15 +521,15 @@ fn a_desktop_told_to_send_the_shell_a_command_tells_the_compositor() {
     let told = Cell::new(None);
     let answered = answered_sending(
         "{\"type\":\"send_shell\",\"command\":[\"focus\",\"right\"]}",
-        &|command| {
-            told.set(Some(command.to_vec()));
+        &|command, window, agent| {
+            told.set(Some((command.to_vec(), window.map(str::to_string), agent)));
             Ok(Some("[]".to_string()))
         },
     );
 
     assert_eq!(
         told.take(),
-        Some(vec!["focus".to_string(), "right".to_string()])
+        Some((vec!["focus".to_string(), "right".to_string()], None, None))
     );
     // What the shell printed reaches the terminal.
     assert_eq!(
@@ -537,6 +537,23 @@ fn a_desktop_told_to_send_the_shell_a_command_tells_the_compositor() {
         Response::Sent {
             output: Some("[]".to_string())
         }
+    );
+}
+
+#[test]
+fn a_shell_command_on_a_window_tells_the_compositor_which_and_for_whom() {
+    let told = Cell::new(None);
+    answered_sending(
+        "{\"type\":\"send_shell\",\"command\":[\"kill\"],\"window\":\"w1\",\"agent\":4}",
+        &|command, window, agent| {
+            told.set(Some((command.to_vec(), window.map(str::to_string), agent)));
+            Ok(None)
+        },
+    );
+
+    assert_eq!(
+        told.take(),
+        Some((vec!["kill".to_string()], Some("w1".to_string()), Some(4)))
     );
 }
 
@@ -929,7 +946,7 @@ fn a_compositor_that_did_not_sleep_the_displays_is_quoted() {
 fn a_compositor_that_did_not_send_the_command_is_quoted() {
     let Response::Refused { why } = answered_sending(
         "{\"type\":\"send_shell\",\"command\":[\"focus\",\"right\"]}",
-        &|_| Err("no page of this desktop listens for commands".to_string()),
+        &|_, _, _| Err("no page of this desktop listens for commands".to_string()),
     ) else {
         panic!("a compositor that refused the command is not one that sent it");
     };
@@ -1571,7 +1588,7 @@ fn nothing_dialed() -> Desktop<'static> {
         stop_agent: &|_| panic!("only stop_agent stops an agent"),
         forget_agent: &|_| panic!("only forget_agent forgets an agent"),
         record: &|| panic!("only screen_record records anything"),
-        send: &|_| panic!("only send_shell sends anything"),
+        send: &|_, _, _| panic!("only send_shell sends anything"),
         site_data: &|| panic!("only site_data lists site data"),
         theme: &|_| panic!("only theme reads or sets the theme"),
         set_extension_enabled: &|_, _, _| panic!("only set_extension_enabled enables one"),

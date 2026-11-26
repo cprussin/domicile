@@ -117,7 +117,16 @@ pub enum Request {
     /// recording. See `SystemRequest::ScreenRecord`.
     ScreenRecord,
     /// Send this command to the shell, as a `send-shell` keybinding would.
-    SendShell { command: Vec<String> },
+    /// With `window`, it acts on that window, not the user's focus; with
+    /// `agent` too, only if that agent session's seat holds it. See
+    /// `SystemRequest::SendShell`.
+    SendShell {
+        command: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        window: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent: Option<u32>,
+    },
     /// Report the files the Settings app edits. Asked by
     /// `domicile-app-host`, which reads and writes them itself.
     SettingsFiles,
@@ -607,10 +616,12 @@ pub type Screenshot<'a> = &'a dyn Fn(Option<&Path>) -> Result<Shot, String>;
 /// tests.
 pub type ScreenRecord<'a> = &'a dyn Fn() -> Result<Option<PathBuf>, String>;
 
-/// Tells the compositor to send the shell a command.
+/// Tells the compositor to send the shell a command, on a window and for an
+/// agent session if given.
 ///
 /// [`crate::compositor_socket::send_shell`] in a desktop; a closure in tests.
-pub type SendShell<'a> = &'a dyn Fn(&[String]) -> Result<Option<String>, String>;
+pub type SendShell<'a> =
+    &'a dyn Fn(&[String], Option<&str>, Option<u32>) -> Result<Option<String>, String>;
 
 /// Asks the engine for every permission's default and every site's own
 /// setting.
@@ -1058,7 +1069,11 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(None) => Response::Canceled,
             Err(why) => Response::Refused { why },
         }),
-        Ok(Request::SendShell { command }) => to_line(&match (desktop.send)(&command) {
+        Ok(Request::SendShell {
+            command,
+            window,
+            agent,
+        }) => to_line(&match (desktop.send)(&command, window.as_deref(), agent) {
             Ok(output) => Response::Sent { output },
             Err(why) => Response::Refused { why },
         }),

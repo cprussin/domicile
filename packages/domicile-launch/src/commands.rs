@@ -211,10 +211,11 @@ pub const COMMANDS: &[Command] = &[
             "Fails with the shell's reason when no page listens, when every page \
              refuses the command, or when none says it ran it within a second.",
         ],
-        sections: &[],
+        sections: &[SEND_SHELL],
         examples: &[
             "domicile send-shell workspace 2",
             "domicile send-shell get-workspaces | jq '.[].name'",
+            "domicile send-shell --window <id> move container to workspace 3",
         ],
         see_also: &["list-shell-commands", "list-bindings"],
     },
@@ -1072,6 +1073,22 @@ const AGENT: Section = Section {
         "Use that agent session's own pointer and keyboard, as `agent` prints it, not the user's. \
          Reaches native and browser windows the user isn't in, but not the shell",
     )],
+};
+
+const SEND_SHELL: Section = Section {
+    title: "Options",
+    entries: &[
+        (
+            "--window <id>",
+            "Act on that window, as `list-windows` prints it, not the user's focus. Only a shell \
+             that runs commands on a given window hears it",
+        ),
+        (
+            "--agent <session>",
+            "Send it for that agent session, as `agent` prints it: refused unless its seat holds \
+             the window. Needs `--window`",
+        ),
+    ],
 };
 
 /// The command named `name`.

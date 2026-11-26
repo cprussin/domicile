@@ -831,12 +831,23 @@ mod shell_commands {
         SystemRequest::ShellCommands {
             commands,
             bindings: Vec::new(),
+            on_a_window: false,
         }
     }
 
     fn send() -> SystemRequest {
         SystemRequest::SendShell {
             command: focus_right(),
+            window: None,
+            agent: None,
+        }
+    }
+
+    fn send_to(window: &str) -> SystemRequest {
+        SystemRequest::SendShell {
+            command: focus_right(),
+            window: Some(window.into()),
+            agent: None,
         }
     }
 
@@ -863,7 +874,12 @@ mod shell_commands {
     fn heard_sent(heard: &Receiver<HostMessage>) -> u64 {
         match next(heard) {
             HostMessage::SystemEvent {
-                event: SystemEvent::ShellCommand { command, sent },
+                event:
+                    SystemEvent::ShellCommand {
+                        command,
+                        sent,
+                        window: None,
+                    },
                 ..
             } if command == focus_right() => sent,
             other => panic!("expected focus right, heard {other:?}"),
@@ -933,6 +949,7 @@ mod shell_commands {
             SystemRequest::ShellCommands {
                 commands: Vec::new(),
                 bindings: vec![lock.clone()],
+                on_a_window: false,
             },
         );
         reply(&page_heard, 7);
@@ -979,6 +996,71 @@ mod shell_commands {
         sender.handle(1, send());
 
         assert_eq!(failure(reply(&sender_heard, 1)), SystemErrorKind::Other);
+    }
+
+    #[test]
+    fn a_command_on_a_window_goes_only_to_pages_that_run_one() {
+        // A page that can't aim a command would run it on the user's focus.
+        let commands = commands();
+        let home = std::env::temp_dir();
+        let ((plain, plain_heard), (aiming, aiming_heard)) = two_pages(&commands);
+        let (sender, sender_heard) = system_in(&home);
+        let sender = sender.sharing_shell_commands(commands.clone());
+        plain.handle(7, listening(Vec::new()));
+        reply(&plain_heard, 7);
+        aiming.handle(
+            7,
+            SystemRequest::ShellCommands {
+                commands: Vec::new(),
+                bindings: Vec::new(),
+                on_a_window: true,
+            },
+        );
+        reply(&aiming_heard, 7);
+
+        sender.handle(1, send_to("app-3"));
+
+        let sent = match next(&aiming_heard) {
+            HostMessage::SystemEvent {
+                event:
+                    SystemEvent::ShellCommand {
+                        sent,
+                        window: Some(window),
+                        ..
+                    },
+                ..
+            } if window == "app-3" => sent,
+            other => panic!("expected focus right on app-3, heard {other:?}"),
+        };
+        assert!(plain_heard.try_recv().is_err());
+        aiming.handle(
+            8,
+            SystemRequest::AnswerShellCommand {
+                sent,
+                refused: None,
+                output: None,
+            },
+        );
+        assert_eq!(reply(&sender_heard, 1), SystemReply::Sent { output: None });
+    }
+
+    #[test]
+    fn a_command_on_a_window_no_page_runs_says_so() {
+        let commands = commands();
+        let ((page, page_heard), (sender, sender_heard)) = two_pages(&commands);
+        page.handle(7, listening(Vec::new()));
+        reply(&page_heard, 7);
+
+        sender.handle(1, send_to("app-3"));
+
+        match reply(&sender_heard, 1) {
+            SystemReply::Failed { error } => assert_eq!(
+                error.message,
+                "the shell runs no command on a given window, only on the user's focus"
+            ),
+            other => panic!("expected a failure, got {other:?}"),
+        }
+        assert!(page_heard.try_recv().is_err());
     }
 
     #[test]
@@ -2007,6 +2089,8 @@ mod locked {
             },
             SystemRequest::SendShell {
                 command: vec!["focus".into(), "right".into()],
+                window: None,
+                agent: None,
             },
             SystemRequest::OpenLink {
                 url: "mailto:a@example.com".into(),
@@ -2076,9 +2160,12 @@ mod apps {
             SystemRequest::ShellCommands {
                 commands: Vec::new(),
                 bindings: Vec::new(),
+                on_a_window: false,
             },
             SystemRequest::SendShell {
                 command: vec!["focus".into(), "right".into()],
+                window: None,
+                agent: None,
             },
             SystemRequest::AnswerShellCommand {
                 sent: 1,

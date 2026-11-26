@@ -20,6 +20,7 @@ import {
   screenOfApp,
   shutIdsOf,
   WindowAction,
+  windowNamed,
   workspaceHere,
   workspaceNamed,
   workspaceOn,
@@ -3118,6 +3119,30 @@ describe("the overview", () => {
     const before = reduce(onOneAndThree(), WindowAction.OverviewToggled());
 
     expect(reduce(before, action)).toBe(before);
+  });
+
+  it("moves a window beside the focused one without moving the focus", () => {
+    // An agent's window, sent off while the user works in theirs.
+    const state = reduce(
+      desktop("editor", "kitty", "notes"),
+      WindowAction.WindowSelected(APP("editor")),
+      WindowAction.WindowMovedToWorkspace(APP("kitty"), "3"),
+    );
+
+    expect(windowsOn(workspaceNamed(state, "3"))).toStrictEqual([APP("kitty")]);
+    expect(activeIdOf(state)).toBe(APP("editor"));
+    expect(currentHere(state)).toBe("1");
+  });
+
+  it("finds a window on a workspace by the name seats give it", () => {
+    const state = reduce(
+      desktop("app-3"),
+      WindowAction.BrowserWindowsListed([listed("7", "https://example.com")]),
+    );
+
+    expect(windowNamed(state, "app-3")).toBe(APP("app-3"));
+    expect(windowNamed(state, "7")).toBe(BROWSER("7"));
+    expect(windowNamed(state, "app-9")).toBeUndefined();
   });
 
   it("leaves a window dropped back on its own workspace", () => {

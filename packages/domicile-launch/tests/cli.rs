@@ -610,9 +610,56 @@ fn send_shell_sends_every_word_after_it_as_the_command() {
         run(&["send-shell", "focus", "right"]),
         Ok(Invocation::Ask {
             request: Request::SendShell {
-                command: vec!["focus".to_string(), "right".to_string()]
+                command: vec!["focus".to_string(), "right".to_string()],
+                window: None,
+                agent: None,
             }
         })
+    );
+}
+
+#[test]
+fn send_shell_aims_a_command_at_a_window_maybe_for_an_agent() {
+    let command = ["move", "container", "to", "workspace", "3"].map(String::from);
+    assert_eq!(
+        run(&[
+            "send-shell",
+            "--agent",
+            "4",
+            "--window",
+            "w1",
+            "move",
+            "container",
+            "to",
+            "workspace",
+            "3"
+        ]),
+        Ok(Invocation::Ask {
+            request: Request::SendShell {
+                command: command.to_vec(),
+                window: Some("w1".to_string()),
+                agent: Some(4),
+            }
+        })
+    );
+    assert_eq!(
+        run(&["send-shell", "--window", "w1", "kill"]),
+        Ok(Invocation::Ask {
+            request: Request::SendShell {
+                command: vec!["kill".to_string()],
+                window: Some("w1".to_string()),
+                agent: None,
+            }
+        })
+    );
+}
+
+#[test]
+fn send_shell_for_an_agent_names_a_window() {
+    // Without one it would act on the user's focus.
+    assert_eq!(
+        run(&["send-shell", "--agent", "4", "kill"]),
+        Err(CliError::AgentSendsToAWindow)
     );
 }
 
@@ -823,7 +870,9 @@ fn help_after_a_verb_s_first_argument_is_that_argument() {
         run(&["send-shell", "exec", "foot", "--help"]),
         Ok(Invocation::Ask {
             request: Request::SendShell {
-                command: vec!["exec".to_string(), "foot".to_string(), "--help".to_string()]
+                command: vec!["exec".to_string(), "foot".to_string(), "--help".to_string()],
+                window: None,
+                agent: None,
             }
         })
     );

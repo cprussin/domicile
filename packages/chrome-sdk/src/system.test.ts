@@ -654,7 +654,34 @@ describe("shell commands", () => {
       [1, { call: "unwatch" }],
     ]);
     expect(await Array.fromAsync(commands.items)).toStrictEqual([
-      { sent: 4, words: ["focus", "right"] },
+      { sent: 4, window: undefined, words: ["focus", "right"] },
+    ]);
+  });
+
+  it("hears commands on a window, naming it, when it says it runs them", async () => {
+    const host = new FakeHost();
+    const listening = system(host).shellCommands([], [], true);
+    host.reply(1, { kind: "started" });
+    const commands = started(await listening);
+    host.event(1, {
+      command: ["move", "container", "to", "workspace", "3"],
+      kind: "shell_command",
+      sent: 4,
+      window: "app-3",
+    });
+    commands.stop();
+    host.end(1, { kind: "stopped" });
+
+    expect(host.calls[0]).toStrictEqual([
+      1,
+      { bindings: [], call: "shell_commands", commands: [], on_a_window: true },
+    ]);
+    expect(await Array.fromAsync(commands.items)).toStrictEqual([
+      {
+        sent: 4,
+        window: "app-3",
+        words: ["move", "container", "to", "workspace", "3"],
+      },
     ]);
   });
 

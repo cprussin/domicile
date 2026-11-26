@@ -2571,8 +2571,8 @@ fn answer_a_command(
                         set_site_permission(engine, site, ANSWER_WITHIN)
                             .map_err(|why| why.to_string())
                     },
-                    send: &|command| {
-                        send_shell(chrome, command, Some(SEND_WITHIN))
+                    send: &|command, window, agent| {
+                        send_shell(chrome, command, window, agent, Some(SEND_WITHIN))
                             .map_err(|why| why.to_string())
                     },
                     load_unpacked: &|directory| {

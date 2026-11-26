@@ -16,6 +16,7 @@
 // docs/architecture/KEYBINDINGS.md.
 
 import type { Result } from "@cprussin/option-result";
+import { Err } from "@cprussin/option-result";
 
 import type { Gestures } from "./desktop/gestures";
 import type { Keyboard } from "./desktop/keyboard";
@@ -58,6 +59,16 @@ export type KeyHandlers = {
    * not run it, which `domicile send-shell` fails with.
    */
   onCommand: (args: readonly string[]) => Result<CommandRan, string>;
+  /**
+   * `domicile send-shell --window` sent a command to run on `window`, by app
+   * id or a browser window's engine id, rather than the user's focus: an
+   * agent's on a window it holds, say. Answered as `onCommand` is. Without
+   * it, the page never hears such a command.
+   */
+  onWindowCommand?: (
+    args: readonly string[],
+    window: string,
+  ) => Result<CommandRan, string>;
   /** The binding mode changed. */
   onModeChanged: (mode: string) => void;
   /** The page cannot hear `domicile send-shell`. Logs by default. */
@@ -104,6 +115,7 @@ export const bindKeys = (
     commands: help,
     onCommand,
     onModeChanged,
+    onWindowCommand,
     report = reportToConsole,
     reportRefusal = refusalToConsole,
   }: KeyHandlers,
@@ -216,6 +228,7 @@ export const bindKeys = (
     help,
     describedBindings(bindings),
     onCommand,
+    onWindowCommand,
     report,
   );
   return {
@@ -340,22 +353,34 @@ const hearCommands = (
   help: readonly ShellCommandHelp[],
   bound: readonly ShellBinding[],
   onCommand: (args: readonly string[]) => Result<CommandRan, string>,
+  onWindowCommand: KeyHandlers["onWindowCommand"],
   report: (error: SystemError) => void,
 ): { stop: () => void } => {
   const state: {
     stopped: boolean;
     listening: Listening<ShellCommand> | undefined;
   } = { listening: undefined, stopped: false };
-  const runAndAnswer = ({ sent, words }: ShellCommand) => {
+  const run = ({ window, words }: ShellCommand): Result<CommandRan, string> => {
+    if (window === undefined) {
+      return onCommand(words);
+    } else if (onWindowCommand === undefined) {
+      // The compositor sends one only to a page that asked; run on the
+      // user's focus instead, it would act on the wrong window.
+      return Err("this shell runs no command on a given window");
+    } else {
+      return onWindowCommand(words, window);
+    }
+  };
+  const runAndAnswer = (command: ShellCommand) => {
     shell
-      .answer(sent, onCommand(words))
+      .answer(command.sent, run(command))
       .then((answered) => {
         answered.match({ Err: report, Ok: () => undefined });
       })
       .catch(reportToConsole);
   };
   shell
-    .commands(help, bound)
+    .commands(help, bound, onWindowCommand !== undefined)
     .then((result) => {
       result.match({
         Err: report,

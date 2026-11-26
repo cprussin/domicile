@@ -9,7 +9,7 @@ use std::os::unix::net::UnixStream;
 
 use domicile_protocol::{
     AgentPageInput, AgentReach, ChromeMessage, EmulatedInput, HostMessage, PointerButton,
-    PortalAnswer, PortalKind, SystemReply, SystemRequest,
+    PortalAnswer, PortalKind, SystemEvent, SystemReply, SystemRequest,
 };
 
 use crate::running::{Client, Compositor};
@@ -280,6 +280,136 @@ fn an_agent_focuses_a_native_window_by_its_listed_id() {
             .wait_for_trace(&format!(", {EVDEV_KEY_A}, 1)"), 1),
         "the agent's key never reached the window it focused; it traced:\n{}",
         desk.other.0.trace()
+    );
+}
+
+/// Sends shell command `command` on `window` for agent `session`, as
+/// `domicile send-shell --agent` does, and returns how it ended.
+fn shell_command_as_the_agent(
+    compositor: &Compositor,
+    session: u32,
+    window: &str,
+    command: &[&str],
+) -> std::thread::JoinHandle<SystemReply> {
+    let mut asking = UnixStream::connect(compositor.socket()).expect("the chrome socket is up");
+    let said = serde_json::to_string(&ChromeMessage::SystemRequest {
+        id: 1,
+        request: SystemRequest::SendShell {
+            command: command.iter().map(|word| word.to_string()).collect(),
+            window: Some(window.to_string()),
+            agent: Some(session),
+        },
+    })
+    .unwrap();
+    writeln!(asking, "{said}").expect("the compositor reads the command");
+    std::thread::spawn(move || {
+        let mut answer = String::new();
+        BufReader::new(asking)
+            .read_line(&mut answer)
+            .expect("the compositor answers");
+        match serde_json::from_str(&answer) {
+            Ok(HostMessage::SystemReply { reply, .. }) => reply,
+            _ => panic!("not an answer to a shell command: {answer}"),
+        }
+    })
+}
+
+/// An agent's shell command on a window its seat holds reaches the shell
+/// aimed at that window, by the id the shell knows it by, so the shell acts
+/// on it and not on the user's focus.
+#[test]
+fn an_agents_shell_command_acts_on_a_window_it_holds() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows(&compositor);
+    let (_held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+    desk.chrome
+        .say(&ChromeMessage::SystemRequest {
+            id: 7,
+            request: SystemRequest::ShellCommands {
+                commands: Vec::new(),
+                bindings: Vec::new(),
+                on_a_window: true,
+            },
+        })
+        .expect("the chrome socket takes a request");
+    assert_eq!(
+        as_the_agent(
+            &compositor,
+            session,
+            vec![EmulatedInput::Focus {
+                window: desk.other_listed.clone()
+            }]
+        ),
+        None
+    );
+
+    let sent = shell_command_as_the_agent(
+        &compositor,
+        session,
+        &desk.other_listed,
+        &["move", "container", "to", "workspace", "3"],
+    );
+
+    let heard = desk
+        .chrome
+        .wait_for(|message| {
+            matches!(
+                message,
+                HostMessage::SystemEvent {
+                    id: 7,
+                    event: SystemEvent::ShellCommand { .. },
+                }
+            )
+        })
+        .expect("the shell hears the agent's command");
+    let HostMessage::SystemEvent {
+        event:
+            SystemEvent::ShellCommand {
+                sent: number,
+                window,
+                ..
+            },
+        ..
+    } = heard
+    else {
+        unreachable!("the wait matched on this variant")
+    };
+    assert_eq!(window, Some(desk.other.1.clone()));
+    desk.chrome
+        .say(&ChromeMessage::SystemRequest {
+            id: 8,
+            request: SystemRequest::AnswerShellCommand {
+                sent: number,
+                refused: None,
+                output: None,
+            },
+        })
+        .expect("the chrome socket takes an answer");
+    assert_eq!(
+        sent.join().expect("the agent's call ends"),
+        SystemReply::Sent { output: None }
+    );
+}
+
+/// An agent's shell command on a window its seat doesn't hold, such as the
+/// user's, is refused before the shell hears it.
+#[test]
+fn an_agents_shell_command_on_a_window_it_does_not_hold_is_refused() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows(&compositor);
+    let (_held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+
+    let sent = shell_command_as_the_agent(&compositor, session, &desk.users.1, &["kill"]);
+
+    let SystemReply::Failed { error } = sent.join().expect("the agent's call ends") else {
+        panic!("the agent's command on the user's window was sent");
+    };
+    assert_eq!(
+        error.message,
+        format!(
+            "your seat doesn't hold window {}: focus_window it first, or act on it by ref",
+            desk.users.1
+        )
     );
 }
 

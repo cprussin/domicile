@@ -1007,6 +1007,7 @@ const systemEventSchema = z.looseObject({
       command: z.array(z.string()),
       kind: z.literal("shell_command"),
       sent: z.number(),
+      window: z.string().optional(),
     }),
     z.looseObject({
       idle: z.boolean(),

@@ -43,10 +43,19 @@ struct Shared {
 /// A page listening, with the commands it said it runs and the bindings that
 /// run them.
 struct Page {
-    hear: Hear<(Vec<String>, u64)>,
+    hear: Hear<Heard>,
     commands: Vec<ShellCommandHelp>,
     bindings: Vec<ShellBinding>,
+    /// It runs commands on a window they name.
+    on_a_window: bool,
 }
+
+/// A command a page hears: its words, its number, and the window it acts on,
+/// if not the user's focus.
+pub(crate) type Heard = (Vec<String>, u64, Option<String>);
+
+/// Why a command on a window fails when no page runs one.
+const NO_PAGE_AIMS: &str = "the shell runs no command on a given window, only on the user's focus";
 
 /// A sent command no page has run yet.
 struct Waiting {
@@ -74,12 +83,14 @@ impl ShellCommands {
 
     /// Calls `hear` with each command and its number until the [`Listener`]
     /// drops. `commands` describes what the page runs meanwhile, and
-    /// `bindings` the keys and gestures that run them.
+    /// `bindings` the keys and gestures that run them. With `on_a_window`, it
+    /// hears commands on a window too.
     pub(crate) fn listen(
         &self,
         commands: Vec<ShellCommandHelp>,
         bindings: Vec<ShellBinding>,
-        hear: Hear<(Vec<String>, u64)>,
+        on_a_window: bool,
+        hear: Hear<Heard>,
     ) -> Listener {
         let mut shared = self.shared.lock().unwrap();
         let key = shared.next_page;
@@ -90,6 +101,7 @@ impl ShellCommands {
                 hear,
                 commands,
                 bindings,
+                on_a_window,
             },
         );
         let stopping = Arc::clone(&self.shared);
@@ -99,18 +111,25 @@ impl ShellCommands {
     }
 
     /// Sends `command` to every page listening, and calls `done` once one ran
-    /// it, every one refused it, or none answered in time. Returns false, and
-    /// never calls `done`, when no page listens.
-    pub(crate) fn send(&self, command: &[String], done: Done) -> bool {
+    /// it, every one refused it, or none answered in time. A command on
+    /// `window` goes only to pages that run one, and fails at once when none
+    /// does. Returns false, and never calls `done`, when no page listens.
+    pub(crate) fn send(&self, command: &[String], window: Option<String>, done: Done) -> bool {
         let (sent, hearing) = {
             let mut shared = self.shared.lock().unwrap();
+            if shared.pages.is_empty() {
+                return false;
+            }
             let hearing: Vec<_> = shared
                 .pages
                 .values()
+                .filter(|page| window.is_none() || page.on_a_window)
                 .map(|page| Arc::clone(&page.hear))
                 .collect();
             if hearing.is_empty() {
-                return false;
+                drop(shared);
+                done(Err(NO_PAGE_AIMS.to_string()));
+                return true;
             }
             let sent = shared.next_sent;
             shared.next_sent += 1;
@@ -127,7 +146,7 @@ impl ShellCommands {
         // Outside the lock, since hearing takes its connection's lock, which a
         // page starting to listen holds while it takes this one.
         for hear in &hearing {
-            hear(&(command.to_vec(), sent));
+            hear(&(command.to_vec(), sent, window.clone()));
         }
         let expiring = self.clone();
         std::thread::spawn(move || {

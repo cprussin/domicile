@@ -184,6 +184,18 @@ pub enum CliError {
     )]
     NothingToSend,
     #[error(
+        "send-shell --agent acts on a window the agent's seat holds, so it \
+         takes --window and the window's id, as list-windows prints it:\n\n    \
+         domicile send-shell --agent 3 --window <id> move container to workspace 2\n"
+    )]
+    AgentSendsToAWindow,
+    #[error(
+        "send-shell --window takes a window's id, as list-windows prints it, \
+         then the command:\n\n    \
+         domicile send-shell --window <id> move container to workspace 2\n"
+    )]
+    NoWindowToSendTo,
+    #[error(
         "disable-while-typing takes on, off or toggle, or nothing to print \
          the setting, and was given {said}."
     )]
@@ -645,11 +657,21 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (Some(_), Some(extra)) => Err(CliError::ExtraToUninstall { extra }),
             },
             Verb::Sending => {
+                let agent = agent_flag(&mut args)?;
+                let window = match args.next_if(|said| said == WINDOW) {
+                    None => None,
+                    Some(_) => Some(args.next().ok_or(CliError::NoWindowToSendTo)?),
+                };
                 let command: Vec<String> = args.collect();
-                match command.is_empty() {
-                    true => Err(CliError::NothingToSend),
-                    false => Ok(Invocation::Ask {
-                        request: Request::SendShell { command },
+                match (command.is_empty(), agent, &window) {
+                    (true, _, _) => Err(CliError::NothingToSend),
+                    (false, Some(_), None) => Err(CliError::AgentSendsToAWindow),
+                    (false, _, _) => Ok(Invocation::Ask {
+                        request: Request::SendShell {
+                            command,
+                            window,
+                            agent,
+                        },
                     }),
                 }
             }
@@ -1263,6 +1285,9 @@ fn emulated(input: Vec<EmulatedInput>, agent: Option<u32>) -> Result<Invocation,
 
 /// The flag that sends emulated input to an agent session's own seat.
 const AGENT: &str = "--agent";
+
+/// The flag that aims a shell command at a window.
+const WINDOW: &str = "--window";
 
 /// The agent session `--agent` names, if it leads `args`.
 fn agent_flag(

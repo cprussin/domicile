@@ -65,6 +65,10 @@ it, as `domicile pointer --agent <session>` and the like:
 `send_shell` acts on the user's focus, so it is refused until the user has left
 this computer's keyboard, pointer and touch alone for 30 seconds
 (`local_seconds` of [`domicile idle-time`](CLI.md#domicile-idle-time---json)).
+Given a `window`, it runs at once on that window instead: the agent's keyboard
+takes it, as `focus_window` does, so a window the user is in is refused, and
+the compositor sends the shell only a command on a window the agent's seat
+holds. Manganese runs `move container to workspace <name>` that way.
 The `browser_` and `app_` tools act by ref and run any time. The `browser_`
 tools reach a browser window through DevTools on its own page, which gives
 that page focus of its own: the user's focus stays where it is, and typed

@@ -15,8 +15,8 @@ use domicile_host::system::{
 use domicile_launch::handshake::Handshake;
 use domicile_protocol::{
     negotiate, AgentReach, ChromeMessage, DeskRect, DeskShot, DisplayChange, EmulatedInput,
-    HostMessage, KnownAgents, SystemError, SystemErrorKind, SystemRequest, Theme, WindowAct,
-    PROTOCOL_VERSION,
+    HostMessage, KnownAgents, SystemError, SystemErrorKind, SystemReply, SystemRequest, Theme,
+    WindowAct, PROTOCOL_VERSION,
 };
 use tracing::{debug, error, info, warn};
 
@@ -645,7 +645,18 @@ fn read_chrome_messages(
                         bus: bus.to_string(),
                     });
                 }
-                call_the_system(hub, &system, id, request)
+                match aimed(hub, request) {
+                    Ok(request) => call_the_system(hub, &system, id, request),
+                    Err(message) => vec![HostMessage::SystemReply {
+                        id,
+                        reply: SystemReply::Failed {
+                            error: SystemError {
+                                kind: SystemErrorKind::Other,
+                                message,
+                            },
+                        },
+                    }],
+                }
             }
             Ok(ChromeMessage::PointerMotion {
                 app_id,
@@ -1267,6 +1278,35 @@ fn answer_an_app(
             Vec::new()
         }
     }
+}
+
+/// `request`, with the window a shell command acts on named as the shell
+/// knows it: a native window's app id or a browser window's engine id, for
+/// one given by its `list-windows` id. Errs when an agent's command names a
+/// window its seat doesn't hold, so an agent acts only on its own windows.
+fn aimed(hub: &ChromeHub, request: SystemRequest) -> Result<SystemRequest, String> {
+    let SystemRequest::SendShell {
+        command,
+        window: Some(said),
+        agent,
+    } = request
+    else {
+        return Ok(request);
+    };
+    let host = hub.host.lock().unwrap();
+    let window = host.window_listed_as(&said).unwrap_or_else(|| said.clone());
+    if let Some(session) = agent {
+        if host.held_by(&window) != Some(format!("agent-{session}").as_str()) {
+            return Err(format!(
+                "your seat doesn't hold window {said}: focus_window it first, or act on it by ref"
+            ));
+        }
+    }
+    Ok(SystemRequest::SendShell {
+        command,
+        window: Some(window),
+        agent,
+    })
 }
 
 /// Run a system call for the page, unless the desktop is locked.

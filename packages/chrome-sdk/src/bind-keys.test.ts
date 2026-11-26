@@ -363,6 +363,75 @@ describe("bindKeys", () => {
       ]);
     });
 
+    it("runs a command on a window through onWindowCommand, and says it can", async () => {
+      const host = new FakeHost();
+      const aimed: (readonly [readonly string[], string])[] = [];
+      unbind = bindKeys(keysOf(host), DESK, {
+        commands: HELP,
+        onCommand: () => Err("not on the user's focus"),
+        onModeChanged: () => undefined,
+        onWindowCommand: (args, window) => {
+          aimed.push([args, window]);
+          return Ok("ran");
+        },
+      }).unbind;
+      host.answer({ reply: { kind: "started" }, type: "system_reply" });
+      await host.settled();
+
+      host.answer({
+        event: {
+          command: ["kill"],
+          kind: "shell_command",
+          sent: 4,
+          window: "app-3",
+        },
+        type: "system_event",
+      });
+      await host.settled();
+
+      expect(host.calls).toStrictEqual([
+        [
+          1,
+          {
+            bindings: DESK_BOUND,
+            call: "shell_commands",
+            commands: HELP,
+            on_a_window: true,
+          },
+        ],
+        [2, { call: "answer_shell_command", sent: 4 }],
+      ]);
+      expect(aimed).toStrictEqual([[["kill"], "app-3"]]);
+    });
+
+    it("refuses a command on a window without onWindowCommand", async () => {
+      // Run on the user's focus instead, it would act on the wrong window.
+      const { heard, host } = bound();
+      host.answer({ reply: { kind: "started" }, type: "system_reply" });
+      await host.settled();
+
+      host.answer({
+        event: {
+          command: ["kill"],
+          kind: "shell_command",
+          sent: 4,
+          window: "app-3",
+        },
+        type: "system_event",
+      });
+      await host.settled();
+
+      expect(heard).toStrictEqual([]);
+      expect(host.calls.at(-1)).toStrictEqual([
+        2,
+        {
+          call: "answer_shell_command",
+          refused: "this shell runs no command on a given window",
+          sent: 4,
+        },
+      ]);
+    });
+
     it("stops hearing them once unbound", async () => {
       const { host } = bound();
       host.answer({ reply: { kind: "started" }, type: "system_reply" });

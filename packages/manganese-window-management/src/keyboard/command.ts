@@ -21,7 +21,7 @@ import type { ShellCommandHelp } from "@domicile-desktop/sdk/shell-command";
 import { Axis, Direction } from "../direction";
 import { Layout } from "../tree/node";
 import type { WindowAction as Action } from "../window-state";
-import { WindowAction, WORKSPACES } from "../window-state";
+import { WindowAction, WindowActionKind, WORKSPACES } from "../window-state";
 import { MediaKey } from "./media-key";
 
 /** Sway's direction words. */
@@ -313,6 +313,23 @@ const parseVirtualMonitor = (
 const virtualMonitorUsage = (args: readonly string[]): Result<Action, string> =>
   Err(
     `manganese: no command \`${args.join(" ")}\`; write \`virtual-monitor add [<width>x<height>]\` or \`virtual-monitor remove\``,
+  );
+
+/**
+ * Parse the words of a `send-shell --window` command into an action on window
+ * `id`, not the focus. Only `move container to workspace <name>` runs on a
+ * given window; any other command acts on the focus, so it is refused.
+ */
+export const parseWindowCommand = (
+  args: readonly string[],
+  id: string,
+): Result<Action, string> =>
+  parseCommand(args).andThen((action) =>
+    action.kind === WindowActionKind.WindowSentToWorkspace
+      ? Ok(WindowAction.WindowMovedToWorkspace(id, action.name))
+      : Err(
+          `manganese: \`${args.join(" ")}\` acts on the focus; on a given window it runs only \`move container to workspace <name>\``,
+        ),
   );
 
 /** Look up a command in {@link COMMANDS}. */

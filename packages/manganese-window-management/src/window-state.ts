@@ -327,6 +327,19 @@ export const workspaceHolding = (
   state.workspaces.find((workspace) => holds(workspace, id));
 
 /**
+ * The window on a workspace that seats and `send-shell --window` name `name`:
+ * a client's by its app id, or a browser window's by the engine's id for it.
+ * `undefined` when no workspace holds one, as in the scratchpad.
+ */
+export const windowNamed = (
+  state: Pick<WindowState, "workspaces">,
+  name: string,
+): string | undefined =>
+  [appWindowId(name), browserWindowId(name)].find(
+    (id) => workspaceHolding(state, id) !== undefined,
+  );
+
+/**
  * The screen showing the client `appId`'s window, or `undefined` while none
  * is.
  */

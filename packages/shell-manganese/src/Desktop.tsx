@@ -112,6 +112,7 @@ import {
   shutIdsOf,
   WindowAction,
   WindowActionKind,
+  windowNamed,
   workspaceHolding,
 } from "@domicile-desktop/manganese-window-management/window-state";
 import type { Workspaces } from "@domicile-desktop/manganese-window-management/workspaces-context";
@@ -817,6 +818,7 @@ export const Desktop = ({
       act(WindowAction.ModeSet(mode));
     },
     overviewOpen: windows.overviewOpen,
+    windowNamed: (name) => windowNamed(windows, name),
   });
 
   useScreenFollowsPointer({ act, displays, focused: windows.focused });
