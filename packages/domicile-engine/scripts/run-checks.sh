@@ -68,6 +68,7 @@ TOGETHER=(
   guard-extension-tray
   guard-extension-menu
   guard-extension-commands
+  guard-extension-kept-key
   guard-extension-page
   guard-extension-open-popup
   guard-extension-side-panel

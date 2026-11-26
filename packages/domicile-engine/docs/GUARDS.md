@@ -212,6 +212,7 @@ Headless.
 | `guard-extension-tray.sh` | the tray event, popup, its auto-resized size and `window.close()` (patch 0056) |
 | `guard-extension-menu.sh` | `installedExtensions` lists every extension with its settings; `configureExtension()`, `setExtensionEnabled()` and `uninstallExtension()` change it, and refuse what the config owns |
 | `guard-extension-commands.sh` | `extensionCommands` has an extension's keys; `runExtensionCommand()`, `extensionMenu()` and `runExtensionMenuItem()` reach its service worker, and `_execute_action` asks for its popup |
+| `guard-extension-kept-key.sh` | an installed extension whose suggested key is not bound takes it at its next start (patch 0288). Control: a key the person cleared stays clear. Headless |
 | `guard-extension-page.sh` | an extension's key pressed in a page of the default and of another browser profile runs its command in that profile and never reaches a page that cancels every key; a private page where the extension is off keeps the key; a shell that listens for `extensioncommandpressed` gets the command, and the engine does not run it; the extension's item in a page's context menu runs, and not once its page is gone. Control: with no extension the page gets the key and the menu has no items. Headless |
 | `guard-extension-open-popup.sh` | `action.openPopup()` reaches the shell as `extensionpopuprequested` |
 | `guard-extension-side-panel.sh` | `sidePanel.open()` opens the side panel's page as a popup window with no size, which the shell tiles |
