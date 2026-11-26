@@ -200,6 +200,7 @@ source_set("domicile") {
     # menu's "Add to dictionary".
     "//chrome/browser/spellchecker",
     "//components/domicile:spellcheck_settings",
+    "//components/domicile:protection_settings",
     "//components/domicile:shortcut_registry",
     "//components/tabs:public",
     "//content/public/browser",

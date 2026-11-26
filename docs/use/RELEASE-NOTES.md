@@ -15,6 +15,12 @@ Closing windows dissolve, the overview blurs your wallpaper, and windows, panels
 
 [Window effects](APPEARANCE.md#window-effects)
 
+### Privacy protections
+
+Browser windows keep more from the sites you visit. Each profile blocks cookies from other sites, asks sites not to sell or share your data, and hides your local network address from video calls, all on by default. Turn any of them off for a profile in Settings, under Privacy.
+
+[Privacy](BROWSER.md#privacy)
+
 ### Agents work beside you
 
 An agent now has its own pointer, keyboard and clipboard, so it can work in any app or browser window while you keep working in yours, without ever taking your typing. A ring shows which windows it's using: click or type in one to take it over, and give it back from the banner. An idle agent leaves after two minutes.

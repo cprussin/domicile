@@ -10,9 +10,9 @@ use std::thread;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::{Appearances, Host};
 use domicile_protocol::{
-    AccessDialog, Appearance, BoundShortcut, BrowserProfile, Capturing, CapturingKind,
-    ChromeMessage, Devices, ExtensionSettings, HostMessage, Notification, Owner, PortalKind,
-    PortalRequest, PortalWallpaper, Theme, TrayItem, Urgency, PROTOCOL_VERSION,
+    AccessDialog, Appearance, BoundShortcut, BrowserProfile, BrowserProtections, Capturing,
+    CapturingKind, ChromeMessage, Devices, ExtensionSettings, HostMessage, Notification, Owner,
+    PortalKind, PortalRequest, PortalWallpaper, Theme, TrayItem, Urgency, PROTOCOL_VERSION,
 };
 
 /// A window's owner, for tests about anything else.
@@ -309,6 +309,11 @@ fn the_browser_profiles_ride_with_the_handshake() {
         color: "#d97706".into(),
         private: false,
         extensions: None,
+        protections: BrowserProtections {
+            block_third_party_cookies: true,
+            global_privacy_control: true,
+            hide_local_ip_address: true,
+        },
     }];
     let sites: std::collections::BTreeMap<String, String> =
         [("github.com/acme".into(), "work".into())].into();

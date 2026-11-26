@@ -741,15 +741,24 @@ TEST_F(ControlChannelTest, TheBrowserProfilesReachTheBrowserWithThePage) {
       heard.GetRepeatingCallback<const Page&, const BrowserProfiles&>());
 
   Say("{\"type\":\"browser_profiles\",\"profiles\":[{\"id\":\"default\","
-      "\"name\":\"Personal\",\"color\":\"#0d9488\",\"private\":false}],"
+      "\"name\":\"Personal\",\"color\":\"#0d9488\",\"private\":false,"
+      "\"protections\":{\"block_third_party_cookies\":true,"
+      "\"global_privacy_control\":true,\"hide_local_ip_address\":true}}],"
       "\"default_profile\":\"work\",\"default_private_profile\":\"work\","
       "\"sites\":{}}\n"
       "{\"type\":\"browser_profiles\",\"profiles\":[{\"id\":\"default\","
-      "\"name\":\"Personal\",\"color\":\"#0d9488\",\"private\":false},"
+      "\"name\":\"Personal\",\"color\":\"#0d9488\",\"private\":false,"
+      "\"protections\":{\"block_third_party_cookies\":true,"
+      "\"global_privacy_control\":true,\"hide_local_ip_address\":true}},"
       "{\"id\":\"private\",\"name\":\"Private\",\"color\":\"#a78bfa\","
-      "\"private\":true},{\"id\":\"work\",\"name\":\"Work\","
+      "\"private\":true,"
+      "\"protections\":{\"block_third_party_cookies\":true,"
+      "\"global_privacy_control\":true,\"hide_local_ip_address\":true}},"
+      "{\"id\":\"work\",\"name\":\"Work\","
       "\"color\":\"#2563eb\",\"private\":false,"
-      "\"extensions\":[\"aeblfdkhhhdcdjpifhhbdiojplfjncoa\"]}],"
+      "\"extensions\":[\"aeblfdkhhhdcdjpifhhbdiojplfjncoa\"],"
+      "\"protections\":{\"block_third_party_cookies\":true,"
+      "\"global_privacy_control\":true,\"hide_local_ip_address\":true}}],"
       "\"default_profile\":\"default\",\"default_private_profile\":"
       "\"private\",\"sites\":{\"github.com/acme\":\"work\"}}\n");
 

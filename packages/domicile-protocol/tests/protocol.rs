@@ -5,9 +5,9 @@
 
 use domicile_protocol::{
     negotiate, ActivityKind, AdaptiveSync, AppCursorImage, AppFrame, Appearance, BrowserProfile,
-    ChromeMessage, ClipboardEntry, CursorHiding, CursorImage, CursorShape, CursorTheme, DisplayHdr,
-    DisplayInfo, DisplayTransform, HostMessage, Owner, Passphrase, PointerConstraint,
-    PointerOverWindow, SurfaceRect, PROTOCOL_VERSION,
+    BrowserProtections, ChromeMessage, ClipboardEntry, CursorHiding, CursorImage, CursorShape,
+    CursorTheme, DisplayHdr, DisplayInfo, DisplayTransform, HostMessage, Owner, Passphrase,
+    PointerConstraint, PointerOverWindow, SurfaceRect, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -288,6 +288,11 @@ fn browser_profiles_wire_shape_is_pinned() {
             color: "#d97706".into(),
             private: false,
             extensions: Some(vec!["aeblfdkhhhdcdjpifhhbdiojplfjncoa".into()]),
+            protections: BrowserProtections {
+                block_third_party_cookies: true,
+                global_privacy_control: false,
+                hide_local_ip_address: true,
+            },
         }],
         default_profile: "work".into(),
         default_private_profile: "private".into(),
@@ -304,6 +309,11 @@ fn browser_profiles_wire_shape_is_pinned() {
                 "color": "#d97706",
                 "private": false,
                 "extensions": ["aeblfdkhhhdcdjpifhhbdiojplfjncoa"],
+                "protections": {
+                    "block_third_party_cookies": true,
+                    "global_privacy_control": false,
+                    "hide_local_ip_address": true,
+                },
             }],
             "default_profile": "work",
             "default_private_profile": "private",

@@ -24,6 +24,7 @@ Each agent gets its own pointer, keyboard and clipboard, in native and browser w
 
 ### Also new
 
+- Each browser profile has `protections`: third-party cookie blocking, Global Privacy Control and hiding the local IP address from WebRTC, all on unless the config turns one off. The SDK's config types and schema have them. [Browser profiles](architecture/BROWSER-PROFILES.md#config)
 - Shader effects can draw through a mesh, sample images, take per-element arrays and draw past the element's bounds. A closed window's last frame stays while its `<app>` does, and windows say where they came from with `launchedFrom` and `opener`. [Shader effects](SHELL-SHADER-EFFECTS.md)
 - `domicile pointer`, `drag`, `scroll`, `key`, `type`, `focus-window`, `exec` and `open` take `--agent <session>`. `domicile list-windows` adds `held_by`, and `domicile idle-time --json` adds `local_seconds`. [The domicile command](CLI.md)
 - `domicile load-extension <directory>` loads or reloads an unpacked extension in every browser profile. [`domicile load-extension`](CLI.md#domicile-load-extension-directory)

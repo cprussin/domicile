@@ -44,8 +44,31 @@ std::optional<BrowserProfile> ParseProfile(const base::Value& value) {
       color == nullptr || !is_private.has_value()) {
     return std::nullopt;
   }
+  const base::DictValue* protections = dict->FindDict("protections");
+  if (protections == nullptr) {
+    return std::nullopt;
+  }
+  const std::optional<bool> block_third_party_cookies =
+      protections->FindBool("block_third_party_cookies");
+  const std::optional<bool> global_privacy_control =
+      protections->FindBool("global_privacy_control");
+  const std::optional<bool> hide_local_ip_address =
+      protections->FindBool("hide_local_ip_address");
+  if (!block_third_party_cookies.has_value() ||
+      !global_privacy_control.has_value() ||
+      !hide_local_ip_address.has_value()) {
+    return std::nullopt;
+  }
   BrowserProfile profile{
-      .id = *id, .name = *name, .color = *color, .is_private = *is_private};
+      .id = *id,
+      .name = *name,
+      .color = *color,
+      .is_private = *is_private,
+      .protections = {
+          .block_third_party_cookies = *block_third_party_cookies,
+          .global_privacy_control = *global_privacy_control,
+          .hide_local_ip_address = *hide_local_ip_address,
+      }};
   const base::Value* extensions = dict->Find("extensions");
   if (extensions != nullptr && !extensions->is_none()) {
     if (!extensions->is_list()) {

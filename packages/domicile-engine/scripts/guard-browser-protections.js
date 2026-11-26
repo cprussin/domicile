@@ -1,0 +1,81 @@
+// The shell for guard-browser-protections.sh. It opens a browser window in
+// each profile the guard names, at `?page=` with `?as=` the profile, and draws
+// each in its own <webview window>, side by side.
+//
+// - `?page=` is the page's address, without its query.
+// - `?profiles=` is the profiles, comma-separated.
+//
+// It logs to the console, which the engine writes to its log:
+//
+//   GUARD shell-loaded     this module ran
+//
+// The page and its frame log what they found themselves; see
+// guard-browser-protections-server.py.
+//
+// Everything is inside `HostShell`, which Domicile's document calls once the
+// module loads.
+
+export const HostShell = (_root, desktop) => {
+  const say = (what) => {
+    console.log(`GUARD ${what}`);
+  };
+
+  /**
+   * Reads a required query parameter. A default would make a misinvoked guard
+   * measure the wrong thing.
+   */
+  const required = (parameters, name) => {
+    const value = parameters.get(name);
+    if (value === null) {
+      throw new Error(`guard-browser-protections: ?${name}= is required`);
+    } else {
+      return value;
+    }
+  };
+
+  const host = desktop;
+  if (host === null || host === undefined) {
+    throw new Error(
+      "guard-browser-protections: no desktop was handed to Shell, so this " +
+        "document was not served by the forked engine",
+    );
+  }
+
+  const parameters = new URLSearchParams(location.search);
+  const page = required(parameters, "page");
+  const profiles = required(parameters, "profiles").split(",");
+
+  document.body.style.margin = "0";
+  document.body.style.display = "flex";
+  document.body.style.blockSize = "100vh";
+
+  // A <webview> for window `id`, sharing the width. `window` is set before the
+  // element enters the document, when it asks for its page.
+  const draw = (id) => {
+    const view = document.createElement("webview");
+    view.style.flex = "1";
+    view.style.border = "0";
+    view.setAttribute("window", id);
+    document.body.append(view);
+  };
+
+  // The first list is empty, so this opens the windows; later ones hold them.
+  let opened = false;
+  const drawn = new Set();
+  host.addEventListener("browserwindowschanged", () => {
+    if (!opened) {
+      opened = true;
+      for (const profile of profiles) {
+        host.openBrowserWindow(`${page}?as=${profile}`, undefined, profile);
+      }
+    }
+    for (const window of host.browserWindows ?? []) {
+      if (!drawn.has(window.id)) {
+        drawn.add(window.id);
+        draw(window.id);
+      }
+    }
+  });
+
+  say("shell-loaded");
+};

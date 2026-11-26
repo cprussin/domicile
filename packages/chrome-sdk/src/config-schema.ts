@@ -23,6 +23,16 @@ export const agentsConfigSchema = z.strictObject({
   web: z.boolean().prefault(false),
 });
 
+/**
+ * What a browser profile keeps sites from learning about you. See
+ * [`BrowserProfile::protections`].
+ */
+export const protectionsSchema = z.strictObject({
+  block_third_party_cookies: z.boolean().prefault(true),
+  global_privacy_control: z.boolean().prefault(true),
+  hide_local_ip_address: z.boolean().prefault(true),
+});
+
 /** One browser profile. See [`BrowserConfig::profiles`]. */
 export const browserProfileSchema = z.strictObject({
   color: accentColorSchema,
@@ -32,6 +42,11 @@ export const browserProfileSchema = z.strictObject({
     .transform((value) => value ?? undefined),
   name: z.string(),
   private: z.boolean().prefault(false),
+  protections: protectionsSchema.prefault({
+    block_third_party_cookies: true,
+    global_privacy_control: true,
+    hide_local_ip_address: true,
+  }),
 });
 
 /**
@@ -48,12 +63,22 @@ export const browserConfigSchema = z.strictObject({
       extensions: null,
       name: "Default",
       private: false,
+      protections: {
+        block_third_party_cookies: true,
+        global_privacy_control: true,
+        hide_local_ip_address: true,
+      },
     },
     private: {
       color: "#a78bfa",
       extensions: null,
       name: "Private",
       private: true,
+      protections: {
+        block_third_party_cookies: true,
+        global_privacy_control: true,
+        hide_local_ip_address: true,
+      },
     },
   }),
   sites: z.record(z.string(), z.string()).prefault({}),
@@ -528,12 +553,22 @@ export const configSchema = z.strictObject({
         extensions: null,
         name: "Default",
         private: false,
+        protections: {
+          block_third_party_cookies: true,
+          global_privacy_control: true,
+          hide_local_ip_address: true,
+        },
       },
       private: {
         color: "#a78bfa",
         extensions: null,
         name: "Private",
         private: true,
+        protections: {
+          block_third_party_cookies: true,
+          global_privacy_control: true,
+          hide_local_ip_address: true,
+        },
       },
     },
     sites: {},

@@ -5,7 +5,8 @@ guard-extension-in-private.sh and guard-extension-reload.sh.
 It answers the browser's `hello` with a `welcome`, the `browser_profiles` it
 was given as JSON if any, and one `extensions` message naming the directories
 it was given as `unpacked` -- none, for the installer guard's control -- and
-the `settings` it was given, as JSON. That is what the real compositor sends
+the `settings` it was given, as JSON. A profile's `protections` default to
+all on, as `domicile-config`'s do. That is what the real compositor sends
 at the handshake from a desk's `[browser]` and `[extensions]`, spelled as
 `domicile-protocol` spells it (`wire/host-messages.jsonl`).
 
@@ -19,6 +20,15 @@ import json
 import os
 import socket
 import sys
+
+# What `domicile-config` gives a profile whose config names no protections:
+# every one on. The real compositor always sends them, so a guard's profile
+# that leaves them out gets these, as a desk's would.
+PROTECTIONS = {
+    "block_third_party_cookies": True,
+    "global_privacy_control": True,
+    "hide_local_ip_address": True,
+}
 
 
 def send(connection, message):
@@ -111,6 +121,8 @@ def main():
         if arguments.browser_profiles is None
         else json.loads(arguments.browser_profiles)
     )
+    for profile in [] if profiles is None else profiles["profiles"]:
+        profile["protections"] = dict(PROTECTIONS, **profile.get("protections", {}))
     try:
         serve(
             arguments.socket,

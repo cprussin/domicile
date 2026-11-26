@@ -13,6 +13,7 @@
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/history/history_tab_helper.h"
 #include "chrome/browser/sessions/session_tab_helper_factory.h"
+#include "chrome/browser/ui/prefs/prefs_tab_helper.h"
 #include "components/domicile/browser/web_view_guest.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
@@ -23,6 +24,10 @@ namespace domicile {
 namespace {
 
 void Attach(content::WebContents& guest, bool records_history) {
+  // As Chrome's TabFeatures does. Without it a page's renderer preferences
+  // are not its own profile's: a profile's Global Privacy Control and WebRTC
+  // IP policy never reach its pages, nor do later changes to them.
+  PrefsTabHelper::CreateForWebContents(&guest);
   // Before the popup check: a popup's page may ask for permissions too.
   AttachPermissionPrompts(guest);
   // A popup's page may print too.

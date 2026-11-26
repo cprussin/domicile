@@ -494,6 +494,11 @@ const browserProfilesSchema = z.looseObject({
       id: z.string(),
       name: z.string(),
       private: z.boolean(),
+      protections: z.looseObject({
+        block_third_party_cookies: z.boolean(),
+        global_privacy_control: z.boolean(),
+        hide_local_ip_address: z.boolean(),
+      }),
     }),
   ),
   sites: z.record(z.string(), z.string()),

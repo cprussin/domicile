@@ -99,6 +99,19 @@ pub struct BrowserProfile {
     /// The extension ids it turns on; `None` turns on all of them, or none
     /// for a private profile.
     pub extensions: Option<Vec<String>>,
+    pub protections: BrowserProtections,
+}
+
+/// What a [`BrowserProfile`] keeps sites from learning: the config's
+/// `browser.profiles.<id>.protections`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BrowserProtections {
+    /// Blocks cookies a page's embedded sites set or read.
+    pub block_third_party_cookies: bool,
+    /// Sends `Sec-GPC: 1` and sets `navigator.globalPrivacyControl`.
+    pub global_privacy_control: bool,
+    /// Keeps WebRTC from telling sites the local network address.
+    pub hide_local_ip_address: bool,
 }
 
 /// One extension's chrome://extensions settings, in

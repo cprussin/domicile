@@ -169,6 +169,47 @@ programs.domicile.settings.spellcheck.languages = ["en-US" "de-DE"];
 Set `enabled` to `false` to turn it off. Dictionaries come with the desktop,
 and your words are never sent anywhere to be checked.
 
+## Privacy
+
+Every profile keeps these from the sites you visit, unless you turn one off:
+
+- **Block cookies from other sites.** A page's ads, buttons and embeds from
+  other sites can't keep cookies that follow you from site to site. Sign-ins
+  that open in their own window still work.
+- **Ask sites not to sell or share your data.** Pages are sent Global Privacy
+  Control, which some places' laws make sites honor.
+- **Hide your local network address.** Video calls and other sites see the
+  address your network shows the internet, not the one on your home or office
+  network.
+
+<!-- tab: Settings app -->
+
+Open **Settings**, then **Privacy**. **Website protections** has a switch for
+each, for the profile you choose.
+
+<!-- tab: Config file -->
+
+```json
+{
+  "browser": {
+    "profiles": {
+      "default": { "name": "Default", "color": "#0d9488" },
+      "work": {
+        "name": "Work",
+        "color": "#d97706",
+        "protections": { "block_third_party_cookies": false }
+      },
+      "private": { "name": "Private", "color": "#a78bfa", "private": true }
+    }
+  }
+}
+```
+
+`protections` takes `block_third_party_cookies`, `global_privacy_control` and
+`hide_local_ip_address`, each `true` unless set.
+
+<!-- /tabs -->
+
 ## Differences from Chrome
 
 The browser is Chromium, with the desktop in place of Chrome's own window and

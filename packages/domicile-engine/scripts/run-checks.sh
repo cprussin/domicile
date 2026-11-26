@@ -124,6 +124,7 @@ TOGETHER=(
   guard-webview-moved
   guard-webview-discard
   guard-profile-routing
+  guard-browser-protections
   guard-webview-paused
   guard-animation-main-frames
   guard-one-spare-renderer

@@ -24,16 +24,26 @@ base::DictValue Dict(const std::string& json) {
   return *std::move(parsed);
 }
 
-// A message with these sites and a Personal, Work and Private profile.
+// Each protection on, as the config has it by default.
+constexpr char kProtections[] =
+    R"("protections":{"block_third_party_cookies":true,)"
+    R"("global_privacy_control":true,"hide_local_ip_address":true})";
+
+// A message with these sites and a Personal, Work and Private profile. Work
+// lets third-party cookies through.
 std::string Message(const std::string& sites) {
-  return R"({"profiles":[)"
-         R"({"id":"personal","name":"Personal","color":"#0d9488",)"
-         R"("private":false,"extensions":null},)"
-         R"({"id":"work","name":"Work","color":"#d97706","private":false,)"
-         R"("extensions":["aeblfdkhhhdcdjpifhhbdiojplfjncoa"]},)"
+  return std::string(R"({"profiles":[)"
+                     R"({"id":"personal","name":"Personal","color":"#0d9488",)"
+                     R"("private":false,"extensions":null,)") +
+         kProtections +
+         R"(},{"id":"work","name":"Work","color":"#d97706","private":false,)"
+         R"("extensions":["aeblfdkhhhdcdjpifhhbdiojplfjncoa"],)"
+         R"("protections":{"block_third_party_cookies":false,)"
+         R"("global_privacy_control":true,"hide_local_ip_address":true}},)"
          R"({"id":"incognito","name":"Private","color":"#a78bfa",)"
-         R"("private":true,"extensions":null}],)"
-         R"("default_profile":"personal",)"
+         R"("private":true,"extensions":null,)" +
+         kProtections +
+         R"(}],"default_profile":"personal",)"
          R"("default_private_profile":"incognito",)"
          R"("sites":)" +
          sites + "}";
@@ -65,18 +75,43 @@ TEST(BrowserProfilesTest, AMessageThatContradictsItselfIsRefused) {
       ParseBrowserProfiles(Dict(Message(R"({"acme.com":"personal"})"))));
   // A private default, and a default private profile that is not private.
   EXPECT_FALSE(ParseBrowserProfiles(Dict(
-      R"({"profiles":[{"id":"incognito","name":"P","color":"#000000",)"
-      R"("private":true,"extensions":null}],"default_profile":"incognito",)"
+      std::string(R"({"profiles":[{"id":"incognito","name":"P",)"
+                  R"("color":"#000000","private":true,"extensions":null,)") +
+      kProtections +
+      R"(}],"default_profile":"incognito",)"
       R"("default_private_profile":"incognito","sites":{}})")));
   EXPECT_FALSE(ParseBrowserProfiles(Dict(
-      R"({"profiles":[{"id":"personal","name":"P","color":"#000000",)"
-      R"("private":false,"extensions":null}],"default_profile":"personal",)"
+      std::string(R"({"profiles":[{"id":"personal","name":"P",)"
+                  R"("color":"#000000","private":false,"extensions":null,)") +
+      kProtections +
+      R"(}],"default_profile":"personal",)"
       R"("default_private_profile":"personal","sites":{}})")));
   // An id that is no directory name.
-  EXPECT_FALSE(ParseBrowserProfiles(
-      Dict(R"({"profiles":[{"id":"../p","name":"P","color":"#000000",)"
-           R"("private":false,"extensions":null}],"default_profile":"../p",)"
-           R"("default_private_profile":"../p","sites":{}})")));
+  EXPECT_FALSE(ParseBrowserProfiles(Dict(
+      std::string(R"({"profiles":[{"id":"../p","name":"P","color":"#000000",)"
+                  R"("private":false,"extensions":null,)") +
+      kProtections +
+      R"(}],"default_profile":"../p",)"
+      R"("default_private_profile":"../p","sites":{}})")));
+}
+
+TEST(BrowserProfilesTest, EachProfileReadsItsOwnProtections) {
+  std::optional<BrowserProfiles> read =
+      ParseBrowserProfiles(Dict(Message("{}")));
+
+  ASSERT_TRUE(read.has_value());
+  EXPECT_EQ(read->Find("personal")->protections, BrowserProtections{});
+  EXPECT_EQ(read->Find("work")->protections,
+            (BrowserProtections{.block_third_party_cookies = false}));
+}
+
+TEST(BrowserProfilesTest, AProfileMissingAProtectionIsRefused) {
+  // Personal's protections, the first in the message, lose their last.
+  std::string message = Message("{}");
+  const std::string last = R"(,"hide_local_ip_address":true})";
+  message.replace(message.find(last), last.size(), "}");
+
+  EXPECT_FALSE(ParseBrowserProfiles(Dict(message)));
 }
 
 // Every profile gets every extension, so each can switch each one and keep

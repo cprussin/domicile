@@ -20,6 +20,20 @@ class GURL;
 
 namespace domicile {
 
+// What a browser profile keeps sites from learning: the config's
+// `browser.profiles.<id>.protections`.
+struct BrowserProtections {
+  // Blocks cookies a page's embedded sites set or read.
+  bool block_third_party_cookies = true;
+  // Sends `Sec-GPC: 1` and sets `navigator.globalPrivacyControl`.
+  bool global_privacy_control = true;
+  // Keeps WebRTC from telling sites the local network address.
+  bool hide_local_ip_address = true;
+
+  friend bool operator==(const BrowserProtections&,
+                         const BrowserProtections&) = default;
+};
+
 // One browser profile: a set of sign-ins, site data and extensions. See
 // docs/architecture/BROWSER-PROFILES.md.
 struct BrowserProfile {
@@ -36,6 +50,7 @@ struct BrowserProfile {
   // The extension ids it turns on; nothing turns on all of them, or none for
   // a private profile.
   std::optional<std::vector<std::string>> extensions;
+  BrowserProtections protections;
 };
 
 // The desk's browser profiles: the config's `browser`, as the compositor's
@@ -67,7 +82,10 @@ BrowserProfiles DefaultBrowserProfiles();
 // Reads a `browser_profiles` message:
 //
 //   {"profiles": [{"id": "work", "name": "Work", "color": "#d97706",
-//                  "private": false, "extensions": ["<id>", ...] | null}],
+//                  "private": false, "extensions": ["<id>", ...] | null,
+//                  "protections": {"block_third_party_cookies": true,
+//                                  "global_privacy_control": true,
+//                                  "hide_local_ip_address": true}}],
 //    "default_profile": "personal", "default_private_profile": "private",
 //    "sites": {"github.com/acme": "work"}}
 //
