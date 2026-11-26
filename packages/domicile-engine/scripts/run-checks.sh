@@ -171,6 +171,7 @@ TOGETHER=(
   guard-electron-web-request
   guard-video-codecs
   guard-browser-brand
+  guard-engine-stays-quiet
   guard-clean-exit
   guard-exit-unload
 )
@@ -194,6 +195,7 @@ ONCE=(
   guard-desk-state
   guard-desktop-geometry
   guard-domicile-fetch
+  guard-engine-stays-quiet
   guard-shell-hmr
   guard-electron-menu-bar
   guard-electron-window-state

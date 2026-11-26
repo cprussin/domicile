@@ -37,6 +37,7 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 - Extensions' keyboard shortcuts work in browser windows, such as Bitwarden's Ctrl+Shift+L, including extensions you installed before. The desk's and the browser's own shortcuts come first. [Extensions](BROWSER.md#extensions)
 - Extensions' items show in a page's right-click menu, above Inspect, and right-clicking an extension's icon in the bar, or its row in the tray's menu, shows its own, without a submenu named after it. [Extensions](BROWSER.md#extensions)
 - Bar panels no longer scroll sideways, as the tray's menu did.
+- The browser no longer downloads parts of Chrome it doesn't use, such as its on-device AI models, asks Google for the time or about AI Mode, or connects to your search engine before you search. Left alone, it only fetches certificate, video and hyphenation updates.
 - When memory runs low, pages you can't see, like background tabs and windows on other workspaces, unload as in Chrome, and load again where you left off when you switch to them.
 
 ### Fixes
