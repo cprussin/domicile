@@ -9,7 +9,7 @@ game 945x1180
 # A terminal redraws at any size; asciiquarium fills it at once and lays its
 # tank out again when it changes.
 native foot -o font="JetBrains Mono:size=12" \
-  "$(nix build --no-link --print-out-paths nixpkgs#asciiquarium)/bin/asciiquarium"
+  "$(nix build --inputs-from "$ROOT" --no-link --print-out-paths nixpkgs#asciiquarium)/bin/asciiquarium"
 # Long enough for the race to start.
 settle 12
 KEYS_SETTLE=0.2

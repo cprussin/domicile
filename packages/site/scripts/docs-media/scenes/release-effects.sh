@@ -3,7 +3,7 @@
 # swarm, picked on the liquid glass bar. Driven with `send-shell`, as the
 # manganese scenes are.
 
-JQ="$(nix build --no-link --print-out-paths 'nixpkgs#jq^bin')/bin/jq"
+JQ="$(nix build --inputs-from "$ROOT" --no-link --print-out-paths 'nixpkgs#jq^bin')/bin/jq"
 
 # Asks the window whose title matches `$1` to close, as Meta+Shift+Q does.
 close_titled() { # title regex
