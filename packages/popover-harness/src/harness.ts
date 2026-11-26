@@ -1,7 +1,7 @@
 // Opens each crowded bar popover from the built Storybook, in Chromium through
 // Playwright, on a small screen. Fails a popover that runs off the screen,
-// whose last row can't be scrolled into view, or that scrolls sideways. See the
-// package README.
+// whose last row can't be scrolled into view, that scrolls sideways, or whose
+// buttons are too narrow for their labels. See the package README.
 //
 //   bun src/harness.ts [--chromium <path>] [<crowd>...]
 
@@ -105,6 +105,7 @@ const checked = async (
     ...offScreen("the panel", await boxOf(panel)),
     ...(await lastRowProblems(page, panel, crowd.last)),
     ...(await sidewaysProblems(panel)),
+    ...(await squeezedButtons(panel)),
   ];
   await page.close();
   if (problems.length === 0) {
@@ -185,6 +186,31 @@ const sidewaysProblems = (panel: Locator): Promise<string[]> =>
           `the panel scrolls sideways: <${element.tagName.toLowerCase()}> holds ${(element.scrollWidth - element.clientWidth).toString()}px more than its width`,
       ),
   );
+
+/**
+ * Each button in `panel` whose label runs past its edges, such as one that
+ * wraps, by its name. A pixel over is rounding, not a squeezed label.
+ */
+const squeezedButtons = async (panel: Locator): Promise<string[]> => {
+  const squeezed = await panel
+    .getByRole("button")
+    .evaluateAll((buttons) =>
+      buttons
+        .filter(
+          (button) =>
+            button.scrollHeight > button.clientHeight + 1 ||
+            button.scrollWidth > button.clientWidth + 1,
+        )
+        .map(
+          (button) =>
+            button.getAttribute("aria-label") ??
+            (button as HTMLElement).innerText,
+        ),
+    );
+  return squeezed.map(
+    (name) => `the "${name}" button is too narrow for its label`,
+  );
+};
 
 const px = (value: number) => `${Math.round(value).toString()}px`;
 

@@ -478,29 +478,31 @@ const Using = ({
                 </span>
                 <span className={whenStyles}>{HOW[how]}</span>
               </span>
-              {how === "taken" ? (
-                <Button
-                  label={`Give ${name} back`}
-                  onClick={() => {
-                    giveBack(appId);
-                  }}
-                  size="sm"
-                  variant="outline"
-                >
-                  Give back
-                </Button>
-              ) : (
-                <Button
-                  label={`Take over ${name}`}
-                  onClick={() => {
-                    takeOver(appId);
-                  }}
-                  size="sm"
-                  variant="outline"
-                >
-                  Take over
-                </Button>
-              )}
+              <span className={buttonStyles}>
+                {how === "taken" ? (
+                  <Button
+                    label={`Give ${name} back`}
+                    onClick={() => {
+                      giveBack(appId);
+                    }}
+                    size="sm"
+                    variant="outline"
+                  >
+                    Give back
+                  </Button>
+                ) : (
+                  <Button
+                    label={`Take over ${name}`}
+                    onClick={() => {
+                      takeOver(appId);
+                    }}
+                    size="sm"
+                    variant="outline"
+                  >
+                    Take over
+                  </Button>
+                )}
+              </span>
             </li>
           );
         })}
@@ -716,6 +718,9 @@ const saidStyles = css({
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 });
+
+// A row's button keeps its label's width beside a long window title.
+const buttonStyles = css({ flexShrink: 0 });
 
 // A window's name over what the agent does in it.
 const useStyles = flex({ direction: "column", minInlineSize: 0 });

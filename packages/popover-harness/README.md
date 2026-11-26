@@ -9,7 +9,8 @@ Chromium through Playwright, and fails on any that runs off the screen.
   control.
 - **The harness** (`src/harness.ts`) presses each item's buttons in turn,
   then fails it when the panel runs off the laptop's screen, its last row
-  can't be scrolled into view, or any part of it scrolls sideways.
+  can't be scrolled into view, any part of it scrolls sideways, or a button
+  is too narrow for its label.
 - **`viewport-units.test.ts`** fails any popover's content sized in `vh` or
   `vw`, which measure the whole desk, not the panel's screen.
 

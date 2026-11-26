@@ -1,4 +1,5 @@
-// The agents panel with 12 Claude Code sessions in control.
+// The agents panel with 12 Claude Code sessions in control, each holding a
+// window whose title is too long for its row.
 
 import { Agents } from "@domicile-desktop/manganese-bar-module-sharing/agents";
 import { DomicileProvider } from "@domicile-desktop/react/domicile-provider";
@@ -9,6 +10,9 @@ import { portals } from "@domicile-desktop/sdk/desktop/portals";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 
 import { Bar } from "../Bar";
+
+/** A window title too long for a row, so it must not squeeze the row's button. */
+const LONG_TITLE = "Sample File Upload Form on a page with a long title";
 
 const SESSIONS = Array.from({ length: 12 }, (_, index) => ({
   app_id: "",
@@ -21,7 +25,11 @@ const SESSIONS = Array.from({ length: 12 }, (_, index) => ({
     reach: {
       type: "windows",
       windows: [
-        { id: `w${index.toString()}`, kind: "browser", title: "Pull requests" },
+        {
+          id: `w${(index + 1).toString()}`,
+          kind: "browser",
+          title: LONG_TITLE,
+        },
       ],
     },
   },
@@ -51,7 +59,27 @@ const PORTALS_HOST = {
   removeEventListener: () => undefined,
 } as unknown as PortalsHost;
 
-const SEATS = desktop(new FakeDomicileHost().host);
+/** A desktop where each session's seat types in a window of its own. */
+const seatsHost = (): FakeDomicileHost => {
+  const host = new FakeDomicileHost();
+  for (const session of SESSIONS) {
+    host.appear(`w${session.id.toString()}`, { title: LONG_TITLE });
+  }
+  host.set({
+    seats: SESSIONS.map((session) => ({
+      focused: `w${session.id.toString()}`,
+      holds: [`w${session.id.toString()}`],
+      id: `agent-${session.id.toString()}`,
+      name: "Claude Code",
+      pointerX: null,
+      pointerY: null,
+      taken: [],
+    })),
+  });
+  return host;
+};
+
+const SEATS = desktop(seatsHost().host);
 
 const DOMICILE: Domicile = {
   ...SEATS,
