@@ -8,9 +8,10 @@
 //! flags to the command line. Reading those scripts would mean knowing every
 //! way of writing them. Running them doesn't: each runs with `BASH_ENV`
 //! naming a script that replaces bash's `exec` with a function. An `exec` of
-//! another script lets it run, the same way; the `exec` of a program execs
-//! `domicile` instead, given [`RECORD`] and the program's command line,
-//! which records them and the environment it got ([`record`]) and exits.
+//! another bash script lets it run, the same way; the `exec` of a program,
+//! or of a script in another shell, execs `domicile` instead, given
+//! [`RECORD`] and the program's command line, which records them and the
+//! environment it got ([`record`]) and exits.
 
 use std::ffi::OsString;
 use std::fs;
@@ -49,8 +50,10 @@ exec() {
     esac
   done
   local start=""
-  IFS= read -r -n 2 start < "$1" 2>/dev/null || true
-  if [ "$start" = "#!" ]; then builtin exec "$@"; fi
+  IFS= read -r -n 256 start < "$1" 2>/dev/null || true
+  case "$start" in
+    "#!"*bash*) builtin exec "$@" ;;
+  esac
   builtin exec "$DOMICILE_ELECTRON_RECORDER" --record-electron-launch "$@"
 }
 "##;
@@ -139,6 +142,11 @@ pub enum WrapperError {
          wrappers set is unknown"
     )]
     NoLaunch { program: String, seconds: u64 },
+    #[error(
+        "{program} exited without starting a program, so what its wrappers \
+         set is unknown"
+    )]
+    EndedWithoutLaunch { program: String },
     #[error(
         "{program} ends in {ran}, which runs no app from {resources}, so what \
          its wrappers set is unknown"
@@ -259,6 +267,7 @@ pub fn through_wrappers(
     let mut child = spawn_when_not_busy(&mut follow_wrappers).map_err(unrunnable)?;
     let started = Instant::now();
     let done = out.path().join("done");
+    let mut timed_out = false;
     while !done.exists() {
         if matches!(child.try_wait(), Ok(Some(_))) && !done.exists() {
             break;
@@ -266,11 +275,13 @@ pub fn through_wrappers(
         if started.elapsed() > wait {
             // SAFETY: a plain signal to the group spawned above.
             unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL) };
+            timed_out = true;
             break;
         }
         std::thread::sleep(Duration::from_millis(20));
     }
     let _ = child.wait();
+    stop_what_it_started(out.path());
     if !done.exists() {
         let mut said = String::new();
         if let Some(mut stderr) = child.stderr.take() {
@@ -279,9 +290,13 @@ pub fn through_wrappers(
         if !said.trim().is_empty() {
             crate::launcher_log::error(&format!("{program} said: {}", said.trim()));
         }
-        return Err(WrapperError::NoLaunch {
-            program,
-            seconds: wait.as_secs(),
+        return Err(if timed_out {
+            WrapperError::NoLaunch {
+                program,
+                seconds: wait.as_secs(),
+            }
+        } else {
+            WrapperError::EndedWithoutLaunch { program }
         });
     }
     let read = |name: &str| -> Result<Vec<String>, WrapperError> {
@@ -306,12 +321,18 @@ pub fn through_wrappers(
         .and_then(|path| path.parent().map(|dir| dir.join("resources")))
         .and_then(|dir| canonical(&dir))
         .is_some_and(|dir| dir == resources);
+    // A script in another shell is the app's own launcher, as VS Code's
+    // `sh` one is, which starts the app in ways no wrapper can follow.
     if !beside {
-        match args.iter().position(|word| inside(word)) {
-            Some(app) => {
+        match (
+            args.iter().position(|word| inside(word)),
+            is_script(Path::new(&ran)),
+        ) {
+            (Some(app), _) => {
                 args.remove(app);
             }
-            None => {
+            (None, true) => {}
+            (None, false) => {
                 return Err(WrapperError::NotTheApp {
                     program,
                     ran,
@@ -329,6 +350,48 @@ pub fn through_wrappers(
         .filter(|(key, _)| !OURS.contains(&key.as_str()))
         .collect();
     Ok(Launch { args, env })
+}
+
+/// Kills every process still running that following the wrappers started,
+/// known by the launch directory `out` in its environment. A program that
+/// left the wrappers' process group, as an app's CLI starts the app in its
+/// own session, would otherwise run the app on its own Electron beside the
+/// one on the engine.
+fn stop_what_it_started(out: &Path) {
+    let mut marker = b"DOMICILE_ELECTRON_LAUNCH=".to_vec();
+    marker.extend_from_slice(out.as_os_str().as_bytes());
+    marker.push(0);
+    let myself = std::process::id();
+    for pid in fs::read_dir("/proc")
+        .expect("/proc lists the processes")
+        .filter_map(|entry| entry.ok()?.file_name().to_str()?.parse::<u32>().ok())
+        .filter(|pid| *pid != myself)
+    {
+        // A process that exited meanwhile, or another user's, has no
+        // environment to read.
+        let Ok(environ) = fs::read(format!("/proc/{pid}/environ")) else {
+            continue;
+        };
+        let ours = environ.starts_with(&marker[..])
+            || environ
+                .windows(marker.len() + 1)
+                .any(|window| window[0] == 0 && window[1..] == marker[..]);
+        if ours {
+            crate::launcher_log::warn(&format!(
+                "stopping process {pid}, which following the wrappers started"
+            ));
+            // SAFETY: a plain signal to a process found above.
+            unsafe { libc::kill(pid as i32, libc::SIGKILL) };
+        }
+    }
+}
+
+/// Whether `program` starts with a `#!`.
+fn is_script(program: &Path) -> bool {
+    let mut start = [0u8; 2];
+    fs::File::open(program)
+        .and_then(|mut file| file.read_exact(&mut start))
+        .is_ok_and(|()| &start == b"#!")
 }
 
 /// How long [`spawn_when_not_busy`] keeps trying.

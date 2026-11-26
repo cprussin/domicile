@@ -4,10 +4,17 @@
 // channel to the host, then runs it. See src/electron/utility-process.ts.
 
 import { EventEmitter } from "node:events";
+import Module from "node:module";
+import { z } from "zod";
 
 import type { MessagePortMain } from "./electron/message-port-main";
 import { createLinkedPorts } from "./electron/message-port-main";
 import type { UtilityMessage } from "./electron/utility-process";
+import { MODULE_HOOKS_VARIABLE } from "./electron/utility-process";
+import { readEnvironment } from "./environment";
+import { Priority, say } from "./journal";
+import type { Resolver } from "./module-hooks";
+import { createRegisterHooks, moduleHooksPlugin } from "./module-hooks";
 
 const send = (message: UtilityMessage) => {
   process.send?.(message);
@@ -69,6 +76,20 @@ if (modulePath === undefined) {
     "usage: utility-process-child <module> [arguments…], as electron-host's utilityProcess.fork runs it",
   );
 } else {
+  const moduleHooks = readEnvironment()[MODULE_HOOKS_VARIABLE];
+  if (moduleHooks === undefined) {
+    throw new Error(
+      `${MODULE_HOOKS_VARIABLE} is unset: only electron-host's utilityProcess.fork runs utility-process-child`,
+    );
+  }
+  Bun.plugin(
+    moduleHooksPlugin(
+      z.array(z.string()).parse(JSON.parse(moduleHooks)),
+      createRegisterHooks(Module as unknown as Resolver, (why) => {
+        say(Priority.Warning, `electron-host: ${why}`);
+      }),
+    ),
+  );
   Object.assign(process, { parentPort, type: "utility" });
   process.argv = [process.execPath, modulePath, ...args];
   // Not awaited at the top level: a message that comes while this module

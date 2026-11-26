@@ -44,9 +44,10 @@ domicile open --electron claude-desktop.desktop [-- <its Exec>]
   command names are followed.
   What the wrappers set reaches the app: when the command is a bash script,
   it runs with `BASH_ENV` naming a script that replaces `exec`. Each script
-  it execs runs the same way; the `exec` of the program execs `domicile`
-  instead, which records the command line and the environment it got and
-  exits. A compiled wrapper is followed by running its `makeCWrapper`
+  it execs runs the same way; the `exec` of the program, or of a script in
+  another shell, execs `domicile` instead, which records the command line
+  and the environment it got and exits. Such a script is the app's own
+  launcher, as VS Code's `sh` one is, and the app gets what it was given. A compiled wrapper is followed by running its `makeCWrapper`
   command as bash, which sets what the wrapper sets, adds its flags and
   execs the same way. The app gets that
   environment (`LD_PRELOAD`, `PATH`) and those arguments, less the app's own
@@ -54,6 +55,9 @@ domicile open --electron claude-desktop.desktop [-- <its Exec>]
   ([`electron_wrapper.rs`](../../packages/domicile-launch/src/electron_wrapper.rs)).
   A command that is neither a bash script nor a compiled wrapper, or that never reaches the app's program
   within 10 seconds, gives its arguments alone, and the latter is logged.
+  Whatever following the wrappers started is killed after, found by the
+  launch directory in its environment, so a program that left their process
+  group never runs the app on its own Electron as well.
 - **`electron.apps`** in the desk config lists desktop entry ids. The
   compositor copies each entry into a directory first on the desk's
   `XDG_DATA_DIRS`, with every `Exec` running
@@ -82,7 +86,13 @@ A bun workspace package, `packages/electron-host`, run by Bun.
   archives' paths, sizes and times, so an update makes a new mirror.
 - Runs `package.json`'s `main` from the mirror.
 - A module hook answers `require("electron")` with the stand-in, which
-  implements Electron's main-process API over the Electron socket.
+  implements Electron's main-process API over the Electron socket, and
+  `original-fs` with Node's `fs`: the mirror is plain files.
+- `module.registerHooks`, which Bun lacks, is given to the scripts that
+  import it (found once per mirror), in the main and in utility processes. Resolve hooks run for `require`; the
+  app's imports resolve as Bun resolves them, which is logged. Load hooks
+  throw. VS Code registers one at start
+  ([`module-hooks.ts`](../../packages/electron-host/src/module-hooks.ts)).
 - Sets `process.type`, `process.versions.electron`, `process.resourcesPath`
   and `app.getPath()` as Electron does. `userData` is the app's existing
   directory (`~/.config/Claude`), so logins and settings carry over.

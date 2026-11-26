@@ -5,6 +5,8 @@ import { z } from "zod";
 const schema = z.object({
   /** The session bus, where the desktop serves its portals. */
   DBUS_SESSION_BUS_ADDRESS: z.string().optional(),
+  /** A utility process's: the app's scripts that import `registerHooks`. */
+  DOMICILE_ELECTRON_MODULE_HOOKS: z.string().optional(),
   /** The engine's Electron socket, which the desktop names to its apps. */
   DOMICILE_ELECTRON_SOCK: z.string().optional(),
   /** systemd's `<device>:<inode>` of the journal stream stderr may be. */

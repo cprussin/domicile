@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -10,9 +10,15 @@ import { createUtilityProcess } from "./utility-process";
 
 /** What `app`'s `child-process-gone` would say, in order. */
 const gone: unknown[] = [];
-const utilityProcess = createUtilityProcess((details) => gone.push(details));
-
-const directory = await mkdtemp(join(tmpdir(), "electron-host-utility-"));
+const directory = await realpath(
+  await mkdtemp(join(tmpdir(), "electron-host-utility-")),
+);
+/** A module of the app's that imports Node's module hooks. */
+const hooked = join(directory, "hooks.mjs");
+const utilityProcess = createUtilityProcess(
+  (details) => gone.push(details),
+  [hooked],
+);
 afterAll(() => rm(directory, { force: true, recursive: true }));
 
 /** Writes a utility process's module, as an app ships one. */
@@ -53,6 +59,19 @@ describe("utilityProcess.fork", () => {
     expect(spawned).toEqual([]);
     expect(child.pid).toBeGreaterThan(0);
     expect(message).toEqual({ argv: ["--flag", "value"], type: "utility" });
+    child.kill();
+  });
+
+  it("gives a module Node's module hooks, as the app's main has them", async () => {
+    await writeFile(
+      hooked,
+      `import { registerHooks } from "node:module";
+      process.parentPort.postMessage(typeof registerHooks);`,
+    );
+    const child = utilityProcess.fork(hooked);
+    const [message] = await next<[unknown]>(child, "message");
+
+    expect(message).toBe("function");
     child.kill();
   });
 

@@ -181,8 +181,75 @@ fn a_wrapper_that_never_reaches_the_app_says_so() {
             Path::new(env!("CARGO_BIN_EXE_domicile")),
             WAIT
         ),
-        Err(WrapperError::NoLaunch { .. })
+        Err(WrapperError::EndedWithoutLaunch { .. })
     ));
+}
+
+#[test]
+fn a_wrapper_ending_in_the_apps_own_sh_launcher_gives_what_it_was_given() {
+    // As nixpkgs wraps VSCodium: a bash wrapper, then VS Code's own `sh`
+    // launcher, which would start the app through its CLI.
+    let root = tempfile::tempdir().unwrap();
+    let (_, resources) = bundled(root.path());
+    let launcher = write(
+        root.path(),
+        "bin/.codium-wrapped",
+        "#!/bin/sh\necho launcher ran >&2\nexit 9\n",
+    );
+    let wrapper = write(
+        root.path(),
+        "bin/codium",
+        &format!(
+            "#! {} -e\nexport GIO_EXTRA_MODULES=/gio\n\
+             exec -a \"$0\" \"{}\" --ozone-platform-hint=auto \"$@\"\n",
+            bash(),
+            launcher.display()
+        ),
+    );
+
+    let launch = through_wrappers(
+        &[wrapper.display().to_string(), "project".into()],
+        &resources,
+        Path::new(env!("CARGO_BIN_EXE_domicile")),
+        WAIT,
+    )
+    .unwrap();
+
+    assert_eq!(
+        launch.args,
+        vec!["--ozone-platform-hint=auto".to_string(), "project".into()]
+    );
+    assert_eq!(env_of(&launch, "GIO_EXTRA_MODULES"), Some("/gio"));
+}
+
+#[test]
+fn nothing_a_wrapper_started_outlives_following_it() {
+    let root = tempfile::tempdir().unwrap();
+    let (_, resources) = bundled(root.path());
+    // A program that leaves its own session, as an app's CLI starts the app.
+    let wrapper = write(
+        root.path(),
+        "bin/claude",
+        &format!("#! {}\nsetsid sleep 313.25 &\nsleep 0.2\nexit 0\n", bash()),
+    );
+
+    let followed = through_wrappers(
+        &[wrapper.display().to_string()],
+        &resources,
+        Path::new(env!("CARGO_BIN_EXE_domicile")),
+        WAIT,
+    );
+
+    assert!(matches!(
+        followed,
+        Err(WrapperError::EndedWithoutLaunch { .. })
+    ));
+    let left: Vec<_> = fs::read_dir("/proc")
+        .unwrap()
+        .filter_map(|entry| fs::read(entry.ok()?.path().join("cmdline")).ok())
+        .filter(|cmdline| cmdline.windows(6).any(|window| window == b"313.25"))
+        .collect();
+    assert!(left.is_empty(), "still running: {left:?}");
 }
 
 #[test]

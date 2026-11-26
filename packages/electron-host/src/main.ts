@@ -2,8 +2,10 @@
 // Runs an installed Electron app's main process on Domicile:
 // `electron-host <install>/resources [app arguments…]`.
 
+import * as fs from "node:fs";
 import { statSync } from "node:fs";
 import { access, mkdir, readFile } from "node:fs/promises";
+import Module from "node:module";
 import { homedir, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -70,6 +72,12 @@ import { readEnvironment } from "./environment";
 import { Priority, say } from "./journal";
 import { connectLoginManager } from "./login-manager";
 import { mirrorResources } from "./mirror";
+import type { Resolver } from "./module-hooks";
+import {
+  createRegisterHooks,
+  filesImportingHooks,
+  moduleHooksPlugin,
+} from "./module-hooks";
 import { electronPaths } from "./paths";
 import { quirksOf } from "./quirks";
 import { keepRunningOnUncaughtErrors } from "./uncaught-errors";
@@ -115,6 +123,7 @@ const main = async ([resources, ...args]: string[]) => {
     if (needsOwnElectron !== undefined) {
       unsupported(`${pkg.productName} ${needsOwnElectron}`);
     }
+    const moduleHooks = await filesImportingHooks(mirror);
     const configHome = env.XDG_CONFIG_HOME ?? join(home, ".config");
     // How this host was started, so `app.relaunch` can start it again.
     const host = [process.execPath, ...process.argv.slice(1, 3)];
@@ -429,7 +438,10 @@ const main = async ([resources, ...args]: string[]) => {
         menus: { click, model },
         name: app.getName,
       }),
-      utilityProcess: createUtilityProcess(appEvents.childProcessGone),
+      utilityProcess: createUtilityProcess(
+        appEvents.childProcessGone,
+        moduleHooks,
+      ),
       View,
       WebContentsView,
       WebSocket,
@@ -468,8 +480,20 @@ const main = async ([resources, ...args]: string[]) => {
         for (const name of ["electron", "electron/main"]) {
           build.module(name, () => ({ exports, loader: "object" }));
         }
+        // Electron's fs without its asar reading. The host mirrors the app
+        // to plain files, so Node's own fs is it.
+        build.module("original-fs", () => ({
+          exports: { ...fs, default: fs },
+          loader: "object",
+        }));
       },
     });
+    Bun.plugin(
+      moduleHooksPlugin(
+        moduleHooks,
+        createRegisterHooks(Module as unknown as Resolver, warn),
+      ),
+    );
     Object.assign(process, electronProcess(mirror));
     Object.assign(process.versions, { electron: ELECTRON_VERSION });
     process.argv = [process.execPath, ...args];

@@ -130,6 +130,12 @@ pub const KNOWN: &str = r#"{
   ],
   "slack-desktop": [
     { "scheme": "slack-webapp-dev", "privileges": ["standard", "secure", "bypassCSP", "corsEnabled", "supportFetchAPI"] }
+  ],
+  "VSCodium": [
+    { "scheme": "vscode-file", "privileges": ["standard", "secure", "corsEnabled", "supportFetchAPI"] },
+    { "scheme": "vscode-managed-remote-resource", "privileges": ["secure", "corsEnabled", "supportFetchAPI"] },
+    { "scheme": "vscode-remote-resource", "privileges": ["secure", "corsEnabled", "supportFetchAPI"] },
+    { "scheme": "vscode-webview", "privileges": ["standard", "secure", "corsEnabled", "supportFetchAPI"] }
   ]
 }"#;
 

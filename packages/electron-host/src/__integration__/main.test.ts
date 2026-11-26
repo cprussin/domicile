@@ -184,6 +184,51 @@ describe("electron-host", () => {
     );
   });
 
+  it("runs an app's main that imports Node's module hooks and Electron's original-fs", async () => {
+    const home = await mkdtemp(join(tmpdir(), "electron-host-main-"));
+    const resources = join(home, "install/resources");
+    await writeAsar(join(resources, "app.asar"), {
+      // As VS Code's main starts: a resolve hook, then a require through it.
+      "main.mjs": {
+        content: `
+import { createRequire, registerHooks } from "node:module";
+import { existsSync } from "original-fs";
+import dependency from "dependency";
+const { app } = await import("electron");
+let conditions;
+registerHooks({ resolve: (specifier, context, next) => {
+  conditions ??= context.conditions;
+  return next(specifier, context);
+} });
+createRequire(import.meta.url).resolve("node:fs");
+console.log(JSON.stringify({ conditions, dependency, exists: existsSync("/") }));
+app.quit();
+`,
+      },
+      "node_modules/dependency/index.js": {
+        content: "module.exports = { from: 'commonjs' };",
+      },
+      "package.json": {
+        content: `{"main":"main.mjs","name":"editor","version":"1.0.0"}`,
+      },
+    });
+    engine = await startFakeEngine();
+    desktopBus = await startFakeDesktopBus({ colorScheme: 1, contrast: 0 });
+
+    const { code, stderr, stdout } = await run(resources, home, [], engine);
+
+    expect({ code, stderr }).toEqual({
+      code: 0,
+      stderr:
+        "electron-host: module.registerHooks resolve hooks run for require only: the app's imports resolve as Bun resolves them\n",
+    });
+    expect(JSON.parse(stdout)).toEqual({
+      conditions: ["require", "node", "module-sync", "node-addons"],
+      dependency: { from: "commonjs" },
+      exists: true,
+    });
+  });
+
   it("says why when the app can't be read", async () => {
     const home = await mkdtemp(join(tmpdir(), "electron-host-main-"));
     const resources = join(home, "install/resources");

@@ -55,6 +55,9 @@ type Child = ChildProcess & {
   on(event: "error", listener: (error: Error) => void): Child;
 };
 
+/** Where the child finds the app's scripts that import `registerHooks`. */
+export const MODULE_HOOKS_VARIABLE = "DOMICILE_ELECTRON_MODULE_HOOKS";
+
 const childModule = new URL("../utility-process-child.ts", import.meta.url)
   .pathname;
 
@@ -66,12 +69,16 @@ export class UtilityProcess extends EventEmitter {
   /** What the app sent before the child listened, in order. */
   #waiting: UtilityMessage[] | undefined = [];
 
-  /** `gone` hears how the process went, when it didn't finish cleanly. */
+  /**
+   * `gone` hears how the process went, when it didn't finish cleanly.
+   * `moduleHooks` are the app's scripts that import `registerHooks`.
+   */
   constructor(
     modulePath: string,
     args: string[],
     options: ForkOptions,
     gone: (details: ChildProcessGoneDetails) => void,
+    moduleHooks: readonly string[],
   ) {
     super();
     let next = 1;
@@ -92,7 +99,11 @@ export class UtilityProcess extends EventEmitter {
         {
           cwd: options.cwd,
           // No env inherits the host's, as Electron's default does.
-          env: options.env,
+          env: {
+            // biome-ignore lint/style/noProcessEnv: the app's environment, which Electron's utility processes inherit
+            ...(options.env ?? process.env),
+            [MODULE_HOOKS_VARIABLE]: JSON.stringify(moduleHooks),
+          },
           // Structured clone, as Electron's ports carry.
           serialization: "advanced",
           stdio: stdioOf(options.stdio ?? "inherit"),
@@ -218,7 +229,8 @@ const reasonOf = (
  */
 export const createUtilityProcess = (
   gone: (details: ChildProcessGoneDetails) => void,
+  moduleHooks: readonly string[],
 ) => ({
   fork: (modulePath: string, args: string[] = [], options: ForkOptions = {}) =>
-    new UtilityProcess(modulePath, args, options, gone),
+    new UtilityProcess(modulePath, args, options, gone, moduleHooks),
 });
