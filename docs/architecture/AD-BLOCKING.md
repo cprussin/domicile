@@ -18,6 +18,16 @@ does; the engine has neither limit.
 - **A profile's `protections.block_ads_and_trackers`**: `standard`, `strict`
   or `off`. Unset: `standard`, or `strict` in a private profile.
 
+A page's mode is its window's, else its site's, else its profile's. A shell
+sets the first two ([SHELL-BROWSER-WINDOWS.md](../SHELL-BROWSER-WINDOWS.md#ads-and-trackers)):
+
+- **A site's** is kept in its profile's prefs (`domicile.ad_blocking.sites`,
+  `site_privacy.h`), by registrable domain, so `www.` and `m.` are one site.
+  A private profile's goes with its off-the-record profile.
+- **A window's** is kept on its page's WebContents (`page_privacy.h`) until
+  the window closes. A shield's "This window only" is a quick fix that ends
+  by itself, so it never outlives what it fixed.
+
 The compositor hands all three to the engine with the profiles
 (`HostMessage::BrowserProfiles`).
 
@@ -49,7 +59,10 @@ user's block, then the lists' verdict.
   engine carries one list of suffixes, not two.
 - **`chrome/browser/domicile/domicile_ad_blocking.cc`**: `AdBlocking`, one
   per process, which keeps the lists and builds the blocker, and
-  `ProxyAdBlocking`, which puts it in front of a frame's loads.
+  `ProxyAdBlocking`, which puts it in front of a frame's loads, checks each
+  in its page's mode and counts what it blocks.
+- **`components/domicile/browser/page_privacy.h`**: a page's mode and count,
+  which its `<webview>` reports (`SitePrivacyChanged`).
 - **Patch 0287**: `ChromeContentBrowserClient::WillCreateURLLoaderFactory`
   calls `ProxyAdBlocking`, after an Electron app's handlers and before
   extensions' webRequest, so a blocked request reaches no extension.
@@ -109,8 +122,10 @@ network error. `--vmodule=domicile_ad_blocking=1` logs each one.
 - [x] the config's lists and rules, and each profile's mode
 - [x] the blocker in front of every website request, lists fetched and kept
 - [x] Settings › Privacy chooses the mode per profile
-- [ ] the address bar's shield: what a page had blocked, and off for a site
-      or for "This window only", through the SDK for any shell
+- [x] each page's count, and a mode for its site or its window, for any
+      shell (`view.blockAdsAndTrackers`, `setBlockAdsAndTrackers`)
+- [ ] manganese's shield in the address bar, with "This window only"
+- [ ] Settings lists the sites with their own mode
 - [ ] cosmetic filters, scriptlets, cookie banners and tracking removed from
       links
 - [ ] fingerprinting protection

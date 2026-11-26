@@ -22,12 +22,13 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/domicile/domicile_browser_profiles.h"
 #include "chrome/browser/domicile/domicile_electron_page.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/domicile/ad_blocking/ad_blocker.h"
 #include "components/domicile/browser/browser_profiles.h"
+#include "components/domicile/browser/page_privacy.h"
+#include "components/domicile/browser/site_privacy.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/global_routing_id.h"
@@ -367,7 +368,8 @@ class AdBlockingURLLoaderFactory final
                                    traffic_annotation);
   }
 
-  // Whether the blocker blocks `request`, in its page's profile's mode.
+  // Whether the blocker blocks `request`, in its page's mode, and counts it
+  // for the page if so.
   bool Blocks(const network::ResourceRequest& request) const {
     const AdBlocker* blocker = AdBlocking::Get().blocker();
     // A page's own navigation is the user's to make.
@@ -392,24 +394,24 @@ class AdBlockingURLLoaderFactory final
     if (!page.SchemeIsHTTPOrHTTPS()) {
       return false;
     }
-    BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
-    const BrowserProfile* profile =
-        registry.profiles().Find(registry.IdOf(*frame->GetBrowserContext()));
-    if (profile == nullptr ||
-        profile->protections.block_ads_and_trackers == AdBlockingMode::kOff) {
+    // The page's own: its window's, its site's or its profile's.
+    PagePrivacy::CreateForWebContents(contents);
+    PagePrivacy& privacy = *PagePrivacy::FromWebContents(contents);
+    const AdBlockingMode mode = privacy.mode();
+    if (mode == AdBlockingMode::kOff) {
       return false;
     }
-    const bool strict = profile->protections.block_ads_and_trackers ==
-                        AdBlockingMode::kStrict;
+    const bool strict = mode == AdBlockingMode::kStrict;
     const std::string_view type = AdBlockRequestType(request.destination);
     if (!blocker->ShouldBlock(request.url, page, type, request.method,
                               strict)) {
       return false;
     }
+    privacy.CountBlocked();
     VLOG(1) << "domicile: ad blocking: blocked a " << type << " request for "
             << request.url.possibly_invalid_spec() << " from "
-            << page.possibly_invalid_spec() << " in profile " << profile->id
-            << (strict ? " (strict)" : "");
+            << page.possibly_invalid_spec() << " ("
+            << AdBlockingModeName(mode) << ")";
     return true;
   }
 

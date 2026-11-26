@@ -204,6 +204,17 @@ class CORE_EXPORT HTMLWebViewElement final
   void setSitePermission(const String& permission,
                          const String& setting,
                          ExceptionState&);
+  // How the page blocks ads and trackers, from SitePrivacyChanged. Empty
+  // strings and 0 for a page that is not a website.
+  const String& privacySite() const { return privacy_site_; }
+  const String& blockAdsAndTrackers() const { return block_ads_and_trackers_; }
+  const String& blockAdsAndTrackersSetFor() const {
+    return block_ads_and_trackers_set_for_;
+  }
+  int32_t blockedCount() const { return blocked_count_; }
+  void setBlockAdsAndTrackers(const String& mode,
+                              const String& scope,
+                              ExceptionState&);
   ScriptPromise<DomicileMediaDevices> mediaDevices(ScriptState*,
                                                    ExceptionState&);
   ScriptPromise<IDLUndefined> setMediaDevice(ScriptState*,
@@ -407,6 +418,9 @@ class CORE_EXPORT HTMLWebViewElement final
       Vector<domicile::mojom::blink::WebViewSitePermissionPtr> permissions)
       override;
 
+  void SitePrivacyChanged(
+      domicile::mojom::blink::WebViewSitePrivacyPtr privacy) override;
+
   // Dispatches `domicile-device-request`. If no listener calls
   // `preventDefault()`, the request is canceled after dispatch. See
   // domicile_device_request_event.h.
@@ -597,6 +611,12 @@ class CORE_EXPORT HTMLWebViewElement final
 
   // See sitePermissions().
   Vector<std::pair<String, String>> site_permissions_;
+
+  // See privacySite().
+  String privacy_site_ = g_empty_string;
+  String block_ads_and_trackers_ = g_empty_string;
+  String block_ads_and_trackers_set_for_ = g_empty_string;
+  int32_t blocked_count_ = 0;
 };
 
 }  // namespace blink

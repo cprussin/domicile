@@ -34,6 +34,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/domicile/browser/control_channel.h"
 #include "components/domicile/browser/protection_settings.h"
+#include "components/domicile/browser/site_privacy.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -1118,6 +1119,7 @@ void BrowserProfileRegistry::OnProfileWillBeDestroyed(Profile* profile) {
 void RegisterBrowserProfilesPrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(kPinnedSitesPref);
   registry->RegisterListPref(kSwitchedPref);
+  RegisterSitePrivacyPrefs(registry);
 }
 
 void StartBrowserProfiles() {

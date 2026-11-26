@@ -174,6 +174,30 @@
   [RaisesException] undefined setSitePermission(DOMString permission,
                                                 DOMString setting);
 
+  // How the page blocks ads and trackers, for a shield in the address bar.
+  // `domicile-site-privacy-change` signals a change to any of them.
+  //
+  // The site a setting is kept for: the page's registrable domain, or its
+  // host when it has none. Empty for a page that is not http or https, which
+  // is never blocked; the rest are then empty and 0.
+  readonly attribute DOMString privacySite;
+  // "standard", "strict" or "off".
+  readonly attribute DOMString blockAdsAndTrackers;
+  // Where that comes from: "profile", "site" or "window".
+  readonly attribute DOMString blockAdsAndTrackersSetFor;
+  // Requests blocked since the page loaded. Reported at most every quarter
+  // second.
+  readonly attribute long blockedCount;
+
+  // Sets how the page's site blocks ads and trackers, kept in its profile
+  // (`scope` "site"), or how this window does until it closes ("window"),
+  // over its site's. `mode` is "standard", "strict" or "off", or null to go
+  // back to the site's or the profile's. Applies from the next request, so
+  // reload to see it. Throws TypeError for an unknown mode or scope, and
+  // InvalidStateError when `privacySite` is empty.
+  [RaisesException] undefined setBlockAdsAndTrackers(DOMString? mode,
+                                                     DOMString scope);
+
   // The cameras and microphones, each most preferred first: a page that names
   // no device gets the first. The preference is the profile's, not the
   // site's. Rejects with InvalidStateError before the element has a page.
