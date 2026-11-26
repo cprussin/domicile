@@ -27,6 +27,7 @@ export const CROWDS: readonly Crowd[] = [
     Scene: DownloadsScene,
   },
   {
+    drawer: "Details",
     id: "quick-settings",
     last: "Network 40",
     presses: ["Quick settings", "Wi-Fi details"],

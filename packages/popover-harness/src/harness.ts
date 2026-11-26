@@ -1,7 +1,8 @@
 // Opens each crowded bar popover from the built Storybook, in Chromium through
 // Playwright, on a small screen. Fails a popover that runs off the screen,
-// whose last row can't be scrolled into view, that scrolls sideways, or whose
-// buttons are too narrow for their labels. See the package README.
+// whose last row can't be scrolled into view, that scrolls sideways, whose
+// buttons are too narrow for their labels, or whose drawer's height jumps as
+// it opens or shuts. See the package README.
 //
 //   bun src/harness.ts [--chromium <path>] [<crowd>...]
 
@@ -21,6 +22,9 @@ const DESK = { height: 1440, width: SCREEN.width + 2560 };
 
 /** Longer than any panel takes to open. */
 const SETTLE_TIMEOUT_MS = 10_000;
+
+/** Longer than a drawer takes to open or shut. */
+const DRAWER_MS = 1500;
 
 const STORYBOOK = resolve(import.meta.dir, "../storybook-static");
 
@@ -103,6 +107,9 @@ const checked = async (
   const panel = page.locator("[role=dialog][data-open]").last();
   const problems = [
     ...offScreen("the panel", await boxOf(panel)),
+    ...(crowd.drawer === undefined
+      ? []
+      : await drawerProblems(panel, crowd.drawer)),
     ...(await lastRowProblems(page, panel, crowd.last)),
     ...(await sidewaysProblems(panel)),
     ...(await squeezedButtons(panel)),
@@ -110,7 +117,7 @@ const checked = async (
   await page.close();
   if (problems.length === 0) {
     said(
-      `PASS: ${crowd.id}: fits a ${describe(SCREEN)} screen beside a taller one, and scrolls`,
+      `PASS: ${crowd.id}: fits a ${describe(SCREEN)} screen beside a taller one, and scrolls${crowd.drawer === undefined ? "" : `; its ${crowd.drawer} drawer grows and shrinks`}`,
     );
     return true;
   } else {
@@ -211,6 +218,75 @@ const squeezedButtons = async (panel: Locator): Promise<string[]> => {
     (name) => `the "${name}" button is too narrow for its label`,
   );
 };
+
+/**
+ * Why the drawer behind `panel`'s `name` disclosure doesn't grow and shrink:
+ * pressed open and then shut, its height must pass between nothing and its
+ * full height each way, not jump.
+ */
+const drawerProblems = async (
+  panel: Locator,
+  name: string,
+): Promise<string[]> => {
+  const trigger = panel.getByRole("button", { exact: true, name });
+  const opening = await heightsAfterPressing(trigger, undefined);
+  const full = opening.at(-1);
+  // base-ui names the drawer on its trigger only while it is open.
+  const drawer = await trigger.getAttribute("aria-controls");
+  if (full === undefined || full <= 1 || drawer === null) {
+    return [`the ${name} drawer did not open`];
+  } else {
+    const closing = await heightsAfterPressing(trigger, drawer);
+    const shut = closing.at(-1);
+    return [
+      ...(passesBetween(opening, full)
+        ? []
+        : [`the ${name} drawer jumped to ${px(full)} as it opened`]),
+      ...(passesBetween(closing, full)
+        ? []
+        : [`the ${name} drawer jumped from ${px(full)} as it shut`]),
+      ...(shut === undefined || shut > 1
+        ? [`the ${name} drawer did not shut`]
+        : []),
+    ];
+  }
+};
+
+/** Whether any of `heights` is clearly between nothing and `full`. */
+const passesBetween = (heights: readonly number[], full: number) =>
+  heights.some((height) => height > 1 && height < full - 1);
+
+/**
+ * Presses `trigger` and reads the height of `drawer`, or of the drawer it
+ * names once pressed, on every frame for {@link DRAWER_MS}: 0 while there is
+ * none.
+ */
+const heightsAfterPressing = (
+  trigger: Locator,
+  drawer: string | undefined,
+): Promise<number[]> =>
+  trigger.evaluate(
+    async (button, { drawer, lengthMs }) => {
+      const frame = () =>
+        new Promise<number>((resolve) => {
+          requestAnimationFrame(resolve);
+        });
+      const height = () => {
+        const id = drawer ?? button.getAttribute("aria-controls");
+        const found = id === null ? null : document.getElementById(id);
+        return found === null ? 0 : found.getBoundingClientRect().height;
+      };
+      const heights: number[] = [];
+      const start = performance.now();
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      while (performance.now() - start < lengthMs) {
+        await frame();
+        heights.push(height());
+      }
+      return heights;
+    },
+    { drawer, lengthMs: DRAWER_MS },
+  );
 
 const px = (value: number) => `${Math.round(value).toString()}px`;
 

@@ -1,4 +1,5 @@
-// Quick settings opened to network details listing 40 Wi-Fi networks.
+// Quick settings opened to network details: the connection, with a Details
+// drawer, over 40 Wi-Fi networks.
 
 import { List, ListRow } from "@domicile-desktop/component-library/ListRow";
 import { QuickTile } from "@domicile-desktop/component-library/QuickTile";
@@ -13,6 +14,8 @@ const NETWORKS = Array.from(
   (_, index) => `Network ${(index + 1).toString()}`,
 );
 
+const ADDRESSES = ["192.0.2.10", "2001:db8::10", "fe80::10"];
+
 const nothing = () => undefined;
 
 const PARTS: QuickSettingsParts = {
@@ -25,6 +28,17 @@ const PARTS: QuickSettingsParts = {
   KeepAwakeTile: nothing,
   NetworkDetails: () => (
     <List label="Wi-Fi networks">
+      <ListRow
+        detail="Connected"
+        disclosure="Details"
+        icon={<WifiHighIcon weight="bold" />}
+        label="Home"
+        surface="filled"
+      >
+        {ADDRESSES.map((address) => (
+          <span key={address}>{address}</span>
+        ))}
+      </ListRow>
       {NETWORKS.map((name) => (
         <ListRow
           icon={<WifiHighIcon weight="bold" />}

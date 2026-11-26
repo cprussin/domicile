@@ -328,9 +328,8 @@ const caretStyles = css({
   transition: "transform {durations.normal} {easings.out}",
 });
 
-// Takes its full height at once, then a clip uncovers it from the top while
-// what is in it fades and slides down into place. Closing runs back, quicker,
-// and the height goes when it has.
+// Opens to the height base-ui measures while what is in it fades and slides
+// down into place, and runs back, quicker, to close.
 const drawerStyles = css({
   "& > *": {
     transition:
@@ -341,14 +340,19 @@ const drawerStyles = css({
       transition:
         "opacity {durations.fast} {easings.in}, transform {durations.springs.snappy} {easings.springs.snappy}",
     },
-    transition: "clip-path {durations.springs.snappy} {easings.springs.snappy}",
+    // main-thread animation: shuts to nothing once, moving what is below.
+    transition:
+      "block-size {durations.springs.snappy} {easings.springs.snappy}",
   },
   "&[data-starting-style], &[data-ending-style]": {
     "& > *": { opacity: 0, transform: "translateY(calc({spacing.1.5} * -1))" },
-    clipPath: "inset(0 0 100% 0)",
+    blockSize: 0,
   },
-  clipPath: "inset(0)",
-  transition: "clip-path {durations.springs.smooth} {easings.springs.smooth}",
+  blockSize: "var(--collapsible-panel-height)",
+  overflow: "hidden",
+  // main-thread animation: opens to its details' height once, moving what is
+  // below. A clip alone leaves the panel and the rows under it jumping.
+  transition: "block-size {durations.springs.smooth} {easings.springs.smooth}",
 });
 
 const iconStyles = css({ display: "inline-flex", flexShrink: 0 });

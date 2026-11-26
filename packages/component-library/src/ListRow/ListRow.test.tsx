@@ -83,8 +83,8 @@ describe(ListRow, () => {
       expect(screen.getByText("10.42.0.17")).toBeVisible();
     });
 
-    // Its height opens at once; the reveal and fade run on the compositor.
-    it("reveals its drawer with a clip on the smooth spring, not its height", async () => {
+    // Its height grows, so the rows under it and the panel's edge move with it.
+    it("opens its drawer's height on the smooth spring", async () => {
       render(
         <List>
           <ListRow disclosure="Details" label="Centar">
@@ -98,7 +98,7 @@ describe(ListRow, () => {
       const panel = screen.getByText("10.42.0.17").parentElement
         ?.parentElement as Element;
       const { transition } = globalThis.getComputedStyle(panel);
-      expect(transition).toBe(springTransition("clip-path", "smooth"));
+      expect(transition).toBe(springTransition("block-size", "smooth"));
     });
 
     it("pads its drawer tightly, centering a footer between its rule and the tile's edge, inset from its side", async () => {

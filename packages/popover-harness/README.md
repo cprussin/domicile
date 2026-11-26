@@ -10,7 +10,9 @@ Chromium through Playwright, and fails on any that runs off the screen.
 - **The harness** (`src/harness.ts`) presses each item's buttons in turn,
   then fails it when the panel runs off the laptop's screen, its last row
   can't be scrolled into view, any part of it scrolls sideways, or a button
-  is too narrow for its label.
+  is too narrow for its label. A crowd with a `drawer` also has that
+  disclosure opened and shut, and fails when the drawer's height jumps rather
+  than growing and shrinking.
 - **`viewport-units.test.ts`** fails any popover's content sized in `vh` or
   `vw`, which measure the whole desk, not the panel's screen.
 

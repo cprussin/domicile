@@ -9,6 +9,12 @@ export type Crowd = {
    * row that opens the crowded part.
    */
   presses: readonly string[];
+  /**
+   * A row's disclosure in the open panel, such as "Details". The harness opens
+   * and shuts its drawer, and fails when the drawer's height jumps rather than
+   * following it.
+   */
+  drawer?: string | undefined;
   /** Text in the panel's last row, which must scroll into view. */
   last: string;
   /** Draws its bar along the top of the screen. */

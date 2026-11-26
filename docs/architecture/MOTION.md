@@ -254,7 +254,7 @@ smoke, cloth, swarm, liquid and cube.
 | Surface | Today | Refined | Shader effect |
 |---|---|---|---|
 | Bar panels (quick settings, sound, network, notifications, cast, downloads) | `Popover`: fade, scale 0.96 | grow from the bar button with `springs.snappy` | none |
-| Panel drawers (`ListRow` details) | base-ui collapsible height | scale reveal (clip-path), content fade | none |
+| Panel drawers (`ListRow` details) | base-ui collapsible height | height on springs (main thread: a clip leaves the rows below jumping), content fade | none |
 | Launcher | `ModalDialog`: fade, rise, scale 0.96 | spring from the launcher button or screen center | frosted backdrop |
 | Dialogs (`ModalDialog`, `PageModal`, page requests) | fade, rise, scale 0.96 | spring from the asking window | none |
 | Slide-overs | slide from the edge | spring | none |
