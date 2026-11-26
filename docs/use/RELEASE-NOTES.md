@@ -33,6 +33,7 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 
 - Switching tabs no longer slides the new tab past the edge of its group.
 - Element no longer says it is open in another window after you log out and quickly in again.
+- Tabs and windows you can't see turn with the theme, so they no longer flash the old theme the first time you show them.
 - Bar panels such as notifications, agents, downloads, quick settings and the tray menu stay on their screen and scroll when they hold more than fits, even on a small screen beside a taller one.
 - Moving the pointer into an embedded frame, such as an artifact on claude.ai, no longer shows the frame's label far away from the pointer.
 - Workspace switches stay smooth with busy pages open: a sliding page no longer redraws on every frame of the slide.

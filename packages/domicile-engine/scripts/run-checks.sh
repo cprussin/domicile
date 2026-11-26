@@ -130,6 +130,7 @@ TOGETHER=(
   guard-webview-scale-animation
   guard-webview-reshown-tiles
   guard-webview-slide-screen-rects
+  guard-webview-hidden-theme
   guard-webview-crash
   guard-desktop-geometry
   guard-windows-state
