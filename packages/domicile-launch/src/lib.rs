@@ -106,6 +106,7 @@ pub mod shell_source;
 pub mod shell_usage;
 pub mod site_data;
 pub mod site_permissions;
+pub mod site_privacy;
 pub mod software_compositing;
 pub mod spawn;
 pub mod splash;

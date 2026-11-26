@@ -8,6 +8,8 @@
 #     right, passes.
 #   - A window's setting that reaches the other window fails.
 #   - Pages blocked right but read back wrong fails, and names the report.
+#   - The Settings app's change, listed and cleared from the command socket and
+#     reported to the open page, passes; a wrong list or no report fails.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -38,6 +40,14 @@ expect() {
   fi
 }
 
+# The command socket's answers, one line per argument, for the next `reads`.
+answers() { # lines...
+  : >"$WORK/answers.log"
+  for line in "$@"; do
+    printf 'SETTINGS %s\n' "$line" >>"$WORK/answers.log"
+  done
+}
+
 # The engine's log, one console line per argument.
 reads() { # lines...
   : >"$WORK/engine.log"
@@ -46,6 +56,8 @@ reads() { # lines...
   done
   (
     ENGINE_LOG="$WORK/engine.log"
+    ANSWERS="$WORK/answers.log"
+    touch "$ANSWERS"
     eval "$READING"
     echo "$READ"
   )
@@ -54,6 +66,7 @@ reads() { # lines...
 verdict() { # $1 MEASURED
   (
     MEASURED="$1"
+    ANSWERS="$WORK/answers.log"
     eval "$BLOCK"
     if [ -n "$PASSED" ]; then
       echo "pass"
@@ -68,6 +81,7 @@ verdict() { # $1 MEASURED
 says() { # $1 MEASURED, $2 what the sentence must contain
   case "$(
     MEASURED="$1"
+    ANSWERS="$WORK/answers.log"
     eval "$BLOCK"
     echo "$FAILURE"
   )" in
@@ -83,9 +97,12 @@ read_() { # step view mode for blocked
 }
 
 TOLD="standard/profile/2 off/window/0 standard/profile/2 off/site/0 off/site/0 standard/profile/2"
-PASS="1 1 BLBLL LLLLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 $TOLD"
+SETTINGS_OK="set default:127.0.0.1:strict set none strict/site,standard/profile"
+PASS="1 1 BLBLL LLLLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 $TOLD $SETTINGS_OK"
+NO_SETTINGS="? ? ? ? ?"
 
 echo "reading the log"
+answers set1=set list1=default:127.0.0.1:strict set2=set list2=none
 expect "every step as set" "$PASS" \
   "$(reads shell-loaded \
     "$(blocked a1)" "$(read_ 1 a standard profile 2)" \
@@ -94,34 +111,45 @@ expect "every step as set" "$PASS" \
     "$(loaded a3)" "$(read_ 4 a off site 0)" \
     "$(loaded b2)" "$(read_ 4 b off site 0)" \
     "$(blocked b3)" "$(read_ 5 b standard profile 2)" \
-    "privacy done")"
-expect "a shell that never finished" "1 0 BLBLL ????? ????? ????? ????? ????? 127.0.0.1 standard/profile/2 ? ? ? ? ?" \
+    "privacy done" \
+    "privacy later view=b mode=strict for=site" \
+    "privacy later view=b mode=strict for=site" \
+    "privacy later view=b mode=standard for=profile")"
+answers
+expect "a shell that never finished" "1 0 BLBLL ????? ????? ????? ????? ????? 127.0.0.1 standard/profile/2 ? ? ? ? ? $NO_SETTINGS" \
   "$(reads shell-loaded "$(blocked a1)" "$(read_ 1 a standard profile 2)")"
-expect "an empty log reads nothing" "0 0 ????? ????? ????? ????? ????? ????? ? ? ? ? ? ? ?" "$(reads)"
+expect "an empty log reads nothing" "0 0 ????? ????? ????? ????? ????? ????? ? ? ? ? ? ? ? $NO_SETTINGS" "$(reads)"
 
 echo
 echo "the verdict"
 expect "every step as set is the pass" "pass" "$(verdict "$PASS")"
 expect "a shell that never ran is a failure" "fail" \
-  "$(verdict "0 0 ????? ????? ????? ????? ????? ????? ? ? ? ? ? ? ?")"
+  "$(verdict "0 0 ????? ????? ????? ????? ????? ????? ? ? ? ? ? ? ? $NO_SETTINGS")"
 expect "a shell that never finished is a failure" "fail" \
-  "$(verdict "1 0 BLBLL ????? ????? ????? ????? ????? 127.0.0.1 standard/profile/2 ? ? ? ? ?")"
+  "$(verdict "1 0 BLBLL ????? ????? ????? ????? ????? 127.0.0.1 standard/profile/2 ? ? ? ? ? $NO_SETTINGS")"
 expect "a window still blocked once off is a failure" "fail" \
-  "$(verdict "1 1 BLBLL BLBLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 $TOLD")"
+  "$(verdict "1 1 BLBLL BLBLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 $TOLD $SETTINGS_OK")"
 expect "and names the window's setting" "yes" \
-  "$(says "1 1 BLBLL BLBLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 $TOLD" "SetAdBlockingForWindow")"
+  "$(says "1 1 BLBLL BLBLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 $TOLD $SETTINGS_OK" "SetAdBlockingForWindow")"
 expect "a window's setting in another window is a failure" "fail" \
-  "$(verdict "1 1 BLBLL LLLLL LLLLL LLLLL LLLLL BLBLL 127.0.0.1 $TOLD")"
+  "$(verdict "1 1 BLBLL LLLLL LLLLL LLLLL LLLLL BLBLL 127.0.0.1 $TOLD $SETTINGS_OK")"
 expect "and says so" "yes" \
-  "$(says "1 1 BLBLL LLLLL LLLLL LLLLL LLLLL BLBLL 127.0.0.1 $TOLD" "REACHED ANOTHER WINDOW")"
+  "$(says "1 1 BLBLL LLLLL LLLLL LLLLL LLLLL BLBLL 127.0.0.1 $TOLD $SETTINGS_OK" "REACHED ANOTHER WINDOW")"
 expect "the site's setting missing a window is a failure" "fail" \
-  "$(verdict "1 1 BLBLL LLLLL BLBLL LLLLL BLBLL BLBLL 127.0.0.1 $TOLD")"
+  "$(verdict "1 1 BLBLL LLLLL BLBLL LLLLL BLBLL BLBLL 127.0.0.1 $TOLD $SETTINGS_OK")"
 expect "a site's setting that stays once cleared is a failure" "fail" \
-  "$(verdict "1 1 BLBLL LLLLL BLBLL LLLLL LLLLL LLLLL 127.0.0.1 $TOLD")"
+  "$(verdict "1 1 BLBLL LLLLL BLBLL LLLLL LLLLL LLLLL 127.0.0.1 $TOLD $SETTINGS_OK")"
 expect "a page blocked right but read back wrong is a failure" "fail" \
-  "$(verdict "1 1 BLBLL LLLLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 standard/profile/2 off/site/0 standard/profile/2 off/site/0 off/site/0 standard/profile/2")"
+  "$(verdict "1 1 BLBLL LLLLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 standard/profile/2 off/site/0 standard/profile/2 off/site/0 off/site/0 standard/profile/2 $SETTINGS_OK")"
 expect "and names the report" "yes" \
-  "$(says "1 1 BLBLL LLLLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 standard/profile/0 off/window/0 standard/profile/2 off/site/0 off/site/0 standard/profile/2" "SitePrivacyChanged")"
+  "$(says "1 1 BLBLL LLLLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 standard/profile/0 off/window/0 standard/profile/2 off/site/0 off/site/0 standard/profile/2 $SETTINGS_OK" "SitePrivacyChanged")"
+
+expect "a refused change from Settings is a failure" "yes" \
+  "$(says "1 1 BLBLL LLLLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 $TOLD refused ? ? ? ?" "REFUSED A SITE'S AD BLOCKING")"
+expect "a list without the site is a failure" "yes" \
+  "$(says "1 1 BLBLL LLLLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 $TOLD set none set none ?" "list of sites was wrong")"
+expect "a change the open page never heard is a failure" "yes" \
+  "$(says "1 1 BLBLL LLLLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 $TOLD set default:127.0.0.1:strict set none ?" "did not reach the open page")"
 
 echo
 if [ "$FAILED" -eq 0 ]; then

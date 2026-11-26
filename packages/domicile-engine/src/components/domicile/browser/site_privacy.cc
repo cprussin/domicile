@@ -89,4 +89,18 @@ void SetSiteAdBlocking(PrefService& prefs,
   }
 }
 
+std::vector<std::pair<std::string, AdBlockingMode>> SitesWithOwnAdBlocking(
+    const PrefService& prefs) {
+  std::vector<std::pair<std::string, AdBlockingMode>> sites;
+  // A dict iterates in key order.
+  for (const auto [site, name] : prefs.GetDict(kSiteAdBlockingPref)) {
+    const std::optional<AdBlockingMode> mode =
+        name.is_string() ? AdBlockingModeNamed(name.GetString()) : std::nullopt;
+    CHECK(mode.has_value()) << kSiteAdBlockingPref << " has " << name
+                            << " for " << site;
+    sites.emplace_back(site, *mode);
+  }
+  return sites;
+}
+
 }  // namespace domicile

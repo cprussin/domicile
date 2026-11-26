@@ -220,6 +220,40 @@ describe(spawnedHost, () => {
       await stored;
     });
 
+    it("lists and sets the sites' ad blocking", async () => {
+      const { asked, host, processes } = await started((host) =>
+        host.sitePrivacy(),
+      );
+      expect(processes[0]?.sent.at(-1)).toEqual({
+        id: 1,
+        type: "site_privacy",
+      });
+      const sites = [
+        {
+          block_ads_and_trackers: "off",
+          profile: "work",
+          site: "nytimes.com",
+        },
+      ] as const;
+      processes[0]?.answer({ id: 1, sites, type: "site_privacy" });
+      expect(await asked).toEqual([...sites]);
+
+      const change = {
+        block_ads_and_trackers: null,
+        profile: "work",
+        site: "nytimes.com",
+      };
+      const stored = host.setSitePrivacy(change);
+      await settled();
+      expect(processes[0]?.sent.at(-1)).toEqual({
+        change,
+        id: 2,
+        type: "set_site_privacy",
+      });
+      processes[0]?.answer({ id: 2, type: "stored" });
+      await stored;
+    });
+
     it("lists, sets and resets temporary changes to the config", async () => {
       const { asked, host, processes } = await started((host) =>
         host.configOverrides(),

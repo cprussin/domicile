@@ -17,6 +17,7 @@
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "base/values.h"
+#include "components/domicile/browser/browser_profiles.h"
 #include "components/domicile/browser/extension_settings.h"
 #include "components/domicile/browser/shell_source.h"
 #include "components/domicile/mojom/browser_windows.mojom-shared.h"
@@ -68,6 +69,17 @@ namespace domicile {
 //
 //   {"type":"set_site_permission","version":1,
 //    "origin":"https://meet.example","permission":"camera","setting":"block"}
+//   -> {"type":"set"}
+//   -> {"type":"refused","why":"..."}
+//
+//   {"type":"site_privacy","version":1}
+//   -> {"type":"site_privacy","sites":[{"profile":"work",
+//       "site":"nytimes.com","block_ads_and_trackers":"off"}]}
+//   -> {"type":"refused","why":"..."}
+//
+//   {"type":"set_site_privacy","version":1,"profile":"work",
+//    "site":"nytimes.com","block_ads_and_trackers":"strict"}
+//   (`null` for "block_ads_and_trackers" goes back to the profile's)
 //   -> {"type":"set"}
 //   -> {"type":"refused","why":"..."}
 //
@@ -298,6 +310,29 @@ using SetSitePermission =
     base::FunctionRef<bool(const url::Origin& origin,
                            mojom::WebViewPermission permission,
                            mojom::WebViewPermissionSetting setting)>;
+
+// One site's own ad-blocking mode in one profile (site_privacy.h).
+struct StoredSitePrivacy {
+  std::string profile;
+  std::string site;
+  AdBlockingMode block_ads_and_trackers;
+};
+
+// Runs once with every profile's sites with their own mode, or nothing if
+// there is no shell, and so no profiles to read.
+using SitePrivacyFound =
+    base::OnceCallback<void(std::optional<std::vector<StoredSitePrivacy>>)>;
+
+// Carries out `site_privacy`: runs `found` once every profile has loaded,
+// possibly after returning.
+using ListSitePrivacy = base::FunctionRef<void(SitePrivacyFound found)>;
+
+// Carries out `set_site_privacy`: sets `site`'s mode in `profile`, or with
+// none goes back to the profile's, or says why not.
+using SetSitePrivacy = base::FunctionRef<base::expected<void, std::string>(
+    const std::string& profile,
+    const std::string& site,
+    std::optional<AdBlockingMode> mode)>;
 
 // Runs once with the id of the extension `load_unpacked` loaded, or the
 // reason it did not load.
@@ -658,6 +693,8 @@ struct CommandActions {
   HasBrowserProfile has_browser_profile;
   ListSitePermissions list_site_permissions;
   SetSitePermission set_site_permission;
+  ListSitePrivacy list_site_privacy;
+  SetSitePrivacy set_site_privacy;
   LoadUnpacked load_unpacked;
   UninstallExtension uninstall_extension;
   ListConfigExtensions list_config_extensions;
@@ -685,7 +722,7 @@ using CommandReply = base::OnceCallback<void(std::string)>;
 
 // Answers one request line (without its newline). `reply` runs once: before
 // this returns, except for `load_shell`, `run_app`, `open_url`,
-// `load_unpacked`, `browser_profiles`, `history`, `visits`, `delete_history`,
+// `load_unpacked`, `browser_profiles`, `site_privacy`, `history`, `visits`, `delete_history`,
 // `clear_browsing_data`, `site_data`, `clear_site_data` and `devtools`, which
 // answer once their action is done.
 void AnswerCommand(std::string_view line,

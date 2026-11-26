@@ -26,6 +26,7 @@
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "components/domicile/browser/site_permissions.h"
+#include "components/domicile/browser/site_privacy.h"
 
 namespace domicile {
 namespace {
@@ -36,6 +37,8 @@ constexpr char kRunApp[] = "run_app";
 constexpr char kOpenUrl[] = "open_url";
 constexpr char kListSitePermissionsCommand[] = "site_permissions";
 constexpr char kSetSitePermissionCommand[] = "set_site_permission";
+constexpr char kSitePrivacy[] = "site_privacy";
+constexpr char kSetSitePrivacy[] = "set_site_privacy";
 constexpr char kLoadUnpacked[] = "load_unpacked";
 constexpr char kUninstallExtension[] = "uninstall_extension";
 constexpr char kConfigExtensions[] = "config_extensions";
@@ -88,6 +91,11 @@ std::string AnswerBrowserWindows(ListBrowserWindowLayouts list_browser_windows);
 std::string AnswerSitePermissions(ListSitePermissions list_site_permissions);
 std::string AnswerSetSitePermission(const base::DictValue& request,
                                     SetSitePermission set_site_permission);
+std::string SitePrivacyLine(
+    const std::optional<std::vector<StoredSitePrivacy>>& list);
+void AnswerSitePrivacy(ListSitePrivacy list_site_privacy, CommandReply reply);
+std::string AnswerSetSitePrivacy(const base::DictValue& request,
+                                 SetSitePrivacy set_site_privacy);
 void AnswerLoadUnpacked(const base::DictValue& request,
                         LoadUnpacked load_unpacked,
                         CommandReply reply);
@@ -234,6 +242,15 @@ void AnswerCommand(std::string_view line,
     std::move(reply).Run(AnswerSitePermissions(actions.list_site_permissions));
     return;
   }
+  if (*type == kSitePrivacy) {
+    AnswerSitePrivacy(actions.list_site_privacy, std::move(reply));
+    return;
+  }
+  if (*type == kSetSitePrivacy) {
+    std::move(reply).Run(
+        AnswerSetSitePrivacy(*request, actions.set_site_privacy));
+    return;
+  }
   if (*type == kSetSitePermissionCommand) {
     std::move(reply).Run(
         AnswerSetSitePermission(*request, actions.set_site_permission));
@@ -330,7 +347,8 @@ void AnswerCommand(std::string_view line,
       {"\"", *type, "\" is not a command this engine knows; it takes \"",
        kLoadShell, "\", \"", kRunApp, "\", \"", kOpenUrl, "\", \"",
        kListSitePermissionsCommand,
-       "\", \"", kSetSitePermissionCommand, "\", \"", kLoadUnpacked, "\", \"",
+       "\", \"", kSetSitePermissionCommand, "\", \"", kSitePrivacy, "\", \"",
+       kSetSitePrivacy, "\", \"", kLoadUnpacked, "\", \"",
        kUninstallExtension, "\", \"", kConfigExtensions, "\", \"",
        kExtensions, "\", \"", kSetExtensionEnabled, "\", \"",
        kConfigureExtension, "\", \"",
@@ -640,6 +658,67 @@ std::string AnswerSetSitePermission(const base::DictValue& request,
   if (!set_site_permission(url::Origin::Create(site), *permission, *setting)) {
     return RefusedCommand(
         "this engine has no shell, and so no profile to store the setting in");
+  }
+  return Done("set");
+}
+
+void AnswerSitePrivacy(ListSitePrivacy list_site_privacy, CommandReply reply) {
+  list_site_privacy(base::BindOnce(
+      [](CommandReply reply,
+         std::optional<std::vector<StoredSitePrivacy>> list) {
+        std::move(reply).Run(SitePrivacyLine(list));
+      },
+      std::move(reply)));
+}
+
+std::string SitePrivacyLine(
+    const std::optional<std::vector<StoredSitePrivacy>>& list) {
+  if (!list) {
+    return RefusedCommand(
+        "this engine has no shell, and so no profiles whose sites to list");
+  }
+  base::ListValue sites;
+  for (const StoredSitePrivacy& site : *list) {
+    sites.Append(base::DictValue()
+                     .Set("profile", site.profile)
+                     .Set("site", site.site)
+                     .Set("block_ads_and_trackers",
+                          AdBlockingModeName(site.block_ads_and_trackers)));
+  }
+  base::DictValue reply;
+  reply.Set("type", kSitePrivacy);
+  reply.Set("sites", std::move(sites));
+  return Line(std::move(reply));
+}
+
+std::string AnswerSetSitePrivacy(const base::DictValue& request,
+                                 SetSitePrivacy set_site_privacy) {
+  const std::string* profile = request.FindString("profile");
+  const std::string* site = request.FindString("site");
+  const base::Value* mode_value = request.Find("block_ads_and_trackers");
+  if (profile == nullptr || site == nullptr || mode_value == nullptr ||
+      !(mode_value->is_none() || mode_value->is_string())) {
+    return RefusedCommand(
+        "set_site_privacy needs a \"profile\", a \"site\" and its "
+        "\"block_ads_and_trackers\", or null for the profile's");
+  }
+  if (site->empty()) {
+    return RefusedCommand("set_site_privacy needs a site, not \"\"");
+  }
+  std::optional<AdBlockingMode> mode;
+  if (mode_value->is_string()) {
+    mode = AdBlockingModeNamed(mode_value->GetString());
+    if (!mode) {
+      return RefusedCommand(base::StrCat(
+          {"\"", mode_value->GetString(),
+           "\" is not a way to block ads and trackers; it is \"standard\", "
+           "\"strict\" or \"off\""}));
+    }
+  }
+  const base::expected<void, std::string> set =
+      set_site_privacy(*profile, *site, mode);
+  if (!set.has_value()) {
+    return RefusedCommand(set.error());
   }
   return Done("set");
 }

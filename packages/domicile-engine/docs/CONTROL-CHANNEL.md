@@ -299,6 +299,12 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 {"type":"set_site_permission","version":1,"origin":"https://meet.example","permission":"camera","setting":"block"}
 {"type":"set"}   |   {"type":"refused","why":"…"}
 
+{"type":"site_privacy","version":1}
+{"type":"site_privacy","sites":[{"profile":"work","site":"nytimes.com","block_ads_and_trackers":"off"}]}
+
+{"type":"set_site_privacy","version":1,"profile":"work","site":"nytimes.com","block_ads_and_trackers":null}
+{"type":"set"}   |   {"type":"refused","why":"…"}
+
 {"type":"load_unpacked","version":1,"directory":"/home/me/src/my-extension"}
 {"type":"loaded_unpacked","id":"…"}   |   {"type":"refused","why":"…"}
 
@@ -401,6 +407,13 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
   shell profile's content settings for each of `kSitePermissions`, as the
   address bar's panel does: user settings for one origin. Setting a
   permission's default removes the site's own.
+- `site_privacy` and `set_site_privacy` are the Settings app's Privacy page
+  too. They list and set each browser profile's sites with their own ad
+  blocking, as a shell's `setBlockAdsAndTrackers(mode, "site")` keeps them
+  ([AD-BLOCKING.md](/docs/architecture/AD-BLOCKING.md)). The listing answers
+  once every profile has loaded. A private profile keeps its sites only while
+  a window is open, so it lists none without one and refuses a change.
+  `null` goes back to the profile's mode.
 - `load_unpacked`, `uninstall_extension` and `config_extensions` are the
   Settings app's too ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md#from-the-settings-app)).
   `domicile load-extension` sends `load_unpacked` as well. The engine replies to

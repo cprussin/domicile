@@ -7,6 +7,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "components/domicile/browser/browser_profiles.h"
 
@@ -55,6 +57,10 @@ std::optional<AdBlockingMode> SiteAdBlocking(const PrefService& prefs,
 void SetSiteAdBlocking(PrefService& prefs,
                        std::string_view site,
                        std::optional<AdBlockingMode> mode);
+
+// Every site with its own mode, by site.
+std::vector<std::pair<std::string, AdBlockingMode>> SitesWithOwnAdBlocking(
+    const PrefService& prefs);
 
 }  // namespace domicile
 

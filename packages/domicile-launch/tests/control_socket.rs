@@ -212,6 +212,10 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                     logs: &|| panic!("a question about this desktop reads no logs"),
                     permissions: &|| panic!("a question about this desktop reaches no engine"),
                     set_permission: &|_| panic!("a question about this desktop reaches no engine"),
+                    site_privacy: &|| panic!("a question about this desktop reaches no engine"),
+                    set_site_privacy: &|_| {
+                        panic!("a question about this desktop reaches no engine")
+                    },
                     load_unpacked: &|_| panic!("a question about this desktop reaches no engine"),
                     uninstall_extension: &|_| {
                         panic!("a question about this desktop reaches no engine")

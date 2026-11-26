@@ -6,6 +6,7 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use domicile_config::AdBlocking;
 use domicile_launch::browser_profiles::{
     BrowserProfileList, ListedBrowserProfile, ListedBrowserSite, ProfileExtension,
 };
@@ -15,14 +16,15 @@ use domicile_launch::command::{
     disable_while_typing_line, extensions_line, history_line, load_shell_line, load_unpacked_line,
     media_devices_line, open_url_line, pin_browser_site_line, set_extension_enabled_line,
     set_log_levels_line, set_media_device_line, set_site_permission_line, site_data_line,
-    site_permissions_line, uninstall_extension_line, visits_line, BrowserWindowLayout,
+    site_permissions_line, site_privacy_line, uninstall_extension_line, visits_line,
+    BrowserWindowLayout,
 };
 use domicile_launch::command_socket::{
     browser_profiles, browser_windows, clear_browsing_data, clear_site_data, config_extensions,
     configure_extension, delete_history, devtools, disable_while_typing, extensions, history,
     load_shell, load_unpacked, media_devices, open_url, pin_browser_site, set_extension_enabled,
     set_log_levels, set_media_device, set_site_permission, site_data, site_permissions,
-    uninstall_extension, visits, CommandError,
+    site_privacy, uninstall_extension, visits, CommandError,
 };
 use domicile_launch::extensions::{ExtensionSettings, InstalledExtension};
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
@@ -30,6 +32,7 @@ use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
+use domicile_launch::site_privacy::SitePrivacy;
 
 /// Reply timeout: long enough for a loaded machine, short enough for a fast
 /// suite.
@@ -204,6 +207,28 @@ fn scratch() -> (tempfile::TempDir, PathBuf) {
     let directory = tempfile::tempdir().expect("a temp directory");
     let path = directory.path().join("command.sock");
     (directory, path)
+}
+
+#[test]
+fn the_engine_is_asked_for_the_sites_ad_blocking_and_lists_them() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(
+        &path,
+        Some("{\"type\":\"site_privacy\",\"sites\":[{\"profile\":\"work\",\"site\":\"nytimes.com\",\"block_ads_and_trackers\":\"off\"}]}\n"),
+    );
+
+    assert_eq!(
+        site_privacy(&path, BRIEFLY).expect("the engine listed them"),
+        vec![SitePrivacy {
+            profile: "work".to_string(),
+            site: "nytimes.com".to_string(),
+            block_ads_and_trackers: AdBlocking::Off,
+        }]
+    );
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        site_privacy_line()
+    );
 }
 
 #[test]

@@ -53,6 +53,8 @@ fi
 OUT="${OUT:-out/Domicile}"
 BROKER="${BROKER:-/tmp/domicile-site-privacy-broker}"
 CONTROL="${CONTROL:-/tmp/domicile-site-privacy-control}"
+COMMAND="${COMMAND:-/tmp/domicile-site-privacy-command}"
+ANSWERS="${ANSWERS:-/tmp/domicile-site-privacy-answers.log}"
 PROFILE="${PROFILE:-/tmp/domicile-site-privacy-profile}"
 LIST="${LIST:-/tmp/domicile-site-privacy-list.txt}"
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-site-privacy-engine.log}"
@@ -70,7 +72,7 @@ cleanup() {
     kill "${STARTED[@]}" 2>/dev/null
   fi
   remove_profile "$PROFILE"
-  rm -f "$LIST"
+  rm -f "$LIST" "$COMMAND"
 }
 trap cleanup EXIT
 
@@ -84,7 +86,7 @@ command -v python3 >/dev/null || {
 }
 
 fresh_broker
-rm -f "$CONTROL"
+rm -f "$CONTROL" "$COMMAND" "$ANSWERS"
 rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
 wait_for_line() { # $1 tries, $2 pattern, $3 file
@@ -144,6 +146,7 @@ rm -f "$ENGINE_LOG"
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-site-privacy.js" \
   --domicile-control-socket="$CONTROL" \
+  --domicile-command-socket="$COMMAND" \
   --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --enable-logging=stderr --log-level=0 --vmodule="domicile_ad_blocking=1,web_view_guest=1" \
@@ -157,11 +160,62 @@ for _ in $(seq 1 "$TRIES"); do
   sleep 0.25
 done
 
+# 6. As the Settings app does: set the site to strict in the default profile
+#    from the command socket, list it, then clear it and list again, waiting
+#    each time for b's page to be told without a load. Each answer goes to
+#    $ANSWERS as `SETTINGS <what>=<answer>`.
+settings() { # $1 what, $2 the request's JSON
+  python3 - "$COMMAND" "$1" "$2" <<'PY' >>"$ANSWERS" 2>&1
+import json, socket, sys
+
+what, line = sys.argv[2], sys.argv[3]
+try:
+    connection = socket.socket(socket.AF_UNIX)
+    connection.settimeout(30)
+    connection.connect(sys.argv[1])
+    connection.sendall((line + "\n").encode())
+    answer = json.loads(connection.makefile().readline())
+except (OSError, ValueError) as failure:
+    print("SETTINGS %s=no-answer" % what)
+    print("  (%s)" % failure)
+    sys.exit(0)
+if answer.get("type") == "site_privacy":
+    sites = ["%s:%s:%s" % (each["profile"], each["site"],
+                           each["block_ads_and_trackers"])
+             for each in answer["sites"]]
+    print("SETTINGS %s=%s" % (what, ",".join(sites) or "none"))
+else:
+    print("SETTINGS %s=%s" % (what, answer.get("type")))
+    print("  (%s)" % json.dumps(answer))
+PY
+}
+if grep -q "GUARD privacy done" "$ENGINE_LOG" 2>/dev/null; then
+  settings set1 '{"type":"set_site_privacy","version":1,"profile":"default","site":"127.0.0.1","block_ads_and_trackers":"strict"}'
+  settings list1 '{"type":"site_privacy","version":1}'
+  wait_for_line 40 "GUARD privacy later view=b mode=strict" "$ENGINE_LOG"
+  settings set2 '{"type":"set_site_privacy","version":1,"profile":"default","site":"127.0.0.1","block_ads_and_trackers":null}'
+  settings list2 '{"type":"site_privacy","version":1}'
+  wait_for_line 40 "GUARD privacy later view=b mode=standard" "$ENGINE_LOG"
+fi
+
 # Whether the shell ran and finished; each step's page as third first mine
 # allowed ok, a letter each (B blocked, L loaded, ? no report); the site the
 # shell was told; and what it read at each step, as mode/for/blocked (`?` for
-# no report).
+# no report); then the command socket's answers and b's reports after
+# them, mode/for each, without repeats (`?` for none).
 READ="$(awk '
+  /SETTINGS [a-z0-9]+=/ {
+    split(substr($0, index($0, "SETTINGS ") + 9), kv, /=/)
+    answered[kv[1]] = kv[2]
+  }
+  match($0, /GUARD privacy later view=b mode=[a-z]* for=[a-z]*/) {
+    split(substr($0, RSTART + 27, RLENGTH - 27), f, / /)
+    split(f[1], m, /=/); split(f[2], w, /=/)
+    if (m[2] "/" w[2] != last) {
+      later = later (later == "" ? "" : ",") m[2] "/" w[2]
+      last = m[2] "/" w[2]
+    }
+  }
   /GUARD shell-loaded/ { shell = 1 }
   /GUARD privacy done/ { done = 1 }
   match($0, /GUARD ads as=[a-z0-9-]+( [a-z]+=[a-z]+)+/) {
@@ -188,23 +242,29 @@ READ="$(awk '
     return out
   }
   function said(key) { return key in read ? read[key] : "?" }
+  function answer(key) { return key in answered ? answered[key] : "?" }
   END {
-    printf "%d %d %s %s %s %s %s %s %s %s %s %s %s %s %s\n", shell, done,
+    printf "%d %d %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
+      shell, done,
       letters("a1"), letters("a2"), letters("b1"), letters("a3"),
       letters("b2"), letters("b3"), (site == "" ? "?" : site),
-      said("1a"), said("2a"), said("3b"), said("4a"), said("4b"), said("5b")
-  }' "$ENGINE_LOG" 2>/dev/null)"
+      said("1a"), said("2a"), said("3b"), said("4a"), said("4b"), said("5b"),
+      answer("set1"), answer("list1"), answer("set2"), answer("list2"),
+      (later == "" ? "?" : later)
+  }' "$ANSWERS" "$ENGINE_LOG" 2>/dev/null)"
 
 MEASURED="$READ"
 echo
 echo "measured: $MEASURED"
-echo "  (shell done a1 a2 b1 a3 b2 b3 site, then what the shell read at 1 2 3 4a 4b 5)"
+echo "  (shell done a1 a2 b1 a3 b2 b3 site, then what the shell read at 1 2 3 4a 4b 5,"
+echo "   then Settings' set, list, clear and list, and b's reports after them)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-site-privacy-guard.sh`
 # runs the reading and this block directly.
 FAILURE=""
 PASSED=""
-read -r RAN DONE A1 A2 B1 A3 B2 B3 SITE READS <<<"$MEASURED"
+read -r RAN DONE A1 A2 B1 A3 B2 B3 SITE R1 R2 R3 R4A R4B R5 SET1 LIST1 SET2 LIST2 LATER <<<"$MEASURED"
+READS="$R1 $R2 $R3 $R4A $R4B $R5"
 BLOCKED="BLBLL"
 LOADED="LLLLL"
 TOLD="standard/profile/2 off/window/0 standard/profile/2 off/site/0 off/site/0 standard/profile/2"
@@ -238,11 +298,22 @@ elif [ "$SITE" != "127.0.0.1" ] || [ "$READS" != "$TOLD" ]; then
 (site $SITE, and $READS for $TOLD): SitePrivacyChanged reports the wrong \
 site, mode, source or count, or reports late (ReportSitePrivacy, \
 PagePrivacy::Changed)"
+elif [ "$SET1" != set ] || [ "$SET2" != set ]; then
+  FAILURE="THE COMMAND SOCKET REFUSED A SITE'S AD BLOCKING ($SET1 $SET2), as \
+the Settings app sends it: set_site_privacy, or SetDeskSitePrivacy found no \
+prefs for the default profile (SitePrivacyPrefsOf); $ANSWERS has its answer"
+elif [ "$LIST1" != "default:127.0.0.1:strict" ] || [ "$LIST2" != none ]; then
+  FAILURE="Settings' list of sites was wrong ($LIST1, then $LIST2 once \
+cleared): site_privacy did not read the profile's sites \
+(ListDeskSitePrivacy, SitesWithOwnAdBlocking)"
+elif [ "$LATER" != "strict/site,standard/profile" ]; then
+  FAILURE="Settings' change did not reach the open page ($LATER): PagePrivacy \
+does not watch kSiteAdBlockingPref, or the view does not report it"
 else
   PASSED="a page's ad blocking went off for its window only, then for its \
 site in both windows, then back to the profile's, as the shell set it, and \
 the shell was told each mode, where it came from and how many requests were \
-blocked"
+blocked; and the Settings app's list and change reached the page"
 fi
 
 if [ -n "$PASSED" ]; then
@@ -253,6 +324,8 @@ fi
 annotate_from "guard-site-privacy: $FAILURE" "$ENGINE_LOG"
 echo "the compositor stand-in said:" >&2
 tail -20 "$SOCKET_LOG" >&2
+echo "the command socket answered:" >&2
+cat "$ANSWERS" >&2 2>/dev/null
 echo "the page server said:" >&2
 tail -20 "$HTTP_LOG" >&2
 echo "the shell's and the pages' steps, and the blocker's, in order:" >&2

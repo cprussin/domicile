@@ -11,10 +11,13 @@ import {
   withProfileChanged,
 } from "../browser-profiles";
 import { valueAt } from "../config-document";
-import type { ConfigPageProps } from "../config-editor";
+import type { ConfigPageProps, Report } from "../config-editor";
+import type { SettingsHost } from "../host";
 import { Page } from "../Page";
 import { SettingRow } from "../SettingRow";
+import { SitesChangedCard } from "../SitesChangedCard";
 import { SwitchRow } from "../SwitchRow";
+import { useSitePrivacy } from "../useSitePrivacy";
 
 /** Each `lockdown` switch, as a person reads it. */
 const SWITCHES = [
@@ -56,16 +59,25 @@ const AD_BLOCKING: { label: string; value: AdBlocking }[] = [
   { label: "Off", value: "off" },
 ];
 
+type Props = ConfigPageProps & {
+  host: SettingsHost;
+  report: Report;
+};
+
 /**
  * `lockdown`, what apps are asked not to do through the Lockdown portal, and
- * each browser profile's `protections`, what its pages keep from sites.
+ * each browser profile's `protections`, what its pages keep from sites, with
+ * the sites whose protections the shield in a browser window changed.
  */
 export const PrivacyPage = ({
   description,
   editor,
+  host,
+  report,
   title,
-}: ConfigPageProps) => {
+}: Props) => {
   const { document, readOnly, set, settings } = editor;
+  const sites = useSitePrivacy(host, report);
   const { browser } = settings;
   const [chosen, setChosen] = useState(browser.default_profile);
   // A profile removed elsewhere falls back to the default.
@@ -178,6 +190,12 @@ export const PrivacyPage = ({
           />
         ))}
       </Card>
+      <SitesChangedCard
+        failure={sites.failure}
+        onSet={sites.set}
+        profile={id}
+        sites={sites.sites}
+      />
       <Card title="Apps">
         {SWITCHES.map(({ key, label }) => (
           <SwitchRow

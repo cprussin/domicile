@@ -20,6 +20,12 @@
 //! {"type":"set_site_permission","version":1,"origin":"https://meet.example","permission":"camera","setting":"block"}
 //! {"type":"set"}   |   {"type":"refused","why":"…"}
 //!
+//! {"type":"site_privacy","version":1}
+//! {"type":"site_privacy","sites":[{"profile":"work","site":"nytimes.com","block_ads_and_trackers":"off"}]}
+//!
+//! {"type":"set_site_privacy","version":1,"profile":"work","site":"nytimes.com","block_ads_and_trackers":null}
+//! {"type":"set"}   |   {"type":"refused","why":"…"}
+//!
 //! {"type":"load_unpacked","version":1,"directory":"/home/me/src/my-extension"}
 //! {"type":"loaded_unpacked","id":"…"}   |   {"type":"refused","why":"…"}
 //!
@@ -83,6 +89,7 @@
 
 use std::path::Path;
 
+use domicile_config::AdBlocking;
 use serde::{Deserialize, Serialize};
 
 use crate::browser_profiles::BrowserProfileList;
@@ -93,6 +100,7 @@ use crate::media_devices::{MediaDevices, MediaKind};
 use crate::shell_path::{Shell, ShellFiles};
 use crate::site_data::SiteData;
 use crate::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
+use crate::site_privacy::{SitePrivacy, SitePrivacyChange};
 
 /// The protocol version the supervisor sends and the engine checks.
 ///
@@ -124,6 +132,8 @@ pub enum Reply {
     },
     /// Every permission's default and every site's own setting.
     SitePermissions(SiteSettings),
+    /// Every browser profile's sites with their own ad blocking.
+    SitePrivacy { sites: Vec<SitePrivacy> },
     /// The engine stored a site's setting, a preferred media device, whether
     /// an extension is enabled or an extension's settings.
     Set,
@@ -250,6 +260,22 @@ pub fn set_site_permission_line(site: &SitePermission) -> String {
         origin: &site.origin,
         permission: site.permission,
         setting: site.setting,
+    })
+}
+
+/// The request for every browser profile's sites with their own ad blocking.
+pub fn site_privacy_line() -> String {
+    line(&Command::SitePrivacy { version: VERSION })
+}
+
+/// The request to set a site's ad blocking in a browser profile, or with
+/// none go back to the profile's.
+pub fn set_site_privacy_line(change: &SitePrivacyChange) -> String {
+    line(&Command::SetSitePrivacy {
+        version: VERSION,
+        profile: &change.profile,
+        site: &change.site,
+        block_ads_and_trackers: change.block_ads_and_trackers,
     })
 }
 
@@ -477,6 +503,17 @@ enum Command<'a> {
         origin: &'a str,
         permission: Permission,
         setting: Setting,
+    },
+    SitePrivacy {
+        version: u32,
+    },
+    SetSitePrivacy {
+        version: u32,
+        profile: &'a str,
+        site: &'a str,
+        // Sent as `null` to go back to the profile's: the engine refuses a
+        // request without it.
+        block_ads_and_trackers: Option<AdBlocking>,
     },
     LoadUnpacked {
         version: u32,

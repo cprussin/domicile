@@ -257,7 +257,9 @@ const PageContent = ({
     case PageId.Power:
       return configPage(PowerPage);
     case PageId.Privacy:
-      return configPage(PrivacyPage);
+      return configPageOf((ready) => (
+        <PrivacyPage {...named} editor={ready} host={host} report={report} />
+      ));
     case PageId.Launcher:
       return configPage(LauncherPage);
     // Startup commands run once, as the desktop starts, so a change that
