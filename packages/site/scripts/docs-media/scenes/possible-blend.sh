@@ -4,7 +4,7 @@
 
 desktop "$SCENE_DIR/shell.js"
 native foot -o font="JetBrains Mono:size=12" \
-  "$(nix build --no-link --print-out-paths nixpkgs#asciiquarium)/bin/asciiquarium"
+  "$(nix build --inputs-from "$ROOT" --no-link --print-out-paths nixpkgs#asciiquarium)/bin/asciiquarium"
 movie
 # Long enough for the page and the film to start.
 settle 10

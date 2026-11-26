@@ -1,7 +1,7 @@
 # Release notes: Element, an Electron app, on the desktop's engine, with its
 # menu bar under its tab.
 
-ELEMENT="$(nix build --no-link --print-out-paths nixpkgs#element-desktop)"
+ELEMENT="$(nix build --inputs-from "$ROOT" --no-link --print-out-paths nixpkgs#element-desktop)"
 # A fresh Element asks where to keep its keys before any page; this answers it.
 mkdir -p "$SCENE_TMP/config/Element"
 echo '{"safeStorageBackend":"basic_text"}' >"$SCENE_TMP/config/Element/electron-config.json"
@@ -9,7 +9,7 @@ desktop @domicile-desktop/manganese
 # Electron apps on the engine read settings and send notifications through
 # the portal frontend, which a session starts and the scene's own bus lacks.
 # Domicile's backend on this bus answers it.
-PORTAL="$(nix build --no-link --print-out-paths nixpkgs#xdg-desktop-portal)"
+PORTAL="$(nix build --inputs-from "$ROOT" --no-link --print-out-paths nixpkgs#xdg-desktop-portal)"
 DOMICILE_SHARE="$(dirname "$(readlink -f "$DOMICILE_BIN")")/../share"
 XDG_CURRENT_DESKTOP=domicile \
 XDG_DESKTOP_PORTAL_DIR="$DOMICILE_SHARE/xdg-desktop-portal/portals" \

@@ -44,8 +44,8 @@ echo "Big Buck Bunny: $(nix hash file --type sha256 "$BIG_BUCK_BUNNY")"
 export BIG_BUCK_BUNNY
 
 # Compresses the scenes' recordings, below, and draws their captions.
-FFMPEG="${FFMPEG:-$(nix build --no-link --print-out-paths 'nixpkgs#ffmpeg^bin')/bin/ffmpeg}"
-CAPTION_FONT="$(nix build --no-link --print-out-paths nixpkgs#inter)/share/fonts/truetype/InterVariable.ttf"
+FFMPEG="${FFMPEG:-$(nix build --inputs-from "$ROOT" --no-link --print-out-paths 'nixpkgs#ffmpeg^bin')/bin/ffmpeg}"
+CAPTION_FONT="$(nix build --inputs-from "$ROOT" --no-link --print-out-paths nixpkgs#inter)/share/fonts/truetype/InterVariable.ttf"
 # shellcheck source=packages/site/scripts/docs-media/captions.sh
 . "$ROOT/packages/site/scripts/docs-media/captions.sh"
 

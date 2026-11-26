@@ -7,7 +7,7 @@ desktop "$SCENE_DIR/shell.js"
 game 945x550
 movie
 native foot -o font="JetBrains Mono:size=12" \
-  "$(nix build --no-link --print-out-paths nixpkgs#asciiquarium)/bin/asciiquarium"
+  "$(nix build --inputs-from "$ROOT" --no-link --print-out-paths nixpkgs#asciiquarium)/bin/asciiquarium"
 # Long enough for the race to start and the page to load.
 settle 12
 # Every rule once, from wherever the shell's cycle is.
