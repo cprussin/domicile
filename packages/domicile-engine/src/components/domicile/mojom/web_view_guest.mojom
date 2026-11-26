@@ -217,6 +217,37 @@ struct WebViewSitePermission {
   WebViewPermissionSetting setting;
 };
 
+// How a page's requests are checked for ads and trackers. See
+// docs/architecture/AD-BLOCKING.md.
+enum WebViewAdBlocking {
+  // Other sites' ads and trackers.
+  kStandard,
+  // The site's own too.
+  kStrict,
+  kOff,
+};
+
+// Where a page's ad blocking comes from.
+enum WebViewAdBlockingSetFor {
+  // Its profile's, from the config.
+  kProfile,
+  // Its site's, kept in the profile (SetAdBlockingForSite).
+  kSite,
+  // Its window's, until the window closes (SetAdBlockingForWindow).
+  kWindow,
+};
+
+// How the page blocks ads and trackers, for a shield in the address bar.
+struct WebViewSitePrivacy {
+  // The site a setting is kept for: the page's registrable domain, or its
+  // host when it has none.
+  string site;
+  WebViewAdBlocking block_ads_and_trackers;
+  WebViewAdBlockingSetFor set_for;
+  // Requests blocked since the page was committed.
+  int32 blocked;
+};
+
 // The kind of dialog a page in a <webview> opened with `alert()`, `confirm()`
 // or `prompt()`, or with a `beforeunload` handler that asks to stay.
 enum WebViewDialogType {
@@ -868,6 +899,13 @@ interface WebViewGuestClient {
   // nothing until its first commit.
   SitePermissionsChanged(array<WebViewSitePermission> permissions);
 
+  // How the page blocks ads and trackers, or null for a page that is not http
+  // or https, which is never blocked.
+  //
+  // Sent when the page, its mode or its count changes; the count at most
+  // every quarter second. A fresh guest sends nothing until its first commit.
+  SitePrivacyChanged(WebViewSitePrivacy? privacy);
+
   // The page's renderer went away, or a new one replaced it, as after a
   // reload. `exit_code` is Chromium's code for the process: its wait status,
   // or the browser's own code when the browser ended it. 0 while running.
@@ -1044,6 +1082,16 @@ interface WebViewGuest {
   // page has no site, which happens when it navigates as the shell sends.
   SetSitePermission(WebViewPermission permission,
                     WebViewPermissionSetting setting);
+
+  // Sets how the page's site blocks ads and trackers, kept in its profile, or
+  // with null goes back to the profile's. Applies from the next request, so a
+  // shell reloads to see it. Dropped, and logged, when the page has no site,
+  // as SetSitePermission is.
+  SetAdBlockingForSite(WebViewAdBlocking? mode);
+
+  // As SetAdBlockingForSite, for this guest's pages only, until it closes.
+  // Over the site's. Null goes back to the site's or the profile's.
+  SetAdBlockingForWindow(WebViewAdBlocking? mode);
 
   // The cameras and microphones, ranked by the profile's preference. The
   // preference is the profile's, not the site's, so every guest lists the

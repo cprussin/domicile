@@ -429,6 +429,39 @@ export const WEBVIEW_SITE_PERMISSIONS_CHANGE_EVENT =
   "domicile-site-permissions-change";
 
 /**
+ * Fired when {@link HTMLWebViewElement.privacySite},
+ * {@link HTMLWebViewElement.blockAdsAndTrackers},
+ * {@link HTMLWebViewElement.blockAdsAndTrackersSetFor} or
+ * {@link HTMLWebViewElement.blockedCount} changed: the page moved, its mode
+ * changed, or more of its requests were blocked (at most every quarter
+ * second). Carries no payload. Bubbles.
+ */
+export const WEBVIEW_SITE_PRIVACY_CHANGE_EVENT = "domicile-site-privacy-change";
+
+/**
+ * How a page blocks ads and trackers: `standard` blocks other sites' ads and
+ * trackers, `strict` the site's own too.
+ */
+export const WEBVIEW_AD_BLOCKING_MODES = ["standard", "strict", "off"] as const;
+
+/** One of {@link WEBVIEW_AD_BLOCKING_MODES}. */
+export type WebViewAdBlocking = (typeof WEBVIEW_AD_BLOCKING_MODES)[number];
+
+/**
+ * Where a page's ad blocking comes from: its profile's config, a setting kept
+ * for its site, or one for its window until the window closes.
+ */
+export const WEBVIEW_AD_BLOCKING_SET_FOR = [
+  "profile",
+  "site",
+  "window",
+] as const;
+
+/** One of {@link WEBVIEW_AD_BLOCKING_SET_FOR}. */
+export type WebViewAdBlockingSetFor =
+  (typeof WEBVIEW_AD_BLOCKING_SET_FOR)[number];
+
+/**
  * The permissions a site can ask for and a shell can set.
  *
  * - `camera`, `microphone`: `getUserMedia`.
@@ -973,6 +1006,38 @@ declare global {
     setSitePermission(
       permission: WebViewPermission,
       setting: WebViewPermissionSetting,
+    ): void;
+    /**
+     * The site the page's ad blocking is kept for: its registrable domain,
+     * such as `nytimes.com`, or its host when it has none. `""` for a page
+     * that is not `http` or `https`, which is never blocked. Changes fire
+     * {@link WEBVIEW_SITE_PRIVACY_CHANGE_EVENT}, as the three below do.
+     */
+    readonly privacySite: string;
+    /**
+     * One of {@link WEBVIEW_AD_BLOCKING_MODES}, or `""` when
+     * {@link HTMLWebViewElement.privacySite} is. External data: parse it at
+     * the boundary.
+     */
+    readonly blockAdsAndTrackers: string;
+    /**
+     * One of {@link WEBVIEW_AD_BLOCKING_SET_FOR}, or `""` when
+     * {@link HTMLWebViewElement.privacySite} is. External data.
+     */
+    readonly blockAdsAndTrackersSetFor: string;
+    /** Requests blocked since the page loaded. */
+    readonly blockedCount: number;
+    /**
+     * Set how the page's site blocks ads and trackers, kept in its profile
+     * (`"site"`), or how this window does until it closes (`"window"`), over
+     * the site's. `null` goes back to the site's or the profile's. Applies
+     * from the next request, so reload to see it. Throws a `TypeError` for an
+     * unknown mode or scope, and an `InvalidStateError` when
+     * {@link HTMLWebViewElement.privacySite} is empty.
+     */
+    setBlockAdsAndTrackers(
+      mode: WebViewAdBlocking | null,
+      scope: "site" | "window",
     ): void;
     /**
      * The cameras and microphones, each most preferred first: a page that

@@ -5,6 +5,7 @@
 
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/domicile/browser/site_privacy.h"
 #include "components/prefs/pref_service.h"
 #include "components/universal_optout/prefs.h"
 
@@ -35,6 +36,7 @@ void ApplyProtections(PrefService& prefs,
   prefs.SetString(kWebRTCIPHandlingPolicy, protections.hide_local_ip_address
                                                ? kPublicInterfaceOnly
                                                : kAnyInterface);
+  SetProfileAdBlocking(prefs, protections.block_ads_and_trackers);
 }
 
 }  // namespace domicile

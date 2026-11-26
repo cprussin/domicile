@@ -123,6 +123,7 @@ constexpr char kPermissionRequestWithdrawnEvent[] =
     "domicile-permission-request-withdrawn";
 constexpr char kSitePermissionsChangeEvent[] =
     "domicile-site-permissions-change";
+constexpr char kSitePrivacyChangeEvent[] = "domicile-site-privacy-change";
 
 // A request the shell answers on the event, a change to its devices, and its
 // withdrawal. See domicile_device_request_event.h.
@@ -1037,6 +1038,9 @@ void HTMLWebViewElement::Replaced(bool unloaded) {
   if (!page_failure_.empty()) {
     PageFailureChanged(nullptr);
   }
+  if (!privacy_site_.empty()) {
+    SitePrivacyChanged(nullptr);
+  }
   shows_when_rendered_ = unloaded && !IsRendered();
   DidNotifySubtreeInsertionsToDocument();
 }
@@ -1490,6 +1494,96 @@ void HTMLWebViewElement::SitePermissionsChanged(
 
   DispatchEvent(
       *Event::CreateBubble(AtomicString(kSitePermissionsChangeEvent)));
+}
+
+namespace {
+
+String AdBlockingName(domicile::mojom::blink::WebViewAdBlocking mode) {
+  switch (mode) {
+    case domicile::mojom::blink::WebViewAdBlocking::kStandard:
+      return "standard";
+    case domicile::mojom::blink::WebViewAdBlocking::kStrict:
+      return "strict";
+    case domicile::mojom::blink::WebViewAdBlocking::kOff:
+      return "off";
+  }
+}
+
+String SetForName(domicile::mojom::blink::WebViewAdBlockingSetFor set_for) {
+  switch (set_for) {
+    case domicile::mojom::blink::WebViewAdBlockingSetFor::kProfile:
+      return "profile";
+    case domicile::mojom::blink::WebViewAdBlockingSetFor::kSite:
+      return "site";
+    case domicile::mojom::blink::WebViewAdBlockingSetFor::kWindow:
+      return "window";
+  }
+}
+
+std::optional<domicile::mojom::blink::WebViewAdBlocking> AdBlockingNamed(
+    const String& name) {
+  for (const auto mode :
+       {domicile::mojom::blink::WebViewAdBlocking::kStandard,
+        domicile::mojom::blink::WebViewAdBlocking::kStrict,
+        domicile::mojom::blink::WebViewAdBlocking::kOff}) {
+    if (AdBlockingName(mode) == name) {
+      return mode;
+    }
+  }
+  return std::nullopt;
+}
+
+}  // namespace
+
+void HTMLWebViewElement::SitePrivacyChanged(
+    domicile::mojom::blink::WebViewSitePrivacyPtr privacy) {
+  if (privacy) {
+    privacy_site_ = privacy->site;
+    block_ads_and_trackers_ = AdBlockingName(privacy->block_ads_and_trackers);
+    block_ads_and_trackers_set_for_ = SetForName(privacy->set_for);
+    blocked_count_ = privacy->blocked;
+  } else {
+    privacy_site_ = g_empty_string;
+    block_ads_and_trackers_ = g_empty_string;
+    block_ads_and_trackers_set_for_ = g_empty_string;
+    blocked_count_ = 0;
+  }
+
+  DispatchEvent(*Event::CreateBubble(AtomicString(kSitePrivacyChangeEvent)));
+}
+
+// Does not change the reported mode: the browser reports the result in
+// SitePrivacyChanged.
+void HTMLWebViewElement::setBlockAdsAndTrackers(
+    const String& mode,
+    const String& scope,
+    ExceptionState& exception_state) {
+  std::optional<domicile::mojom::blink::WebViewAdBlocking> named;
+  if (!mode.IsNull()) {
+    named = AdBlockingNamed(mode);
+    if (!named.has_value()) {
+      exception_state.ThrowTypeError(
+          "A mode must be \"standard\", \"strict\", \"off\" or null.");
+      return;
+    }
+  }
+  if (scope != "site" && scope != "window") {
+    exception_state.ThrowTypeError("It must be for \"site\" or \"window\".");
+    return;
+  }
+  // Only a guest reports a site, so a guest exists past this.
+  if (privacy_site_.empty()) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "This page is not a website, which is never blocked.");
+    return;
+  }
+  CHECK(guest_.is_bound());
+  if (scope == "site") {
+    guest_->SetAdBlockingForSite(named);
+  } else {
+    guest_->SetAdBlockingForWindow(named);
+  }
 }
 
 // Stored before dispatch, so a handler can run the menu immediately.

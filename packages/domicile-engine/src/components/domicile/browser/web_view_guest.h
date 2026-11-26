@@ -902,6 +902,14 @@ class WebViewGuest : public mojom::WebViewGuest,
   void SetSitePermission(mojom::WebViewPermission permission,
                          mojom::WebViewPermissionSetting setting) override;
 
+  // Through PagePrivacy (page_privacy.h): the site's in its profile's prefs,
+  // the window's on the guest's WebContents. Either reaches the shell through
+  // ReportSitePrivacy.
+  void SetAdBlockingForSite(
+      std::optional<mojom::WebViewAdBlocking> mode) override;
+  void SetAdBlockingForWindow(
+      std::optional<mojom::WebViewAdBlocking> mode) override;
+
   // The profile's camera and microphone preference, through MediaAccess.
   void ListMediaDevices(ListMediaDevicesCallback callback) override;
   void SetMediaDevice(mojom::WebViewMediaDeviceKind kind,
@@ -1416,6 +1424,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   // page with no site reports none.
   void ReportSitePermissions();
 
+  // Reports how the page blocks ads and trackers to the element if it
+  // changed. PagePrivacy calls it on each change.
+  void ReportSitePrivacy();
+
   // Reports whether the page has a renderer, and why it went away, to the
   // element if either changed. See RenderProcessChanged in the mojom.
   void ReportRenderProcess();
@@ -1615,6 +1627,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   std::vector<std::pair<mojom::WebViewPermission,
                         mojom::WebViewPermissionSetting>>
       reported_site_permissions_;
+
+  // The last SitePrivacyChanged sent. Null, as the element starts.
+  mojom::WebViewSitePrivacyPtr reported_site_privacy_;
 
   // The profile's settings, watched for ReportSitePermissions. Reset in
   // WebContentsDestroyed, with the zoom subscription.

@@ -128,6 +128,7 @@ TOGETHER=(
   guard-profile-routing
   guard-browser-protections
   guard-ad-blocking
+  guard-site-privacy
   guard-webview-paused
   guard-animation-main-frames
   guard-one-spare-renderer

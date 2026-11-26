@@ -48,7 +48,10 @@
 #include "components/domicile/browser/render_process.h"
 #include "components/domicile/browser/screen_capture.h"
 #include "components/domicile/browser/shortcut_registry.h"
+#include "components/domicile/browser/page_privacy.h"
 #include "components/domicile/browser/site_permissions.h"
+#include "components/domicile/browser/site_privacy.h"
+#include "components/user_prefs/user_prefs.h"
 #include "components/domicile/browser/unfocused_web_views.h"
 #include "components/permissions/permission_decision_auto_blocker.h"
 #include "components/permissions/permissions_client.h"
@@ -925,6 +928,12 @@ std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
   zoom::ZoomController::CreateForWebContents(guest_contents_);
   zoom_observation_.Observe(
       zoom::ZoomController::FromWebContents(guest_contents_));
+
+  // The shield's: the page's ad blocking and its count.
+  PagePrivacy::CreateForWebContents(guest_contents_);
+  PagePrivacy::FromWebContents(guest_contents_)
+      ->OnChanged(base::BindRepeating(&WebViewGuest::ReportSitePrivacy,
+                                      weak_factory_.GetWeakPtr()));
   return contents;
 }
 
@@ -1057,6 +1066,8 @@ void WebViewGuest::ReportEverything() {
   }
   reported_site_permissions_.clear();
   ReportSitePermissions();
+  reported_site_privacy_.reset();
+  ReportSitePrivacy();
   reported_render_process_ = mojom::WebViewRenderProcess::kRunning;
   reported_exit_code_ = 0;
   ReportRenderProcess();
@@ -2339,6 +2350,79 @@ void WebViewGuest::SetSitePermission(
                       setting);
 }
 
+namespace {
+
+AdBlockingMode ModeOf(mojom::WebViewAdBlocking mode) {
+  switch (mode) {
+    case mojom::WebViewAdBlocking::kStandard:
+      return AdBlockingMode::kStandard;
+    case mojom::WebViewAdBlocking::kStrict:
+      return AdBlockingMode::kStrict;
+    case mojom::WebViewAdBlocking::kOff:
+      return AdBlockingMode::kOff;
+  }
+}
+
+std::optional<AdBlockingMode> ModeOf(
+    std::optional<mojom::WebViewAdBlocking> mode) {
+  if (!mode.has_value()) {
+    return std::nullopt;
+  }
+  return ModeOf(*mode);
+}
+
+mojom::WebViewAdBlocking WireModeOf(AdBlockingMode mode) {
+  switch (mode) {
+    case AdBlockingMode::kStandard:
+      return mojom::WebViewAdBlocking::kStandard;
+    case AdBlockingMode::kStrict:
+      return mojom::WebViewAdBlocking::kStrict;
+    case AdBlockingMode::kOff:
+      return mojom::WebViewAdBlocking::kOff;
+  }
+}
+
+mojom::WebViewAdBlockingSetFor WireSetForOf(AdBlockingSetFor set_for) {
+  switch (set_for) {
+    case AdBlockingSetFor::kProfile:
+      return mojom::WebViewAdBlockingSetFor::kProfile;
+    case AdBlockingSetFor::kSite:
+      return mojom::WebViewAdBlockingSetFor::kSite;
+    case AdBlockingSetFor::kWindow:
+      return mojom::WebViewAdBlockingSetFor::kWindow;
+  }
+}
+
+}  // namespace
+
+void WebViewGuest::SetAdBlockingForSite(
+    std::optional<mojom::WebViewAdBlocking> mode) {
+  CHECK(guest_contents_);
+  const std::string site = PagePrivacy::FromWebContents(guest_contents_)->site();
+  // The shell sends what it last saw, and the page may have navigated since.
+  if (site.empty()) {
+    LOG(WARNING) << "domicile: the shell set ad blocking for a page with no "
+                    "site; it is dropped.";
+    return;
+  }
+  VLOG(1) << "domicile: ad blocking for " << site << " is now "
+          << (mode.has_value() ? AdBlockingModeName(ModeOf(*mode))
+                               : "the profile's");
+  SetSiteAdBlocking(
+      *user_prefs::UserPrefs::Get(guest_contents_->GetBrowserContext()), site,
+      ModeOf(mode));
+}
+
+void WebViewGuest::SetAdBlockingForWindow(
+    std::optional<mojom::WebViewAdBlocking> mode) {
+  CHECK(guest_contents_);
+  VLOG(1) << "domicile: ad blocking in browser window " << window_id_
+          << " is now "
+          << (mode.has_value() ? AdBlockingModeName(ModeOf(*mode))
+                               : "its site's");
+  PagePrivacy::FromWebContents(guest_contents_)->SetForWindow(ModeOf(mode));
+}
+
 void WebViewGuest::ListMediaDevices(ListMediaDevicesCallback callback) {
   CHECK(guest_contents_);
   Media().WhenDevicesListed(base::BindOnce(
@@ -2992,6 +3076,24 @@ void WebViewGuest::ReportSitePermissions() {
     report.push_back(mojom::WebViewSitePermission::New(permission, setting));
   }
   client_->SitePermissionsChanged(std::move(report));
+}
+
+void WebViewGuest::ReportSitePrivacy() {
+  CHECK(guest_contents_);
+  const PagePrivacy& privacy = *PagePrivacy::FromWebContents(guest_contents_);
+  std::string site = privacy.site();
+  mojom::WebViewSitePrivacyPtr now;
+  if (!site.empty()) {
+    now = mojom::WebViewSitePrivacy::New(std::move(site),
+                                         WireModeOf(privacy.mode()),
+                                         WireSetForOf(privacy.set_for()),
+                                         privacy.blocked());
+  }
+  if (now.Equals(reported_site_privacy_)) {
+    return;
+  }
+  reported_site_privacy_ = now.Clone();
+  client_->SitePrivacyChanged(std::move(now));
 }
 
 void WebViewGuest::ReportRenderProcess() {

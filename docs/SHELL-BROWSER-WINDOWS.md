@@ -1023,6 +1023,30 @@ frame.addEventListener(WEBVIEW_PERMISSION_REQUEST_EVENT, (event) => {
 Manganese draws both in the address bar's site permissions panel
 (`window-management/browser/SitePermissions.tsx`).
 
+## Ads and trackers
+
+The engine blocks ads and trackers in every website's page, in its profile's
+mode ([AD-BLOCKING.md](architecture/AD-BLOCKING.md)). A view tells the shell
+enough to draw a shield like Brave's, and turns blocking off for a page's site
+or its window:
+
+- `view.privacySite`: the site a setting is kept for, the page's registrable
+  domain such as `nytimes.com`, or its host when it has none. `""` for a page
+  that isn't `http` or `https`, which is never blocked.
+- `view.blockAdsAndTrackers`: `standard`, `strict` or `off`
+  (`WEBVIEW_AD_BLOCKING_MODES`).
+- `view.blockAdsAndTrackersSetFor`: `profile` (the config's), `site` or
+  `window`.
+- `view.blockedCount`: requests blocked since the page loaded.
+- `view.setBlockAdsAndTrackers(mode, scope)` sets the mode for the site, kept
+  in the profile (`"site"`), or for this window until it closes
+  (`"window"`), over the site's. `null` goes back to the site's or the
+  profile's. It applies from the next request, so reload the page to see it.
+  A private profile's sites are kept until its last page closes.
+
+`domicile-site-privacy-change` signals a change to any of them, the count at
+most every quarter second.
+
 ## Devices
 
 The browser draws no device chooser. A page asking for a device through

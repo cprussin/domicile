@@ -205,6 +205,9 @@ source_set("domicile") {
     "//chrome/browser/spellchecker",
     "//components/domicile:spellcheck_settings",
     "//components/domicile:protection_settings",
+    # Each page's ad blocking, its site's and its window's, for the shield.
+    "//components/domicile:page_privacy",
+    "//components/domicile:site_privacy",
     "//components/domicile:shortcut_registry",
     "//components/tabs:public",
     "//content/public/browser",

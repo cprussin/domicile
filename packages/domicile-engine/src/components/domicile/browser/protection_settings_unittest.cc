@@ -5,6 +5,7 @@
 
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/domicile/browser/site_privacy.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/universal_optout/prefs.h"
@@ -26,6 +27,7 @@ class ProtectionSettingsTest : public testing::Test {
     prefs_.registry()->RegisterBooleanPref(
         universal_optout::prefs::kUniversalOptOutEnabled, false);
     prefs_.registry()->RegisterStringPref(kWebRTCIPHandlingPolicy, "default");
+    RegisterSitePrivacyPrefs(prefs_.registry());
   }
 
   TestingPrefServiceSimple prefs_;
@@ -40,6 +42,7 @@ TEST_F(ProtectionSettingsTest, EveryProtectionOnSetsChromesOwnPrefs) {
       prefs_.GetBoolean(universal_optout::prefs::kUniversalOptOutEnabled));
   EXPECT_EQ(prefs_.GetString(kWebRTCIPHandlingPolicy),
             "default_public_interface_only");
+  EXPECT_EQ(ProfileAdBlocking(prefs_), AdBlockingMode::kStandard);
 }
 
 TEST_F(ProtectionSettingsTest, AProtectionTurnedOffPutsChromesDefaultBack) {
@@ -48,12 +51,14 @@ TEST_F(ProtectionSettingsTest, AProtectionTurnedOffPutsChromesDefaultBack) {
                                .block_third_party_cookies = false,
                                .global_privacy_control = false,
                                .hide_local_ip_address = false,
+                               .block_ads_and_trackers = AdBlockingMode::kOff,
                            });
   EXPECT_EQ(prefs_.GetInteger(prefs::kCookieControlsMode),
             static_cast<int>(content_settings::CookieControlsMode::kOff));
   EXPECT_FALSE(
       prefs_.GetBoolean(universal_optout::prefs::kUniversalOptOutEnabled));
   EXPECT_EQ(prefs_.GetString(kWebRTCIPHandlingPolicy), "default");
+  EXPECT_EQ(ProfileAdBlocking(prefs_), AdBlockingMode::kOff);
 }
 
 }  // namespace

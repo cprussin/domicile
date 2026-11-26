@@ -658,7 +658,9 @@ source_set("web_view_guest") {
     ":render_process",
     ":screen_capture",
     ":shortcut_registry",
+    ":page_privacy",
     ":site_permissions",
+    ":site_privacy",
     ":unfocused_web_views",
     ":web_view_partition",
     ":web_view_url",
@@ -684,6 +686,8 @@ source_set("web_view_guest") {
     "//components/security_interstitials/content:security_interstitial_page",
     "//components/security_interstitials/core",
     # Chrome's zoom modes, which chrome.tabs.setZoomSettings sets.
+    # A site's ad blocking, in its profile's prefs.
+    "//components/user_prefs",
     "//components/zoom",
     "//content/public/browser",
     "//mojo/public/cpp/bindings",
@@ -1354,10 +1358,50 @@ source_set("protection_settings") {
   public_deps = [ ":browser_profiles" ]
 
   deps = [
+    ":site_privacy",
     "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
     "//components/prefs",
     "//components/universal_optout",
+  ]
+}
+
+# How a profile and its sites block ads and trackers, in its prefs. Its own
+# target for :protection_settings' reason.
+source_set("site_privacy") {
+  sources = [
+    "browser/site_privacy.cc",
+    "browser/site_privacy.h",
+  ]
+
+  public_deps = [ ":browser_profiles" ]
+
+  deps = [
+    "//base",
+    "//components/prefs",
+    "//net",
+    "//url",
+  ]
+}
+
+# One page's ad blocking: its window's mode over its site's, and its count,
+# for a shell's shield.
+source_set("page_privacy") {
+  sources = [
+    "browser/page_privacy.cc",
+    "browser/page_privacy.h",
+  ]
+
+  public_deps = [
+    ":browser_profiles",
+    "//base",
+    "//components/prefs",
+    "//content/public/browser",
+  ]
+
+  deps = [
+    ":site_privacy",
+    "//components/user_prefs",
   ]
 }
 
@@ -1675,6 +1719,7 @@ source_set("unit_tests") {
     "browser/desk_tabs_unittest.cc",
     "browser/desktop_prefs_unittest.cc",
     "browser/protection_settings_unittest.cc",
+    "browser/site_privacy_unittest.cc",
     "browser/device_choices_unittest.cc",
     "browser/display_capture_target_unittest.cc",
     "browser/display_capture_unittest.cc",
@@ -1789,6 +1834,7 @@ source_set("unit_tests") {
     ":desk_tabs",
     ":desktop_prefs",
     ":protection_settings",
+    ":site_privacy",
     ":device_choices",
     ":display_capture_target",
     ":display_transform",

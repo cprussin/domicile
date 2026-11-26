@@ -19,6 +19,9 @@ namespace domicile {
 // - The local address: `webrtc.ip_handling_policy`, as
 //   `default_public_interface_only`, which lets a call through on the
 //   interface that reaches the internet and names no other.
+// - Ad and tracker blocking: `domicile.ad_blocking.profile`, which a page's
+//   requests are checked in unless its site or window says otherwise
+//   (site_privacy.h).
 void ApplyProtections(PrefService& prefs,
                       const BrowserProtections& protections);
 
