@@ -149,29 +149,6 @@ export const withDefault = (
   }
 };
 
-/**
- * `browser` with `extension` switched in profile `id`'s locked list. A
- * profile with no list gets one of `on`, the extensions on in it now.
- */
-export const withExtensionSwitched = (
-  browser: BrowserConfig,
-  id: string,
-  extension: string,
-  enabled: boolean,
-  on: readonly string[],
-): BrowserConfig => {
-  const profile = browser.profiles[id];
-  if (profile === undefined) {
-    throw new Error(`The config has no browser profile ${id}`);
-  }
-  const listed = (profile.extensions ?? on).filter(
-    (each) => each !== extension,
-  );
-  return withProfileChanged(browser, id, {
-    extensions: enabled ? [...listed, extension] : listed,
-  });
-};
-
 /** `browser` with `site` opening in `profile`, or unlisted for the default. */
 export const withSite = (
   browser: BrowserConfig,

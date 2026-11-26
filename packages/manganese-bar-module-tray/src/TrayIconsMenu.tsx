@@ -25,7 +25,7 @@ import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
 import { PushPinIcon } from "@phosphor-icons/react/dist/ssr/PushPin";
 import { PuzzlePieceIcon } from "@phosphor-icons/react/dist/ssr/PuzzlePiece";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { css } from "../styled-system/css";
 import { center } from "../styled-system/patterns";
@@ -95,12 +95,14 @@ export const TrayIconsMenu = ({
 }: Props) => {
   const [open, setOpen] = useState(false);
   const [failure, setFailure] = useState<Failure | undefined>(undefined);
+  const changed = useChangedExtensions(domicile, open ? profile : undefined);
   const actions = new Map(extensions.map((action) => [action.id, action]));
   /** Runs `request`, saying `what` failed if it is refused. */
   const ask = (what: string, request: Promise<void>) => {
     request.then(
       () => {
         setFailure(undefined);
+        changed.reload();
       },
       (error: unknown) => {
         // biome-ignore lint/suspicious/noConsole: the panel says it in words; this keeps the error itself
@@ -194,17 +196,11 @@ export const TrayIconsMenu = ({
                 <ExtensionRow
                   action={actions.get(extension.id)}
                   ask={ask}
+                  changed={changed.ids.includes(extension.id)}
                   domicile={domicile}
                   extension={extension}
                   key={extension.id}
-                  locked={
-                    profile?.lockedExtensions.includes(extension.id) ?? false
-                  }
-                  on={
-                    profile === undefined
-                      ? extension.enabled
-                      : profile.enabledExtensions.includes(extension.id)
-                  }
+                  on={profile?.enabledExtensions.includes(extension.id)}
                   onActivate={(action) => {
                     setOpen(false);
                     onActivate(action.id);
@@ -217,20 +213,29 @@ export const TrayIconsMenu = ({
                       });
                     }
                   }}
+                  onReset={() => {
+                    if (profile !== undefined) {
+                      ask(
+                        `reset ${extension.name} in ${profile.name}`,
+                        domicile.browser.resetExtension(
+                          profile.id,
+                          extension.id,
+                        ),
+                      );
+                    }
+                  }}
                   onSettings={onSettings}
                   onSwitch={(on) => {
-                    ask(
-                      profile === undefined
-                        ? `switch ${extension.name} ${on ? "on" : "off"}`
-                        : `switch ${extension.name} ${on ? "on" : "off"} in ${profile.name}`,
-                      profile === undefined
-                        ? domicile.extensions.setEnabled(extension.id, on)
-                        : domicile.browser.setExtensionEnabled(
-                            profile.id,
-                            extension.id,
-                            on,
-                          ),
-                    );
+                    if (profile !== undefined) {
+                      ask(
+                        `switch ${extension.name} ${on ? "on" : "off"} in ${profile.name}`,
+                        domicile.browser.setExtensionEnabled(
+                          profile.id,
+                          extension.id,
+                          on,
+                        ),
+                      );
+                    }
                   }}
                   pin={pinOf(extensionKey(extension.id), extension.name)}
                 />
@@ -256,6 +261,42 @@ export const TrayIconsMenu = ({
       </Panel>
     </Popover>
   );
+};
+
+/**
+ * The extensions a temporary change switches in `profile` apart from the
+ * config, read again whenever the engine lists the profile again, as when a
+ * switch changed here or in Settings; none while `profile` is `undefined`.
+ */
+const useChangedExtensions = (
+  domicile: Domicile,
+  profile: BrowserProfile | undefined,
+) => {
+  const [ids, setIds] = useState<readonly string[]>([]);
+  const read = useCallback(
+    (of: BrowserProfile | undefined) => {
+      if (of === undefined) {
+        setIds([]);
+      } else {
+        domicile.browser
+          .changedExtensions(of.id)
+          .then(setIds, (error: unknown) => {
+            // biome-ignore lint/suspicious/noConsole: a switch shows no Reset, and this keeps why
+            console.error("tray: couldn't read the temporary changes", error);
+          });
+      }
+    },
+    [domicile],
+  );
+  useEffect(() => {
+    read(profile);
+  }, [read, profile]);
+  return {
+    ids,
+    reload: () => {
+      read(profile);
+    },
+  };
 };
 
 /** A request the engine refused: what it was, and the engine's words. */
@@ -316,16 +357,21 @@ type ExtensionRowProps = {
   ask: (what: string, request: Promise<void>) => void;
   domicile: Domicile;
   extension: InstalledExtension;
-  /** Whether it is on in the profile the menu shows. */
-  on: boolean;
-  /** The config switches it in that profile, so the menu cannot. */
-  locked: boolean;
+  /**
+   * Whether it is on in the profile the menu shows; `undefined` before the
+   * engine lists profiles, when it cannot switch.
+   */
+  on: boolean | undefined;
+  /** A temporary change switches it apart from the config. */
+  changed: boolean;
   /** Its row was clicked: click `action`. */
   onActivate: (action: Extension) => void;
   /** Open the Settings app. */
   onSettings: () => void;
   /** Switch it on or off in the profile the menu shows. */
   onSwitch: (on: boolean) => void;
+  /** Put it back as the config switches it. */
+  onReset: () => void;
   /** Its pin button. */
   pin: ReactNode;
 };
@@ -337,25 +383,25 @@ type ExtensionRowProps = {
 const ExtensionRow = ({
   action,
   ask,
+  changed,
   domicile,
   extension,
-  locked,
   on,
   onActivate,
+  onReset,
   onSettings,
   onSwitch,
   pin,
 }: ExtensionRowProps) => {
   const [uninstalling, setUninstalling] = useState(false);
   const { id, name } = extension;
-  const enabled = on;
+  const enabled = on === true;
   const controls = (
     <>
       {enabled && pin}
-      {locked && lockIcon}
       <Switch
         checked={enabled}
-        disabled={locked}
+        disabled={on === undefined}
         hideLabel
         label={name}
         onCheckedChange={onSwitch}
@@ -400,6 +446,20 @@ const ExtensionRow = ({
       </span>
     </div>
   );
+  const differs = changed && (
+    <span className={changedStyles}>
+      Changed from your config
+      <Button
+        label={`Reset ${name}`}
+        onClick={onReset}
+        rounded
+        size="xs"
+        variant="ghost"
+      >
+        Reset
+      </Button>
+    </span>
+  );
   return action === undefined ? (
     <ListRow
       detail={enabled ? undefined : "Off"}
@@ -407,6 +467,7 @@ const ExtensionRow = ({
       icon={icon}
       label={name}
     >
+      {differs}
       {confirm}
     </ListRow>
   ) : (
@@ -418,6 +479,7 @@ const ExtensionRow = ({
         onActivate(action);
       }}
     >
+      {differs}
       {confirm}
     </ListRow>
   );
@@ -555,6 +617,14 @@ const letterStyles = center({
 
 // The caret, in the box of a tray icon.
 const caretStyles = center({ blockSize: 4, inlineSize: 4 });
+
+const changedStyles = css({
+  alignItems: "center",
+  color: "warning",
+  display: "flex",
+  fontSize: "xs",
+  gap: 1,
+});
 
 const confirmStyles = css({
   alignItems: "center",

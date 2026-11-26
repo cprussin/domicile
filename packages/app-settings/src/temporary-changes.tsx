@@ -23,6 +23,12 @@ export type TemporaryChanges = {
   overrides: readonly ConfigOverride[];
   /** Ends the changes at or under each of `paths`. */
   reset: (paths: readonly ConfigPath[]) => void;
+  /**
+   * Lays `value` over the config at `path` for now, whether or not the page
+   * writes the file: what puts back one of the tray's switches and keeps
+   * the rest. Resolves once the desktop has it.
+   */
+  setForNow: (path: ConfigPath, value: unknown) => Promise<void>;
   /** The config sections the page shows. */
   sections: readonly ConfigPath[];
   /**

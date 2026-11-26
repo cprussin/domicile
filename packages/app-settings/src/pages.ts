@@ -73,7 +73,8 @@ export const PAGES = [
     title: "Shell",
   },
   {
-    description: "Chrome extensions in browser windows.",
+    description:
+      "Chrome extensions in browser windows, installed in every profile. Turn each on in the profiles you choose.",
     id: PageId.Extensions,
     title: "Extensions",
   },

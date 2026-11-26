@@ -10,7 +10,6 @@ import type {
 /** What the app does with extensions. */
 export type Extensions = {
   list: () => Promise<InstalledExtension[]>;
-  setEnabled: (id: string, enabled: boolean) => Promise<void>;
   /** Changes each of `settings` that is set. */
   configure: (id: string, settings: ExtensionSettings) => Promise<void>;
   /** Opens an extension's options page in a browser window. */
@@ -20,8 +19,8 @@ export type Extensions = {
 };
 
 /**
- * {@link Extensions} over `host`. A listener hears this app's own switches
- * and settings, and every change the host pushes.
+ * {@link Extensions} over `host`. A listener hears this app's own settings,
+ * and every change the host pushes.
  */
 export const hostExtensions = (host: SettingsHost): Extensions => {
   const switched = new Set<() => void>();
@@ -49,9 +48,5 @@ export const hostExtensions = (host: SettingsHost): Extensions => {
       };
     },
     openOptions: (url) => host.openUrl(url),
-    setEnabled: async (id, enabled) => {
-      await host.setExtensionEnabled(id, enabled);
-      tell();
-    },
   };
 };

@@ -22,6 +22,11 @@ the detail, when there is one. Remove a gap when it's fixed.
   the fullscreen window back to its box.
 - **Extensions' media-key commands do nothing,** nor does an action's key when
   the action opens the extension's side panel.
+- **An extension installed from the Chrome Web Store starts off in every
+  profile, and nothing asks where to turn it on.** Only a folder loaded in
+  Settings asks. Turn it on from the tray's menu, or with **Choose profiles**
+  on Settings' Extensions page, which marks it "Not on in any profile".
+  [EXTENSIONS.md](/docs/architecture/EXTENSIONS.md).
 - **An input method's candidate list does not show over pages or the
   shell:** they compose from it, but only native windows show its list.
   [TEXT-INPUT.md](/docs/architecture/TEXT-INPUT.md#plan).

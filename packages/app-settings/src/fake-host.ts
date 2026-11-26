@@ -132,9 +132,26 @@ export const fakeHost = (state: FakeHostState) => {
       }
       return Promise.resolve();
     },
+    // The folder holds one extension, which loads off in every profile.
     loadUnpacked: (directory) => {
       loaded.push(directory);
-      return Promise.resolve("c".repeat(32));
+      const id = "c".repeat(32);
+      if (!state.installed.some((extension) => extension.id === id)) {
+        state.installed.push({
+          description: "",
+          enabled: true,
+          icon: undefined,
+          id,
+          name: "My Extension",
+          optionsUrl: undefined,
+          settings: {},
+          version: "0.1",
+        });
+        for (const profile of state.profiles?.profiles ?? []) {
+          profile.extensions.push({ enabled: false, id, locked: false });
+        }
+      }
+      return Promise.resolve(id);
     },
     mediaDevices: () => Promise.resolve(structuredClone(state.media)),
     monitors: () => Promise.resolve(structuredClone(state.monitors ?? [])),
@@ -177,12 +194,15 @@ export const fakeHost = (state: FakeHostState) => {
     },
     setConfigOverride: (path, value) => {
       if (state.refuse === undefined) {
-        state.overrides = [
-          ...(state.overrides ?? []).filter(
-            (change) => !startsWith(change.path, path),
-          ),
-          { path: [...path], value: value ?? null, written: writtenAt(path) },
-        ];
+        const written = writtenAt(path);
+        const others = (state.overrides ?? []).filter(
+          (change) => !startsWith(change.path, path),
+        );
+        // As the compositor does, the file's own value ends the change.
+        state.overrides =
+          JSON.stringify(value ?? null) === JSON.stringify(written)
+            ? others
+            : [...others, { path: [...path], value: value ?? null, written }];
         return Promise.resolve(structuredClone(state.overrides));
       } else {
         return Promise.reject(new Error(state.refuse));

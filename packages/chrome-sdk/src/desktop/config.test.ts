@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { FakeDomicileHost } from "../fake-host";
+import { switchInConfig } from "./config";
 import { desktop } from "./desktop";
 
 const answer = (overrides: object[], refused?: string) =>
@@ -113,5 +114,39 @@ describe("config", () => {
       "the compositor exited before it answered",
     );
     expect(await after).toHaveLength(1);
+  });
+
+  it("switches in the config one after another, so two quick switches both stay", async () => {
+    const fake = new FakeDomicileHost();
+    const { config } = desktop(fake.host);
+    const path = ["browser", "profiles", "work", "extensions"];
+    const work = {
+      enabledExtensions: [],
+      id: "work",
+      lockedExtensions: ["a", "b"],
+    };
+    const settle = () => new Promise((done) => setTimeout(done, 0));
+    const listed = (value: string[]) =>
+      answer([
+        { path, value: JSON.stringify(value), written: JSON.stringify([]) },
+      ]);
+    const first = switchInConfig(config, work, "a", true);
+    const second = switchInConfig(config, work, "b", true);
+    await settle();
+    expect(fake.calls).toHaveLength(1);
+    fake.dispatch("configoverrides", { data: answer([]) });
+    await settle();
+    fake.dispatch("configoverrides", { data: listed(["a"]) });
+    await first;
+    await settle();
+    fake.dispatch("configoverrides", { data: listed(["a"]) });
+    await settle();
+    fake.dispatch("configoverrides", { data: listed(["a", "b"]) });
+    await second;
+    expect(JSON.parse(String(fake.calls.at(-1)?.[1]))).toStrictEqual({
+      path,
+      type: "set_config_override",
+      value: JSON.stringify(["a", "b"]),
+    });
   });
 });

@@ -24,6 +24,7 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 ### Also new
 
 - A web page an agent opens is the agent's from the start: it opens in its own window beside what you're doing, not as a tab behind yours, and your keyboard stays where it was.
+- Extensions are switched on per profile, each with its own data. Installing one asks which profiles to turn it on in, the tray's menu switches it in the profile you're on, and its site and file access apply in every profile even while it's off. A config you can't write switches until the desktop restarts. [Extensions](BROWSER.md#extensions)
 - Settings changes a config file it can't write, such as home-manager's, until the desktop restarts or the file changes that setting. Each change says "Changed from your config", with Reset. [Configure](CONFIGURE.md)
 - Extensions' keyboard shortcuts work in browser windows, such as Bitwarden's Ctrl+Shift+L. The desk's and the browser's own shortcuts come first. [Extensions](BROWSER.md#extensions)
 - Extensions' items show in a page's right-click menu, above Inspect, and right-clicking an extension's icon in the bar shows its own. [Extensions](BROWSER.md#extensions)

@@ -176,3 +176,191 @@ const onTheWire = (path: ConfigPath): ConfigKey[] =>
       return key;
     }
   });
+
+/** Where the config lists the extensions browser profile `profile` turns on. */
+export const profileExtensionsPath = (profile: string): ConfigPath => [
+  "browser",
+  "profiles",
+  profile,
+  "extensions",
+];
+
+const samePath = (a: ConfigPath, b: ConfigPath) =>
+  a.length === b.length && a.every((key, at) => key === b[at]);
+
+/** The change at `path`, if there is one. */
+export const overrideAt = (
+  overrides: readonly ConfigOverride[],
+  path: ConfigPath,
+): ConfigOverride | undefined =>
+  overrides.find((change) => samePath(change.path, path));
+
+/** A config list of extension ids; none for anything else. */
+export const idsOf = (value: unknown): readonly string[] =>
+  Array.isArray(value)
+    ? value.filter((id): id is string => typeof id === "string")
+    : [];
+
+/**
+ * The extensions a temporary change switches in browser profile `profile`
+ * apart from its config: each on in one of the change and the file, and off
+ * in the other. Sorted.
+ */
+export const changedExtensions = (
+  overrides: readonly ConfigOverride[],
+  profile: string,
+): readonly string[] => {
+  const change = overrideAt(overrides, profileExtensionsPath(profile));
+  if (change === undefined) {
+    return [];
+  } else {
+    const now = idsOf(change.value);
+    const written = idsOf(change.written);
+    return [...new Set([...now, ...written])]
+      .filter((id) => now.includes(id) !== written.includes(id))
+      .toSorted();
+  }
+};
+
+/**
+ * `list`, a profile's config list of extensions, with `id` on or off: the
+ * file's own list, `written`, when it comes to the same extensions, so a
+ * temporary change of it ends.
+ */
+export const switchedExtensions = (
+  list: readonly string[],
+  id: string,
+  on: boolean,
+  written: readonly string[],
+): readonly string[] => {
+  const next = on
+    ? [...new Set([...list, id])]
+    : list.filter((each) => each !== id);
+  const same =
+    next.length === written.length &&
+    next.every((each) => written.includes(each));
+  return same ? written : next;
+};
+
+/** A browser profile, as far as its config-switched extensions go. */
+export type ProfileSwitches = {
+  readonly id: string;
+  /** Those of its extensions on now. */
+  readonly enabledExtensions: readonly string[];
+  /** Those its config list switches, which only the config changes. */
+  readonly lockedExtensions: readonly string[];
+};
+
+/**
+ * Switches extension `id`, one `profile`'s config list switches, on or off
+ * there until the desktop restarts or the config changes that list: a
+ * temporary change to the list. Resolves with every change after it.
+ *
+ * Only an earlier change of the list says what the file has, so the first
+ * guesses the file's list from the switches, then lays the switch over the
+ * file's own once the answer says it, which keeps any id the file lists that
+ * the profile does not have.
+ */
+const switchNow = async (
+  config: ConfigNamespace,
+  profile: ProfileSwitches,
+  id: string,
+  on: boolean,
+): Promise<readonly ConfigOverride[]> => {
+  const path = profileExtensionsPath(profile.id);
+  /** The switch laid over the file's own list, which `answered` says. */
+  const overTheFile = (answered: readonly ConfigOverride[]) => {
+    const change = overrideAt(answered, path);
+    if (change === undefined) {
+      return answered;
+    } else {
+      // With no change before it, the list was the file's.
+      const written = idsOf(change.written);
+      const meant = switchedExtensions(written, id, on, written);
+      const sent = idsOf(change.value);
+      return meant.length === sent.length &&
+        meant.every((each, at) => each === sent[at])
+        ? answered
+        : config.setOverride(path, meant);
+    }
+  };
+  const before = overrideAt(await config.overrides(), path);
+  if (before === undefined) {
+    const guess = profile.lockedExtensions.filter((each) =>
+      profile.enabledExtensions.includes(each),
+    );
+    return overTheFile(
+      await config.setOverride(path, switchedExtensions(guess, id, on, [])),
+    );
+  } else {
+    return config.setOverride(
+      path,
+      switchedExtensions(idsOf(before.value), id, on, idsOf(before.written)),
+    );
+  }
+};
+
+/**
+ * Puts extension `id` in `profile` back as the config file switches it,
+ * keeping the list's other temporary switches. Resolves with every change
+ * after it.
+ */
+const resetNow = async (
+  config: ConfigNamespace,
+  profile: string,
+  id: string,
+): Promise<readonly ConfigOverride[]> => {
+  const path = profileExtensionsPath(profile);
+  const listed = await config.overrides();
+  const change = overrideAt(listed, path);
+  if (change === undefined) {
+    return listed;
+  } else {
+    const written = idsOf(change.written);
+    return config.setOverride(
+      path,
+      switchedExtensions(
+        idsOf(change.value),
+        id,
+        written.includes(id),
+        written,
+      ),
+    );
+  }
+};
+
+/** Each config's switch or reset under way, for the next to wait on. */
+const turns = new WeakMap<ConfigNamespace, Promise<unknown>>();
+
+/**
+ * Runs `change` once `config`'s changes before it have answered, so each
+ * reads the list the last left: two quick switches both stay.
+ */
+const inTurn = <T>(
+  config: ConfigNamespace,
+  change: () => Promise<T>,
+): Promise<T> => {
+  const next = (turns.get(config) ?? Promise.resolve()).then(change, change);
+  turns.set(
+    config,
+    next.catch(() => undefined),
+  );
+  return next;
+};
+
+/** {@link switchNow}, after the switches and resets before it. */
+export const switchInConfig = (
+  config: ConfigNamespace,
+  profile: ProfileSwitches,
+  id: string,
+  on: boolean,
+): Promise<readonly ConfigOverride[]> =>
+  inTurn(config, () => switchNow(config, profile, id, on));
+
+/** {@link resetNow}, after the switches and resets before it. */
+export const resetInConfig = (
+  config: ConfigNamespace,
+  profile: string,
+  id: string,
+): Promise<readonly ConfigOverride[]> =>
+  inTurn(config, () => resetNow(config, profile, id));

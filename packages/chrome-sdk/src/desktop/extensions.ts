@@ -56,8 +56,9 @@ export type Extensions = {
    */
   readonly list: readonly Extension[] | undefined;
   /**
-   * Every installed extension, switched on or off. `undefined` until the
-   * engine says. Parsed: throws on a row a shell cannot draw.
+   * Every installed extension: in every browser profile, each switched on or
+   * off there (`Browser.setExtensionEnabled`). `undefined` until the engine
+   * says. Parsed: throws on a row a shell cannot draw.
    */
   readonly installed: readonly InstalledExtension[] | undefined;
   /**
@@ -94,8 +95,6 @@ export type Extensions = {
   runCommand: (id: string, name: string) => void;
   /** Runs entry `item` of the newest `menu` on the active page. */
   runMenuItem: (item: number) => void;
-  /** Switches extension `id` on or off. Rejects for one not installed. */
-  setEnabled: (id: string, enabled: boolean) => Promise<void>;
   /**
    * Shows browser profile `profile`'s extensions in `list`, and has
    * `activate` click them there, on its active page: as a browser's toolbar
@@ -123,7 +122,6 @@ export type ExtensionsHost = Pick<
   | "reserveExtensionKeys"
   | "runExtensionCommand"
   | "runExtensionMenuItem"
-  | "setExtensionEnabled"
   | "setExtensionsProfile"
   | "uninstallExtension"
 >;
@@ -186,7 +184,6 @@ export const extensions = (host: ExtensionsHost): Extensions => {
     runMenuItem: (item) => {
       host.runExtensionMenuItem(item);
     },
-    setEnabled: (id, enabled) => host.setExtensionEnabled(id, enabled),
     setProfile: (profile) => {
       host.setExtensionsProfile(profile);
     },

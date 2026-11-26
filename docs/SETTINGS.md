@@ -10,16 +10,19 @@ not in the Extensions page or any extension list.
   ([SHELL-CONFIG.md](SHELL-CONFIG.md)). A change is written to the file as soon
   as it is made, and the desktop reloads it. A config Settings cannot write
   takes [temporary changes](#temporary-changes).
-- **Extensions:** switch an extension on or off and open its options through
-  the engine. While one is on, change the settings it can use: site access,
-  local files and user scripts. What runs in private windows is a private
-  profile's extension switches, on the Profiles page. A setting the config sets
-  changes in the config, and is locked when the config is read-only; the rest
-  change through the engine
-  ([EXTENSIONS.md](architecture/EXTENSIONS.md#settings)). Load an unpacked folder, picked in the desktop's file
-  chooser, or uninstall an extension the config did not install, through the
-  engine; this works with a read-only config. The config's own uninstall by
-  editing its `extensions` lists
+- **Extensions:** every installed extension, which is installed in every
+  profile, with the profiles it is on in and **Choose profiles**, which opens
+  the Profiles page. An extension is switched on or off only per profile.
+  Change the settings it can use, on or off: site access, local files and user
+  scripts, which apply in every profile. Open its options through the engine. A
+  setting the config sets changes in the config, and is locked when the config
+  is read-only; the rest change through the engine
+  ([EXTENSIONS.md](architecture/EXTENSIONS.md#settings)). Load an unpacked
+  folder, picked in the desktop's file chooser, or uninstall an extension the
+  config did not install, through the engine; this works with a read-only
+  config. A folder that loads a new extension asks which profiles to turn it on
+  in, with none chosen, and **Cancel** uninstalls it. The config's own
+  uninstall by editing its `extensions` lists
   ([EXTENSIONS.md](architecture/EXTENSIONS.md#from-the-settings-app)).
 - **Profiles:** a card per browser profile with its color, whether it is
   private, and its extension switches, and one list of the sites that open
@@ -27,8 +30,10 @@ not in the Extensions page or any extension list.
   ([BROWSER-PROFILES.md](architecture/BROWSER-PROFILES.md)). **Add profile**,
   **Make default**, a color, Private and removing a profile change the config.
   An extension switch and a site added here are saved by the desktop, as the
-  address bar's profile menu saves them; one the config sets changes in the
-  config, and is locked when the config is read-only. Adding a site that is
+  address bar's profile menu saves them. A switch of an extension the profile's
+  `extensions` list sets changes that list in one click, or takes a
+  [temporary change](#temporary-changes) when the config is read-only; a site
+  the config sets changes in the config, and is locked when it is read-only. Adding a site that is
   already listed is refused, pointing at its row.
 - **Agents:** **Connect from the web** (`agents.web`), which shows the
   desktop's address for agents on the web such as claude.ai, with Copy, and
@@ -103,7 +108,14 @@ lays each change over the config until the desktop restarts.
   `config-overrides` watch topic).
 - A config Settings can write shows them too, with **Reset**. A choice made in
   Settings writes the file and ends the change at that setting.
-- Extensions, Profiles and Startup do not take them.
+- The extension switches of the Profiles page and the tray's menu take them
+  for an extension the config switches, as a change of the profile's
+  `extensions` list. The tray's switch is always temporary. On a config
+  Settings writes, the Profiles page writes the switch into the file's own
+  list, which ends the tray's other switches in that profile rather than
+  writing them in, and its **Reset** puts one switch back without writing.
+  The profiles themselves, extension settings, the lock's PAM service and
+  Startup take no temporary change.
 
 The compositor holds them (`ConfigStore::set_override` in `domicile-config`)
 and takes them up as it takes up an edit of the file. The host asks with

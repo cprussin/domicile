@@ -117,10 +117,17 @@ programs.domicile.webApps.Music = {
 Chrome extensions work in every browser window. Their buttons sit in the top
 bar's tray; a click opens the extension's popup under it.
 
+An extension is installed in every profile, with its own data in each, and is
+on only in the profiles you choose. The tray's menu switches it on or off in
+the profile of the page you're on.
+
 <!-- tab: Settings app -->
 
-Open **Settings**, then **Extensions**. Switch each one on or off, open its
-options, or **Load unpacked folder** to add one from a folder.
+Open **Settings**, then **Extensions** to see which profiles each one is on
+in, change what it can reach, open its options, or **Load unpacked folder** to
+add one from a folder; it asks which profiles to turn it on in. **Choose
+profiles** opens **Profiles**, where each profile has a switch for each
+extension.
 
 <!-- tab: Config file -->
 

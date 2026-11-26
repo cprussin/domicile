@@ -279,15 +279,102 @@ describe("browser", () => {
       ONE_PASSWORD,
       BITWARDEN,
     ]);
-    await expect(
-      browser.setExtensionEnabled("work", ONE_PASSWORD, false),
-    ).rejects.toThrow("only the config");
     expect(fake.calls[0]).toStrictEqual([
       "setBrowserProfileExtensionEnabled",
       "work",
       BITWARDEN,
       true,
     ]);
+  });
+
+  it("switches one the config lists with a temporary change to its list", async () => {
+    const fake = new FakeDomicileHost();
+    const { browser } = desktop(fake.host);
+    const BITWARDEN = "nngceckbapebfimnlniiiahkandclblb";
+    const ONE_PASSWORD = "aeblfdkhhhdcdjpifhhbdiojplfjncoa";
+    const UBLOCK = "ddkjiahejlhfcafbddmgiahcphecmpfh";
+    fake.set({
+      browserProfiles: [
+        {
+          color: "#3366ff",
+          configSites: [],
+          enabledExtensions: [ONE_PASSWORD, UBLOCK],
+          extensions: [BITWARDEN, ONE_PASSWORD, UBLOCK],
+          id: "work",
+          isDefault: true,
+          isDefaultPrivate: false,
+          isPrivate: false,
+          lockedExtensions: [BITWARDEN, ONE_PASSWORD, UBLOCK],
+          name: "Work",
+          pinnedSites: [],
+        },
+      ],
+    });
+    const path = ["browser", "profiles", "work", "extensions"];
+    /** Answers the next request, as the compositor would. */
+    const answer = (value: string[] | undefined, written: string[]) => {
+      fake.dispatch("configoverrides", {
+        data: JSON.stringify({
+          overrides:
+            value === undefined
+              ? []
+              : [
+                  {
+                    path,
+                    value: JSON.stringify(value),
+                    written: JSON.stringify(written),
+                  },
+                ],
+          type: "config_overrides",
+        }),
+      });
+    };
+    const settle = () => new Promise((done) => setTimeout(done, 0));
+    // The file lists an extension the desk doesn't have, which stays.
+    const written = ["gone", ONE_PASSWORD, UBLOCK];
+    const switched = browser.setExtensionEnabled("work", UBLOCK, false);
+    await settle();
+    answer(undefined, []);
+    await settle();
+    answer([ONE_PASSWORD], written);
+    await settle();
+    answer(["gone", ONE_PASSWORD], written);
+    await switched;
+    expect(
+      fake.calls.map((call) =>
+        call[0] === "changeConfig" ? JSON.parse(String(call[1])) : call,
+      ),
+    ).toStrictEqual([
+      { type: "which_config_overrides" },
+      {
+        path,
+        type: "set_config_override",
+        value: JSON.stringify([ONE_PASSWORD]),
+      },
+      {
+        path,
+        type: "set_config_override",
+        value: JSON.stringify(["gone", ONE_PASSWORD]),
+      },
+    ]);
+
+    const changed = browser.changedExtensions("work");
+    answer(["gone", ONE_PASSWORD], written);
+    expect(await changed).toStrictEqual([UBLOCK]);
+
+    // Back on, it is the file's list again, in the file's order.
+    fake.calls.length = 0;
+    const reset = browser.resetExtension("work", UBLOCK);
+    await settle();
+    answer(["gone", ONE_PASSWORD], written);
+    await settle();
+    answer(undefined, []);
+    await reset;
+    expect(JSON.parse(String(fake.calls[1]?.[1]))).toStrictEqual({
+      path,
+      type: "set_config_override",
+      value: JSON.stringify(written),
+    });
   });
 
   it("opens an app window in a profile", () => {

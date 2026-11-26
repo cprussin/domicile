@@ -60,17 +60,6 @@ describe(hostExtensions, () => {
     expect(await hostExtensions(host).list()).toEqual([UBLOCK, ZOTERO]);
   });
 
-  it("turns an extension off, and tells listeners", async () => {
-    const { host, state } = withInstalled([UBLOCK]);
-    const extensions = hostExtensions(host);
-    const changed = new Promise<void>((resolve) => {
-      extensions.onChange(resolve);
-    });
-    await extensions.setEnabled(UBLOCK.id, false);
-    await changed;
-    expect(state.installed[0]?.enabled).toBe(false);
-  });
-
   it("changes an extension's settings, and tells listeners", async () => {
     const { host, state } = withInstalled([UBLOCK]);
     const extensions = hostExtensions(host);
@@ -98,7 +87,7 @@ describe(hostExtensions, () => {
     change();
     stop();
     change();
-    await extensions.setEnabled(UBLOCK.id, false);
+    await extensions.configure(UBLOCK.id, { file_access: true });
     expect(heard).toEqual(["changed"]);
   });
 });

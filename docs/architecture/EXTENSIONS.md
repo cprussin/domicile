@@ -91,9 +91,13 @@ one from the Settings app or the tray sets it in every loaded profile's copy
 (`BrowserProfileRegistry::ConfigureEverywhere`), and a copy installed later
 takes up the shell profile's.
 
-The Settings app removes extensions by editing these lists, and switches
-extensions on and off through `chrome.management`
-([SETTINGS.md](/docs/SETTINGS.md)).
+The Settings app removes extensions by editing these lists. It has no
+switch for an extension as a whole: its Profiles page and the tray's menu
+switch it in one profile, through `set_extension_enabled` with a `profile`, or
+through a change of that profile's `extensions` list when the list switches it
+(`switchInConfig` in `chrome-sdk`'s `desktop/config.ts`). A folder loaded from
+the Extensions page asks which profiles to turn it on in, and Cancel
+uninstalls it ([SETTINGS.md](/docs/SETTINGS.md)).
 
 #### From the Settings app
 

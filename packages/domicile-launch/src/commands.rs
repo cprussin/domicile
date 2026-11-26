@@ -707,8 +707,10 @@ pub const COMMANDS: &[Command] = &[
         forms: &[],
         about: &[
             "Loads the unpacked Chrome extension in `<directory>` into every browser \
-             profile, and prints its id. An extension already loaded from that \
-             directory reloads in place and keeps its id. Nothing restarts.",
+             profile, and prints its id. A new extension starts off in every \
+             profile: turn it on in the ones you choose in Settings › Profiles. \
+             An extension already loaded from that directory reloads in place, \
+             keeps its id and stays on where it was. Nothing restarts.",
             "The id follows the directory, with symlinks resolved, unless the \
              manifest has a `key`.",
             "It stays across restarts until it is uninstalled, as one loaded from \

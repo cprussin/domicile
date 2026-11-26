@@ -116,12 +116,13 @@ const built = new WeakMap<DomicileHost, Domicile>();
 const build = (host: DomicileHost): Domicile => {
   const calls = system(host);
   const bus = dbus(calls);
+  const changes = config(host);
   return {
     appearance: appearance(host),
-    browser: browser(host),
+    browser: browser(host, changes),
     capture: capture(calls),
     clipboard: clipboard(host),
-    config: config(host),
+    config: changes,
     dbus: bus,
     displays: displays(host, calls),
     downloads: downloads(host),

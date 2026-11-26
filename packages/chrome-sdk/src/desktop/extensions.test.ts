@@ -265,17 +265,15 @@ describe("extensions", () => {
       expect(await changed).toBeUndefined();
     });
 
-    it("switches, configures and uninstalls an extension", () => {
+    it("configures and uninstalls an extension", () => {
       const fake = new FakeDomicileHost();
       const { extensions } = desktop(fake.host);
-      extensions.setEnabled(installed.id, false).catch(() => undefined);
       extensions
         .configure(installed.id, { siteAccess: "on_click" })
         .catch(() => undefined);
       extensions.uninstall(installed.id).catch(() => undefined);
 
       expect(fake.calls).toStrictEqual([
-        ["setExtensionEnabled", installed.id, false],
         ["configureExtension", installed.id, { siteAccess: "on_click" }],
         ["uninstallExtension", installed.id],
       ]);

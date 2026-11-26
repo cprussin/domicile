@@ -4,6 +4,13 @@ import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import { Input } from "@domicile-desktop/component-library/Input";
 import { Select } from "@domicile-desktop/component-library/Select";
 import { Switch } from "@domicile-desktop/component-library/Switch";
+import {
+  changedExtensions,
+  idsOf,
+  overrideAt,
+  profileExtensionsPath,
+  switchedExtensions,
+} from "@domicile-desktop/sdk/desktop/config";
 import { ArrowDownIcon } from "@phosphor-icons/react/dist/ssr/ArrowDown";
 import { ArrowUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowUp";
 import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
@@ -20,7 +27,6 @@ import {
   isProfileSite,
   PROFILE_COLORS,
   withDefault,
-  withExtensionSwitched,
   withNewProfile,
   withoutProfile,
   withProfileChanged,
@@ -40,6 +46,7 @@ import type {
 import { Notice } from "../Notice";
 import { Page } from "../Page";
 import { SettingRow } from "../SettingRow";
+import { useTemporaryChanges } from "../temporary-changes";
 import { useBrowserProfiles } from "../useBrowserProfiles";
 import { useExtensionsById } from "../useExtensionNames";
 
@@ -73,8 +80,90 @@ export const ProfilesPage = ({
 }: Props) => {
   const { failure, listed, reload } = useBrowserProfiles(host);
   const installed = useExtensionsById(extensions, report);
+  const temporary = useTemporaryChanges();
   const sitesId = useId();
   const configurable = editor !== undefined && readOnly === undefined;
+  /**
+   * The config's list of the extensions profile `id` turns on, with any
+   * temporary change of it, and the file's own; `undefined` for a profile
+   * the config doesn't list them for.
+   */
+  const listsOf = (id: string) => {
+    // `null` in the config is no list.
+    const now = editor?.settings.browser.profiles[id]?.extensions ?? undefined;
+    if (now === undefined) {
+      return undefined;
+    } else {
+      const change = overrideAt(
+        temporary?.overrides ?? [],
+        profileExtensionsPath(id),
+      );
+      // With no change, the list shown is the file's; with one, the file may
+      // list none.
+      return {
+        now,
+        written: change === undefined ? now : idsOf(change.written),
+      };
+    }
+  };
+  /** {@link listsOf}, for a profile the config lists extensions for. */
+  const listedIn = (id: string) => {
+    const lists = listsOf(id);
+    if (lists === undefined) {
+      throw new Error(`The config lists no extensions for ${id}`);
+    } else {
+      return lists;
+    }
+  };
+  /**
+   * Puts an extension in profile `id` back as the file switches it, keeping
+   * the list's other temporary switches temporary.
+   */
+  const resetListed = (id: string, extension: string) => {
+    const lists = listedIn(id);
+    if (temporary === undefined) {
+      throw new Error("A switch the config changed has no temporary changes");
+    } else {
+      temporary
+        .setForNow(
+          [...profileExtensionsPath(id)],
+          switchedExtensions(
+            lists.now,
+            extension,
+            lists.written.includes(extension),
+            lists.written,
+          ),
+        )
+        .catch(report("Couldn't reset the switch"));
+    }
+  };
+  /**
+   * Switches an extension the config switches in profile `id`: with a
+   * temporary change of its list where the file can't change, or in the
+   * file's own list where it can, which ends the tray's temporary switches
+   * there rather than writing them into the file. `undefined` where neither
+   * can.
+   */
+  const switchListed =
+    editor !== undefined && (configurable || editor.temporary)
+      ? (id: string, extension: string, on: boolean) => {
+          const lists = listedIn(id);
+          if (editor.temporary) {
+            editor.set(
+              [...profileExtensionsPath(id)],
+              switchedExtensions(lists.now, extension, on, lists.written),
+            );
+          } else if (lists.written.includes(extension) === on) {
+            // The file has it so already: only a temporary switch differs.
+            resetListed(id, extension);
+          } else {
+            editor.set(
+              [...profileExtensionsPath(id)],
+              switchedExtensions(lists.written, extension, on, lists.written),
+            );
+          }
+        }
+      : undefined;
   /** Writes the config's `browser` as `change` makes it, if it can change. */
   const change = configurable
     ? (next: (browser: BrowserConfig) => BrowserConfig) => {
@@ -96,6 +185,11 @@ export const ProfilesPage = ({
       {(listed?.profiles ?? []).map((profile, at, profiles) => (
         <ProfileCard
           change={change}
+          changed={
+            temporary === undefined
+              ? []
+              : changedExtensions(temporary.overrides, profile.id)
+          }
           extensionIcon={(id) => installed.get(id)?.icon}
           extensionName={(id) => installed.get(id)?.name ?? id}
           first={at === 0}
@@ -103,11 +197,22 @@ export const ProfilesPage = ({
           isDefaultPrivate={profile.id === listed?.defaultPrivateProfile}
           key={profile.id}
           last={at === profiles.length - 1}
+          listed={listsOf(profile.id)?.now}
+          onReset={(extension) => {
+            resetListed(profile.id, extension);
+          }}
           onSwitch={(extension, enabled) => {
             host
               .setExtensionEnabled(extension, enabled, profile.id)
               .then(reload, report(`Couldn't switch it in ${profile.name}`));
           }}
+          onSwitchListed={
+            switchListed === undefined
+              ? undefined
+              : (extension, enabled) => {
+                  switchListed(profile.id, extension, enabled);
+                }
+          }
           profile={profile}
         />
       ))}
@@ -164,29 +269,44 @@ type ProfileCardProps = {
   extensionName: (id: string) => string;
   /** The extension's icon, or none when it has none. */
   extensionIcon: (id: string) => string | undefined;
-  /** Switches an extension the config doesn't lock. */
+  /** Switches an extension the config doesn't switch. */
   onSwitch: (extension: string, enabled: boolean) => void;
+  /**
+   * Switches one the config does, in its list or with a temporary change of
+   * it; `undefined` where neither can change.
+   */
+  onSwitchListed: ((extension: string, enabled: boolean) => void) | undefined;
+  /**
+   * The config's list of the extensions it turns on here, with any temporary
+   * change; `undefined` where the config lists none.
+   */
+  listed: readonly string[] | undefined;
+  /** Those a temporary change switches apart from the config. */
+  changed: readonly string[];
+  /** Puts one back as the config file switches it. */
+  onReset: (extension: string) => void;
 };
 
 /** One profile: its color, whether it is private, and its extensions. */
 const ProfileCard = ({
   change,
+  changed,
   extensionIcon,
   extensionName,
   first,
   isDefault,
   isDefaultPrivate,
   last,
+  listed,
+  onReset,
   onSwitch,
+  onSwitchListed,
   profile,
 }: ProfileCardProps) => {
   const nameId = useId();
   const profileColor = profile.color.toLowerCase();
   // Picked from the swatches, else from the well, which then shows it.
   const swatched = PROFILE_COLORS.some((color) => color === profileColor);
-  const on = profile.extensions
-    .filter(({ enabled }) => enabled)
-    .map(({ id }) => id);
   return (
     <section aria-labelledby={nameId} className={cardStyles}>
       <div className={cardHeadStyles}>
@@ -313,6 +433,11 @@ const ProfileCard = ({
             <ul className={extensionListStyles}>
               {profile.extensions.map(({ enabled, id, locked }) => {
                 const name = extensionName(id);
+                // What the config says shows at once; the engine follows it.
+                const on =
+                  locked && listed !== undefined
+                    ? listed.includes(id)
+                    : enabled;
                 return (
                   <li className={extensionStyles} key={id}>
                     <ExtensionIcon
@@ -320,23 +445,32 @@ const ProfileCard = ({
                       name={name}
                       size="sm"
                     />
-                    <span className={extensionNameStyles}>{name}</span>
+                    <span className={extensionTextStyles}>
+                      <span className={extensionNameStyles}>{name}</span>
+                      {changed.includes(id) && (
+                        <span className={changedStyles}>
+                          Changed from your config
+                          <Button
+                            label={`Reset ${name} in ${profile.name}`}
+                            onClick={() => {
+                              onReset(id);
+                            }}
+                            size="xs"
+                            variant="ghost"
+                          >
+                            Reset
+                          </Button>
+                        </span>
+                      )}
+                    </span>
                     <Switch
-                      checked={enabled}
-                      disabled={locked && change === undefined}
+                      checked={on}
+                      disabled={locked && onSwitchListed === undefined}
                       hideLabel
                       label={`${name} in ${profile.name}`}
                       onCheckedChange={(switched) => {
                         if (locked) {
-                          change?.((browser) =>
-                            withExtensionSwitched(
-                              browser,
-                              profile.id,
-                              id,
-                              switched,
-                              on,
-                            ),
-                          );
+                          onSwitchListed?.(id, switched);
                         } else {
                           onSwitch(id, switched);
                         }
@@ -624,8 +758,20 @@ const extensionStyles = flex({
   paddingInline: 2.5,
 });
 
-const extensionNameStyles = css({
+const extensionTextStyles = flex({
+  direction: "column",
   flexGrow: 1,
+  minInlineSize: 0,
+});
+
+const changedStyles = flex({
+  alignItems: "center",
+  color: "warning",
+  fontSize: "xs",
+  gap: 1.5,
+});
+
+const extensionNameStyles = css({
   fontSize: "sm",
   minInlineSize: 0,
   overflow: "hidden",

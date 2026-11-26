@@ -577,8 +577,10 @@ $ domicile load-extension ~/src/my-extension
 abcdefghijklmnopabcdefghijklmnop
 ```
 
-- An extension already loaded from that directory reloads in place and keeps
-  its id. Run it again after each edit.
+- A new extension starts off in every profile. Turn it on in the profiles you
+  choose in Settings › Profiles.
+- An extension already loaded from that directory reloads in place, keeps its
+  id and stays on where it was. Run it again after each edit.
 - The id follows the directory, with symlinks resolved, unless the manifest has
   a `key`. Without one, a link that points elsewhere loads a second extension
   beside the first.

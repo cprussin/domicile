@@ -97,6 +97,7 @@ export const App = ({ extensions, host }: Props) => {
           overrides: overrides.overrides,
           reset: overrides.reset,
           sections: "sections" in shown ? shown.sections : [],
+          setForNow: overrides.set,
           temporary: editor.temporary,
         };
 
@@ -122,6 +123,7 @@ export const App = ({ extensions, host }: Props) => {
               extensions={extensions}
               files={files}
               host={host}
+              onPage={setPage}
               page={page}
               report={report}
               state={state}
@@ -164,6 +166,8 @@ type PageContentProps = {
   editor: ConfigEditor | undefined;
   write: (file: Target, text: string) => Promise<void>;
   report: Report;
+  /** Opens another page. */
+  onPage: (page: PageId) => void;
 };
 
 /** The page `page` names. */
@@ -173,6 +177,7 @@ const PageContent = ({
   extensions,
   files,
   host,
+  onPage,
   page,
   report,
   state,
@@ -200,6 +205,9 @@ const PageContent = ({
           editor={editor}
           extensions={extensions}
           host={host}
+          onChooseProfiles={() => {
+            onPage(PageId.Profiles);
+          }}
           readOnly={state === undefined ? undefined : whyReadOnly(state)}
           report={report}
         />

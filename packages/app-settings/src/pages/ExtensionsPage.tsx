@@ -1,6 +1,7 @@
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Card } from "@domicile-desktop/component-library/Card";
 import { IconButton } from "@domicile-desktop/component-library/IconButton";
+import { ModalDialog } from "@domicile-desktop/component-library/ModalDialog";
 import { Select } from "@domicile-desktop/component-library/Select";
 import { Switch } from "@domicile-desktop/component-library/Switch";
 import { FolderOpenIcon } from "@phosphor-icons/react/dist/ssr/FolderOpen";
@@ -16,6 +17,7 @@ import type { ConfigEditor, Report } from "../config-editor";
 import { ExtensionIcon } from "../ExtensionIcon";
 import type { Extensions } from "../extensions";
 import type {
+  BrowserProfile,
   ExtensionSettings,
   InstalledExtension,
   SettingsHost,
@@ -25,6 +27,7 @@ import { Notice } from "../Notice";
 import { Page } from "../Page";
 import { SettingRow } from "../SettingRow";
 import { isSite } from "../sites";
+import { useBrowserProfiles } from "../useBrowserProfiles";
 import { useInstalled } from "../useInstalled";
 
 type Props = {
@@ -37,25 +40,40 @@ type Props = {
   extensions: Extensions;
   host: SettingsHost;
   report: Report;
+  /** Opens the Profiles page, where each profile switches its extensions. */
+  onChooseProfiles: () => void;
 };
 
 /**
- * The extensions in browser windows: switched on and off and configured
- * through the browser. The config's are installed and uninstalled through the
- * config; unpacked folders load, and others uninstall, through the engine.
- * A setting the config sets changes in the config, and the rest through the
- * engine.
+ * The extensions in browser windows, installed in every profile and switched
+ * on in each on the Profiles page. Each says which profiles it is on in, and
+ * its settings apply in every one. The config's are installed and
+ * uninstalled through the config; unpacked folders load, and others
+ * uninstall, through the engine, and a folder just loaded asks which
+ * profiles it goes on in. A setting the config sets changes in the config,
+ * and the rest through the engine.
  */
 export const ExtensionsPage = ({
   description,
   editor,
   extensions,
   host,
+  onChooseProfiles,
   readOnly,
   report,
   title,
 }: Props) => {
   const { failure, listed, reload } = useInstalled(extensions, host);
+  const profiles = useBrowserProfiles(host);
+  /** The extension just loaded, until the user says where it goes on. */
+  const [asking, setAsking] = useState<InstalledExtension | undefined>(
+    undefined,
+  );
+  /** The profiles extension `id` is on in. */
+  const onIn = (id: string) =>
+    (profiles.listed?.profiles ?? []).filter((profile) =>
+      profile.extensions.some((each) => each.id === id && each.enabled),
+    );
   const fromStore = editor?.settings.extensions.web_store ?? [];
   const configurable = editor !== undefined && readOnly === undefined;
   const store = configurable
@@ -87,6 +105,7 @@ export const ExtensionsPage = ({
               }
               extension={extension}
               key={extension.id}
+              onChooseProfiles={onChooseProfiles}
               onConfigure={(settings) => {
                 configure({
                   configurable,
@@ -100,11 +119,7 @@ export const ExtensionsPage = ({
                   settings,
                 });
               }}
-              onEnabled={(enabled) => {
-                extensions
-                  .setEnabled(extension.id, enabled)
-                  .then(reload, report(`Couldn't switch ${extension.name}`));
-              }}
+              onIn={onIn(extension.id)}
               onOptions={(url) => {
                 extensions
                   .openOptions(url)
@@ -136,8 +151,27 @@ export const ExtensionsPage = ({
                 .chooseFolder()
                 .then(async (directory) => {
                   if (directory !== undefined) {
-                    await host.loadUnpacked(directory);
+                    // Asked now, not read from the list shown, which may not
+                    // have loaded: Cancel uninstalls what it asks about.
+                    const before = new Set(
+                      (await extensions.list()).map(({ id }) => id),
+                    );
+                    const id = await host.loadUnpacked(directory);
                     reload();
+                    // A folder loaded again is the same extension, already
+                    // on where the user put it.
+                    if (!before.has(id)) {
+                      const loaded = (await extensions.list()).find(
+                        (each) => each.id === id,
+                      );
+                      if (loaded === undefined) {
+                        throw new Error(
+                          `The extension loaded from ${directory} isn't installed`,
+                        );
+                      } else {
+                        setAsking(loaded);
+                      }
+                    }
                   }
                 })
                 .catch(report("Couldn't load the folder"));
@@ -172,7 +206,106 @@ export const ExtensionsPage = ({
           </Card>
         </>
       )}
+      {asking !== undefined && (
+        <InstallDialog
+          extension={asking}
+          onCancel={() => {
+            setAsking(undefined);
+            host
+              .uninstallExtension(asking.id)
+              .then(reload, report(`Couldn't uninstall ${asking.name}`));
+          }}
+          onInstall={(chosen) => {
+            setAsking(undefined);
+            Promise.all(
+              chosen.map((profile) =>
+                host.setExtensionEnabled(asking.id, true, profile),
+              ),
+            ).then(
+              () => {
+                profiles.reload();
+                reload();
+              },
+              report(`Couldn't turn ${asking.name} on`),
+            );
+          }}
+          profiles={profiles.listed?.profiles ?? []}
+        />
+      )}
     </Page>
+  );
+};
+
+type InstallDialogProps = {
+  extension: InstalledExtension;
+  profiles: readonly BrowserProfile[];
+  /** Keep it, on in each of `chosen`, by id: none is fine. */
+  onInstall: (chosen: string[]) => void;
+  /** Don't keep it. */
+  onCancel: () => void;
+};
+
+/**
+ * Asks which profiles an extension just loaded goes on in, with none chosen
+ * to start: installing assumes none.
+ */
+const InstallDialog = ({
+  extension,
+  onCancel,
+  onInstall,
+  profiles,
+}: InstallDialogProps) => {
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
+  return (
+    <ModalDialog
+      footer={
+        <>
+          <Button onClick={onCancel} variant="ghost">
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              onInstall(
+                profiles.map(({ id }) => id).filter((id) => chosen.has(id)),
+              );
+            }}
+            variant="primary"
+          >
+            Install
+          </Button>
+        </>
+      }
+      onOpenChange={(open) => {
+        if (!open) {
+          onCancel();
+        }
+      }}
+      open
+      title={`Install ${extension.name}?`}
+    >
+      <div className={installStyles}>
+        <span className={nameStyles}>Turn it on in</span>
+        {profiles.map((profile) => (
+          <Switch
+            checked={chosen.has(profile.id)}
+            key={profile.id}
+            label={profile.name}
+            onCheckedChange={(on) => {
+              setChosen((was) => {
+                const next = new Set(was);
+                if (on) {
+                  next.add(profile.id);
+                } else {
+                  next.delete(profile.id);
+                }
+                return next;
+              });
+            }}
+          />
+        ))}
+        <p className={hintStyles}>Change this later in Settings › Profiles.</p>
+      </div>
+    </ModalDialog>
   );
 };
 
@@ -283,7 +416,10 @@ type ExtensionRowProps = {
   configured: ExtensionSettings;
   /** Whether the config can change. */
   configurable: boolean;
-  onEnabled: (enabled: boolean) => void;
+  /** The profiles it is on in. */
+  onIn: readonly BrowserProfile[];
+  /** Opens the Profiles page, where each profile switches it. */
+  onChooseProfiles: () => void;
   onConfigure: (settings: ExtensionSettings) => void;
   onOptions: (url: string) => void;
   /** Uninstalls it, or `undefined` if the page cannot. */
@@ -292,20 +428,21 @@ type ExtensionRowProps = {
 };
 
 /**
- * One extension: its switch, the settings it can use while it is on, and its
- * options and uninstall buttons.
+ * One extension: the profiles it is on in, the settings it can use, which
+ * apply in every profile, and its options and uninstall buttons.
  */
 const ExtensionRow = ({
   configurable,
   configured,
   extension,
+  onChooseProfiles,
   onConfigure,
-  onEnabled,
+  onIn,
   onOptions,
   onUninstall,
   report,
 }: ExtensionRowProps) => {
-  const { description, enabled, icon, name, optionsUrl, version } = extension;
+  const { description, icon, name, optionsUrl, version } = extension;
   // The config's, where it sets one, over the engine's.
   const settings = {
     ...extension.settings,
@@ -331,15 +468,30 @@ const ExtensionRow = ({
               <span className={descriptionStyles}>{description}</span>
             )}
           </div>
-          <Switch
-            aria-labelledby={nameId}
-            checked={enabled}
-            label={enabled ? "On" : "Off"}
-            onCheckedChange={onEnabled}
-          />
         </div>
         <div className={bodyStyles}>
-          {enabled && settings.site_access !== undefined && (
+          <div className={onInStyles}>
+            {onIn.length === 0 ? (
+              <span className={hintStyles}>Not on in any profile</span>
+            ) : (
+              <ul aria-label={`${name} is on in`} className={chipsStyles}>
+                {onIn.map((profile) => (
+                  <li className={profileChipStyles} key={profile.id}>
+                    <span
+                      aria-hidden
+                      className={profileDotStyles}
+                      style={{ backgroundColor: profile.color }}
+                    />
+                    {profile.name}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Button onClick={onChooseProfiles} size="sm" variant="outline">
+              Choose profiles
+            </Button>
+          </div>
+          {settings.site_access !== undefined && (
             <SiteAccessSetting
               disabled={locked("site_access")}
               onChange={(siteAccess) => {
@@ -349,7 +501,7 @@ const ExtensionRow = ({
               value={settings.site_access}
             />
           )}
-          {enabled && settings.file_access !== undefined && (
+          {settings.file_access !== undefined && (
             <SettingRow title="Allow on local files">
               <Switch
                 checked={settings.file_access}
@@ -362,7 +514,7 @@ const ExtensionRow = ({
               />
             </SettingRow>
           )}
-          {enabled && settings.user_scripts !== undefined && (
+          {settings.user_scripts !== undefined && (
             <SettingRow
               hint="Lets it run scripts you add to it"
               title="Allow user scripts"
@@ -596,3 +748,29 @@ const chipStyles = flex({
 });
 
 const hintStyles = css({ color: "muted", fontSize: "xs", margin: 0 });
+
+const onInStyles = flex({
+  align: "center",
+  gap: 3,
+  justify: "space-between",
+  wrap: "wrap",
+});
+
+const profileChipStyles = flex({
+  align: "center",
+  border: "1px solid {colors.border}",
+  borderRadius: "full",
+  fontSize: "xs",
+  gap: 1.5,
+  paddingBlock: 0.5,
+  paddingInline: 2,
+});
+
+const profileDotStyles = css({
+  blockSize: 2,
+  borderRadius: "full",
+  flexShrink: 0,
+  inlineSize: 2,
+});
+
+const installStyles = flex({ direction: "column", gap: 3 });
