@@ -44,11 +44,19 @@ describe("TabEdge", () => {
     });
   });
 
-  // It grows out of and shrinks into the tab with the contents.
-  it("scales about the tab, as the contents do", () => {
+  // It grows out of the tab with the contents.
+  it("scales about the tab while opening, as the contents do", () => {
     // The tab's middle is (470, 36), 16px above the contents' top.
-    expect(drawn("closing-tab")).toHaveStyle({
+    expect(drawn("opening-tab")).toHaveStyle({
       transformOrigin: "450px -16px",
+    });
+  });
+
+  // It shrinks with the contents about the frame's middle.
+  it("scales about the frame while closing, as the contents do", () => {
+    // The frame's middle is (620, 436), 384px below the contents' top.
+    expect(drawn("closing-tab")).toHaveStyle({
+      transformOrigin: "600px 384px",
     });
   });
 

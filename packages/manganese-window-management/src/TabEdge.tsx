@@ -10,13 +10,13 @@ type Props = {
   motion: "closing-tab" | "opening-tab";
   /** The contents' box. */
   rect: Rect;
-  /** The tab the contents grow out of or shrink into. */
+  /** The tab the contents grow out of. */
   tab: Rect | undefined;
 };
 
 /**
- * The ring and shadow around a tab's contents while they grow out of or
- * shrink into its tab. The contents' own edge scales with them, too thin to
+ * The ring and shadow around a tab's contents while they grow out of its tab
+ * or close. The contents' own edge scales with them, too thin to
  * show them over a like tab, such as a terminal over a terminal.
  *
  * A layer of its own under the contents, at their depth: it scales with them

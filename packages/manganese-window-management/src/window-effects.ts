@@ -11,52 +11,6 @@
 import type { ShaderEffect } from "@domicile-desktop/sdk/desktop/effects";
 
 /**
- * Burns a closing window away in a noise pattern, with a lit rim at the
- * front. The noise is made here, from a hash, so it needs no image.
- *
- * `progress` runs 0 (whole) to 1 (gone). `originX` and `originY` are where,
- * in the element, the pattern is laid from, in CSS pixels: the frame's
- * middle, so the bar and contents dissolve as one (see `originAt`).
- */
-const DISSOLVE = `uniform shader content;
-uniform float2 size;
-uniform float progress;
-uniform float originX;
-uniform float originY;
-uniform float scale;
-
-float hash(float2 cell) {
-  float3 p = fract(cell.xyx * 0.1031);
-  p += dot(p, p.yzx + 33.33);
-  return fract((p.x + p.y) * p.z);
-}
-
-float noise(float2 at) {
-  float2 cell = floor(at);
-  float2 f = fract(at);
-  float2 u = f * f * (3.0 - 2.0 * f);
-  return mix(
-    mix(hash(cell), hash(cell + float2(1.0, 0.0)), u.x),
-    mix(hash(cell + float2(0.0, 1.0)), hash(cell + float2(1.0, 1.0)), u.x),
-    u.y
-  );
-}
-
-half4 main(float2 p) {
-  float2 at = (p / scale - float2(originX, originY)) / 28.0;
-  float grain = 0.55 * noise(at) + 0.3 * noise(at * 2.1) + 0.15 * noise(at * 4.3);
-  // Below 0 at the start and above 1 at the end, so nothing is gone at 0
-  // and nothing is left at 1.
-  float front = progress * 1.3 - 0.15;
-  float kept = smoothstep(front, front + 0.06, grain);
-  float rim = kept * (1.0 - smoothstep(front + 0.06, front + 0.14, grain));
-  half4 color = content.eval(p);
-  color.rgb = mix(color.rgb, color.aaa, half(rim * 0.45));
-  return color * half(kept);
-}
-`;
-
-/**
  * Smears a window along a workspace switch's slide, `reach` CSS pixels each
  * way. It samples inside the element only, so the edges stay put.
  */
@@ -102,9 +56,8 @@ half4 main(float2 p) {
 
 /** The window and overview effects, by name. */
 export const WINDOW_EFFECTS: Readonly<
-  Record<"depth-of-field" | "dissolve" | "slide-blur", ShaderEffect>
+  Record<"depth-of-field" | "slide-blur", ShaderEffect>
 > = {
   "depth-of-field": { sksl: DEPTH_OF_FIELD },
-  dissolve: { sksl: DISSOLVE },
   "slide-blur": { sksl: SLIDE_BLUR },
 };

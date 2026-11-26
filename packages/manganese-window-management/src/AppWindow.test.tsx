@@ -356,7 +356,6 @@ describe("AppWindow", () => {
       // The shell lists the effects that may draw; see `useShaderEffects`.
       it.each([
         ["closing", "", "windowClosing"],
-        ["closing", "dissolve", "windowDissolving"],
         ["arriving-from-end", "", "windowArrivingFromEnd "],
         ["arriving-from-end", "slide-blur", "windowArrivingFromEndBlurred"],
         ["leaving-to-start", "slide-blur", "windowLeavingToStartBlurred"],

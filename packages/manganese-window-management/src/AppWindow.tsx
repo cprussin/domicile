@@ -97,8 +97,8 @@ type Props = {
    */
   frame: Rect | undefined;
   /**
-   * Its tab in the strip, which its contents grow out of as it opens and
-   * shrink into as it closes (see {@link contentsScaledAbout}).
+   * Its tab in the strip, which its contents grow out of as it opens (see
+   * {@link contentsScaledAbout}).
    */
   tab?: Rect | undefined;
   /** Whether the shell considers this window focused. */

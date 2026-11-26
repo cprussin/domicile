@@ -69,20 +69,11 @@ describe("window keyframes", () => {
     });
   });
 
-  // `--origin-x` and `--origin-y` are the frame's middle, set by `originAt`,
-  // so every part of the window dissolves in one pattern.
-  it("dissolves a closing window from its frame's middle", () => {
-    expect(keyframes.windowDissolving).toStrictEqual({
-      "0%": {
-        filter:
-          "domicile-shader(dissolve, 0, var(--origin-x), var(--origin-y), var(--device-pixel-ratio))",
-        transform: "scale(1)",
-      },
-      "100%": {
-        filter:
-          "domicile-shader(dissolve, 1, var(--origin-x), var(--origin-y), var(--device-pixel-ratio))",
-        transform: "scale(0.96)",
-      },
+  // A short fade and a slight shrink: closing is quiet.
+  it("fades a closing window out as it shrinks a little", () => {
+    expect(keyframes.windowClosing).toStrictEqual({
+      "0%": { opacity: "1", transform: "scale(1)" },
+      "100%": { opacity: "0", transform: "scale(0.95)" },
     });
   });
 

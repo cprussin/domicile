@@ -37,12 +37,6 @@ describe("window effects", () => {
       ),
     ).toStrictEqual({
       "depth-of-field": ["float radius", "float scale"],
-      dissolve: [
-        "float progress",
-        "float originX",
-        "float originY",
-        "float scale",
-      ],
       "slide-blur": ["float reach", "float scale"],
     });
   });
@@ -52,7 +46,7 @@ describe("window effects", () => {
   it("draw only inside their element", () => {
     expect(
       Object.values(WINDOW_EFFECTS).map(({ outset }) => outset ?? 0),
-    ).toStrictEqual([0, 0, 0]);
+    ).toStrictEqual([0, 0]);
   });
 
   // `size` and `p` are in device pixels, and every length a motion passes

@@ -113,7 +113,6 @@ export const windowManagementPreset = definePreset({
   conditions: {
     extend: {
       depthOfField: "[data-shader-effects~=depth-of-field] &",
-      dissolve: "[data-shader-effects~=dissolve] &",
       slideBlur: "[data-shader-effects~=slide-blur] &",
     },
   },
@@ -174,12 +173,12 @@ export const windowManagementPreset = definePreset({
         },
         // The ring and shadow around a tab's contents (see `TabEdge`). They
         // scale with the contents, and fade in as the contents start to
-        // shrink or out as they finish growing, so the shadow never comes or
+        // close or out as they finish growing, so the shadow never comes or
         // goes in one frame.
         tabEdgeClosing: {
           "0%": { opacity: "0", transform: "scale(1)" },
           "30%": { opacity: "1" },
-          "100%": { opacity: "0", transform: "scale(0.15)" },
+          "100%": { opacity: "0", transform: "scale(0.95)" },
         },
         tabEdgeOpening: {
           "0%": { opacity: "0", transform: "scale(0.15)" },
@@ -190,24 +189,16 @@ export const windowManagementPreset = definePreset({
         windowArrivingFromEndBlurred: blurred(ARRIVING_FROM_END),
         windowArrivingFromStart: ARRIVING_FROM_START,
         windowArrivingFromStartBlurred: blurred(ARRIVING_FROM_START),
-        // The reverse of `windowOpening`. It shrinks only to 0.85 rather than
-        // to nothing; the fade does most of the work.
+        // A closing window, or a closing tab's contents: a fade and a slight
+        // shrink about the frame's middle. The fade does the work.
         windowClosing: {
           "0%": { opacity: "1", transform: "scale(1)" },
-          "100%": { opacity: "0", transform: "scale(0.85)" },
+          "100%": { opacity: "0", transform: "scale(0.95)" },
         },
         // A closing tab collapses along its strip: `--collapse-x` in a tabbed
-        // container, `--collapse-y` in a stack; see `collapsedAlong`.
-        //
-        // Only the bar plays it. A closing tab's contents shrink into it with
-        // `windowClosingIntoTab` over the tab drawn underneath at the same box
-        // (see `movingStyles`).
-        // A closing tab's contents shrink into its tab and fade, about the tab
-        // (see `contentsScaledAbout`).
-        windowClosingIntoTab: {
-          "0%": { opacity: "1", transform: "scale(1)" },
-          "100%": { opacity: "0", transform: "scale(0.15)" },
-        },
+        // container, `--collapse-y` in a stack; see `collapsedAlong`. Only
+        // the bar plays it; the contents play `windowClosing` over the tab
+        // they uncover (see `movingStyles`).
         windowClosingTab: {
           "0%": { opacity: "1", transform: "scale(1, 1)" },
           "100%": {
@@ -226,20 +217,6 @@ export const windowManagementPreset = definePreset({
         windowConcealing: {
           "0%": { zIndex: "-1" },
           "100%": { zIndex: "-1" },
-        },
-        // With the dissolve on, a closing window burns away in place of its
-        // fade, from its frame's middle (`--origin-*`, see `originAt`).
-        windowDissolving: {
-          "0%": {
-            filter:
-              "domicile-shader(dissolve, 0, var(--origin-x), var(--origin-y), var(--device-pixel-ratio))",
-            transform: "scale(1)",
-          },
-          "100%": {
-            filter:
-              "domicile-shader(dissolve, 1, var(--origin-x), var(--origin-y), var(--device-pixel-ratio))",
-            transform: "scale(0.96)",
-          },
         },
         windowDropping: SCRATCHPAD_DROP,
         // Holds a window at the tiled depth. The tab a close uncovers, and the
@@ -270,7 +247,8 @@ export const windowManagementPreset = definePreset({
           "0%": { opacity: "0", transform: TRAVELED_TO_085 },
           "100%": { opacity: "1", transform: "none" },
         },
-        // The reverse of `windowClosingIntoTab`.
+        // A new tab's contents grow out of its tab (see
+        // `contentsScaledAbout`).
         windowOpeningFromTab: {
           "0%": { opacity: "0", transform: "scale(0.15)" },
           "100%": { opacity: "1", transform: "scale(1)" },

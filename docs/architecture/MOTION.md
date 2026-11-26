@@ -231,8 +231,8 @@ smoke, cloth, swarm, liquid and cube.
 | Motion | Today | Refined | Shader effect |
 |---|---|---|---|
 | Open | fade, scale 0.85 → 1 | `springs.smooth` scale from the launcher or the window that opened it | none |
-| Close | fade, scale 1 → 0.85 | `springs.snappy` | dissolve |
-| Tab open / close | grow from or shrink into the tab (0.15) | spring, tab edge as a faded layer (no `box-shadow` keyframes) | none |
+| Close | fade, scale 1 → 0.85 | `springs.snappy`, fade and scale to 0.95; a tab's contents close the same way | none |
+| Tab open | grow from the tab (0.15) | spring, tab edge as a faded layer (no `box-shadow` keyframes) | none |
 | Tab switch | crossfade | short directional slide plus crossfade | ripple wipe, optional |
 | Send to workspace | fade, scale 0.6 | fly to the target in the workspace switcher | genie into the chip |
 | Workspace switch | slide one width, `emphasized` | spring, reversible mid-slide | slight motion blur along the slide |
@@ -332,7 +332,6 @@ Shader primitive (engine):
 
 Shader effects in manganese:
 
-- [x] dissolve on close
 - [ ] genie on send to workspace (needs mesh effects)
 - [ ] wobbly drag (needs mesh effects)
 - [x] workspace switch motion blur, overview depth of field

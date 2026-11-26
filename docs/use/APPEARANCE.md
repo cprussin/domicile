@@ -49,10 +49,9 @@ On **Appearance**:
 
 ### Window effects
 
-Closing windows dissolve, windows blur a little as a workspace switch slides
-them, the overview throws the wallpaper out of focus, the launcher's glass is
-frosted, and a theme change wipes in behind a soft edge. They are on unless
-motion is reduced.
+Windows blur a little as a workspace switch slides them, the overview throws
+the wallpaper out of focus, the launcher's glass is frosted, and a theme change
+wipes in behind a soft edge. They are on unless motion is reduced.
 
 To turn them off, turn off **Window effects** on Settings' Shell page, or:
 

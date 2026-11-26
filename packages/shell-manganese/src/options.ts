@@ -20,8 +20,8 @@ export const options = defineOptions({
     seconds: option.toggle("Show seconds", true),
   },
   effects: {
-    // Shader effects: closing windows dissolve, workspace switches blur,
-    // the overview blurs the wallpaper, and the theme wipe has a soft edge.
+    // Shader effects: workspace switches blur, the overview blurs the
+    // wallpaper, and the theme wipe has a soft edge.
     // Off under reduced motion whatever this says.
     windows: option.toggle("Window effects", true),
   },

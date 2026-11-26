@@ -11,7 +11,7 @@ _Unreleased_
 
 ![A workspace switch, the overview, a theme change and a window closing, with manganese's window effects](../media/release-window-effects.png)
 
-Closing windows dissolve, the overview blurs your wallpaper, and windows, panels and toasts move on springs that turn back midway when you change your mind. Turn the effects off with Window effects in Settings.
+Workspace switches blur as they slide, the overview blurs your wallpaper, and windows, panels and toasts move on springs that turn back midway when you change your mind. Turn the effects off with Window effects in Settings.
 
 [Window effects](APPEARANCE.md#window-effects)
 
@@ -23,6 +23,7 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 
 ### Also new
 
+- Closing a window or a tab is a short, quiet fade, and closing one tab of a group looks the same as closing the whole group.
 - A web page an agent opens is the agent's from the start: it opens in its own window beside what you're doing, not as a tab behind yours, and your keyboard stays where it was.
 - Extensions are switched on per profile, each with its own data. Installing one asks which profiles to turn it on in, the tray's menu switches it in the profile you're on, and its site and file access apply in every profile even while it's off. A config you can't write switches until the desktop restarts. [Extensions](BROWSER.md#extensions)
 - Settings changes a config file it can't write, such as home-manager's, until the desktop restarts or the file changes that setting. Each change says "Changed from your config", with Reset. [Configure](CONFIGURE.md)

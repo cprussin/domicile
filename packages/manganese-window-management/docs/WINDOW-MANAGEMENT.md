@@ -431,9 +431,6 @@ are switched on and motion is not reduced. Each takes the shell's
 `--device-pixel-ratio` last, so its lengths are CSS pixels. Each is a
 condition in `panda-preset.ts`:
 
-- `_dissolve`: a closing window burns away (`windowDissolving`) in place of
-  its fade, every part in one noise pattern laid from the frame's middle
-  (`--origin-x`, `--origin-y` from `originAt`).
 - `_slideBlur`: a workspace switch blurs each window along its slide, most
   where the spring moves fastest (`window*Blurred`).
 - `_depthOfField`: the overview's backdrop blurs the wallpaper under it, and
@@ -452,15 +449,15 @@ condition in `panda-preset.ts`:
   springs (`useSettling`'s `dragged`).
 - Moving a tab along its strip, by keys or by dragging: the tabs slide to
   their new places, the moved one included.
-- Closing: shrink and fade out.
+- Closing: fade out and shrink a little (`windowClosing`).
 - Sending to a workspace no screen shows: fly into the workspace's chip in
   the bar, shrinking to fit inside it, and fade out. The chip
   (`WORKSPACE_CHIP`) is measured once, as the window sets out. With no chip
   showing, the window shrinks in place instead. A tab group leaves as one:
   every part scales about the group's middle.
 - Closing a tab: it closes up toward its start as the tabs after it slide
-  back. Its contents shrink into the tab and fade out over the tab it
-  uncovers, as slowly as a new tab's grow out.
+  back. Its contents close as a closing window does, over the tab it
+  uncovers.
 - An opening or closing tab's contents carry a ring and shadow while they
   move, so they show over a tab that looks like them. They are a layer of
   their own under the contents (`TabEdge`) that scales with them and fades,

@@ -1221,13 +1221,7 @@ describe("Shell", () => {
         domicile.calls.flatMap(([method, name]) =>
           method === "registerShaderEffect" ? [name] : [],
         ),
-      ).toStrictEqual([
-        "depth-of-field",
-        "dissolve",
-        "slide-blur",
-        "frost",
-        "theme-wipe",
-      ]);
+      ).toStrictEqual(["depth-of-field", "slide-blur", "frost", "theme-wipe"]);
     });
   });
 

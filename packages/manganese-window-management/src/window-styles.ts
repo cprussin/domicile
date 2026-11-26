@@ -120,9 +120,9 @@ export const scaledAbout = (frame: Rect, rect: Rect): CSSProperties =>
 
 /**
  * Inline style setting a window's contents' `transform-origin`: the middle of
- * its whole `frame`, as {@link scaledAbout}, except for a tab opening or
- * closing. Its contents grow out of or shrink into its `tab` in the strip (see
- * `movingStyles`), so they are seen to come from or go to it.
+ * its whole `frame`, as {@link scaledAbout}, except for a tab opening. Its
+ * contents grow out of its `tab` in the strip (see `movingStyles`), so they
+ * are seen to come from it.
  */
 export const contentsScaledAbout = (
   motion: WindowMotion,
@@ -131,23 +131,12 @@ export const contentsScaledAbout = (
   rect: Rect,
 ): CSSProperties =>
   scaledAbout(
-    (motion === "closing-tab" || motion === "opening-tab") && tab !== undefined
-      ? tab
-      : frame,
+    motion === "opening-tab" && tab !== undefined ? tab : frame,
     rect,
   );
 
-/**
- * Inline style setting part of a window's `transform-origin` to `point`, and
- * `--origin-x` and `--origin-y` to it as numbers, where the dissolve lays its
- * noise from so it runs unbroken across the parts.
- */
-export const originAt = ({
-  x,
-  y,
-}: Point): CSSProperties & Record<`--${string}`, number> => ({
-  "--origin-x": x,
-  "--origin-y": y,
+/** Inline style setting part of a window's `transform-origin` to `point`. */
+export const originAt = ({ x, y }: Point): CSSProperties => ({
   transformOrigin: `${x.toString()}px ${y.toString()}px`,
 });
 
@@ -359,8 +348,8 @@ export const clippedAlong = (
  * `springs.snappy` for what leaves. Departures use `forwards` so the window
  * does not snap back before it is removed.
  *
- * A close dissolves, and a workspace switch blurs along its slide, while the
- * shell lists that effect (`_dissolve`, `_slideBlur`; see `WINDOW_EFFECTS`).
+ * A workspace switch blurs along its slide while the shell lists that effect
+ * (`_slideBlur`; see `WINDOW_EFFECTS`).
  */
 export const movingStyles = cva({
   compoundVariants: [
@@ -372,16 +361,16 @@ export const movingStyles = cva({
       },
       motion: ["closing-tab", "uncovering"],
     },
-    // A closing tab's contents shrink into its tab and fade, over the tab
-    // they uncover; a new tab's grow out of it over the tab they hide (see
-    // `contentsScaledAbout`). A fade alone, over the same box, reads as a tab
-    // switch. Slower than the bar, so the move to the strip is seen. Their
-    // ring and shadow are a layer of their own; see `TabEdge`.
+    // A closing tab's contents close as a closing window does, over the tab
+    // they uncover. A new tab's grow out of its tab over the tab they hide
+    // (see `contentsScaledAbout`); a fade alone, over the same box, reads as
+    // a tab switch. Their ring and shadow are a layer of their own; see
+    // `TabEdge`.
     {
       contents: true,
       css: {
         animationDuration: "token(durations.springs.snappy)",
-        animationName: "windowClosingIntoTab",
+        animationName: "windowClosing",
         animationTimingFunction: "token(easings.springs.snappy)",
       },
       motion: "closing-tab",
@@ -428,13 +417,7 @@ export const movingStyles = cva({
         animation:
           "windowArrivingFromStart {durations.springs.smooth} {easings.springs.smooth} var(--motion-delay, 0ms)",
       },
-      // With the dissolve on, it burns away instead of fading, slower so
-      // the pattern is seen.
       closing: {
-        _dissolve: {
-          animation:
-            "windowDissolving {durations.slower} {easings.in-out} forwards",
-        },
         animation:
           "windowClosing {durations.springs.snappy} {easings.springs.snappy} forwards",
       },
