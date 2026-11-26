@@ -1,0 +1,282 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 26 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a shader effect's arrays reach it while its filter
+ animates
+
+An array the shell set with updateShaderEffect() reached viz under a
+compositor animation of the element's filter only when something else
+rebuilt the compositor's property trees. The cloth close effect sets its
+points every frame under a compositor-run fade, so it drew the window
+flat and only faded it.
+
+Setting an array rebuilds the element's filters with it, and
+EffectPaintPropertyNode::State::ComputeChange calls any filter change a
+composited value while a filter animation runs on the compositor. A
+composited value schedules no PaintArtifactCompositor update, and Blink
+has no direct update for filters, so the cc effect node kept its old
+arrays until an unrelated full update wrote the node again.
+
+- A change to a shader effect's arrays under a running filter or
+  backdrop filter animation is a simple value.
+- PaintPropertyTreeBuilder writes a simple shader array change straight
+  to the cc effect node (PropertyTreeManager::DirectlyUpdateShaderArrays)
+  and commits, as it does opacity. The node keeps its filter values,
+  which the animation owns, and the animation keeps the arrays (patch
+  0274's EffectTree::OnFilterAnimated).
+- If the node cannot be found, the change makes a full update, which
+  writes the arrays too.
+
+Verified: not built. This repository cannot build Chromium; the engine job builds it on `crux`.
+---
+ .../core/paint/paint_property_tree_builder.cc | 46 ++++++++++++++++++-
+ .../compositing/paint_artifact_compositor.cc  |  9 ++++
+ .../compositing/paint_artifact_compositor.h   |  2 +
+ .../compositing/property_tree_manager.cc      | 24 ++++++++++
+ .../compositing/property_tree_manager.h       |  5 ++
+ .../paint/effect_paint_property_node.cc       | 46 ++++++++++++++++++-
+ 6 files changed, 128 insertions(+), 4 deletions(-)
+
+diff --git a/third_party/blink/renderer/core/paint/paint_property_tree_builder.cc b/third_party/blink/renderer/core/paint/paint_property_tree_builder.cc
+index 3a616e9..4ef378d 100644
+--- a/third_party/blink/renderer/core/paint/paint_property_tree_builder.cc
++++ b/third_party/blink/renderer/core/paint/paint_property_tree_builder.cc
+@@ -1285,6 +1285,35 @@ static void DirectlyUpdateCcOpacity(const LayoutObject& object,
+   }
+ }
+ 
++// Domicile: writes the arrays of the shader effects in `effect`'s filters to
++// its cc effect node, when they changed while the compositor animates the
++// filters (see EffectPaintPropertyNode's ComputeAnimatedFilterChange). A
++// running animation keeps them (cc::EffectTree::OnFilterAnimated). Downgrades
++// the change if successful, unless `opacity_may_have_changed`, which leaves it
++// for DirectlyUpdateCcOpacity(). If unsuccessful, the change is a full
++// PaintArtifactCompositor update.
++static void DirectlyUpdateCcShaderArrays(const LayoutObject& object,
++                                         const EffectPaintPropertyNode& effect,
++                                         bool filter_animation_on_compositor,
++                                         bool opacity_may_have_changed,
++                                         PaintPropertyChangeType& change_type) {
++  if (change_type != PaintPropertyChangeType::kChangedOnlySimpleValues ||
++      !filter_animation_on_compositor) {
++    return;
++  }
++  auto* paint_artifact_compositor =
++      object.GetFrameView()->GetPaintArtifactCompositor();
++  if (!paint_artifact_compositor ||
++      !paint_artifact_compositor->DirectlyUpdateShaderArrays(effect)) {
++    change_type = PaintPropertyChangeType::kChangedOnlyValues;
++    return;
++  }
++  if (!opacity_may_have_changed) {
++    change_type = PaintPropertyChangeType::kChangedOnlyCompositedValues;
++    effect.CompositorSimpleValuesUpdated();
++  }
++}
++
+ // TODO(dbaron): Remove this function when we can remove the
+ // BackfaceVisibilityInteropEnabled() check, and have the caller use
+ // CompositingReasonCombos::kDirectReasonsForTransformProperty directly.
+@@ -2377,6 +2406,13 @@ void FragmentPaintPropertyTreeBuilder::UpdateEffect() {
+ 
+       auto effective_change_type = properties_->UpdateEffect(
+           *parent_effect, std::move(state), animation_state);
++      // Domicile: a simple value change may be a backdrop filter's shader
++      // arrays, before opacity.
++      DirectlyUpdateCcShaderArrays(
++          object_, *properties_->Effect(),
++          animation_state.is_running_backdrop_filter_animation_on_compositor,
++          !animation_state.is_running_opacity_animation_on_compositor,
++          effective_change_type);
+       // If we have simple value change, which means opacity, we should try to
+       // directly update it on the PaintArtifactCompositor in order to avoid
+       // doing a full rebuild.
+@@ -2800,8 +2836,14 @@ void FragmentPaintPropertyTreeBuilder::UpdateFilter() {
+       EffectPaintPropertyNode::AnimationState animation_state;
+       animation_state.is_running_filter_animation_on_compositor =
+           object_.Style().IsRunningFilterAnimationOnCompositor();
+-      OnUpdateEffect(properties_->UpdateFilter(
+-          *context_.current_effect, std::move(state), animation_state));
++      auto effective_change_type = properties_->UpdateFilter(
++          *context_.current_effect, std::move(state), animation_state);
++      // Domicile: the only simple change to a filter is its shader arrays.
++      DirectlyUpdateCcShaderArrays(
++          object_, *properties_->Filter(),
++          animation_state.is_running_filter_animation_on_compositor,
++          /*opacity_may_have_changed=*/false, effective_change_type);
++      OnUpdateEffect(effective_change_type);
+ 
+       if (properties_->Filter()->NeedsPixelMovingFilterClipExpander()) {
+         OnUpdateClip(properties_->UpdatePixelMovingFilterClipExpander(
+diff --git a/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc b/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc
+index 1aa672a..9b4fd3d 100644
+--- a/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc
++++ b/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc
+@@ -1460,6 +1460,15 @@ bool PaintArtifactCompositor::DirectlyUpdateCompositedOpacityValue(
+   return false;
+ }
+ 
++bool PaintArtifactCompositor::DirectlyUpdateShaderArrays(
++    const EffectPaintPropertyNode& effect) {
++  if (CanDirectlyUpdateProperties()) {
++    return PropertyTreeManager::DirectlyUpdateShaderArrays(
++        *root_layer_->layer_tree_host(), effect);
++  }
++  return false;
++}
++
+ bool PaintArtifactCompositor::DirectlyUpdateScrollOffsetTransform(
+     const TransformPaintPropertyNode& transform) {
+   if (CanDirectlyUpdateProperties()) {
+diff --git a/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.h b/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.h
+index e9019a8..395fa4e 100644
+--- a/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.h
++++ b/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.h
+@@ -196,6 +196,8 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
+       Vector<std::unique_ptr<cc::ViewTransitionRequest>> requests);
+ 
+   bool DirectlyUpdateCompositedOpacityValue(const EffectPaintPropertyNode&);
++  // Domicile: see PropertyTreeManager::DirectlyUpdateShaderArrays().
++  bool DirectlyUpdateShaderArrays(const EffectPaintPropertyNode&);
+   bool DirectlyUpdateScrollOffsetTransform(const TransformPaintPropertyNode&);
+   bool DirectlyUpdateTransform(const TransformPaintPropertyNode&);
+   bool DirectlyUpdatePageScaleTransform(const TransformPaintPropertyNode&);
+diff --git a/third_party/blink/renderer/platform/graphics/compositing/property_tree_manager.cc b/third_party/blink/renderer/platform/graphics/compositing/property_tree_manager.cc
+index 415b149..02a4149 100644
+--- a/third_party/blink/renderer/platform/graphics/compositing/property_tree_manager.cc
++++ b/third_party/blink/renderer/platform/graphics/compositing/property_tree_manager.cc
+@@ -114,6 +114,30 @@ bool PropertyTreeManager::DirectlyUpdateCompositedOpacityValue(
+   return true;
+ }
+ 
++bool PropertyTreeManager::DirectlyUpdateShaderArrays(
++    cc::LayerTreeHost& host,
++    const EffectPaintPropertyNode& effect) {
++  auto* property_trees = host.property_trees();
++  int cc_id = effect.CcNodeId(property_trees->sequence_number());
++  if (cc_id == cc::kInvalidPropertyNodeId) {
++    return false;
++  }
++
++  auto& cc_effect = property_trees->effect_tree_mutable().MutableNode(cc_id);
++  if (const auto* filter = effect.Filter()) {
++    cc_effect.filters =
++        cc_effect.filters.WithShaderArraysOf(filter->AsCcFilterOperations());
++  }
++  if (const auto* backdrop_filter = effect.BackdropFilter()) {
++    cc_effect.backdrop_filters = cc_effect.backdrop_filters.WithShaderArraysOf(
++        backdrop_filter->AsCcFilterOperations());
++  }
++  cc_effect.SetEffectChanged(cc::DamageReason::kUntracked);
++  property_trees->effect_tree_mutable().set_needs_update(true);
++  host.SetNeedsCommit();
++  return true;
++}
++
+ bool PropertyTreeManager::DirectlyUpdateScrollOffsetTransform(
+     cc::LayerTreeHost& host,
+     const TransformPaintPropertyNode& transform) {
+diff --git a/third_party/blink/renderer/platform/graphics/compositing/property_tree_manager.h b/third_party/blink/renderer/platform/graphics/compositing/property_tree_manager.h
+index 2a3fdb7..1fa4cd7 100644
+--- a/third_party/blink/renderer/platform/graphics/compositing/property_tree_manager.h
++++ b/third_party/blink/renderer/platform/graphics/compositing/property_tree_manager.h
+@@ -162,6 +162,11 @@ class PropertyTreeManager {
+   static bool DirectlyUpdateCompositedOpacityValue(
+       cc::LayerTreeHost&,
+       const EffectPaintPropertyNode&);
++  // Domicile: gives the cc effect node of `effect` the arrays of the shader
++  // effects in its filters, keeping the node's filter values, which a running
++  // animation owns. Returns false if `effect` has no cc node.
++  static bool DirectlyUpdateShaderArrays(cc::LayerTreeHost&,
++                                         const EffectPaintPropertyNode&);
+   // Returns true if the compositor scroll offsets were updated, even if the
+   // values did not change. This function updates both the cc scroll tree scroll
+   // offset and the cc transform node's scroll offset.
+diff --git a/third_party/blink/renderer/platform/graphics/paint/effect_paint_property_node.cc b/third_party/blink/renderer/platform/graphics/paint/effect_paint_property_node.cc
+index f9f5e54..cf0bc28 100644
+--- a/third_party/blink/renderer/platform/graphics/paint/effect_paint_property_node.cc
++++ b/third_party/blink/renderer/platform/graphics/paint/effect_paint_property_node.cc
+@@ -6,6 +6,8 @@
+ 
+ #include "base/memory/values_equivalent.h"
+ #include "base/no_destructor.h"
++#include "cc/paint/filter_operation.h"
++#include "cc/paint/filter_operations.h"
+ #include "third_party/blink/renderer/platform/graphics/paint/clip_paint_property_node.h"
+ #include "third_party/blink/renderer/platform/graphics/paint/property_tree_state.h"
+ #include "third_party/blink/renderer/platform/heap/persistent.h"
+@@ -15,6 +17,39 @@ namespace blink {
+ 
+ namespace {
+ 
++// Domicile: whether a shader effect in `a` has other arrays than the same
++// effect at the same place in `b`.
++bool DomicileShaderArraysChanged(const CompositorFilterOperations& a,
++                                 const CompositorFilterOperations& b) {
++  const cc::FilterOperations& before = a.AsCcFilterOperations();
++  const cc::FilterOperations& after = b.AsCcFilterOperations();
++  for (size_t i = 0; i < before.size() && i < after.size(); ++i) {
++    const cc::FilterOperation& was = before.at(i);
++    const cc::FilterOperation& is = after.at(i);
++    if (was.type() == cc::FilterOperation::SHADER &&
++        is.type() == cc::FilterOperation::SHADER &&
++        was.shader_effect() == is.shader_effect() &&
++        was.shader_arrays() != is.shader_arrays()) {
++      return true;
++    }
++  }
++  return false;
++}
++
++// Domicile: the change to filters `a` to `b` while the compositor animates
++// them. Their values are the animation's, but a shader effect's arrays are
++// the page's: the compositor keeps the arrays the page last committed
++// (cc::EffectTree::OnFilterAnimated). A composited value schedules no
++// PaintArtifactCompositor update, so new arrays are a simple value, which
++// PaintPropertyTreeBuilder writes to the cc effect node directly.
++PaintPropertyChangeType ComputeAnimatedFilterChange(
++    const CompositorFilterOperations& a,
++    const CompositorFilterOperations& b) {
++  return DomicileShaderArraysChanged(a, b)
++             ? PaintPropertyChangeType::kChangedOnlySimpleValues
++             : PaintPropertyChangeType::kChangedOnlyCompositedValues;
++}
++
+ PaintPropertyChangeType ComputeFilterChange(
+     const EffectPaintPropertyNode::FilterInfo* a,
+     const EffectPaintPropertyNode::FilterInfo* b,
+@@ -30,7 +65,7 @@ PaintPropertyChangeType ComputeFilterChange(
+   }
+   if (a->operations != b->operations) {
+     return is_running_filter_animation_on_compositor
+-               ? PaintPropertyChangeType::kChangedOnlyCompositedValues
++               ? ComputeAnimatedFilterChange(a->operations, b->operations)
+                : PaintPropertyChangeType::kChangedOnlyValues;
+   }
+   return PaintPropertyChangeType::kUnchanged;
+@@ -47,7 +82,7 @@ PaintPropertyChangeType ComputeBackdropFilterChange(
+     return PaintPropertyChangeType::kChangedOnlyValues;
+   if (a->operations != b->operations) {
+     return is_running_backdrop_filter_animation_on_compositor
+-               ? PaintPropertyChangeType::kChangedOnlyCompositedValues
++               ? ComputeAnimatedFilterChange(a->operations, b->operations)
+                : PaintPropertyChangeType::kChangedOnlyValues;
+   }
+   return PaintPropertyChangeType::kUnchanged;
+@@ -98,6 +133,13 @@ PaintPropertyChangeType EffectPaintPropertyNode::State::ComputeChange(
+     return PaintPropertyChangeType::kChangedOnlyValues;
+   }
+ 
++  // Domicile: a shader effect's arrays changed under a filter animation.
++  if (filter_changed == PaintPropertyChangeType::kChangedOnlySimpleValues ||
++      backdrop_filter_changed ==
++          PaintPropertyChangeType::kChangedOnlySimpleValues) {
++    return PaintPropertyChangeType::kChangedOnlySimpleValues;
++  }
++
+   if (opacity_change_is_simple &&
+       !animation_state.is_running_opacity_animation_on_compositor) {
+     return PaintPropertyChangeType::kChangedOnlySimpleValues;
+-- 
+2.43.0
+
