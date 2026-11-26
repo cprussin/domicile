@@ -3,6 +3,10 @@
 
 #include "components/domicile/browser/site_privacy.h"
 
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "components/prefs/testing_pref_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -30,6 +34,16 @@ TEST_F(SitePrivacyTest, ASiteKeepsItsOwnModeUntilItIsRemoved) {
   EXPECT_EQ(SiteAdBlocking(prefs_, "example.org"), std::nullopt);
   SetSiteAdBlocking(prefs_, "example.com", std::nullopt);
   EXPECT_EQ(SiteAdBlocking(prefs_, "example.com"), std::nullopt);
+}
+
+TEST_F(SitePrivacyTest, ListsEachSiteWithItsOwnModeBySite) {
+  EXPECT_TRUE(SitesWithOwnAdBlocking(prefs_).empty());
+  SetSiteAdBlocking(prefs_, "nytimes.com", AdBlockingMode::kOff);
+  SetSiteAdBlocking(prefs_, "chase.com", AdBlockingMode::kStrict);
+  const std::vector<std::pair<std::string, AdBlockingMode>> expected = {
+      {"chase.com", AdBlockingMode::kStrict},
+      {"nytimes.com", AdBlockingMode::kOff}};
+  EXPECT_EQ(SitesWithOwnAdBlocking(prefs_), expected);
 }
 
 TEST_F(SitePrivacyTest, APagesSiteIsItsRegistrableDomain) {

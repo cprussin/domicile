@@ -20,6 +20,7 @@ import type {
   KnownAgents,
   Monitor,
   SettingsFiles,
+  SitePrivacy,
   WebAgents,
 } from "./host";
 
@@ -126,9 +127,12 @@ const renderApp = async (
     options,
     profiles,
     refuse,
+    sitePrivacy,
     webAgents,
     writable = true,
   }: {
+    /** The sites with their own ad blocking; none by default. */
+    sitePrivacy?: SitePrivacy[];
     /** Agents on the web; none by default. */
     webAgents?: WebAgents;
     /** The agents in now and remembered; none by default. */
@@ -158,6 +162,7 @@ const renderApp = async (
     profiles: structuredClone(profiles),
     refuse,
     siteData: structuredClone(SITE_DATA),
+    sitePrivacy: structuredClone(sitePrivacy),
     sites: structuredClone(SITES),
     webAgents: structuredClone(webAgents),
   });
@@ -589,6 +594,57 @@ describe(App, () => {
           ...BROWSER.profiles.private,
         });
       });
+    });
+
+    it("lists the sites whose protections the profile's windows changed", async () => {
+      const { host, user } = await renderApp("Privacy", {
+        config: { browser: BROWSER },
+        sitePrivacy: [
+          {
+            block_ads_and_trackers: "off",
+            profile: "personal",
+            site: "secure.chase.com",
+          },
+          {
+            block_ads_and_trackers: "strict",
+            profile: "personal",
+            site: "news.example",
+          },
+          { block_ads_and_trackers: "off", profile: "work", site: "espn.com" },
+        ],
+      });
+      const sites = await profileCard("Sites you changed");
+      expect(sites.getByText("Protections off")).toBeInTheDocument();
+      expect(sites.getByText("Ads and trackers: Strict")).toBeInTheDocument();
+      expect(sites.queryByText("espn.com")).toBeNull();
+
+      await user.click(
+        sites.getByRole("button", {
+          name: "Turn protections back on for secure.chase.com",
+        }),
+      );
+      await waitFor(() => {
+        expect(host.state.sitePrivacy).toEqual([
+          {
+            block_ads_and_trackers: "strict",
+            profile: "personal",
+            site: "news.example",
+          },
+          { block_ads_and_trackers: "off", profile: "work", site: "espn.com" },
+        ]);
+      });
+      await choose(user, "Profile", "Work");
+      expect(
+        (await profileCard("Sites you changed")).getByText("espn.com"),
+      ).toBeInTheDocument();
+    });
+
+    it("shows no sites card while no site has its own", async () => {
+      await renderApp("Privacy");
+      await profileCard("Website protections");
+      expect(
+        screen.queryByRole("region", { name: "Sites you changed" }),
+      ).toBeNull();
     });
 
     it("changes the protections of the profile chosen, keeping the others", async () => {

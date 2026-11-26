@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use domicile_config::AdBlocking;
 use domicile_launch::app_host::{answer, downloads, read_message, watched, write_message, Host};
 use domicile_launch::browser_profiles::{
     BrowserProfileList, ListedBrowserProfile, ListedBrowserSite, ProfileExtension,
@@ -16,6 +17,7 @@ use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
+use domicile_launch::site_privacy::{SitePrivacy, SitePrivacyChange};
 use domicile_protocol::{DisplayHdr, LogLevel, LogLevels, MonitorInfo};
 use serde_json::{json, Value};
 
@@ -198,6 +200,38 @@ fn site_permissions_are_the_desktops() {
             "type": "site_permissions",
             "defaults": {"camera": "ask"},
             "sites": [{"origin": "https://meet.example", "permission": "camera", "setting": "allow"}],
+        })
+    );
+}
+
+#[test]
+fn the_sites_ad_blocking_is_the_desktops() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 6, "type": "site_privacy"})),
+        json!({
+            "id": 6,
+            "type": "site_privacy",
+            "sites": [{"profile": "work", "site": "nytimes.com", "block_ads_and_trackers": "off"}],
+        })
+    );
+}
+
+#[test]
+fn a_sites_ad_blocking_is_set_on_the_desktop() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 8, "type": "set_site_privacy", "change": {"profile": "work", "site": "nytimes.com", "block_ads_and_trackers": null}})),
+        json!({"id": 8, "type": "stored"})
+    );
+    assert_eq!(
+        host.asked.take().last(),
+        Some(&Request::SetSitePrivacy {
+            change: SitePrivacyChange {
+                profile: "work".to_string(),
+                site: "nytimes.com".to_string(),
+                block_ads_and_trackers: None,
+            }
         })
     );
 }
@@ -790,6 +824,14 @@ impl Fake {
                             }],
                         }),
                         Request::SetSitePermission { .. } => Response::Stored,
+                        Request::SitePrivacy => Response::SitePrivacy {
+                            sites: vec![SitePrivacy {
+                                profile: "work".to_string(),
+                                site: "nytimes.com".to_string(),
+                                block_ads_and_trackers: AdBlocking::Off,
+                            }],
+                        },
+                        Request::SetSitePrivacy { .. } => Response::Stored,
                         Request::LogLevels | Request::ResetLogLevels => Response::LogLevels {
                             levels: LogLevels::default(),
                         },

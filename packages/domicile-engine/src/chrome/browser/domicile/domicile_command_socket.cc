@@ -48,9 +48,11 @@
 #include "components/domicile/browser/shell_window_wait.h"
 #include "components/domicile/browser/shortcut_registry.h"
 #include "components/domicile/browser/site_permissions.h"
+#include "components/domicile/browser/site_privacy.h"
 #include "components/domicile/browser/web_view_guest.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/permissions/permissions_client.h"
+#include "components/prefs/pref_service.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -538,6 +540,100 @@ void ListDeskBrowserProfiles(BrowserProfilesFound found) {
   }
 }
 
+// The prefs browser profile `id` keeps its sites' ad blocking in
+// (site_privacy.h): its Chrome profile's, or a private profile's open
+// off-the-record one's. Null for one the desk does not have or that has not
+// loaded, and for a private profile with no page open, which keeps none.
+PrefService* SitePrivacyPrefsOf(const std::string& id) {
+  BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+  const BrowserProfile* listed = registry.profiles().Find(id);
+  Profile* profile = registry.ExtensionsProfileOf(id);
+  if (listed == nullptr || profile == nullptr) {
+    return nullptr;
+  }
+  if (!listed->is_private) {
+    return profile->GetPrefs();
+  }
+  if (!profile->HasPrimaryOTRProfile()) {
+    return nullptr;
+  }
+  return profile->GetPrimaryOTRProfile(/*create_if_needed=*/false)->GetPrefs();
+}
+
+// Every profile's sites with their own ad blocking, once each profile has
+// loaded, as ListDeskBrowserProfiles waits.
+void ListDeskSitePrivacy(SitePrivacyFound found) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Profile* profile = ShellProfile();
+  if (profile == nullptr) {
+    std::move(found).Run(std::nullopt);
+    return;
+  }
+  BrowserProfileRegistry& registry = BrowserProfileRegistry::Get();
+  const std::vector<BrowserProfile>& profiles = registry.profiles().profiles;
+  base::RepeatingClosure loaded = base::BarrierClosure(
+      profiles.size(),
+      base::BindOnce(
+          [](SitePrivacyFound found) {
+            // The shell may have gone while they loaded.
+            if (ShellProfile() == nullptr) {
+              std::move(found).Run(std::nullopt);
+              return;
+            }
+            std::vector<StoredSitePrivacy> sites;
+            for (const BrowserProfile& each :
+                 BrowserProfileRegistry::Get().profiles().profiles) {
+              const PrefService* prefs = SitePrivacyPrefsOf(each.id);
+              if (prefs == nullptr) {
+                continue;
+              }
+              for (const auto& [site, mode] : SitesWithOwnAdBlocking(*prefs)) {
+                sites.push_back({.profile = each.id,
+                                 .site = site,
+                                 .block_ads_and_trackers = mode});
+              }
+            }
+            std::move(found).Run(std::move(sites));
+          },
+          std::move(found)));
+  // Copied: the compositor may send new profiles while one loads.
+  std::vector<std::string> ids;
+  for (const BrowserProfile& each : profiles) {
+    ids.push_back(each.id);
+  }
+  for (const std::string& id : ids) {
+    registry.WhenLoaded(*profile->GetOriginalProfile(), id, loaded);
+  }
+}
+
+base::expected<void, std::string> SetDeskSitePrivacy(
+    const std::string& browser_profile,
+    const std::string& site,
+    std::optional<AdBlockingMode> mode) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (ShellProfile() == nullptr) {
+    return base::unexpected(
+        "this engine has no shell, and so no profiles to keep sites in");
+  }
+  if (BrowserProfileRegistry::Get().profiles().Find(browser_profile) ==
+      nullptr) {
+    return base::unexpected(base::StrCat(
+        {"the desk has no browser profile \"", browser_profile, "\""}));
+  }
+  PrefService* prefs = SitePrivacyPrefsOf(browser_profile);
+  if (prefs == nullptr) {
+    return base::unexpected(base::StrCat(
+        {"browser profile \"", browser_profile,
+         "\" keeps no sites now: it has not loaded, or it is private with no "
+         "window open"}));
+  }
+  SetSiteAdBlocking(*prefs, site, mode);
+  VLOG(1) << "domicile: ad blocking for " << site << " in browser profile "
+          << browser_profile << " set to "
+          << (mode ? AdBlockingModeName(*mode) : "the profile's");
+  return base::ok();
+}
+
 base::expected<void, std::string> PinDeskBrowserSite(
     const std::string& site,
     const std::string& browser_profile) {
@@ -706,6 +802,8 @@ void AnswerOnUIThread(const std::string& line, CommandReply reply) {
                  .has_browser_profile = &DeskHasBrowserProfile,
                  .list_site_permissions = &ListShellSitePermissions,
                  .set_site_permission = &SetShellSitePermission,
+                 .list_site_privacy = &ListDeskSitePrivacy,
+                 .set_site_privacy = &SetDeskSitePrivacy,
                  .load_unpacked = &LoadUnpackedIntoTheShellProfile,
                  .uninstall_extension = &UninstallFromTheShellProfile,
                  .list_config_extensions =

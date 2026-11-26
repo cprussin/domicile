@@ -3,14 +3,15 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use domicile_config::AdBlocking;
 use domicile_launch::command::{
     browser_profiles_line, browser_windows_line, clear_browsing_data_line, clear_site_data_line,
     config_extensions_line, configure_extension_line, delete_history_line, devtools_line,
     disable_while_typing_line, extensions_line, history_line, load_shell_line, load_unpacked_line,
     media_devices_line, open_app_line, open_url_line, pin_browser_site_line, reply, run_app_line,
     set_extension_enabled_line, set_log_levels_line, set_media_device_line,
-    set_site_permission_line, site_data_line, site_permissions_line, uninstall_extension_line,
-    visits_line, Reply,
+    set_site_permission_line, set_site_privacy_line, site_data_line, site_permissions_line,
+    site_privacy_line, uninstall_extension_line, visits_line, Reply,
 };
 use domicile_launch::control::AppReuse;
 use domicile_launch::extensions::{
@@ -21,6 +22,7 @@ use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
+use domicile_launch::site_privacy::{SitePrivacy, SitePrivacyChange};
 
 #[test]
 fn a_load_shell_names_the_version_it_is_written_in() {
@@ -158,6 +160,55 @@ fn a_question_about_site_permissions_names_the_version_it_is_written_in() {
     assert_eq!(
         site_permissions_line(),
         "{\"type\":\"site_permissions\",\"version\":1}\n"
+    );
+}
+
+#[test]
+fn a_question_about_the_sites_ad_blocking_names_the_version_it_is_written_in() {
+    assert_eq!(
+        site_privacy_line(),
+        "{\"type\":\"site_privacy\",\"version\":1}\n"
+    );
+}
+
+#[test]
+fn a_sites_ad_blocking_is_set_by_profile_and_site() {
+    assert_eq!(
+        set_site_privacy_line(&SitePrivacyChange {
+            profile: "work".to_string(),
+            site: "nytimes.com".to_string(),
+            block_ads_and_trackers: Some(AdBlocking::Strict),
+        }),
+        "{\"type\":\"set_site_privacy\",\"version\":1,\"profile\":\"work\",\"site\":\"nytimes.com\",\"block_ads_and_trackers\":\"strict\"}\n"
+    );
+}
+
+#[test]
+fn a_sites_ad_blocking_goes_back_to_the_profiles_with_null() {
+    // The engine refuses a request without the field, so none is sent as
+    // `null`, not left out.
+    assert_eq!(
+        set_site_privacy_line(&SitePrivacyChange {
+            profile: "work".to_string(),
+            site: "nytimes.com".to_string(),
+            block_ads_and_trackers: None,
+        }),
+        "{\"type\":\"set_site_privacy\",\"version\":1,\"profile\":\"work\",\"site\":\"nytimes.com\",\"block_ads_and_trackers\":null}\n"
+    );
+}
+
+#[test]
+fn the_sites_ad_blocking_is_read_from_the_engines_answer() {
+    assert_eq!(
+        reply("{\"type\":\"site_privacy\",\"sites\":[{\"profile\":\"work\",\"site\":\"nytimes.com\",\"block_ads_and_trackers\":\"off\"}]}")
+            .expect("a reply"),
+        Reply::SitePrivacy {
+            sites: vec![SitePrivacy {
+                profile: "work".to_string(),
+                site: "nytimes.com".to_string(),
+                block_ads_and_trackers: AdBlocking::Off,
+            }]
+        }
     );
 }
 

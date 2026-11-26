@@ -33,6 +33,7 @@ use crate::recent_log::{local_offset, Said};
 use crate::shell_path::{Shell, ShellFiles};
 use crate::site_data::SiteData;
 use crate::site_permissions::{SitePermission, SiteSettings};
+use crate::site_privacy::{SitePrivacy, SitePrivacyChange};
 
 /// The file a built shell's declared options are written to, beside its
 /// module. See `docs/WRITING-A-SHELL.md#options`.
@@ -135,6 +136,12 @@ pub enum Request {
     SitePermissions,
     /// Store one site's setting in the engine.
     SetSitePermission { site: SitePermission },
+    /// Report every browser profile's sites with their own ad blocking. The
+    /// engine keeps them.
+    SitePrivacy,
+    /// Set one site's ad blocking in a browser profile, or go back to the
+    /// profile's.
+    SetSitePrivacy { change: SitePrivacyChange },
     /// Load the unpacked extension in this absolute directory into every
     /// browser profile. It stays until uninstalled.
     LoadUnpacked { directory: PathBuf },
@@ -452,6 +459,9 @@ pub enum Response {
     /// Answers `site_permissions`.
     SitePermissions(SiteSettings),
 
+    /// Answers `site_privacy`.
+    SitePrivacy { sites: Vec<SitePrivacy> },
+
     /// The engine stored the site's setting, the preferred media device or
     /// whether the extension is enabled.
     Stored,
@@ -649,6 +659,18 @@ pub type SitePermissions<'a> = &'a dyn Fn() -> Result<SiteSettings, String>;
 /// [`crate::command_socket::set_site_permission`] in a desktop; a closure in
 /// tests.
 pub type SetSitePermission<'a> = &'a dyn Fn(&SitePermission) -> Result<(), String>;
+
+/// Asks the engine for every browser profile's sites with their own ad
+/// blocking.
+///
+/// [`crate::command_socket::site_privacy`] in a desktop; a closure in tests.
+pub type ListSitePrivacy<'a> = &'a dyn Fn() -> Result<Vec<SitePrivacy>, String>;
+
+/// Tells the engine to set a site's ad blocking in a browser profile.
+///
+/// [`crate::command_socket::set_site_privacy`] in a desktop; a closure in
+/// tests.
+pub type SetSitePrivacy<'a> = &'a dyn Fn(&SitePrivacyChange) -> Result<(), String>;
 
 /// Tells the engine to load an unpacked extension, returning its id.
 ///
@@ -914,6 +936,8 @@ pub struct Desktop<'a> {
     pub send: SendShell<'a>,
     pub permissions: SitePermissions<'a>,
     pub set_permission: SetSitePermission<'a>,
+    pub site_privacy: ListSitePrivacy<'a>,
+    pub set_site_privacy: SetSitePrivacy<'a>,
     pub load_unpacked: LoadUnpacked<'a>,
     pub uninstall_extension: UninstallExtension<'a>,
     pub config_extensions: ConfigExtensions<'a>,
@@ -1109,6 +1133,16 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::SetSitePermission { site }) => {
             to_line(&match (desktop.set_permission)(&site) {
+                Ok(()) => Response::Stored,
+                Err(why) => Response::Refused { why },
+            })
+        }
+        Ok(Request::SitePrivacy) => to_line(&match (desktop.site_privacy)() {
+            Ok(sites) => Response::SitePrivacy { sites },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::SetSitePrivacy { change }) => {
+            to_line(&match (desktop.set_site_privacy)(&change) {
                 Ok(()) => Response::Stored,
                 Err(why) => Response::Refused { why },
             })

@@ -13,6 +13,7 @@ import type {
   SettingsFiles,
   SettingsHost,
   SiteData,
+  SitePrivacy,
   SiteSettings,
   Target,
   WebAgents,
@@ -28,6 +29,8 @@ export type FakeHostState = {
   /** The extensions in the profile, which switches change. */
   installed: InstalledExtension[];
   sites: SiteSettings;
+  /** The sites with their own ad blocking; none by default. */
+  sitePrivacy?: SitePrivacy[] | undefined;
   /** The hosts that store data, which clearing one removes. */
   siteData: SiteData[];
   media: MediaDevices;
@@ -254,6 +257,23 @@ export const fakeHost = (state: FakeHostState) => {
       };
       return Promise.resolve();
     },
+    setSitePrivacy: (change) => {
+      const others = (state.sitePrivacy ?? []).filter(
+        (kept) => kept.profile !== change.profile || kept.site !== change.site,
+      );
+      state.sitePrivacy =
+        change.block_ads_and_trackers === null
+          ? others
+          : [
+              ...others,
+              {
+                block_ads_and_trackers: change.block_ads_and_trackers,
+                profile: change.profile,
+                site: change.site,
+              },
+            ];
+      return Promise.resolve();
+    },
     signOutWebAgent: (client) => {
       if (state.webAgents !== undefined) {
         state.webAgents.signedIn = state.webAgents.signedIn.filter(
@@ -264,6 +284,8 @@ export const fakeHost = (state: FakeHostState) => {
     },
     siteData: () => Promise.resolve(structuredClone(state.siteData)),
     sitePermissions: () => Promise.resolve(structuredClone(state.sites)),
+    sitePrivacy: () =>
+      Promise.resolve(structuredClone(state.sitePrivacy ?? [])),
     stopAgent: (session) => {
       if (state.agents !== undefined) {
         state.agents.connected = state.agents.connected.filter(

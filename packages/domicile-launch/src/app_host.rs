@@ -22,6 +22,10 @@
 //!   {"id":3,"type":"site_permissions","defaults":{…},"sites":[…]}
 //! {"id":4,"type":"set_site_permission","site":{…}}
 //!   {"id":4,"type":"stored"}
+//! {"id":4,"type":"site_privacy"}
+//!   {"id":4,"type":"site_privacy","sites":[{"profile":"work","site":"nytimes.com","block_ads_and_trackers":"off"}]}
+//! {"id":4,"type":"set_site_privacy","change":{"profile":"work","site":"nytimes.com","block_ads_and_trackers":null}}
+//!   {"id":4,"type":"stored"}
 //! {"id":5,"type":"load_unpacked","directory":"~/src/my-extension"}
 //!   {"id":5,"type":"loaded_unpacked","extension":"…"}
 //! {"id":6,"type":"uninstall_extension","extension":"…"}
@@ -105,6 +109,7 @@ use crate::history::{BrowsingData, HistoryQuery};
 use crate::media_devices::MediaKind;
 use crate::shell_options::problems;
 use crate::site_permissions::SitePermission;
+use crate::site_privacy::SitePrivacyChange;
 use domicile_protocol::{ConfigKey, LogLevel, LogLevels};
 
 /// The largest message the host reads or writes. A page's file, or a page of
@@ -232,6 +237,10 @@ enum AppRequest {
     SitePermissions,
     SetSitePermission {
         site: SitePermission,
+    },
+    SitePrivacy,
+    SetSitePrivacy {
+        change: SitePrivacyChange,
     },
     ConfigOverrides,
     SetConfigOverride {
@@ -371,6 +380,19 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
         },
         AppRequest::SetSitePermission { site } => {
             match (host.ask)(&Request::SetSitePermission { site })? {
+                Response::Stored => Ok(json!({"type": "stored"})),
+                other => Err(refusal_or_surprise(other)),
+            }
+        }
+        AppRequest::SitePrivacy => match (host.ask)(&Request::SitePrivacy)? {
+            Response::SitePrivacy { sites } => Ok(json!({
+                "type": "site_privacy",
+                "sites": sites,
+            })),
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::SetSitePrivacy { change } => {
+            match (host.ask)(&Request::SetSitePrivacy { change })? {
                 Response::Stored => Ok(json!({"type": "stored"})),
                 other => Err(refusal_or_surprise(other)),
             }

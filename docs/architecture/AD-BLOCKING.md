@@ -125,7 +125,7 @@ network error. `--vmodule=domicile_ad_blocking=1` logs each one.
 - [x] each page's count, and a mode for its site or its window, for any
       shell (`view.blockAdsAndTrackers`, `setBlockAdsAndTrackers`)
 - [x] manganese's shield in the address bar, with "This window only"
-- [ ] Settings lists the sites with their own mode
+- [x] Settings lists the sites with their own mode (`site_privacy`)
 - [ ] cosmetic filters, scriptlets, cookie banners and tracking removed from
       links
 - [ ] fingerprinting protection

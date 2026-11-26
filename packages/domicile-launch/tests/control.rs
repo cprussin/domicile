@@ -4,6 +4,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use domicile_config::AdBlocking;
 use domicile_host::system::DisplayPower;
 use domicile_launch::command::BrowserWindowLayout;
 use domicile_launch::control::{
@@ -20,6 +21,7 @@ use domicile_launch::recent_log::Said;
 use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
+use domicile_launch::site_privacy::{SitePrivacy, SitePrivacyChange};
 use domicile_protocol::{
     AdaptiveSync, ChromeMessage, ConfigKey, ConfigOverride, DeskRect, DeskShot, DesktopStatus,
     DisplayChange, DisplayHdr, DisplayInfo, DisplayTransform, EmulatedInput, InputConnection,
@@ -1017,6 +1019,55 @@ fn a_desktop_told_to_set_a_site_permission_tells_the_engine() {
     assert_eq!(answered, Response::Stored);
 }
 
+fn nytimes_off_in(profile: &str) -> SitePrivacy {
+    SitePrivacy {
+        profile: profile.to_string(),
+        site: "nytimes.com".to_string(),
+        block_ads_and_trackers: AdBlocking::Off,
+    }
+}
+
+#[test]
+fn a_desktop_asked_for_the_sites_ad_blocking_asks_the_engine() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"site_privacy\"}",
+            &Desktop {
+                site_privacy: &|| Ok(vec![nytimes_off_in("work")]),
+                ..nothing_dialed()
+            }
+        ),
+        Response::SitePrivacy {
+            sites: vec![nytimes_off_in("work")]
+        }
+    );
+}
+
+#[test]
+fn a_desktop_told_to_clear_a_sites_ad_blocking_tells_the_engine() {
+    let told = RefCell::new(None);
+    let answered = reply_to(
+        "{\"type\":\"set_site_privacy\",\"change\":{\"profile\":\"work\",\"site\":\"nytimes.com\",\"block_ads_and_trackers\":null}}",
+        &Desktop {
+            set_site_privacy: &|change| {
+                told.replace(Some(change.clone()));
+                Ok(())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(
+        told.take(),
+        Some(SitePrivacyChange {
+            profile: "work".to_string(),
+            site: "nytimes.com".to_string(),
+            block_ads_and_trackers: None,
+        })
+    );
+    assert_eq!(answered, Response::Stored);
+}
+
 #[test]
 fn a_desktop_asked_for_media_devices_asks_the_engine() {
     assert_eq!(
@@ -1598,6 +1649,8 @@ fn nothing_dialed() -> Desktop<'static> {
         configure_extension: &|_, _| panic!("only configure_extension configures one"),
         set_media_device: &|_, _| panic!("only set_media_device prefers one"),
         set_permission: &|_| panic!("only set_site_permission sets one"),
+        site_privacy: &|| panic!("only site_privacy lists the sites' ad blocking"),
+        set_site_privacy: &|_| panic!("only set_site_privacy sets a site's ad blocking"),
         uninstall_extension: &|_| panic!("only uninstall_extension uninstalls one"),
         visits: &|_| panic!("only visits lists a page's visits"),
     }

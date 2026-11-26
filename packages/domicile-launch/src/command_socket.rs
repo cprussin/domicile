@@ -18,8 +18,9 @@ use crate::command::{
     disable_while_typing_line, extensions_line, history_line, load_shell_line, load_unpacked_line,
     media_devices_line, open_app_line, open_url_line, pin_browser_site_line, reply, run_app_line,
     set_extension_enabled_line, set_log_levels_line, set_media_device_line,
-    set_site_permission_line, site_data_line, site_permissions_line, uninstall_extension_line,
-    visits_line, BrowserWindowLayout, Reply, NO_SHELL_WINDOW,
+    set_site_permission_line, set_site_privacy_line, site_data_line, site_permissions_line,
+    site_privacy_line, uninstall_extension_line, visits_line, BrowserWindowLayout, Reply,
+    NO_SHELL_WINDOW,
 };
 use crate::control::AppReuse;
 use crate::extensions::{ExtensionSettings, InstalledExtension};
@@ -28,6 +29,7 @@ use crate::media_devices::{MediaDevices, MediaKind};
 use crate::shell_path::Shell;
 use crate::site_data::SiteData;
 use crate::site_permissions::{SitePermission, SiteSettings};
+use crate::site_privacy::{SitePrivacy, SitePrivacyChange};
 
 /// Why the engine did not carry out a command.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -155,6 +157,25 @@ pub fn set_site_permission(
         Reply::Set,
         patience,
     )
+}
+
+/// Asks the engine at `socket` for every browser profile's sites with their
+/// own ad blocking. The engine answers once each profile has loaded.
+pub fn site_privacy(socket: &Path, patience: Duration) -> Result<Vec<SitePrivacy>, CommandError> {
+    match answered(socket, &site_privacy_line(), patience)? {
+        Reply::SitePrivacy { sites } => Ok(sites),
+        other => Err(unexpected(socket, &other)),
+    }
+}
+
+/// Tells the engine at `socket` to set a site's ad blocking in a browser
+/// profile, or go back to the profile's.
+pub fn set_site_privacy(
+    socket: &Path,
+    change: &SitePrivacyChange,
+    patience: Duration,
+) -> Result<(), CommandError> {
+    carry_out(socket, &set_site_privacy_line(change), Reply::Set, patience)
 }
 
 /// Tells the engine at `socket` to load the unpacked extension in

@@ -9,8 +9,11 @@
 //
 //   GUARD shell-loaded                                      this module ran
 //   GUARD privacy step=N view=V site=S mode=M for=F blocked=C
+//   GUARD privacy later view=b mode=M for=F
 //
-// after each page has loaded and its count settled. The pages log which of
+// after each page has loaded and its count settled, and, once done, each time
+// b's report changes without a load: the guard then sets the site from the
+// command socket, as the Settings app does. The pages log which of
 // their scripts ran themselves, as `as=VN`: a1 is view a's page at step 1.
 //
 // Everything is inside `HostShell`, which Domicile's document calls once the
@@ -89,6 +92,12 @@ export const HostShell = () => {
     views.b.setBlockAdsAndTrackers(null, "site");
     await load("b", "b3");
     report(5, "b");
+    views.b.addEventListener("domicile-site-privacy-change", () => {
+      say(
+        `privacy later view=b mode=${views.b.blockAdsAndTrackers} ` +
+          `for=${views.b.blockAdsAndTrackersSetFor}`,
+      );
+    });
     say("privacy done");
   };
 

@@ -92,6 +92,27 @@ const siteSettingsSchema = z.object({
 /** Every permission's default and every site's own setting. */
 export type SiteSettings = z.infer<typeof siteSettingsSchema>;
 
+const AD_BLOCKING_MODES = ["standard", "strict", "off"] as const;
+
+const sitePrivacySchema = z.object({
+  block_ads_and_trackers: z.enum(AD_BLOCKING_MODES),
+  profile: z.string(),
+  site: z.string(),
+});
+
+/**
+ * A site with its own ad blocking in a browser profile, as the shield in a
+ * browser window keeps it. See `docs/architecture/AD-BLOCKING.md`.
+ */
+export type SitePrivacy = z.infer<typeof sitePrivacySchema>;
+
+/** A change to one site's ad blocking; `null` goes back to the profile's. */
+export type SitePrivacyChange = {
+  block_ads_and_trackers: SitePrivacy["block_ads_and_trackers"] | null;
+  profile: string;
+  site: string;
+};
+
 const siteDataSchema = z.object({
   bytes: z.number(),
   cookies: z.number(),
@@ -312,6 +333,10 @@ export type SettingsHost = {
   sitePermissions: () => Promise<SiteSettings>;
   /** Stores a site's setting; a permission's default removes it. */
   setSitePermission: (site: SitePermission) => Promise<void>;
+  /** Every browser profile's sites with their own ad blocking. */
+  sitePrivacy: () => Promise<SitePrivacy[]>;
+  /** Sets a site's ad blocking in a profile, or clears it with `null`. */
+  setSitePrivacy: (change: SitePrivacyChange) => Promise<void>;
   /** Every host that stores data in browser windows' profile. */
   siteData: () => Promise<SiteData[]>;
   /** Removes everything `host` stores. */
@@ -661,6 +686,12 @@ export const spawnedHost = (
         throw unexpected(reply, "stored");
       }
     },
+    setSitePrivacy: async (change) => {
+      const reply = await ask({ change, type: "set_site_privacy" });
+      if (reply.type !== "stored") {
+        throw unexpected(reply, "stored");
+      }
+    },
     signOutWebAgent: async (client) => {
       const reply = await ask({ client, type: "sign_out_web_agent" });
       if (reply.type !== "done") {
@@ -681,6 +712,14 @@ export const spawnedHost = (
         return { defaults: reply.defaults, sites: reply.sites };
       } else {
         throw unexpected(reply, "site_permissions");
+      }
+    },
+    sitePrivacy: async () => {
+      const reply = await ask({ type: "site_privacy" });
+      if (reply.type === "site_privacy") {
+        return reply.sites;
+      } else {
+        throw unexpected(reply, "site_privacy");
       }
     },
     stopAgent: async (session) => {
@@ -731,6 +770,11 @@ const replySchema = z.discriminatedUnion("type", [
   siteSettingsSchema.extend({
     id: z.number(),
     type: z.literal("site_permissions"),
+  }),
+  z.object({
+    id: z.number(),
+    sites: z.array(sitePrivacySchema),
+    type: z.literal("site_privacy"),
   }),
   z.object({ id: z.number(), type: z.literal("stored") }),
   z.object({

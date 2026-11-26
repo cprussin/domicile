@@ -37,7 +37,8 @@ use domicile_launch::command_socket::{
     configure_extension, delete_history, devtools, disable_while_typing, extensions, history,
     load_shell, load_unpacked, media_devices, open_app, open_url, pin_browser_site, run_app,
     set_extension_enabled, set_log_levels as set_engine_log_levels, set_media_device,
-    set_site_permission, site_data, site_permissions, uninstall_extension, visits,
+    set_site_permission, set_site_privacy, site_data, site_permissions, site_privacy,
+    uninstall_extension, visits,
 };
 use domicile_launch::commands;
 use domicile_launch::completion::{complete, Completion, Sources};
@@ -1270,6 +1271,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         // Only `domicile-app-host` asks for these.
         | Response::SettingsFiles { .. }
         | Response::SitePermissions(_)
+        | Response::SitePrivacy { .. }
         | Response::Stored
         | Response::Uninstalled
         | Response::ConfigExtensions { .. }
@@ -2650,6 +2652,15 @@ fn answer_a_command(
                     },
                     set_permission: &|site| {
                         set_site_permission(engine, site, ANSWER_WITHIN)
+                            .map_err(|why| why.to_string())
+                    },
+                    // Waits for every profile to load, as `browser_profiles`
+                    // does.
+                    site_privacy: &|| {
+                        site_privacy(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    },
+                    set_site_privacy: &|change| {
+                        set_site_privacy(engine, change, ANSWER_WITHIN)
                             .map_err(|why| why.to_string())
                     },
                     send: &|command, window, agent| {

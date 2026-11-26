@@ -438,6 +438,7 @@ source_set("command_protocol") {
   ]
 
   public_deps = [
+    ":browser_profiles",
     ":common",
     ":extension_settings",
     ":shell_source",
@@ -446,8 +447,12 @@ source_set("command_protocol") {
     "//url",
   ]
 
-  # The names of site permissions and their settings.
-  deps = [ ":site_permissions" ]
+  # The names of site permissions and their settings, and of ad-blocking
+  # modes.
+  deps = [
+    ":site_permissions",
+    ":site_privacy",
+  ]
 }
 
 # Waits for the shell window's first page before `load_shell` loads into it.
