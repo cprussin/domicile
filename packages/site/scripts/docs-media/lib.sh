@@ -263,7 +263,7 @@ keys() { # wtype args...
 
 # Python with pywayland, and the protocols `pointer.py` speaks, for `click`.
 POINTER_PYTHON="$(nix build --no-link --print-out-paths --impure --expr \
-  '(import (builtins.getFlake "nixpkgs") { }).python3.withPackages (ps: [ ps.pywayland ])')"
+  "(import $(nix eval --raw --inputs-from "$ROOT" nixpkgs#path) { }).python3.withPackages (ps: [ ps.pywayland ])")"
 # The scanner asks pkg-config for wayland.xml first, and fails outright when
 # there is no pkg-config at all; given none, it goes on to the files passed.
 POINTER_PKG_CONFIG="$(nix build --inputs-from "$ROOT" --no-link --print-out-paths 'nixpkgs#pkg-config^out')"

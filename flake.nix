@@ -3200,6 +3200,11 @@
           # The EDID vendor table the installed wrapper sets, so `cargo run`
           # names monitor makers the same way.
           DOMICILE_PNP_IDS = "${pkgs.hwdata}/share/hwdata/pnp.ids";
+          # The loader nix-ld hands an unpatched binary to, such as the engine
+          # the checks build in Chromium's FHS shell. Without it nix-ld uses the
+          # host's glibc, which need not match the libraries below: on #2555
+          # crux's (2.42) could not load the locked glib (GLIBC_2.43).
+          NIX_LD = pkgs.stdenv.cc.bintools.dynamicLinker;
           # `dlopen`ed libraries are not on the loader path from `packages`
           # alone. `/run/opengl-driver/lib` comes first so NixOS uses the EGL
           # matching its kernel driver.
