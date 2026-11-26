@@ -661,7 +661,7 @@ class AgentSeatsInPages : public ui::EventObserver {
         pressed ? ui::EventType::kKeyPressed : ui::EventType::kKeyReleased,
         key_code, dom_code, flags, dom_key, ui::EventTimeForNow());
     content::RenderWidgetHost* widget = content::DomicileKeyWidgetOf(page);
-    widget->ForwardKeyboardEvent(input::NativeWebKeyboardEvent(key));
+    widget->ForwardKeyboardEvent(Agents(input::NativeWebKeyboardEvent(key)));
     if (!pressed) {
       return;
     }
@@ -677,7 +677,18 @@ class AgentSeatsInPages : public ui::EventObserver {
       return;
     }
     widget->ForwardKeyboardEvent(
-        input::NativeWebKeyboardEvent(key, character));
+        Agents(input::NativeWebKeyboardEvent(key, character)));
+  }
+
+  // `event`, marked as no user's: the page alone handles it, as DevTools keys
+  // with no native key code are. The browser skips PreHandleKeyboardEvent and
+  // HandleKeyboardEvent for it, so the shell never hears it as the user's key
+  // in that window (`domicile-key-delivered`, which raises and focuses it),
+  // and it runs no desk, browser or extension shortcut.
+  static input::NativeWebKeyboardEvent Agents(
+      input::NativeWebKeyboardEvent event) {
+    event.skip_if_unhandled = true;
+    return event;
   }
 
   Reached Focus(const AgentPageInput& input, Seat& seat) {

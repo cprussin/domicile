@@ -17,14 +17,15 @@ Workspace switches blur as they slide, the overview blurs your wallpaper, and wi
 
 ### Agents work beside you
 
-An agent now has its own pointer, keyboard and clipboard, so it can work in any app or browser window while you keep working in yours, without ever taking your typing. A ring shows which windows it's using: click or type in one to take it over, and give it back from the banner. An idle agent leaves after two minutes.
+![Claude opening a page in its own window and searching there with its own pointer while you type in yours, then you taking its window over and giving it back](../media/release-agents.png)
+
+An agent now has its own pointer, keyboard and clipboard, so it can work in any app or browser window while you keep working in yours, without ever taking your typing. A page it opens gets its own window beside yours. A ring shows which windows it's using: click or type in one to take it over, and give it back from the banner. An idle agent leaves after two minutes.
 
 [Agents](AGENTS.md)
 
 ### Also new
 
 - Closing a window or a tab is a short, quiet fade, and closing one tab of a group looks the same as closing the whole group.
-- A web page an agent opens is the agent's from the start: it opens in its own window beside what you're doing, not as a tab behind yours, and your keyboard stays where it was.
 - Extensions are switched on per profile, each with its own data. Installing one asks which profiles to turn it on in, the tray's menu switches it in the profile you're on, and its site and file access apply in every profile even while it's off. A config you can't write switches until the desktop restarts. [Extensions](BROWSER.md#extensions)
 - Settings changes a config file it can't write, such as home-manager's, until the desktop restarts or the file changes that setting. Each change says "Changed from your config", with Reset. [Configure](CONFIGURE.md)
 - Extensions' keyboard shortcuts work in browser windows, such as Bitwarden's Ctrl+Shift+L. The desk's and the browser's own shortcuts come first. [Extensions](BROWSER.md#extensions)

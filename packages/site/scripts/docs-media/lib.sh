@@ -16,6 +16,9 @@
 #   blender_scene         Blender, playing an animation in its viewport
 #   photo                 GIMP, editing a photo
 #   document              LibreOffice Writer, editing a document
+#   agent <name>          let an agent in, its session in $AGENT
+#   shell_spot <role> <name>  the middle of a shell element, on the desk
+#   page_spot <window> <role> [name]  the same in a browser window's page
 #
 # See docs/media/README.md.
 
@@ -26,7 +29,7 @@
 # download.
 TOOLS="$(nix build --no-link --print-out-paths \
   nixpkgs#foot nixpkgs#neovim nixpkgs#wtype nixpkgs#wl-clipboard nixpkgs#grim \
-  nixpkgs#libnotify nixpkgs#wf-recorder nixpkgs#ffmpeg nixpkgs#jetbrains-mono \
+  nixpkgs#libnotify nixpkgs#wf-recorder nixpkgs#ffmpeg nixpkgs#jq nixpkgs#jetbrains-mono \
   nixpkgs#supertuxkart nixpkgs#mpv nixpkgs#blender nixpkgs#gimp3 nixpkgs#libreoffice-fresh |
   sed 's#$#/bin#' | paste -sd:)"
 export PATH="$TOOLS:$PATH"
@@ -401,6 +404,100 @@ document() {
     soffice --headless --convert-to odt --outdir "$SCENE_TMP/home/Documents" \
     "$FIXTURES/trip.html" >>"$SCENE_TMP/apps.log" 2>&1
   native soffice --norestore --nologo "$SCENE_TMP/home/Documents/trip.odt"
+}
+
+# An agent named `$1`, let in to the whole desk without the dialog, as one
+# the user told to remember is. Its session, for `--agent`, in `$AGENT`. Before
+# `desktop`, which reads what is remembered as it starts, call it with
+# `--remember`; after, without, to let it in.
+AGENT=""
+agent() { # [--remember] name
+  if [ "$1" = --remember ]; then
+    mkdir -p "$SCENE_TMP/state/domicile"
+    jq -cn --arg name "$2" '{agents: [{agent: $name, last_used_ms: 1}]}' \
+      >"$SCENE_TMP/state/domicile/agents.json"
+    return 0
+  fi
+  # Held open on fd 8: the agent stays in until its stdin ends, and each line
+  # on it shows in the bar as what it did.
+  mkfifo "$SCENE_TMP/agent.in"
+  "$DOMICILE_BIN" agent "$1" <"$SCENE_TMP/agent.in" >"$SCENE_TMP/agent.out" 2>&1 &
+  STARTED+=($!)
+  exec 8>"$SCENE_TMP/agent.in"
+  for _ in $(seq 1 40); do
+    AGENT="$(head -1 "$SCENE_TMP/agent.out" | jq -r '.session // empty' 2>/dev/null || true)"
+    [ -n "$AGENT" ] && return 0
+    sleep 0.25
+  done
+  echo "$1 was not let in. domicile agent said:" >&2
+  cat "$SCENE_TMP/agent.out" >&2
+  exit 1
+}
+
+# Moves the agent's own pointer from one point to another over about half a
+# second, as a hand would, rather than jumping.
+agent_glide() { # x1 y1 x2 y2
+  local step
+  for step in $(seq 0 20); do
+    "$DOMICILE_BIN" pointer --agent "$AGENT" \
+      "$(awk -v a="$1" -v b="$3" -v s="$step" 'BEGIN { printf "%d", a + (b - a) * s / 20 }'),$(awk -v a="$2" -v b="$4" -v s="$step" 'BEGIN { printf "%d", a + (b - a) * s / 20 }')"
+    sleep 0.02
+  done
+}
+
+# The middle of the first element of role `$2`, named `$3` if given, in `$1`'s
+# accessibility tree, as "x y" in that page's CSS pixels. `$1` is a window id
+# or `shell`.
+ax_spot() { # window role [name]
+  local node
+  node="$("$DOMICILE_BIN" devtools "$1" Accessibility.getFullAXTree '{}' |
+    jq --arg role "$2" --arg name "${3-}" 'first(.nodes[] | select(.ignored != true) |
+      select(.role.value == $role and ($name == "" or .name.value == $name)) | .backendDOMNodeId)')"
+  if [ -z "$node" ] || [ "$node" = null ]; then
+    echo "no $2 named \"${3-}\" in $1" >&2
+    exit 1
+  fi
+  "$DOMICILE_BIN" devtools "$1" DOM.getContentQuads "{\"backendNodeId\":$node}" |
+    jq -r '.quads[0] | "\((.[0] + .[4]) / 2 | floor) \((.[1] + .[5]) / 2 | floor)"'
+}
+
+# The middle of the shell's element of role `$1` named `$2`, on the desk, for
+# `click`.
+shell_spot() { # role name
+  ax_spot shell "$1" "$2"
+}
+
+# The middle of the element of role `$2`, named `$3` if given, in browser
+# window `$1`'s page, on the desk: its place in the page, plus where the shell
+# draws the page.
+page_spot() { # window role [name]
+  local at origin
+  at="$(ax_spot "$1" "$2" "${3-}")"
+  origin="$(page_origin "$1")"
+  echo "$((${at% *} + ${origin% *})) $((${at#* } + ${origin#* }))"
+}
+
+# Where the shell draws browser window `$1`'s page, as "x y" on the desk: the
+# top left of the shell's frame the size of the page, under the window's
+# title in the shell.
+page_origin() { # window
+  local size title frames
+  size="$("$DOMICILE_BIN" list-windows --json | jq -c --arg id "$1" '.[] | select(.id == $id) | .size | map(round)')"
+  title="$("$DOMICILE_BIN" list-windows --json | jq -r --arg id "$1" '.[] | select(.id == $id) | .title')"
+  title="$(ax_spot shell StaticText "$title")"
+  frames="$("$DOMICILE_BIN" devtools shell Accessibility.getFullAXTree '{}' |
+    jq -r '.nodes[] | select(.role.value == "Iframe") | .backendDOMNodeId' |
+    while read -r frame; do
+      "$DOMICILE_BIN" devtools shell DOM.getContentQuads "{\"backendNodeId\":$frame}" |
+        jq -r --argjson size "$size" '.quads[0] |
+          select([(.[4] - .[0] | round), (.[5] - .[1] | round)] == $size) |
+          "\(.[0] | round) \(.[1] | round) \(.[4] | round)"'
+    done)"
+  echo "$frames" | awk -v x="${title% *}" '$1 <= x && x <= $3 { print $1, $2; found = 1; exit }
+    END { if (!found) exit 1 }' || {
+    echo "the shell draws no page the size of $1's ($size) under its title at $title. Frames: $frames" >&2
+    exit 1
+  }
 }
 
 # Stops what the scene started. First prints the engine's fatal lines if it
