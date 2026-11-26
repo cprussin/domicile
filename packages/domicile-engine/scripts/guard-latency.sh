@@ -188,7 +188,11 @@ if [ "$NEGATIVE" = "1" ]; then
   CLIENT_CMD='while :; do printf .; sleep 0.2; done'
   echo "negative control: a client that answers no keys"
 else
-  CLIENT_CMD='a=1B3A5F; b=5F1B3A; c=$a; while read -r _; do
+  # `stty -echo`: the flip is the only thing a key redraws. Echoing Enter
+  # moved the cursor in a frame of its own, often too soon to count as the
+  # answer; since kitty 0.51 that frame sometimes carries the flip too, and
+  # the round is then dropped as moved before the answer.
+  CLIENT_CMD='stty -echo; a=1B3A5F; b=5F1B3A; c=$a; while read -r _; do
       if [ "$c" = "$a" ]; then c=$b; else c=$a; fi
       printf "\033]11;#%s\007" "$c"
     done'

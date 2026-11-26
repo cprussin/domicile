@@ -29,7 +29,8 @@ LOG=/tmp/domicile-css-and-resize-shell.log
 rm -f "$RAN"
 
 # `nix-shell` reads `NIX_PATH` rather than the flake, and the runner has none.
-nixpkgs="$(nix eval --raw --impure --expr '(builtins.getFlake "nixpkgs").outPath')"
+# flake.lock's nixpkgs, which the engine was built on.
+nixpkgs="$(nix eval --raw --inputs-from "$ROOT" nixpkgs#path)"
 export NIX_PATH="nixpkgs=$nixpkgs"
 
 RUN=/tmp/domicile-css-and-resize-run

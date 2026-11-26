@@ -142,8 +142,9 @@ jobs:
           set -euo pipefail
 
           # tools/nix/shell.nix imports <nixpkgs>, and a systemd service has no
-          # NIX_PATH, so take nixpkgs from this machine's flake registry.
-          nixpkgs="$(nix eval --raw --impure --expr '(builtins.getFlake "nixpkgs").outPath')"
+          # NIX_PATH, so take flake.lock's nixpkgs: `.#full` takes its
+          # libraries from it, and what this builds runs in that shell.
+          nixpkgs="$(nix eval --raw --inputs-from . nixpkgs#path)"
           echo "nixpkgs is $nixpkgs"
           export NIX_PATH="nixpkgs=$nixpkgs"
 

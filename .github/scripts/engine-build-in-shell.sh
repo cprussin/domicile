@@ -30,9 +30,11 @@ LOG=/tmp/domicile-shell.log
 rm -f "$DONE"
 
 # tools/nix/shell.nix imports `<nixpkgs>`, and the runner's systemd unit has
-# no NIX_PATH. Without it nix-shell runs the script with no toolchain. Read it
-# from the flake registry so this machine's nixpkgs pin stays in one place.
-nixpkgs="$(nix eval --raw --impure --expr '(builtins.getFlake "nixpkgs").outPath')"
+# no NIX_PATH. Without it nix-shell runs the script with no toolchain. Point it
+# at flake.lock's nixpkgs, the one `.#full` takes its libraries from: the
+# checks run what this builds in that shell, and on #2555 a build on the host
+# registry's glibc (2.42) could not load the locked glib (GLIBC_2.43).
+nixpkgs="$(nix eval --raw --inputs-from "$ROOT" nixpkgs#path)"
 echo "nixpkgs is $nixpkgs"
 export NIX_PATH="nixpkgs=$nixpkgs"
 
