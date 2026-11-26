@@ -35,6 +35,14 @@ each X `hidden` or `shown`:
                            for (127.0.0.1#@#)
   plain    .plain          nothing names it
 
+Then it follows a link to the other site that carries a click id and a
+campaign parameter, `/landing?as=ID&keep=1&fbclid=f&utm_source=u` at
+localhost, which logs what reached it:
+
+  GUARD landed as=ID keep=X fbclid=X utm_source=X
+
+each X `kept` or `dropped`.
+
 This server logs each script it is asked for, to its stdout:
 
   GUARD served as=ID what=WHAT
@@ -117,7 +125,29 @@ PAGE = """<!doctype html>
               `generic=${how("generic")} complex=${how("complex")} ` +
               `late=${how("late")} kept=${how("kept")} plain=${how("plain")}`,
           );
+          location.href =
+            `http://localhost:${port}/landing?as=${as}&keep=1&fbclid=f&` +
+            "utm_source=u";
         });
+    </script>
+  </body>
+</html>
+"""
+
+LANDING = """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>a page a link with tracking leads to</title>
+  </head>
+  <body>
+    <script>
+      const query = new URLSearchParams(location.search);
+      const how = (name) => (query.has(name) ? "kept" : "dropped");
+      console.log(
+        `GUARD landed as=${query.get("as")} keep=${how("keep")} ` +
+          `fbclid=${how("fbclid")} utm_source=${how("utm_source")}`,
+      );
     </script>
   </body>
 </html>
@@ -141,12 +171,15 @@ class TwoSites(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802 - the name is BaseHTTPRequestHandler's
         url = urlsplit(self.path)
         as_ = parse_qs(url.query).get("as", [""])[0]
-        if (url.path != "/page" and url.path not in SCRIPTS) or not ID.match(as_):
-            self.send_error(404, "this server has /page?as=ID and its scripts")
+        pages = {"/page": PAGE, "/landing": LANDING}
+        if (url.path not in pages and url.path not in SCRIPTS) or not ID.match(as_):
+            self.send_error(
+                404, "this server has /page?as=ID, its scripts and /landing?as=ID"
+            )
             return
 
-        if url.path == "/page":
-            body = PAGE.encode("utf-8")
+        if url.path in pages:
+            body = pages[url.path].encode("utf-8")
             kind = "text/html; charset=utf-8"
         else:
             print("GUARD served as=%s what=%s" % (as_, SCRIPTS[url.path]), flush=True)

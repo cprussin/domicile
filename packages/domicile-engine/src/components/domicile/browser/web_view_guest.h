@@ -821,6 +821,8 @@ class WebViewGuest : public mojom::WebViewGuest,
   };
   // Reports to `page`, an Electron window's, as well as to the element.
   void ReportToApp(base::WeakPtr<AppPage> page);
+  // Whether an Electron app's page: one that reports to its app.
+  bool is_app_page() const { return static_cast<bool>(app_page_); }
 
   // Runs with the number of the window a desktop getUserMedia() names by its
   // source id, "window:<number>:0", and gives the browser window it captures

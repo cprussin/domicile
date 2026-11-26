@@ -36,6 +36,8 @@ void ApplyProtections(PrefService& prefs,
   prefs.SetString(kWebRTCIPHandlingPolicy, protections.hide_local_ip_address
                                                ? kPublicInterfaceOnly
                                                : kAnyInterface);
+  prefs.SetBoolean(kRemoveLinkTrackingPref,
+                   protections.remove_tracking_from_links);
   SetProfileAdBlocking(prefs, protections.block_ads_and_trackers);
 }
 

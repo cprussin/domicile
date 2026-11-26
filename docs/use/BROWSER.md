@@ -177,6 +177,9 @@ Every profile keeps these from the sites you visit, unless you turn one off:
   to site, never load, and the boxes they would have filled are hidden.
   Standard blocks what other sites put on a page; Strict also blocks a site's
   own, which can break some sites. Private windows use Strict.
+- **Remove tracking from links.** A link from one site to another loses what
+  tells the next site where you clicked it (`fbclid`, `gclid` and the like),
+  and with Strict ad blocking its campaign tags (`utm_`) too.
 - **Block cookies from other sites.** A page's ads, buttons and embeds from
   other sites can't keep cookies that follow you from site to site. Sign-ins
   that open in their own window still work.
@@ -235,7 +238,8 @@ to Strict, from the shield. **Turn back on** or **Remove** undoes one.
 
 `protections` takes `block_ads_and_trackers`, which is `"standard"`,
 `"strict"` or `"off"`, and `block_third_party_cookies`,
-`global_privacy_control` and `hide_local_ip_address`, each `true` unless set.
+`global_privacy_control`, `hide_local_ip_address` and
+`remove_tracking_from_links`, each `true` unless set.
 
 `browser.block_lists` replaces the lists: each is an `https:` address or a
 file's absolute path, in the syntax uBlock Origin and Adblock Plus read.

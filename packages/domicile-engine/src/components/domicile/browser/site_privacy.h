@@ -32,6 +32,10 @@ namespace domicile {
 
 inline constexpr char kProfileAdBlockingPref[] = "domicile.ad_blocking.profile";
 inline constexpr char kSiteAdBlockingPref[] = "domicile.ad_blocking.sites";
+// Whether links to other sites lose their tracking (LinkTrackingThrottle),
+// as the config has it. Off too wherever the page's ad blocking is Off.
+inline constexpr char kRemoveLinkTrackingPref[] =
+    "domicile.link_tracking.remove";
 
 // The prefs above, on every profile.
 void RegisterSitePrivacyPrefs(PrefRegistrySimple* registry);

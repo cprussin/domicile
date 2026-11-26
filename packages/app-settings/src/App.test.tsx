@@ -557,6 +557,20 @@ describe(App, () => {
       });
     });
 
+    it("keeps the tracking in links in the default profile", async () => {
+      const { host, user } = await renderApp("Privacy");
+      const protections = await profileCard("Website protections");
+      await user.click(
+        protections.getByRole("switch", { name: "Remove tracking from links" }),
+      );
+      await waitFor(() => {
+        const { profiles } = written(host.writes).browser;
+        expect(profiles.default.protections).toEqual({
+          remove_tracking_from_links: false,
+        });
+      });
+    });
+
     it("blocks a site's own ads too in the default profile", async () => {
       const { host, user } = await renderApp("Privacy");
       await choose(user, "Block ads and trackers", "Strict");

@@ -585,6 +585,12 @@ export type Protections = {
    * network address.
    */
   hide_local_ip_address?: boolean;
+  /**
+   * Takes the click ids (`fbclid`, `gclid` and the like) out of links to
+   * other sites, and in [`AdBlocking::Strict`] the `utm_` campaign
+   * parameters too. Not on a site or in a window whose ad blocking is off.
+   */
+  remove_tracking_from_links?: boolean;
 };
 
 /** How a touchpad generates scrolling. */

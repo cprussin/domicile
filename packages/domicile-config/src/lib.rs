@@ -978,6 +978,10 @@ pub struct Protections {
     /// Keeps WebRTC, as video calls use, from telling sites your local
     /// network address.
     pub hide_local_ip_address: bool,
+    /// Takes the click ids (`fbclid`, `gclid` and the like) out of links to
+    /// other sites, and in [`AdBlocking::Strict`] the `utm_` campaign
+    /// parameters too. Not on a site or in a window whose ad blocking is off.
+    pub remove_tracking_from_links: bool,
     /// How the profile's pages block ads and trackers, with
     /// [`BrowserConfig::block_lists`]. Unset: `standard`, or `strict` in a
     /// private profile.
@@ -1017,6 +1021,7 @@ impl Default for Protections {
             block_third_party_cookies: true,
             global_privacy_control: true,
             hide_local_ip_address: true,
+            remove_tracking_from_links: true,
             block_ads_and_trackers: None,
         }
     }

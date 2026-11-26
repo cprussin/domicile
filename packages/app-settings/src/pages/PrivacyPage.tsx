@@ -41,6 +41,11 @@ const PROTECTIONS = [
     label: "Block cookies from other sites",
   },
   {
+    hint: "Takes out what tells the next site which link you clicked to get there.",
+    key: "remove_tracking_from_links",
+    label: "Remove tracking from links",
+  },
+  {
     hint: "Tells every site you visit. In some places, sites must honor it by law.",
     key: "global_privacy_control",
     label: "Ask sites not to sell or share your data",

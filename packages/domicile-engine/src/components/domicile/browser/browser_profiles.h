@@ -40,6 +40,8 @@ struct BrowserProtections {
   bool global_privacy_control = true;
   // Keeps WebRTC from telling sites the local network address.
   bool hide_local_ip_address = true;
+  // Takes the click ids out of links to other sites.
+  bool remove_tracking_from_links = true;
   AdBlockingMode block_ads_and_trackers = AdBlockingMode::kStandard;
 
   friend bool operator==(const BrowserProtections&,
@@ -103,6 +105,7 @@ BrowserProfiles DefaultBrowserProfiles();
 //                  "protections": {"block_third_party_cookies": true,
 //                                  "global_privacy_control": true,
 //                                  "hide_local_ip_address": true,
+//                                  "remove_tracking_from_links": true,
 //                                  "block_ads_and_trackers": "standard"}}],
 //    "default_profile": "personal", "default_private_profile": "private",
 //    "sites": {"github.com/acme": "work"},

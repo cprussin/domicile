@@ -44,6 +44,7 @@ export const protectionsSchema = z.strictObject({
   block_third_party_cookies: z.boolean().prefault(true),
   global_privacy_control: z.boolean().prefault(true),
   hide_local_ip_address: z.boolean().prefault(true),
+  remove_tracking_from_links: z.boolean().prefault(true),
 });
 
 /** One browser profile. See [`BrowserConfig::profiles`]. */
@@ -60,6 +61,7 @@ export const browserProfileSchema = z.strictObject({
     block_third_party_cookies: true,
     global_privacy_control: true,
     hide_local_ip_address: true,
+    remove_tracking_from_links: true,
   }),
 });
 
@@ -90,6 +92,7 @@ export const browserConfigSchema = z.strictObject({
         block_third_party_cookies: true,
         global_privacy_control: true,
         hide_local_ip_address: true,
+        remove_tracking_from_links: true,
       },
     },
     private: {
@@ -102,6 +105,7 @@ export const browserConfigSchema = z.strictObject({
         block_third_party_cookies: true,
         global_privacy_control: true,
         hide_local_ip_address: true,
+        remove_tracking_from_links: true,
       },
     },
   }),
@@ -588,6 +592,7 @@ export const configSchema = z.strictObject({
           block_third_party_cookies: true,
           global_privacy_control: true,
           hide_local_ip_address: true,
+          remove_tracking_from_links: true,
         },
       },
       private: {
@@ -600,6 +605,7 @@ export const configSchema = z.strictObject({
           block_third_party_cookies: true,
           global_privacy_control: true,
           hide_local_ip_address: true,
+          remove_tracking_from_links: true,
         },
       },
     },

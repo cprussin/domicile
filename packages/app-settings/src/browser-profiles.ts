@@ -27,6 +27,7 @@ export const PROTECTIONS_ON: ConfigProfile["protections"] = {
   block_third_party_cookies: true,
   global_privacy_control: true,
   hide_local_ip_address: true,
+  remove_tracking_from_links: true,
 };
 
 /**
