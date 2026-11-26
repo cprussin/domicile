@@ -112,6 +112,8 @@ pub struct BrowserProtections {
     pub global_privacy_control: bool,
     /// Keeps WebRTC from telling sites the local network address.
     pub hide_local_ip_address: bool,
+    /// Takes the click ids out of links to other sites.
+    pub remove_tracking_from_links: bool,
     /// How its pages block ads and trackers.
     pub block_ads_and_trackers: AdBlocking,
 }

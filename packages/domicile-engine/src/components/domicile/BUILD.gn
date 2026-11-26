@@ -834,6 +834,7 @@ source_set("browser_page_throttle") {
   deps = [
     ":app_navigation_throttle",
     ":browser_pages",
+    ":link_tracking_throttle",
     ":profile_route_throttle",
     ":web_view_guest",
     ":web_view_url",
@@ -858,6 +859,46 @@ source_set("profile_route_throttle") {
     "//base",
     "//ui/base",
   ]
+}
+
+# Takes the tracking out of a link from one site to another.
+# :browser_page_throttle adds it.
+source_set("link_tracking_throttle") {
+  sources = [
+    "browser/link_tracking_throttle.cc",
+    "browser/link_tracking_throttle.h",
+  ]
+
+  public_deps = [
+    "//content/public/browser",
+    "//url",
+  ]
+
+  deps = [
+    ":link_tracking",
+    ":page_privacy",
+    ":site_privacy",
+    ":web_view_guest",
+    "//base",
+    "//components/prefs",
+    "//components/user_prefs",
+    "//content/public/common",
+    "//net",
+    "//ui/base",
+  ]
+}
+
+# What WithoutTracking takes out of an address. Its own target so its test
+# needs no browser: //url only.
+source_set("link_tracking") {
+  sources = [
+    "browser/link_tracking.cc",
+    "browser/link_tracking.h",
+  ]
+
+  public_deps = [ "//url" ]
+
+  deps = [ "//base" ]
 }
 
 # The back and forward lists of a guest's history. Its own target beside
@@ -1774,6 +1815,7 @@ source_set("unit_tests") {
     "common/electron_schemes_unittest.cc",
     "renderer/context_bridge_unittest.cc",
     "renderer/cosmetic_stylesheet_unittest.cc",
+    "browser/link_tracking_unittest.cc",
     "browser/browser_profiles_unittest.cc",
     "browser/extension_installer_unittest.cc",
     "browser/extension_menu_unittest.cc",
@@ -1886,6 +1928,7 @@ source_set("unit_tests") {
     ":electron_schemes",
     ":context_bridge",
     ":cosmetic_stylesheet",
+    ":link_tracking",
     ":extension_installer",
     ":extension_menu",
     ":extension_settings",

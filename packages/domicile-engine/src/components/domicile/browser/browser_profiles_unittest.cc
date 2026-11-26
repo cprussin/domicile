@@ -28,7 +28,8 @@ base::DictValue Dict(const std::string& json) {
 constexpr char kProtections[] =
     R"("protections":{"block_ads_and_trackers":"standard",)"
     R"("block_third_party_cookies":true,)"
-    R"("global_privacy_control":true,"hide_local_ip_address":true})";
+    R"("global_privacy_control":true,"hide_local_ip_address":true,)"
+    R"("remove_tracking_from_links":true})";
 
 // The block lists and rules every message carries.
 constexpr char kBlocking[] =
@@ -46,7 +47,8 @@ std::string Message(const std::string& sites) {
          R"("extensions":["aeblfdkhhhdcdjpifhhbdiojplfjncoa"],)"
          R"("protections":{"block_ads_and_trackers":"off",)"
          R"("block_third_party_cookies":false,)"
-         R"("global_privacy_control":true,"hide_local_ip_address":true}},)"
+         R"("global_privacy_control":true,"hide_local_ip_address":true,)"
+         R"("remove_tracking_from_links":true}},)"
          R"({"id":"incognito","name":"Private","color":"#a78bfa",)"
          R"("private":true,"extensions":null,)" +
          kProtections +
@@ -138,7 +140,7 @@ TEST(BrowserProfilesTest, AnAdBlockingModeTheEngineDoesNotKnowIsRefused) {
 TEST(BrowserProfilesTest, AProfileMissingAProtectionIsRefused) {
   // Personal's protections, the first in the message, lose their last.
   std::string message = Message("{}");
-  const std::string last = R"(,"hide_local_ip_address":true})";
+  const std::string last = R"(,"remove_tracking_from_links":true})";
   message.replace(message.find(last), last.size(), "}");
 
   EXPECT_FALSE(ParseBrowserProfiles(Dict(message)));

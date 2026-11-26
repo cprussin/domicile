@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "components/domicile/browser/app_navigation_throttle.h"
 #include "components/domicile/browser/browser_pages.h"
+#include "components/domicile/browser/link_tracking_throttle.h"
 #include "components/domicile/browser/profile_route_throttle.h"
 #include "components/domicile/browser/web_view_guest.h"
 #include "components/domicile/browser/web_view_url.h"
@@ -31,6 +32,9 @@ void BrowserPageThrottle::MaybeCreateAndAdd(
     WillNavigateThrottle::Add(registry);
     // After the shell's answer, so a navigation it cancels moves nothing.
     ProfileRouteThrottle::Add(registry);
+    // Last: a page that moves profile is checked again in its new one, where
+    // the mode may differ.
+    LinkTrackingThrottle::Add(registry);
   }
 }
 

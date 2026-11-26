@@ -18,6 +18,7 @@ void RegisterSitePrivacyPrefs(PrefRegistrySimple* registry) {
       kProfileAdBlockingPref,
       std::string(AdBlockingModeName(AdBlockingMode::kStandard)));
   registry->RegisterDictionaryPref(kSiteAdBlockingPref);
+  registry->RegisterBooleanPref(kRemoveLinkTrackingPref, true);
 }
 
 std::string_view AdBlockingModeName(AdBlockingMode mode) {

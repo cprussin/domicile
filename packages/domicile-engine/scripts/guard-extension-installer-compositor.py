@@ -29,6 +29,7 @@ PROTECTIONS = {
     "block_third_party_cookies": True,
     "global_privacy_control": True,
     "hide_local_ip_address": True,
+    "remove_tracking_from_links": True,
 }
 
 # Unlike a desk's, no filter lists unless the guard names some, so a guard

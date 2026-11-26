@@ -467,6 +467,8 @@ void BrowserProfileRegistry::ProtectOne(Profile& profile,
           << (protections.global_privacy_control ? "on" : "off")
           << ", local IP address "
           << (protections.hide_local_ip_address ? "hidden" : "shown")
+          << ", links' tracking "
+          << (protections.remove_tracking_from_links ? "removed" : "kept")
           << (profile.HasPrimaryOTRProfile() ? ", and its off-the-record one"
                                              : "")
           << ".";

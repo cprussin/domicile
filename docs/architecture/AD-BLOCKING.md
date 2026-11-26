@@ -136,6 +136,22 @@ They hide the same in Standard and Strict; Off hides nothing.
 With EasyList, EasyPrivacy and uBlock Origin's filters, a news site's page
 gets about 450 selectors, found in well under a millisecond.
 
+## Links
+
+A link from one site to another often carries the click that brought it
+(`?fbclid=`, `gclid`, `msclkid`, Brave's list of about 60), which tells the
+site, and whoever it shares it with, where you came from. In a profile with
+`protections.remove_tracking_from_links` (on unless set `false`), in Standard
+and Strict, `LinkTrackingThrottle`
+(`components/domicile/browser/link_tracking_throttle.h`) cancels such a
+navigation, or its redirect, and starts it again without them
+(`WithoutTracking`); Strict drops the campaign parameters (`utm_`) too. Off
+keeps everything. It leaves alone a link within one site, whose parameters
+may be its own, a frame's navigation, a POST, back, forward and reload, and
+an Electron app's page. `--vmodule=link_tracking_throttle=1` logs each one.
+
+Not yet: the lists' `$removeparam` rules.
+
 Not yet: procedural filters (`:has-text()`, `:upward()`) and scriptlets
 (`##+js()`), which need a script in the page's world.
 
@@ -150,6 +166,9 @@ Not yet: procedural filters (`:has-text()`, `:upward()`) and scriptlets
   asks from the renderer once the document exists, which can show an ad for a
   frame; a push over an associated interface is there first, and a user
   stylesheet beats the page's `!important`.
+- **Click ids in Standard, campaign parameters only in Strict**, as Brave:
+  `utm_` names a newsletter or an ad campaign, not you, and some sites read
+  it for their own pages.
 - **The same hiding in Standard and Strict.** The lists' cosmetic rules
   rarely break a site the way blocking its own scripts does, so Strict only
   blocks more.
@@ -167,6 +186,6 @@ Not yet: procedural filters (`:has-text()`, `:upward()`) and scriptlets
 - [x] manganese's shield in the address bar, with "This window only"
 - [x] Settings lists the sites with their own mode (`site_privacy`)
 - [x] cosmetic filters: what the lists hide by a page's elements
-- [ ] scriptlets and procedural filters, cookie banners, and tracking
-      removed from links
+- [x] tracking taken out of links to other sites
+- [ ] scriptlets and procedural filters, cookie banners, `$removeparam`
 - [ ] fingerprinting protection
