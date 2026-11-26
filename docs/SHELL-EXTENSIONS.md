@@ -171,7 +171,8 @@ domicile.extensions.on("commandPressed", ({ id, name, profile }) => {
 <!-- /tabs -->
 
 - An extension may have any key, Chrome's own shortcuts too, such as Ctrl+T.
-  The desk's shortcuts (`grabShortcut`) come first, then extensions' keys, then
+  It gets each key its manifest suggests that is free when it is installed or
+  starts, unless the person cleared it. The desk's shortcuts (`grabShortcut`) come first, then extensions' keys, then
   the page, then `domicile-guest-keydown`.
 - `extensions.reserveKeys(["Ctrl+T", "Ctrl+W"])` keeps keys your shell handles
   from extensions. A command bound to one has no keys. Nothing is reserved

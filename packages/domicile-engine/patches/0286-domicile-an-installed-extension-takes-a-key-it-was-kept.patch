@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Connor Prussin <connor@prussin.net>
+Date: Thu, 26 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: an installed extension takes a key it was kept from
+
+Chrome assigns an extension's suggested keys when it is installed or updated,
+never at a later load. One installed while a key was Chrome's own, such as
+Bitwarden's Ctrl+Shift+L before patch 0282 freed it, or while another
+extension held it, kept no key for that command until its next update.
+
+CommandService assigns free suggested keys at every load as well. A key the
+person cleared stays clear (CanAutoAssign).
+---
+ chrome/browser/extensions/commands/command_service.cc | 9 +++++++++
+ chrome/browser/extensions/commands/command_service.h  | 2 ++
+ 2 files changed, 11 insertions(+)
+
+diff --git a/chrome/browser/extensions/commands/command_service.cc b/chrome/browser/extensions/commands/command_service.cc
+index cc7a390..4811e69 100644
+--- a/chrome/browser/extensions/commands/command_service.cc
++++ b/chrome/browser/extensions/commands/command_service.cc
+@@ -293,6 +293,15 @@ void CommandService::OnExtensionWillBeInstalled(
+   UpdateKeybindings(extension);
+ }
+ 
++void CommandService::OnExtensionLoaded(content::BrowserContext* browser_context,
++                                       const Extension* extension) {
++  // Chrome assigns an extension's suggested keys at install only. One that
++  // was installed while a key was Chrome's or another extension's takes it at
++  // a later load, once it is free. A key the person cleared stays clear: see
++  // CanAutoAssign.
++  AssignKeybindings(extension);
++}
++
+ void CommandService::OnExtensionUninstalled(
+     content::BrowserContext* browser_context,
+     const Extension* extension,
+diff --git a/chrome/browser/extensions/commands/command_service.h b/chrome/browser/extensions/commands/command_service.h
+index 5908833..c61685d 100644
+--- a/chrome/browser/extensions/commands/command_service.h
++++ b/chrome/browser/extensions/commands/command_service.h
+@@ -205,6 +205,8 @@ class CommandService : public BrowserContextKeyedAPI,
+   void OnExtensionUninstalled(content::BrowserContext* browser_context,
+                               const Extension* extension,
+                               extensions::UninstallReason reason) override;
++  void OnExtensionLoaded(content::BrowserContext* browser_context,
++                         const Extension* extension) override;
+ 
+   // Updates keybindings for a given `extension`'s page action, browser action
+   // and named commands. Assigns new keybindings and removes relinquished
