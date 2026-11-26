@@ -1266,6 +1266,14 @@ void AnswerDevTools(const base::DictValue& request,
         "to"));
     return;
   }
+  const base::Value* agent = request.Find("agent");
+  if (agent != nullptr &&
+      (!agent->is_string() || agent->GetString().empty())) {
+    std::move(reply).Run(RefusedCommand(
+        "devtools's \"agent\" is the agent seat it is sent for, such as "
+        "\"agent-3\", or left out"));
+    return;
+  }
   const std::string* method = request.FindString("method");
   if (method == nullptr) {
     std::move(reply).Run(RefusedCommand(
@@ -1295,7 +1303,10 @@ void AnswerDevTools(const base::DictValue& request,
     }
   }
   send_devtools(
-      *window, *method, std::move(params),
+      *window,
+      agent != nullptr ? std::optional<std::string>(agent->GetString())
+                       : std::nullopt,
+      *method, std::move(params),
       base::BindOnce(
           [](CommandReply reply,
              base::expected<base::DictValue, std::string> answered) {

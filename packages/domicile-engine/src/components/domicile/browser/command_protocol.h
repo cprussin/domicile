@@ -167,6 +167,8 @@ namespace domicile {
 //
 //   {"type":"devtools","version":1,"window":"<browser window id>",
 //    "method":"Accessibility.getFullAXTree","params":{"depth":4}}
+//   {"type":"devtools","version":1,"window":"<browser window id>",
+//    "agent":"agent-3","method":"Input.dispatchKeyEvent","params":{...}}
 //   -> {"type":"devtools","result":{"nodes":[...]}}
 //   -> {"type":"refused","why":"..."}
 //
@@ -176,7 +178,9 @@ namespace domicile {
 // enough to read the page's accessibility tree, click, type, scroll and
 // navigate, and nothing that reads cookies or storage or runs script, plus
 // Domicile's own methods for the file choosers an agent opens. A private
-// window is never driven. `params` defaults to {}.
+// window is never driven. `params` defaults to {}. `agent` names the agent
+// seat it is sent for: a page it presses or keys in copies to and pastes from
+// that seat's own clipboard.
 // `set_log_levels` is `domicile set-log-level`: `min_level` is Chromium's
 // minimum severity (0 INFO to 3 FATAL) and `vmodule` its `--vmodule`, in every
 // engine process until the engine exits.
@@ -617,11 +621,14 @@ using DevToolsAnswered =
     base::OnceCallback<void(base::expected<base::DictValue, std::string>)>;
 
 // Carries out `devtools`: sends `method` with `params` to browser window
-// `window`'s page. Runs `answered` once, possibly after returning.
-using SendDevTools = base::FunctionRef<void(const std::string& window,
-                                            const std::string& method,
-                                            base::DictValue params,
-                                            DevToolsAnswered answered)>;
+// `window`'s page, for agent seat `agent` when one is named. Runs `answered`
+// once, possibly after returning.
+using SendDevTools =
+    base::FunctionRef<void(const std::string& window,
+                           const std::optional<std::string>& agent,
+                           const std::string& method,
+                           base::DictValue params,
+                           DevToolsAnswered answered)>;
 
 // A browser window as the user has it now, for `browser_windows`.
 struct BrowserWindowLayout {

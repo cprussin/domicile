@@ -1138,6 +1138,20 @@ source_set("private_pages") {
 #
 # Its own target beside :control_channel for :line_framer's reason: it is the
 # piece of the input method's crossing a test can reach with a string.
+# Agents' own clipboards, which pages an agent drove copy to. Its own target
+# for the reason :file_choice is one: it needs no browser, which is where its
+# tests are.
+source_set("agent_clipboards") {
+  sources = [
+    "browser/agent_clipboards.cc",
+    "browser/agent_clipboards.h",
+  ]
+
+  public_deps = [ "//base" ]
+
+  deps = [ "//ui/base/clipboard" ]
+}
+
 # The control channel's agent seat messages, its own target for
 # :input_method_lines' reason.
 source_set("agent_input_lines") {
@@ -1686,6 +1700,7 @@ source_set("unit_tests") {
     "browser/guest_dialogs_unittest.cc",
     "browser/history_menu_unittest.cc",
     "browser/identity_dialog_unittest.cc",
+    "browser/agent_clipboards_unittest.cc",
     "browser/agent_input_lines_unittest.cc",
     "browser/input_method_lines_unittest.cc",
     "browser/line_framer_unittest.cc",
@@ -1795,6 +1810,7 @@ source_set("unit_tests") {
     ":held_chords",
     ":history_menu",
     ":identity_dialog",
+    ":agent_clipboards",
     ":agent_input_lines",
     ":input_method_lines",
     ":keyboard_layout",
@@ -1878,6 +1894,9 @@ source_set("unit_tests") {
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
+    # The agent clipboards' tests copy onto a TestClipboard as the desktop's.
+    "//ui/base/clipboard",
+    "//ui/base/clipboard:clipboard_test_support",
     "//ui/display",
     # The keymap test's four: the engine it asserts against, the DomCode and
     # DomKey it decodes to, the KeyboardCode beside them, and the xkbcommon

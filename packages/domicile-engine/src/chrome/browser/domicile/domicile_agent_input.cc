@@ -23,6 +23,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_desk_pointer.h"
+#include "components/domicile/browser/agent_clipboards.h"
 #include "components/domicile/browser/agent_input_lines.h"
 #include "components/domicile/browser/control_channel.h"
 #include "components/domicile/browser/web_view_guest.h"
@@ -30,6 +31,8 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/domicile_agent_input.h"
+#include "content/public/browser/domicile_clipboard.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -201,18 +204,19 @@ struct Landed {
   std::string window;
 };
 
-// Notes who last pressed or keyed in browser window `window`'s page, an agent
-// or a person: a file request the page makes next goes to the agent only if
-// an agent did. See WebViewGuest::NoteAgentInput.
-void NoteInputIn(const std::string& window, bool agent) {
+// Notes who last pressed or keyed in browser window `window`'s page: agent
+// seat `agent`, or a person for nullopt. A file request the page makes next
+// goes to the agent only if an agent did, and its copies and pastes use that
+// agent's clipboard. See WebViewGuest::NoteAgentInput.
+void NoteInputIn(const std::string& window, std::optional<std::string> agent) {
   content::WebContents* page = BrowserWindowContents(window);
   WebViewGuest* guest =
       page == nullptr ? nullptr : WebViewGuest::FromWebContents(page);
   if (guest == nullptr) {
     return;
   }
-  if (agent) {
-    guest->NoteAgentInput();
+  if (agent.has_value()) {
+    guest->NoteAgentInput(std::move(agent));
   } else {
     guest->NotePersonInput();
   }
@@ -251,6 +255,16 @@ class AgentSeatsInPages : public ui::EventObserver {
       tell.Run(AgentInputReachedMessage(input.serial, reached.window,
                                         reached.refused));
     }
+  }
+
+  // content's clipboard chooser: a frame in a browser window's page that an
+  // agent seat last drove copies to and pastes from that seat's clipboard.
+  ui::Clipboard* ClipboardFor(content::RenderFrameHost& frame) {
+    WebViewGuest* guest = WebViewGuest::FromWebContents(
+        content::WebContents::FromRenderFrameHost(&frame));
+    return guest == nullptr
+               ? nullptr
+               : clipboards_.ForPage(guest->agent_seat_driving());
   }
 
   // content's drag taker: a drag in a widget an agent pressed in is the
@@ -320,6 +334,7 @@ class AgentSeatsInPages : public ui::EventObserver {
         Leave(seat);
         Blur(seat);
         seats_.erase(input.seat);
+        clipboards_.Gone(input.seat);
         return {};
     }
     NOTREACHED();
@@ -572,7 +587,7 @@ class AgentSeatsInPages : public ui::EventObserver {
     if (page != nullptr) {
       TypeIn(seat, page, window);
     }
-    NoteInputIn(window, /*agent=*/true);
+    NoteInputIn(window, input.seat);
     SendMouse(widget, blink::WebInputEvent::Type::kMouseDown, in_widget,
               button, seat.clicks, Modifiers(seat));
     return Window(window);
@@ -635,7 +650,7 @@ class AgentSeatsInPages : public ui::EventObserver {
       return {};
     }
     if (input.pressed) {
-      NoteInputIn(seat.typing_window, /*agent=*/true);
+      NoteInputIn(seat.typing_window, input.seat);
     }
     SendKey(page, input.code, input.pressed, Flags(seat));
     return Window(seat.typing_window);
@@ -874,12 +889,12 @@ class AgentSeatsInPages : public ui::EventObserver {
     // The user's own press or key takes the window's file requests back from
     // any agent, whether or not an agent seat is here now.
     if (pressed) {
-      NoteInputIn(UsersPointerWindow(), /*agent=*/false);
+      NoteInputIn(UsersPointerWindow(), std::nullopt);
     } else if (event.type() == ui::EventType::kKeyPressed) {
       content::WebContents* shell = DeskShellContents();
       content::WebContents* users = content::DomicileUsersFocusedPage(shell);
       if (users != nullptr && users != shell) {
-        NoteInputIn(BrowserWindowOfPage(users), /*agent=*/false);
+        NoteInputIn(BrowserWindowOfPage(users), std::nullopt);
       }
     }
     if (seats_.empty() || !tell_) {
@@ -933,6 +948,8 @@ class AgentSeatsInPages : public ui::EventObserver {
   }
 
   std::map<std::string, Seat> seats_;
+  // Each agent seat's clipboard, until the seat goes.
+  AgentClipboards clipboards_;
   std::optional<uint64_t> last_serial_;
   // Sends on the channel that last carried an agent's input.
   AgentInputTell tell_;
@@ -956,6 +973,10 @@ void StartAgentInput() {
       [](content::RenderWidgetHost* source, const content::DropData& data,
          blink::DragOperationsMask allowed) {
         return AgentSeatsInPages::Get().TakeDrag(source, data, allowed);
+      }));
+  content::SetDomicileClipboardChooser(
+      base::BindRepeating([](content::RenderFrameHost& frame) {
+        return AgentSeatsInPages::Get().ClipboardFor(frame);
       }));
 }
 

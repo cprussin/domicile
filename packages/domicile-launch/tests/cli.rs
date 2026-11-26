@@ -1665,6 +1665,7 @@ fn devtools_sends_a_method_and_its_params_to_a_window() {
         Ok(Invocation::Ask {
             request: Request::DevTools {
                 window: "Xy7p".to_string(),
+                agent: None,
                 view: None,
                 method: "DOM.getBoxModel".to_string(),
                 params,
@@ -1689,12 +1690,34 @@ fn devtools_sends_a_method_and_its_params_to_a_window() {
         Ok(Invocation::Ask {
             request: Request::DevTools {
                 window: "Xy7p".to_string(),
+                agent: None,
                 view: Some("9".to_string()),
                 method: "Page.reload".to_string(),
                 params: serde_json::json!({}),
             },
         })
     );
+    assert_eq!(
+        run(&[
+            "devtools",
+            "--agent",
+            "3",
+            "--view",
+            "9",
+            "Xy7p",
+            "Page.reload"
+        ]),
+        Ok(Invocation::Ask {
+            request: Request::DevTools {
+                window: "Xy7p".to_string(),
+                agent: Some(3),
+                view: Some("9".to_string()),
+                method: "Page.reload".to_string(),
+                params: serde_json::json!({}),
+            },
+        })
+    );
+    assert!(run(&["devtools", "--agent", "three", "Xy7p", "Page.reload"]).is_err());
     assert!(run(&["devtools", "--view"]).is_err());
     assert!(run(&["devtools", "Xy7p"]).is_err());
     assert!(run(&["devtools", "Xy7p", "Page.reload", "[1]"]).is_err());

@@ -1550,7 +1550,7 @@ fn nothing_dialed() -> Desktop<'static> {
         act_on_window: &|_, _| panic!("only act_on_window acts on a window"),
         shoot_desk: &|_, _, _| panic!("only shoot_desk shoots the desk"),
         emulate: &|_, _| panic!("only emulate sends input"),
-        devtools: &|_, _, _| panic!("only devtools sends DevTools methods"),
+        devtools: &|_, _, _, _| panic!("only devtools sends DevTools methods"),
         configure_display: &|_, _| panic!("only configure_display configures a display"),
         log_levels: &|| panic!("only the log level requests read the log levels"),
         set_log_levels: &|_| panic!("only the log level requests set log levels"),
@@ -1870,10 +1870,10 @@ fn devtools_sends_to_a_browser_window_by_its_listed_id() {
             &Desktop {
                 windows: &three_windows,
                 status: &|| status(false),
-                devtools: &|window, method, params| {
+                devtools: &|window, agent, method, params| {
                     assert_eq!(
-                        (window, method, params),
-                        ("3", "DOM.getBoxModel", &serde_json::json!({"backendNodeId": 4}))
+                        (window, agent, method, params),
+                        ("3", None, "DOM.getBoxModel", &serde_json::json!({"backendNodeId": 4}))
                     );
                     Ok(serde_json::json!({"model": {}}))
                 },
@@ -1886,6 +1886,29 @@ fn devtools_sends_to_a_browser_window_by_its_listed_id() {
     );
 }
 
+/// An agent session's method names its seat, so the page it drives copies to
+/// that seat's clipboard.
+#[test]
+fn devtools_sends_for_the_agent_session_it_names() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"devtools\",\"window\":\"Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE\",\"agent\":7,\"method\":\"Page.reload\",\"params\":{}}",
+            &Desktop {
+                windows: &three_windows,
+                status: &|| status(false),
+                devtools: &|_, agent, _, _| {
+                    assert_eq!(agent, Some(7));
+                    Ok(serde_json::json!({}))
+                },
+                ..nothing_dialed()
+            },
+        ),
+        Response::DevTools {
+            result: serde_json::json!({})
+        }
+    );
+}
+
 #[test]
 fn devtools_sends_to_a_view_the_window_holds() {
     assert_eq!(
@@ -1894,7 +1917,7 @@ fn devtools_sends_to_a_view_the_window_holds() {
             &Desktop {
                 windows: &three_windows,
                 status: &|| status(false),
-                devtools: &|window, _, _| {
+                devtools: &|window, _, _, _| {
                     assert_eq!(window, "9");
                     Ok(serde_json::json!({}))
                 },
@@ -1951,7 +1974,7 @@ fn devtools_sends_window_shell_to_the_shells_own_page() {
             &Desktop {
                 windows: &three_windows,
                 status: &|| status(false),
-                devtools: &|window, method, _| {
+                devtools: &|window, _, method, _| {
                     assert_eq!((window, method), ("shell", "Accessibility.getFullAXTree"));
                     Ok(serde_json::json!({"nodes": []}))
                 },

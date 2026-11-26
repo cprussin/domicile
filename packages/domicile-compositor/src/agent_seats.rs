@@ -438,13 +438,13 @@ impl DomicileCompositor {
         let serial = self.agent_seats.next_serial();
         // Windows the user took from this agent, and windows other agents
         // hold.
+        // An agent with no seat yet has taken nothing.
         let mut barred: Vec<String> = self
             .agent_seats
-            .mine(session)
-            .taken
-            .iter()
-            .cloned()
-            .collect();
+            .seats
+            .get(&session)
+            .map(|agent| agent.taken.iter().cloned().collect())
+            .unwrap_or_default();
         for (other, agent) in &self.agent_seats.seats {
             if *other == session {
                 continue;
@@ -482,13 +482,15 @@ impl DomicileCompositor {
         self.agent_seats
             .started
             .retain(|_, started_for| *started_for != session);
-        // An agent that never pointed or typed has no seat.
+        // An agent that never pointed or typed has no seat. It may have
+        // driven pages by DevTools, so their clipboard goes.
         if !self.agent_seats.seats.contains_key(&session) {
+            self.agent_asks_the_browser(session, AgentPageInput::Gone, true);
             return;
         }
         self.agent_stops(session, Err(format!("no agent is in as session {session}")));
         self.agent_lets_go(session);
-        // What it held in the browser's pages goes too.
+        // What it held in the browser's pages goes too, and their clipboard.
         self.agent_asks_the_browser(session, AgentPageInput::Gone, true);
         let agent = self
             .agent_seats

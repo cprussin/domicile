@@ -315,6 +315,7 @@ void ChooseFiles(const std::string& window,
 }  // namespace
 
 void SendDevToolsToBrowserWindow(const std::string& window,
+                                 const std::optional<std::string>& agent,
                                  const std::string& method,
                                  base::DictValue params,
                                  DevToolsAnswered answered) {
@@ -358,10 +359,11 @@ void SendDevToolsToBrowserWindow(const std::string& window,
     return;
   }
   if (window != kShellWindow && PressesOrKeys(method, params)) {
-    // A file chooser this sets off is the agent's. Upstream's DevTools has
-    // the same for its own clients: Page.setInterceptFileChooserDialog.
+    // A file chooser this sets off is the agent's, and so are the copies and
+    // pastes it makes. Upstream's DevTools has the first for its own clients:
+    // Page.setInterceptFileChooserDialog.
     if (WebViewGuest* guest = WebViewGuest::FromWebContents(page)) {
-      guest->NoteAgentInput();
+      guest->NoteAgentInput(agent);
     }
   }
   // Owns itself until answered.

@@ -1253,6 +1253,35 @@ fn an_agent_that_leaves_is_gone_from_the_pages() {
     assert_eq!(quietly_told(&mut desk.chrome), AgentPageInput::Gone);
 }
 
+/// An agent that only drove pages by DevTools has no seat, and leaving still
+/// tells the browser: the clipboard its pages copied to goes with it.
+#[test]
+fn an_agent_with_no_seat_that_leaves_is_gone_from_the_pages() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows(&compositor);
+    let (held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+
+    drop(held);
+
+    let told = desk
+        .chrome
+        .wait_for(|message| matches!(message, HostMessage::AgentInput { quiet: true, .. }))
+        .expect("the browser is told");
+    let HostMessage::AgentInput {
+        seat,
+        input,
+        barred,
+        ..
+    } = told
+    else {
+        unreachable!("the wait matched on this variant")
+    };
+    assert_eq!(
+        (seat, input, barred),
+        (format!("agent-{session}"), AgentPageInput::Gone, Vec::new())
+    );
+}
+
 /// The shell takes a browser window from an agent as it does a native one.
 #[test]
 fn the_shell_takes_a_browser_window_from_an_agent() {

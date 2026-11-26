@@ -50,7 +50,7 @@ user's block, then the lists' verdict.
 - **`chrome/browser/domicile/domicile_ad_blocking.cc`**: `AdBlocking`, one
   per process, which keeps the lists and builds the blocker, and
   `ProxyAdBlocking`, which puts it in front of a frame's loads.
-- **Patch 0287**: `ChromeContentBrowserClient::WillCreateURLLoaderFactory`
+- **Patch 0288**: `ChromeContentBrowserClient::WillCreateURLLoaderFactory`
   calls `ProxyAdBlocking`, after an Electron app's handlers and before
   extensions' webRequest, so a blocked request reaches no extension.
 - **Crates**: adblock-rust and the crates it needs that the Chromium pin does

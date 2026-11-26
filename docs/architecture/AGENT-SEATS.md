@@ -119,6 +119,20 @@ user's clipboard. Clipboard managers (data control) and the clipboard
 history see only the user's. An agent's selection ends with its session. Copying
 between them is explicit: a future `clipboard_read` / `clipboard_write` tool.
 
+Browser windows share the engine's one process clipboard, so the engine keeps
+an agent's apart:
+
+- A page an agent seat last pressed or keyed in, by DevTools or at a desk
+  position, copies to and pastes from that seat's own in-memory clipboard
+  (`AgentClipboards`, patch 0289). The user's press or key there gives the
+  page back the desktop's.
+- `domicile mcp` sends its input methods with `devtools --agent <session>`,
+  so the engine knows the seat. DevTools sent with no seat (`domicile
+  devtools` by hand) copies to the desktop's.
+- The compositor never sees an agent's browser copies. They end with its
+  session (`agent_input` `gone`), and are not shared with its native windows'
+  selection.
+
 ### File choosers
 
 A file request an agent's input sets off is the agent's to answer, never a
@@ -204,6 +218,8 @@ domicile.seats.giveBack(windowId);
       (`agent_input`, patch 0277); the shell refuses them; the user's press
       or key takes the window
 - [x] manganese: ring, name tag and cursor on browser windows too
+- [x] engine and MCP: an agent's copies and pastes in browser windows use
+      its own clipboard (patch 0289)
 - [x] engine and MCP: file choosers an agent's input opens wait for the
       agent (`Domicile.fileChooser`, `Domicile.chooseFiles`,
       `browser_choose_files`)

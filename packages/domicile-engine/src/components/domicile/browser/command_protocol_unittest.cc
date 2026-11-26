@@ -87,6 +87,7 @@ struct Told {
   // Whether the recording `disable_while_typing` has the pads rest.
   bool typing_rests = true;
   std::string devtools_window;
+  std::optional<std::string> devtools_agent;
   std::string devtools_method;
   std::optional<base::DictValue> devtools_params;
   std::optional<int> min_log_level;
@@ -413,11 +414,13 @@ std::string Answer(std::string_view line,
     return told->typing_rests;
   };
   // Answers with the method it was sent, so a test can see it went through.
-  auto send_devtools = [told, has_window](const std::string& window,
-                                          const std::string& method,
-                                          base::DictValue params,
-                                          DevToolsAnswered answered) {
+  auto send_devtools = [told, has_window](
+                           const std::string& window,
+                           const std::optional<std::string>& agent,
+                           const std::string& method, base::DictValue params,
+                           DevToolsAnswered answered) {
     told->devtools_window = window;
+    told->devtools_agent = agent;
     told->devtools_method = method;
     told->devtools_params = std::move(params);
     if (!has_window) {
@@ -1660,6 +1663,28 @@ TEST(CommandProtocolTest, SendsADevToolsMethodToABrowserWindow) {
                                        base::JSON_PARSE_RFC));
 }
 
+// The agent seat a method is sent for: a page it drove copies to that seat's
+// clipboard.
+TEST(CommandProtocolTest, SendsADevToolsMethodForAnAgentSeat) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"devtools","version":1,"window":"w1",)"
+                          R"("agent":"agent-3","method":"Page.reload"})",
+                          &told)),
+            "devtools");
+  EXPECT_EQ(told.devtools_agent, "agent-3");
+}
+
+// `domicile devtools` by hand names no seat.
+TEST(CommandProtocolTest, SendsADevToolsMethodForNoAgentSeat) {
+  Told told;
+  told.devtools_agent = "agent-9";
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"devtools","version":1,"window":"w1",)"
+                          R"("method":"Page.reload"})",
+                          &told)),
+            "devtools");
+  EXPECT_EQ(told.devtools_agent, std::nullopt);
+}
+
 TEST(CommandProtocolTest, SendsADevToolsMethodWithoutParamsAsAnEmptyObject) {
   Told told;
   EXPECT_EQ(TypeOf(Answer(R"({"type":"devtools","version":1,"window":"w1",)"
@@ -1746,7 +1771,11 @@ TEST(CommandProtocolTest, RefusesADevToolsRequestMissingAField) {
         R"({"type":"devtools","version":1,"window":"","method":"Page.reload"})",
         R"({"type":"devtools","version":1,"window":"w1"})",
         R"({"type":"devtools","version":1,"window":"w1",)"
-        R"("method":"Page.reload","params":[1]})"}) {
+        R"("method":"Page.reload","params":[1]})",
+        R"({"type":"devtools","version":1,"window":"w1",)"
+        R"("agent":"","method":"Page.reload"})",
+        R"({"type":"devtools","version":1,"window":"w1",)"
+        R"("agent":3,"method":"Page.reload"})"}) {
     EXPECT_EQ(TypeOf(Answer(line, &told)), "refused") << line;
   }
   EXPECT_TRUE(told.devtools_method.empty());

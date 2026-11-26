@@ -608,12 +608,13 @@ fn the_engine_sends_a_devtools_method_and_answers_its_result() {
     let params = serde_json::json!({"url": "https://example.com/"});
 
     assert_eq!(
-        devtools(&path, "w7", "Page.navigate", &params, BRIEFLY).expect("the page answered"),
+        devtools(&path, "w7", Some(3), "Page.navigate", &params, BRIEFLY)
+            .expect("the page answered"),
         serde_json::json!({"frameId": "F"})
     );
     assert_eq!(
         heard.join().expect("the engine was listening"),
-        devtools_line("w7", "Page.navigate", &params)
+        devtools_line("w7", Some(3), "Page.navigate", &params)
     );
 }
 

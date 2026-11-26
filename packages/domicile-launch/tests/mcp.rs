@@ -593,6 +593,32 @@ const AGENTS_METHODS: [&str; 18] = [
     "Page.reload",
 ];
 
+/// `domicile devtools` arguments without the agent session, which every input
+/// method names and no other does: the page it drives copies to that agent's
+/// own clipboard.
+fn for_the_agent(args: &[String]) -> Vec<String> {
+    match args {
+        [devtools, flag, session, rest @ ..] if devtools == "devtools" && flag == "--agent" => {
+            assert_eq!(session, "7", "sent for the agent's own session");
+            assert!(
+                rest.iter().any(|arg| arg.starts_with("Input.")),
+                "only input names the agent: {args:?}"
+            );
+            std::iter::once(devtools.clone())
+                .chain(rest.iter().cloned())
+                .collect()
+        }
+        [devtools, ..] if devtools == "devtools" => {
+            assert!(
+                !args.iter().any(|arg| arg.starts_with("Input.")),
+                "input names the agent: {args:?}"
+            );
+            args.to_vec()
+        }
+        _ => args.to_vec(),
+    }
+}
+
 /// Stands in for `domicile devtools` on browser window `w1`: answers each
 /// method from `answers` and records every run in `ran`.
 fn page<'a>(
@@ -607,6 +633,7 @@ fn page<'a>(
             ran.push((args.join(" "), json!({})));
             return printed("");
         }
+        let args = for_the_agent(args);
         assert_eq!(args[..2], ["devtools", "w1"]);
         let params: Value = serde_json::from_str(&args[3]).unwrap();
         ran.push((args[2].clone(), params));
@@ -1230,7 +1257,8 @@ fn electron_window<'a>(
                 "[{\"id\": \"w1\", \"views\": [{\"id\": \"9\", \"position\": [200, 40], \"size\": [600, 560]}]}]\n",
             );
         }
-        let (view, args) = match args {
+        let args = for_the_agent(args);
+        let (view, args) = match args.as_slice() {
             [devtools, flag, view, rest @ ..] if devtools == "devtools" && flag == "--view" => {
                 (Some(view.clone()), rest)
             }

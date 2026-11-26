@@ -1001,7 +1001,7 @@ fn called(
     match tool {
         Tool::Screenshot => return screenshot(arguments, domicile, view),
         Tool::Browser(browser) => {
-            let answer = browser::called(browser, arguments, domicile, read, titles, quiet)?;
+            let answer = browser::called(browser, arguments, seat, domicile, read, titles, quiet)?;
             return keyboard_follows_a_click(browser, arguments, seat, domicile, answer);
         }
         _ => {}

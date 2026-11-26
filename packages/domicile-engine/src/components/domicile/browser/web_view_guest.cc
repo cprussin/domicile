@@ -1176,12 +1176,14 @@ void WebViewGuest::ChooseFiles(
               base::BindOnce(&DialogFilesChosen, mode, std::move(chosen)));
 }
 
-void WebViewGuest::NoteAgentInput() {
+void WebViewGuest::NoteAgentInput(std::optional<std::string> seat) {
   agent_drove_last_ = true;
+  agent_seat_driving_ = std::move(seat);
 }
 
 void WebViewGuest::NotePersonInput() {
   agent_drove_last_ = false;
+  agent_seat_driving_.reset();
 }
 
 std::optional<WebViewGuest::AgentFileRequest>

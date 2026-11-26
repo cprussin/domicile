@@ -107,10 +107,13 @@ pub(super) fn described(tool: Browser) -> (&'static str, Value, Vec<&'static str
 /// `tools/call`'s result for browser tool `tool` with `arguments`. A read
 /// keeps the window's outline in `read`; an act answers what it changed,
 /// unless `quiet`, for a batch that reads the window once at its end. Each
-/// read notes the title of the page the window shows in `titles`.
+/// read notes the title of the page the window shows in `titles`. Its methods
+/// are sent for agent session `seat`, so a page it drives copies to and pastes
+/// from that agent's own clipboard.
 pub(super) fn called(
     tool: Browser,
     arguments: &Map<String, Value>,
+    seat: u32,
     domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
     read: &mut HashMap<String, String>,
     titles: &mut HashMap<String, String>,
@@ -127,6 +130,7 @@ pub(super) fn called(
     };
     let mut page = Page {
         window,
+        agent: Some(seat),
         view,
         domicile,
         title: None,
@@ -195,6 +199,7 @@ pub(super) fn chooser_note(
 ) -> io::Result<Option<String>> {
     let mut page = Page {
         window: window.to_string(),
+        agent: None,
         view,
         domicile,
         title: None,
@@ -217,6 +222,7 @@ pub(super) fn read_again(
 ) -> io::Result<String> {
     let mut page = Page {
         window: window.to_string(),
+        agent: None,
         view: None,
         domicile,
         title: None,
@@ -241,6 +247,9 @@ pub(super) fn read_again(
 /// sends methods to.
 struct Page<'a, D> {
     window: String,
+    /// The agent session its input methods are sent for, for an act; none
+    /// for a read.
+    agent: Option<u32>,
     view: Option<String>,
     domicile: &'a mut D,
     /// The title of the window's page as last read, if it was.
@@ -250,12 +259,20 @@ struct Page<'a, D> {
 impl<D: FnMut(&[String]) -> io::Result<Ran>> Page<'_, D> {
     /// `method`'s result, or why there is none.
     fn send(&mut self, method: &str, params: Value) -> io::Result<Result<Value, String>> {
+        // Only input says who drove the page, which is what the engine keys
+        // the page's clipboard on.
+        let agent = self
+            .agent
+            .filter(|_| method.starts_with("Input."))
+            .into_iter()
+            .flat_map(|agent| ["--agent".to_string(), agent.to_string()]);
         let view = self
             .view
             .iter()
             .flat_map(|view| ["--view".to_string(), view.clone()]);
         let ran = (self.domicile)(
             &std::iter::once("devtools".to_string())
+                .chain(agent)
                 .chain(view)
                 .chain([self.window.clone(), method.to_string(), params.to_string()])
                 .collect::<Vec<_>>(),

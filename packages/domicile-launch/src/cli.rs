@@ -871,6 +871,7 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
             },
             Verb::DevTooling => {
                 let mut args = args.peekable();
+                let agent = agent_flag(&mut args)?;
                 let view = match args.next_if(|said| said == "--view") {
                     Some(_) => Some(args.next().ok_or(CliError::NotDevTools)?),
                     None => None,
@@ -887,6 +888,7 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                         Ok(Invocation::Ask {
                             request: Request::DevTools {
                                 window,
+                                agent,
                                 view,
                                 method,
                                 params,

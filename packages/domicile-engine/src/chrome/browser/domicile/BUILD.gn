@@ -230,6 +230,9 @@ source_set("domicile") {
     # An agent seat's input into the browser's pages, from the control
     # channel, as the pages' own keyboard and mouse events.
     "//components/domicile:agent_input_lines",
+    # Their copies and pastes in the pages they drove, on their own
+    # clipboards.
+    "//components/domicile:agent_clipboards",
     "//components/input",
     "//third_party/blink/public/common:headers",
     "//ui/events/blink",

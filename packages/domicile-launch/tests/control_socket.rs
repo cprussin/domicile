@@ -197,7 +197,9 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                         panic!("a question about this desktop reaches no compositor")
                     },
                     emulate: &|_, _| panic!("a question about this desktop reaches no compositor"),
-                    devtools: &|_, _, _| panic!("a question about this desktop reaches no engine"),
+                    devtools: &|_, _, _, _| {
+                        panic!("a question about this desktop reaches no engine")
+                    },
                     configure_display: &|_, _| {
                         panic!("a question about this desktop reaches no compositor")
                     },

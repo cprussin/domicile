@@ -530,8 +530,16 @@ class WebViewGuest : public mojom::WebViewGuest,
   // An agent's own input, DevTools or its seat's, gave this page a press or a
   // key. Until a person's does, a file request the page makes is the agent's
   // to answer, not the shell's: see AgentFileRequest and
-  // docs/architecture/AGENT-SEATS.md.
-  void NoteAgentInput();
+  // docs/architecture/AGENT-SEATS.md. `seat` is the agent's seat ("agent-3"),
+  // or nullopt for DevTools sent with none (`domicile devtools` by hand).
+  void NoteAgentInput(std::optional<std::string> seat);
+
+  // The agent seat whose input last pressed or keyed in this page, or nullopt
+  // when a person's did, or an agent's with no seat named. Its copies and
+  // pastes use that seat's clipboard, not the desktop's.
+  const std::optional<std::string>& agent_seat_driving() const {
+    return agent_seat_driving_;
+  }
 
   // A person's own press or key reached this page: its file requests ask the
   // shell again.
@@ -1503,6 +1511,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Whether an agent's input, not a person's, last pressed or keyed in this
   // page. See NoteAgentInput.
   bool agent_drove_last_ = false;
+
+  // The agent seat that did, when named. See agent_seat_driving().
+  std::optional<std::string> agent_seat_driving_;
 
   // The file request held for an agent, and its answer, which runs with
   // nothing if it is dropped. See AskForFiles.

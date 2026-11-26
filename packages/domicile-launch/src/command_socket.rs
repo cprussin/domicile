@@ -385,16 +385,21 @@ pub fn disable_while_typing(
 }
 
 /// Sends DevTools Protocol `method` with `params` to browser window `window`
-/// of the engine at `socket`, by its id there, and returns the method's
-/// result.
+/// of the engine at `socket`, by its id there, for agent session `agent` when
+/// given, and returns the method's result.
 pub fn devtools(
     socket: &Path,
     window: &str,
+    agent: Option<u32>,
     method: &str,
     params: &serde_json::Value,
     patience: Duration,
 ) -> Result<serde_json::Value, CommandError> {
-    match answered(socket, &devtools_line(window, method, params), patience)? {
+    match answered(
+        socket,
+        &devtools_line(window, agent, method, params),
+        patience,
+    )? {
         Reply::DevTools { result } => Ok(result),
         other => Err(unexpected(socket, &other)),
     }

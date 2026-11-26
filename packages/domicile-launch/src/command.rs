@@ -399,11 +399,18 @@ pub fn set_log_levels_line(min_level: i32, vmodule: &str) -> String {
 }
 
 /// The request to send DevTools Protocol `method` with `params` to browser
-/// window `window`, by its id in the engine.
-pub fn devtools_line(window: &str, method: &str, params: &serde_json::Value) -> String {
+/// window `window`, by its id in the engine, for agent session `agent` when
+/// given: the page it drives copies to that seat's clipboard.
+pub fn devtools_line(
+    window: &str,
+    agent: Option<u32>,
+    method: &str,
+    params: &serde_json::Value,
+) -> String {
     line(&Command::DevTools {
         version: VERSION,
         window,
+        agent: agent.map(|session| format!("agent-{session}")),
         method,
         params,
     })
@@ -557,6 +564,9 @@ enum Command<'a> {
     DevTools {
         version: u32,
         window: &'a str,
+        // The agent seat, `agent-<session>`; left out for none.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        agent: Option<String>,
         method: &'a str,
         params: &'a serde_json::Value,
     },

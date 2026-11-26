@@ -34,6 +34,7 @@ Each agent gets its own pointer, keyboard and clipboard, in native and browser w
 - `domicile list-windows` and the MCP server's `list_windows` give a browser window `focused` and its page's `size`, from the engine's new `browser_windows` command. [`domicile list-windows`](CLI.md#domicile-list-windows---json)
 - Extensions' keys and menus: `extensions.commands` and `runCommand()` run `chrome.commands`, `extensions.menu()` has an action's `chrome.contextMenus` items, and a page's context menu event carries `extensionItems`. [Commands](SHELL-EXTENSIONS.md#commands) · [Menus](SHELL-EXTENSIONS.md#menus)
 - `domicile.config` makes temporary changes to the config, which last until the desktop restarts or the file changes that setting: `setOverride`, `resetOverrides` and `overrides`, each change with what the file has under it. An extension's site and file access are the same in every browser profile, and one the user installs starts off in every profile, for your shell to ask which profiles it goes on in. [Temporary changes](SETTINGS.md#temporary-changes) · [Extensions](architecture/EXTENSIONS.md)
+- `domicile devtools --agent <session>` sends a method as that agent's input, so what the page copies and pastes goes to the agent's clipboard; the engine's `devtools` command takes `"agent"`. [`domicile devtools`](CLI.md)
 - `idle.ignore_pointer_motion` keeps a drifting mouse from holding the desktop awake. [`idle`](SHELL-CONFIG.md#idle)
 
 ### Breaking changes
@@ -47,6 +48,7 @@ Each agent gets its own pointer, keyboard and clipboard, in native and browser w
 
 ### Fixes
 
+- An agent's Ctrl+C in a browser page goes to the agent's clipboard, not the user's, and its Ctrl+V pastes its own copy.
 - A `Popover` grows no taller than the room on its screen, and its body scrolls the rest; a child with `min-block-size: 0` shrinks to scroll a part of itself. `Select` and `Autocomplete` lists cap at the room too.
 - An extension that asks for a page's language, such as Ghostery, is refused and the desktop stays up. [Extensions](SHELL-EXTENSIONS.md)
 - A picker's event has its anchor in the `<webview>`'s coordinates, wherever the `<webview>` is on the desktop. [Browser windows](SHELL-BROWSER-WINDOWS.md)
