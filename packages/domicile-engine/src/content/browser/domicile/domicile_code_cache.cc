@@ -18,8 +18,9 @@ void SetDomicileCodeCachePath(StoragePartition& partition,
       partition.GetGeneratedCodeCacheContext();
   // Every partition the browser makes has one.
   CHECK(context);
-  // As the partition first did, with a size disk_cache chooses.
-  context->Initialize(path, /*max_bytes=*/0);
+  // Initialized as the partition was made, so the caches move, with a size
+  // disk_cache chooses as the partition's did.
+  context->DomicileMoveTo(path, /*max_bytes=*/0);
 }
 
 }  // namespace content

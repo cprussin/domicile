@@ -3,7 +3,7 @@
 # and a cookie before its window opens, and the page loads as that agent
 # with that cookie; cookies.get then finds the cookie the page set too, and
 # clearStorageData leaves the page's next load with no cookies and no
-# localStorage. See "Sessions" in docs/architecture/ELECTRON-APPS.md.
+# localStorage; setCodeCachePath moves its code cache, and pages load on. See "Sessions" in docs/architecture/ELECTRON-APPS.md.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-electron-session.sh /build/chromium/src
@@ -17,6 +17,7 @@
 #   got      cookies.get found the app's cookie and the one the page set
 #   cleared  after clearStorageData, the page's next load had no cookies and
 #            no localStorage
+#   moved    setCodeCachePath answered, and the page loaded again after it
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -187,7 +188,7 @@ try:
     connection.connect(path)
 except OSError as failure:
     print("no socket: %s" % failure, flush=True)
-    print("measured: 0 0 0 0 0", flush=True)
+    print("measured: 0 0 0 0 0 0", flush=True)
     sys.exit(0)
 reader = connection.makefile("r", encoding="utf-8")
 
@@ -215,9 +216,14 @@ for attempt in range(1, 6):
         break
     time.sleep(0.2)
 
+# The partition's code cache started with it, so this one moves it.
+moved = call(5, "set_code_cache_path", path="/tmp/domicile-electron-session-code")
+send({"type": "load_url", "window": 1, "url": origin + "/index.html?moved"})
+after_move = page_says("?moved")
+
 names = sorted(cookie.get("name") for cookie in
                ((got or {}).get("result") or []))
-print("measured: %d %d %d %d %d" % (
+print("measured: %d %d %d %d %d %d" % (
     ready is not None and ready["type"] == "ready",
     agent_set is not None and "error" not in agent_set and
     first[0] == "GuardAgent/1" and len(seen) > 0 and
@@ -226,7 +232,8 @@ print("measured: %d %d %d %d %d" % (
     "app=1" in first[1] and len(seen) > 0 and "app=1" in seen[0][1],
     names == ["app", "page"],
     cleared is not None and "error" not in cleared and first[2] == "none" and
-    second[1] == "" and second[2] == "none"),
+    second[1] == "" and second[2] == "none",
+    moved is not None and "error" not in moved and after_move[0] != ""),
     flush=True)
 server.shutdown()
 PY
@@ -234,17 +241,17 @@ PY
 MEASURED="$(sed -n 's/^measured: //p' "$APP_LOG")"
 echo
 echo "measured: $MEASURED"
-echo "  (ready agent cookie got cleared)"
+echo "  (ready agent cookie got cleared moved)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-electron-session-guard.sh`
 # runs this block directly. MEASURED is "<ready> <agent> <cookie> <got>
-# <cleared>".
+# <cleared> <moved>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"1 1 1 1 1")
+"1 1 1 1 1 1")
   PASSED="the app's session gave its page a user agent and a cookie, found \\
-the page's own cookie, and cleared what the page kept"
+the page's own cookie, cleared what the page kept, and moved its code cache"
   ;;
 "0 "*)
   FAILURE="the Electron socket did not take the app's hello -- \\
@@ -264,9 +271,14 @@ must set it in the partition the app's windows load in (StorageOf)"
   FAILURE="cookies.get did not find both cookies for the page's URL: \\
 GetElectronCookies, or ElectronCookieMatches dropped one"
   ;;
-"1 1 1 1 0")
+"1 1 1 1 0 "*)
   FAILURE="THE PAGE KEPT ITS COOKIES OR localStorage AFTER clearStorageData: \\
 ClearElectronStorage must clear every storage of the session's partition"
+  ;;
+"1 1 1 1 1 0")
+  FAILURE="setCodeCachePath stopped the session or its page: \\
+SetDomicileCodeCachePath must move the partition's started code cache \\
+(GeneratedCodeCacheContext::DomicileMoveTo), not initialize it again"
   ;;
 *)
   FAILURE="there is no measurement here this guard can place ($MEASURED)"

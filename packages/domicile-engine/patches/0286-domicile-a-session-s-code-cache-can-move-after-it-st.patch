@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Connor Prussin <connor@prussin.net>
+Date: Thu, 26 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a session's code cache can move after it starts
+
+GeneratedCodeCacheContext initializes once, as its partition is made, and
+a second Initialize fails its CHECK. session.setCodeCachePath moves the
+caches later, so DomicileMoveTo drops and remakes them on the code cache
+thread, which stays: code cache hosts hold its task runner.
+---
+ .../generated_code_cache_context.cc           | 23 +++++++++++++++++++
+ .../code_cache/generated_code_cache_context.h |  7 ++++++
+ 2 files changed, 30 insertions(+)
+
+diff --git a/content/browser/code_cache/generated_code_cache_context.cc b/content/browser/code_cache/generated_code_cache_context.cc
+index fbe93d5..79414b5 100644
+--- a/content/browser/code_cache/generated_code_cache_context.cc
++++ b/content/browser/code_cache/generated_code_cache_context.cc
+@@ -228,6 +228,29 @@ void GeneratedCodeCacheContext::InitializeOnThread(const base::FilePath& path,
+   }
+ }
+ 
++void GeneratedCodeCacheContext::DomicileMoveTo(const base::FilePath& path,
++                                               int max_bytes) {
++  CHECK_CURRENTLY_ON(BrowserThread::UI);
++  CHECK(task_runner_);  // Initialized, and not shut down.
++  RunOrPostTask(
++      this, FROM_HERE,
++      base::BindOnce(&GeneratedCodeCacheContext::DomicileMoveToOnThread, this,
++                     path, max_bytes));
++}
++
++void GeneratedCodeCacheContext::DomicileMoveToOnThread(
++    const base::FilePath& path,
++    int max_bytes) {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++#if !BUILDFLAG(IS_FUCHSIA)
++  persistent_cache_collection_.reset();
++#endif  // !BUILDFLAG(IS_FUCHSIA)
++  generated_js_code_cache_.reset();
++  generated_wasm_code_cache_.reset();
++  generated_webui_js_code_cache_.reset();
++  InitializeOnThread(path, max_bytes);
++}
++
+ void GeneratedCodeCacheContext::Shutdown() {
+   CHECK_CURRENTLY_ON(BrowserThread::UI, base::NotFatalUntil::M159);
+   RunOrPostTask(this, FROM_HERE,
+diff --git a/content/browser/code_cache/generated_code_cache_context.h b/content/browser/code_cache/generated_code_cache_context.h
+index 44ca792..2b11204 100644
+--- a/content/browser/code_cache/generated_code_cache_context.h
++++ b/content/browser/code_cache/generated_code_cache_context.h
+@@ -68,6 +68,12 @@ class CONTENT_EXPORT GeneratedCodeCacheContext
+ 
+   void Shutdown();
+ 
++  // Domicile: keeps the caches in `path` from now on, as an Electron app's
++  // session.setCodeCachePath does. The caches move on the code cache
++  // thread, after every task already posted there, and that thread stays:
++  // callers hold its task runner. UI thread only, after Initialize.
++  void DomicileMoveTo(const base::FilePath& path, int max_bytes);
++
+   // Shuts down the context and runs `callback` on the caller's sequence once
+   // all background tasks have completed.
+   void ShutdownForTesting(base::OnceClosure callback);
+@@ -120,6 +126,7 @@ class CONTENT_EXPORT GeneratedCodeCacheContext
+   ~GeneratedCodeCacheContext();
+ 
+   void InitializeOnThread(const base::FilePath& path, int max_bytes);
++  void DomicileMoveToOnThread(const base::FilePath& path, int max_bytes);
+   void ShutdownOnThread(
+       DedicatedTaskRunnerForResource task_runner_for_resource);
+   void ShutdownOnThreadForTesting(

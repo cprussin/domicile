@@ -57,28 +57,32 @@ says() { # $1 MEASURED, $2 what the sentence must contain
   esac
 }
 
-# MEASURED is "<ready> <agent> <cookie> <got> <cleared>".
+# MEASURED is "<ready> <agent> <cookie> <got> <cleared> <moved>".
 echo "the claim — an app's session calls reach its page's storage and loads"
-expect "every call doing its part is the pass" "pass" "$(verdict "1 1 1 1 1")"
-expect "no hello is a failure" "fail" "$(verdict "0 0 0 0 0")"
+expect "every call doing its part is the pass" "pass" "$(verdict "1 1 1 1 1 1")"
+expect "no hello is a failure" "fail" "$(verdict "0 0 0 0 0 0")"
 expect "and points at the socket's guard" "yes" \
-  "$(says "0 0 0 0 0" "guard-electron-socket.sh")"
+  "$(says "0 0 0 0 0 0" "guard-electron-socket.sh")"
 expect "a page that missed the user agent is a failure" "fail" \
-  "$(verdict "1 0 1 1 1")"
+  "$(verdict "1 0 1 1 1 1")"
 expect "and names where the agent is applied" "yes" \
-  "$(says "1 0 1 1 1" "UseUserAgent")"
+  "$(says "1 0 1 1 1 1" "UseUserAgent")"
 expect "a page without the app's cookie is a failure" "fail" \
-  "$(verdict "1 1 0 1 1")"
+  "$(verdict "1 1 0 1 1 1")"
 expect "and names the partition lookup" "yes" \
-  "$(says "1 1 0 1 1" "StorageOf")"
+  "$(says "1 1 0 1 1 1" "StorageOf")"
 expect "cookies.get missing a cookie is a failure" "fail" \
-  "$(verdict "1 1 1 0 1")"
+  "$(verdict "1 1 1 0 1 1")"
 expect "and names the filter" "yes" \
-  "$(says "1 1 1 0 1" "ElectronCookieMatches")"
+  "$(says "1 1 1 0 1 1" "ElectronCookieMatches")"
 expect "storage that survived clearStorageData is a failure" "fail" \
-  "$(verdict "1 1 1 1 0")"
+  "$(verdict "1 1 1 1 0 1")"
 expect "and names the clear" "yes" \
-  "$(says "1 1 1 1 0" "ClearElectronStorage")"
+  "$(says "1 1 1 1 0 1" "ClearElectronStorage")"
+expect "a code cache move that stopped the page is a failure" "fail" \
+  "$(verdict "1 1 1 1 1 0")"
+expect "and names the move" "yes" \
+  "$(says "1 1 1 1 1 0" "DomicileMoveTo")"
 expect "an empty measurement is a failure" "fail" "$(verdict "")"
 
 [ "$FAILED" -eq 0 ] && echo "all ok"
