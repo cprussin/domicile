@@ -627,7 +627,8 @@ The host carries out the webContents members that act on the page with
   `setPreloads`) run before the window's in a sandboxed page, each in turn,
   one's error thrown apart so the next still runs; a Node page refuses
   them for now. `setCodeCachePath` is `set_code_cache_path`: the partition
-  keeps the code V8 compiles from then on in the app's directory
+  keeps the code V8 compiles from then on in the app's directory, its
+  started cache moved on the code cache thread (patch 0290)
   ([`domicile_code_cache.h`](../../packages/domicile-engine/src/content/public/browser/domicile_code_cache.h)).
 - **Session events**: a page's resource hint (`<link rel=preconnect>`)
   comes as `preconnect {session, url, allow_credentials}`, its session's
