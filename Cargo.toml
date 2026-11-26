@@ -46,10 +46,9 @@ print_stderr = "deny"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-# Pinned release candidate for `Config::with_event_kinds`. Version 8 watches
-# every file open, which overflows the kernel queue on a real home (see
-# `domicile_host::home_watch`). Move to 9.0.0 when it is released.
-notify = "=9.0.0-rc.9"
+# 9 for `Config::with_event_kinds`. Version 8 watches every file open, which
+# overflows the kernel queue on a real home (see `domicile_host::home_watch`).
+notify = "9.0"
 # Matches the gitignore-style globs in the config's `[files] omit`.
 globset = { version = "0.4", default-features = false }
 tempfile = "3"
@@ -68,9 +67,9 @@ png = "0.18"
 schemars = "1"
 # Parses JavaScript shells to find their imports (see
 # `domicile_launch::shell_source`).
-oxc_allocator = "0.159"
-oxc_parser = "0.159"
-oxc_span = "0.159"
+oxc_allocator = "0.160"
+oxc_parser = "0.160"
+oxc_span = "0.160"
 
 # The installed binaries (`domicileBinaries` in `flake.nix`). Panics unwind:
 # `domicile`'s `Drop`s end the desktop's process groups and its graphical
