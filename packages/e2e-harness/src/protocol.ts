@@ -500,6 +500,7 @@ const browserProfilesSchema = z.looseObject({
         block_ads_and_trackers: z.enum(["standard", "strict", "off"]),
         block_third_party_cookies: z.boolean(),
         global_privacy_control: z.boolean(),
+        hide_device_details: z.boolean(),
         hide_local_ip_address: z.boolean(),
         remove_tracking_from_links: z.boolean(),
       }),

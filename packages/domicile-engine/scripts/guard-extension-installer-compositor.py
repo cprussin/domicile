@@ -30,6 +30,7 @@ PROTECTIONS = {
     "global_privacy_control": True,
     "hide_local_ip_address": True,
     "remove_tracking_from_links": True,
+    "hide_device_details": True,
 }
 
 # Unlike a desk's, no filter lists unless the guard names some, so a guard

@@ -68,6 +68,9 @@ the detail, when there is one. Remove a gap when it's fixed.
 - **A page's app link can't open a `Terminal=true` app,** such as a
   terminal mail client for `mailto:`: the engine has no `DOMICILE_TERMINAL`,
   so its `domicile open` skips them (`let_the_engine_open_links`).
+- **Hiding your device's details covers pages, not workers,** nor WebGL,
+  fonts or the screen's size.
+  [AD-BLOCKING.md](/docs/architecture/AD-BLOCKING.md#device-details).
 - **Resize cost is unmeasured.**
   [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#embed-deadlines).
 

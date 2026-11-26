@@ -571,6 +571,20 @@ describe(App, () => {
       });
     });
 
+    it("shows sites the device's true details in the default profile", async () => {
+      const { host, user } = await renderApp("Privacy");
+      const protections = await profileCard("Website protections");
+      await user.click(
+        protections.getByRole("switch", { name: "Hide your device's details" }),
+      );
+      await waitFor(() => {
+        const { profiles } = written(host.writes).browser;
+        expect(profiles.default.protections).toEqual({
+          hide_device_details: false,
+        });
+      });
+    });
+
     it("blocks a site's own ads too in the default profile", async () => {
       const { host, user } = await renderApp("Privacy");
       await choose(user, "Block ads and trackers", "Strict");

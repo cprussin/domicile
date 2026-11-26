@@ -36,6 +36,10 @@ inline constexpr char kSiteAdBlockingPref[] = "domicile.ad_blocking.sites";
 // as the config has it. Off too wherever the page's ad blocking is Off.
 inline constexpr char kRemoveLinkTrackingPref[] =
     "domicile.link_tracking.remove";
+// Whether pages see the device's details a little off (DeviceDetailsHiding),
+// as the config has it. Off too wherever the page's ad blocking is Off.
+inline constexpr char kHideDeviceDetailsPref[] =
+    "domicile.device_details.hide";
 
 // The prefs above, on every profile.
 void RegisterSitePrivacyPrefs(PrefRegistrySimple* registry);

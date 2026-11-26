@@ -872,6 +872,7 @@ fn every_profile_starts_with_every_protection_on() {
         assert!(profile.protections.global_privacy_control);
         assert!(profile.protections.hide_local_ip_address);
         assert!(profile.protections.remove_tracking_from_links);
+        assert!(profile.protections.hide_device_details);
     }
 }
 
@@ -891,6 +892,7 @@ fn a_profile_turns_off_the_protections_it_names() {
     assert!(protections.global_privacy_control);
     assert!(protections.hide_local_ip_address);
     assert!(protections.remove_tracking_from_links);
+    assert!(protections.hide_device_details);
 }
 
 #[test]

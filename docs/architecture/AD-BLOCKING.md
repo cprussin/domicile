@@ -152,6 +152,38 @@ an Electron app's page. `--vmodule=link_tracking_throttle=1` logs each one.
 
 Not yet: the lists' `$removeparam` rules.
 
+## Device details
+
+A site can recognize a browser without a cookie by what it reads of the
+device: how a canvas drawing comes out in pixels, how an audio graph renders,
+how many processors there are. In a profile with
+`protections.hide_device_details` (on unless set `false`), in Standard and
+Strict, a page reads each a little off, as Brave farbles them:
+
+- **Canvas**: `toDataURL`, `toBlob` and `getImageData` change the lowest bit
+  of one color in 8 of the picture's pixels (`FarblePixels`), chosen by the
+  seed and the pixels, so the same drawing comes out the same way twice.
+- **Audio**: what an `OfflineAudioContext` renders, and an `AnalyserNode`'s
+  float readings, are scaled by a factor a few millionths from 1
+  (`FarbledAudioFactor`).
+- **Processors**: `navigator.hardwareConcurrency` is between 2 and the true
+  count (`FarbledHardwareConcurrency`).
+
+The seed is the first 8 bytes of an HMAC-SHA256 of the page's top site, keyed
+by 32 random bytes each profile draws when it starts (`DeviceDetailsHiding`,
+`chrome/browser/domicile/domicile_device_details.cc`). So one site reads the
+same details all session, two sites read different ones, and the next start
+reads new ones. The browser pushes it to the frame before its commit, as it
+does cosmetic filters (`DeviceDetailsAgent`), and Blink keeps it on the
+`LocalDOMWindow`; a frame reads its nearest local parent's. Patch 0293 calls
+the farbling (`third_party/blink/renderer/core/frame/domicile_device_details.h`)
+from each of those places. Off reads the truth.
+
+Not yet: workers (their `hardwareConcurrency` and `OffscreenCanvas`), WebGL's
+`readPixels`, `OffscreenCanvas.convertToBlob`, an `AnalyserNode`'s byte
+readings, an `AudioContext` played rather than rendered offline, and fonts and
+the screen's size.
+
 Not yet: procedural filters (`:has-text()`, `:upward()`) and scriptlets
 (`##+js()`), which need a script in the page's world.
 
@@ -169,6 +201,11 @@ Not yet: procedural filters (`:has-text()`, `:upward()`) and scriptlets
 - **Click ids in Standard, campaign parameters only in Strict**, as Brave:
   `utm_` names a newsletter or an ad campaign, not you, and some sites read
   it for their own pages.
+- **Farbled, not blocked or made uniform.** A canvas or audio reading that
+  fails breaks the sites that draw or play with them; one made the same for
+  everyone needs everyone on the same engine, which a desktop of its own is
+  not. A few bits off, per site and per start, are invisible and still keep
+  two sites from matching their readings.
 - **The same hiding in Standard and Strict.** The lists' cosmetic rules
   rarely break a site the way blocking its own scripts does, so Strict only
   blocks more.
@@ -188,4 +225,5 @@ Not yet: procedural filters (`:has-text()`, `:upward()`) and scriptlets
 - [x] cosmetic filters: what the lists hide by a page's elements
 - [x] tracking taken out of links to other sites
 - [ ] scriptlets and procedural filters, cookie banners, `$removeparam`
-- [ ] fingerprinting protection
+- [x] fingerprinting protection: canvas, audio and processor count farbled
+- [ ] farbling in workers, WebGL, fonts and the screen

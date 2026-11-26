@@ -581,6 +581,13 @@ export type Protections = {
    */
   global_privacy_control?: boolean;
   /**
+   * Shows sites the device's canvas drawing, audio and processor count a
+   * little off, the same way for a site until the desktop starts again,
+   * as Brave's farbling does, so they can't recognize the device by
+   * them. Not on a site or in a window whose ad blocking is off.
+   */
+  hide_device_details?: boolean;
+  /**
    * Keeps WebRTC, as video calls use, from telling sites your local
    * network address.
    */

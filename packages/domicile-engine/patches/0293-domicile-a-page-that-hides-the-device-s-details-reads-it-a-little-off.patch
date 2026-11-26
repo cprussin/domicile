@@ -1,0 +1,324 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 26 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a page that hides the device's details reads it a
+ little off
+
+Brave's farbling: a page in a profile that hides the device's details
+reads its canvas pictures and pixels, its rendered and analyzed audio and
+its processor count a little off, the same way for its site all session.
+The browser sends each frame its seed before it commits;
+domicile::DeviceDetailsAgent, which ChromeContentRendererClient::
+RenderFrameCreated gives every frame, hands it to the new document's
+window (WebLocalFrame::SetDomicileDeviceDetailsSeed), and core/frame/
+domicile_device_details.h farbles with it where a page reads each:
+NavigatorBase::hardwareConcurrency, HTMLCanvasElement's toDataURL and
+toBlob, BaseRenderingContext2D::getImageData, OfflineAudioContext's
+rendered buffer and AnalyserNode's float data.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ chrome/renderer/BUILD.gn                            |  1 +
+ chrome/renderer/chrome_content_renderer_client.cc   |  5 +++++
+ third_party/blink/public/web/web_local_frame.h      |  5 +++++
+ third_party/blink/renderer/core/BUILD.gn            |  4 ++++
+ .../core/execution_context/navigator_base.cc        |  6 +++++-
+ third_party/blink/renderer/core/frame/build.gni     |  2 ++
+ .../blink/renderer/core/frame/local_dom_window.h    | 13 +++++++++++++
+ .../renderer/core/frame/web_local_frame_impl.cc     |  6 ++++++
+ .../renderer/core/frame/web_local_frame_impl.h      |  1 +
+ .../core/html/canvas/html_canvas_element.cc         | 10 ++++++++--
+ .../canvas/canvas2d/base_rendering_context_2d.cc    |  4 ++++
+ .../renderer/modules/webaudio/analyser_node.cc      |  6 ++++++
+ .../modules/webaudio/offline_audio_context.cc       |  9 +++++++++
+ 13 files changed, 69 insertions(+), 3 deletions(-)
+
+diff --git a/chrome/renderer/BUILD.gn b/chrome/renderer/BUILD.gn
+index e7be1c370de43..915cc21005a25 100644
+--- a/chrome/renderer/BUILD.gn
++++ b/chrome/renderer/BUILD.gn
+@@ -155,6 +155,7 @@ static_library("renderer") {
+     "//components/crx_file",
+     "//components/domicile:common",
+     "//components/domicile:cosmetic_filters",
++    "//components/domicile:device_details_agent",
+     "//components/domicile:electron_preload",
+     "//components/domicile:electron_schemes",
+     "//components/facilitated_payments/content/renderer",
+diff --git a/chrome/renderer/chrome_content_renderer_client.cc b/chrome/renderer/chrome_content_renderer_client.cc
+index a6184586294a6..f288108436765 100644
+--- a/chrome/renderer/chrome_content_renderer_client.cc
++++ b/chrome/renderer/chrome_content_renderer_client.cc
+@@ -7,6 +7,7 @@
+ #include "components/domicile/common/domicile_scheme.h"
+ #include "components/domicile/common/electron_schemes.h"
+ #include "components/domicile/renderer/cosmetic_filters.h"
++#include "components/domicile/renderer/device_details_agent.h"
+ #include "components/domicile/renderer/electron_preload.h"
+ 
+ #include <functional>
+@@ -714,6 +715,10 @@ void ChromeContentRendererClient::RenderFrameCreated(
+   // sends a frame what to hide before each navigation commits. See
+   // components/domicile/renderer/cosmetic_filters.h.
+   domicile::CosmeticFilters::Attach(render_frame);
++  // Domicile's engine fork. The seed a website frame farbles what its page
++  // reads of the device with: the browser sends it before each navigation
++  // commits. See components/domicile/renderer/device_details_agent.h.
++  domicile::DeviceDetailsAgent::Attach(render_frame);
+ 
+   auto content_settings_delegate =
+       std::make_unique<ChromeContentSettingsAgentDelegate>(render_frame);
+diff --git a/third_party/blink/public/web/web_local_frame.h b/third_party/blink/public/web/web_local_frame.h
+index 3f0b653476602..ed0dcf97e26b0 100644
+--- a/third_party/blink/public/web/web_local_frame.h
++++ b/third_party/blink/public/web/web_local_frame.h
+@@ -1001,6 +1001,11 @@ class BLINK_EXPORT WebLocalFrame : public WebFrame {
+   // This should only be used for extensions and the webview tag.
+   virtual void SetAllowsCrossBrowsingInstanceFrameLookup() = 0;
+ 
++  // Domicile's engine fork. The seed the current document's window farbles
++  // what the page reads of the device with, or none for the truth. See
++  // third_party/blink/renderer/core/frame/domicile_device_details.h.
++  virtual void SetDomicileDeviceDetailsSeed(std::optional<uint64_t> seed) = 0;
++
+   virtual void SetTargetToCurrentHistoryItem(const WebString& target) = 0;
+   virtual void UpdateCurrentHistoryItem() = 0;
+   virtual PageState CurrentHistoryItemToPageState() = 0;
+diff --git a/third_party/blink/renderer/core/BUILD.gn b/third_party/blink/renderer/core/BUILD.gn
+index 79319388ecac1..33401c9d63b78 100644
+--- a/third_party/blink/renderer/core/BUILD.gn
++++ b/third_party/blink/renderer/core/BUILD.gn
+@@ -417,6 +417,10 @@ component("core") {
+     # components/domicile/mojom's WebViewGuestHost.
+     "//components/domicile/mojom:mojom_blink",
+ 
++    # Domicile's engine fork: what a page that hides the device's details
++    # reads of it. See frame/domicile_device_details.h.
++    "//components/domicile:device_details",
++
+     "//components/paint_preview/common",
+     "//components/performance_manager/public/mojom:mojom_blink",
+     "//components/shared_highlighting/core/common",
+diff --git a/third_party/blink/renderer/core/execution_context/navigator_base.cc b/third_party/blink/renderer/core/execution_context/navigator_base.cc
+index 83f427c5ec9b7..b36d350d177d5 100644
+--- a/third_party/blink/renderer/core/execution_context/navigator_base.cc
++++ b/third_party/blink/renderer/core/execution_context/navigator_base.cc
+@@ -8,6 +8,7 @@
+ #include "build/build_config.h"
+ #include "third_party/blink/public/common/features.h"
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/frame/domicile_device_details.h"
+ #include "third_party/blink/renderer/core/frame/navigator_concurrent_hardware.h"
+ #include "third_party/blink/renderer/core/probe/core_probes.h"
+ #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+@@ -90,7 +91,10 @@ unsigned int NavigatorBase::hardwareConcurrency() const {
+ 
+   probe::ApplyHardwareConcurrencyOverride(
+       probe::ToCoreProbeSink(GetExecutionContext()), hardware_concurrency);
+-  return hardware_concurrency;
++  // Domicile's engine fork. A page that hides the device's details sees a
++  // count of its own. See core/frame/domicile_device_details.h.
++  return DomicileHardwareConcurrency(GetExecutionContext(),
++                                     hardware_concurrency);
+ }
+ 
+ ExecutionContext* NavigatorBase::GetUAExecutionContext() const {
+diff --git a/third_party/blink/renderer/core/frame/build.gni b/third_party/blink/renderer/core/frame/build.gni
+index d4c9fd8971317..8d65d5b46d0db 100644
+--- a/third_party/blink/renderer/core/frame/build.gni
++++ b/third_party/blink/renderer/core/frame/build.gni
+@@ -38,6 +38,8 @@ blink_core_sources_frame = [
+   "csp/source_list_directive.h",
+   "csp/trusted_types_directive.cc",
+   "csp/trusted_types_directive.h",
++  "domicile_device_details.cc",
++  "domicile_device_details.h",
+   "frame_content_as_text.h",
+   "frame_content_as_text.cc",
+   "deprecation/deprecation.cc",
+diff --git a/third_party/blink/renderer/core/frame/local_dom_window.h b/third_party/blink/renderer/core/frame/local_dom_window.h
+index 1540c489fa4f5..beef45263b8b8 100644
+--- a/third_party/blink/renderer/core/frame/local_dom_window.h
++++ b/third_party/blink/renderer/core/frame/local_dom_window.h
+@@ -28,6 +28,7 @@
+ #define THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_LOCAL_DOM_WINDOW_H_
+ 
+ #include <memory>
++#include <optional>
+ 
+ #include "base/task/single_thread_task_runner.h"
+ #include "services/metrics/public/cpp/ukm_recorder.h"
+@@ -501,6 +502,16 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
+ 
+   bool IsCrossSiteSubframeIncludingScheme() const;
+ 
++  // Domicile's engine fork. The seed this window farbles what its page reads
++  // of the device with, or none. See domicile_device_details.h, which also
++  // looks to a parent frame's.
++  void SetDomicileDeviceDetailsSeed(std::optional<uint64_t> seed) {
++    domicile_device_details_seed_ = seed;
++  }
++  std::optional<uint64_t> DomicileDeviceDetailsSeed() const {
++    return domicile_device_details_seed_;
++  }
++
+   void DispatchPersistedPageshowEvent(base::TimeTicks navigation_start);
+ 
+   void DispatchPagehideEvent(PageTransitionEventPersistence persistence);
+@@ -673,6 +684,8 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
+   Member<ScriptController> script_controller_;
+ 
+   Member<Document> document_;
++  // Domicile's engine fork. See SetDomicileDeviceDetailsSeed.
++  std::optional<uint64_t> domicile_device_details_seed_;
+   Member<DOMViewport> viewport_;
+   Member<DOMVisualViewport> visualViewport_;
+ 
+diff --git a/third_party/blink/renderer/core/frame/web_local_frame_impl.cc b/third_party/blink/renderer/core/frame/web_local_frame_impl.cc
+index 05fe9d80fc120..8fbee35846019 100644
+--- a/third_party/blink/renderer/core/frame/web_local_frame_impl.cc
++++ b/third_party/blink/renderer/core/frame/web_local_frame_impl.cc
+@@ -3463,6 +3463,12 @@ void WebLocalFrameImpl::SetAllowsCrossBrowsingInstanceFrameLookup() {
+   window->GetMutableSecurityOrigin()->GrantCrossAgentClusterAccess();
+ }
+ 
++void WebLocalFrameImpl::SetDomicileDeviceDetailsSeed(
++    std::optional<uint64_t> seed) {
++  DCHECK(GetFrame());
++  GetFrame()->DomWindow()->SetDomicileDeviceDetailsSeed(seed);
++}
++
+ WebHistoryItem WebLocalFrameImpl::GetCurrentHistoryItem() const {
+   return WebHistoryItem(current_history_item_);
+ }
+diff --git a/third_party/blink/renderer/core/frame/web_local_frame_impl.h b/third_party/blink/renderer/core/frame/web_local_frame_impl.h
+index 15cb071c2a775..9b3d764e9e822 100644
+--- a/third_party/blink/renderer/core/frame/web_local_frame_impl.h
++++ b/third_party/blink/renderer/core/frame/web_local_frame_impl.h
+@@ -367,6 +367,7 @@ class CORE_EXPORT WebLocalFrameImpl final
+   gfx::Rect GetSelectionBoundsRectForTesting() const override;
+   gfx::Point GetPositionInViewportForTesting() const override;
+   void SetAllowsCrossBrowsingInstanceFrameLookup() override;
++  void SetDomicileDeviceDetailsSeed(std::optional<uint64_t> seed) override;
+   void NotifyUserActivation(
+       mojom::blink::UserActivationNotificationType notification_type) override;
+   bool HasStickyUserActivation() override;
+diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+index 3a0282b5e7014..4256480ee923f 100644
+--- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
++++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+@@ -73,6 +73,7 @@
+ #include "third_party/blink/renderer/core/dom/element_traversal.h"
+ #include "third_party/blink/renderer/core/event_type_names.h"
+ #include "third_party/blink/renderer/core/fileapi/file.h"
++#include "third_party/blink/renderer/core/frame/domicile_device_details.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
+ #include "third_party/blink/renderer/core/frame/local_frame_client.h"
+@@ -1473,7 +1474,10 @@ String HTMLCanvasElement::ToDataURLInternal(
+   ImageEncodingMimeType encoding_mime_type =
+       ImageEncoderUtils::ToEncodingMimeType(mime_type);
+ 
+-  scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(source_buffer);
++  // Domicile's engine fork. A page that hides the device's details exports
++  // a picture a little off. See core/frame/domicile_device_details.h.
++  scoped_refptr<StaticBitmapImage> image_bitmap = DomicileFarbledImage(
++      GetDocument().GetExecutionContext(), Snapshot(source_buffer));
+   if (image_bitmap) {
+     std::unique_ptr<ImageDataBuffer> data_buffer =
+         ImageDataBuffer::Create(image_bitmap);
+@@ -1576,7 +1580,9 @@ void HTMLCanvasElement::toBlob(V8BlobCallback* callback,
+       ImageEncoderUtils::ToEncodingMimeType(mime_type);
+ 
+   CanvasAsyncBlobCreator* async_creator = nullptr;
+-  scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(kBackBuffer);
++  // Domicile's engine fork. As ToDataURLInternal.
++  scoped_refptr<StaticBitmapImage> image_bitmap =
++      DomicileFarbledImage(GetExecutionContext(), Snapshot(kBackBuffer));
+   if (image_bitmap) {
+     auto* options = ImageEncodeOptions::Create();
+     options->setType(ImageEncoderUtils::MimeTypeName(encoding_mime_type));
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+index 774197367795c..306f0a6a6f5bb 100644
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "third_party/blink/renderer/core/frame/domicile_device_details.h"
+ #include "third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.h"
+ 
+ #include <stdint.h>
+@@ -1644,6 +1645,9 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
+     }
+   }
+ 
++  // Domicile's engine fork. A page that hides the device's details reads
++  // pixels a little off. See core/frame/domicile_device_details.h.
++  DomicileFarbleImageData(GetTopExecutionContext(), *image_data);
+   return image_data;
+ }
+ 
+diff --git a/third_party/blink/renderer/modules/webaudio/analyser_node.cc b/third_party/blink/renderer/modules/webaudio/analyser_node.cc
+index 4bc4b15f4b7ed..5e851c047f0b1 100644
+--- a/third_party/blink/renderer/modules/webaudio/analyser_node.cc
++++ b/third_party/blink/renderer/modules/webaudio/analyser_node.cc
+@@ -23,6 +23,7 @@
+  * DAMAGE.
+  */
+ 
++#include "third_party/blink/renderer/core/frame/domicile_device_details.h"
+ #include "third_party/blink/renderer/modules/webaudio/analyser_node.h"
+ 
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_analyser_options.h"
+@@ -126,6 +127,9 @@ double AnalyserNode::smoothingTimeConstant() const {
+ void AnalyserNode::getFloatFrequencyData(NotShared<DOMFloat32Array> array) {
+   GetAnalyserHandler().GetFloatFrequencyData(array.Get(),
+                                              context()->currentTime());
++  // Domicile's engine fork. A page that hides the device's details hears its
++  // audio a little off. See core/frame/domicile_device_details.h.
++  DomicileFarbleAudio(GetExecutionContext(), array->AsSpan());
+ }
+ 
+ void AnalyserNode::getByteFrequencyData(NotShared<DOMUint8Array> array) {
+@@ -135,6 +139,8 @@ void AnalyserNode::getByteFrequencyData(NotShared<DOMUint8Array> array) {
+ 
+ void AnalyserNode::getFloatTimeDomainData(NotShared<DOMFloat32Array> array) {
+   GetAnalyserHandler().GetFloatTimeDomainData(array.Get());
++  // Domicile's engine fork. As getFloatFrequencyData.
++  DomicileFarbleAudio(GetExecutionContext(), array->AsSpan());
+ }
+ 
+ void AnalyserNode::getByteTimeDomainData(NotShared<DOMUint8Array> array) {
+diff --git a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
+index a798c39c5263e..876fd8087694d 100644
+--- a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
++++ b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
+@@ -23,6 +23,7 @@
+  * DAMAGE.
+  */
+ 
++#include "third_party/blink/renderer/core/frame/domicile_device_details.h"
+ #include "third_party/blink/renderer/modules/webaudio/offline_audio_context.h"
+ 
+ #include <limits>
+@@ -604,6 +605,14 @@ void OfflineAudioContext::OnChunkRendered() {
+   Member<AudioBuffer> rendered_buffer = pending_render_targets_.front();
+ 
+   CHECK(rendered_buffer);
++  // Domicile's engine fork. A page that hides the device's details hears
++  // its rendering a little off, once, before it can read it. See
++  // core/frame/domicile_device_details.h.
++  for (unsigned channel = 0; channel < rendered_buffer->numberOfChannels();
++       ++channel) {
++    DomicileFarbleAudio(GetExecutionContext(),
++                        rendered_buffer->getChannelData(channel)->AsSpan());
++  }
+   // Keep the target queued across `Resolve()` so synchronous thenable getters
+   // can enqueue more chunks without starting a duplicate render.
+   resolver->Resolve(rendered_buffer.Get());
+-- 
+2.43.0
+

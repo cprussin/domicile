@@ -98,6 +98,7 @@
                 "block_ads_and_trackers": null,
                 "block_third_party_cookies": true,
                 "global_privacy_control": true,
+                "hide_device_details": true,
                 "hide_local_ip_address": true,
                 "remove_tracking_from_links": true
               }
@@ -111,6 +112,7 @@
                 "block_ads_and_trackers": null,
                 "block_third_party_cookies": true,
                 "global_privacy_control": true,
+                "hide_device_details": true,
                 "hide_local_ip_address": true,
                 "remove_tracking_from_links": true
               }
@@ -161,6 +163,7 @@
             "block_ads_and_trackers": null,
             "block_third_party_cookies": true,
             "global_privacy_control": true,
+            "hide_device_details": true,
             "hide_local_ip_address": true,
             "remove_tracking_from_links": true
           },
@@ -818,6 +821,11 @@
           "description": "Asks sites not to sell or share your data, with the\n`Sec-GPC: 1` header and `navigator.globalPrivacyControl`.",
           "type": "boolean"
         },
+        "hide_device_details": {
+          "default": true,
+          "description": "Shows sites the device's canvas drawing, audio and processor count a\nlittle off, the same way for a site until the desktop starts again,\nas Brave's farbling does, so they can't recognize the device by\nthem. Not on a site or in a window whose ad blocking is off.",
+          "type": "boolean"
+        },
         "hide_local_ip_address": {
           "default": true,
           "description": "Keeps WebRTC, as video calls use, from telling sites your local\nnetwork address.",
@@ -1160,6 +1168,7 @@
               "block_ads_and_trackers": null,
               "block_third_party_cookies": true,
               "global_privacy_control": true,
+              "hide_device_details": true,
               "hide_local_ip_address": true,
               "remove_tracking_from_links": true
             }
@@ -1173,6 +1182,7 @@
               "block_ads_and_trackers": null,
               "block_third_party_cookies": true,
               "global_privacy_control": true,
+              "hide_device_details": true,
               "hide_local_ip_address": true,
               "remove_tracking_from_links": true
             }

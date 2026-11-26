@@ -16,6 +16,7 @@ mojom("mojom") {
     "cast_sinks.mojom",
     "control_channel.mojom",
     "cosmetic_filters.mojom",
+    "device_details.mojom",
     "downloads.mojom",
     "electron_frame.mojom",
     "extension_tray.mojom",

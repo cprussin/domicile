@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # A profile's ad blocking reaches its pages: the config's filter lists and the
 # user's own rules block a website's requests, and hide what they name by its
-# elements, and take the tracking out of its links to other sites, in the mode
-# of the profile its page is in, and a profile with blocking off loads, shows
-# and keeps everything.
+# elements, take the tracking out of its links to other sites, and show a page
+# the device's details a little off, in the mode of the profile its page is
+# in, and a profile with blocking off loads, shows, keeps and tells
+# everything.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-ad-blocking.sh /build/chromium/src
@@ -18,8 +19,9 @@
 # ProxyAdBlocking is in front of the frame's loads (the patch that names this
 # guard), that its frames get their cosmetic filters (CosmeticFiltering and
 # the renderer's CosmeticFilters, patch 0292), that a link to another site
-# goes through LinkTrackingThrottle, and that each profile's mode is the one
-# used.
+# goes through LinkTrackingThrottle, that the page it leads to reads the
+# device as DeviceDetailsHiding and patch 0293 farble it, and that each
+# profile's mode is the one used.
 #
 # The list, a file this guard writes, names `/ads/*` and makes an exception for
 # `/ads/allowed.js`, and hides `.site-promo` on 127.0.0.1, `.ad-banner`,
@@ -55,6 +57,17 @@
 #   default: K D K                     the click id is dropped, the rest kept
 #   strict:  K D D                     the campaign parameter too
 #   off:     K K K                     the control: everything is kept
+#
+# and, as canvas image audio cores again, on that page, against off's:
+#
+#   default: C C C K S                 the canvas's export, its pixels and the
+#                                      rendered audio are not off's, the
+#                                      processor count is between 2 and off's,
+#                                      and a second export is the first
+#   strict:  C C C K S                 the same: farbling is no stricter
+#   off:     S                         the control: its two exports agree,
+#                                      so the others' differences are the
+#                                      farbling's
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -184,10 +197,11 @@ rm -f "$ENGINE_LOG"
 STARTED+=($!)
 
 # 5. Wait for the three pages to say which scripts ran, a few seconds later
-#    what they hide, and then what reached the page their link leads to.
+#    what they hide, and then what reached the page their link leads to and
+#    what it read of the device.
 TRIES=$((FOR_SECONDS * 4))
 for _ in $(seq 1 "$TRIES"); do
-  [ "$(grep -c "GUARD landed as=" "$ENGINE_LOG" 2>/dev/null)" -ge 3 ] && break
+  [ "$(grep -c "GUARD device as=" "$ENGINE_LOG" 2>/dev/null)" -ge 3 ] && break
   sleep 0.25
 done
 
@@ -197,7 +211,11 @@ done
 # each profile again, which of site, generic, complex, late, kept and plain
 # are hidden (H hidden, S shown, ? no report); and for each profile again,
 # which of keep, fbclid and utm_source reached the page its link leads to (K
-# kept, D dropped, ? no report).
+# kept, D dropped, ? no report); and for default and strict, which of the
+# canvas's export, its pixels and the rendered audio Changed from off's or
+# are True to it, whether the processor count is Kept between 2 and off's (X
+# if not), and whether a second export is the Same (V if it varies); and for
+# off whether its two exports agree (S or V).
 READ="$(awk '
   /GUARD shell-loaded/ { shell = 1 }
   match($0, /GUARD ads as=[a-z0-9-]+( [a-z]+=[a-z]+)+/) {
@@ -223,6 +241,15 @@ READ="$(awk '
       split(f[i], kv, /=/)
       landed[a[2] SUBSEP kv[1]] = kv[2]
     }
+  }
+  match($0, /GUARD device as=[a-z0-9-]+( [a-z_]+=[^ ",]+)+/) {
+    n = split(substr($0, RSTART + 13, RLENGTH - 13), f, / /)
+    split(f[1], a, /=/)
+    for (i = 2; i <= n; i++) {
+      split(f[i], kv, /=/)
+      device[a[2] SUBSEP kv[1]] = kv[2]
+    }
+    read[a[2]] = 1
   }
   match($0, /^GUARD served as=[a-z0-9-]+ what=[a-z]+$/) {
     split(substr($0, 14), f, /[ =]/)
@@ -255,13 +282,29 @@ READ="$(awk '
     }
     return out
   }
+  function versus(as, what) {
+    return device[as SUBSEP what] == device["off" SUBSEP what] ? "T" : "C"
+  }
+  function farbled(as,   cores) {
+    if (!read[as] || !read["off"]) return "?????"
+    cores = device[as SUBSEP "cores"] + 0
+    return versus(as, "canvas") versus(as, "image") versus(as, "audio") \
+      (cores <= device["off" SUBSEP "cores"] + 0 && \
+        (cores >= 2 || cores == device["off" SUBSEP "cores"] + 0) ? "K" : "X") \
+      (device[as SUBSEP "canvas"] == device[as SUBSEP "canvas_again"] ? "S" : "V")
+  }
+  function truthful() {
+    if (!read["off"]) return "?"
+    return device["off" SUBSEP "canvas"] == device["off" SUBSEP "canvas_again"] ? "S" : "V"
+  }
   END {
     leaked = 0
     for (k in served) if (ran[k] == "blocked") leaked += served[k]
-    printf "%d %s %s %s %d %s %s %s %s %s %s\n", shell, letters("default"),
-      letters("strict"), letters("off"), leaked, shown("default"),
-      shown("strict"), shown("off"), reached("default"), reached("strict"),
-      reached("off")
+    printf "%d %s %s %s %d %s %s %s %s %s %s %s %s %s\n", shell,
+      letters("default"), letters("strict"), letters("off"), leaked,
+      shown("default"), shown("strict"), shown("off"), reached("default"),
+      reached("strict"), reached("off"), farbled("default"), farbled("strict"),
+      truthful()
   }' "$ENGINE_LOG" "$HTTP_LOG" 2>/dev/null)"
 
 MEASURED="$READ"
@@ -269,21 +312,23 @@ echo
 echo "measured: $MEASURED"
 echo "  (shell default strict off leaked, each profile as third first mine allowed ok;"
 echo "   then default strict off, each as site generic complex late kept plain;"
-echo "   then default strict off, each as keep fbclid utm_source)"
+echo "   then default strict off, each as keep fbclid utm_source;"
+echo "   then default strict as canvas image audio cores again, and off as again)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-ad-blocking-guard.sh`
 # runs the reading and this block directly.
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK")
+"1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")
   PASSED="a profile's ad blocking reached its pages: default blocked another \
 site's listed script and not the page's own, strict blocked both, the user's \
 rule blocked in either and the list's exception loaded; both hid what the \
 list names by its elements, a late one too, and not the site's exception; a \
 link to another site lost its click id, and in strict its campaign parameter; \
-off loaded, showed and kept everything, and no blocked script reached the \
-server"
+the page it led to read its canvas, audio and processor count a little off, \
+the same way twice; off loaded, showed, kept and told everything, and no \
+blocked script reached the server"
   ;;
 "0 "*)
   FAILURE="the shell page never ran, so nothing here was set up: the module \
@@ -291,7 +336,7 @@ did not load, or it threw, and the engine log has its console"
   ;;
 *"?"*)
   FAILURE="a page never said which scripts ran or what it hid, or its link \
-never landed: \
+never landed or read the device: \
 openBrowserWindow opened no window in a profile, the list never reached the \
 shell, or a page's scripts never settled"
   ;;
@@ -386,22 +431,55 @@ in both, so the strict profile's page got another's, or none"
 other than LinkTrackingThrottle drops it (the throttle ignores Off, or the \
 server) and the other profiles' drops prove nothing"
   ;;
-*" "D??" "???" "??? | *" "???" "D??" "???)
+*" "D??" "???" "???" "?????" "?????" "? | *" "???" "D??" "???" "?????" "?????" "?)
   FAILURE="a link lost a parameter that is no tracking: WithoutTracking drops \
 more than its list"
   ;;
-*" "?K?" "???" "???)
+*" "?K?" "???" "???" "?????" "?????" "?)
   FAILURE="THE DEFAULT PROFILE'S LINK KEPT ITS CLICK ID: LinkTrackingThrottle \
 never saw the navigation (BrowserPageThrottle::MaybeCreateAndAdd) or took it \
 for a link within the site"
   ;;
-*" "??D" "???" "???)
+*" "??D" "???" "???" "?????" "?????" "?)
   FAILURE="the default profile's link lost its campaign parameter: standard \
 drops only click ids, so the mode passed is not standard's"
   ;;
-*" "???" "?K?" "??? | *" "???" "??K" "???)
+*" "???" "?K?" "???" "?????" "?????" "? | *" "???" "??K" "???" "?????" "?????" "?)
   FAILURE="strict's link kept what strict drops: the strict profile's mode is \
 not the one WithoutTracking was given"
+  ;;
+*" V")
+  FAILURE="off's canvas exported differently twice, with nothing farbled: \
+the drawing itself varies on this machine, so the others' differences prove \
+nothing"
+  ;;
+*" "TTT??" "?????" "? | *" "?????" "TTT??" "?)
+  FAILURE="A PAGE READ THE DEVICE'S TRUE DETAILS: its frame never got a seed \
+(DeviceDetailsHiding in AttachTabHelpers, the profile's \
+domicile.device_details.hide) or never handed it to Blink \
+(DeviceDetailsAgent, the RenderFrameCreated hook of patch 0293)"
+  ;;
+*" "T????" "?????" "? | *" "?????" "T????" "?)
+  FAILURE="a page exported its canvas true while the rest was farbled: \
+HTMLCanvasElement::ToDataURLInternal does not farble its snapshot \
+(DomicileFarbledImage)"
+  ;;
+*" "?T???" "?????" "? | *" "?????" "?T???" "?)
+  FAILURE="a page read its canvas's pixels true: getImageData does not \
+farble them (DomicileFarbleImageData)"
+  ;;
+*" "??T??" "?????" "? | *" "?????" "??T??" "?)
+  FAILURE="a page's rendered audio was true: OfflineAudioContext's \
+rendered buffer is not farbled (DomicileFarbleAudio)"
+  ;;
+*" "???X?" "?????" "? | *" "?????" "???X?" "?)
+  FAILURE="a page's processor count was not between 2 and the true one: \
+FarbledHardwareConcurrency, or NavigatorBase's call of it"
+  ;;
+*" "????V" "?????" "? | *" "?????" "????V" "?)
+  FAILURE="a page exported its canvas differently twice: the farbling is \
+not the same for the same picture (FarblePixels must take only the seed and \
+the pixels)"
   ;;
 *)
   FAILURE="there is no measurement here this guard can place ($MEASURED) -- \

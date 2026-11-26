@@ -1,0 +1,16 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+module domicile.mojom;
+
+// A website frame's device details: the seed Blink farbles what the page
+// reads of the device with (components/domicile/common/device_details.h).
+// See docs/architecture/AD-BLOCKING.md.
+//
+// Associated with the frame's channel, so a Hide sent before a navigation
+// commits reaches the renderer before the commit does.
+interface DeviceDetails {
+  // Farble the document about to commit with `seed`, its top site's for the
+  // session. A document the browser sends nothing for keeps the truth.
+  Hide(uint64 seed);
+};

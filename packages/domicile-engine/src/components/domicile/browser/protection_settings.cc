@@ -38,6 +38,7 @@ void ApplyProtections(PrefService& prefs,
                                                : kAnyInterface);
   prefs.SetBoolean(kRemoveLinkTrackingPref,
                    protections.remove_tracking_from_links);
+  prefs.SetBoolean(kHideDeviceDetailsPref, protections.hide_device_details);
   SetProfileAdBlocking(prefs, protections.block_ads_and_trackers);
 }
 
