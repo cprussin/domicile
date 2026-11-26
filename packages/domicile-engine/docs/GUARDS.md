@@ -122,6 +122,7 @@ Headless.
 | `guard-pdf-zoom.sh` | zooming a PDF in a `<webview>` zooms the document once, through the viewer, with its page at the default zoom: the desk takes `tabs.setZoomSettings`' manual mode, and refuses none of the viewer's calls |
 | `guard-pdf-after-hiding.sh` | a PDF in a `<webview>` draws its page again after the `<webview>` is hidden and shown, as a tab switched away and back: the viewer frame un-throttles the page's frame (patch 0214) |
 | `guard-video-codecs.sh` | the engine plays H.264 and AAC (`src/build/args/domicile_codecs.gn`); VP9 is the control |
+| `guard-engine-stays-quiet.sh` | an idle engine with a fresh profile downloads only the components patch 0286 keeps, never asks for the network time or AI Mode eligibility, and opens no connection to the search engine; the control is the updater's own check, which must be in the net log |
 | `guard-browser-brand.sh` | sites are told the engine is Google Chrome in `navigator.userAgentData` and `Sec-CH-UA` (patch 0157); `Chromium` is the control |
 | `guard-clean-exit.sh` | two SIGTERMs back to back, as a session end sends, leave the profile's clean-exit beacon saying the engine exited cleanly (patch 0259); the control sends SIGKILL and the beacon must say it did not |
 | `guard-exit-unload.sh` | a browser window's page runs `pagehide` when SIGTERM ends the engine, and what it wrote to localStorage is there at the next start; a page that hangs in its own does not hold the exit up; no window closes (patch 0278). The control sends SIGKILL, and the lock the page gives up must still be held |
