@@ -1001,7 +1001,7 @@ fn called(
     match tool {
         Tool::Screenshot => return screenshot(arguments, domicile, view),
         Tool::Browser(browser) => {
-            return browser::called(browser, arguments, domicile, read, titles, quiet)
+            return browser::called(browser, arguments, seat, domicile, read, titles, quiet)
         }
         _ => {}
     }

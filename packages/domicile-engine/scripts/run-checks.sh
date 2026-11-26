@@ -52,6 +52,7 @@ TOGETHER=(
   guard-agent-devtools-shell
   guard-agent-input-keeps-focus
   guard-agent-file-chooser
+  guard-agent-clipboard
   guard-agent-seat-in-pages
   guard-shell-local-network
   guard-webview-notifications

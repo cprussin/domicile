@@ -205,14 +205,16 @@ the keyboard focus, or replace its text. Clicking runs the element's own
 click, press or activate action, so it works on a window the desk hides. A
 ref of another process is refused.
 
-## `domicile devtools [--view <view>] <window> <method> [params]`
+## `domicile devtools [--agent <session>] [--view <view>] <window> <method> [params]`
 
 Send one [DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/)
 method to a browser window's page, with its params as a JSON object, and print
 its result as JSON. `<window>` is an id `list-windows` prints, or `shell` for
 the shell's own page: its bars, panels and dialogs. `--view` sends
 it to one of the window's views instead, by the id `list-windows --json`
-lists. `domicile mcp` drives browser windows with it.
+lists. `--agent` sends it for that agent session: a press or key it sends
+makes the page copy to and paste from that agent's own clipboard, never the
+user's. `domicile mcp` drives browser windows with it.
 
 ```
 $ domicile devtools Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE DOM.getContentQuads '{"backendNodeId":42}'

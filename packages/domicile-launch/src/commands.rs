@@ -996,7 +996,10 @@ pub const COMMANDS: &[Command] = &[
         group: Group::Agents,
         takes: "<window> <method> [params]",
         summary: "Send a DevTools Protocol method",
-        forms: &["devtools [--view <view>] <window> <method> [params]"],
+        forms: &[
+            "devtools [--view <view>] <window> <method> [params]",
+            "devtools --agent <session> <window> <method> [params]",
+        ],
         about: &[
             "Sends a DevTools Protocol method, with its params as a JSON object, to \
              a browser window's page, or `shell` for the shell's page, and prints \
@@ -1005,10 +1008,17 @@ pub const COMMANDS: &[Command] = &[
         ],
         sections: &[Section {
             title: "Options",
-            entries: &[(
-                "--view <view>",
-                "Send it to one of the window's views, by its `list-windows --json` id",
-            )],
+            entries: &[
+                (
+                    "--agent <session>",
+                    "Send it for that agent session: the page's copies and pastes then \
+                     use that agent's own clipboard",
+                ),
+                (
+                    "--view <view>",
+                    "Send it to one of the window's views, by its `list-windows --json` id",
+                ),
+            ],
         }],
         examples: &["domicile devtools shell Accessibility.getFullAXTree"],
         see_also: &["list-windows", "mcp"],

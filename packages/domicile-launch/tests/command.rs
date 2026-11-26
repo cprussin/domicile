@@ -519,8 +519,19 @@ fn an_open_app_names_its_browser_profile_when_it_has_one() {
 #[test]
 fn devtools_sends_a_method_to_a_browser_window() {
     assert_eq!(
-        devtools_line("w7", "DOM.getBoxModel", &serde_json::json!({"backendNodeId": 4})),
+        devtools_line(
+            "w7",
+            None,
+            "DOM.getBoxModel",
+            &serde_json::json!({"backendNodeId": 4})
+        ),
         "{\"type\":\"devtools\",\"version\":1,\"window\":\"w7\",\"method\":\"DOM.getBoxModel\",\"params\":{\"backendNodeId\":4}}\n"
+    );
+    // For an agent session, its seat: the page it drives copies to the seat's
+    // clipboard.
+    assert_eq!(
+        devtools_line("w7", Some(3), "Page.reload", &serde_json::json!({})),
+        "{\"type\":\"devtools\",\"version\":1,\"window\":\"w7\",\"agent\":\"agent-3\",\"method\":\"Page.reload\",\"params\":{}}\n"
     );
     assert_eq!(
         reply("{\"type\":\"devtools\",\"result\":{\"nodes\":[]}}").unwrap(),

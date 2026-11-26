@@ -268,10 +268,12 @@ pub enum Request {
     },
     /// Send DevTools Protocol `method` with `params` to browser window
     /// `window`, as `domicile list-windows` prints it, or to its view
-    /// `view`. See `domicile devtools`.
+    /// `view`, for agent session `agent` when given. See `domicile devtools`.
     #[serde(rename = "devtools")]
     DevTools {
         window: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent: Option<u32>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         view: Option<String>,
         method: String,
@@ -765,11 +767,12 @@ pub struct AgentLetIn {
 pub type Emulating<'a> = &'a dyn Fn(&[EmulatedInput], Option<u32>) -> Result<(), String>;
 
 /// Sends a DevTools Protocol method to a browser window, by its id in the
-/// engine, and returns its result.
+/// engine, and returns its result. The second argument is the agent session
+/// it is sent for, if any: a page it drives copies to that seat's clipboard.
 ///
 /// [`crate::command_socket::devtools`] in a desktop; a closure in tests.
 pub type SendDevTools<'a> =
-    &'a dyn Fn(&str, &str, &serde_json::Value) -> Result<serde_json::Value, String>;
+    &'a dyn Fn(&str, Option<u32>, &str, &serde_json::Value) -> Result<serde_json::Value, String>;
 
 /// Asks the compositor to change how a monitor is set up.
 ///
@@ -1259,11 +1262,12 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::DevTools {
             window,
+            agent,
             view,
             method,
             params,
         }) => to_line(
-            &match driven(desktop, &window, view.as_deref(), &method, &params) {
+            &match driven(desktop, &window, agent, view.as_deref(), &method, &params) {
                 Ok(result) => Response::DevTools { result },
                 Err(why) => Response::Refused { why },
             },
@@ -1480,6 +1484,7 @@ pub const SHELL_WINDOW: &str = "shell";
 fn driven(
     desktop: &Desktop,
     window: &str,
+    agent: Option<u32>,
     view: Option<&str>,
     method: &str,
     params: &serde_json::Value,
@@ -1491,7 +1496,7 @@ fn driven(
     // own page.
     if window == SHELL_WINDOW {
         return match view {
-            None => (desktop.devtools)(SHELL_WINDOW, method, params),
+            None => (desktop.devtools)(SHELL_WINDOW, agent, method, params),
             Some(_) => Err(
                 "the shell holds no views; list-windows lists browser windows' views".to_string(),
             ),
@@ -1509,9 +1514,9 @@ fn driven(
     }
     match (&listed.kind, &listed.engine_id) {
         (WindowKind::Browser, Some(engine_id)) => match view {
-            None => (desktop.devtools)(engine_id, method, params),
+            None => (desktop.devtools)(engine_id, agent, method, params),
             Some(view) if listed.views.iter().any(|held| held.id == view) => {
-                (desktop.devtools)(view, method, params)
+                (desktop.devtools)(view, agent, method, params)
             }
             Some(view) => Err(format!(
                 "window {window} holds no view {view}; list-windows lists its views"

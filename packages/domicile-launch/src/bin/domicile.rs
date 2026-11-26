@@ -2653,8 +2653,8 @@ fn answer_a_command(
                         emulate(chrome, input, agent, Some(ANSWER_WITHIN))
                             .map_err(|why| why.to_string())?
                     },
-                    devtools: &|window, method, params| {
-                        devtools(engine, window, method, params, DEVTOOLS_WITHIN)
+                    devtools: &|window, agent, method, params| {
+                        devtools(engine, window, agent, method, params, DEVTOOLS_WITHIN)
                             .map_err(|why| why.to_string())
                     },
                     // The compositor waits up to 5s for the desktop to be laid
