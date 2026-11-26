@@ -69,7 +69,15 @@ describe(useMailLinks, () => {
         mailInbox("Home", "me@home.net", written),
         mailInbox("Work", "me@work.com", written),
       ],
-      [Reading.Counted(1, 0, [], ["me@home.net", "me@alias.net"]), undefined],
+      [
+        Reading.Counted(
+          1,
+          0,
+          [],
+          ["me@home.net", "alias@domicile-desktop.com"],
+        ),
+        undefined,
+      ],
     );
 
     await handOver(fake, LINK);
@@ -86,17 +94,21 @@ describe(useMailLinks, () => {
       ]),
     ).toStrictEqual([
       ["Home", "me@home.net"],
-      ["Home", "me@alias.net"],
+      ["Home", "alias@domicile-desktop.com"],
       ["Work", "me@work.com"],
     ]);
 
     act(() => {
-      rendered.result.current.choose("me@alias.net");
+      rendered.result.current.choose("alias@domicile-desktop.com");
     });
 
-    expect(written).toStrictEqual([["Home", LINK, "me@alias.net"]]);
+    expect(written).toStrictEqual([
+      ["Home", LINK, "alias@domicile-desktop.com"],
+    ]);
     expect(rendered.result.current.asking).toBeUndefined();
-    expect(rendered.result.current.lastChoice).toBe("me@alias.net");
+    expect(rendered.result.current.lastChoice).toBe(
+      "alias@domicile-desktop.com",
+    );
   });
 
   it("writes at once from the one address there is", async () => {

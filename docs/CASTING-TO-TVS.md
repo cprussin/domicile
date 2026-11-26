@@ -114,13 +114,13 @@ bar item ──casting(host).start(target, Extend | Pick)──▶ backend (engi
 
 ### Miracast, `domicile-miracast`
 
-- `packages/domicile-miracast`: a Rust D-Bus service, `net.domicile.Miracast`
+- `packages/domicile-miracast`: a Rust D-Bus service, `com.domicile_desktop.Miracast`
   on the session bus, which D-Bus starts on the shell's first call as the
   user unit `domicile-miracast.service`. That unit is `PartOf=` and
   `Requisite=graphical-session.target`, so it ends with the desk. The SDK's
   `miracastCast(domicile)` reaches it through `domicile.dbus`, so it needs no
   protocol frames.
-- **API** (`net.domicile.Miracast1` at `/net/domicile/Miracast`): `Sinks()`
+- **API** (`com.domicile_desktop.Miracast1` at `/com/domicile_desktop/Miracast`): `Sinks()`
   and `SinksChanged`; `Cast(id)`, which returns a cast id at once, then
   `Started(cast)` once the TV plays or `Ended(cast, reason)`; `Stop(cast)`.
 - **Discovery and links:** NetworkManager's `WifiP2P` D-Bus API for Wi-Fi

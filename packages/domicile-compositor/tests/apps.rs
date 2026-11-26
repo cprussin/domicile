@@ -298,7 +298,10 @@ fn a_fixed_size_window_is_announced_as_a_dialog_at_the_size_it_drew() {
     };
     assert_eq!(title.as_deref(), Some("a dialog"));
     // The id `domicile-test-client` sets.
-    assert_eq!(desktop_id.as_deref(), Some("dev.domicile.test-client"));
+    assert_eq!(
+        desktop_id.as_deref(),
+        Some("com.domicile_desktop.test-client")
+    );
     assert_eq!(size, [320.0, 240.0]);
     assert!(dialog, "a fixed-size window is a dialog");
     assert!(client_frame, "the client asked to draw its own frame");

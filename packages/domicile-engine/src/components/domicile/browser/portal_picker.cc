@@ -22,10 +22,10 @@ namespace domicile {
 namespace {
 
 // The compositor's portal backend, where it also serves
-// `org.domicile.ScreenCast`.
+// `com.domicile_desktop.ScreenCast`.
 constexpr char kBackend[] = "org.freedesktop.impl.portal.desktop.domicile";
 constexpr char kBackendPath[] = "/org/freedesktop/portal/desktop";
-constexpr char kInterface[] = "org.domicile.ScreenCast";
+constexpr char kInterface[] = "com.domicile_desktop.ScreenCast";
 constexpr char kPick[] = "Pick";
 
 // The page waits on it, so a desktop that does not answer is given up on

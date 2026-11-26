@@ -77,7 +77,7 @@ const FormInModalDialogShowcase = () => (
       </Field>
       <Field hint="We will never share this address." label="Email">
         <Input
-          defaultValue="connor@dourolabs.xyz"
+          defaultValue="connor@domicile-desktop.com"
           placeholder="you@example.com"
           prefixIcon={<EnvelopeIcon />}
           type="email"

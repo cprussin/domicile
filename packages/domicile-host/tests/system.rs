@@ -2135,7 +2135,7 @@ mod dbus {
     /// The service the tests call.
     struct Greeter;
 
-    #[zbus::interface(name = "org.domicile.Test")]
+    #[zbus::interface(name = "com.domicile_desktop.Test")]
     impl Greeter {
         fn greet(&self, name: &str, times: u32) -> String {
             format!("hello {name}").repeat(times as usize)
@@ -2181,9 +2181,9 @@ mod dbus {
     fn call(member: &str, signature: &str, body: &str) -> SystemRequest {
         SystemRequest::DbusCall {
             bus: Bus::Session,
-            destination: "org.domicile.Test".into(),
+            destination: "com.domicile_desktop.Test".into(),
             path: "/test".into(),
-            interface: "org.domicile.Test".into(),
+            interface: "com.domicile_desktop.Test".into(),
             member: member.into(),
             signature: signature.into(),
             body: body.into(),
@@ -2247,20 +2247,26 @@ mod dbus {
                 bus: Bus::Session,
                 sender: None,
                 path: None,
-                interface: Some("org.domicile.Test".into()),
+                interface: Some("com.domicile_desktop.Test".into()),
                 member: Some("Pinged".into()),
             },
         );
         assert_eq!(reply(&heard, 1), SystemReply::Started);
         let service = services.lock().unwrap().last().cloned().expect("a service");
         service
-            .emit_signal(None::<&str>, "/test", "org.domicile.Test", "Ignored", &())
+            .emit_signal(
+                None::<&str>,
+                "/test",
+                "com.domicile_desktop.Test",
+                "Ignored",
+                &(),
+            )
             .unwrap();
         service
             .emit_signal(
                 None::<&str>,
                 "/test",
-                "org.domicile.Test",
+                "com.domicile_desktop.Test",
                 "Pinged",
                 &(7u32,),
             )
@@ -2285,7 +2291,7 @@ mod dbus {
             (path, interface, member, signature, body),
             (
                 "/test".into(),
-                "org.domicile.Test".into(),
+                "com.domicile_desktop.Test".into(),
                 "Pinged".into(),
                 "u".into(),
                 "[7]".into()

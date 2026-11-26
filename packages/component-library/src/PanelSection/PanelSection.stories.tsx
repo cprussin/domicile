@@ -8,7 +8,7 @@ const meta = {
   args: {
     children: (
       <List>
-        <ListRow label="PrussinNet" onPress={() => undefined} />
+        <ListRow label="Domicile" onPress={() => undefined} />
         <ListRow label="Messages" onPress={() => undefined} />
       </List>
     ),

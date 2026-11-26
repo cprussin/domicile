@@ -196,7 +196,7 @@ impl ScreenCast {
         }
     }
 
-    /// The `org.domicile.ScreenCast` object, which says what a stream's node
+    /// The `com.domicile_desktop.ScreenCast` object, which says what a stream's node
     /// shows.
     pub fn picks(&self) -> CastPicks {
         CastPicks {
@@ -214,7 +214,7 @@ pub struct CastPicks {
     picks: Picks,
 }
 
-#[zbus::interface(name = "org.domicile.ScreenCast")]
+#[zbus::interface(name = "com.domicile_desktop.ScreenCast")]
 impl CastPicks {
     /// The source type, browser window and sound node name of node `node`'s
     /// stream. The browser window is empty for any other source; the sound
@@ -1732,7 +1732,7 @@ mod tests {
             .call_method(
                 None::<&str>,
                 OBJECT_PATH,
-                Some("org.domicile.ScreenCast"),
+                Some("com.domicile_desktop.ScreenCast"),
                 "Pick",
                 &(42u32,),
             )
