@@ -3,7 +3,7 @@ use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Mutex};
 
 use domicile_launch::notification::{connected, notify, ANSWER_WITHIN};
-use zbus::zvariant::OwnedValue;
+use zbus::OwnedVariant;
 
 /// One `Notify` call the fake server received.
 #[derive(Debug, PartialEq)]
@@ -30,7 +30,7 @@ impl Server {
         summary: String,
         body: String,
         _actions: Vec<String>,
-        hints: HashMap<String, OwnedValue>,
+        hints: HashMap<String, OwnedVariant>,
         _expire_timeout: i32,
     ) -> u32 {
         let urgency = hints
@@ -48,29 +48,24 @@ impl Server {
 }
 
 /// A fake server and a client, connected peer-to-peer over a socket pair.
-fn paired() -> (
-    zbus::blocking::Connection,
-    zbus::blocking::Connection,
-    Arc<Mutex<Vec<Heard>>>,
-) {
+fn paired() -> (zbus::Connection, zbus::Connection, Arc<Mutex<Vec<Heard>>>) {
     let (theirs, ours) = UnixStream::pair().unwrap();
     let heard = Arc::new(Mutex::new(Vec::new()));
     let guid = zbus::Guid::generate();
     let server = std::thread::spawn({
         let heard = Arc::clone(&heard);
         move || {
-            zbus::blocking::connection::Builder::async_io_unix_stream(theirs)
-                .server(guid)
-                .unwrap()
-                .p2p()
-                .serve_at("/org/freedesktop/Notifications", Server { heard })
-                .unwrap()
-                .build()
-                .unwrap()
+            zbus::block_on(
+                zbus::connection::Builder::unix_stream(theirs)
+                    .server(guid)
+                    .p2p()
+                    .serve_at("/org/freedesktop/Notifications", Server { heard })
+                    .build(),
+            )
+            .unwrap()
         }
     });
-    let client =
-        connected(zbus::blocking::connection::Builder::async_io_unix_stream(ours).p2p()).unwrap();
+    let client = connected(zbus::connection::Builder::unix_stream(ours).p2p()).unwrap();
     (server.join().unwrap(), client, heard)
 }
 
@@ -108,15 +103,15 @@ fn a_server_that_never_answers_is_an_error_not_a_hang() {
     let (theirs, ours) = UnixStream::pair().unwrap();
     let guid = zbus::Guid::generate();
     let server = std::thread::spawn(move || {
-        zbus::blocking::connection::Builder::async_io_unix_stream(theirs)
-            .server(guid)
-            .unwrap()
-            .p2p()
-            .build()
-            .unwrap()
+        zbus::block_on(
+            zbus::connection::Builder::unix_stream(theirs)
+                .server(guid)
+                .p2p()
+                .build(),
+        )
+        .unwrap()
     });
-    let client =
-        connected(zbus::blocking::connection::Builder::async_io_unix_stream(ours).p2p()).unwrap();
+    let client = connected(zbus::connection::Builder::unix_stream(ours).p2p()).unwrap();
     let _server = server.join().unwrap();
     let asked = std::time::Instant::now();
     assert!(notify(&client, "", "summary", "body").is_err());

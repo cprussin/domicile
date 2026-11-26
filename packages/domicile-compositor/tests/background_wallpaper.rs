@@ -13,8 +13,8 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use domicile_protocol::{ChromeMessage, HostMessage};
-use zbus::blocking::Connection;
-use zbus::zvariant::{ObjectPath, OwnedValue, Value};
+use zbus::Connection;
+use zbus::{ObjectPath, OwnedVariant, Variant};
 
 use crate::running::Compositor;
 
@@ -80,14 +80,12 @@ impl Bus {
 
     /// A client on the bus, once the compositor has taken the backend's name.
     fn client(&self) -> Connection {
-        let connection = zbus::blocking::connection::Builder::address(self.address.as_str())
-            .expect("an address")
-            .build()
-            .expect("the bus takes a client");
-        let bus = zbus::blocking::fdo::DBusProxy::new(&connection).expect("the bus");
+        let connection =
+            zbus::block_on(zbus::connection::Builder::address(self.address.as_str()).build())
+                .expect("the bus takes a client");
+        let bus = zbus::block_on(zbus::fdo::DBusProxy::new(&connection)).expect("the bus");
         let until = Instant::now() + PATIENCE;
-        while !bus
-            .name_has_owner(BACKEND.try_into().expect("a name"))
+        while !zbus::block_on(bus.name_has_owner(BACKEND.try_into().expect("a name")))
             .expect("the bus answers")
         {
             assert!(
@@ -114,18 +112,17 @@ fn app_states_until(
 ) -> HashMap<String, u32> {
     let until = Instant::now() + PATIENCE;
     loop {
-        let states: HashMap<String, OwnedValue> = connection
-            .call_method(
-                Some(BACKEND),
-                OBJECT_PATH,
-                Some(BACKGROUND),
-                "GetAppState",
-                &(),
-            )
-            .expect("GetAppState answered")
-            .body()
-            .deserialize()
-            .expect("the states");
+        let states: HashMap<String, OwnedVariant> = zbus::block_on(connection.call_method(
+            Some(BACKEND),
+            OBJECT_PATH,
+            Some(BACKGROUND),
+            "GetAppState",
+            &(),
+        ))
+        .expect("GetAppState answered")
+        .body()
+        .deserialize()
+        .expect("the states");
         let states = states
             .into_iter()
             .map(|(app_id, state)| (app_id, u32::try_from(state).expect("a u")))
@@ -185,27 +182,25 @@ fn a_picture_set_reaches_the_chrome() {
 
     let options = HashMap::from([(
         "set-on".to_string(),
-        OwnedValue::try_from(Value::from("lockscreen")).expect("ownable"),
+        OwnedVariant::try_from(Variant::from("lockscreen")).expect("ownable"),
     )]);
-    let response: u32 = connection
-        .call_method(
-            Some(BACKEND),
-            OBJECT_PATH,
-            Some(WALLPAPER),
-            "SetWallpaperURI",
-            &(
-                ObjectPath::try_from("/org/freedesktop/portal/desktop/request/1_1/w")
-                    .expect("a path"),
-                "org.example.Photos",
-                "",
-                format!("file://{}", sky.display()),
-                options,
-            ),
-        )
-        .expect("SetWallpaperURI answered")
-        .body()
-        .deserialize()
-        .expect("a response");
+    let response: u32 = zbus::block_on(connection.call_method(
+        Some(BACKEND),
+        OBJECT_PATH,
+        Some(WALLPAPER),
+        "SetWallpaperURI",
+        &(
+            ObjectPath::try_from("/org/freedesktop/portal/desktop/request/1_1/w").expect("a path"),
+            "org.example.Photos",
+            "",
+            format!("file://{}", sky.display()),
+            options,
+        ),
+    ))
+    .expect("SetWallpaperURI answered")
+    .body()
+    .deserialize()
+    .expect("a response");
     assert_eq!(response, 0);
 
     let told = chrome

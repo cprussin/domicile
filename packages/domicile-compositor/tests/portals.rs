@@ -18,9 +18,10 @@ use domicile_protocol::{
 };
 use reis::ei;
 use reis::event::EiEvent;
-use zbus::blocking::{Connection, MessageIterator};
-use zbus::zvariant::{ObjectPath, OwnedValue, Value};
+use zbus::export::ordered_stream::OrderedStreamExt;
 use zbus::MatchRule;
+use zbus::{Connection, MessageStream};
+use zbus::{ObjectPath, OwnedVariant, Variant};
 
 use crate::running::bus::Bus;
 use crate::running::Compositor;
@@ -36,7 +37,7 @@ const CLIPBOARD: &str = "org.freedesktop.impl.portal.Clipboard";
 const SESSION: &str = "/org/freedesktop/portal/desktop/session/1_9/remote";
 const TEXT: &str = "text/plain;charset=utf-8";
 
-type Options = HashMap<String, OwnedValue>;
+type Options = HashMap<String, OwnedVariant>;
 
 fn call<B>(
     connection: &Connection,
@@ -45,35 +46,39 @@ fn call<B>(
     body: &B,
 ) -> zbus::message::Message
 where
-    B: zbus::export::serde::Serialize + zbus::zvariant::DynamicType,
+    B: zbus::export::serde::Serialize + zbus::DynamicType,
 {
-    connection
-        .call_method(Some(BACKEND), OBJECT_PATH, Some(interface), method, body)
-        .unwrap_or_else(|why| panic!("{method} failed: {why}"))
+    zbus::block_on(connection.call_method(
+        Some(BACKEND),
+        OBJECT_PATH,
+        Some(interface),
+        method,
+        body,
+    ))
+    .unwrap_or_else(|why| panic!("{method} failed: {why}"))
 }
 
 fn path(path: &str) -> ObjectPath<'_> {
     ObjectPath::try_from(path).expect("a path")
 }
 
-fn signals(connection: &Connection, member: &'static str) -> MessageIterator {
-    MessageIterator::for_match_rule(
+fn signals(connection: &Connection, member: &'static str) -> MessageStream {
+    zbus::block_on(MessageStream::for_match_rule(
         MatchRule::builder()
             .msg_type(zbus::message::Type::Signal)
             .interface(CLIPBOARD)
-            .expect("a name")
             .member(member)
-            .expect("a name")
-            .build(),
+            .build()
+            .expect("a match rule"),
         connection,
         None,
-    )
+    ))
     .expect("listening")
 }
 
 /// The fd a call answered with.
 fn fd(message: zbus::message::Message) -> OwnedFd {
-    let fd: zbus::zvariant::OwnedFd = message.body().deserialize().expect("an fd");
+    let fd: zbus::OwnedFd = message.body().deserialize().expect("an fd");
     fd.into()
 }
 
@@ -91,7 +96,7 @@ fn granted(connection: &Connection, chrome: &mut domicile_test_chrome::Chrome) {
             Options::new(),
         ),
     );
-    let keyboard = HashMap::from([("types", Value::from(1u32))]);
+    let keyboard = HashMap::from([("types", Variant::from(1u32))]);
     call(
         connection,
         REMOTE_DESKTOP,
@@ -156,7 +161,7 @@ fn granted(connection: &Connection, chrome: &mut domicile_test_chrome::Chrome) {
     assert_eq!(response, 0);
     assert_eq!(
         results.get("clipboard_enabled"),
-        Some(&OwnedValue::from(true))
+        Some(&OwnedVariant::from(true))
     );
 }
 
@@ -247,8 +252,8 @@ fn a_remote_desktop_session_shares_the_clipboard_both_ways() {
     granted(&connection, &mut chrome);
 
     // The application's copy, pasted by `wl-paste`.
-    let transfers = signals(&connection, "SelectionTransfer");
-    let offer = HashMap::from([("mime_types", Value::from(vec![TEXT]))]);
+    let mut transfers = signals(&connection, "SelectionTransfer");
+    let offer = HashMap::from([("mime_types", Variant::from(vec![TEXT]))]);
     call(
         &connection,
         CLIPBOARD,
@@ -262,12 +267,11 @@ fn a_remote_desktop_session_shares_the_clipboard_both_ways() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("wl-paste starts; it is in `nix develop .#full`");
-    let transfer = transfers
-        .into_iter()
+    let transfer = std::iter::from_fn(|| zbus::block_on(transfers.next()))
         .next()
         .expect("a signal")
         .expect("read");
-    let (_, _, serial): (zbus::zvariant::OwnedObjectPath, String, u32) =
+    let (_, _, serial): (zbus::OwnedObjectPath, String, u32) =
         transfer.body().deserialize().expect("its arguments");
     {
         // Its own connection, dropped after: a connection keeps a copy of
@@ -293,7 +297,7 @@ fn a_remote_desktop_session_shares_the_clipboard_both_ways() {
     assert_eq!(String::from_utf8_lossy(&pasted.stdout), "from afar");
 
     // `wl-copy`'s copy, read by the application.
-    let changes = signals(&connection, "SelectionOwnerChanged");
+    let mut changes = signals(&connection, "SelectionOwnerChanged");
     let mut copying = compositor
         .command("wl-copy")
         .args(["--foreground", "--", "copied here"])
@@ -301,13 +305,12 @@ fn a_remote_desktop_session_shares_the_clipboard_both_ways() {
         .stderr(Stdio::null())
         .spawn()
         .expect("wl-copy starts");
-    let changed = changes
-        .into_iter()
+    let changed = std::iter::from_fn(|| zbus::block_on(changes.next()))
         .map(|signal| signal.expect("read"))
         .find(|signal| {
-            let (_, options): (zbus::zvariant::OwnedObjectPath, Options) =
+            let (_, options): (zbus::OwnedObjectPath, Options) =
                 signal.body().deserialize().expect("its arguments");
-            options.get("session_is_owner") == Some(&OwnedValue::from(false))
+            options.get("session_is_owner") == Some(&OwnedVariant::from(false))
         });
     assert!(changed.is_some(), "the session hears another client copy");
     let mut read = String::new();

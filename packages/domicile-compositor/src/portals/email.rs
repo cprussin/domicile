@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::{OwnedObjectPath, OwnedVariant};
 
 use super::uri::percent_encoded;
 
@@ -26,8 +26,8 @@ impl Email {
         handle: OwnedObjectPath,
         app_id: String,
         _parent_window: String,
-        options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let response = match (self.open)(&mailto(options), &app_id) {
             Ok(()) => 0,
             Err(why) => {
@@ -44,7 +44,7 @@ impl Email {
 /// Attachments, which the frontend hands over as paths, become `attach=`.
 /// Evolution and Geary read it; Thunderbird ignores it. An option of the wrong
 /// type reads as absent.
-fn mailto(mut options: HashMap<String, OwnedValue>) -> String {
+fn mailto(mut options: HashMap<String, OwnedVariant>) -> String {
     let mut text = |name: &str| {
         options
             .remove(name)
@@ -89,14 +89,14 @@ fn encoded(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zbus::zvariant::Value;
+    use zbus::Variant;
 
-    fn options(sent: Vec<(&str, Value<'static>)>) -> HashMap<String, OwnedValue> {
+    fn options(sent: Vec<(&str, Variant<'static>)>) -> HashMap<String, OwnedVariant> {
         sent.into_iter()
             .map(|(name, value)| {
                 (
                     name.to_string(),
-                    OwnedValue::try_from(value).expect("an ownable value"),
+                    OwnedVariant::try_from(value).expect("an ownable value"),
                 )
             })
             .collect()
@@ -105,13 +105,13 @@ mod tests {
     #[test]
     fn every_field_goes_into_the_url_encoded() {
         let url = mailto(options(vec![
-            ("address", Value::from("a@example.com")),
-            ("addresses", Value::from(vec!["b@example.com"])),
-            ("cc", Value::from(vec!["c@example.com"])),
-            ("bcc", Value::from(vec!["d@example.com", "e@example.com"])),
-            ("subject", Value::from("Hi & bye")),
-            ("body", Value::from("Line 1\nLine 2")),
-            ("attachments", Value::from(vec!["/tmp/a b.pdf"])),
+            ("address", Variant::from("a@example.com")),
+            ("addresses", Variant::from(vec!["b@example.com"])),
+            ("cc", Variant::from(vec!["c@example.com"])),
+            ("bcc", Variant::from(vec!["d@example.com", "e@example.com"])),
+            ("subject", Variant::from("Hi & bye")),
+            ("body", Variant::from("Line 1\nLine 2")),
+            ("attachments", Variant::from(vec!["/tmp/a b.pdf"])),
         ]));
 
         assert_eq!(
@@ -126,8 +126,8 @@ mod tests {
     #[test]
     fn a_message_with_only_a_recipient_has_no_query() {
         let url = mailto(options(vec![
-            ("address", Value::from("a@example.com")),
-            ("subject", Value::from(7u32)),
+            ("address", Variant::from("a@example.com")),
+            ("subject", Variant::from(7u32)),
         ]));
 
         assert_eq!(url, "mailto:a@example.com");

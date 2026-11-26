@@ -18,7 +18,7 @@ use domicile_host::save_to_pdf;
 use domicile_protocol::{PortalAnswer, PortalKind, PrintDialog, PrintOptions, Printer};
 use tracing::debug;
 use zbus::object_server::ObjectServer;
-use zbus::zvariant::{OwnedFd, OwnedObjectPath, OwnedValue, Value};
+use zbus::{OwnedFd, OwnedObjectPath, OwnedVariant, Variant};
 
 use super::queue::{ask, Queue};
 use super::uri::file_uri;
@@ -66,10 +66,10 @@ impl Print {
         app_id: String,
         parent_window: String,
         title: String,
-        settings: HashMap<String, OwnedValue>,
-        page_setup: HashMap<String, OwnedValue>,
-        options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        settings: HashMap<String, OwnedVariant>,
+        page_setup: HashMap<String, OwnedVariant>,
+        options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let preset = Preset::read(&strings(&settings), &strings(&page_setup));
         let asked = Asked {
             app_id,
@@ -90,7 +90,7 @@ impl Print {
                 let results = results
                     .into_iter()
                     .map(|(key, value)| (key.to_string(), value))
-                    .chain([("token".to_string(), OwnedValue::from(token))])
+                    .chain([("token".to_string(), OwnedVariant::from(token))])
                     .collect();
                 (0, results)
             }
@@ -109,8 +109,8 @@ impl Print {
         parent_window: String,
         title: String,
         fd: OwnedFd,
-        options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let token = options
             .get("token")
             .and_then(|token| u32::try_from(token).ok());
@@ -161,7 +161,7 @@ struct Asked {
     app_id: String,
     parent_window: String,
     title: String,
-    options: HashMap<String, OwnedValue>,
+    options: HashMap<String, OwnedVariant>,
 }
 
 impl Print {
@@ -294,7 +294,7 @@ fn dialog(
 }
 
 /// The string values of `map`. GTK writes every setting as one.
-fn strings(map: &HashMap<String, OwnedValue>) -> HashMap<String, String> {
+fn strings(map: &HashMap<String, OwnedVariant>) -> HashMap<String, String> {
     map.iter()
         .filter_map(|(key, value)| {
             <&str>::try_from(value)
@@ -305,7 +305,7 @@ fn strings(map: &HashMap<String, OwnedValue>) -> HashMap<String, String> {
 }
 
 /// GTK's settings for `chosen`. A file is GTK's own "Print to File".
-fn settings_of(chosen: &Chosen) -> Vec<(&'static str, Value<'static>)> {
+fn settings_of(chosen: &Chosen) -> Vec<(&'static str, Variant<'static>)> {
     let settings = match &chosen.destination {
         Destination::Printer(printer) => gtk_settings(printer, &chosen.options),
         Destination::File(path) => gtk_settings("Print to File", &chosen.options)
@@ -318,7 +318,7 @@ fn settings_of(chosen: &Chosen) -> Vec<(&'static str, Value<'static>)> {
     };
     settings
         .into_iter()
-        .map(|(key, value)| (key, Value::from(value)))
+        .map(|(key, value)| (key, Variant::from(value)))
         .collect()
 }
 
@@ -332,17 +332,17 @@ fn save_pdf(path: &std::path::Path, document: &[u8]) -> Result<(), String> {
 }
 
 /// GTK's page setup for `options`; none when its paper is unknown.
-fn page_setup_of(options: &PrintOptions) -> Vec<(&'static str, Value<'static>)> {
+fn page_setup_of(options: &PrintOptions) -> Vec<(&'static str, Variant<'static>)> {
     page_setup(options)
         .map(|setup| {
             [
-                Some(("Name", Value::from(setup.name))),
-                Some(("DisplayName", Value::from(setup.display_name))),
-                Some(("Width", Value::from(setup.width_mm))),
-                Some(("Height", Value::from(setup.height_mm))),
+                Some(("Name", Variant::from(setup.name))),
+                Some(("DisplayName", Variant::from(setup.display_name))),
+                Some(("Width", Variant::from(setup.width_mm))),
+                Some(("Height", Variant::from(setup.height_mm))),
                 setup
                     .orientation
-                    .map(|orientation| ("Orientation", Value::from(orientation))),
+                    .map(|orientation| ("Orientation", Variant::from(orientation))),
             ]
             .into_iter()
             .flatten()
@@ -354,16 +354,16 @@ fn page_setup_of(options: &PrintOptions) -> Vec<(&'static str, Value<'static>)> 
 /// The application's `given` dictionary with `chosen` laid over it, so keys
 /// this does not know go back as they came.
 fn dictionary(
-    mut given: HashMap<String, OwnedValue>,
-    chosen: Vec<(&'static str, Value<'static>)>,
-) -> OwnedValue {
+    mut given: HashMap<String, OwnedVariant>,
+    chosen: Vec<(&'static str, Variant<'static>)>,
+) -> OwnedVariant {
     for (key, value) in chosen {
         given.insert(
             key.to_string(),
-            OwnedValue::try_from(value).expect("a setting holds no file descriptor"),
+            OwnedVariant::try_from(value).expect("a setting holds no file descriptor"),
         );
     }
-    OwnedValue::try_from(Value::from(given)).expect("the application's own values are ownable")
+    OwnedVariant::try_from(Variant::from(given)).expect("the application's own values are ownable")
 }
 
 /// Run `work` on its own thread, so a slow CUPS or document does not hold up
@@ -386,24 +386,24 @@ mod tests {
     use domicile_host::cups::Endpoint;
     use domicile_host::ipp::{self, Attribute, Group, Message, Value};
     use domicile_protocol::{PortalAnswer, PortalKind, PortalRequest, PrintDialog};
-    use zbus::zvariant::{ObjectPath, Value as Variant};
+    use zbus::{ObjectPath, Variant};
 
     use super::super::socket_pair;
     use super::super::OBJECT_PATH;
 
     const PRINT: &str = "org.freedesktop.impl.portal.Print";
 
-    type Results = HashMap<String, OwnedValue>;
+    type Results = HashMap<String, OwnedVariant>;
 
     /// A job CUPS took: its attributes and document.
     type Job = (Group, Vec<u8>);
 
     /// The backend on a socket pair, with CUPS at `endpoints`.
     struct Served {
-        client: zbus::blocking::Connection,
+        client: zbus::Connection,
         queue: Arc<Queue>,
         published: Receiver<Vec<PortalRequest>>,
-        _server: zbus::blocking::Connection,
+        _server: zbus::Connection,
     }
 
     fn served(endpoints: Vec<Endpoint>) -> Served {
@@ -418,17 +418,15 @@ mod tests {
         );
         let serving = Arc::clone(&queue);
         let (server, client) = socket_pair::connected(move |builder| {
-            builder
-                .serve_at(
-                    OBJECT_PATH,
-                    Print {
-                        queue: serving,
-                        cups: Cups::new(endpoints, "me".into()),
-                        home: "/home/me".into(),
-                        prepared: Mutex::default(),
-                    },
-                )
-                .expect("the interface registered")
+            builder.serve_at(
+                OBJECT_PATH,
+                Print {
+                    queue: serving,
+                    cups: Cups::new(endpoints, "me".into()),
+                    home: "/home/me".into(),
+                    prepared: Mutex::default(),
+                },
+            )
         });
         Served {
             client,
@@ -540,7 +538,7 @@ mod tests {
             .map(|(key, value)| {
                 (
                     key.to_string(),
-                    OwnedValue::try_from(Variant::from(*value)).expect("ownable"),
+                    OwnedVariant::try_from(Variant::from(*value)).expect("ownable"),
                 )
             })
             .collect()
@@ -550,26 +548,25 @@ mod tests {
     fn prepare(served: &Served, settings: Results) -> thread::JoinHandle<(u32, Results)> {
         let client = served.client.clone();
         thread::spawn(move || {
-            client
-                .call_method(
-                    None::<&str>,
-                    OBJECT_PATH,
-                    Some(PRINT),
-                    "PreparePrint",
-                    &(
-                        ObjectPath::try_from("/r/1").expect("a path"),
-                        "org.example.Editor",
-                        "",
-                        "Report",
-                        settings,
-                        strings(&[]),
-                        strings(&[("accept_label", "Print it")]),
-                    ),
-                )
-                .expect("PreparePrint answered")
-                .body()
-                .deserialize()
-                .expect("its reply")
+            zbus::block_on(client.call_method(
+                None::<&str>,
+                OBJECT_PATH,
+                Some(PRINT),
+                "PreparePrint",
+                &(
+                    ObjectPath::try_from("/r/1").expect("a path"),
+                    "org.example.Editor",
+                    "",
+                    "Report",
+                    settings,
+                    strings(&[]),
+                    strings(&[("accept_label", "Print it")]),
+                ),
+            ))
+            .expect("PreparePrint answered")
+            .body()
+            .deserialize()
+            .expect("its reply")
         })
     }
 
@@ -586,25 +583,24 @@ mod tests {
             .expect("the document fits the pipe");
         drop(write);
         thread::spawn(move || {
-            client
-                .call_method(
-                    None::<&str>,
-                    OBJECT_PATH,
-                    Some(PRINT),
-                    "Print",
-                    &(
-                        ObjectPath::try_from("/r/2").expect("a path"),
-                        "org.example.Editor",
-                        "",
-                        "Report",
-                        zbus::zvariant::Fd::from(&std::os::fd::OwnedFd::from(read)),
-                        options,
-                    ),
-                )
-                .expect("Print answered")
-                .body()
-                .deserialize()
-                .expect("its reply")
+            zbus::block_on(client.call_method(
+                None::<&str>,
+                OBJECT_PATH,
+                Some(PRINT),
+                "Print",
+                &(
+                    ObjectPath::try_from("/r/2").expect("a path"),
+                    "org.example.Editor",
+                    "",
+                    "Report",
+                    zbus::Fd::from(&std::os::fd::OwnedFd::from(read)),
+                    options,
+                ),
+            ))
+            .expect("Print answered")
+            .body()
+            .deserialize()
+            .expect("its reply")
         })
     }
 
@@ -633,7 +629,7 @@ mod tests {
         }
     }
 
-    fn dict(results: &Results, key: &str) -> HashMap<String, OwnedValue> {
+    fn dict(results: &Results, key: &str) -> HashMap<String, OwnedVariant> {
         results
             .get(key)
             .expect(key)
@@ -643,7 +639,7 @@ mod tests {
             .expect("a dictionary")
     }
 
-    fn text(dict: &HashMap<String, OwnedValue>, key: &str) -> String {
+    fn text(dict: &HashMap<String, OwnedVariant>, key: &str) -> String {
         dict.get(key)
             .expect(key)
             .try_clone()
@@ -689,7 +685,7 @@ mod tests {
         let printing = print(
             &served,
             b"%PDF-1.7",
-            HashMap::from([("token".to_string(), OwnedValue::from(token))]),
+            HashMap::from([("token".to_string(), OwnedVariant::from(token))]),
         );
 
         assert_eq!(
@@ -770,7 +766,7 @@ mod tests {
         let printing = print(
             &served,
             b"%PDF-1.7",
-            HashMap::from([("token".to_string(), OwnedValue::from(token))]),
+            HashMap::from([("token".to_string(), OwnedVariant::from(token))]),
         );
 
         assert_eq!(

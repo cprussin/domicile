@@ -2127,8 +2127,8 @@ mod dbus {
     use std::os::unix::net::UnixStream;
     use std::sync::{Arc, Mutex};
 
-    use zbus::blocking::connection::Builder;
-    use zbus::blocking::Connection;
+    use zbus::connection::Builder;
+    use zbus::Connection;
 
     use super::*;
 
@@ -2161,13 +2161,15 @@ mod dbus {
             move |_bus| {
                 let (ours, theirs) = UnixStream::pair()?;
                 let serving = std::thread::spawn(move || {
-                    Builder::async_io_unix_stream(theirs)
-                        .server(zbus::Guid::generate())?
-                        .p2p()
-                        .serve_at("/test", Greeter)?
-                        .build()
+                    zbus::block_on(
+                        Builder::unix_stream(theirs)
+                            .server(zbus::Guid::generate())
+                            .p2p()
+                            .serve_at("/test", Greeter)
+                            .build(),
+                    )
                 });
-                let client = Builder::async_io_unix_stream(ours).p2p().build()?;
+                let client = zbus::block_on(Builder::unix_stream(ours).p2p().build())?;
                 services
                     .lock()
                     .unwrap()
@@ -2253,24 +2255,22 @@ mod dbus {
         );
         assert_eq!(reply(&heard, 1), SystemReply::Started);
         let service = services.lock().unwrap().last().cloned().expect("a service");
-        service
-            .emit_signal(
-                None::<&str>,
-                "/test",
-                "com.domicile_desktop.Test",
-                "Ignored",
-                &(),
-            )
-            .unwrap();
-        service
-            .emit_signal(
-                None::<&str>,
-                "/test",
-                "com.domicile_desktop.Test",
-                "Pinged",
-                &(7u32,),
-            )
-            .unwrap();
+        zbus::block_on(service.emit_signal(
+            None::<&str>,
+            "/test",
+            "com.domicile_desktop.Test",
+            "Ignored",
+            &(),
+        ))
+        .unwrap();
+        zbus::block_on(service.emit_signal(
+            None::<&str>,
+            "/test",
+            "com.domicile_desktop.Test",
+            "Pinged",
+            &(7u32,),
+        ))
+        .unwrap();
 
         let HostMessage::SystemEvent {
             id: 1,
@@ -2330,7 +2330,7 @@ mod dbus {
 
         let (closed, heard_closed) = channel();
         std::thread::spawn(move || {
-            service.closed();
+            zbus::block_on(service.closed());
             let _ = closed.send(());
         });
         heard_closed

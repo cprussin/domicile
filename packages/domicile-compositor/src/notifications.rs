@@ -42,10 +42,10 @@ use domicile_host::portal_notifications::{
 use domicile_host::tray::TrayIcons;
 use domicile_protocol::Notification;
 use tracing::{debug, warn};
-use zbus::blocking::object_server::InterfaceRef;
-use zbus::blocking::Connection;
+use zbus::object_server::InterfaceRef;
 use zbus::object_server::SignalEmitter;
-use zbus::zvariant::OwnedValue;
+use zbus::Connection;
+use zbus::OwnedVariant;
 
 /// The name a notification server answers on.
 const SERVER_NAME: &str = "org.freedesktop.Notifications";
@@ -191,7 +191,7 @@ impl NotificationServer {
         &self,
         app_id: String,
         id: String,
-        notification: PortalNotification<OwnedValue>,
+        notification: PortalNotification<OwnedVariant>,
     ) {
         let app = app(&app_id, &self.store.applications);
         let notified = self.store.change(|held| {
@@ -383,7 +383,7 @@ impl NotificationServer {
     /// notification, and the token its application raises its window with.
     pub fn on_portal_action(
         &self,
-        invoked: impl Fn(Invoked<OwnedValue>, String) + Send + Sync + 'static,
+        invoked: impl Fn(Invoked<OwnedVariant>, String) + Send + Sync + 'static,
     ) {
         if self.store.portal_actions.set(Box::new(invoked)).is_err() {
             panic!("portal notifications have one listener");
@@ -430,7 +430,7 @@ pub fn serve(
 }
 
 /// Passes a press on a portal notification, and its token, to the portal.
-type PortalAction = Box<dyn Fn(Invoked<OwnedValue>, String) + Send + Sync>;
+type PortalAction = Box<dyn Fn(Invoked<OwnedVariant>, String) + Send + Sync>;
 
 /// The notifications, and who is told when they change.
 struct Store {
@@ -446,7 +446,7 @@ struct Store {
 /// The history, and which of it the portal added.
 struct Held {
     notifications: Notifications,
-    portal: PortalNotifications<OwnedValue>,
+    portal: PortalNotifications<OwnedVariant>,
 }
 
 /// What a press on a notification did.
@@ -458,7 +458,7 @@ enum Pressed {
         application: Option<Application>,
     },
     /// `ActionInvoked` goes to the portal.
-    Portal(Invoked<OwnedValue>),
+    Portal(Invoked<OwnedVariant>),
     /// One of Domicile's own notifications runs this command.
     Launches(Vec<String>),
     NotOffered,
@@ -556,19 +556,21 @@ impl Store {
 /// Serve the name and handle user events in order. Returns on failure or
 /// when the compositor exits.
 fn answer(store: Arc<Store>, events: &Receiver<Event>, starting: &Starting) -> zbus::Result<()> {
-    let connection = Connection::session()?;
-    connection.object_server().at(
+    let connection = zbus::block_on(Connection::session())?;
+    zbus::block_on(connection.object_server().at(
         SERVER_PATH,
         Server {
             store: Arc::clone(&store),
         },
-    )?;
+    ))?;
     crate::bus_names::take(&connection, SERVER_NAME, starting.in_a_window)?;
     debug!("this desktop is the notification server");
 
-    let server = connection
-        .object_server()
-        .interface::<_, Server>(SERVER_PATH)?;
+    let server = zbus::block_on(
+        connection
+            .object_server()
+            .interface::<_, Server>(SERVER_PATH),
+    )?;
     // Ends when the compositor exits and drops every sender.
     for event in events {
         match event {
@@ -708,9 +710,9 @@ fn reach(
 /// Whether `name` is on the bus. A failed question counts as on: the press
 /// then goes to the bus as it did before applications were started.
 fn owned(connection: &Connection, name: &str) -> bool {
-    let asked = zbus::blocking::fdo::DBusProxy::new(connection).and_then(|bus| {
-        let name = zbus::names::BusName::try_from(name).map_err(zbus::Error::from)?;
-        bus.name_has_owner(name).map_err(zbus::Error::from)
+    let asked = zbus::block_on(zbus::fdo::DBusProxy::new(connection)).and_then(|bus| {
+        let name = zbus::names::BusName::try_from(name)?;
+        zbus::block_on(bus.name_has_owner(name)).map_err(zbus::Error::from)
     });
     asked.unwrap_or_else(|why| {
         warn!(%why, %name, "could not ask whether a notification's application is running");
@@ -797,7 +799,7 @@ fn now() -> u64 {
 
 /// Parse a `Notify`'s hints. A missing or mistyped hint reads as absent;
 /// hints the shell does not use are dropped.
-fn hints(mut sent: HashMap<String, OwnedValue>) -> Hints {
+fn hints(mut sent: HashMap<String, OwnedVariant>) -> Hints {
     let mut first = |names: &[&str]| names.iter().find_map(|name| sent.remove(*name));
     let urgency = first(&["urgency"]).and_then(|value| u8::try_from(value).ok());
     // `image-data` since 1.2, `image_data` in 1.1, `icon_data` before that.
@@ -878,7 +880,7 @@ impl Server {
         summary: String,
         body: String,
         actions: Vec<String>,
-        hints: HashMap<String, OwnedValue>,
+        hints: HashMap<String, OwnedVariant>,
         expire_timeout: i32,
     ) -> u32 {
         let hints = self::hints(hints);
@@ -977,7 +979,8 @@ mod tests {
     use crate::portals::socket_pair;
     use domicile_host::portal_notifications::{Action, Priority};
     use domicile_protocol::Urgency;
-    use zbus::zvariant::Value;
+    use zbus::export::ordered_stream::OrderedStreamExt;
+    use zbus::Variant;
 
     #[test]
     fn a_press_starts_an_application_that_has_quit() {
@@ -1017,25 +1020,20 @@ mod tests {
         // The spec's order: the application raises its window with the token
         // when it hears the action.
         let (server, client) = socket_pair::connected(|builder| {
-            builder
-                .serve_at(
-                    SERVER_PATH,
-                    Server {
-                        store: Arc::new(Store::new(Vec::new(), None)),
-                    },
-                )
-                .expect("served")
+            builder.serve_at(
+                SERVER_PATH,
+                Server {
+                    store: Arc::new(Store::new(Vec::new(), None)),
+                },
+            )
         });
-        let iface = server
-            .object_server()
-            .interface::<_, Server>(SERVER_PATH)
+        let iface = zbus::block_on(server.object_server().interface::<_, Server>(SERVER_PATH))
             .expect("served");
-        let mut messages = zbus::blocking::MessageIterator::from(&client);
+        let mut messages = zbus::MessageStream::from(&client);
 
         pressed_on_the_bus(&iface, 7, "default", "t0k", false);
 
-        let signals: Vec<String> = messages
-            .by_ref()
+        let signals: Vec<String> = std::iter::from_fn(|| zbus::block_on(messages.next()))
             .map(|message| message.expect("a message"))
             .filter(|message| message.message_type() == zbus::message::Type::Signal)
             .take(2)
@@ -1071,7 +1069,7 @@ mod tests {
         (server, published)
     }
 
-    fn from_the_portal(title: &str) -> PortalNotification<OwnedValue> {
+    fn from_the_portal(title: &str) -> PortalNotification<OwnedVariant> {
         PortalNotification {
             title: title.into(),
             body: String::new(),
@@ -1079,7 +1077,7 @@ mod tests {
             priority: Priority::Normal,
             default_action: Some(Action {
                 name: "app.open".into(),
-                target: Some(OwnedValue::from(7u32)),
+                target: Some(OwnedVariant::from(7u32)),
             }),
             buttons: Vec::new(),
             display_hint: Vec::new(),
@@ -1543,13 +1541,13 @@ mod tests {
     }
 
     /// `hints` as a `Notify` sends them.
-    fn sent(hints: Vec<(&str, Value<'static>)>) -> HashMap<String, OwnedValue> {
+    fn sent(hints: Vec<(&str, Variant<'static>)>) -> HashMap<String, OwnedVariant> {
         hints
             .into_iter()
             .map(|(name, value)| {
                 (
                     name.to_string(),
-                    OwnedValue::try_from(value).expect("an ownable value"),
+                    OwnedVariant::try_from(value).expect("an ownable value"),
                 )
             })
             .collect()
@@ -1574,13 +1572,13 @@ mod tests {
     #[test]
     fn what_a_notification_hints_is_read() {
         let read = hints(sent(vec![
-            ("urgency", Value::from(2u8)),
-            ("image-data", Value::from(pixels())),
-            ("image-path", Value::from("/tmp/chrome-icon")),
-            ("resident", Value::from(true)),
-            ("x-kde-origin-name", Value::from("chat.example.com")),
-            ("desktop-entry", Value::from("firefox")),
-            ("x-domicile-browser-window", Value::from("7")),
+            ("urgency", Variant::from(2u8)),
+            ("image-data", Variant::from(pixels())),
+            ("image-path", Variant::from("/tmp/chrome-icon")),
+            ("resident", Variant::from(true)),
+            ("x-kde-origin-name", Variant::from("chat.example.com")),
+            ("desktop-entry", Variant::from("firefox")),
+            ("x-domicile-browser-window", Variant::from("7")),
         ]));
 
         assert_eq!(
@@ -1600,19 +1598,19 @@ mod tests {
     #[test]
     fn the_older_spellings_of_the_picture_are_read() {
         for name in ["image_data", "icon_data"] {
-            let read = hints(sent(vec![(name, Value::from(pixels()))]));
+            let read = hints(sent(vec![(name, Variant::from(pixels()))]));
             assert_eq!(read.image_data, Some(image()), "{name}");
         }
-        let read = hints(sent(vec![("image_path", Value::from("firefox"))]));
+        let read = hints(sent(vec![("image_path", Variant::from("firefox"))]));
         assert_eq!(read.image_path, Some("firefox".into()));
     }
 
     #[test]
     fn a_hint_of_the_wrong_type_is_absent() {
         let read = hints(sent(vec![
-            ("urgency", Value::from("critical")),
-            ("resident", Value::from(1u32)),
-            ("image-data", Value::from(7u32)),
+            ("urgency", Variant::from("critical")),
+            ("resident", Variant::from(1u32)),
+            ("image-data", Variant::from(7u32)),
         ]));
 
         assert_eq!(read, Hints::default());

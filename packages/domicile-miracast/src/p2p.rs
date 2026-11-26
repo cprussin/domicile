@@ -8,8 +8,9 @@ use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::time::{Duration, Instant};
 
-use zbus::blocking::{Connection, Proxy};
-use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+use zbus::export::ordered_stream::OrderedStreamExt;
+use zbus::{Connection, Proxy};
+use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
 use crate::wfd;
 
@@ -67,13 +68,13 @@ pub struct P2p {
 impl P2p {
     /// The first Wi-Fi Direct device.
     pub fn open(connection: &Connection) -> Result<Self, P2pError> {
-        let manager = Proxy::new(connection, NM, NM_PATH, NM)?;
-        let devices: Vec<OwnedObjectPath> = manager.call("GetDevices", &())?;
+        let manager = zbus::block_on(Proxy::new(connection, NM, NM_PATH, NM))?;
+        let devices: Vec<OwnedObjectPath> = zbus::block_on(manager.call("GetDevices", &()))?;
         let device = devices
             .into_iter()
             .find(|device| {
-                Proxy::new(connection, NM, device.as_str(), DEVICE)
-                    .and_then(|proxy| proxy.get_property::<u32>("DeviceType"))
+                zbus::block_on(Proxy::new(connection, NM, device.as_str(), DEVICE))
+                    .and_then(|proxy| zbus::block_on(proxy.get_property::<u32>("DeviceType")))
                     .is_ok_and(|kind| kind == WIFI_P2P_TYPE)
             })
             .ok_or(P2pError::NoDevice)?;
@@ -84,23 +85,24 @@ impl P2p {
     }
 
     fn proxy(&self) -> Result<Proxy<'_>, P2pError> {
-        Ok(Proxy::new(
+        Ok(zbus::block_on(Proxy::new(
             &self.connection,
             NM,
             self.device.as_str(),
             WIFI_P2P,
-        )?)
+        ))?)
     }
 
     /// The displays seen now.
     pub fn peers(&self) -> Result<Vec<Peer>, P2pError> {
-        let paths: Vec<OwnedObjectPath> = self.proxy()?.get_property("Peers")?;
+        let paths: Vec<OwnedObjectPath> = zbus::block_on(self.proxy()?.get_property("Peers"))?;
         Ok(paths
             .into_iter()
             .filter_map(|path| {
-                let peer = Proxy::new(&self.connection, NM, path.as_str(), PEER).ok()?;
-                let ies: Vec<u8> = peer.get_property("WfdIEs").ok()?;
-                let name: String = peer.get_property("Name").ok()?;
+                let peer =
+                    zbus::block_on(Proxy::new(&self.connection, NM, path.as_str(), PEER)).ok()?;
+                let ies: Vec<u8> = zbus::block_on(peer.get_property("WfdIEs")).ok()?;
+                let name: String = zbus::block_on(peer.get_property("Name")).ok()?;
                 wfd::is_sink(&ies).then(|| Peer {
                     path: path.to_string(),
                     name,
@@ -113,11 +115,11 @@ impl P2p {
     /// each time a peer comes or goes.
     pub fn find(&self, changed: impl Fn(Vec<Peer>)) -> Result<(), P2pError> {
         let proxy = self.proxy()?;
-        let added = proxy.receive_signal("PeerAdded")?;
-        let removed = proxy.receive_signal("PeerRemoved")?;
+        let added = zbus::block_on(proxy.receive_signal("PeerAdded"))?;
+        let removed = zbus::block_on(proxy.receive_signal("PeerRemoved"))?;
         let search = || {
-            let options = HashMap::from([("timeout", Value::from(FIND_FOR))]);
-            proxy.call_method("StartFind", &(options,)).map(drop)
+            let options = HashMap::from([("timeout", Variant::from(FIND_FOR))]);
+            zbus::block_on(proxy.call_method("StartFind", &(options,))).map(drop)
         };
         search()?;
         changed(self.peers()?);
@@ -128,7 +130,7 @@ impl P2p {
         for mut stream in [added, removed] {
             let wake = wake.clone();
             std::thread::spawn(move || {
-                while stream.next().is_some() {
+                while zbus::block_on(stream.next()).is_some() {
                     if wake.send(()).is_err() {
                         break;
                     }
@@ -151,39 +153,40 @@ impl P2p {
     /// computer's address on it, where the TV will reach it. The link goes
     /// when the [`Link`] drops, or this process ends.
     pub fn connect(&self, peer: &str) -> Result<(Link, Ipv4Addr), P2pError> {
-        let hardware: String =
-            Proxy::new(&self.connection, NM, peer, PEER)?.get_property("HwAddress")?;
+        let hardware: String = zbus::block_on(
+            zbus::block_on(Proxy::new(&self.connection, NM, peer, PEER))?.get_property("HwAddress"),
+        )?;
         let settings = HashMap::from([
             (
                 "connection",
                 HashMap::from([
-                    ("type", Value::from("wifi-p2p")),
-                    ("id", Value::from("Domicile cast")),
-                    ("autoconnect", Value::from(false)),
+                    ("type", Variant::from("wifi-p2p")),
+                    ("id", Variant::from("Domicile cast")),
+                    ("autoconnect", Variant::from(false)),
                 ]),
             ),
             (
                 "wifi-p2p",
                 HashMap::from([
-                    ("peer", Value::from(hardware)),
-                    ("wfd-ies", Value::from(wfd::source_ies())),
+                    ("peer", Variant::from(hardware)),
+                    ("wfd-ies", Variant::from(wfd::source_ies())),
                 ]),
             ),
         ]);
         let options = HashMap::from([
-            ("persist", Value::from("volatile")),
-            ("bind-activation", Value::from("dbus-client")),
+            ("persist", Variant::from("volatile")),
+            ("bind-activation", Variant::from("dbus-client")),
         ]);
-        let manager = Proxy::new(&self.connection, NM, NM_PATH, NM)?;
-        let peer_path = OwnedObjectPath::try_from(peer.to_string()).map_err(zbus::Error::from)?;
+        let manager = zbus::block_on(Proxy::new(&self.connection, NM, NM_PATH, NM))?;
+        let peer_path = OwnedObjectPath::try_from(peer.to_string())?;
         let (_, active, _): (
             OwnedObjectPath,
             OwnedObjectPath,
-            HashMap<String, OwnedValue>,
-        ) = manager.call(
+            HashMap<String, OwnedVariant>,
+        ) = zbus::block_on(manager.call(
             "AddAndActivateConnection2",
             &(settings, &self.device, &peer_path, options),
-        )?;
+        ))?;
         let link = Link {
             connection: self.connection.clone(),
             active,
@@ -202,12 +205,12 @@ pub struct Link {
 
 impl Link {
     fn active(&self) -> Result<Proxy<'_>, P2pError> {
-        Ok(Proxy::new(
+        Ok(zbus::block_on(Proxy::new(
             &self.connection,
             NM,
             self.active.as_str(),
             "org.freedesktop.NetworkManager.Connection.Active",
-        )?)
+        ))?)
     }
 
     /// Waits for the TV to accept.
@@ -215,7 +218,7 @@ impl Link {
         let deadline = Instant::now() + ACCEPT_WITHIN;
         let active = self.active()?;
         while Instant::now() < deadline {
-            match active.get_property::<u32>("State")? {
+            match zbus::block_on(active.get_property::<u32>("State"))? {
                 ACTIVATED => return Ok(()),
                 DEACTIVATED => return Err(P2pError::NotAccepted),
                 _ => std::thread::sleep(Duration::from_millis(250)),
@@ -226,14 +229,15 @@ impl Link {
 
     /// This computer's IPv4 address on the link.
     fn address(&self) -> Result<Ipv4Addr, P2pError> {
-        let config: OwnedObjectPath = self.active()?.get_property("Ip4Config")?;
-        let ip4 = Proxy::new(
+        let config: OwnedObjectPath = zbus::block_on(self.active()?.get_property("Ip4Config"))?;
+        let ip4 = zbus::block_on(Proxy::new(
             &self.connection,
             NM,
             config.as_str(),
             "org.freedesktop.NetworkManager.IP4Config",
-        )?;
-        let data: Vec<HashMap<String, OwnedValue>> = ip4.get_property("AddressData")?;
+        ))?;
+        let data: Vec<HashMap<String, OwnedVariant>> =
+            zbus::block_on(ip4.get_property("AddressData"))?;
         data.iter()
             .filter_map(|entry| entry.get("address"))
             .filter_map(|address| String::try_from(address.clone()).ok())
@@ -244,10 +248,8 @@ impl Link {
 
 impl Drop for Link {
     fn drop(&mut self) {
-        let _ = Proxy::new(&self.connection, NM, NM_PATH, NM).and_then(|manager| {
-            manager
-                .call_method("DeactivateConnection", &(&self.active,))
-                .map(drop)
+        let _ = zbus::block_on(Proxy::new(&self.connection, NM, NM_PATH, NM)).and_then(|manager| {
+            zbus::block_on(manager.call_method("DeactivateConnection", &(&self.active,))).map(drop)
         });
     }
 }

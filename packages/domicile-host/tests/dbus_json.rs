@@ -1,7 +1,7 @@
 //! D-Bus bodies as JSON text, read against their signature.
 
 use domicile_host::dbus_json::{read, written};
-use zbus::zvariant::{Array, Dict, ObjectPath, Signature, StructureBuilder, Value};
+use zbus::{Array, Dict, ObjectPath, Signature, Structure, Variant};
 
 fn signature(text: &str) -> Signature {
     text.parse().expect("a signature")
@@ -15,18 +15,18 @@ fn basic_types_read_from_json_by_their_signature() {
             r#"[1, true, -2, 3, -4, 5, -6, 7, 0.5, "s", "/o", "a{sv}"]"#
         ),
         Ok(vec![
-            Value::U8(1),
-            Value::Bool(true),
-            Value::I16(-2),
-            Value::U16(3),
-            Value::I32(-4),
-            Value::U32(5),
-            Value::I64(-6),
-            Value::U64(7),
-            Value::F64(0.5),
-            Value::from("s"),
-            Value::ObjectPath(ObjectPath::try_from("/o").unwrap()),
-            Value::Signature(signature("a{sv}")),
+            Variant::U8(1),
+            Variant::Bool(true),
+            Variant::I16(-2),
+            Variant::U16(3),
+            Variant::I32(-4),
+            Variant::U32(5),
+            Variant::I64(-6),
+            Variant::U64(7),
+            Variant::F64(0.5),
+            Variant::from("s"),
+            Variant::ObjectPath(ObjectPath::try_from("/o").unwrap()),
+            Variant::Signature(signature("a{sv}")),
         ])
     );
 }
@@ -34,17 +34,17 @@ fn basic_types_read_from_json_by_their_signature() {
 #[test]
 fn containers_read_as_arrays_and_objects() {
     let mut strings = Array::new(&Signature::Str);
-    strings.append(Value::from("a")).unwrap();
+    strings.append(Variant::from("a")).unwrap();
     let mut properties = Dict::new(&Signature::Str, &Signature::Variant);
     properties
         .append(
-            Value::from("Percentage"),
-            Value::Value(Box::new(Value::F64(97.0))),
+            Variant::from("Percentage"),
+            Variant::Variant(Box::new(Variant::F64(97.0))),
         )
         .unwrap();
-    let pair = StructureBuilder::new()
-        .append_field(Value::I32(1))
-        .append_field(Value::from("x"))
+    let pair = Structure::builder()
+        .append_field(Variant::I32(1))
+        .append_field(Variant::from("x"))
         .build()
         .unwrap();
 
@@ -54,9 +54,9 @@ fn containers_read_as_arrays_and_objects() {
             r#"[["a"], {"Percentage": {"signature": "d", "value": 97}}, [1, "x"]]"#
         ),
         Ok(vec![
-            Value::Array(strings),
-            Value::Dict(properties),
-            Value::Structure(pair),
+            Variant::Array(strings),
+            Variant::Dict(properties),
+            Variant::Structure(pair),
         ])
     );
 }
@@ -65,7 +65,7 @@ fn containers_read_as_arrays_and_objects() {
 #[test]
 fn an_empty_array_takes_its_type_from_the_signature() {
     let read = read("au", "[[]]").expect("it reads");
-    let [Value::Array(array)] = read.as_slice() else {
+    let [Variant::Array(array)] = read.as_slice() else {
         panic!("expected one array, read {read:?}");
     };
     assert_eq!(array.element_signature(), &Signature::U32);
@@ -77,14 +77,14 @@ fn an_empty_array_takes_its_type_from_the_signature() {
 fn a_dictionary_with_number_keys_is_keyed_by_their_text() {
     let mut numbered = Dict::new(&Signature::U32, &Signature::Str);
     numbered
-        .append(Value::U32(7), Value::from("seven"))
+        .append(Variant::U32(7), Variant::from("seven"))
         .unwrap();
 
     assert_eq!(
         read("a{us}", r#"[{"7": "seven"}]"#),
-        Ok(vec![Value::Dict(numbered.try_clone().unwrap())])
+        Ok(vec![Variant::Dict(numbered.try_clone().unwrap())])
     );
-    assert_eq!(written(&[Value::Dict(numbered)]), r#"[{"7":"seven"}]"#);
+    assert_eq!(written(&[Variant::Dict(numbered)]), r#"[{"7":"seven"}]"#);
 }
 
 #[test]

@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use domicile_protocol::{CapturingKind, Devices, PortalAnswer, PortalKind, RemoteDesktopDialog};
 use zbus::fdo;
 use zbus::object_server::ObjectServer;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
 use super::queue::{ask, Listed};
 use super::restore::Grant;
@@ -71,8 +71,8 @@ impl RemoteDesktop {
         _handle: OwnedObjectPath,
         session_handle: OwnedObjectPath,
         _app_id: String,
-        _options: HashMap<String, OwnedValue>,
-    ) -> fdo::Result<(u32, HashMap<String, OwnedValue>)> {
+        _options: HashMap<String, OwnedVariant>,
+    ) -> fdo::Result<(u32, HashMap<String, OwnedVariant>)> {
         self.backends.remotes.0.lock().unwrap().insert(
             session_handle.clone(),
             Remote {
@@ -100,8 +100,8 @@ impl RemoteDesktop {
         _handle: OwnedObjectPath,
         session_handle: OwnedObjectPath,
         _app_id: String,
-        options: HashMap<String, OwnedValue>,
-    ) -> fdo::Result<(u32, HashMap<String, OwnedValue>)> {
+        options: HashMap<String, OwnedVariant>,
+    ) -> fdo::Result<(u32, HashMap<String, OwnedVariant>)> {
         self.backends.remotes.with(&session_handle, |remote| {
             if let Some(types) = number(&options, "types") {
                 remote.asked = devices(types);
@@ -121,8 +121,8 @@ impl RemoteDesktop {
         session_handle: OwnedObjectPath,
         app_id: String,
         parent_window: String,
-        _options: HashMap<String, OwnedValue>,
-    ) -> fdo::Result<(u32, HashMap<String, OwnedValue>)> {
+        _options: HashMap<String, OwnedVariant>,
+    ) -> fdo::Result<(u32, HashMap<String, OwnedVariant>)> {
         let (asked, clipboard_asked, persist_mode, restore) =
             self.backends.remotes.with(&session_handle, |remote| {
                 (
@@ -174,7 +174,7 @@ impl RemoteDesktop {
     async fn notify_pointer_motion(
         &self,
         session_handle: OwnedObjectPath,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
         dx: f64,
         dy: f64,
     ) -> fdo::Result<()> {
@@ -185,7 +185,7 @@ impl RemoteDesktop {
     async fn notify_pointer_motion_absolute(
         &self,
         session_handle: OwnedObjectPath,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
         stream: u32,
         _x: f64,
         _y: f64,
@@ -196,7 +196,7 @@ impl RemoteDesktop {
     async fn notify_pointer_button(
         &self,
         session_handle: OwnedObjectPath,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
         button: i32,
         state: u32,
     ) -> fdo::Result<()> {
@@ -215,7 +215,7 @@ impl RemoteDesktop {
     async fn notify_pointer_axis(
         &self,
         session_handle: OwnedObjectPath,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
         dx: f64,
         dy: f64,
     ) -> fdo::Result<()> {
@@ -226,7 +226,7 @@ impl RemoteDesktop {
     async fn notify_pointer_axis_discrete(
         &self,
         session_handle: OwnedObjectPath,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
         axis: u32,
         steps: i32,
     ) -> fdo::Result<()> {
@@ -248,7 +248,7 @@ impl RemoteDesktop {
     async fn notify_keyboard_keycode(
         &self,
         session_handle: OwnedObjectPath,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
         keycode: i32,
         state: u32,
     ) -> fdo::Result<()> {
@@ -267,7 +267,7 @@ impl RemoteDesktop {
     async fn notify_keyboard_keysym(
         &self,
         session_handle: OwnedObjectPath,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
         keysym: i32,
         state: u32,
     ) -> fdo::Result<()> {
@@ -282,7 +282,7 @@ impl RemoteDesktop {
     async fn notify_touch_down(
         &self,
         session_handle: OwnedObjectPath,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
         stream: u32,
         _slot: u32,
         _x: f64,
@@ -295,7 +295,7 @@ impl RemoteDesktop {
     async fn notify_touch_motion(
         &self,
         session_handle: OwnedObjectPath,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
         stream: u32,
         _slot: u32,
         _x: f64,
@@ -307,7 +307,7 @@ impl RemoteDesktop {
     async fn notify_touch_up(
         &self,
         session_handle: OwnedObjectPath,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
         slot: u32,
     ) -> fdo::Result<()> {
         self.emulate(&session_handle, TOUCHSCREEN, Emulated::TouchUp { id: slot })
@@ -319,8 +319,8 @@ impl RemoteDesktop {
         &self,
         session_handle: OwnedObjectPath,
         _app_id: String,
-        _options: HashMap<String, OwnedValue>,
-    ) -> fdo::Result<zbus::zvariant::OwnedFd> {
+        _options: HashMap<String, OwnedVariant>,
+    ) -> fdo::Result<zbus::OwnedFd> {
         let eis = self.backends.eis()?;
         self.backends.remotes.started(&session_handle, |started| {
             let (socket, context) = eis
@@ -350,7 +350,7 @@ impl RemoteDesktop {
         session_handle: &OwnedObjectPath,
         grant: Grant,
         persist_mode: u32,
-    ) -> fdo::Result<HashMap<String, OwnedValue>> {
+    ) -> fdo::Result<HashMap<String, OwnedVariant>> {
         let emulator = self.backends.eis()?.emulate();
         let told = self.backends.told.clone();
         let stopping = session_handle.clone();
@@ -376,10 +376,13 @@ impl RemoteDesktop {
             });
         })?;
         let mut results = HashMap::from([
-            ("devices".to_string(), OwnedValue::from(bits(grant.devices))),
+            (
+                "devices".to_string(),
+                OwnedVariant::from(bits(grant.devices)),
+            ),
             (
                 "clipboard_enabled".to_string(),
-                OwnedValue::from(grant.clipboard),
+                OwnedVariant::from(grant.clipboard),
             ),
         ]);
         if let Some(token) = self
@@ -391,9 +394,13 @@ impl RemoteDesktop {
         {
             results.insert(
                 "restore_data".to_string(),
-                owned(Value::from((VENDOR, RESTORE_VERSION, Value::from(token)))),
+                owned(Variant::from((
+                    VENDOR,
+                    RESTORE_VERSION,
+                    Variant::from(token),
+                ))),
             );
-            results.insert("persist_mode".to_string(), OwnedValue::from(persist_mode));
+            results.insert("persist_mode".to_string(), OwnedVariant::from(persist_mode));
         }
         Ok(results)
     }
@@ -536,21 +543,21 @@ fn capabilities(devices: Devices) -> Capabilities {
 }
 
 /// A `u` option. One of another type reads as absent.
-fn number(options: &HashMap<String, OwnedValue>, name: &str) -> Option<u32> {
+fn number(options: &HashMap<String, OwnedVariant>, name: &str) -> Option<u32> {
     options
         .get(name)
         .and_then(|value| u32::try_from(value).ok())
 }
 
 /// The token in a `restore_data` of ours. Another vendor's reads as none.
-fn token(restore: &OwnedValue) -> Option<String> {
+fn token(restore: &OwnedVariant) -> Option<String> {
     match &**restore {
-        Value::Structure(fields) => match fields.fields() {
-            [Value::Str(vendor), Value::U32(version), Value::Value(token)]
+        Variant::Structure(fields) => match fields.fields() {
+            [Variant::Str(vendor), Variant::U32(version), Variant::Variant(token)]
                 if vendor.as_str() == VENDOR && *version == RESTORE_VERSION =>
             {
                 match &**token {
-                    Value::Str(token) => Some(token.to_string()),
+                    Variant::Str(token) => Some(token.to_string()),
                     _ => None,
                 }
             }
@@ -560,8 +567,8 @@ fn token(restore: &OwnedValue) -> Option<String> {
     }
 }
 
-fn owned(value: Value<'_>) -> OwnedValue {
-    OwnedValue::try_from(value).expect("a value with no file descriptor is ownable")
+fn owned(value: Variant<'_>) -> OwnedVariant {
+    OwnedVariant::try_from(value).expect("a value with no file descriptor is ownable")
 }
 
 #[cfg(test)]
@@ -569,7 +576,7 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
-    use zbus::zvariant::Value;
+    use zbus::Variant;
 
     use crate::client_requests::ClientRequest;
     use crate::eis::recorded::{a_client, Saw};
@@ -590,7 +597,11 @@ mod tests {
 
     /// A session that asked for `types`, granted everything.
     fn a_session(served: &Served, types: u32) -> Results {
-        let started = starting(served, options(vec![("types", Value::from(types))]), false);
+        let started = starting(
+            served,
+            options(vec![("types", Variant::from(types))]),
+            false,
+        );
         let (items, _) = next(served);
         assert_eq!(
             items[0].kind,
@@ -629,10 +640,10 @@ mod tests {
         let served = served(Tokens::load(None));
         let results = a_keyboard_session(&served);
 
-        assert_eq!(results.get("devices"), Some(&OwnedValue::from(KEYBOARD)));
+        assert_eq!(results.get("devices"), Some(&OwnedVariant::from(KEYBOARD)));
         assert_eq!(
             results.get("clipboard_enabled"),
-            Some(&OwnedValue::from(false))
+            Some(&OwnedVariant::from(false))
         );
         keycode(&served, 1).expect("a granted key");
         assert_eq!(
@@ -666,7 +677,7 @@ mod tests {
             &(path(SESSION), APP, Results::new()),
         )
         .expect("ConnectToEIS answered");
-        let socket: zbus::zvariant::OwnedFd = socket.body().deserialize().expect("a socket");
+        let socket: zbus::OwnedFd = socket.body().deserialize().expect("a socket");
         let seen = a_client(socket.into(), 1, |_, _| {});
 
         assert_eq!(
@@ -721,8 +732,8 @@ mod tests {
             let started = starting(
                 &served,
                 options(vec![
-                    ("types", Value::from(KEYBOARD)),
-                    ("persist_mode", Value::from(1u32)),
+                    ("types", Variant::from(KEYBOARD)),
+                    ("persist_mode", Variant::from(1u32)),
                 ]),
                 false,
             );
@@ -740,27 +751,25 @@ mod tests {
             started.join().expect("Start returned").1
         };
         let restore = results.get("restore_data").expect("a token").clone();
-        served
-            .client
-            .call_method(
-                None::<&str>,
-                SESSION,
-                Some("org.freedesktop.impl.portal.Session"),
-                "Close",
-                &(),
-            )
-            .expect("closed");
+        zbus::block_on(served.client.call_method(
+            None::<&str>,
+            SESSION,
+            Some("org.freedesktop.impl.portal.Session"),
+            "Close",
+            &(),
+        ))
+        .expect("closed");
 
         let (response, again) = starting(
             &served,
-            options(vec![("restore_data", Value::from(restore))]),
+            options(vec![("restore_data", Variant::from(restore))]),
             false,
         )
         .join()
         .expect("Start returned");
 
         assert_eq!(response, 0);
-        assert_eq!(again.get("devices"), Some(&OwnedValue::from(KEYBOARD)));
+        assert_eq!(again.get("devices"), Some(&OwnedVariant::from(KEYBOARD)));
         assert!(
             served
                 .published

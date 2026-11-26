@@ -13,7 +13,7 @@ use std::sync::Arc;
 use domicile_host::usb_names::{database_properties, names};
 use domicile_protocol::{PortalAnswer, PortalKind, UsbDevice, UsbDialog};
 use zbus::object_server::ObjectServer;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::{OwnedObjectPath, OwnedVariant};
 
 use super::queue::{ask, Queue};
 
@@ -23,8 +23,8 @@ const INTERFACE_VERSION: u32 = 1;
 /// A device as `AcquireDevices` passes it: id, information, access options.
 type Asked = (
     String,
-    HashMap<String, OwnedValue>,
-    HashMap<String, OwnedValue>,
+    HashMap<String, OwnedVariant>,
+    HashMap<String, OwnedVariant>,
 );
 
 /// The `Usb` backend object.
@@ -46,8 +46,8 @@ impl Usb {
         parent_window: String,
         app_id: String,
         devices: Vec<Asked>,
-        _options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        _options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let kind = PortalKind::Usb(UsbDialog {
             devices: devices
                 .iter()
@@ -56,7 +56,7 @@ impl Usb {
         });
         match ask(&self.queue, server, handle, app_id, &parent_window, kind).await {
             PortalAnswer::Access => {
-                let granted: Vec<(String, HashMap<String, OwnedValue>)> = devices
+                let granted: Vec<(String, HashMap<String, OwnedVariant>)> = devices
                     .into_iter()
                     .map(|(id, _, access)| (id, access))
                     .collect();
@@ -64,7 +64,7 @@ impl Usb {
                     0,
                     HashMap::from([(
                         "devices".to_string(),
-                        OwnedValue::try_from(zbus::zvariant::Value::from(granted))
+                        OwnedVariant::try_from(zbus::Variant::from(granted))
                             .expect("a device list holds no file descriptors"),
                     )]),
                 )
@@ -87,13 +87,13 @@ impl Usb {
 /// mistyped key reads as absent.
 fn device(
     id: &str,
-    information: &HashMap<String, OwnedValue>,
-    access: &HashMap<String, OwnedValue>,
+    information: &HashMap<String, OwnedVariant>,
+    access: &HashMap<String, OwnedVariant>,
     udev_data: &Path,
 ) -> UsbDevice {
     let passed: HashMap<String, String> = information
         .get("properties")
-        .and_then(|value| HashMap::<String, OwnedValue>::try_from(value.try_clone().ok()?).ok())
+        .and_then(|value| HashMap::<String, OwnedVariant>::try_from(value.try_clone().ok()?).ok())
         .unwrap_or_default()
         .into_iter()
         .filter_map(|(key, value)| Some((key, String::try_from(value).ok()?)))
@@ -130,7 +130,7 @@ mod tests {
     use std::time::Duration;
 
     use domicile_protocol::PortalRequest;
-    use zbus::zvariant::{ObjectPath, Value};
+    use zbus::{ObjectPath, Variant};
 
     use crate::portals::socket_pair::connected;
 
@@ -138,11 +138,11 @@ mod tests {
     const INTERFACE: &str = "org.freedesktop.impl.portal.Usb";
 
     struct Served {
-        client: zbus::blocking::Connection,
+        client: zbus::Connection,
         queue: Arc<Queue>,
         published: Receiver<Vec<PortalRequest>>,
         udev: tempfile::TempDir,
-        _server: zbus::blocking::Connection,
+        _server: zbus::Connection,
     }
 
     fn served() -> Served {
@@ -159,15 +159,13 @@ mod tests {
         let serving = Arc::clone(&queue);
         let udev_data = udev.path().to_path_buf();
         let (server, client) = connected(move |builder| {
-            builder
-                .serve_at(
-                    PATH,
-                    Usb {
-                        queue: serving,
-                        udev_data,
-                    },
-                )
-                .expect("served")
+            builder.serve_at(
+                PATH,
+                Usb {
+                    queue: serving,
+                    udev_data,
+                },
+            )
         });
         Served {
             client,
@@ -178,8 +176,8 @@ mod tests {
         }
     }
 
-    fn owned(value: Value<'static>) -> OwnedValue {
-        OwnedValue::try_from(value).expect("ownable")
+    fn owned(value: Variant<'static>) -> OwnedVariant {
+        OwnedVariant::try_from(value).expect("ownable")
     }
 
     /// A security key the frontend named, asked for writable.
@@ -188,24 +186,24 @@ mod tests {
             "dev-1".into(),
             HashMap::from([(
                 "properties".to_string(),
-                owned(Value::from(HashMap::from([(
+                owned(Variant::from(HashMap::from([(
                     "ID_VENDOR_FROM_DATABASE".to_string(),
-                    Value::from("Yubico.com"),
+                    Variant::from("Yubico.com"),
                 )]))),
             )]),
-            HashMap::from([("writable".to_string(), OwnedValue::from(true))]),
+            HashMap::from([("writable".to_string(), OwnedVariant::from(true))]),
         )
     }
 
     /// Call `AcquireDevices` from another thread.
     fn acquire(
-        client: &zbus::blocking::Connection,
+        client: &zbus::Connection,
         devices: Vec<Asked>,
-    ) -> thread::JoinHandle<(u32, HashMap<String, OwnedValue>)> {
+    ) -> thread::JoinHandle<(u32, HashMap<String, OwnedVariant>)> {
         let client = client.clone();
         thread::spawn(move || {
-            client
-                .call_method(
+            zbus::block_on(
+                client.call_method(
                     None::<&str>,
                     PATH,
                     Some(INTERFACE),
@@ -216,13 +214,14 @@ mod tests {
                         "",
                         "org.example.Keys",
                         devices,
-                        HashMap::<String, OwnedValue>::new(),
+                        HashMap::<String, OwnedVariant>::new(),
                     ),
-                )
-                .expect("AcquireDevices answered")
-                .body()
-                .deserialize()
-                .expect("its reply")
+                ),
+            )
+            .expect("AcquireDevices answered")
+            .body()
+            .deserialize()
+            .expect("its reply")
         })
     }
 
@@ -256,7 +255,7 @@ mod tests {
 
         let (response, results) = asking.join().expect("the call returned");
         assert_eq!(response, 0);
-        let granted = <Vec<(String, HashMap<String, OwnedValue>)>>::try_from(
+        let granted = <Vec<(String, HashMap<String, OwnedVariant>)>>::try_from(
             results
                 .get("devices")
                 .expect("the devices")
@@ -299,7 +298,7 @@ mod tests {
             "dev-2".to_string(),
             HashMap::from([(
                 "device-file".to_string(),
-                owned(Value::from(file.to_string_lossy().into_owned())),
+                owned(Variant::from(file.to_string_lossy().into_owned())),
             )]),
             HashMap::new(),
         );

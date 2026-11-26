@@ -35,17 +35,17 @@ impl Manager {
             .push(Heard::UnsetEnvironment(names));
     }
 
-    fn start_unit(&self, name: String, mode: String) -> zbus::zvariant::OwnedObjectPath {
+    fn start_unit(&self, name: String, mode: String) -> zbus::OwnedObjectPath {
         self.heard
             .lock()
             .unwrap()
             .push(Heard::StartUnit(name, mode));
-        zbus::zvariant::OwnedObjectPath::try_from("/org/freedesktop/systemd1/job/1").unwrap()
+        zbus::OwnedObjectPath::try_from("/org/freedesktop/systemd1/job/1").unwrap()
     }
 
-    fn stop_unit(&self, name: String, mode: String) -> zbus::zvariant::OwnedObjectPath {
+    fn stop_unit(&self, name: String, mode: String) -> zbus::OwnedObjectPath {
         self.heard.lock().unwrap().push(Heard::StopUnit(name, mode));
-        zbus::zvariant::OwnedObjectPath::try_from("/org/freedesktop/systemd1/job/2").unwrap()
+        zbus::OwnedObjectPath::try_from("/org/freedesktop/systemd1/job/2").unwrap()
     }
 
     #[zbus(property)]
@@ -55,22 +55,14 @@ impl Manager {
 }
 
 /// A fake user manager and a client, connected peer-to-peer over a socket pair.
-fn paired() -> (
-    zbus::blocking::Connection,
-    zbus::blocking::Connection,
-    Arc<Mutex<Vec<Heard>>>,
-) {
+fn paired() -> (zbus::Connection, zbus::Connection, Arc<Mutex<Vec<Heard>>>) {
     paired_with(&[])
 }
 
 /// The same, with the manager holding `environment`.
 fn paired_with(
     environment: &[&str],
-) -> (
-    zbus::blocking::Connection,
-    zbus::blocking::Connection,
-    Arc<Mutex<Vec<Heard>>>,
-) {
+) -> (zbus::Connection, zbus::Connection, Arc<Mutex<Vec<Heard>>>) {
     let (theirs, ours) = UnixStream::pair().unwrap();
     let heard = Arc::new(Mutex::new(Vec::new()));
     let environment = environment.iter().map(|line| line.to_string()).collect();
@@ -78,18 +70,17 @@ fn paired_with(
     let server = std::thread::spawn({
         let heard = Arc::clone(&heard);
         move || {
-            zbus::blocking::connection::Builder::async_io_unix_stream(theirs)
-                .server(guid)
-                .unwrap()
-                .p2p()
-                .serve_at("/org/freedesktop/systemd1", Manager { heard, environment })
-                .unwrap()
-                .build()
-                .unwrap()
+            zbus::block_on(
+                zbus::connection::Builder::unix_stream(theirs)
+                    .server(guid)
+                    .p2p()
+                    .serve_at("/org/freedesktop/systemd1", Manager { heard, environment })
+                    .build(),
+            )
+            .unwrap()
         }
     });
-    let client =
-        connected(zbus::blocking::connection::Builder::async_io_unix_stream(ours).p2p()).unwrap();
+    let client = connected(zbus::connection::Builder::unix_stream(ours).p2p()).unwrap();
     (server.join().unwrap(), client, heard)
 }
 

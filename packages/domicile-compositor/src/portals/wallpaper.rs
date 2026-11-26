@@ -19,7 +19,7 @@ use domicile_protocol::{
 };
 use tracing::debug;
 use zbus::object_server::ObjectServer;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::{OwnedObjectPath, OwnedVariant};
 
 use super::queue::{ask, Queue};
 
@@ -41,7 +41,7 @@ impl Wallpaper {
         app_id: String,
         parent_window: String,
         uri: String,
-        options: HashMap<String, OwnedValue>,
+        options: HashMap<String, OwnedVariant>,
     ) -> u32 {
         let Some(asked) = asked(&uri, options) else {
             debug!(%uri, "a wallpaper this desktop cannot set; refused");
@@ -124,7 +124,7 @@ struct Asked {
 
 /// Read a call, or `None` when it cannot be done. A missing `set-on` sets
 /// both pictures; a mistyped option reads as absent.
-fn asked(uri: &str, mut options: HashMap<String, OwnedValue>) -> Option<Asked> {
+fn asked(uri: &str, mut options: HashMap<String, OwnedVariant>) -> Option<Asked> {
     let preview = options
         .remove("show-preview")
         .and_then(|value| bool::try_from(value).ok())
@@ -155,19 +155,19 @@ mod tests {
     use std::time::Duration;
 
     use domicile_protocol::PortalRequest;
-    use zbus::zvariant::{ObjectPath, Value};
+    use zbus::{ObjectPath, Variant};
 
     use crate::portals::socket_pair::connected;
 
     const HANDLE: &str = "/org/freedesktop/portal/desktop/request/1_7/w";
 
     struct Served {
-        client: zbus::blocking::Connection,
+        client: zbus::Connection,
         queue: Arc<Queue>,
         published: Receiver<Vec<PortalRequest>>,
         shown: Receiver<PortalWallpaper>,
         state: tempfile::TempDir,
-        _server: zbus::blocking::Connection,
+        _server: zbus::Connection,
     }
 
     fn served() -> Served {
@@ -188,15 +188,13 @@ mod tests {
         });
         let serving = Arc::clone(&queue);
         let (server, client) = connected(move |builder| {
-            builder
-                .serve_at(
-                    super::super::OBJECT_PATH,
-                    Wallpaper {
-                        queue: serving,
-                        pictures,
-                    },
-                )
-                .expect("served")
+            builder.serve_at(
+                super::super::OBJECT_PATH,
+                Wallpaper {
+                    queue: serving,
+                    pictures,
+                },
+            )
         });
         Served {
             client,
@@ -210,39 +208,38 @@ mod tests {
 
     /// Call `SetWallpaperURI` from another thread, returning its response.
     fn set_wallpaper(
-        client: &zbus::blocking::Connection,
+        client: &zbus::Connection,
         uri: String,
-        options: Vec<(&'static str, Value<'static>)>,
+        options: Vec<(&'static str, Variant<'static>)>,
     ) -> thread::JoinHandle<u32> {
         let client = client.clone();
         thread::spawn(move || {
-            let options: HashMap<String, OwnedValue> = options
+            let options: HashMap<String, OwnedVariant> = options
                 .into_iter()
                 .map(|(name, value)| {
                     (
                         name.to_string(),
-                        OwnedValue::try_from(value).expect("ownable"),
+                        OwnedVariant::try_from(value).expect("ownable"),
                     )
                 })
                 .collect();
-            client
-                .call_method(
-                    None::<&str>,
-                    super::super::OBJECT_PATH,
-                    Some("org.freedesktop.impl.portal.Wallpaper"),
-                    "SetWallpaperURI",
-                    &(
-                        ObjectPath::try_from(HANDLE).expect("a path"),
-                        "org.example.Photos",
-                        "",
-                        uri,
-                        options,
-                    ),
-                )
-                .expect("SetWallpaperURI answered")
-                .body()
-                .deserialize()
-                .expect("a response")
+            zbus::block_on(client.call_method(
+                None::<&str>,
+                super::super::OBJECT_PATH,
+                Some("org.freedesktop.impl.portal.Wallpaper"),
+                "SetWallpaperURI",
+                &(
+                    ObjectPath::try_from(HANDLE).expect("a path"),
+                    "org.example.Photos",
+                    "",
+                    uri,
+                    options,
+                ),
+            ))
+            .expect("SetWallpaperURI answered")
+            .body()
+            .deserialize()
+            .expect("a response")
         })
     }
 
@@ -269,7 +266,7 @@ mod tests {
         let response = set_wallpaper(
             &served.client,
             uri,
-            vec![("set-on", Value::from("background"))],
+            vec![("set-on", Variant::from("background"))],
         );
 
         assert_eq!(response.join().expect("the call returned"), 0);
@@ -288,7 +285,7 @@ mod tests {
         let response = set_wallpaper(
             &served.client,
             uri,
-            vec![("show-preview", Value::from(true))],
+            vec![("show-preview", Variant::from(true))],
         );
         assert_eq!(
             next(&served.published)
@@ -317,7 +314,7 @@ mod tests {
         let response = set_wallpaper(
             &served.client,
             uri,
-            vec![("show-preview", Value::from(true))],
+            vec![("show-preview", Variant::from(true))],
         );
         next(&served.published);
         served.queue.answer(1, PortalAnswer::Canceled);
@@ -364,7 +361,7 @@ mod tests {
         let response = set_wallpaper(
             &served.client,
             uri,
-            vec![("set-on", Value::from("ceiling"))],
+            vec![("set-on", Variant::from("ceiling"))],
         );
 
         assert_eq!(response.join().expect("the call returned"), 2);

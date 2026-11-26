@@ -12,9 +12,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use domicile_host::app_names::app;
-use zbus::blocking::object_server::InterfaceRef;
+use zbus::object_server::InterfaceRef;
 use zbus::object_server::SignalEmitter;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
 /// `GetAppState`'s value for an application with an open window.
 const RUNNING: u32 = 1;
@@ -43,13 +43,13 @@ pub struct Background {
 impl Background {
     /// Each application with a window: `1` running, `2` focused. The frontend
     /// reads an application missing here as running without a window.
-    fn get_app_state(&self) -> HashMap<String, OwnedValue> {
+    fn get_app_state(&self) -> HashMap<String, OwnedVariant> {
         self.apps
             .held
             .lock()
             .unwrap()
             .iter()
-            .map(|(app_id, state)| (app_id.clone(), OwnedValue::from(*state)))
+            .map(|(app_id, state)| (app_id.clone(), OwnedVariant::from(*state)))
             .collect()
     }
 
@@ -63,14 +63,14 @@ impl Background {
         _handle: OwnedObjectPath,
         app_id: String,
         name: String,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let shown = if name.is_empty() {
             app(&app_id, &self.applications).name
         } else {
             name
         };
         let summary = format!("{shown} is running in the background");
-        let hints: HashMap<&str, Value<'_>> = HashMap::new();
+        let hints: HashMap<&str, Variant<'_>> = HashMap::new();
         let notified = connection
             .call_method(
                 Some("org.freedesktop.Notifications"),
@@ -94,7 +94,7 @@ impl Background {
         }
         (
             0,
-            HashMap::from([("result".to_string(), OwnedValue::from(ALLOW_ONCE))]),
+            HashMap::from([("result".to_string(), OwnedVariant::from(ALLOW_ONCE))]),
         )
     }
 
@@ -175,6 +175,7 @@ mod tests {
     use std::fs;
     use std::sync::mpsc::{channel, Sender};
     use std::time::Duration;
+    use zbus::export::ordered_stream::OrderedStreamExt;
 
     use crate::portals::socket_pair::connected_both;
 
@@ -198,7 +199,7 @@ mod tests {
             summary: String,
             _body: String,
             _actions: Vec<String>,
-            _hints: HashMap<String, OwnedValue>,
+            _hints: HashMap<String, OwnedVariant>,
             _expire_timeout: i32,
         ) -> u32 {
             let _ = self.heard.send((app_name, app_icon, summary));
@@ -209,24 +210,20 @@ mod tests {
     fn served(
         config_home: Option<PathBuf>,
         heard: Sender<(String, String, String)>,
-    ) -> (zbus::blocking::Connection, zbus::blocking::Connection) {
+    ) -> (zbus::Connection, zbus::Connection) {
         connected_both(
             move |builder| {
-                builder
-                    .serve_at(
-                        PATH,
-                        Background {
-                            apps: Arc::default(),
-                            config_home,
-                            applications: Vec::new(),
-                        },
-                    )
-                    .expect("served")
+                builder.serve_at(
+                    PATH,
+                    Background {
+                        apps: Arc::default(),
+                        config_home,
+                        applications: Vec::new(),
+                    },
+                )
             },
             move |builder| {
-                builder
-                    .serve_at("/org/freedesktop/Notifications", Notifications { heard })
-                    .expect("served")
+                builder.serve_at("/org/freedesktop/Notifications", Notifications { heard })
             },
         )
     }
@@ -262,35 +259,36 @@ mod tests {
     fn the_frontend_reads_each_application_s_state_and_hears_changes() {
         let (heard, _) = channel();
         let (server, client) = served(None, heard);
-        let served = server
-            .object_server()
-            .interface::<_, Background>(PATH)
+        let served = zbus::block_on(server.object_server().interface::<_, Background>(PATH))
             .expect("served");
-        served
-            .get()
+        zbus::block_on(served.get())
             .apps
             .set([("org.example.Chat".to_string(), true)]);
-        let signals = zbus::blocking::MessageIterator::for_match_rule(
+        let mut signals = zbus::block_on(zbus::MessageStream::for_match_rule(
             zbus::MatchRule::builder()
                 .msg_type(zbus::message::Type::Signal)
                 .interface(INTERFACE)
-                .expect("an interface")
                 .member("RunningApplicationsChanged")
-                .expect("a member")
-                .build(),
+                .build()
+                .expect("a match rule"),
             &client,
             None,
-        )
+        ))
         .expect("listening");
 
         changed(&served);
 
-        let states: HashMap<String, OwnedValue> = client
-            .call_method(None::<&str>, PATH, Some(INTERFACE), "GetAppState", &())
-            .expect("GetAppState answered")
-            .body()
-            .deserialize()
-            .expect("the states");
+        let states: HashMap<String, OwnedVariant> = zbus::block_on(client.call_method(
+            None::<&str>,
+            PATH,
+            Some(INTERFACE),
+            "GetAppState",
+            &(),
+        ))
+        .expect("GetAppState answered")
+        .body()
+        .deserialize()
+        .expect("the states");
         assert_eq!(
             states
                 .into_iter()
@@ -298,7 +296,12 @@ mod tests {
                 .collect::<Vec<_>>(),
             [("org.example.Chat".to_string(), ACTIVE)]
         );
-        assert!(signals.into_iter().next().is_some(), "the change was said");
+        assert!(
+            std::iter::from_fn(|| zbus::block_on(signals.next()))
+                .next()
+                .is_some(),
+            "the change was said"
+        );
     }
 
     #[test]
@@ -306,8 +309,8 @@ mod tests {
         let (heard, notified) = channel();
         let (_server, client) = served(None, heard);
 
-        let (response, results): (u32, HashMap<String, OwnedValue>) = client
-            .call_method(
+        let (response, results): (u32, HashMap<String, OwnedVariant>) = zbus::block_on(
+            client.call_method(
                 None::<&str>,
                 PATH,
                 Some(INTERFACE),
@@ -318,11 +321,12 @@ mod tests {
                     "org.example.Chat",
                     "Chat",
                 ),
-            )
-            .expect("NotifyBackground answered")
-            .body()
-            .deserialize()
-            .expect("its reply");
+            ),
+        )
+        .expect("NotifyBackground answered")
+        .body()
+        .deserialize()
+        .expect("its reply");
 
         assert_eq!(response, 0);
         assert_eq!(
@@ -348,8 +352,8 @@ mod tests {
         let (heard, notified) = channel();
         let (_server, client) = served(None, heard);
 
-        let _: (u32, HashMap<String, OwnedValue>) = client
-            .call_method(
+        let _: (u32, HashMap<String, OwnedVariant>) = zbus::block_on(
+            client.call_method(
                 None::<&str>,
                 PATH,
                 Some(INTERFACE),
@@ -360,11 +364,12 @@ mod tests {
                     "org.example.Chat",
                     "",
                 ),
-            )
-            .expect("NotifyBackground answered")
-            .body()
-            .deserialize()
-            .expect("its reply");
+            ),
+        )
+        .expect("NotifyBackground answered")
+        .body()
+        .deserialize()
+        .expect("its reply");
 
         assert_eq!(
             notified
@@ -381,18 +386,17 @@ mod tests {
         let (heard, _) = channel();
         let (_server, client) = served(Some(config.path().to_path_buf()), heard);
         let enable = |enable: bool| -> bool {
-            client
-                .call_method(
-                    None::<&str>,
-                    PATH,
-                    Some(INTERFACE),
-                    "EnableAutostart",
-                    &("org.example.Chat", enable, vec!["chat", "--hidden"], 0u32),
-                )
-                .expect("EnableAutostart answered")
-                .body()
-                .deserialize()
-                .expect("a result")
+            zbus::block_on(client.call_method(
+                None::<&str>,
+                PATH,
+                Some(INTERFACE),
+                "EnableAutostart",
+                &("org.example.Chat", enable, vec!["chat", "--hidden"], 0u32),
+            ))
+            .expect("EnableAutostart answered")
+            .body()
+            .deserialize()
+            .expect("a result")
         };
         let entry = config.path().join("autostart/org.example.Chat.desktop");
 
@@ -409,18 +413,17 @@ mod tests {
         let (heard, _) = channel();
         let (_server, client) = served(None, heard);
 
-        let enabled: bool = client
-            .call_method(
-                None::<&str>,
-                PATH,
-                Some(INTERFACE),
-                "EnableAutostart",
-                &("org.example.Chat", true, vec!["chat"], 0u32),
-            )
-            .expect("EnableAutostart answered")
-            .body()
-            .deserialize()
-            .expect("a result");
+        let enabled: bool = zbus::block_on(client.call_method(
+            None::<&str>,
+            PATH,
+            Some(INTERFACE),
+            "EnableAutostart",
+            &("org.example.Chat", true, vec!["chat"], 0u32),
+        ))
+        .expect("EnableAutostart answered")
+        .body()
+        .deserialize()
+        .expect("a result");
 
         assert!(!enabled);
     }

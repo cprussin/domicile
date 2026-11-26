@@ -13,7 +13,7 @@ use std::io::Read;
 use domicile_host::notifications::{Icon, LARGEST_FILE};
 use domicile_host::portal_notifications::{Action, Button, Invoked, PortalNotification, Priority};
 use zbus::object_server::SignalEmitter;
-use zbus::zvariant::{Fd, OwnedValue, Value};
+use zbus::{Fd, OwnedVariant, Variant};
 
 use crate::notifications::NotificationServer;
 
@@ -31,7 +31,7 @@ impl Notification {
         &self,
         app_id: String,
         id: String,
-        notification: HashMap<String, OwnedValue>,
+        notification: HashMap<String, OwnedVariant>,
     ) {
         self.notifications
             .add_from_portal(app_id, id, parsed(notification));
@@ -47,13 +47,13 @@ impl Notification {
         app_id: &str,
         id: &str,
         action: &str,
-        parameter: Vec<Value<'_>>,
+        parameter: Vec<Variant<'_>>,
     ) -> zbus::Result<()>;
 
     /// No categories or button purposes: the shell draws every notification
     /// the same.
     #[zbus(property(emits_changed_signal = "const"))]
-    fn supported_options(&self) -> HashMap<String, OwnedValue> {
+    fn supported_options(&self) -> HashMap<String, OwnedVariant> {
         HashMap::new()
     }
 
@@ -67,11 +67,11 @@ impl Notification {
 /// then the platform data: `token` as its `activation-token`, which the
 /// application raises its window with.
 pub fn invoked(
-    served: &zbus::blocking::object_server::InterfaceRef<Notification>,
-    invoked: Invoked<OwnedValue>,
+    served: &zbus::object_server::InterfaceRef<Notification>,
+    invoked: Invoked<OwnedVariant>,
     token: String,
 ) {
-    let platform_data = HashMap::from([("activation-token", Value::from(token))]);
+    let platform_data = HashMap::from([("activation-token", Variant::from(token))]);
     let said = zbus::block_on(Notification::action_invoked(
         served.signal_emitter(),
         &invoked.app_id,
@@ -80,8 +80,8 @@ pub fn invoked(
         invoked
             .target
             .into_iter()
-            .map(Value::from)
-            .chain([Value::from(platform_data)])
+            .map(Variant::from)
+            .chain([Variant::from(platform_data)])
             .collect(),
     ));
     if let Err(why) = said {
@@ -91,7 +91,7 @@ pub fn invoked(
 
 /// An `AddNotification`'s notification. A missing or mistyped field reads as
 /// absent; fields the shell does not use are dropped.
-fn parsed(mut sent: HashMap<String, OwnedValue>) -> PortalNotification<OwnedValue> {
+fn parsed(mut sent: HashMap<String, OwnedVariant>) -> PortalNotification<OwnedVariant> {
     let mut text = |name: &str| {
         sent.remove(name)
             .and_then(|value| String::try_from(value).ok())
@@ -110,7 +110,7 @@ fn parsed(mut sent: HashMap<String, OwnedValue>) -> PortalNotification<OwnedValu
     });
     let buttons = sent
         .remove("buttons")
-        .and_then(|value| Vec::<HashMap<String, OwnedValue>>::try_from(value).ok())
+        .and_then(|value| Vec::<HashMap<String, OwnedVariant>>::try_from(value).ok())
         .unwrap_or_default()
         .into_iter()
         .filter_map(button)
@@ -132,7 +132,7 @@ fn parsed(mut sent: HashMap<String, OwnedValue>) -> PortalNotification<OwnedValu
 }
 
 /// A button, or `None` without a label and an action.
-fn button(mut sent: HashMap<String, OwnedValue>) -> Option<Button<OwnedValue>> {
+fn button(mut sent: HashMap<String, OwnedVariant>) -> Option<Button<OwnedVariant>> {
     let mut text = |name: &str| {
         sent.remove(name)
             .and_then(|value| String::try_from(value).ok())
@@ -149,12 +149,12 @@ fn button(mut sent: HashMap<String, OwnedValue>) -> Option<Button<OwnedValue>> {
 
 /// A serialized icon: `("themed", as)`, `("bytes", ay)` or
 /// `("file-descriptor", h)`.
-fn icon(sent: OwnedValue) -> Option<Icon> {
-    let Value::Structure(sent) = Value::from(sent) else {
+fn icon(sent: OwnedVariant) -> Option<Icon> {
+    let Variant::Structure(sent) = Variant::from(sent) else {
         return None;
     };
-    let [Value::Str(kind), Value::Value(value)] =
-        <[Value; 2]>::try_from(sent.into_fields()).ok()?
+    let [Variant::Str(kind), Variant::Variant(value)] =
+        <[Variant; 2]>::try_from(sent.into_fields()).ok()?
     else {
         return None;
     };
@@ -180,50 +180,54 @@ mod tests {
     use super::*;
     use std::io::{Seek, Write};
 
-    fn sent(fields: Vec<(&str, Value<'static>)>) -> HashMap<String, OwnedValue> {
+    fn sent(fields: Vec<(&str, Variant<'static>)>) -> HashMap<String, OwnedVariant> {
         fields
             .into_iter()
             .map(|(name, value)| {
                 (
                     name.to_string(),
-                    OwnedValue::try_from(value).expect("an ownable value"),
+                    OwnedVariant::try_from(value).expect("an ownable value"),
                 )
             })
             .collect()
     }
 
-    fn button_sent(label: &str, action: &str, target: Option<Value<'static>>) -> Value<'static> {
+    fn button_sent(
+        label: &str,
+        action: &str,
+        target: Option<Variant<'static>>,
+    ) -> Variant<'static> {
         let mut fields = vec![
-            ("label", Value::from(label.to_string())),
-            ("action", Value::from(action.to_string())),
+            ("label", Variant::from(label.to_string())),
+            ("action", Variant::from(action.to_string())),
         ];
         fields.extend(target.map(|target| ("target", target)));
-        Value::from(sent(fields))
+        Variant::from(sent(fields))
     }
 
     #[test]
     fn what_a_notification_says_is_read() {
         let read = parsed(sent(vec![
-            ("title", Value::from("Update")),
-            ("body", Value::from("Ready to install")),
-            ("priority", Value::from("urgent")),
-            ("default-action", Value::from("app.open")),
-            ("default-action-target", Value::from(7u32)),
+            ("title", Variant::from("Update")),
+            ("body", Variant::from("Ready to install")),
+            ("priority", Variant::from("urgent")),
+            ("default-action", Variant::from("app.open")),
+            ("default-action-target", Variant::from(7u32)),
             (
                 "buttons",
-                Value::from(vec![
-                    button_sent("Restart", "app.restart", Some(Value::from("now"))),
+                Variant::from(vec![
+                    button_sent("Restart", "app.restart", Some(Variant::from("now"))),
                     button_sent("Later", "app.later", None),
                     // No action: dropped.
-                    Value::from(sent(vec![("label", Value::from("Broken"))])),
+                    Variant::from(sent(vec![("label", Variant::from("Broken"))])),
                 ]),
             ),
-            ("display-hint", Value::from(vec!["persistent"])),
+            ("display-hint", Variant::from(vec!["persistent"])),
             (
                 "icon",
-                Value::from(("themed", Value::from(vec!["software-update"]))),
+                Variant::from(("themed", Variant::from(vec!["software-update"]))),
             ),
-            ("category", Value::from("im.received")),
+            ("category", Variant::from("im.received")),
         ]));
 
         assert_eq!(
@@ -250,10 +254,10 @@ mod tests {
     #[test]
     fn a_notification_of_the_wrong_types_is_mostly_absent() {
         let read = parsed(sent(vec![
-            ("title", Value::from(3u32)),
-            ("priority", Value::from("whenever")),
-            ("buttons", Value::from("none")),
-            ("icon", Value::from(("hologram", Value::from("?")))),
+            ("title", Variant::from(3u32)),
+            ("priority", Variant::from("whenever")),
+            ("buttons", Variant::from("none")),
+            ("icon", Variant::from(("hologram", Variant::from("?")))),
         ]));
 
         assert_eq!(
@@ -278,12 +282,15 @@ mod tests {
         let fd = std::os::fd::OwnedFd::from(file);
 
         let bytes = icon(
-            OwnedValue::try_from(Value::from(("bytes", Value::from(b"\x89PNG".to_vec()))))
+            OwnedVariant::try_from(Variant::from(("bytes", Variant::from(b"\x89PNG".to_vec()))))
                 .expect("ownable"),
         );
         let from_file = icon(
-            OwnedValue::try_from(Value::from(("file-descriptor", Value::from(Fd::from(fd)))))
-                .expect("ownable"),
+            OwnedVariant::try_from(Variant::from((
+                "file-descriptor",
+                Variant::from(Fd::from(fd)),
+            )))
+            .expect("ownable"),
         );
 
         assert_eq!(bytes, Some(Icon::Bytes(b"\x89PNG".to_vec())));

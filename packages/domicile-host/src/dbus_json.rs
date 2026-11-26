@@ -19,7 +19,7 @@
 //! `docs/SHELL-SYSTEM-ACCESS.md`.
 
 use serde_json::{Map, Number, Value as Json};
-use zbus::zvariant::{Array, Dict, ObjectPath, Signature, Str, StructureBuilder, Value};
+use zbus::{Array, Dict, ObjectPath, Signature, Str, Structure, Variant};
 
 /// JSON text that does not fit its signature.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -27,7 +27,7 @@ use zbus::zvariant::{Array, Dict, ObjectPath, Signature, Str, StructureBuilder, 
 pub struct NotABody(String);
 
 /// The values `body` holds, one per complete type in `signature`.
-pub fn read(signature: &str, body: &str) -> Result<Vec<Value<'static>>, NotABody> {
+pub fn read(signature: &str, body: &str) -> Result<Vec<Variant<'static>>, NotABody> {
     let types = types(signature)?;
     let Json::Array(elements) =
         serde_json::from_str(body).map_err(|err| NotABody(err.to_string()))?
@@ -49,7 +49,7 @@ pub fn read(signature: &str, body: &str) -> Result<Vec<Value<'static>>, NotABody
 }
 
 /// `values` as a body's JSON text.
-pub fn written(values: &[Value<'_>]) -> String {
+pub fn written(values: &[Variant<'_>]) -> String {
     Json::Array(values.iter().map(json).collect()).to_string()
 }
 
@@ -64,24 +64,24 @@ fn types(signature: &str) -> Result<Vec<Signature>, NotABody> {
     }
 }
 
-fn value(of: &Signature, json: &Json) -> Result<Value<'static>, NotABody> {
+fn value(of: &Signature, json: &Json) -> Result<Variant<'static>, NotABody> {
     let wrong = || NotABody(format!("{json} is not a {of}"));
     Ok(match of {
-        Signature::U8 => Value::U8(integer(json).ok_or_else(wrong)?),
-        Signature::I16 => Value::I16(integer(json).ok_or_else(wrong)?),
-        Signature::U16 => Value::U16(integer(json).ok_or_else(wrong)?),
-        Signature::I32 => Value::I32(integer(json).ok_or_else(wrong)?),
-        Signature::U32 => Value::U32(integer(json).ok_or_else(wrong)?),
-        Signature::I64 => Value::I64(json.as_i64().ok_or_else(wrong)?),
-        Signature::U64 => Value::U64(json.as_u64().ok_or_else(wrong)?),
-        Signature::F64 => Value::F64(json.as_f64().ok_or_else(wrong)?),
-        Signature::Bool => Value::Bool(json.as_bool().ok_or_else(wrong)?),
-        Signature::Str => Value::Str(Str::from(json.as_str().ok_or_else(wrong)?.to_string())),
-        Signature::ObjectPath => Value::ObjectPath(
+        Signature::U8 => Variant::U8(integer(json).ok_or_else(wrong)?),
+        Signature::I16 => Variant::I16(integer(json).ok_or_else(wrong)?),
+        Signature::U16 => Variant::U16(integer(json).ok_or_else(wrong)?),
+        Signature::I32 => Variant::I32(integer(json).ok_or_else(wrong)?),
+        Signature::U32 => Variant::U32(integer(json).ok_or_else(wrong)?),
+        Signature::I64 => Variant::I64(json.as_i64().ok_or_else(wrong)?),
+        Signature::U64 => Variant::U64(json.as_u64().ok_or_else(wrong)?),
+        Signature::F64 => Variant::F64(json.as_f64().ok_or_else(wrong)?),
+        Signature::Bool => Variant::Bool(json.as_bool().ok_or_else(wrong)?),
+        Signature::Str => Variant::Str(Str::from(json.as_str().ok_or_else(wrong)?.to_string())),
+        Signature::ObjectPath => Variant::ObjectPath(
             ObjectPath::try_from(json.as_str().ok_or_else(wrong)?.to_string())
                 .map_err(|_| wrong())?,
         ),
-        Signature::Signature => Value::Signature(
+        Signature::Signature => Variant::Signature(
             json.as_str()
                 .ok_or_else(wrong)?
                 .parse()
@@ -96,7 +96,7 @@ fn value(of: &Signature, json: &Json) -> Result<Value<'static>, NotABody> {
                 .parse()
                 .map_err(|_| wrong())?;
             let held = inner.get("value").ok_or_else(wrong)?;
-            Value::Value(Box::new(value(&of, held)?))
+            Variant::Variant(Box::new(value(&of, held)?))
         }
         Signature::Array(element) => {
             let mut array = Array::new(element);
@@ -105,7 +105,7 @@ fn value(of: &Signature, json: &Json) -> Result<Value<'static>, NotABody> {
                     .append(value(element, item)?)
                     .map_err(|err| NotABody(err.to_string()))?;
             }
-            Value::Array(array)
+            Variant::Array(array)
         }
         Signature::Dict { key, value: held } => {
             let mut dict = Dict::new(key, held);
@@ -113,7 +113,7 @@ fn value(of: &Signature, json: &Json) -> Result<Value<'static>, NotABody> {
                 dict.append(self::key(key, name)?, value(held, item)?)
                     .map_err(|err| NotABody(err.to_string()))?;
             }
-            Value::Dict(dict)
+            Variant::Dict(dict)
         }
         Signature::Structure(fields) => {
             let items = json.as_array().ok_or_else(wrong)?;
@@ -123,11 +123,11 @@ fn value(of: &Signature, json: &Json) -> Result<Value<'static>, NotABody> {
             fields
                 .iter()
                 .zip(items)
-                .try_fold(StructureBuilder::new(), |built, (field, item)| {
+                .try_fold(Structure::builder(), |built, (field, item)| {
                     Ok::<_, NotABody>(built.append_field(value(field, item)?))
                 })?
                 .build()
-                .map(Value::Structure)
+                .map(Variant::Structure)
                 .map_err(|err| NotABody(err.to_string()))?
         }
         Signature::Unit | Signature::Fd => return Err(wrong()),
@@ -135,7 +135,7 @@ fn value(of: &Signature, json: &Json) -> Result<Value<'static>, NotABody> {
 }
 
 /// A dictionary key, from the JSON object key that names it.
-fn key(of: &Signature, name: &str) -> Result<Value<'static>, NotABody> {
+fn key(of: &Signature, name: &str) -> Result<Variant<'static>, NotABody> {
     match of {
         Signature::Str | Signature::ObjectPath | Signature::Signature => {
             value(of, &Json::String(name.to_string()))
@@ -152,42 +152,42 @@ fn integer<T: TryFrom<i64>>(json: &Json) -> Option<T> {
     json.as_i64().and_then(|whole| T::try_from(whole).ok())
 }
 
-fn json(value: &Value<'_>) -> Json {
+fn json(value: &Variant<'_>) -> Json {
     match value {
-        Value::U8(number) => Json::from(*number),
-        Value::Bool(truth) => Json::from(*truth),
-        Value::I16(number) => Json::from(*number),
-        Value::U16(number) => Json::from(*number),
-        Value::I32(number) => Json::from(*number),
-        Value::U32(number) => Json::from(*number),
-        Value::I64(number) => Json::from(*number),
-        Value::U64(number) => Json::from(*number),
+        Variant::U8(number) => Json::from(*number),
+        Variant::Bool(truth) => Json::from(*truth),
+        Variant::I16(number) => Json::from(*number),
+        Variant::U16(number) => Json::from(*number),
+        Variant::I32(number) => Json::from(*number),
+        Variant::U32(number) => Json::from(*number),
+        Variant::I64(number) => Json::from(*number),
+        Variant::U64(number) => Json::from(*number),
         // NaN and the infinities have no JSON; D-Bus services do not send them.
-        Value::F64(number) => Number::from_f64(*number).map_or(Json::Null, Json::Number),
-        Value::Str(text) => Json::from(text.as_str()),
-        Value::Signature(signature) => Json::from(signature.to_string()),
-        Value::ObjectPath(path) => Json::from(path.as_str()),
-        Value::Value(held) => Json::Object(Map::from_iter([
+        Variant::F64(number) => Number::from_f64(*number).map_or(Json::Null, Json::Number),
+        Variant::Str(text) => Json::from(text.as_str()),
+        Variant::Signature(signature) => Json::from(signature.to_string()),
+        Variant::ObjectPath(path) => Json::from(path.as_str()),
+        Variant::Variant(held) => Json::Object(Map::from_iter([
             (
                 "signature".to_string(),
                 Json::from(held.value_signature().to_string()),
             ),
             ("value".to_string(), json(held)),
         ])),
-        Value::Array(array) => Json::Array(array.inner().iter().map(json).collect()),
-        Value::Dict(dict) => Json::Object(
+        Variant::Array(array) => Json::Array(array.inner().iter().map(json).collect()),
+        Variant::Dict(dict) => Json::Object(
             dict.iter()
                 .map(|(key, held)| (key_text(key), json(held)))
                 .collect(),
         ),
-        Value::Structure(structure) => Json::Array(structure.fields().iter().map(json).collect()),
-        Value::Fd(_) => Json::Null,
+        Variant::Structure(structure) => Json::Array(structure.fields().iter().map(json).collect()),
+        Variant::Fd(_) => Json::Null,
     }
 }
 
 /// A dictionary key as a JSON object key: a string as is, anything else as
 /// its JSON text.
-fn key_text(key: &Value<'_>) -> String {
+fn key_text(key: &Variant<'_>) -> String {
     match json(key) {
         Json::String(text) => text,
         other => other.to_string(),

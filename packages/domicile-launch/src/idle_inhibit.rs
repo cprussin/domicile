@@ -48,17 +48,16 @@ pub fn inhibit_idle(command: &[String]) -> Result<ExitStatus, String> {
     let bus = session_bus().map_err(|why| format!("could not reach the session bus: {why}"))?;
     let holder = holder(command);
     let reason = format!("domicile inhibit-idle is running {holder}");
-    let reply = bus
-        .call_method(
-            Some(SCREEN_SAVER),
-            PATH,
-            Some(SCREEN_SAVER),
-            "Inhibit",
-            &(holder.as_str(), reason.as_str()),
-        )
-        .map_err(|why| {
-            format!("the desktop did not hold the screens on, so {holder} was not run: {why}")
-        })?;
+    let reply = zbus::block_on(bus.call_method(
+        Some(SCREEN_SAVER),
+        PATH,
+        Some(SCREEN_SAVER),
+        "Inhibit",
+        &(holder.as_str(), reason.as_str()),
+    ))
+    .map_err(|why| {
+        format!("the desktop did not hold the screens on, so {holder} was not run: {why}")
+    })?;
     let cookie: u32 = reply
         .body()
         .deserialize()
@@ -68,12 +67,12 @@ pub fn inhibit_idle(command: &[String]) -> Result<ExitStatus, String> {
         .status()
         .map_err(|why| format!("could not run {program}: {why}"));
     // Leaving the bus ends the hold anyway; this says so at once.
-    let _ = bus.call_method(
+    let _ = zbus::block_on(bus.call_method(
         Some(SCREEN_SAVER),
         PATH,
         Some(SCREEN_SAVER),
         "UnInhibit",
         &(cookie,),
-    );
+    ));
     ran
 }

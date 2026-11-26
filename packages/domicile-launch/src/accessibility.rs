@@ -259,7 +259,7 @@ pub fn act_on(
 
 /// The accessibility bus over D-Bus: AT-SPI 2.
 pub struct AtSpi {
-    connection: zbus::blocking::Connection,
+    connection: zbus::Connection,
 }
 
 const ACCESSIBLE: &str = "org.a11y.atspi.Accessible";
@@ -268,26 +268,26 @@ impl AtSpi {
     /// Connects to the session's accessibility bus, which `org.a11y.Bus` on
     /// the session bus names.
     pub fn connected() -> Result<AtSpi, String> {
-        let session = zbus::blocking::Connection::session()
+        let session = zbus::block_on(zbus::Connection::session())
             .map_err(|why| format!("no session bus: {why}"))?;
-        let address: String = session
-            .call_method(
-                Some("org.a11y.Bus"),
-                "/org/a11y/bus",
-                Some("org.a11y.Bus"),
-                "GetAddress",
-                &(),
-            )
-            .and_then(|reply| reply.body().deserialize())
-            .map_err(|why| {
-                format!(
-                    "no accessibility bus: {why}. at-spi2-core provides it; on NixOS, \
+        let address: String = zbus::block_on(session.call_method(
+            Some("org.a11y.Bus"),
+            "/org/a11y/bus",
+            Some("org.a11y.Bus"),
+            "GetAddress",
+            &(),
+        ))
+        .and_then(|reply| reply.body().deserialize())
+        .map_err(|why| {
+            format!(
+                "no accessibility bus: {why}. at-spi2-core provides it; on NixOS, \
                      services.gnome.at-spi2-core.enable"
-                )
-            })?;
-        let connection = zbus::blocking::connection::Builder::address(address.as_str())
-            .and_then(|builder| builder.build())
-            .map_err(|why| format!("could not reach the accessibility bus at {address}: {why}"))?;
+            )
+        })?;
+        let connection = zbus::block_on(
+            zbus::connection::Builder::address(address.as_str()).build(),
+        )
+        .map_err(|why| format!("could not reach the accessibility bus at {address}: {why}"))?;
         Ok(AtSpi { connection })
     }
 
@@ -296,28 +296,27 @@ impl AtSpi {
         element: &Element,
         interface: &str,
         method: &str,
-        body: &(impl serde::Serialize + zbus::zvariant::DynamicType),
+        body: &(impl serde::Serialize + zbus::DynamicType),
     ) -> Result<R, String>
     where
-        R: for<'d> zbus::zvariant::DynamicDeserialize<'d>,
+        R: for<'d> zbus::wire::DynamicDeserialize<'d>,
     {
-        self.connection
-            .call_method(
-                Some(element.bus.as_str()),
-                element.path.as_str(),
-                Some(interface),
-                method,
-                body,
-            )
-            .and_then(|reply| reply.body().deserialize())
-            .map_err(|why| format!("{interface}.{method} on {}: {why}", element.reference()))
+        zbus::block_on(self.connection.call_method(
+            Some(element.bus.as_str()),
+            element.path.as_str(),
+            Some(interface),
+            method,
+            body,
+        ))
+        .and_then(|reply| reply.body().deserialize())
+        .map_err(|why| format!("{interface}.{method} on {}: {why}", element.reference()))
     }
 
     fn property<R>(&self, element: &Element, interface: &str, name: &str) -> Result<R, String>
     where
-        R: TryFrom<zbus::zvariant::OwnedValue>,
+        R: TryFrom<zbus::OwnedVariant>,
     {
-        let value: zbus::zvariant::OwnedValue = self.call(
+        let value: zbus::OwnedVariant = self.call(
             element,
             "org.freedesktop.DBus.Properties",
             "Get",
@@ -337,7 +336,7 @@ impl AtSpi {
 }
 
 /// An `(so)` reference as AT-SPI sends it.
-type Reference = (String, zbus::zvariant::OwnedObjectPath);
+type Reference = (String, zbus::OwnedObjectPath);
 
 fn element_of((bus, path): Reference) -> Element {
     Element {
@@ -356,16 +355,15 @@ impl Accessible for AtSpi {
     }
 
     fn process(&mut self, bus: &str) -> Result<u32, String> {
-        self.connection
-            .call_method(
-                Some("org.freedesktop.DBus"),
-                "/org/freedesktop/DBus",
-                Some("org.freedesktop.DBus"),
-                "GetConnectionUnixProcessID",
-                &(bus,),
-            )
-            .and_then(|reply| reply.body().deserialize())
-            .map_err(|why| format!("which process owns {bus}: {why}"))
+        zbus::block_on(self.connection.call_method(
+            Some("org.freedesktop.DBus"),
+            "/org/freedesktop/DBus",
+            Some("org.freedesktop.DBus"),
+            "GetConnectionUnixProcessID",
+            &(bus,),
+        ))
+        .and_then(|reply| reply.body().deserialize())
+        .map_err(|why| format!("which process owns {bus}: {why}"))
     }
 
     fn children(&mut self, element: &Element) -> Result<Vec<Element>, String> {

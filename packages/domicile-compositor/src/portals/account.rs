@@ -15,7 +15,7 @@ use domicile_protocol::{AccountDialog, PortalAnswer, PortalKind};
 use tracing::{debug, warn};
 use zbus::object_server::ObjectServer;
 use zbus::proxy::CacheProperties;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::{OwnedObjectPath, OwnedVariant};
 
 use super::queue::{ask, Queue};
 use super::uri::file_uri;
@@ -54,8 +54,8 @@ impl Account {
         handle: OwnedObjectPath,
         app_id: String,
         parent_window: String,
-        mut options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        mut options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let user = match (self.user)().await {
             Ok(user) => user,
             Err(why) => {
@@ -123,7 +123,7 @@ pub fn the_user() -> LookUp {
 }
 
 /// The portal's results for `user`.
-fn results(user: User) -> HashMap<String, OwnedValue> {
+fn results(user: User) -> HashMap<String, OwnedVariant> {
     [
         ("id", Some(user.id)),
         ("name", Some(user.name)),
@@ -131,12 +131,7 @@ fn results(user: User) -> HashMap<String, OwnedValue> {
     ]
     .into_iter()
     .filter_map(|(key, value)| {
-        value.map(|value| {
-            (
-                key.to_string(),
-                OwnedValue::from(zbus::zvariant::Str::from(value)),
-            )
-        })
+        value.map(|value| (key.to_string(), OwnedVariant::from(zbus::Str::from(value))))
     })
     .collect()
 }
@@ -163,13 +158,13 @@ async fn from_accounts_service(connection: &zbus::Connection, uid: u32) -> zbus:
 /// An uncached proxy, so it needs no match rules on the bus.
 async fn proxy<'a>(
     connection: &zbus::Connection,
-    path: impl TryInto<zbus::zvariant::ObjectPath<'a>, Error = impl Into<zbus::Error>>,
+    path: impl TryInto<zbus::ObjectPath<'a>, Error = impl Into<zbus::Error>>,
     interface: &'a str,
 ) -> zbus::Result<zbus::Proxy<'a>> {
     zbus::proxy::Builder::new(connection)
-        .destination(ACCOUNTS)?
-        .path(path)?
-        .interface(interface)?
+        .destination(ACCOUNTS)
+        .path(path)
+        .interface(interface)
         .cache_properties(CacheProperties::No)
         .build()
         .await
@@ -286,20 +281,17 @@ mod tests {
         }
     }
 
-    fn accounts_service(real_name: &str) -> (zbus::blocking::Connection, zbus::Connection) {
+    fn accounts_service(real_name: &str) -> (zbus::Connection, zbus::Connection) {
         let real_name = real_name.to_string();
         let (server, client) = socket_pair::connected(|builder| {
             builder
                 .serve_at("/org/freedesktop/Accounts", Accounts)
-                .and_then(|builder| {
-                    builder.serve_at(
-                        "/org/freedesktop/Accounts/User1000",
-                        AccountsUser { real_name },
-                    )
-                })
-                .expect("the stand-in registered")
+                .serve_at(
+                    "/org/freedesktop/Accounts/User1000",
+                    AccountsUser { real_name },
+                )
         });
-        (server, client.into_inner())
+        (server, client)
     }
 
     #[test]

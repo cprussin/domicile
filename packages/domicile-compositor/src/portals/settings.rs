@@ -16,7 +16,7 @@ use domicile_config::{AccentColor, Contrast, CursorThemeName, ThemeConfig, Theme
 use domicile_host::Appearances;
 use domicile_protocol::{CursorHiding, CursorTheme, Theme};
 use zbus::object_server::SignalEmitter;
-use zbus::zvariant::{OwnedValue, Value};
+use zbus::{OwnedVariant, Variant};
 
 /// The standard namespace toolkits read the color scheme from.
 const NAMESPACE: &str = "org.freedesktop.appearance";
@@ -185,8 +185,8 @@ pub struct Settings {
 #[zbus::interface(name = "org.freedesktop.impl.portal.Settings")]
 impl Settings {
     /// All settings in the requested namespaces.
-    fn read_all(&self, namespaces: Vec<String>) -> HashMap<String, HashMap<String, OwnedValue>> {
-        let mut read: HashMap<String, HashMap<String, OwnedValue>> = HashMap::new();
+    fn read_all(&self, namespaces: Vec<String>) -> HashMap<String, HashMap<String, OwnedVariant>> {
+        let mut read: HashMap<String, HashMap<String, OwnedVariant>> = HashMap::new();
         for (namespace, key, value) in values(self.theme, &self.appearance) {
             if wants(namespace, &namespaces) {
                 read.entry(namespace.to_string())
@@ -198,7 +198,7 @@ impl Settings {
     }
 
     /// One setting (interface version 2).
-    fn read_one(&self, namespace: &str, key: &str) -> zbus::fdo::Result<OwnedValue> {
+    fn read_one(&self, namespace: &str, key: &str) -> zbus::fdo::Result<OwnedVariant> {
         values(self.theme, &self.appearance)
             .into_iter()
             .find(|(served_namespace, served_key, _)| {
@@ -218,7 +218,7 @@ impl Settings {
 
     /// Version 1's name for [`Self::read_one`], still called by older
     /// frontends.
-    fn read(&self, namespace: &str, key: &str) -> zbus::fdo::Result<OwnedValue> {
+    fn read(&self, namespace: &str, key: &str) -> zbus::fdo::Result<OwnedVariant> {
         self.read_one(namespace, key)
     }
 
@@ -227,7 +227,7 @@ impl Settings {
         emitter: &SignalEmitter<'_>,
         namespace: &str,
         key: &str,
-        value: Value<'_>,
+        value: Variant<'_>,
     ) -> zbus::Result<()>;
 
     #[zbus(property(emits_changed_signal = "const"))]
@@ -238,14 +238,14 @@ impl Settings {
 
 /// Stores `theme` and `appearance`, then signals every key that moved.
 pub fn changed(
-    served: &zbus::blocking::object_server::InterfaceRef<Settings>,
+    served: &zbus::object_server::InterfaceRef<Settings>,
     theme: Option<Theme>,
     appearance: Option<Appearance>,
 ) -> zbus::Result<()> {
     // Store before signaling, and release the lock before the signals are
     // sent.
     let moved = {
-        let mut settings = served.get_mut();
+        let mut settings = zbus::block_on(served.get_mut());
         let now_theme = theme.unwrap_or(settings.theme);
         let now_appearance = appearance.unwrap_or_else(|| settings.appearance.clone());
         let moved = moved(
@@ -259,20 +259,18 @@ pub fn changed(
         moved
     };
     for (namespace, key, value) in moved {
-        // zbus's blocking API has no signal emitter, so block on the async
-        // one.
         zbus::block_on(Settings::setting_changed(
             served.signal_emitter(),
             namespace,
             key,
-            Value::from(value),
+            Variant::from(value),
         ))?;
     }
     Ok(())
 }
 
 /// A served setting: its namespace, key and value.
-type Setting = (&'static str, &'static str, OwnedValue);
+type Setting = (&'static str, &'static str, OwnedVariant);
 
 /// Every key served and its value. The [`named`] keys are served only when
 /// set.
@@ -300,17 +298,18 @@ fn looks(theme: Theme, appearance: &Appearance) -> Vec<Setting> {
         (
             NAMESPACE,
             COLOR_SCHEME,
-            OwnedValue::from(color_scheme(theme)),
+            OwnedVariant::from(color_scheme(theme)),
         ),
         (
             NAMESPACE,
             "accent-color",
-            OwnedValue::try_from(Value::from(accent)).expect("doubles hold no file descriptors"),
+            OwnedVariant::try_from(Variant::from(accent))
+                .expect("doubles hold no file descriptors"),
         ),
         (
             NAMESPACE,
             "contrast",
-            OwnedValue::from(match appearance.contrast {
+            OwnedVariant::from(match appearance.contrast {
                 Contrast::Normal => 0u32,
                 Contrast::High => 1,
             }),
@@ -318,7 +317,7 @@ fn looks(theme: Theme, appearance: &Appearance) -> Vec<Setting> {
         (
             NAMESPACE,
             "reduced-motion",
-            OwnedValue::from(u32::from(appearance.reduced_motion)),
+            OwnedVariant::from(u32::from(appearance.reduced_motion)),
         ),
     ]
 }
@@ -333,12 +332,13 @@ fn gnome_looks(theme: Theme, appearance: &Appearance) -> [Setting; 2] {
         (
             INTERFACE,
             COLOR_SCHEME,
-            OwnedValue::try_from(Value::from(scheme)).expect("a string holds no file descriptors"),
+            OwnedVariant::try_from(Variant::from(scheme))
+                .expect("a string holds no file descriptors"),
         ),
         (
             INTERFACE,
             ENABLE_ANIMATIONS,
-            OwnedValue::from(!appearance.reduced_motion),
+            OwnedVariant::from(!appearance.reduced_motion),
         ),
     ]
 }
@@ -348,9 +348,9 @@ fn gnome_looks(theme: Theme, appearance: &Appearance) -> [Setting; 2] {
 fn named(
     theme: Theme,
     appearance: &Appearance,
-) -> [(&'static str, Option<OwnedValue>, OwnedValue); 5] {
+) -> [(&'static str, Option<OwnedVariant>, OwnedVariant); 5] {
     let text = |name: &str| {
-        OwnedValue::try_from(Value::from(name)).expect("a string holds no file descriptors")
+        OwnedVariant::try_from(Variant::from(name)).expect("a string holds no file descriptors")
     };
     let text_or = |key, set: &Option<String>, unset| (key, set.as_deref().map(text), text(unset));
     [
@@ -364,8 +364,8 @@ fn named(
             CURSOR_SIZE,
             appearance
                 .cursor_size
-                .map(|size| OwnedValue::from(i32::from(size))),
-            OwnedValue::from(i32::from(DEFAULT_CURSOR_SIZE)),
+                .map(|size| OwnedVariant::from(i32::from(size))),
+            OwnedVariant::from(i32::from(DEFAULT_CURSOR_SIZE)),
         ),
         text_or(FONT_NAME, &appearance.font_name, DEFAULT_FONT_NAME),
         text_or(
@@ -404,11 +404,11 @@ mod tests {
     use super::*;
     use domicile_config::{AccentColor, Contrast, CursorThemeName, PerModeCursorThemes};
 
-    fn string(text: &str) -> OwnedValue {
-        OwnedValue::try_from(Value::from(text)).expect("a string")
+    fn string(text: &str) -> OwnedVariant {
+        OwnedVariant::try_from(Variant::from(text)).expect("a string")
     }
 
-    fn value(settings: &Settings, key: &str) -> OwnedValue {
+    fn value(settings: &Settings, key: &str) -> OwnedVariant {
         settings.read_one(NAMESPACE, key).expect("a setting")
     }
 
@@ -571,14 +571,14 @@ mod tests {
         assert_eq!(
             moved(Theme::Dark, &was, Theme::Dark, &now),
             [
-                (NAMESPACE, "reduced-motion", OwnedValue::from(1u32)),
-                (INTERFACE, ENABLE_ANIMATIONS, OwnedValue::from(false)),
+                (NAMESPACE, "reduced-motion", OwnedVariant::from(1u32)),
+                (INTERFACE, ENABLE_ANIMATIONS, OwnedVariant::from(false)),
             ]
         );
         assert_eq!(
             moved(Theme::Dark, &was, Theme::Light, &was),
             [
-                (NAMESPACE, COLOR_SCHEME, OwnedValue::from(2u32)),
+                (NAMESPACE, COLOR_SCHEME, OwnedVariant::from(2u32)),
                 (INTERFACE, COLOR_SCHEME, string("prefer-light")),
             ]
         );
@@ -650,7 +650,7 @@ mod tests {
         // GNOME's schema types the size `i`.
         assert_eq!(
             settings.read_one(INTERFACE, CURSOR_SIZE),
-            Ok(OwnedValue::from(32i32))
+            Ok(OwnedVariant::from(32i32))
         );
         assert_eq!(
             settings.read_one(INTERFACE, FONT_NAME),
@@ -715,7 +715,7 @@ mod tests {
             moved(Theme::Dark, &was, Theme::Dark, &Appearance::default()),
             [
                 (INTERFACE, CURSOR_THEME, string("default")),
-                (INTERFACE, CURSOR_SIZE, OwnedValue::from(24i32)),
+                (INTERFACE, CURSOR_SIZE, OwnedVariant::from(24i32)),
                 (INTERFACE, FONT_NAME, string("Sans 10")),
                 (INTERFACE, MONOSPACE_FONT_NAME, string("Monospace 10")),
             ]
@@ -738,7 +738,7 @@ mod tests {
         );
         assert_eq!(
             settings.read_one(INTERFACE, ENABLE_ANIMATIONS),
-            Ok(OwnedValue::from(false))
+            Ok(OwnedVariant::from(false))
         );
         assert_eq!(
             settings.read_all(vec![INTERFACE.to_string()])[INTERFACE].len(),

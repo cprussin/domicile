@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use domicile_launch::notification::connected;
 use domicile_launch::power::{confirmed, Power};
 use domicile_protocol::SHELL_APP_ID;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::{OwnedObjectPath, OwnedVariant};
 
 /// What one `AccessDialog` was asked.
 #[derive(Debug, PartialEq)]
@@ -28,7 +28,7 @@ struct Portal {
 }
 
 /// A string option's value.
-fn text(options: &HashMap<String, OwnedValue>, key: &str) -> String {
+fn text(options: &HashMap<String, OwnedVariant>, key: &str) -> String {
     String::try_from(options[key].try_clone().unwrap()).unwrap()
 }
 
@@ -43,8 +43,8 @@ impl Portal {
         title: String,
         subtitle: String,
         _body: String,
-        options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         self.asked.lock().unwrap().push(Asked {
             handle: handle.to_string(),
             app_id,
@@ -60,13 +60,7 @@ impl Portal {
 
 /// The client's end of a fake Access portal answering `response`, and what
 /// each dialog was asked.
-fn a_portal(
-    response: u32,
-) -> (
-    zbus::blocking::Connection,
-    zbus::blocking::Connection,
-    Arc<Mutex<Vec<Asked>>>,
-) {
+fn a_portal(response: u32) -> (zbus::Connection, zbus::Connection, Arc<Mutex<Vec<Asked>>>) {
     let (theirs, ours) = UnixStream::pair().unwrap();
     let asked = Arc::new(Mutex::new(Vec::new()));
     let portal = Portal {
@@ -75,17 +69,16 @@ fn a_portal(
     };
     let guid = zbus::Guid::generate();
     let server = std::thread::spawn(move || {
-        zbus::blocking::connection::Builder::async_io_unix_stream(theirs)
-            .server(guid)
-            .unwrap()
-            .p2p()
-            .serve_at("/org/freedesktop/portal/desktop", portal)
-            .unwrap()
-            .build()
-            .unwrap()
+        zbus::block_on(
+            zbus::connection::Builder::unix_stream(theirs)
+                .server(guid)
+                .p2p()
+                .serve_at("/org/freedesktop/portal/desktop", portal)
+                .build(),
+        )
+        .unwrap()
     });
-    let client =
-        connected(zbus::blocking::connection::Builder::async_io_unix_stream(ours).p2p()).unwrap();
+    let client = connected(zbus::connection::Builder::unix_stream(ours).p2p()).unwrap();
     (server.join().unwrap(), client, asked)
 }
 

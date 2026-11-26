@@ -12,7 +12,7 @@ use std::sync::Mutex;
 use domicile_protocol::{CapturingKind, Devices, InputCaptureDialog, PortalAnswer, PortalKind};
 use zbus::fdo;
 use zbus::object_server::ObjectServer;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
 use super::queue::{ask, Listed};
 use super::{session, Backends, Told};
@@ -78,8 +78,8 @@ impl InputCapture {
         session_handle: OwnedObjectPath,
         app_id: String,
         parent_window: String,
-        options: HashMap<String, OwnedValue>,
-    ) -> fdo::Result<(u32, HashMap<String, OwnedValue>)> {
+        options: HashMap<String, OwnedVariant>,
+    ) -> fdo::Result<(u32, HashMap<String, OwnedVariant>)> {
         let asked = options
             .get("capabilities")
             .and_then(|value| u32::try_from(value).ok())
@@ -101,7 +101,7 @@ impl InputCapture {
                 self.open(server, session_handle, app_id, devices).await?;
                 Ok((
                     0,
-                    HashMap::from([("capabilities".to_string(), OwnedValue::from(asked))]),
+                    HashMap::from([("capabilities".to_string(), OwnedVariant::from(asked))]),
                 ))
             }
             PortalAnswer::Canceled => Ok((1, HashMap::new())),
@@ -115,8 +115,8 @@ impl InputCapture {
         _handle: OwnedObjectPath,
         session_handle: OwnedObjectPath,
         _app_id: String,
-        _options: HashMap<String, OwnedValue>,
-    ) -> fdo::Result<(u32, HashMap<String, OwnedValue>)> {
+        _options: HashMap<String, OwnedVariant>,
+    ) -> fdo::Result<(u32, HashMap<String, OwnedVariant>)> {
         self.backends.inputs.with(&session_handle, |_| ())?;
         let zones = self.backends.zones.lock().unwrap();
         let listed: Vec<(u32, u32, i32, i32)> = zones
@@ -127,8 +127,8 @@ impl InputCapture {
         Ok((
             0,
             HashMap::from([
-                ("zones".to_string(), owned(Value::from(listed))),
-                ("zone_set".to_string(), OwnedValue::from(zones.set)),
+                ("zones".to_string(), owned(Variant::from(listed))),
+                ("zone_set".to_string(), OwnedVariant::from(zones.set)),
             ]),
         ))
     }
@@ -141,10 +141,10 @@ impl InputCapture {
         _handle: OwnedObjectPath,
         session_handle: OwnedObjectPath,
         _app_id: String,
-        _options: HashMap<String, OwnedValue>,
-        barriers: Vec<HashMap<String, OwnedValue>>,
+        _options: HashMap<String, OwnedVariant>,
+        barriers: Vec<HashMap<String, OwnedVariant>>,
         zone_set: u32,
-    ) -> fdo::Result<(u32, HashMap<String, OwnedValue>)> {
+    ) -> fdo::Result<(u32, HashMap<String, OwnedVariant>)> {
         let asked: Vec<(u32, [i32; 4])> = barriers.iter().filter_map(barrier).collect();
         let (accepted, failed) = {
             let zones = self.backends.zones.lock().unwrap();
@@ -162,7 +162,7 @@ impl InputCapture {
         })?;
         Ok((
             0,
-            HashMap::from([("failed_barriers".to_string(), owned(Value::from(failed)))]),
+            HashMap::from([("failed_barriers".to_string(), owned(Variant::from(failed)))]),
         ))
     }
 
@@ -170,7 +170,7 @@ impl InputCapture {
         &self,
         session_handle: OwnedObjectPath,
         _app_id: String,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
     ) -> fdo::Result<()> {
         self.backends.inputs.enable(&session_handle, true)
     }
@@ -179,7 +179,7 @@ impl InputCapture {
         &self,
         session_handle: OwnedObjectPath,
         _app_id: String,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
     ) -> fdo::Result<()> {
         self.backends.inputs.enable(&session_handle, false)
     }
@@ -190,7 +190,7 @@ impl InputCapture {
         &self,
         session_handle: OwnedObjectPath,
         _app_id: String,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
     ) -> fdo::Result<()> {
         self.backends.inputs.with(&session_handle, |input| {
             if let Some(capture) = &input.capture {
@@ -205,8 +205,8 @@ impl InputCapture {
         &self,
         session_handle: OwnedObjectPath,
         _app_id: String,
-        _options: HashMap<String, OwnedValue>,
-    ) -> fdo::Result<zbus::zvariant::OwnedFd> {
+        _options: HashMap<String, OwnedVariant>,
+    ) -> fdo::Result<zbus::OwnedFd> {
         let eis = self.backends.eis()?;
         let told = self.backends.told.clone();
         let session = session_handle.clone();
@@ -327,17 +327,20 @@ pub fn activated(
     activation_id: u32,
     cursor: (f64, f64),
     barrier_id: u32,
-) -> HashMap<String, OwnedValue> {
+) -> HashMap<String, OwnedVariant> {
     HashMap::from([
-        ("activation_id".to_string(), OwnedValue::from(activation_id)),
-        ("cursor_position".to_string(), owned(Value::from(cursor))),
-        ("barrier_id".to_string(), OwnedValue::from(barrier_id)),
+        (
+            "activation_id".to_string(),
+            OwnedVariant::from(activation_id),
+        ),
+        ("cursor_position".to_string(), owned(Variant::from(cursor))),
+        ("barrier_id".to_string(), OwnedVariant::from(barrier_id)),
     ])
 }
 
 /// A barrier's id and position. One missing either is skipped: it has no id
 /// to fail under.
-fn barrier(barrier: &HashMap<String, OwnedValue>) -> Option<(u32, [i32; 4])> {
+fn barrier(barrier: &HashMap<String, OwnedVariant>) -> Option<(u32, [i32; 4])> {
     let id = u32::try_from(barrier.get("barrier_id")?).ok()?;
     let (x1, y1, x2, y2) =
         <(i32, i32, i32, i32)>::try_from(barrier.get("position")?.try_clone().ok()?).ok()?;
@@ -352,8 +355,8 @@ fn devices(capabilities: u32) -> Devices {
     }
 }
 
-fn owned(value: Value<'_>) -> OwnedValue {
-    OwnedValue::try_from(value).expect("a value with no file descriptor is ownable")
+fn owned(value: Variant<'_>) -> OwnedVariant {
+    OwnedVariant::try_from(value).expect("a value with no file descriptor is ownable")
 }
 
 #[cfg(test)]
@@ -361,9 +364,10 @@ mod tests {
     use super::*;
     use std::thread;
     use std::time::Duration;
+    use zbus::export::ordered_stream::OrderedStreamExt;
 
-    use zbus::blocking::MessageIterator;
     use zbus::MatchRule;
+    use zbus::MessageStream;
 
     use crate::client_requests::ClientRequest;
     use crate::eis::recorded::{a_receiver, Got};
@@ -387,21 +391,20 @@ mod tests {
         served.backends.displays(vec![DISPLAY]);
         let client = served.client.clone();
         let creating = thread::spawn(move || {
-            let created = client
-                .call_method(
-                    None::<&str>,
-                    crate::portals::OBJECT_PATH,
-                    Some(INPUT_CAPTURE),
-                    "CreateSession",
-                    &(
-                        path("/r/1"),
-                        path(SESSION),
-                        APP,
-                        "",
-                        options(vec![("capabilities", Value::from(7u32))]),
-                    ),
-                )
-                .expect("CreateSession answered");
+            let created = zbus::block_on(client.call_method(
+                None::<&str>,
+                crate::portals::OBJECT_PATH,
+                Some(INPUT_CAPTURE),
+                "CreateSession",
+                &(
+                    path("/r/1"),
+                    path(SESSION),
+                    APP,
+                    "",
+                    options(vec![("capabilities", Variant::from(7u32))]),
+                ),
+            ))
+            .expect("CreateSession answered");
             reply(created)
         });
         let (items, _) = next(served);
@@ -427,8 +430,8 @@ mod tests {
     fn barriers(served: &Served, zone_set: u32) -> Vec<u32> {
         let barrier = |id: u32, position: (i32, i32, i32, i32)| {
             HashMap::from([
-                ("barrier_id".to_string(), OwnedValue::from(id)),
-                ("position".to_string(), owned(Value::from(position))),
+                ("barrier_id".to_string(), OwnedVariant::from(id)),
+                ("position".to_string(), owned(Variant::from(position))),
             ])
         };
         let set = call(
@@ -455,7 +458,7 @@ mod tests {
 
         let results = granted(&served);
 
-        assert_eq!(results.get("capabilities"), Some(&OwnedValue::from(3u32)));
+        assert_eq!(results.get("capabilities"), Some(&OwnedVariant::from(3u32)));
         let capturing = loop {
             let (_, capturing) = next(&served);
             if !capturing.is_empty() {
@@ -497,17 +500,16 @@ mod tests {
     fn reaching_a_barrier_activates_the_capture() {
         let served = served(Tokens::load(None));
         granted(&served);
-        let activations = MessageIterator::for_match_rule(
+        let mut activations = zbus::block_on(MessageStream::for_match_rule(
             MatchRule::builder()
                 .msg_type(zbus::message::Type::Signal)
                 .interface(INPUT_CAPTURE)
-                .expect("a name")
                 .member("Activated")
-                .expect("a name")
-                .build(),
+                .build()
+                .expect("a match rule"),
             &served.client,
             None,
-        )
+        ))
         .expect("listening");
         let socket = call(
             &served,
@@ -516,7 +518,7 @@ mod tests {
             &(path(SESSION), APP, Results::new()),
         )
         .expect("ConnectToEIS answered");
-        let socket: zbus::zvariant::OwnedFd = socket.body().deserialize().expect("a socket");
+        let socket: zbus::OwnedFd = socket.body().deserialize().expect("a socket");
         let got = a_receiver(socket.into());
         assert_eq!(
             got.recv_timeout(Duration::from_secs(10)),
@@ -542,8 +544,7 @@ mod tests {
             })
             .expect("the loop listens");
 
-        let signal = activations
-            .into_iter()
+        let signal = std::iter::from_fn(|| zbus::block_on(activations.next()))
             .next()
             .expect("a signal")
             .expect("read");

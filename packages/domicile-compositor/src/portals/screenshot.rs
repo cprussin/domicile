@@ -24,7 +24,7 @@ use domicile_protocol::{
     ShotRect, SystemError, SystemErrorKind, SHELL_APP_ID,
 };
 use zbus::object_server::ObjectServer;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
 use super::queue::{ask, ask_unbidden, Queue};
 use super::uri::file_uri;
@@ -101,8 +101,8 @@ impl Screenshot {
         handle: OwnedObjectPath,
         app_id: String,
         parent_window: String,
-        options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let interactive = flag(&options, "interactive");
         let checked = flag(&options, "permission_store_checked");
         let taken = async {
@@ -150,7 +150,7 @@ impl Screenshot {
         match taken.await {
             Ok(uri) => (
                 0,
-                HashMap::from([("uri".to_string(), owned(Value::from(uri)))]),
+                HashMap::from([("uri".to_string(), owned(Variant::from(uri)))]),
             ),
             Err(response) => (response, HashMap::new()),
         }
@@ -164,8 +164,8 @@ impl Screenshot {
         handle: OwnedObjectPath,
         app_id: String,
         parent_window: String,
-        _options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        _options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let picked = async {
             let desk = self.desk().await?;
             let kind = PortalKind::PickColor(frozen(&desk));
@@ -177,7 +177,7 @@ impl Screenshot {
         match picked.await {
             Ok(color) => (
                 0,
-                HashMap::from([("color".to_string(), owned(Value::from(color)))]),
+                HashMap::from([("color".to_string(), owned(Variant::from(color)))]),
             ),
             Err(response) => (response, HashMap::new()),
         }
@@ -267,7 +267,7 @@ async fn kept(connection: &zbus::Connection, app_id: &str) -> Option<bool> {
         .and_then(|reply| {
             Ok(reply
                 .body()
-                .deserialize::<(HashMap<String, Vec<String>>, OwnedValue)>()?
+                .deserialize::<(HashMap<String, Vec<String>>, OwnedVariant)>()?
                 .0)
         });
     match looked_up {
@@ -656,7 +656,7 @@ pub(super) fn frozen(desk: &Desk) -> FrozenDesk {
 
 /// Whether boolean option `name` is set. Absent, or of another type, is
 /// unset.
-fn flag(options: &HashMap<String, OwnedValue>, name: &str) -> bool {
+fn flag(options: &HashMap<String, OwnedVariant>, name: &str) -> bool {
     options
         .get(name)
         .and_then(|value| bool::try_from(value).ok())
@@ -671,8 +671,8 @@ fn other(why: String) -> SystemError {
     }
 }
 
-fn owned(value: Value) -> OwnedValue {
-    OwnedValue::try_from(value).expect("a string or a tuple of doubles holds no fd")
+fn owned(value: Variant) -> OwnedVariant {
+    OwnedVariant::try_from(value).expect("a string or a tuple of doubles holds no fd")
 }
 
 #[cfg(test)]
@@ -688,8 +688,8 @@ mod tests {
         AccessDialog, DeskRect, FrozenDesk, PortalAnswer, PortalKind, PortalRequest, ShotArea,
         ShotRect, ShotWindow,
     };
-    use zbus::blocking::Connection;
-    use zbus::zvariant::{ObjectPath, Value};
+    use zbus::Connection;
+    use zbus::{ObjectPath, Variant};
 
     use crate::portals::socket_pair::connected_both;
     use crate::portals::OBJECT_PATH;
@@ -708,7 +708,7 @@ mod tests {
 
     #[zbus::interface(name = "org.freedesktop.impl.portal.PermissionStore")]
     impl Store {
-        fn lookup(&self, table: String, id: String) -> Result<(Table, OwnedValue), NotFound> {
+        fn lookup(&self, table: String, id: String) -> Result<(Table, OwnedVariant), NotFound> {
             assert_eq!((table.as_str(), id.as_str()), (TABLE, TABLE));
             let kept = self
                 .0
@@ -716,7 +716,7 @@ mod tests {
                 .unwrap()
                 .clone()
                 .ok_or(NotFound::NotFound("no screenshot table".into()))?;
-            Ok((kept, owned(Value::from(0u8))))
+            Ok((kept, owned(Variant::from(0u8))))
         }
 
         fn set_permission(
@@ -930,12 +930,8 @@ mod tests {
         // Served by the builder, whose `build` waits for the object server to
         // listen; served later, a `Lookup` can arrive first and is dropped.
         let (server, client) = connected_both(
-            |builder| builder.serve_at(OBJECT_PATH, backend).expect("served"),
-            |builder| {
-                builder
-                    .serve_at(PERMISSION_STORE_PATH, store.clone())
-                    .expect("the store served")
-            },
+            |builder| builder.serve_at(OBJECT_PATH, backend),
+            |builder| builder.serve_at(PERMISSION_STORE_PATH, store.clone()),
         );
         Served {
             client,
@@ -953,35 +949,34 @@ mod tests {
         served: &Served,
         method: &'static str,
         options: Vec<(&'static str, bool)>,
-    ) -> thread::JoinHandle<(u32, Map<String, OwnedValue>)> {
+    ) -> thread::JoinHandle<(u32, Map<String, OwnedVariant>)> {
         let client = served.client.clone();
         thread::spawn(move || {
-            let options: Map<String, OwnedValue> = options
+            let options: Map<String, OwnedVariant> = options
                 .into_iter()
                 .map(|(name, on)| {
                     (
                         name.to_string(),
-                        OwnedValue::try_from(Value::from(on)).expect("ownable"),
+                        OwnedVariant::try_from(Variant::from(on)).expect("ownable"),
                     )
                 })
                 .collect();
-            client
-                .call_method(
-                    None::<&str>,
-                    OBJECT_PATH,
-                    Some(INTERFACE),
-                    method,
-                    &(
-                        ObjectPath::try_from(HANDLE).expect("a path"),
-                        APP,
-                        "",
-                        options,
-                    ),
-                )
-                .expect("answered")
-                .body()
-                .deserialize()
-                .expect("a response")
+            zbus::block_on(client.call_method(
+                None::<&str>,
+                OBJECT_PATH,
+                Some(INTERFACE),
+                method,
+                &(
+                    ObjectPath::try_from(HANDLE).expect("a path"),
+                    APP,
+                    "",
+                    options,
+                ),
+            ))
+            .expect("answered")
+            .body()
+            .deserialize()
+            .expect("a response")
         })
     }
 
@@ -994,7 +989,7 @@ mod tests {
     }
 
     /// The PNG `uri` names: its size and straight RGBA pixels.
-    fn png_at(uri: &OwnedValue) -> ((u32, u32), Vec<u8>) {
+    fn png_at(uri: &OwnedVariant) -> ((u32, u32), Vec<u8>) {
         let uri = String::try_from(uri.try_clone().expect("cloned")).expect("a string");
         // The file names have spaces; the temporary folder's path has no
         // other encoded byte.
@@ -1474,7 +1469,7 @@ mod tests {
         };
         assert!(path.starts_with(shooting.album.path().join("Screenshots")));
         assert_eq!(
-            png_at(&owned(Value::from(file_uri(&path.display().to_string())))),
+            png_at(&owned(Variant::from(file_uri(&path.display().to_string())))),
             ((1, 1), vec![0, 0, 255, 128])
         );
     }
@@ -1500,7 +1495,7 @@ mod tests {
             panic!("saved");
         };
         assert_eq!(
-            png_at(&owned(Value::from(file_uri(&path.display().to_string())))),
+            png_at(&owned(Variant::from(file_uri(&path.display().to_string())))),
             ((1, 1), vec![0, 255, 0, 255])
         );
     }
@@ -1559,7 +1554,7 @@ mod tests {
             Ok(Kept::Saved(file.clone()))
         );
         assert_eq!(
-            png_at(&owned(Value::from(file_uri(&file.display().to_string())))).0,
+            png_at(&owned(Variant::from(file_uri(&file.display().to_string())))).0,
             (2, 1)
         );
         assert!(
@@ -1586,19 +1581,17 @@ mod tests {
     fn it_is_version_two() {
         let served = served(Ok(desk()));
 
-        let version: OwnedValue = served
-            .client
-            .call_method(
-                None::<&str>,
-                OBJECT_PATH,
-                Some("org.freedesktop.DBus.Properties"),
-                "Get",
-                &(INTERFACE, "version"),
-            )
-            .expect("answered")
-            .body()
-            .deserialize()
-            .expect("a variant");
+        let version: OwnedVariant = zbus::block_on(served.client.call_method(
+            None::<&str>,
+            OBJECT_PATH,
+            Some("org.freedesktop.DBus.Properties"),
+            "Get",
+            &(INTERFACE, "version"),
+        ))
+        .expect("answered")
+        .body()
+        .deserialize()
+        .expect("a variant");
         let version = u32::try_from(version).expect("a u32");
 
         assert_eq!(version, 2);

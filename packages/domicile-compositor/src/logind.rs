@@ -9,9 +9,10 @@ use std::thread;
 
 use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
 use tracing::debug;
-use zbus::blocking::{proxy, Connection, Proxy};
+use zbus::export::ordered_stream::OrderedStreamExt;
 use zbus::proxy::CacheProperties;
-use zbus::zvariant::OwnedObjectPath;
+use zbus::OwnedObjectPath;
+use zbus::{proxy, Connection, Proxy};
 
 use crate::lock::LOCK_SCREEN_DRAWS_WITHIN;
 use crate::{CalloopData, DomicileCompositor};
@@ -85,9 +86,9 @@ fn listen_on(tell: impl Fn(Logind) + Send + Clone + 'static) -> zbus::Error {
 /// Subscribes before taking the first inhibitor, so no sleep goes unheard
 /// once one is held.
 fn hear_sleeps(tell: impl Fn(Logind) + Send + Clone + 'static) -> zbus::Result<()> {
-    let bus = Connection::system()?;
+    let bus = zbus::block_on(Connection::system())?;
     let manager = proxy_to(&bus, MANAGER, MANAGER_INTERFACE)?;
-    let sleeps = manager.receive_signal("PrepareForSleep")?;
+    let mut sleeps = zbus::block_on(manager.receive_signal("PrepareForSleep"))?;
     if let Err(why) = listen_for_locks(&bus, &manager, tell.clone()) {
         tracing::error!(
             %why,
@@ -96,7 +97,7 @@ fn hear_sleeps(tell: impl Fn(Logind) + Send + Clone + 'static) -> zbus::Result<(
         );
     }
     tell(Logind::Holding(inhibit(&manager)?));
-    for signal in sleeps {
+    for signal in std::iter::from_fn(|| zbus::block_on(sleeps.next())) {
         let starting: bool = signal.body().deserialize()?;
         tell(if starting {
             Logind::Sleeping
@@ -116,10 +117,13 @@ fn listen_for_locks(
     manager: &Proxy<'static>,
     tell: impl Fn(Logind) + Send + 'static,
 ) -> zbus::Result<()> {
-    let session: OwnedObjectPath = manager.call("GetSessionByPID", &std::process::id())?;
-    let locks = proxy_to(bus, session.into_inner(), SESSION_INTERFACE)?.receive_signal("Lock")?;
+    let session: OwnedObjectPath =
+        zbus::block_on(manager.call("GetSessionByPID", &std::process::id()))?;
+    let mut locks = zbus::block_on(
+        proxy_to(bus, session.into_inner(), SESSION_INTERFACE)?.receive_signal("Lock"),
+    )?;
     thread::spawn(move || {
-        for _ in locks {
+        for _ in std::iter::from_fn(|| zbus::block_on(locks.next())) {
             tell(Logind::AskedToLock);
         }
     });
@@ -128,7 +132,7 @@ fn listen_for_locks(
 
 /// Ask logind to delay sleep until the returned descriptor is closed.
 fn inhibit(manager: &Proxy<'static>) -> zbus::Result<OwnedFd> {
-    let inhibitor: zbus::zvariant::OwnedFd = manager.call(
+    let inhibitor: zbus::OwnedFd = zbus::block_on(manager.call(
         "Inhibit",
         &(
             "sleep",
@@ -136,19 +140,21 @@ fn inhibit(manager: &Proxy<'static>) -> zbus::Result<OwnedFd> {
             "Locks the desktop before the machine sleeps",
             "delay",
         ),
-    )?;
+    ))?;
     Ok(inhibitor.into())
 }
 
 fn proxy_to<'a>(
     bus: &Connection,
-    path: impl TryInto<zbus::zvariant::ObjectPath<'a>, Error: Into<zbus::Error>>,
+    path: impl TryInto<zbus::ObjectPath<'a>, Error: Into<zbus::Error>>,
     interface: &'static str,
 ) -> zbus::Result<Proxy<'a>> {
-    proxy::Builder::new(bus)
-        .destination(LOGIND)?
-        .path(path)?
-        .interface(interface)?
-        .cache_properties(CacheProperties::No)
-        .build()
+    zbus::block_on(
+        proxy::Builder::new(bus)
+            .destination(LOGIND)
+            .path(path)
+            .interface(interface)
+            .cache_properties(CacheProperties::No)
+            .build(),
+    )
 }

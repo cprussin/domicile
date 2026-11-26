@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use domicile_protocol::{Inhibited, Inhibition, PortalKind};
 use tracing::{debug, warn};
 use zbus::object_server::{ObjectServer, SignalEmitter};
-use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
 use super::queue::Queue;
 use super::session;
@@ -97,7 +97,7 @@ impl Inhibit {
         app_id: String,
         window: String,
         flags: u32,
-        mut options: HashMap<String, OwnedValue>,
+        mut options: HashMap<String, OwnedVariant>,
     ) -> zbus::fdo::Result<()> {
         let reason = options
             .remove("reason")
@@ -161,18 +161,18 @@ impl Inhibit {
     async fn state_changed(
         emitter: &SignalEmitter<'_>,
         session_handle: OwnedObjectPath,
-        state: HashMap<&str, Value<'_>>,
+        state: HashMap<&str, Variant<'_>>,
     ) -> zbus::Result<()>;
 }
 
 /// Store whether the screensaver is active, and tell every monitor if that
 /// changed.
 pub fn screensaver(
-    served: &zbus::blocking::object_server::InterfaceRef<Inhibit>,
+    served: &zbus::object_server::InterfaceRef<Inhibit>,
     active: bool,
 ) -> zbus::Result<()> {
     let monitors = {
-        let mut inhibit = served.get_mut();
+        let mut inhibit = zbus::block_on(served.get_mut());
         let changed = inhibit.screensaver_active != active;
         inhibit.screensaver_active = active;
         if changed {
@@ -186,8 +186,8 @@ pub fn screensaver(
             served.signal_emitter(),
             monitor,
             HashMap::from([
-                ("screensaver-active", Value::from(active)),
-                ("session-state", Value::from(RUNNING)),
+                ("screensaver-active", Variant::from(active)),
+                ("session-state", Variant::from(RUNNING)),
             ]),
         ))?;
     }

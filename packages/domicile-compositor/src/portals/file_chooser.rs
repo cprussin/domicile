@@ -16,7 +16,7 @@ use domicile_protocol::{
 };
 use tracing::warn;
 use zbus::object_server::ObjectServer;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
 use super::queue::{ask, Queue};
 
@@ -45,8 +45,8 @@ impl FileChooser {
         app_id: String,
         parent_window: String,
         title: String,
-        options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         self.choose(
             server,
             handle,
@@ -67,8 +67,8 @@ impl FileChooser {
         app_id: String,
         parent_window: String,
         title: String,
-        options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         self.choose(
             server,
             handle,
@@ -89,8 +89,8 @@ impl FileChooser {
         app_id: String,
         parent_window: String,
         title: String,
-        options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         self.choose(
             server,
             handle,
@@ -114,8 +114,8 @@ impl FileChooser {
         parent_window: &str,
         mode: FileChooserMode,
         title: String,
-        options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let types = MimeTypes::read(&self.data_dirs).unwrap_or_else(|why| {
             tracing::error!(%why, "MIME types are unreadable; file filters by type match nothing");
             MimeTypes::default()
@@ -140,14 +140,15 @@ impl Asked {
     fn new(
         mode: FileChooserMode,
         title: String,
-        mut options: HashMap<String, OwnedValue>,
+        mut options: HashMap<String, OwnedVariant>,
         types: &MimeTypes,
         home: &str,
     ) -> Self {
         let mut take = |name: &str| options.remove(name);
-        let flag = |value: Option<OwnedValue>| value.and_then(|value| bool::try_from(value).ok());
-        let text = |value: Option<OwnedValue>| value.and_then(|value| String::try_from(value).ok());
-        let path = |value: Option<OwnedValue>| {
+        let flag = |value: Option<OwnedVariant>| value.and_then(|value| bool::try_from(value).ok());
+        let text =
+            |value: Option<OwnedVariant>| value.and_then(|value| String::try_from(value).ok());
+        let path = |value: Option<OwnedVariant>| {
             value
                 .and_then(|value| Vec::<u8>::try_from(value).ok())
                 .map(|bytes| byte_string(&bytes))
@@ -223,7 +224,7 @@ impl Asked {
     }
 
     /// The portal's response and results for the shell's `answer`.
-    fn respond(&self, answer: PortalAnswer) -> (u32, HashMap<String, OwnedValue>) {
+    fn respond(&self, answer: PortalAnswer) -> (u32, HashMap<String, OwnedVariant>) {
         match answer {
             PortalAnswer::FileChooser(chosen) => match self.results(chosen) {
                 Ok(results) => (0, results),
@@ -262,7 +263,7 @@ impl Asked {
     fn results(
         &self,
         chosen: FileChooserAnswer,
-    ) -> Result<HashMap<String, OwnedValue>, &'static str> {
+    ) -> Result<HashMap<String, OwnedVariant>, &'static str> {
         if !chosen.paths.iter().all(|path| path.starts_with('/')) {
             return Err("a path is not absolute");
         }
@@ -282,8 +283,8 @@ impl Asked {
         let uris: Vec<String> = paths.iter().map(|path| file_uri(path)).collect();
         let choices: Vec<(String, String)> = chosen.choices.into_iter().collect();
         let mut results = HashMap::from([
-            ("uris".to_string(), owned(Value::from(uris))),
-            ("choices".to_string(), owned(Value::from(choices))),
+            ("uris".to_string(), owned(Variant::from(uris))),
+            ("choices".to_string(), owned(Variant::from(choices))),
         ]);
         if let Some(index) = chosen.current_filter {
             let filter = self
@@ -292,7 +293,7 @@ impl Asked {
                 .ok_or("the filter is not one the dialog offered")?;
             results.insert(
                 "current_filter".to_string(),
-                owned(Value::from(filter.clone())),
+                owned(Variant::from(filter.clone())),
             );
         }
         Ok(results)
@@ -321,20 +322,20 @@ fn file_uri(path: &str) -> String {
 
 /// `value` owned, for a reply. Fails only for a file descriptor, which no
 /// result here holds.
-fn owned(value: Value<'_>) -> OwnedValue {
-    OwnedValue::try_from(value).expect("no file descriptors in a file chooser's results")
+fn owned(value: Variant<'_>) -> OwnedVariant {
+    OwnedVariant::try_from(value).expect("no file descriptors in a file chooser's results")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn options(sent: Vec<(&str, Value<'static>)>) -> HashMap<String, OwnedValue> {
+    fn options(sent: Vec<(&str, Variant<'static>)>) -> HashMap<String, OwnedVariant> {
         sent.into_iter()
             .map(|(name, value)| {
                 (
                     name.to_string(),
-                    OwnedValue::try_from(value).expect("an ownable value"),
+                    OwnedVariant::try_from(value).expect("an ownable value"),
                 )
             })
             .collect()
@@ -351,8 +352,8 @@ mod tests {
     }
 
     /// A path as the portal sends it: bytes ending in a NUL.
-    fn bytes(path: &str) -> Value<'static> {
-        Value::from([path.as_bytes(), b"\0"].concat())
+    fn bytes(path: &str) -> Variant<'static> {
+        Variant::from([path.as_bytes(), b"\0"].concat())
     }
 
     fn images() -> PortalFilter {
@@ -363,7 +364,7 @@ mod tests {
         MimeTypes::parse("50:image/jpeg:*.jpg\n")
     }
 
-    fn opened(sent: Vec<(&str, Value<'static>)>) -> Asked {
+    fn opened(sent: Vec<(&str, Variant<'static>)>) -> Asked {
         Asked::new(
             FileChooserMode::Open,
             "Open Image".into(),
@@ -381,26 +382,26 @@ mod tests {
         })
     }
 
-    fn uris(results: &HashMap<String, OwnedValue>) -> Vec<String> {
+    fn uris(results: &HashMap<String, OwnedVariant>) -> Vec<String> {
         Vec::<String>::try_from(results["uris"].try_clone().expect("cloned")).expect("as")
     }
 
     #[test]
     fn an_open_dialog_reads_every_option() {
         let asked = opened(vec![
-            ("accept_label", Value::from("Pick")),
-            ("multiple", Value::from(true)),
-            ("directory", Value::from(false)),
-            ("modal", Value::from(true)),
+            ("accept_label", Variant::from("Pick")),
+            ("multiple", Variant::from(true)),
+            ("directory", Variant::from(false)),
+            ("modal", Variant::from(true)),
             (
                 "filters",
-                Value::from(vec![images(), filter("All", &[(0, "*")])]),
+                Variant::from(vec![images(), filter("All", &[(0, "*")])]),
             ),
-            ("current_filter", Value::from(filter("All", &[(0, "*")]))),
+            ("current_filter", Variant::from(filter("All", &[(0, "*")]))),
             ("current_folder", bytes("/home/me/Pictures")),
             (
                 "choices",
-                Value::from(vec![
+                Variant::from(vec![
                     (
                         "encoding".to_string(),
                         "Encoding".to_string(),
@@ -465,7 +466,7 @@ mod tests {
     fn a_filter_the_picker_cannot_match_is_left_out() {
         let asked = opened(vec![(
             "filters",
-            Value::from(vec![filter("Makefiles", &[(0, "Makefile")]), images()]),
+            Variant::from(vec![filter("Makefiles", &[(0, "Makefile")]), images()]),
         )]);
 
         assert_eq!(
@@ -482,7 +483,7 @@ mod tests {
     #[test]
     fn a_current_filter_outside_the_list_is_added_to_it() {
         // The spec applies it unconditionally when the list is empty.
-        let asked = opened(vec![("current_filter", Value::from(images()))]);
+        let asked = opened(vec![("current_filter", Variant::from(images()))]);
 
         assert_eq!(asked.dialog.filters.len(), 1);
         assert_eq!(asked.dialog.current_filter, Some(0));
@@ -494,7 +495,7 @@ mod tests {
             FileChooserMode::Save,
             "Save".into(),
             options(vec![
-                ("current_name", Value::from("ignored.txt")),
+                ("current_name", Variant::from("ignored.txt")),
                 ("current_file", bytes("/home/me/notes.txt")),
             ]),
             &types(),
@@ -514,7 +515,7 @@ mod tests {
             "Save".into(),
             options(vec![(
                 "files",
-                Value::from(vec![b"a.txt\0".to_vec(), b"b c.txt\0".to_vec()]),
+                Variant::from(vec![b"a.txt\0".to_vec(), b"b c.txt\0".to_vec()]),
             )]),
             &types(),
             "/home/me",
@@ -525,7 +526,7 @@ mod tests {
 
     #[test]
     fn chosen_paths_are_answered_as_file_uris_with_the_choices_and_filter() {
-        let asked = opened(vec![("filters", Value::from(vec![images()]))]);
+        let asked = opened(vec![("filters", Variant::from(vec![images()]))]);
 
         let (response, results) = asked.respond(PortalAnswer::FileChooser(FileChooserAnswer {
             paths: vec!["/home/me/a b#1.png".into()],
@@ -554,7 +555,7 @@ mod tests {
             "Save".into(),
             options(vec![(
                 "files",
-                Value::from(vec![b"a.txt\0".to_vec(), b"b.txt\0".to_vec()]),
+                Variant::from(vec![b"a.txt\0".to_vec(), b"b.txt\0".to_vec()]),
             )]),
             &types(),
             "/home/me",

@@ -53,11 +53,13 @@ notify = "=9.0.0-rc.9"
 # Matches the gitignore-style globs in the config's `[files] omit`.
 globset = { version = "0.4", default-features = false }
 tempfile = "3"
-# D-Bus. Pure Rust, so it links nothing. `blocking-api` because nothing here runs
-# an async runtime; no default features to avoid tokio.
-zbus = { version = "5.0", default-features = false, features = [
-    "async-io",
-    "blocking-api",
+# D-Bus. Pure Rust, so it links nothing. `default-rt` is zbus's own runtime,
+# driven by `zbus::block_on`; no default features to avoid tracing and the
+# object manager.
+zbus = { version = "6.5", default-features = false, features = [
+    "default-rt",
+    "proxy",
+    "service",
 ] }
 libc = "0.2"
 # Encodes screenshots (see `domicile_host::screenshot`).

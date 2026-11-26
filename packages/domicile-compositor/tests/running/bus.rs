@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use zbus::blocking::Connection;
+use zbus::Connection;
 
 /// How long the compositor gets to take a name on the bus.
 const PATIENCE: Duration = Duration::from_secs(20);
@@ -59,19 +59,16 @@ impl Bus {
 
     /// A client on the bus.
     pub fn client(&self) -> Connection {
-        zbus::blocking::connection::Builder::address(self.address.as_str())
-            .expect("an address")
-            .build()
+        zbus::block_on(zbus::connection::Builder::address(self.address.as_str()).build())
             .expect("the bus takes a client")
     }
 
     /// A client on the bus, once the compositor has taken `name`.
     pub fn client_once(&self, name: &str) -> Connection {
         let connection = self.client();
-        let bus = zbus::blocking::fdo::DBusProxy::new(&connection).expect("the bus");
+        let bus = zbus::block_on(zbus::fdo::DBusProxy::new(&connection)).expect("the bus");
         let until = Instant::now() + PATIENCE;
-        while !bus
-            .name_has_owner(name.try_into().expect("a name"))
+        while !zbus::block_on(bus.name_has_owner(name.try_into().expect("a name")))
             .expect("the bus answers")
         {
             assert!(Instant::now() < until, "the compositor never took {name}");

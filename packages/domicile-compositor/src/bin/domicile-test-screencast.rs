@@ -35,8 +35,8 @@ use domicile_protocol::{
     PortalRequest, ScreenCastDialog,
 };
 use domicile_test_chrome::Chrome;
-use zbus::blocking::Connection;
-use zbus::zvariant::{ObjectPath, OwnedValue, Value};
+use zbus::Connection;
+use zbus::{ObjectPath, OwnedVariant, Variant};
 
 const BUS_NAME: &str = "org.freedesktop.impl.portal.desktop.domicile";
 const OBJECT_PATH: &str = "/org/freedesktop/portal/desktop";
@@ -44,7 +44,7 @@ const INTERFACE: &str = "org.freedesktop.impl.portal.ScreenCast";
 const APP: &str = "org.example.Recorder";
 
 /// A portal method's response and results.
-type Answered = (u32, HashMap<String, OwnedValue>);
+type Answered = (u32, HashMap<String, OwnedVariant>);
 
 /// What to pick in the source picker.
 enum Wanted {
@@ -76,19 +76,20 @@ fn main() -> ExitCode {
 fn run(socket: &Path, wanted: &Wanted) -> Result<(), String> {
     let mut chrome =
         Chrome::connect(socket, Duration::from_secs(20)).map_err(|why| why.to_string())?;
-    let bus = Connection::session().map_err(|why| format!("no session bus: {why}"))?;
-    let selection = |restore: Option<Value<'static>>| {
+    let bus =
+        zbus::block_on(Connection::session()).map_err(|why| format!("no session bus: {why}"))?;
+    let selection = |restore: Option<Variant<'static>>| {
         let mut options = vec![
-            ("persist_mode", Value::from(2u32)),
+            ("persist_mode", Variant::from(2u32)),
             (
                 "types",
-                Value::from(match wanted {
+                Variant::from(match wanted {
                     Wanted::Window(_) => 2u32,
                     Wanted::Monitor => 1,
                 }),
             ),
             // Embedded, so a monitor's stream draws the pointer where it is.
-            ("cursor_mode", Value::from(2u32)),
+            ("cursor_mode", Variant::from(2u32)),
         ];
         options.extend(restore.map(|restore| ("restore_data", restore)));
         options
@@ -135,18 +136,18 @@ fn run(socket: &Path, wanted: &Wanted) -> Result<(), String> {
         .try_clone()
         .map_err(|why| why.to_string())?;
     let session = "/org/freedesktop/portal/desktop/session/1_1/second";
-    select(&bus, session, selection(Some(Value::from(restore))))?;
+    select(&bus, session, selection(Some(Variant::from(restore))))?;
     let results = started(start(&bus, session))?;
     say(&format!("restored node {}", stream(&results)?.0));
     capturing(&mut chrome, |capturing| !capturing.is_empty())?;
 
-    bus.call_method(
+    zbus::block_on(bus.call_method(
         Some(BUS_NAME),
         session,
         Some("org.freedesktop.impl.portal.Session"),
         "Close",
         &(),
-    )
+    ))
     .map_err(|why| format!("Close failed: {why}"))?;
     capturing(&mut chrome, |capturing| capturing.is_empty())?;
     say("closed");
@@ -157,7 +158,7 @@ fn run(socket: &Path, wanted: &Wanted) -> Result<(), String> {
 fn select(
     bus: &Connection,
     session: &str,
-    options: Vec<(&str, Value<'static>)>,
+    options: Vec<(&str, Variant<'static>)>,
 ) -> Result<(), String> {
     for (method, body) in [("CreateSession", Vec::new()), ("SelectSources", options)] {
         let (response, _) = call(
@@ -189,7 +190,7 @@ fn start(bus: &Connection, session: &'static str) -> thread::JoinHandle<Result<A
                 path(session)?,
                 APP,
                 "",
-                HashMap::<String, OwnedValue>::new(),
+                HashMap::<String, OwnedVariant>::new(),
             ),
         )
     })
@@ -198,7 +199,7 @@ fn start(bus: &Connection, session: &'static str) -> thread::JoinHandle<Result<A
 /// `Start`'s results, once it answered `0`.
 fn started(
     starting: thread::JoinHandle<Result<Answered, String>>,
-) -> Result<HashMap<String, OwnedValue>, String> {
+) -> Result<HashMap<String, OwnedVariant>, String> {
     match starting.join().map_err(|_| "Start panicked")?? {
         (0, results) => Ok(results),
         (response, _) => Err(format!("Start answered {response}")),
@@ -287,14 +288,14 @@ fn next_push(chrome: &mut Chrome) -> Result<(Vec<PortalRequest>, Vec<Capturing>)
 
 /// The first stream's PipeWire node, and its size if it has one. A window
 /// the page has not placed has none.
-fn stream(results: &HashMap<String, OwnedValue>) -> Result<(u32, Option<(i32, i32)>), String> {
-    let streams: Vec<(u32, HashMap<String, OwnedValue>)> = results
+fn stream(results: &HashMap<String, OwnedVariant>) -> Result<(u32, Option<(i32, i32)>), String> {
+    let streams: Vec<(u32, HashMap<String, OwnedVariant>)> = results
         .get("streams")
         .ok_or("Start returned no streams")?
         .try_clone()
         .map_err(|why| why.to_string())?
         .try_into()
-        .map_err(|why: zbus::zvariant::Error| why.to_string())?;
+        .map_err(|why: zbus::Error| why.to_string())?;
     let (node, properties) = streams
         .first()
         .ok_or("Start returned an empty list of streams")?;
@@ -304,18 +305,18 @@ fn stream(results: &HashMap<String, OwnedValue>) -> Result<(u32, Option<(i32, i3
             size.try_clone()
                 .map_err(|why| why.to_string())?
                 .try_into()
-                .map_err(|why: zbus::zvariant::Error| why.to_string())
+                .map_err(|why: zbus::Error| why.to_string())
         })
         .transpose()?;
     Ok((*node, size))
 }
 
-fn call<B: zbus::export::serde::Serialize + zbus::zvariant::DynamicType>(
+fn call<B: zbus::export::serde::Serialize + zbus::DynamicType>(
     bus: &Connection,
     method: &str,
     body: &B,
-) -> Result<(u32, HashMap<String, OwnedValue>), String> {
-    bus.call_method(Some(BUS_NAME), OBJECT_PATH, Some(INTERFACE), method, body)
+) -> Result<(u32, HashMap<String, OwnedVariant>), String> {
+    zbus::block_on(bus.call_method(Some(BUS_NAME), OBJECT_PATH, Some(INTERFACE), method, body))
         .map_err(|why| format!("{method} failed: {why}"))?
         .body()
         .deserialize()
@@ -326,11 +327,11 @@ fn path(path: &str) -> Result<ObjectPath<'static>, String> {
     ObjectPath::try_from(path.to_string()).map_err(|why| why.to_string())
 }
 
-fn owned(options: Vec<(&str, Value<'static>)>) -> Result<HashMap<String, OwnedValue>, String> {
+fn owned(options: Vec<(&str, Variant<'static>)>) -> Result<HashMap<String, OwnedVariant>, String> {
     options
         .into_iter()
         .map(|(name, value)| {
-            OwnedValue::try_from(value)
+            OwnedVariant::try_from(value)
                 .map(|value| (name.to_string(), value))
                 .map_err(|why| why.to_string())
         })

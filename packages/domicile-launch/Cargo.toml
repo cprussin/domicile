@@ -37,18 +37,20 @@ tiny_http = "0.12"
 ureq = { version = "3", default-features = false, features = ["rustls"] }
 # Session bus, for reporting a failed reload as a notification. Features match
 # the compositor's so the workspace builds zbus once.
-zbus = { version = "5.0", default-features = false, features = [
-    "async-io",
-    "blocking-api",
+zbus = { version = "6.5", default-features = false, features = [
+    "default-rt",
+    "proxy",
+    "service",
 ] }
 
 [dev-dependencies]
 libc.workspace = true
 tempfile.workspace = true
 # `p2p` lets tests serve notifications over a socket pair instead of a bus.
-zbus = { version = "5.0", default-features = false, features = [
-    "async-io",
-    "blocking-api",
+zbus = { version = "6.5", default-features = false, features = [
+    "default-rt",
+    "proxy",
+    "service",
     "p2p",
 ] }
 

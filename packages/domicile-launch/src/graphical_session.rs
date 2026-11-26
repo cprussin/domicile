@@ -49,7 +49,7 @@ const VARIABLES: [&str; 4] = [
 ///
 /// The portal frontend reads `XDG_CURRENT_DESKTOP` once, when it starts, and
 /// routes every interface by it. Neither value waits on the compositor.
-pub fn name(manager: &zbus::blocking::Connection) -> Result<(), zbus::Error> {
+pub fn name(manager: &zbus::Connection) -> Result<(), zbus::Error> {
     call(
         manager,
         "SetEnvironment",
@@ -65,7 +65,7 @@ pub fn name(manager: &zbus::blocking::Connection) -> Result<(), zbus::Error> {
 /// Returns the [`VARIABLES`] `manager` held when they named another desktop's
 /// control socket, for [`end`]. Empty when they named none or this desktop's.
 pub fn begin(
-    manager: &zbus::blocking::Connection,
+    manager: &zbus::Connection,
     wayland_display: &str,
     control: &Path,
 ) -> Result<Vec<String>, zbus::Error> {
@@ -100,7 +100,7 @@ pub fn begin(
 ///   [`begin`]. Uses `replace-irreversibly`, as niri does, so no later job can
 ///   cancel the shutdown.
 pub fn end(
-    manager: &zbus::blocking::Connection,
+    manager: &zbus::Connection,
     control: &Path,
     earlier: &[String],
 ) -> Result<(), zbus::Error> {
@@ -116,14 +116,16 @@ pub fn end(
 }
 
 /// The assignments of [`VARIABLES`] in `manager`'s environment.
-fn held(manager: &zbus::blocking::Connection) -> Result<Vec<String>, zbus::Error> {
-    let environment: Vec<String> = zbus::blocking::Proxy::new(
-        manager,
-        "org.freedesktop.systemd1",
-        "/org/freedesktop/systemd1",
-        "org.freedesktop.systemd1.Manager",
-    )?
-    .get_property("Environment")?;
+fn held(manager: &zbus::Connection) -> Result<Vec<String>, zbus::Error> {
+    let environment: Vec<String> = zbus::block_on(
+        zbus::block_on(zbus::Proxy::new(
+            manager,
+            "org.freedesktop.systemd1",
+            "/org/freedesktop/systemd1",
+            "org.freedesktop.systemd1.Manager",
+        ))?
+        .get_property("Environment"),
+    )?;
     Ok(environment
         .into_iter()
         .filter(|assignment| {
@@ -143,17 +145,16 @@ fn socket(assignments: &[String]) -> Option<&str> {
     })
 }
 
-fn call<B>(manager: &zbus::blocking::Connection, method: &str, body: &B) -> Result<(), zbus::Error>
+fn call<B>(manager: &zbus::Connection, method: &str, body: &B) -> Result<(), zbus::Error>
 where
-    B: serde::Serialize + zbus::zvariant::DynamicType,
+    B: serde::Serialize + zbus::DynamicType,
 {
-    manager
-        .call_method(
-            Some("org.freedesktop.systemd1"),
-            "/org/freedesktop/systemd1",
-            Some("org.freedesktop.systemd1.Manager"),
-            method,
-            body,
-        )
-        .map(drop)
+    zbus::block_on(manager.call_method(
+        Some("org.freedesktop.systemd1"),
+        "/org/freedesktop/systemd1",
+        Some("org.freedesktop.systemd1.Manager"),
+        method,
+        body,
+    ))
+    .map(drop)
 }

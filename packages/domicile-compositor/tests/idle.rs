@@ -423,15 +423,14 @@ fn a_video_call_in_a_browser_holds_the_screens_on_until_it_lets_go() {
     compositor.wait_for_log(
         "an application asked to keep the screens on; this desktop's screens come back on",
     );
-    browser
-        .call_method(
-            Some(SCREEN_SAVER),
-            "/org/freedesktop/ScreenSaver",
-            Some(SCREEN_SAVER),
-            "UnInhibit",
-            &(cookie,),
-        )
-        .expect("UnInhibit answers");
+    zbus::block_on(browser.call_method(
+        Some(SCREEN_SAVER),
+        "/org/freedesktop/ScreenSaver",
+        Some(SCREEN_SAVER),
+        "UnInhibit",
+        &(cookie,),
+    ))
+    .expect("UnInhibit answers");
     compositor.wait_for_log(
         "an application asked to keep the screens on; this desktop's screens go dark",
     );
@@ -482,19 +481,18 @@ fn a_page_hears_a_browser_window_hold_the_desktop_awake_as_the_browser() {
 }
 
 /// Asks the screen saver to stay off, as Chromium does, returning the cookie.
-fn inhibit(connection: &zbus::blocking::Connection) -> u32 {
-    connection
-        .call_method(
-            Some(SCREEN_SAVER),
-            "/org/freedesktop/ScreenSaver",
-            Some(SCREEN_SAVER),
-            "Inhibit",
-            &("Chromium", "WebRTC has active PeerConnections"),
-        )
-        .expect("Inhibit answers")
-        .body()
-        .deserialize()
-        .expect("a cookie")
+fn inhibit(connection: &zbus::Connection) -> u32 {
+    zbus::block_on(connection.call_method(
+        Some(SCREEN_SAVER),
+        "/org/freedesktop/ScreenSaver",
+        Some(SCREEN_SAVER),
+        "Inhibit",
+        &("Chromium", "WebRTC has active PeerConnections"),
+    ))
+    .expect("Inhibit answers")
+    .body()
+    .deserialize()
+    .expect("a cookie")
 }
 
 /// The page put `app_id`'s window at the origin with `size`; an empty one

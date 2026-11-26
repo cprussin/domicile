@@ -10,23 +10,25 @@ use domicile_miracast::{mice, p2p::P2p};
 
 fn main() -> Result<(), zbus::Error> {
     let state = Arc::new(Mutex::new(State::default()));
-    let system = zbus::blocking::Connection::system()?;
-    let session_bus = zbus::blocking::Connection::session()?;
+    let system = zbus::block_on(zbus::Connection::system())?;
+    let session_bus = zbus::block_on(zbus::Connection::session())?;
     let buses = Arc::new(Buses {
         session: session_bus.clone(),
         system: system.clone(),
     });
-    let served = zbus::blocking::connection::Builder::session()?
-        .name(service::NAME)?
-        .serve_at(
-            service::PATH,
-            Miracast {
-                state: state.clone(),
-                buses,
-                name: hostname(),
-            },
-        )?
-        .build()?;
+    let served = zbus::block_on(
+        zbus::connection::Builder::session()
+            .name(service::NAME)
+            .serve_at(
+                service::PATH,
+                Miracast {
+                    state: state.clone(),
+                    buses,
+                    name: hostname(),
+                },
+            )
+            .build(),
+    )?;
 
     let finders = [
         {

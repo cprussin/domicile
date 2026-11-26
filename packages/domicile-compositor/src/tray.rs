@@ -34,13 +34,14 @@ use domicile_host::tray::{
 };
 use domicile_protocol::{TrayAction, TrayItem};
 use tracing::{debug, warn};
-use zbus::blocking::connection::Builder;
-use zbus::blocking::object_server::InterfaceRef;
-use zbus::blocking::{Connection, MessageIterator, Proxy};
+use zbus::connection::Builder;
+use zbus::export::ordered_stream::OrderedStreamExt;
 use zbus::message::{Header, Type};
+use zbus::object_server::InterfaceRef;
 use zbus::object_server::SignalEmitter;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 use zbus::MatchRule;
+use zbus::{Connection, MessageStream, Proxy};
+use zbus::{OwnedObjectPath, OwnedVariant};
 
 /// The watcher's bus name. Items look for KDE's name; the freedesktop one was
 /// never adopted.
@@ -73,7 +74,7 @@ enum Event {
     Read {
         id: String,
         sequence: u64,
-        properties: zbus::Result<HashMap<String, OwnedValue>>,
+        properties: zbus::Result<HashMap<String, OwnedVariant>>,
     },
     /// A shell clicked an entry of the menu on `bus`, with a `token` to raise
     /// a window with. The click itself is the shell's own D-Bus call.
@@ -177,22 +178,22 @@ fn answer(
     pids: &Mutex<Pids>,
     publish: &dyn Fn(Vec<TrayItem>),
 ) -> zbus::Result<()> {
-    let connection = answering_within(Builder::session()?).build()?;
-    connection.object_server().at(
+    let connection = zbus::block_on(answering_within(Builder::session()).build())?;
+    zbus::block_on(connection.object_server().at(
         WATCHER_PATH,
         Watcher {
             told: told.clone(),
             items: Vec::new(),
         },
-    )?;
+    ))?;
     // Listen before taking the name, so an item that registers and changes
     // immediately is not missed.
     listen(
         &connection,
         MatchRule::builder()
             .msg_type(Type::Signal)
-            .interface(ITEM_INTERFACE)?
-            .build(),
+            .interface(ITEM_INTERFACE)
+            .build()?,
         told.clone(),
         changed,
     )?;
@@ -200,21 +201,25 @@ fn answer(
         &connection,
         MatchRule::builder()
             .msg_type(Type::Signal)
-            .sender("org.freedesktop.DBus")?
-            .interface("org.freedesktop.DBus")?
-            .member("NameOwnerChanged")?
-            .build(),
+            .sender("org.freedesktop.DBus")
+            .interface("org.freedesktop.DBus")
+            .member("NameOwnerChanged")
+            .build()?,
         told.clone(),
         owner,
     )?;
     crate::bus_names::take(&connection, WATCHER_NAME, in_a_window)?;
     // Some items check for a host name before registering.
-    connection.request_name(format!("org.kde.StatusNotifierHost-{}", std::process::id()))?;
+    zbus::block_on(
+        connection.request_name(format!("org.kde.StatusNotifierHost-{}", std::process::id())),
+    )?;
     debug!("this desktop hosts the system tray");
 
-    let watcher = connection
-        .object_server()
-        .interface::<_, Watcher>(WATCHER_PATH)?;
+    let watcher = zbus::block_on(
+        connection
+            .object_server()
+            .interface::<_, Watcher>(WATCHER_PATH),
+    )?;
     let mut registry = Registry::default();
     let mut reads = Reads::default();
     // Reads in a row that timed out, by item, for the wait before the next.
@@ -340,11 +345,12 @@ fn listed(
     arrived: Option<&str>,
     left: Option<&str>,
 ) {
-    watcher.get_mut().items = registry.ids();
+    zbus::block_on(watcher.get_mut()).items = registry.ids();
     let emitter = watcher.signal_emitter();
     let said = zbus::block_on(async {
         watcher
             .get()
+            .await
             .registered_status_notifier_items_changed(emitter)
             .await?;
         if let Some(id) = arrived {
@@ -431,9 +437,14 @@ fn get_all(
     connection: &Connection,
     bus: &str,
     path: &str,
-) -> zbus::Result<HashMap<String, OwnedValue>> {
-    Proxy::new(connection, bus, path, "org.freedesktop.DBus.Properties")
-        .and_then(|proxy| proxy.call("GetAll", &(ITEM_INTERFACE,)))
+) -> zbus::Result<HashMap<String, OwnedVariant>> {
+    zbus::block_on(Proxy::new(
+        connection,
+        bus,
+        path,
+        "org.freedesktop.DBus.Properties",
+    ))
+    .and_then(|proxy| zbus::block_on(proxy.call("GetAll", &(ITEM_INTERFACE,))))
 }
 
 /// Calls the method for `action` on item `id`, after handing it `token`.
@@ -452,13 +463,18 @@ fn activate(
         debug!(%id, "a click on a tray icon that has gone");
         return;
     };
-    let called =
-        Proxy::new(connection, bus.as_str(), path.as_str(), ITEM_INTERFACE).and_then(|proxy| {
-            proxy.call_noreply("ProvideXdgActivationToken", &(token,))?;
-            // Screen coordinates, used only by X11 items to place a window.
-            // Wayland clients cannot place windows, so send the origin.
-            proxy.call_noreply(method(action), &(0i32, 0i32))
-        });
+    let called = zbus::block_on(Proxy::new(
+        connection,
+        bus.as_str(),
+        path.as_str(),
+        ITEM_INTERFACE,
+    ))
+    .and_then(|proxy| {
+        zbus::block_on(proxy.call_noreply("ProvideXdgActivationToken", &(token,)))?;
+        // Screen coordinates, used only by X11 items to place a window.
+        // Wayland clients cannot place windows, so send the origin.
+        zbus::block_on(proxy.call_noreply(method(action), &(0i32, 0i32)))
+    });
     if let Err(why) = called {
         debug!(%id, %why, "a tray icon could not be clicked");
     }
@@ -466,8 +482,10 @@ fn activate(
 
 /// Hands the item at `path` on `bus` `token`, for a click on its menu.
 fn provide(connection: &Connection, bus: &str, path: &str, token: &str) {
-    let called = Proxy::new(connection, bus, path, ITEM_INTERFACE)
-        .and_then(|proxy| proxy.call_noreply("ProvideXdgActivationToken", &(token,)));
+    let called =
+        zbus::block_on(Proxy::new(connection, bus, path, ITEM_INTERFACE)).and_then(|proxy| {
+            zbus::block_on(proxy.call_noreply("ProvideXdgActivationToken", &(token,)))
+        });
     if let Err(why) = called {
         debug!(%bus, %why, "a tray icon could not be handed a token");
     }
@@ -477,11 +495,10 @@ fn provide(connection: &Connection, bus: &str, path: &str, token: &str) {
 /// bus will not say, which is logged: a click on its icon then cannot let it
 /// raise its window with a token of its own.
 fn pid(connection: &Connection, name: &str) -> Option<u32> {
-    zbus::blocking::fdo::DBusProxy::new(connection)
+    zbus::block_on(zbus::fdo::DBusProxy::new(connection))
         .and_then(|bus| {
-            let name = zbus::names::BusName::try_from(name).map_err(zbus::Error::from)?;
-            bus.get_connection_unix_process_id(name)
-                .map_err(zbus::Error::from)
+            let name = zbus::names::BusName::try_from(name)?;
+            zbus::block_on(bus.get_connection_unix_process_id(name)).map_err(zbus::Error::from)
         })
         .inspect_err(|why| warn!(%why, %name, "a tray icon's process could not be asked"))
         .ok()
@@ -489,7 +506,7 @@ fn pid(connection: &Connection, name: &str) -> Option<u32> {
 
 /// Converts an item's `GetAll` reply to [`Properties`]. A missing or
 /// wrongly typed property reads as empty.
-fn parse(mut properties: HashMap<String, OwnedValue>) -> Properties {
+fn parse(mut properties: HashMap<String, OwnedVariant>) -> Properties {
     let mut text = |name: &str| {
         properties
             .remove(name)
@@ -561,9 +578,9 @@ fn listen(
     told: Sender<Event>,
     heard: fn(&zbus::Message) -> Option<Event>,
 ) -> zbus::Result<()> {
-    let messages = MessageIterator::for_match_rule(rule, connection, None)?;
+    let mut messages = zbus::block_on(MessageStream::for_match_rule(rule, connection, None))?;
     thread::spawn(move || {
-        for message in messages {
+        for message in std::iter::from_fn(|| zbus::block_on(messages.next())) {
             match message {
                 Ok(message) => {
                     if let Some(event) = heard(&message) {
@@ -655,7 +672,7 @@ mod tests {
     use super::*;
     use crate::portals::socket_pair::connected_both;
     use std::time::Instant;
-    use zbus::zvariant::{ObjectPath, Value};
+    use zbus::{ObjectPath, Variant};
 
     #[test]
     fn a_hung_item_is_asked_again_ever_more_slowly() {
@@ -681,13 +698,13 @@ mod tests {
     }
 
     /// `properties` in the shape of a `GetAll` reply.
-    fn answered(properties: Vec<(&str, Value<'static>)>) -> HashMap<String, OwnedValue> {
+    fn answered(properties: Vec<(&str, Variant<'static>)>) -> HashMap<String, OwnedVariant> {
         properties
             .into_iter()
             .map(|(name, value)| {
                 (
                     name.to_string(),
-                    OwnedValue::try_from(value).expect("an ownable value"),
+                    OwnedVariant::try_from(value).expect("an ownable value"),
                 )
             })
             .collect()
@@ -697,22 +714,22 @@ mod tests {
     fn what_an_item_says_is_read_into_its_properties() {
         let pixmaps = vec![(1i32, 1i32, vec![255u8, 255, 0, 0])];
         let read = parse(answered(vec![
-            ("Id", Value::from("nm-applet")),
-            ("Title", Value::from("Network")),
-            ("Status", Value::from("NeedsAttention")),
-            ("IconName", Value::from("nm-signal-75")),
-            ("AttentionIconName", Value::from("nm-no-connection")),
-            ("IconThemePath", Value::from("/opt/nm/icons")),
+            ("Id", Variant::from("nm-applet")),
+            ("Title", Variant::from("Network")),
+            ("Status", Variant::from("NeedsAttention")),
+            ("IconName", Variant::from("nm-signal-75")),
+            ("AttentionIconName", Variant::from("nm-no-connection")),
+            ("IconThemePath", Variant::from("/opt/nm/icons")),
             (
                 "Menu",
-                Value::from(ObjectPath::try_from("/MenuBar").expect("a path")),
+                Variant::from(ObjectPath::try_from("/MenuBar").expect("a path")),
             ),
-            ("ItemIsMenu", Value::from(true)),
-            ("IconPixmap", Value::from(pixmaps.clone())),
-            ("AttentionIconPixmap", Value::from(pixmaps)),
+            ("ItemIsMenu", Variant::from(true)),
+            ("IconPixmap", Variant::from(pixmaps.clone())),
+            ("AttentionIconPixmap", Variant::from(pixmaps)),
             (
                 "ToolTip",
-                Value::from((
+                Variant::from((
                     String::new(),
                     Vec::<(i32, i32, Vec<u8>)>::new(),
                     "Wired connection 1".to_string(),
@@ -748,8 +765,8 @@ mod tests {
     fn a_property_left_out_or_of_the_wrong_type_is_empty() {
         // Every property is optional, and a wrongly typed one is ignored.
         let read = parse(answered(vec![
-            ("Id", Value::from("sync")),
-            ("Title", Value::from(7u32)),
+            ("Id", Variant::from("sync")),
+            ("Title", Variant::from(7u32)),
         ]));
 
         assert_eq!(

@@ -34,7 +34,7 @@ use domicile_protocol::{
 };
 use tracing::{debug, info, warn};
 use zbus::object_server::ObjectServer;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
 use super::queue::{ask, Queue};
 use super::screenshot::{frozen, Shoot};
@@ -244,8 +244,8 @@ impl ScreenCast {
         _handle: OwnedObjectPath,
         session_handle: OwnedObjectPath,
         _app_id: String,
-        _options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        _options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let closing = Closing {
             queue: Arc::clone(&self.queue),
             casting: self.casting.clone(),
@@ -274,8 +274,8 @@ impl ScreenCast {
         _handle: OwnedObjectPath,
         session_handle: OwnedObjectPath,
         _app_id: String,
-        options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let selected = match selected(&options) {
             Ok(selected) => selected,
             Err(why) => {
@@ -301,8 +301,8 @@ impl ScreenCast {
         session_handle: OwnedObjectPath,
         app_id: String,
         parent_window: String,
-        _options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        _options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let Some(selected) = self
             .sessions
             .lock()
@@ -365,7 +365,10 @@ impl ScreenCast {
                 // The user picks once, for this connection's other session.
                 Some(closed) => {
                     closed.await;
-                    async_io::Timer::after(AFTER_THE_PICK).await;
+                    zruntime::SharedRuntime::current()
+                        .expect("this thread runs zbus's runtime")
+                        .sleep(AFTER_THE_PICK)
+                        .await;
                     debug!("a cast started while its app's picker was up is canceled");
                     return (1, HashMap::new());
                 }
@@ -441,7 +444,7 @@ impl ScreenCast {
         }
         let mut results = HashMap::from([(
             "streams".to_string(),
-            owned(Value::from(
+            owned(Variant::from(
                 streams
                     .iter()
                     .zip(&picked)
@@ -452,11 +455,15 @@ impl ScreenCast {
         if let Some(token) = self.remember(&selected, &picked, &monitors) {
             results.insert(
                 "persist_mode".to_string(),
-                owned(Value::from(selected.persist.mode())),
+                owned(Variant::from(selected.persist.mode())),
             );
             results.insert(
                 "restore_data".to_string(),
-                owned(Value::from((VENDOR, RESTORE_VERSION, Value::from(token)))),
+                owned(Variant::from((
+                    VENDOR,
+                    RESTORE_VERSION,
+                    Variant::from(token),
+                ))),
             );
         }
         drop(picker_up);
@@ -775,17 +782,12 @@ impl Ending {
         }
         let connection = self.connection.clone();
         let handle = self.handle.clone();
-        self.connection
-            .executor()
-            .spawn(
-                async move {
-                    if let Err(why) = session::end(connection.object_server(), &handle).await {
-                        tracing::error!(%why, %handle, "an application was not told its screen cast ended");
-                    }
-                },
-                "end a screen cast session",
-            )
-            .detach();
+        zruntime::spawn(async move {
+            if let Err(why) = session::end(connection.object_server(), &handle).await {
+                tracing::error!(%why, %handle, "an application was not told its screen cast ended");
+            }
+        })
+        .detach();
     }
 }
 
@@ -908,7 +910,7 @@ fn listener(stream: StreamId, ready: Replier<u32>, ending: Ending) -> crate::cas
 }
 
 /// The `SelectSources` options, read.
-fn selected(options: &HashMap<String, OwnedValue>) -> Result<Selected, String> {
+fn selected(options: &HashMap<String, OwnedVariant>) -> Result<Selected, String> {
     let number = |name: &str| -> Result<Option<u32>, String> {
         options
             .get(name)
@@ -944,16 +946,16 @@ fn selected(options: &HashMap<String, OwnedValue>) -> Result<Selected, String> {
 
 /// The token in `restore_data` this backend wrote, or `None` for another
 /// backend's.
-fn restore_token(data: &OwnedValue) -> Option<String> {
-    let Value::Structure(data) = &**data else {
+fn restore_token(data: &OwnedVariant) -> Option<String> {
+    let Variant::Structure(data) = &**data else {
         return None;
     };
     match data.fields() {
-        [Value::Str(vendor), Value::U32(RESTORE_VERSION), Value::Value(token)]
+        [Variant::Str(vendor), Variant::U32(RESTORE_VERSION), Variant::Variant(token)]
             if vendor.as_str() == VENDOR =>
         {
             match &**token {
-                Value::Str(token) => Some(token.to_string()),
+                Variant::Str(token) => Some(token.to_string()),
                 _ => None,
             }
         }
@@ -1183,26 +1185,29 @@ fn captured_monitor(screen: &Candidate) -> CapturedMonitor {
 }
 
 /// A stream's properties for `Start`'s results.
-fn stream_properties(candidate: &Candidate) -> HashMap<String, OwnedValue> {
+fn stream_properties(candidate: &Candidate) -> HashMap<String, OwnedVariant> {
     let mut properties = HashMap::from([(
         "source_type".to_string(),
-        owned(Value::from(source_type(&candidate.source))),
+        owned(Variant::from(source_type(&candidate.source))),
     )]);
     match &candidate.source {
         Source::Window(id) | Source::BrowserWindow(id) | Source::Monitor(id) => {
-            properties.insert("id".to_string(), owned(Value::from(id.as_str())));
+            properties.insert("id".to_string(), owned(Variant::from(id.as_str())));
         }
         Source::Region(_) => {}
     }
     if let Some(bounds) = candidate.bounds {
-        properties.insert("position".to_string(), owned(Value::from(bounds.position)));
-        properties.insert("size".to_string(), owned(Value::from(bounds.size)));
+        properties.insert(
+            "position".to_string(),
+            owned(Variant::from(bounds.position)),
+        );
+        properties.insert("size".to_string(), owned(Variant::from(bounds.size)));
     }
     properties
 }
 
-fn owned(value: Value<'_>) -> OwnedValue {
-    OwnedValue::try_from(value).expect("a value with no file descriptors is ownable")
+fn owned(value: Variant<'_>) -> OwnedVariant {
+    OwnedVariant::try_from(value).expect("a value with no file descriptors is ownable")
 }
 
 /// A new restore token: 128 random bits as hex.
@@ -1221,6 +1226,7 @@ mod tests {
     use std::sync::mpsc::{channel, Receiver};
     use std::thread;
     use std::time::Duration;
+    use zbus::export::ordered_stream::OrderedStreamExt;
 
     use domicile_protocol::{
         Captured, CapturedMonitor, Capturing, CapturingKind, CastPick, CastSource, PortalAnswer,
@@ -1228,7 +1234,7 @@ mod tests {
     };
     use smithay::reexports::calloop::channel::{channel as calloop_channel, Event as Heard};
     use smithay::reexports::calloop::EventLoop;
-    use zbus::zvariant::{ObjectPath, OwnedValue, Value};
+    use zbus::{ObjectPath, OwnedVariant, Variant};
 
     use crate::casting::{Candidate, Desk, Ended, Event, Region, Request, Source};
     use crate::portals::screenshot::{Shoot, Shots};
@@ -1241,13 +1247,13 @@ mod tests {
 
     /// What the backend published, and the casts it started and stopped.
     struct Served {
-        client: zbus::blocking::Connection,
+        client: zbus::Connection,
         queue: Arc<Queue>,
         published: Receiver<(Vec<PortalRequest>, Vec<Capturing>)>,
         casts: Receiver<String>,
         /// Set, the next stream started never gets ready.
         hold: Arc<AtomicBool>,
-        _server: zbus::blocking::Connection,
+        _server: zbus::Connection,
     }
 
     /// The backend, over windows `app-3` ("Notes", `org.gnome.TextEditor`)
@@ -1275,9 +1281,7 @@ mod tests {
         let (server, client) = connected(|builder| {
             builder
                 .serve_at(OBJECT_PATH, picks)
-                .expect("the picks registered")
                 .serve_at(OBJECT_PATH, backend)
-                .expect("the interface registered")
         });
         Served {
             client,
@@ -1404,12 +1408,12 @@ mod tests {
         ]
     }
 
-    fn options(sent: Vec<(&str, Value<'static>)>) -> HashMap<String, OwnedValue> {
+    fn options(sent: Vec<(&str, Variant<'static>)>) -> HashMap<String, OwnedVariant> {
         sent.into_iter()
             .map(|(name, value)| {
                 (
                     name.to_string(),
-                    OwnedValue::try_from(value).expect("an ownable value"),
+                    OwnedVariant::try_from(value).expect("an ownable value"),
                 )
             })
             .collect()
@@ -1420,13 +1424,12 @@ mod tests {
     }
 
     /// Call `method` with the request handle, `SESSION` and `rest`.
-    fn call<B: zbus::export::serde::Serialize + zbus::zvariant::DynamicType>(
-        client: &zbus::blocking::Connection,
+    fn call<B: zbus::export::serde::Serialize + zbus::DynamicType>(
+        client: &zbus::Connection,
         method: &str,
         body: &B,
-    ) -> (u32, HashMap<String, OwnedValue>) {
-        client
-            .call_method(None::<&str>, OBJECT_PATH, Some(INTERFACE), method, body)
+    ) -> (u32, HashMap<String, OwnedVariant>) {
+        zbus::block_on(client.call_method(None::<&str>, OBJECT_PATH, Some(INTERFACE), method, body))
             .unwrap_or_else(|why| panic!("{method} failed: {why}"))
             .body()
             .deserialize()
@@ -1434,16 +1437,12 @@ mod tests {
     }
 
     /// Create a session and select sources with `select`.
-    fn select(client: &zbus::blocking::Connection, select: Vec<(&str, Value<'static>)>) {
+    fn select(client: &zbus::Connection, select: Vec<(&str, Variant<'static>)>) {
         select_on(client, SESSION, select);
     }
 
     /// [`select`], on session `session`.
-    fn select_on(
-        client: &zbus::blocking::Connection,
-        session: &str,
-        select: Vec<(&str, Value<'static>)>,
-    ) {
+    fn select_on(client: &zbus::Connection, session: &str, select: Vec<(&str, Variant<'static>)>) {
         let (response, _) = call(
             client,
             "CreateSession",
@@ -1470,8 +1469,8 @@ mod tests {
 
     /// Call `Start` from another thread.
     fn start(
-        client: &zbus::blocking::Connection,
-    ) -> thread::JoinHandle<(u32, HashMap<String, OwnedValue>)> {
+        client: &zbus::Connection,
+    ) -> thread::JoinHandle<(u32, HashMap<String, OwnedVariant>)> {
         start_on(
             client,
             SESSION,
@@ -1481,10 +1480,10 @@ mod tests {
 
     /// [`start`], on session `session` with request `request`.
     fn start_on(
-        client: &zbus::blocking::Connection,
+        client: &zbus::Connection,
         session: &'static str,
         request: &'static str,
-    ) -> thread::JoinHandle<(u32, HashMap<String, OwnedValue>)> {
+    ) -> thread::JoinHandle<(u32, HashMap<String, OwnedVariant>)> {
         let client = client.clone();
         thread::spawn(move || {
             call(
@@ -1511,7 +1510,7 @@ mod tests {
     }
 
     /// Pick `app-3` in the dialog `Start` puts up.
-    fn pick_notes(served: &Served) -> (u32, HashMap<String, OwnedValue>) {
+    fn pick_notes(served: &Served) -> (u32, HashMap<String, OwnedVariant>) {
         pick(
             served,
             vec![CastPick::Window {
@@ -1522,7 +1521,7 @@ mod tests {
     }
 
     /// Pick `sources` in the dialog `Start` puts up.
-    fn pick(served: &Served, sources: Vec<CastPick>) -> (u32, HashMap<String, OwnedValue>) {
+    fn pick(served: &Served, sources: Vec<CastPick>) -> (u32, HashMap<String, OwnedVariant>) {
         let starting = start(&served.client);
         let (items, _) = next(&served.published);
         served
@@ -1532,8 +1531,8 @@ mod tests {
     }
 
     /// Each stream's properties in `Start`'s results.
-    fn streams(results: &HashMap<String, OwnedValue>) -> Vec<HashMap<String, OwnedValue>> {
-        let streams: Vec<(u32, HashMap<String, OwnedValue>)> = results
+    fn streams(results: &HashMap<String, OwnedVariant>) -> Vec<HashMap<String, OwnedVariant>> {
+        let streams: Vec<(u32, HashMap<String, OwnedVariant>)> = results
             .get("streams")
             .expect("streams")
             .try_clone()
@@ -1550,9 +1549,9 @@ mod tests {
     }
 
     /// Property `name` of a stream, read as `T`.
-    fn read<T>(properties: &HashMap<String, OwnedValue>, name: &str) -> T
+    fn read<T>(properties: &HashMap<String, OwnedVariant>, name: &str) -> T
     where
-        T: TryFrom<OwnedValue>,
+        T: TryFrom<OwnedVariant>,
         T::Error: std::fmt::Debug,
     {
         T::try_from(
@@ -1585,16 +1584,14 @@ mod tests {
     }
 
     fn close(served: &Served) {
-        served
-            .client
-            .call_method(
-                None::<&str>,
-                SESSION,
-                Some("org.freedesktop.impl.portal.Session"),
-                "Close",
-                &(),
-            )
-            .expect("Close answered");
+        zbus::block_on(served.client.call_method(
+            None::<&str>,
+            SESSION,
+            Some("org.freedesktop.impl.portal.Session"),
+            "Close",
+            &(),
+        ))
+        .expect("Close answered");
     }
 
     #[track_caller]
@@ -1607,7 +1604,7 @@ mod tests {
     #[test]
     fn the_shell_picks_from_the_open_windows() {
         let served = served(Grants::default());
-        select(&served.client, vec![("types", Value::from(2u32))]);
+        select(&served.client, vec![("types", Variant::from(2u32))]);
         let starting = start(&served.client);
 
         let (items, _) = next(&served.published);
@@ -1648,8 +1645,8 @@ mod tests {
         select(
             &served.client,
             vec![
-                ("types", Value::from(1u32)),
-                ("multiple", Value::from(true)),
+                ("types", Variant::from(1u32)),
+                ("multiple", Variant::from(true)),
             ],
         );
         let starting = start(&served.client);
@@ -1708,7 +1705,7 @@ mod tests {
             })
         });
         let served = served_shooting(Grants::default(), shoot);
-        select(&served.client, vec![("types", Value::from(1u32))]);
+        select(&served.client, vec![("types", Variant::from(1u32))]);
         let starting = start(&served.client);
 
         let (items, _) = next(&served.published);
@@ -1727,22 +1724,20 @@ mod tests {
 
     /// What `Pick` says of node 42, the fake Wayland thread's every stream.
     fn picked(served: &Served) -> zbus::Result<(u32, String, String)> {
-        served
-            .client
-            .call_method(
-                None::<&str>,
-                OBJECT_PATH,
-                Some("com.domicile_desktop.ScreenCast"),
-                "Pick",
-                &(42u32,),
-            )
-            .map(|reply| reply.body().deserialize().expect("(uss)"))
+        zbus::block_on(served.client.call_method(
+            None::<&str>,
+            OBJECT_PATH,
+            Some("com.domicile_desktop.ScreenCast"),
+            "Pick",
+            &(42u32,),
+        ))
+        .map(|reply| reply.body().deserialize().expect("(uss)"))
     }
 
     #[test]
     fn the_engine_learns_what_a_streams_node_shows() {
         let served = served(Grants::default());
-        select(&served.client, vec![("types", Value::from(2u32))]);
+        select(&served.client, vec![("types", Variant::from(2u32))]);
         assert!(picked(&served).is_err(), "nothing is cast yet");
 
         pick_notes(&served);
@@ -1760,7 +1755,7 @@ mod tests {
     #[test]
     fn a_monitors_stream_carries_the_desks_sound() {
         let served = served(Grants::default());
-        select(&served.client, vec![("types", Value::from(1u32))]);
+        select(&served.client, vec![("types", Variant::from(1u32))]);
 
         pick(
             &served,
@@ -1779,7 +1774,7 @@ mod tests {
     #[test]
     fn a_browser_windows_stream_names_it_and_carries_no_sound() {
         let served = served(Grants::default());
-        select(&served.client, vec![("types", Value::from(2u32))]);
+        select(&served.client, vec![("types", Variant::from(2u32))]);
 
         pick(&served, vec![meet()]);
         heard(&served.casts);
@@ -1793,7 +1788,7 @@ mod tests {
     #[test]
     fn a_picked_browser_window_is_cast_by_the_engines_id() {
         let served = served(Grants::default());
-        select(&served.client, vec![("types", Value::from(2u32))]);
+        select(&served.client, vec![("types", Variant::from(2u32))]);
 
         let (response, results) = pick(&served, vec![meet()]);
 
@@ -1812,13 +1807,13 @@ mod tests {
     #[test]
     fn a_restore_token_shares_the_same_browser_window_without_asking() {
         let served = served(Grants::default());
-        let windows = |restore: Option<OwnedValue>| {
+        let windows = |restore: Option<OwnedVariant>| {
             let mut options = vec![
-                ("types", Value::from(2u32)),
-                ("persist_mode", Value::from(1u32)),
+                ("types", Variant::from(2u32)),
+                ("persist_mode", Variant::from(1u32)),
             ];
             if let Some(restore) = restore {
-                options.push(("restore_data", Value::from(restore)));
+                options.push(("restore_data", Variant::from(restore)));
             }
             options
         };
@@ -1853,13 +1848,13 @@ mod tests {
     #[test]
     fn a_restore_closed_before_it_answered_is_restored_by_the_next_ask() {
         let served = served(Grants::default());
-        let windows = |restore: Option<OwnedValue>| {
+        let windows = |restore: Option<OwnedVariant>| {
             let mut options = vec![
-                ("types", Value::from(3u32)),
-                ("persist_mode", Value::from(1u32)),
+                ("types", Variant::from(3u32)),
+                ("persist_mode", Variant::from(1u32)),
             ];
             if let Some(restore) = restore {
-                options.push(("restore_data", Value::from(restore)));
+                options.push(("restore_data", Variant::from(restore)));
             }
             options
         };
@@ -1906,13 +1901,13 @@ mod tests {
     #[test]
     fn a_restore_closed_before_it_started_does_not_carry_over() {
         let served = served(Grants::default());
-        let windows = |restore: Option<OwnedValue>| {
+        let windows = |restore: Option<OwnedVariant>| {
             let mut options = vec![
-                ("types", Value::from(3u32)),
-                ("persist_mode", Value::from(1u32)),
+                ("types", Variant::from(3u32)),
+                ("persist_mode", Variant::from(1u32)),
             ];
             if let Some(restore) = restore {
-                options.push(("restore_data", Value::from(restore)));
+                options.push(("restore_data", Variant::from(restore)));
             }
             options
         };
@@ -1966,8 +1961,8 @@ mod tests {
         select(
             &served.client,
             vec![
-                ("types", Value::from(2u32)),
-                ("persist_mode", Value::from(2u32)),
+                ("types", Variant::from(2u32)),
+                ("persist_mode", Variant::from(2u32)),
             ],
         );
 
@@ -1980,13 +1975,13 @@ mod tests {
     #[test]
     fn a_restore_token_shares_the_same_part_of_a_window_without_asking() {
         // A page's capture restores the pick of its picker session this way.
-        let windows = |restore: Option<OwnedValue>| {
+        let windows = |restore: Option<OwnedVariant>| {
             let mut options = vec![
-                ("types", Value::from(2u32)),
-                ("persist_mode", Value::from(1u32)),
+                ("types", Variant::from(2u32)),
+                ("persist_mode", Variant::from(1u32)),
             ];
             if let Some(restore) = restore {
-                options.push(("restore_data", Value::from(restore)));
+                options.push(("restore_data", Variant::from(restore)));
             }
             options
         };
@@ -2043,8 +2038,8 @@ mod tests {
         select(
             &served.client,
             vec![
-                ("types", Value::from(2u32)),
-                ("persist_mode", Value::from(2u32)),
+                ("types", Variant::from(2u32)),
+                ("persist_mode", Variant::from(2u32)),
             ],
         );
 
@@ -2082,8 +2077,8 @@ mod tests {
         select(
             &served.client,
             vec![
-                ("types", Value::from(1u32)),
-                ("cursor_mode", Value::from(4u32)),
+                ("types", Variant::from(1u32)),
+                ("cursor_mode", Variant::from(4u32)),
             ],
         );
 
@@ -2117,8 +2112,8 @@ mod tests {
     fn a_cast_started_while_its_apps_picker_is_up_is_canceled_after_the_pick() {
         const SECOND: &str = "/org/freedesktop/portal/desktop/session/1_7/second";
         let served = served(Grants::default());
-        select(&served.client, vec![("types", Value::from(1u32))]);
-        select_on(&served.client, SECOND, vec![("types", Value::from(2u32))]);
+        select(&served.client, vec![("types", Variant::from(1u32))]);
+        select_on(&served.client, SECOND, vec![("types", Variant::from(2u32))]);
         let first = start(&served.client);
         let (items, _) = next(&served.published);
         let second = start_on(
@@ -2165,7 +2160,7 @@ mod tests {
     fn an_apps_asks_for_windows_after_it_picked_a_screen_are_canceled() {
         const LATER: &str = "/org/freedesktop/portal/desktop/session/1_7/later";
         let served = served(Grants::default());
-        select(&served.client, vec![("types", Value::from(1u32))]);
+        select(&served.client, vec![("types", Variant::from(1u32))]);
         let first = start(&served.client);
         let (items, _) = next(&served.published);
         served.queue.answer(
@@ -2179,7 +2174,7 @@ mod tests {
         assert_eq!(first.join().expect("Start returned").0, 0);
 
         for types in [2u32, 3] {
-            select_on(&served.client, LATER, vec![("types", Value::from(types))]);
+            select_on(&served.client, LATER, vec![("types", Variant::from(types))]);
             let later = start_on(
                 &served.client,
                 LATER,
@@ -2235,7 +2230,7 @@ mod tests {
     #[test]
     fn a_drawn_region_is_cast_where_it_was_drawn() {
         let served = served(Grants::default());
-        select(&served.client, vec![("types", Value::from(4u32))]);
+        select(&served.client, vec![("types", Variant::from(4u32))]);
 
         let (response, results) = pick(
             &served,
@@ -2270,7 +2265,7 @@ mod tests {
     #[test]
     fn a_region_over_one_whole_monitor_is_listed_as_that_monitor() {
         let served = served(Grants::default());
-        select(&served.client, vec![("types", Value::from(4u32))]);
+        select(&served.client, vec![("types", Variant::from(4u32))]);
 
         pick(
             &served,
@@ -2292,7 +2287,7 @@ mod tests {
     #[test]
     fn a_region_over_every_monitor_is_listed_as_the_desk() {
         let served = served(Grants::default());
-        select(&served.client, vec![("types", Value::from(4u32))]);
+        select(&served.client, vec![("types", Variant::from(4u32))]);
 
         pick(
             &served,
@@ -2308,14 +2303,14 @@ mod tests {
     #[test]
     fn a_restore_token_shares_the_same_monitor_and_region_without_asking() {
         let served = served(Grants::default());
-        let both = |restore: Option<OwnedValue>| {
+        let both = |restore: Option<OwnedVariant>| {
             let mut options = vec![
-                ("types", Value::from(1u32 | 4)),
-                ("multiple", Value::from(true)),
-                ("persist_mode", Value::from(1u32)),
+                ("types", Variant::from(1u32 | 4)),
+                ("multiple", Variant::from(true)),
+                ("persist_mode", Variant::from(1u32)),
             ];
             if let Some(restore) = restore {
-                options.push(("restore_data", Value::from(restore)));
+                options.push(("restore_data", Variant::from(restore)));
             }
             options
         };
@@ -2364,7 +2359,7 @@ mod tests {
     #[test]
     fn a_picked_window_is_cast_and_its_node_handed_back() {
         let served = served(Grants::default());
-        select(&served.client, vec![("types", Value::from(2u32))]);
+        select(&served.client, vec![("types", Variant::from(2u32))]);
 
         let (response, results) = pick_notes(&served);
 
@@ -2398,7 +2393,7 @@ mod tests {
     #[test]
     fn closing_the_session_stops_its_streams() {
         let served = served(Grants::default());
-        select(&served.client, vec![("types", Value::from(2u32))]);
+        select(&served.client, vec![("types", Variant::from(2u32))]);
         pick_notes(&served);
         heard(&served.casts);
 
@@ -2411,17 +2406,17 @@ mod tests {
     #[test]
     fn the_shell_s_stop_ends_the_session() {
         let served = served(Grants::default());
-        select(&served.client, vec![("types", Value::from(2u32))]);
+        select(&served.client, vec![("types", Variant::from(2u32))]);
         pick_notes(&served);
         heard(&served.casts);
         let capture = served.published.try_iter().last().expect("published").1[0].id;
-        let mut messages = zbus::blocking::MessageIterator::from(&served.client);
+        let mut messages = zbus::MessageStream::from(&served.client);
 
         served.queue.answer(capture, PortalAnswer::Stop);
 
         assert_eq!(heard(&served.casts), "stop");
         assert!(
-            messages.any(|message| {
+            std::iter::from_fn(|| zbus::block_on(messages.next())).any(|message| {
                 message
                     .expect("a message")
                     .header()
@@ -2441,8 +2436,8 @@ mod tests {
         select(
             &served.client,
             vec![
-                ("types", Value::from(2u32)),
-                ("persist_mode", Value::from(2u32)),
+                ("types", Variant::from(2u32)),
+                ("persist_mode", Variant::from(2u32)),
             ],
         );
         let (_, results) = pick_notes(&served);
@@ -2464,9 +2459,9 @@ mod tests {
         select(
             &served.client,
             vec![
-                ("types", Value::from(2u32)),
-                ("persist_mode", Value::from(2u32)),
-                ("restore_data", Value::from(restore)),
+                ("types", Variant::from(2u32)),
+                ("persist_mode", Variant::from(2u32)),
+                ("restore_data", Variant::from(restore)),
             ],
         );
         let (response, _) = start(&served.client).join().expect("Start returned");
@@ -2486,12 +2481,12 @@ mod tests {
     fn options_this_backend_cannot_meet_are_refused() {
         let windows_and = |option: &'static str, value: u32| {
             selected(&options(vec![
-                ("types", Value::from(2u32)),
-                (option, Value::from(value)),
+                ("types", Variant::from(2u32)),
+                (option, Variant::from(value)),
             ]))
         };
 
-        let types = |types: u32| selected(&options(vec![("types", Value::from(types))]));
+        let types = |types: u32| selected(&options(vec![("types", Variant::from(types))]));
 
         assert!(windows_and("cursor_mode", 8).is_err());
         assert!(windows_and("persist_mode", 3).is_err());
@@ -2508,8 +2503,9 @@ mod tests {
 
     #[test]
     fn the_shell_may_pick_only_what_was_asked_for() {
-        let asked =
-            |types: u32| selected(&options(vec![("types", Value::from(types))])).expect("selected");
+        let asked = |types: u32| {
+            selected(&options(vec![("types", Variant::from(types))])).expect("selected")
+        };
         let open: Vec<Candidate> = windows().into_iter().chain(monitors()).collect();
         let window = |id: &str| CastPick::Window {
             id: id.into(),
@@ -2567,7 +2563,7 @@ mod tests {
     /// one is all of it.
     #[test]
     fn the_shell_may_pick_part_of_a_window() {
-        let asked = selected(&options(vec![("types", Value::from(2u32))])).expect("selected");
+        let asked = selected(&options(vec![("types", Variant::from(2u32))])).expect("selected");
         let open: Vec<Candidate> = windows().into_iter().chain(monitors()).collect();
         let part = |width, height| CastPick::Window {
             id: "app-4".into(),
@@ -2597,21 +2593,19 @@ mod tests {
     fn every_source_type_and_cursor_mode_is_offered() {
         let served = served(Grants::default());
         let property = |name: &str| -> u32 {
-            served
-                .client
-                .call_method(
-                    None::<&str>,
-                    OBJECT_PATH,
-                    Some("org.freedesktop.DBus.Properties"),
-                    "Get",
-                    &(INTERFACE, name),
-                )
-                .expect("Get answered")
-                .body()
-                .deserialize::<OwnedValue>()
-                .expect("a variant")
-                .try_into()
-                .expect("a u32")
+            zbus::block_on(served.client.call_method(
+                None::<&str>,
+                OBJECT_PATH,
+                Some("org.freedesktop.DBus.Properties"),
+                "Get",
+                &(INTERFACE, name),
+            ))
+            .expect("Get answered")
+            .body()
+            .deserialize::<OwnedVariant>()
+            .expect("a variant")
+            .try_into()
+            .expect("a u32")
         };
 
         assert_eq!(property("AvailableSourceTypes"), 7);

@@ -10,7 +10,7 @@ use std::io;
 use domicile_host::priority::{nice, set_nice, Tid};
 use thiserror::Error;
 use tracing::{debug, warn};
-use zbus::blocking::Connection;
+use zbus::Connection;
 
 /// The nice value Chromium gives the threads that draw and present frames
 /// (`ThreadType::kDisplayCritical`).
@@ -45,7 +45,7 @@ pub fn raise_and_say(tid: Tid, thread: &str) {
     match raise(
         current,
         |nice| set_nice(tid, nice),
-        |nice| through_rtkit(&Connection::system()?, tid, nice),
+        |nice| through_rtkit(&zbus::block_on(Connection::system())?, tid, nice),
     ) {
         Ok(Raised::Directly) => debug!(thread, nice = LATENCY_CRITICAL, "raised the thread"),
         Ok(Raised::ThroughRtkit) => debug!(
@@ -97,13 +97,13 @@ pub fn raise(
 ///
 /// rtkit names the process by the caller's D-Bus credentials.
 pub fn through_rtkit(bus: &Connection, tid: Tid, nice: i32) -> zbus::Result<()> {
-    bus.call_method(
+    zbus::block_on(bus.call_method(
         Some("org.freedesktop.RealtimeKit1"),
         "/org/freedesktop/RealtimeKit1",
         Some("org.freedesktop.RealtimeKit1"),
         "MakeThreadHighPriority",
         &(tid as u64, nice),
-    )?;
+    ))?;
     Ok(())
 }
 
@@ -249,9 +249,7 @@ mod tests {
         }
         let (told, heard) = channel();
         let (_server, client) = socket_pair::connected(|server| {
-            server
-                .serve_at("/org/freedesktop/RealtimeKit1", Rtkit(Mutex::new(told)))
-                .unwrap()
+            server.serve_at("/org/freedesktop/RealtimeKit1", Rtkit(Mutex::new(told)))
         });
 
         through_rtkit(&client, 4321, LATENCY_CRITICAL).unwrap();

@@ -9,7 +9,7 @@ use std::time::Duration;
 use domicile_config::LockdownConfig;
 use domicile_host::cups::Cups;
 use domicile_protocol::{Capturing, PortalRequest, Theme};
-use zbus::zvariant::{ObjectPath, OwnedValue, Value};
+use zbus::{ObjectPath, OwnedVariant, Variant};
 
 use super::clipboard::Selection;
 use super::global_shortcuts::Shortcuts;
@@ -26,11 +26,11 @@ const REMOTE_DESKTOP: &str = "org.freedesktop.impl.portal.RemoteDesktop";
 pub const SESSION: &str = "/org/freedesktop/portal/desktop/session/1_7/s";
 pub const APP: &str = "org.example.Remote";
 
-pub type Results = HashMap<String, OwnedValue>;
+pub type Results = HashMap<String, OwnedVariant>;
 
 /// The backend served to a client, over a real EIS loop.
 pub struct Served {
-    pub client: zbus::blocking::Connection,
+    pub client: zbus::Connection,
     pub backends: Backends,
     pub published: Receiver<(Vec<PortalRequest>, Vec<Capturing>)>,
     pub injected: Receiver<ClientRequest>,
@@ -38,7 +38,7 @@ pub struct Served {
     pub input: std::sync::mpsc::Sender<ClientRequest>,
     /// What the backends asked of the clipboard.
     pub selections: Receiver<Selection>,
-    _server: zbus::blocking::Connection,
+    _server: zbus::Connection,
 }
 
 pub fn served(tokens: Tokens) -> Served {
@@ -79,7 +79,6 @@ pub fn served(tokens: Tokens) -> Served {
             Vec::new(),
             "/home/me".into(),
         )
-        .expect("the interfaces registered")
     });
     let hearing = server.clone();
     let hearing_backends = backends.clone();
@@ -106,20 +105,24 @@ pub fn call<B>(
     body: &B,
 ) -> zbus::Result<zbus::message::Message>
 where
-    B: zbus::export::serde::Serialize + zbus::zvariant::DynamicType,
+    B: zbus::export::serde::Serialize + zbus::DynamicType,
 {
-    served
-        .client
-        .call_method(None::<&str>, OBJECT_PATH, Some(interface), method, body)
+    zbus::block_on(served.client.call_method(
+        None::<&str>,
+        OBJECT_PATH,
+        Some(interface),
+        method,
+        body,
+    ))
 }
 
 pub fn path(path: &str) -> ObjectPath<'_> {
     ObjectPath::try_from(path).expect("a path")
 }
 
-pub fn options(sent: Vec<(&str, Value<'static>)>) -> Results {
+pub fn options(sent: Vec<(&str, Variant<'static>)>) -> Results {
     sent.into_iter()
-        .map(|(name, value)| (name.into(), OwnedValue::try_from(value).expect("ownable")))
+        .map(|(name, value)| (name.into(), OwnedVariant::try_from(value).expect("ownable")))
         .collect()
 }
 
@@ -161,15 +164,14 @@ pub fn starting(
     }
     let client = served.client.clone();
     thread::spawn(move || {
-        let started = client
-            .call_method(
-                None::<&str>,
-                OBJECT_PATH,
-                Some(REMOTE_DESKTOP),
-                "Start",
-                &(path("/r/3"), path(SESSION), APP, "", Results::new()),
-            )
-            .expect("Start answered");
+        let started = zbus::block_on(client.call_method(
+            None::<&str>,
+            OBJECT_PATH,
+            Some(REMOTE_DESKTOP),
+            "Start",
+            &(path("/r/3"), path(SESSION), APP, "", Results::new()),
+        ))
+        .expect("Start answered");
         reply(started)
     })
 }

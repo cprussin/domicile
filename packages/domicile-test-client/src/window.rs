@@ -441,7 +441,7 @@ struct Client {
     notify: Option<String>,
     /// The bus `notify` was sent on, which must outlive the notification;
     /// see [`crate::notification::notify`].
-    notified_on: Option<zbus::blocking::Connection>,
+    notified_on: Option<zbus::Connection>,
     /// The clipboard and primary selection devices. `None` unless a copy or
     /// paste was requested.
     selections: Option<Selections>,

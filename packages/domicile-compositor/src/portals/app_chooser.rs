@@ -7,7 +7,7 @@ use std::sync::Arc;
 use domicile_protocol::{AppChooserDialog, PortalAnswer, PortalKind};
 use tracing::debug;
 use zbus::object_server::ObjectServer;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
 use super::queue::{ask, Queue};
 use super::request::Request;
@@ -28,8 +28,8 @@ impl AppChooser {
         app_id: String,
         parent_window: String,
         choices: Vec<String>,
-        options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let asked = Asked::read(choices, options);
         let parent_window = if asked.modal {
             parent_window.as_str()
@@ -86,7 +86,7 @@ struct Asked {
 
 impl Asked {
     /// Read a call's `options`. An option of the wrong type reads as absent.
-    fn read(choices: Vec<String>, mut options: HashMap<String, OwnedValue>) -> Asked {
+    fn read(choices: Vec<String>, mut options: HashMap<String, OwnedVariant>) -> Asked {
         let mut text = |name: &str| {
             options
                 .remove(name)
@@ -113,7 +113,10 @@ impl Asked {
 }
 
 /// The results for `answer`: the choice and token on success, else nothing.
-fn results(answer: PortalAnswer, activation_token: Option<String>) -> HashMap<String, OwnedValue> {
+fn results(
+    answer: PortalAnswer,
+    activation_token: Option<String>,
+) -> HashMap<String, OwnedVariant> {
     match answer {
         PortalAnswer::AppChooser { choice } => Some(("choice", choice))
             .into_iter()
@@ -148,20 +151,20 @@ fn results(answer: PortalAnswer, activation_token: Option<String>) -> HashMap<St
     }
 }
 
-fn owned(text: String) -> OwnedValue {
-    OwnedValue::try_from(Value::from(text)).expect("a string holds no file descriptor")
+fn owned(text: String) -> OwnedVariant {
+    OwnedVariant::try_from(Variant::from(text)).expect("a string holds no file descriptor")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn options(sent: Vec<(&str, Value<'static>)>) -> HashMap<String, OwnedValue> {
+    fn options(sent: Vec<(&str, Variant<'static>)>) -> HashMap<String, OwnedVariant> {
         sent.into_iter()
             .map(|(name, value)| {
                 (
                     name.to_string(),
-                    OwnedValue::try_from(value).expect("an ownable value"),
+                    OwnedVariant::try_from(value).expect("an ownable value"),
                 )
             })
             .collect()
@@ -172,12 +175,12 @@ mod tests {
         let asked = Asked::read(
             vec!["firefox".into()],
             options(vec![
-                ("last_choice", Value::from("firefox")),
-                ("modal", Value::from(false)),
-                ("content_type", Value::from("text/html")),
-                ("uri", Value::from("https://example.com/")),
-                ("filename", Value::from("index.html")),
-                ("activation_token", Value::from("token-1")),
+                ("last_choice", Variant::from("firefox")),
+                ("modal", Variant::from(false)),
+                ("content_type", Variant::from("text/html")),
+                ("uri", Variant::from("https://example.com/")),
+                ("filename", Variant::from("index.html")),
+                ("activation_token", Variant::from("token-1")),
             ]),
         );
 
@@ -199,7 +202,7 @@ mod tests {
 
     #[test]
     fn a_dialog_is_modal_unless_told_otherwise() {
-        let asked = Asked::read(vec![], options(vec![("modal", Value::from("no"))]));
+        let asked = Asked::read(vec![], options(vec![("modal", Variant::from("no"))]));
 
         assert!(asked.modal);
     }

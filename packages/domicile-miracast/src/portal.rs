@@ -6,8 +6,9 @@ use std::collections::HashMap;
 use std::os::fd::OwnedFd;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use zbus::blocking::{Connection, Proxy};
-use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+use zbus::export::ordered_stream::OrderedStreamExt;
+use zbus::{Connection, Proxy};
+use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
 const DESTINATION: &str = "org.freedesktop.portal.Desktop";
 const PATH: &str = "/org/freedesktop/portal/desktop";
@@ -48,13 +49,13 @@ pub struct Shared {
 
 impl Drop for Shared {
     fn drop(&mut self) {
-        let _ = self.connection.call_method(
+        let _ = zbus::block_on(self.connection.call_method(
             Some(DESTINATION),
             self.session.as_str(),
             Some("org.freedesktop.portal.Session"),
             "Close",
             &(),
-        );
+        ));
     }
 }
 
@@ -63,8 +64,8 @@ pub fn share(connection: &Connection) -> Result<Shared, PortalError> {
     let session_token = token();
     let results = request(connection, "CreateSession", |handle| {
         (HashMap::from([
-            ("handle_token", Value::from(handle)),
-            ("session_handle_token", Value::from(session_token)),
+            ("handle_token", Variant::from(handle)),
+            ("session_handle_token", Variant::from(session_token)),
         ]),)
     })?;
     let session = results
@@ -76,10 +77,10 @@ pub fn share(connection: &Connection) -> Result<Shared, PortalError> {
         (
             &session,
             HashMap::from([
-                ("handle_token", Value::from(handle)),
-                ("types", Value::from(EVERY_SOURCE)),
-                ("multiple", Value::from(false)),
-                ("cursor_mode", Value::from(EMBEDDED_CURSOR)),
+                ("handle_token", Variant::from(handle)),
+                ("types", Variant::from(EVERY_SOURCE)),
+                ("multiple", Variant::from(false)),
+                ("cursor_mode", Variant::from(EMBEDDED_CURSOR)),
             ]),
         )
     })?;
@@ -87,19 +88,20 @@ pub fn share(connection: &Connection) -> Result<Shared, PortalError> {
         (
             &session,
             "",
-            HashMap::from([("handle_token", Value::from(handle))]),
+            HashMap::from([("handle_token", Variant::from(handle))]),
         )
     })?;
     let node = started
         .get("streams")
         .and_then(|streams| {
-            <Vec<(u32, HashMap<String, OwnedValue>)>>::try_from(streams.clone()).ok()
+            <Vec<(u32, HashMap<String, OwnedVariant>)>>::try_from(streams.clone()).ok()
         })
         .and_then(|streams| streams.first().map(|(node, _)| *node))
         .ok_or(PortalError::NoStream)?;
-    let proxy = Proxy::new(connection, DESTINATION, PATH, SCREEN_CAST)?;
-    let options: HashMap<&str, Value> = HashMap::new();
-    let remote: zbus::zvariant::OwnedFd = proxy.call("OpenPipeWireRemote", &(&session, options))?;
+    let proxy = zbus::block_on(Proxy::new(connection, DESTINATION, PATH, SCREEN_CAST))?;
+    let options: HashMap<&str, Variant> = HashMap::new();
+    let remote: zbus::OwnedFd =
+        zbus::block_on(proxy.call("OpenPipeWireRemote", &(&session, options)))?;
     Ok(Shared {
         session,
         connection: connection.clone(),
@@ -120,9 +122,9 @@ fn request<B>(
     connection: &Connection,
     method: &str,
     body: impl FnOnce(String) -> B,
-) -> Result<HashMap<String, OwnedValue>, PortalError>
+) -> Result<HashMap<String, OwnedVariant>, PortalError>
 where
-    B: serde::ser::Serialize + zbus::zvariant::DynamicType,
+    B: serde::ser::Serialize + zbus::DynamicType,
 {
     let handle = token();
     let sender = connection
@@ -131,17 +133,17 @@ where
         .unwrap_or_default();
     let path = format!("{PATH}/request/{sender}/{handle}");
     // Subscribed before the call, so a quick response is not missed.
-    let request = Proxy::new(
+    let request = zbus::block_on(Proxy::new(
         connection,
         DESTINATION,
         path,
         "org.freedesktop.portal.Request",
-    )?;
-    let mut responses = request.receive_signal("Response")?;
-    let screen_cast = Proxy::new(connection, DESTINATION, PATH, SCREEN_CAST)?;
-    let _: OwnedObjectPath = screen_cast.call(method, &body(handle.clone()))?;
-    let response = responses.next().ok_or(PortalError::NoStream)?;
-    let (code, results): (u32, HashMap<String, OwnedValue>) = response.body().deserialize()?;
+    ))?;
+    let mut responses = zbus::block_on(request.receive_signal("Response"))?;
+    let screen_cast = zbus::block_on(Proxy::new(connection, DESTINATION, PATH, SCREEN_CAST))?;
+    let _: OwnedObjectPath = zbus::block_on(screen_cast.call(method, &body(handle.clone())))?;
+    let response = zbus::block_on(responses.next()).ok_or(PortalError::NoStream)?;
+    let (code, results): (u32, HashMap<String, OwnedVariant>) = response.body().deserialize()?;
     match code {
         0 => Ok(results),
         1 => Err(PortalError::Canceled),

@@ -2,7 +2,7 @@
 //! session that outlives one dialog, such as a screen cast.
 
 use zbus::object_server::{ObjectServer, SignalEmitter};
-use zbus::zvariant::OwnedObjectPath;
+use zbus::OwnedObjectPath;
 
 /// The `org.freedesktop.impl.portal.Session` version implemented.
 const INTERFACE_VERSION: u32 = 1;
@@ -27,6 +27,7 @@ pub async fn open(
             },
         )
         .await
+        .map(|taken| taken.is_none())
 }
 
 /// End the session at `handle` from the desktop's side, as when the user
@@ -76,6 +77,7 @@ impl Session {
 mod tests {
     use super::*;
     use std::sync::mpsc::channel;
+    use zbus::export::ordered_stream::OrderedStreamExt;
 
     use domicile_protocol::Theme;
 
@@ -88,30 +90,28 @@ mod tests {
     fn closing_a_session_ends_what_it_started_and_takes_it_down() {
         // Any object starts the object server before the connection does.
         let (server, client) = connected(|builder| {
-            builder
-                .serve_at(
-                    "/",
-                    Settings {
-                        theme: Theme::Dark,
-                        appearance: Appearance::default(),
-                    },
-                )
-                .expect("served")
+            builder.serve_at(
+                "/",
+                Settings {
+                    theme: Theme::Dark,
+                    appearance: Appearance::default(),
+                },
+            )
         });
         let (ended, heard) = channel();
         let handle = OwnedObjectPath::try_from(HANDLE).expect("a path");
-        zbus::block_on(open(server.object_server().inner(), &handle, move || {
+        zbus::block_on(open(server.object_server(), &handle, move || {
             ended.send(()).expect("the test listens");
         }))
         .expect("opened");
         let close = || {
-            client.call_method(
+            zbus::block_on(client.call_method(
                 None::<&str>,
                 HANDLE,
                 Some("org.freedesktop.impl.portal.Session"),
                 "Close",
                 &(),
-            )
+            ))
         };
 
         close().expect("Close answered");
@@ -123,39 +123,39 @@ mod tests {
     #[test]
     fn a_session_the_desktop_ends_tells_the_application() {
         let (server, client) = connected(|builder| {
-            builder
-                .serve_at(
-                    "/",
-                    Settings {
-                        theme: Theme::Dark,
-                        appearance: Appearance::default(),
-                    },
-                )
-                .expect("served")
+            builder.serve_at(
+                "/",
+                Settings {
+                    theme: Theme::Dark,
+                    appearance: Appearance::default(),
+                },
+            )
         });
         let (ended, heard) = channel();
         let handle = OwnedObjectPath::try_from(HANDLE).expect("a path");
-        zbus::block_on(open(server.object_server().inner(), &handle, move || {
+        zbus::block_on(open(server.object_server(), &handle, move || {
             ended.send(()).expect("the test listens");
         }))
         .expect("opened");
-        let closed = zbus::blocking::MessageIterator::for_match_rule(
+        let mut closed = zbus::block_on(zbus::MessageStream::for_match_rule(
             zbus::MatchRule::builder()
                 .msg_type(zbus::message::Type::Signal)
                 .interface("org.freedesktop.impl.portal.Session")
-                .expect("a name")
                 .member("Closed")
-                .expect("a name")
-                .build(),
+                .build()
+                .expect("a match rule"),
             &client,
             None,
-        )
+        ))
         .expect("listening");
 
-        zbus::block_on(end(server.object_server().inner(), &handle)).expect("ended");
+        zbus::block_on(end(server.object_server(), &handle)).expect("ended");
 
         assert_eq!(heard.try_recv(), Ok(()));
-        let signal = closed.into_iter().next().expect("a signal").expect("read");
+        let signal = std::iter::from_fn(|| zbus::block_on(closed.next()))
+            .next()
+            .expect("a signal")
+            .expect("read");
         assert_eq!(
             signal.header().path().map(|path| path.as_str()),
             Some(HANDLE)

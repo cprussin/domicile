@@ -19,7 +19,7 @@ use domicile_host::global_shortcuts::{self as held, Asked, Listed, NoSession, Sa
 use domicile_protocol::{BoundShortcut, PortalAnswer, PortalKind, ShortcutsDialog};
 use tracing::{debug, warn};
 use zbus::object_server::{ObjectServer, SignalEmitter};
-use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
+use zbus::{ObjectPath, OwnedObjectPath, OwnedVariant, Variant};
 
 use super::queue::{ask, ask_unbidden, Queue};
 use super::session;
@@ -29,7 +29,7 @@ use super::OBJECT_PATH;
 const INTERFACE_VERSION: u32 = 2;
 
 /// A shortcut as the portal writes it: its id and its properties.
-type Shortcut = (String, HashMap<String, OwnedValue>);
+type Shortcut = (String, HashMap<String, OwnedVariant>);
 
 /// The `GlobalShortcuts` backend object.
 pub struct GlobalShortcuts {
@@ -46,8 +46,8 @@ impl GlobalShortcuts {
         _handle: OwnedObjectPath,
         session_handle: OwnedObjectPath,
         app_id: String,
-        _options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        _options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let session = session_handle.to_string();
         let closing = Arc::clone(&self.shortcuts);
         let closed = session.clone();
@@ -80,8 +80,8 @@ impl GlobalShortcuts {
         session_handle: OwnedObjectPath,
         shortcuts: Vec<Shortcut>,
         parent_window: String,
-        _options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        _options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let session = session_handle.as_str();
         let asked = asks(shortcuts);
         match self.shortcuts.binding(session, &asked) {
@@ -102,7 +102,7 @@ impl GlobalShortcuts {
         &self,
         _handle: OwnedObjectPath,
         session_handle: OwnedObjectPath,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         match self
             .shortcuts
             .read(|held| held.list(session_handle.as_str()))
@@ -119,7 +119,7 @@ impl GlobalShortcuts {
         #[zbus(connection)] connection: &zbus::Connection,
         session_handle: OwnedObjectPath,
         parent_window: String,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
     ) -> zbus::fdo::Result<()> {
         let session = session_handle.to_string();
         let (app_id, asked, review) = self
@@ -133,10 +133,7 @@ impl GlobalShortcuts {
         let queue = Arc::clone(&self.queue);
         let shortcuts = Arc::clone(&self.shortcuts);
         let signaling = connection.clone();
-        connection
-            .executor()
-            .spawn(
-                async move {
+        zruntime::spawn(async move {
                     let kind = PortalKind::GlobalShortcuts(review);
                     let answer = ask_unbidden(&queue, app_id, &parent_window, kind).await;
                     if let Ok(listed) = shortcuts.chose(&session, &asked, answer) {
@@ -152,10 +149,7 @@ impl GlobalShortcuts {
                             tracing::error!(%why, "an application was not told its global shortcuts changed");
                         }
                     }
-                },
-                "configure global shortcuts",
-            )
-            .detach();
+                }).detach();
         Ok(())
     }
 
@@ -165,7 +159,7 @@ impl GlobalShortcuts {
         session_handle: ObjectPath<'_>,
         shortcut_id: &str,
         timestamp: u64,
-        options: HashMap<String, OwnedValue>,
+        options: HashMap<String, OwnedVariant>,
     ) -> zbus::Result<()>;
 
     #[zbus(signal)]
@@ -174,7 +168,7 @@ impl GlobalShortcuts {
         session_handle: ObjectPath<'_>,
         shortcut_id: &str,
         timestamp: u64,
-        options: HashMap<String, OwnedValue>,
+        options: HashMap<String, OwnedVariant>,
     ) -> zbus::Result<()>;
 
     #[zbus(signal)]
@@ -412,17 +406,17 @@ fn asks(shortcuts: Vec<Shortcut>) -> Vec<Asked> {
 }
 
 /// `BindShortcuts` and `ListShortcuts` results: `shortcuts`.
-fn results(listed: &[Listed]) -> HashMap<String, OwnedValue> {
+fn results(listed: &[Listed]) -> HashMap<String, OwnedVariant> {
     HashMap::from([(
         "shortcuts".to_string(),
-        OwnedValue::try_from(Value::from(described(listed))).expect("an ownable list"),
+        OwnedVariant::try_from(Variant::from(described(listed))).expect("an ownable list"),
     )])
 }
 
 /// Each shortcut with its `description` and `trigger_description`, empty for
 /// a cleared one.
 fn described(listed: &[Listed]) -> Vec<Shortcut> {
-    let text = |text: &str| OwnedValue::try_from(Value::from(text)).expect("an ownable string");
+    let text = |text: &str| OwnedVariant::try_from(Variant::from(text)).expect("an ownable string");
     listed
         .iter()
         .map(|listed| {
@@ -446,10 +440,11 @@ mod tests {
     use std::sync::mpsc::{channel, Receiver};
     use std::thread;
     use std::time::Duration;
+    use zbus::export::ordered_stream::OrderedStreamExt;
 
     use domicile_protocol::{ChosenTrigger, PortalRequest, ProposedShortcut};
-    use zbus::blocking::{Connection, MessageIterator};
     use zbus::message::Type;
+    use zbus::{Connection, MessageStream};
 
     use crate::notifications::NotificationServer;
     use crate::portals::restore::Tokens;
@@ -492,17 +487,15 @@ mod tests {
             let _ = publish_bound.send(items);
         });
         let (server, client) = connected(|builder| {
-            builder
-                .serve_at(
-                    OBJECT_PATH,
-                    GlobalShortcuts {
-                        queue: Arc::clone(&backends.queue),
-                        shortcuts: Arc::clone(&backends.shortcuts),
-                    },
-                )
-                .expect("served")
+            builder.serve_at(
+                OBJECT_PATH,
+                GlobalShortcuts {
+                    queue: Arc::clone(&backends.queue),
+                    shortcuts: Arc::clone(&backends.shortcuts),
+                },
+            )
         });
-        backends.shortcuts.signal_on(server.inner().clone());
+        backends.shortcuts.signal_on(server.clone());
         Served {
             client,
             queue: Arc::clone(&backends.queue),
@@ -531,10 +524,9 @@ mod tests {
 
     fn call<B>(client: &Connection, path: &str, member: &str, body: &B) -> zbus::Message
     where
-        B: zbus::export::serde::Serialize + zbus::zvariant::DynamicType,
+        B: zbus::export::serde::Serialize + zbus::DynamicType,
     {
-        client
-            .call_method(None::<&str>, path, Some(INTERFACE), member, body)
+        zbus::block_on(client.call_method(None::<&str>, path, Some(INTERFACE), member, body))
             .expect("answered")
     }
 
@@ -542,12 +534,12 @@ mod tests {
         ObjectPath::try_from(path).expect("a path")
     }
 
-    fn no_options() -> HashMap<String, OwnedValue> {
+    fn no_options() -> HashMap<String, OwnedVariant> {
         HashMap::new()
     }
 
     fn create_session(client: &Connection) {
-        let (response, _): (u32, HashMap<String, OwnedValue>) = call(
+        let (response, _): (u32, HashMap<String, OwnedVariant>) = call(
             client,
             OBJECT_PATH,
             "CreateSession",
@@ -580,7 +572,7 @@ mod tests {
                     no_options(),
                 ),
             );
-            let (response, mut results): (u32, HashMap<String, OwnedValue>) =
+            let (response, mut results): (u32, HashMap<String, OwnedVariant>) =
                 reply.body().deserialize().expect("its reply");
             (
                 response,
@@ -592,12 +584,12 @@ mod tests {
         })
     }
 
-    fn owned(text: &str) -> OwnedValue {
-        OwnedValue::try_from(Value::from(text)).expect("ownable")
+    fn owned(text: &str) -> OwnedVariant {
+        OwnedVariant::try_from(Variant::from(text)).expect("ownable")
     }
 
     /// Each shortcut's id and `trigger_description`.
-    fn triggers(shortcuts: OwnedValue) -> Vec<(String, String)> {
+    fn triggers(shortcuts: OwnedVariant) -> Vec<(String, String)> {
         Vec::<Shortcut>::try_from(shortcuts)
             .expect("a(sa{sv})")
             .into_iter()
@@ -619,9 +611,8 @@ mod tests {
     }
 
     /// The next signal the client hears, and its member.
-    fn next_signal(heard: &mut MessageIterator) -> (String, zbus::Message) {
-        let message = heard
-            .by_ref()
+    fn next_signal(heard: &mut MessageStream) -> (String, zbus::Message) {
+        let message = std::iter::from_fn(|| zbus::block_on(heard.next()))
             .map(|message| message.expect("a message"))
             .find(|message| message.message_type() == Type::Signal)
             .expect("a signal");
@@ -674,13 +665,13 @@ mod tests {
 
     /// The member, shortcut id and timestamp of the next signal the client
     /// hears, an `Activated` or `Deactivated`.
-    fn fired(heard: &mut MessageIterator) -> (String, String, u64) {
+    fn fired(heard: &mut MessageStream) -> (String, String, u64) {
         let (member, message) = next_signal(heard);
         let (session, id, timestamp, _): (
             OwnedObjectPath,
             String,
             u64,
-            HashMap<String, OwnedValue>,
+            HashMap<String, OwnedVariant>,
         ) = message.body().deserialize().expect("its body");
         assert_eq!(session.as_str(), SESSION);
         (member, id, timestamp)
@@ -689,7 +680,7 @@ mod tests {
     #[test]
     fn a_reviewed_chord_is_activated_on_its_press_and_deactivated_on_its_release() {
         let served = served(None);
-        let mut heard = MessageIterator::from(served.client.clone());
+        let mut heard = MessageStream::from(served.client.clone());
         create_session(&served.client);
         let bound = bind_through_the_dialog(&served);
 
@@ -710,7 +701,7 @@ mod tests {
     #[test]
     fn letting_go_of_held_chords_deactivates_each_once() {
         let served = served(None);
-        let mut heard = MessageIterator::from(served.client.clone());
+        let mut heard = MessageStream::from(served.client.clone());
         create_session(&served.client);
         let bound = bind_through_the_dialog(&served);
         served.portals.answer(bound.id, PortalAnswer::Pressed);
@@ -767,7 +758,7 @@ mod tests {
         create_session(&served.client);
         bind_through_the_dialog(&served);
 
-        let (response, results): (u32, HashMap<String, OwnedValue>) = call(
+        let (response, results): (u32, HashMap<String, OwnedVariant>) = call(
             &served.client,
             OBJECT_PATH,
             "ListShortcuts",
@@ -788,23 +779,21 @@ mod tests {
             [("talk".to_string(), "Ctrl+Alt+t".to_string())]
         );
 
-        served
-            .client
-            .call_method(
-                None::<&str>,
-                SESSION,
-                Some("org.freedesktop.impl.portal.Session"),
-                "Close",
-                &(),
-            )
-            .expect("closed");
+        zbus::block_on(served.client.call_method(
+            None::<&str>,
+            SESSION,
+            Some("org.freedesktop.impl.portal.Session"),
+            "Close",
+            &(),
+        ))
+        .expect("closed");
         assert_eq!(next(&served.bound), []);
     }
 
     #[test]
     fn configuring_reviews_the_chords_again_and_says_what_changed() {
         let served = served(None);
-        let mut heard = MessageIterator::from(served.client.clone());
+        let mut heard = MessageStream::from(served.client.clone());
         create_session(&served.client);
         bind_through_the_dialog(&served);
 

@@ -10,8 +10,9 @@ use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt as _;
 use std::path::PathBuf;
 
+use zbus::export::ordered_stream::OrderedStreamExt;
 use zbus::message::Type;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
 const PORTAL: &str = "org.freedesktop.portal.Desktop";
 const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
@@ -24,40 +25,36 @@ const CANCELED: u32 = 1;
 /// Shows the portal's folder picker titled `title` and waits for it.
 ///
 /// Returns the folder, or `None` if the user canceled.
-pub fn choose_folder(
-    bus: &zbus::blocking::Connection,
-    title: &str,
-) -> Result<Option<PathBuf>, String> {
+pub fn choose_folder(bus: &zbus::Connection, title: &str) -> Result<Option<PathBuf>, String> {
     // Listening before asking: the portal may answer before `OpenFile`
     // returns the request's path.
     let rule = zbus::MatchRule::builder()
         .msg_type(Type::Signal)
         .interface(REQUEST)
-        .and_then(|rule| rule.member("Response"))
-        .map(|rule| rule.build())
+        .member("Response")
+        .build()
         .map_err(|why| format!("cannot listen for the portal's answer: {why}"))?;
-    let messages = zbus::blocking::MessageIterator::for_match_rule(rule, bus, None)
+    let mut messages = zbus::block_on(zbus::MessageStream::for_match_rule(rule, bus, None))
         .map_err(|why| format!("cannot listen for the portal's answer: {why}"))?;
     let options = HashMap::from([
-        ("directory", Value::from(true)),
-        ("modal", Value::from(true)),
-        ("accept_label", Value::from("Load")),
-        ("handle_token", Value::from("domicile_settings")),
+        ("directory", Variant::from(true)),
+        ("modal", Variant::from(true)),
+        ("accept_label", Variant::from("Load")),
+        ("handle_token", Variant::from("domicile_settings")),
     ]);
-    let request: OwnedObjectPath = bus
-        .call_method(
-            Some(PORTAL),
-            PORTAL_PATH,
-            Some(FILE_CHOOSER),
-            "OpenFile",
-            &("", title, options),
-        )
-        .and_then(|reply| reply.body().deserialize())
-        .map_err(|why| format!("the file chooser portal did not open: {why}"))?;
-    for message in messages {
+    let request: OwnedObjectPath = zbus::block_on(bus.call_method(
+        Some(PORTAL),
+        PORTAL_PATH,
+        Some(FILE_CHOOSER),
+        "OpenFile",
+        &("", title, options),
+    ))
+    .and_then(|reply| reply.body().deserialize())
+    .map_err(|why| format!("the file chooser portal did not open: {why}"))?;
+    for message in std::iter::from_fn(|| zbus::block_on(messages.next())) {
         let message = message.map_err(|why| format!("lost the portal's answer: {why}"))?;
         if message.header().path().map(|path| path.as_str()) == Some(request.as_str()) {
-            let (response, results): (u32, HashMap<String, OwnedValue>) = message
+            let (response, results): (u32, HashMap<String, OwnedVariant>) = message
                 .body()
                 .deserialize()
                 .map_err(|why| format!("the portal's answer is not a response: {why}"))?;
@@ -72,14 +69,14 @@ pub fn choose_folder(
 }
 
 /// The path of the first `file://` URI in a response's `uris`.
-fn first_folder(results: &HashMap<String, OwnedValue>) -> Result<PathBuf, String> {
+fn first_folder(results: &HashMap<String, OwnedVariant>) -> Result<PathBuf, String> {
     let uris: Vec<String> = results
         .get("uris")
         .ok_or("the file chooser answered without a folder")?
         .try_clone()
         .map_err(|why| why.to_string())?
         .try_into()
-        .map_err(|why: zbus::zvariant::Error| format!("the file chooser's uris: {why}"))?;
+        .map_err(|why: zbus::Error| format!("the file chooser's uris: {why}"))?;
     let uri = uris
         .first()
         .ok_or("the file chooser answered without a folder")?;

@@ -4,8 +4,8 @@
 use std::os::unix::net::UnixStream;
 use std::thread;
 
-use zbus::blocking::connection::Builder;
-use zbus::blocking::Connection;
+use zbus::connection::Builder;
+use zbus::Connection;
 
 /// A server, set up by `serve`, and a client connected to it.
 pub fn connected(
@@ -22,15 +22,13 @@ pub fn connected_both(
 ) -> (Connection, Connection) {
     let (ours, theirs) = UnixStream::pair().expect("a socket pair");
     let server = serve(
-        Builder::async_io_unix_stream(ours)
+        Builder::unix_stream(ours)
             .server(zbus::Guid::generate())
-            .expect("a server guid")
             .p2p(),
     );
     // Both ends must handshake at once.
-    let server = thread::spawn(move || server.build().expect("the server end"));
-    let client = serve_client(Builder::async_io_unix_stream(theirs).p2p())
-        .build()
+    let server = thread::spawn(move || zbus::block_on(server.build()).expect("the server end"));
+    let client = zbus::block_on(serve_client(Builder::unix_stream(theirs).p2p()).build())
         .expect("the client end");
     (server.join().expect("the server handshook"), client)
 }

@@ -36,8 +36,9 @@ use domicile_protocol::{
     SystemError, Theme,
 };
 use tracing::{debug, warn};
-use zbus::blocking::connection::Builder;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::connection::Builder;
+use zbus::export::ordered_stream::OrderedStreamExt;
+use zbus::{OwnedObjectPath, OwnedVariant};
 
 use crate::eis::barriers::Zone;
 use crate::eis::{Captured, Eis};
@@ -661,30 +662,34 @@ fn answer(
         home.as_deref(),
     );
     let home = home.unwrap_or_else(|| "/".into()).display().to_string();
-    let connection = export(
-        Builder::session()?,
-        theme,
-        appearance,
-        starting,
-        backends,
-        data_dirs,
-        home,
-    )?
-    .build()?;
-    backends.shortcuts.signal_on(connection.inner().clone());
-    let notification = connection
-        .object_server()
-        .interface::<_, Notification>(OBJECT_PATH)?;
+    let connection = zbus::block_on(
+        export(
+            Builder::session(),
+            theme,
+            appearance,
+            starting,
+            backends,
+            data_dirs,
+            home,
+        )
+        .build(),
+    )?;
+    backends.shortcuts.signal_on(connection.clone());
+    let notification = zbus::block_on(
+        connection
+            .object_server()
+            .interface::<_, Notification>(OBJECT_PATH),
+    )?;
     backends
         .notifications
-        .on_portal_action(move |invoked: Invoked<OwnedValue>, token| {
+        .on_portal_action(move |invoked: Invoked<OwnedVariant>, token| {
             notification::invoked(&notification, invoked, token)
         });
-    let acquired = zbus::blocking::fdo::DBusProxy::new(&connection)?
-        .receive_name_acquired_with_args(&[(0, BUS_NAME)])?;
+    let names = zbus::block_on(zbus::fdo::DBusProxy::new(&connection))?;
+    let mut acquired = zbus::block_on(names.receive_name_acquired_with_args(&[(0, BUS_NAME)]))?;
     let saying = connection.clone();
     thread::spawn(move || {
-        for _ in acquired {
+        for _ in std::iter::from_fn(|| zbus::block_on(acquired.next())) {
             say_which_desktop(&saying, &environment);
         }
     });
@@ -702,49 +707,47 @@ fn answer(
 }
 
 /// Do one thing the portal thread was told.
-fn heard(
-    connection: &zbus::blocking::Connection,
-    backends: &Backends,
-    told: Told,
-) -> zbus::Result<()> {
+fn heard(connection: &zbus::Connection, backends: &Backends, told: Told) -> zbus::Result<()> {
     match told {
         Told::Theme(theme) => settings::changed(&settings(connection)?, Some(theme), None),
         Told::Appearance(appearance) => {
             settings::changed(&settings(connection)?, None, Some(appearance))
         }
         Told::Screensaver(active) => inhibit::screensaver(
-            &connection
-                .object_server()
-                .interface::<_, Inhibit>(OBJECT_PATH)?,
+            &zbus::block_on(
+                connection
+                    .object_server()
+                    .interface::<_, Inhibit>(OBJECT_PATH),
+            )?,
             active,
         ),
         Told::Lockdown(lockdown) => lockdown::changed(
-            &connection
-                .object_server()
-                .interface::<_, Lockdown>(OBJECT_PATH)?,
+            &zbus::block_on(
+                connection
+                    .object_server()
+                    .interface::<_, Lockdown>(OBJECT_PATH),
+            )?,
             lockdown,
         ),
         Told::RunningApps => {
-            background::changed(
-                &connection
+            background::changed(&zbus::block_on(
+                connection
                     .object_server()
-                    .interface::<_, Background>(OBJECT_PATH)?,
-            );
+                    .interface::<_, Background>(OBJECT_PATH),
+            )?);
             Ok(())
         }
-        Told::End(handle) => {
-            zbus::block_on(session::end(connection.object_server().inner(), &handle))
-        }
+        Told::End(handle) => zbus::block_on(session::end(connection.object_server(), &handle)),
         Told::SelectionChanged { mime_types, owner } => {
             for session in backends.remotes.sharing_sessions() {
                 let is_owner = owner.as_ref() == Some(&session);
-                connection.emit_signal(
+                zbus::block_on(connection.emit_signal(
                     None::<&str>,
                     OBJECT_PATH,
                     CLIPBOARD,
                     "SelectionOwnerChanged",
                     &(&session, clipboard::owner_changed(&mime_types, is_owner)),
-                )?;
+                ))?;
             }
             Ok(())
         }
@@ -755,13 +758,13 @@ fn heard(
         } => match backends.remotes.sharing(&session) {
             Ok(()) => {
                 let serial = Transfers::hold(&backends.transfers, session.clone(), fd);
-                connection.emit_signal(
+                zbus::block_on(connection.emit_signal(
                     None::<&str>,
                     OBJECT_PATH,
                     CLIPBOARD,
                     "SelectionTransfer",
                     &(&session, mime_type, serial),
-                )
+                ))
             }
             // The session ended after the client asked: dropping the pipe
             // pastes nothing.
@@ -772,16 +775,16 @@ fn heard(
         },
         Told::Rezoned { set } => {
             for session in backends.inputs.rezoned() {
-                connection.emit_signal(
+                zbus::block_on(connection.emit_signal(
                     None::<&str>,
                     OBJECT_PATH,
                     INPUT_CAPTURE,
                     "ZonesChanged",
                     &(
                         &session,
-                        HashMap::from([("zone_set", zbus::zvariant::Value::from(set))]),
+                        HashMap::from([("zone_set", zbus::Variant::from(set))]),
                     ),
-                )?;
+                ))?;
             }
             Ok(())
         }
@@ -793,7 +796,7 @@ fn heard(
                     cursor,
                     barrier_id,
                 },
-        } => connection.emit_signal(
+        } => zbus::block_on(connection.emit_signal(
             None::<&str>,
             OBJECT_PATH,
             INPUT_CAPTURE,
@@ -802,17 +805,19 @@ fn heard(
                 &session,
                 input_capture::activated(activation_id, (cursor.x, cursor.y), barrier_id),
             ),
-        ),
+        )),
     }
 }
 
 /// The `Settings` interface, to signal a change on.
 fn settings(
-    connection: &zbus::blocking::Connection,
-) -> zbus::Result<zbus::blocking::object_server::InterfaceRef<Settings>> {
-    connection
-        .object_server()
-        .interface::<_, Settings>(OBJECT_PATH)
+    connection: &zbus::Connection,
+) -> zbus::Result<zbus::object_server::InterfaceRef<Settings>> {
+    zbus::block_on(
+        connection
+            .object_server()
+            .interface::<_, Settings>(OBJECT_PATH),
+    )
 }
 
 /// Registers every interface at [`OBJECT_PATH`].
@@ -830,28 +835,28 @@ fn export<'a>(
     backends: &Backends,
     data_dirs: Vec<PathBuf>,
     home: String,
-) -> zbus::Result<Builder<'a>> {
+) -> Builder<'a> {
     let applications = application_dirs(&data_dirs);
     builder
-        .serve_at(OBJECT_PATH, Settings { theme, appearance })?
+        .serve_at(OBJECT_PATH, Settings { theme, appearance })
         .serve_at(
             OBJECT_PATH,
             Access {
                 queue: Arc::clone(&backends.queue),
             },
-        )?
+        )
         .serve_at(
             OBJECT_PATH,
             AppChooser {
                 queue: Arc::clone(&backends.queue),
             },
-        )?
+        )
         .serve_at(
             OBJECT_PATH,
             Notification {
                 notifications: backends.notifications.clone(),
             },
-        )?
+        )
         .serve_at(
             OBJECT_PATH,
             Inhibit {
@@ -859,7 +864,7 @@ fn export<'a>(
                 inhibitors: Arc::clone(&backends.inhibitors),
                 screensaver_active: false,
             },
-        )?
+        )
         .serve_at(
             OBJECT_PATH,
             FileChooser {
@@ -867,51 +872,51 @@ fn export<'a>(
                 data_dirs,
                 home: home.clone(),
             },
-        )?
+        )
         .serve_at(
             OBJECT_PATH,
             RemoteDesktop {
                 backends: backends.clone(),
             },
-        )?
+        )
         .serve_at(
             OBJECT_PATH,
             Clipboard {
                 backends: backends.clone(),
             },
-        )?
+        )
         .serve_at(
             OBJECT_PATH,
             InputCapture {
                 backends: backends.clone(),
             },
-        )?
+        )
         .serve_at(
             OBJECT_PATH,
             Account {
                 queue: Arc::clone(&backends.queue),
                 user: starting.user,
             },
-        )?
+        )
         .serve_at(
             OBJECT_PATH,
             Email {
                 open: starting.open,
             },
-        )?
+        )
         .serve_at(
             OBJECT_PATH,
             Lockdown {
                 config: starting.lockdown,
             },
-        )?
+        )
         .serve_at(
             OBJECT_PATH,
             GlobalShortcuts {
                 queue: Arc::clone(&backends.queue),
                 shortcuts: Arc::clone(&backends.shortcuts),
             },
-        )?
+        )
         .serve_at(
             OBJECT_PATH,
             Background {
@@ -919,29 +924,29 @@ fn export<'a>(
                 config_home: backends.config_home.clone(),
                 applications,
             },
-        )?
+        )
         .serve_at(
             OBJECT_PATH,
             Wallpaper {
                 queue: Arc::clone(&backends.queue),
                 pictures: Arc::clone(&backends.pictures),
             },
-        )?
+        )
         .serve_at(
             OBJECT_PATH,
             DynamicLauncher {
                 queue: Arc::clone(&backends.queue),
             },
-        )?
+        )
         .serve_at(
             OBJECT_PATH,
             Usb {
                 queue: Arc::clone(&backends.queue),
                 udev_data: PathBuf::from("/run/udev/data"),
             },
-        )?
-        .serve_at(OBJECT_PATH, starting.screen_cast.picks())?
-        .serve_at(OBJECT_PATH, starting.screen_cast)?
+        )
+        .serve_at(OBJECT_PATH, starting.screen_cast.picks())
+        .serve_at(OBJECT_PATH, starting.screen_cast)
         .serve_at(
             OBJECT_PATH,
             Print {
@@ -950,7 +955,7 @@ fn export<'a>(
                 home,
                 prepared: Mutex::default(),
             },
-        )?
+        )
         .serve_at(
             OBJECT_PATH,
             Screenshot {
@@ -1054,21 +1059,23 @@ fn activation_environment(ours: &str, in_a_window: bool) -> Vec<(&'static str, S
 /// Without this `xdg-desktop-portal` never routes to this backend. Every call
 /// is best effort and logs at `debug`: a desk without a systemd user manager
 /// is normal.
-fn say_which_desktop(connection: &zbus::blocking::Connection, environment: &[(&str, String)]) {
+fn say_which_desktop(connection: &zbus::Connection, environment: &[(&str, String)]) {
     // For services D-Bus starts directly.
-    let bus = zbus::blocking::Proxy::new(
+    let bus = zbus::block_on(zbus::Proxy::new(
         connection,
         "org.freedesktop.DBus",
         "/org/freedesktop/DBus",
         "org.freedesktop.DBus",
-    );
+    ));
     let told_the_bus = match &bus {
-        Ok(bus) => bus.call::<_, _, ()>(
-            "UpdateActivationEnvironment",
-            &(environment
-                .iter()
-                .map(|(key, value)| (*key, value.as_str()))
-                .collect::<HashMap<_, _>>(),),
+        Ok(bus) => zbus::block_on(
+            bus.call::<_, _, ()>(
+                "UpdateActivationEnvironment",
+                &(environment
+                    .iter()
+                    .map(|(key, value)| (*key, value.as_str()))
+                    .collect::<HashMap<_, _>>(),),
+            ),
         ),
         Err(why) => Err(zbus::Error::Failure(why.to_string())),
     };
@@ -1078,19 +1085,21 @@ fn say_which_desktop(connection: &zbus::blocking::Connection, environment: &[(&s
 
     // For services started as systemd user units, which is how most
     // distributions start the portal frontend.
-    let systemd = zbus::blocking::Proxy::new(
+    let systemd = zbus::block_on(zbus::Proxy::new(
         connection,
         "org.freedesktop.systemd1",
         "/org/freedesktop/systemd1",
         "org.freedesktop.systemd1.Manager",
-    );
+    ));
     let told_systemd = match &systemd {
-        Ok(systemd) => systemd.call::<_, _, ()>(
-            "SetEnvironment",
-            &(environment
-                .iter()
-                .map(|(key, value)| format!("{key}={value}"))
-                .collect::<Vec<_>>(),),
+        Ok(systemd) => zbus::block_on(
+            systemd.call::<_, _, ()>(
+                "SetEnvironment",
+                &(environment
+                    .iter()
+                    .map(|(key, value)| format!("{key}={value}"))
+                    .collect::<Vec<_>>(),),
+            ),
         ),
         Err(why) => Err(zbus::Error::Failure(why.to_string())),
     };
@@ -1115,18 +1124,18 @@ const FRONTEND_UNIT: &str = "xdg-desktop-portal.service";
 /// service at login) routes elsewhere, and every interface only this backend
 /// implements is missing from it. See [`must_reroute`] for which is restarted.
 /// A frontend D-Bus started directly, not as a unit, is left running.
-fn reroute_frontend(connection: &zbus::blocking::Connection, systemd: &zbus::blocking::Proxy<'_>) {
-    let main_pid = systemd
-        .call::<_, _, OwnedObjectPath>("GetUnit", &(FRONTEND_UNIT,))
-        .and_then(|unit| {
-            zbus::blocking::Proxy::new(
-                connection,
-                "org.freedesktop.systemd1",
-                unit,
-                "org.freedesktop.systemd1.Service",
-            )?
-            .get_property::<u32>("MainPID")
-        });
+fn reroute_frontend(connection: &zbus::Connection, systemd: &zbus::Proxy<'_>) {
+    let main_pid =
+        zbus::block_on(systemd.call::<_, _, OwnedObjectPath>("GetUnit", &(FRONTEND_UNIT,)))
+            .and_then(|unit| {
+                let service = zbus::block_on(zbus::Proxy::new(
+                    connection,
+                    "org.freedesktop.systemd1",
+                    unit,
+                    "org.freedesktop.systemd1.Service",
+                ))?;
+                zbus::block_on(service.get_property::<u32>("MainPID"))
+            });
     let main_pid = match main_pid {
         Ok(main_pid) => main_pid,
         // Not loaded: it reads the new environment when it starts.
@@ -1140,9 +1149,9 @@ fn reroute_frontend(connection: &zbus::blocking::Connection, systemd: &zbus::blo
     });
     match rerouting {
         Ok(false) => {}
-        Ok(true) => match systemd
-            .call::<_, _, OwnedObjectPath>("TryRestartUnit", &(FRONTEND_UNIT, "replace"))
-        {
+        Ok(true) => match zbus::block_on(
+            systemd.call::<_, _, OwnedObjectPath>("TryRestartUnit", &(FRONTEND_UNIT, "replace")),
+        ) {
             Ok(_) => tracing::debug!(
                 "restarted the portal frontend, which had started under another desktop's name"
             ),
@@ -1194,24 +1203,25 @@ fn names_this_desktop(environ: &[u8]) -> bool {
 mod tests {
     use super::*;
     use std::time::Duration;
+    use zbus::export::ordered_stream::OrderedStreamExt;
 
     use account::User;
     use domicile_protocol::{
         AccessDialog, AccountDialog, AppChooserDialog, FileChooserAnswer, Inhibited, Inhibition,
         Notification as Shown, PortalKind,
     };
-    use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
+    use zbus::{ObjectPath, OwnedObjectPath, OwnedVariant, Variant};
 
     /// The frontend's handle for the dialog these tests open.
     const HANDLE: &str = "/org/freedesktop/portal/desktop/request/1_7/t";
 
     /// The interfaces served to a client, and what the queue publishes.
     struct Served {
-        client: zbus::blocking::Connection,
+        client: zbus::Connection,
         queue: Arc<Queue>,
         published: Receiver<Vec<PortalRequest>>,
         backends: Backends,
-        server: zbus::blocking::Connection,
+        server: zbus::Connection,
     }
 
     fn served(listening: bool) -> Served {
@@ -1271,7 +1281,6 @@ mod tests {
                 Vec::new(),
                 "/home/me".into(),
             )
-            .expect("the interfaces registered")
         });
         Served {
             client,
@@ -1286,8 +1295,8 @@ mod tests {
     #[track_caller]
     /// The next signal named `member` in `messages`. Take `messages` before
     /// whatever sends the signal: one that arrives earlier is not kept.
-    fn heard(messages: &mut zbus::blocking::MessageIterator, member: &str) -> zbus::message::Body {
-        messages
+    fn heard(messages: &mut zbus::MessageStream, member: &str) -> zbus::message::Body {
+        std::iter::from_fn(|| zbus::block_on(messages.next()))
             .map(|message| message.expect("a message"))
             .find(|message| {
                 message.message_type() == zbus::message::Type::Signal
@@ -1298,31 +1307,30 @@ mod tests {
     }
 
     /// Call `AccessDialog` from another thread, returning its response.
-    fn ask_for_access(client: &zbus::blocking::Connection) -> thread::JoinHandle<u32> {
+    fn ask_for_access(client: &zbus::Connection) -> thread::JoinHandle<u32> {
         let client = client.clone();
         thread::spawn(move || {
             let options = HashMap::from([(
                 "grant_label".to_string(),
-                OwnedValue::try_from(Value::from("Allow")).expect("ownable"),
+                OwnedVariant::try_from(Variant::from("Allow")).expect("ownable"),
             )]);
-            let reply = client
-                .call_method(
-                    None::<&str>,
-                    OBJECT_PATH,
-                    Some("org.freedesktop.impl.portal.Access"),
-                    "AccessDialog",
-                    &(
-                        ObjectPath::try_from(HANDLE).expect("a path"),
-                        "org.example.App",
-                        "wayland:abc",
-                        "Use the camera?",
-                        "",
-                        "",
-                        options,
-                    ),
-                )
-                .expect("AccessDialog answered");
-            let (response, results): (u32, HashMap<String, OwnedValue>) =
+            let reply = zbus::block_on(client.call_method(
+                None::<&str>,
+                OBJECT_PATH,
+                Some("org.freedesktop.impl.portal.Access"),
+                "AccessDialog",
+                &(
+                    ObjectPath::try_from(HANDLE).expect("a path"),
+                    "org.example.App",
+                    "wayland:abc",
+                    "Use the camera?",
+                    "",
+                    "",
+                    options,
+                ),
+            ))
+            .expect("AccessDialog answered");
+            let (response, results): (u32, HashMap<String, OwnedVariant>) =
                 reply.body().deserialize().expect("its reply");
             assert!(results.is_empty());
             response
@@ -1379,16 +1387,14 @@ mod tests {
         let asking = ask_for_access(&served.client);
         next(&served.published);
 
-        served
-            .client
-            .call_method(
-                None::<&str>,
-                HANDLE,
-                Some("org.freedesktop.impl.portal.Request"),
-                "Close",
-                &(),
-            )
-            .expect("Close answered");
+        zbus::block_on(served.client.call_method(
+            None::<&str>,
+            HANDLE,
+            Some("org.freedesktop.impl.portal.Request"),
+            "Close",
+            &(),
+        ))
+        .expect("Close answered");
 
         assert_eq!(next(&served.published), []);
         assert_eq!(asking.join().expect("the call returned"), 2);
@@ -1413,45 +1419,44 @@ mod tests {
     /// Call `ChooseApplication` over `wayland:abc` from another thread,
     /// returning its reply. `modal` is the option, if sent.
     fn choose_application(
-        client: &zbus::blocking::Connection,
+        client: &zbus::Connection,
         modal: Option<bool>,
-    ) -> thread::JoinHandle<(u32, HashMap<String, OwnedValue>)> {
+    ) -> thread::JoinHandle<(u32, HashMap<String, OwnedVariant>)> {
         let client = client.clone();
         thread::spawn(move || {
             let mut options = HashMap::from([
                 (
                     "content_type".to_string(),
-                    OwnedValue::try_from(Value::from("application/pdf")).expect("ownable"),
+                    OwnedVariant::try_from(Variant::from("application/pdf")).expect("ownable"),
                 ),
                 (
                     "activation_token".to_string(),
-                    OwnedValue::try_from(Value::from("token-1")).expect("ownable"),
+                    OwnedVariant::try_from(Variant::from("token-1")).expect("ownable"),
                 ),
             ]);
             if let Some(modal) = modal {
                 options.insert(
                     "modal".to_string(),
-                    OwnedValue::try_from(Value::from(modal)).expect("ownable"),
+                    OwnedVariant::try_from(Variant::from(modal)).expect("ownable"),
                 );
             }
-            client
-                .call_method(
-                    None::<&str>,
-                    OBJECT_PATH,
-                    Some("org.freedesktop.impl.portal.AppChooser"),
-                    "ChooseApplication",
-                    &(
-                        ObjectPath::try_from(HANDLE).expect("a path"),
-                        "org.example.App",
-                        "wayland:abc",
-                        vec!["org.gnome.Evince"],
-                        options,
-                    ),
-                )
-                .expect("ChooseApplication answered")
-                .body()
-                .deserialize()
-                .expect("its reply")
+            zbus::block_on(client.call_method(
+                None::<&str>,
+                OBJECT_PATH,
+                Some("org.freedesktop.impl.portal.AppChooser"),
+                "ChooseApplication",
+                &(
+                    ObjectPath::try_from(HANDLE).expect("a path"),
+                    "org.example.App",
+                    "wayland:abc",
+                    vec!["org.gnome.Evince"],
+                    options,
+                ),
+            ))
+            .expect("ChooseApplication answered")
+            .body()
+            .deserialize()
+            .expect("its reply")
         })
     }
 
@@ -1477,19 +1482,17 @@ mod tests {
         let choosing = choose_application(&served.client, None);
         assert_eq!(next(&served.published), [pdf_dialog(&["org.gnome.Evince"])]);
 
-        served
-            .client
-            .call_method(
-                None::<&str>,
-                OBJECT_PATH,
-                Some("org.freedesktop.impl.portal.AppChooser"),
-                "UpdateChoices",
-                &(
-                    ObjectPath::try_from(HANDLE).expect("a path"),
-                    vec!["org.gnome.Evince", "org.gnome.Papers"],
-                ),
-            )
-            .expect("UpdateChoices answered");
+        zbus::block_on(served.client.call_method(
+            None::<&str>,
+            OBJECT_PATH,
+            Some("org.freedesktop.impl.portal.AppChooser"),
+            "UpdateChoices",
+            &(
+                ObjectPath::try_from(HANDLE).expect("a path"),
+                vec!["org.gnome.Evince", "org.gnome.Papers"],
+            ),
+        ))
+        .expect("UpdateChoices answered");
         assert_eq!(
             next(&served.published),
             [pdf_dialog(&["org.gnome.Evince", "org.gnome.Papers"])]
@@ -1508,11 +1511,11 @@ mod tests {
             HashMap::from([
                 (
                     "choice".to_string(),
-                    OwnedValue::try_from(Value::from("org.gnome.Papers")).expect("ownable"),
+                    OwnedVariant::try_from(Variant::from("org.gnome.Papers")).expect("ownable"),
                 ),
                 (
                     "activation_token".to_string(),
-                    OwnedValue::try_from(Value::from("token-1")).expect("ownable"),
+                    OwnedVariant::try_from(Variant::from("token-1")).expect("ownable"),
                 ),
             ])
         );
@@ -1568,36 +1571,36 @@ mod tests {
         let served = served(true);
         let add = || {
             let notification = HashMap::from([
-                ("title", Value::from("Update")),
-                ("default-action", Value::from("app.open")),
-                ("default-action-target", Value::from("inbox")),
+                ("title", Variant::from("Update")),
+                ("default-action", Variant::from("app.open")),
+                ("default-action-target", Variant::from("inbox")),
             ]);
-            served
-                .client
-                .call_method(
-                    None::<&str>,
-                    OBJECT_PATH,
-                    Some("org.freedesktop.impl.portal.Notification"),
-                    "AddNotification",
-                    &("org.example.App", "update", notification),
-                )
-                .expect("AddNotification answered");
+            zbus::block_on(served.client.call_method(
+                None::<&str>,
+                OBJECT_PATH,
+                Some("org.freedesktop.impl.portal.Notification"),
+                "AddNotification",
+                &("org.example.App", "update", notification),
+            ))
+            .expect("AddNotification answered");
         };
 
         let shown = shown_after(&served, add);
-        let mut messages = zbus::blocking::MessageIterator::from(&served.client);
-        let iface = served
-            .server
-            .object_server()
-            .interface::<_, Notification>(OBJECT_PATH)
-            .expect("served");
+        let mut messages = zbus::MessageStream::from(&served.client);
+        let iface = zbus::block_on(
+            served
+                .server
+                .object_server()
+                .interface::<_, Notification>(OBJECT_PATH),
+        )
+        .expect("served");
         notification::invoked(
             &iface,
             Invoked {
                 app_id: "org.example.App".into(),
                 id: "update".into(),
                 action: "app.open".into(),
-                target: Some(OwnedValue::try_from(Value::from("inbox")).expect("ownable")),
+                target: Some(OwnedVariant::try_from(Variant::from("inbox")).expect("ownable")),
             },
             "t0k".into(),
         );
@@ -1609,7 +1612,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             [("Update", true)]
         );
-        let (app_id, id, action, parameter): (String, String, String, Vec<OwnedValue>) =
+        let (app_id, id, action, parameter): (String, String, String, Vec<OwnedVariant>) =
             heard(&mut messages, "ActionInvoked")
                 .deserialize()
                 .expect("ActionInvoked's arguments");
@@ -1619,7 +1622,7 @@ mod tests {
         );
         // The target, then the platform data with a token the application
         // raises its window with.
-        let [target, platform_data] = <[OwnedValue; 2]>::try_from(parameter).expect("two values");
+        let [target, platform_data] = <[OwnedVariant; 2]>::try_from(parameter).expect("two values");
         assert_eq!(String::try_from(target), Ok("inbox".to_string()));
         assert_eq!(
             HashMap::<String, String>::try_from(platform_data),
@@ -1633,32 +1636,28 @@ mod tests {
     #[test]
     fn an_application_removes_its_portal_notification() {
         let served = served(true);
-        served
-            .client
-            .call_method(
+        zbus::block_on(served.client.call_method(
+            None::<&str>,
+            OBJECT_PATH,
+            Some("org.freedesktop.impl.portal.Notification"),
+            "AddNotification",
+            &(
+                "org.example.App",
+                "update",
+                HashMap::from([("title", Variant::from("Update"))]),
+            ),
+        ))
+        .expect("AddNotification answered");
+
+        let shown = shown_after(&served, || {
+            zbus::block_on(served.client.call_method(
                 None::<&str>,
                 OBJECT_PATH,
                 Some("org.freedesktop.impl.portal.Notification"),
-                "AddNotification",
-                &(
-                    "org.example.App",
-                    "update",
-                    HashMap::from([("title", Value::from("Update"))]),
-                ),
-            )
-            .expect("AddNotification answered");
-
-        let shown = shown_after(&served, || {
-            served
-                .client
-                .call_method(
-                    None::<&str>,
-                    OBJECT_PATH,
-                    Some("org.freedesktop.impl.portal.Notification"),
-                    "RemoveNotification",
-                    &("org.example.App", "update"),
-                )
-                .expect("RemoveNotification answered");
+                "RemoveNotification",
+                &("org.example.App", "update"),
+            ))
+            .expect("RemoveNotification answered");
         });
 
         assert_eq!(shown, []);
@@ -1676,33 +1675,29 @@ mod tests {
             .inhibitors
             .hold_idle_through(move |holds| told.send(holds).expect("the test listens"));
 
-        served
-            .client
-            .call_method(
-                None::<&str>,
-                OBJECT_PATH,
-                Some("org.freedesktop.impl.portal.Inhibit"),
-                "Inhibit",
-                &(
-                    ObjectPath::try_from(INHIBITOR).expect("a path"),
-                    "org.example.Editor",
-                    "",
-                    1u32 | 8,
-                    HashMap::from([("reason", Value::from("Unsaved changes"))]),
-                ),
-            )
-            .expect("Inhibit answered");
+        zbus::block_on(served.client.call_method(
+            None::<&str>,
+            OBJECT_PATH,
+            Some("org.freedesktop.impl.portal.Inhibit"),
+            "Inhibit",
+            &(
+                ObjectPath::try_from(INHIBITOR).expect("a path"),
+                "org.example.Editor",
+                "",
+                1u32 | 8,
+                HashMap::from([("reason", Variant::from("Unsaved changes"))]),
+            ),
+        ))
+        .expect("Inhibit answered");
         let listed = next(&served.published);
-        served
-            .client
-            .call_method(
-                None::<&str>,
-                INHIBITOR,
-                Some("org.freedesktop.impl.portal.Request"),
-                "Close",
-                &(),
-            )
-            .expect("Close answered");
+        zbus::block_on(served.client.call_method(
+            None::<&str>,
+            INHIBITOR,
+            Some("org.freedesktop.impl.portal.Request"),
+            "Close",
+            &(),
+        ))
+        .expect("Close answered");
 
         assert_eq!(
             listed,
@@ -1724,24 +1719,23 @@ mod tests {
     }
 
     /// Open a monitor at `session`.
-    fn monitor(client: &zbus::blocking::Connection, session: &str) -> u32 {
-        client
-            .call_method(
-                None::<&str>,
-                OBJECT_PATH,
-                Some("org.freedesktop.impl.portal.Inhibit"),
-                "CreateMonitor",
-                &(
-                    ObjectPath::try_from(INHIBITOR).expect("a path"),
-                    ObjectPath::try_from(session).expect("a path"),
-                    "org.example.Player",
-                    "",
-                ),
-            )
-            .expect("CreateMonitor answered")
-            .body()
-            .deserialize()
-            .expect("a response")
+    fn monitor(client: &zbus::Connection, session: &str) -> u32 {
+        zbus::block_on(client.call_method(
+            None::<&str>,
+            OBJECT_PATH,
+            Some("org.freedesktop.impl.portal.Inhibit"),
+            "CreateMonitor",
+            &(
+                ObjectPath::try_from(INHIBITOR).expect("a path"),
+                ObjectPath::try_from(session).expect("a path"),
+                "org.example.Player",
+                "",
+            ),
+        ))
+        .expect("CreateMonitor answered")
+        .body()
+        .deserialize()
+        .expect("a response")
     }
 
     #[test]
@@ -1749,32 +1743,32 @@ mod tests {
         const GONE: &str = "/org/freedesktop/portal/desktop/session/1_7/gone";
         const STAYING: &str = "/org/freedesktop/portal/desktop/session/1_7/staying";
         let served = served(true);
-        let inhibit = served
-            .server
-            .object_server()
-            .interface::<_, Inhibit>(OBJECT_PATH)
-            .expect("served");
+        let inhibit = zbus::block_on(
+            served
+                .server
+                .object_server()
+                .interface::<_, Inhibit>(OBJECT_PATH),
+        )
+        .expect("served");
         let responses = [
             monitor(&served.client, GONE),
             monitor(&served.client, STAYING),
         ];
-        served
-            .client
-            .call_method(
-                None::<&str>,
-                GONE,
-                Some("org.freedesktop.impl.portal.Session"),
-                "Close",
-                &(),
-            )
-            .expect("Close answered");
+        zbus::block_on(served.client.call_method(
+            None::<&str>,
+            GONE,
+            Some("org.freedesktop.impl.portal.Session"),
+            "Close",
+            &(),
+        ))
+        .expect("Close answered");
 
-        let mut messages = zbus::blocking::MessageIterator::from(&served.client);
+        let mut messages = zbus::MessageStream::from(&served.client);
         inhibit::screensaver(&inhibit, true).expect("said");
 
         assert_eq!(responses, [0, 0]);
         // The closed monitor would have been told first.
-        let (session, state): (OwnedObjectPath, HashMap<String, OwnedValue>) =
+        let (session, state): (OwnedObjectPath, HashMap<String, OwnedVariant>) =
             heard(&mut messages, "StateChanged")
                 .deserialize()
                 .expect("StateChanged's arguments");
@@ -1786,12 +1780,14 @@ mod tests {
     #[test]
     fn a_new_look_is_signaled_to_clients() {
         let served = served(true);
-        let settings = served
-            .server
-            .object_server()
-            .interface::<_, Settings>(OBJECT_PATH)
-            .expect("served");
-        let mut messages = zbus::blocking::MessageIterator::from(&served.client);
+        let settings = zbus::block_on(
+            served
+                .server
+                .object_server()
+                .interface::<_, Settings>(OBJECT_PATH),
+        )
+        .expect("served");
+        let mut messages = zbus::MessageStream::from(&served.client);
 
         settings::changed(
             &settings,
@@ -1803,7 +1799,7 @@ mod tests {
         )
         .expect("said");
 
-        let (namespace, key, value): (String, String, OwnedValue) =
+        let (namespace, key, value): (String, String, OwnedVariant) =
             heard(&mut messages, "SettingChanged")
                 .deserialize()
                 .expect("SettingChanged's arguments");
@@ -1820,24 +1816,23 @@ mod tests {
         let asking = thread::spawn(move || {
             let options = HashMap::from([(
                 "multiple".to_string(),
-                OwnedValue::try_from(Value::from(true)).expect("ownable"),
+                OwnedVariant::try_from(Variant::from(true)).expect("ownable"),
             )]);
-            let reply = client
-                .call_method(
-                    None::<&str>,
-                    OBJECT_PATH,
-                    Some("org.freedesktop.impl.portal.FileChooser"),
-                    "OpenFile",
-                    &(
-                        ObjectPath::try_from(HANDLE).expect("a path"),
-                        "org.example.Editor",
-                        "",
-                        "Open Notes",
-                        options,
-                    ),
-                )
-                .expect("OpenFile answered");
-            let (response, results): (u32, HashMap<String, OwnedValue>) =
+            let reply = zbus::block_on(client.call_method(
+                None::<&str>,
+                OBJECT_PATH,
+                Some("org.freedesktop.impl.portal.FileChooser"),
+                "OpenFile",
+                &(
+                    ObjectPath::try_from(HANDLE).expect("a path"),
+                    "org.example.Editor",
+                    "",
+                    "Open Notes",
+                    options,
+                ),
+            ))
+            .expect("OpenFile answered");
+            let (response, results): (u32, HashMap<String, OwnedVariant>) =
                 reply.body().deserialize().expect("its reply");
             (
                 response,
@@ -1879,31 +1874,30 @@ mod tests {
 
     /// Call `GetUserInformation` from another thread, returning its reply.
     fn ask_for_the_user(
-        client: &zbus::blocking::Connection,
-    ) -> thread::JoinHandle<(u32, HashMap<String, OwnedValue>)> {
+        client: &zbus::Connection,
+    ) -> thread::JoinHandle<(u32, HashMap<String, OwnedVariant>)> {
         let client = client.clone();
         thread::spawn(move || {
             let options = HashMap::from([(
                 "reason".to_string(),
-                OwnedValue::try_from(Value::from("To sign you in")).expect("ownable"),
+                OwnedVariant::try_from(Variant::from("To sign you in")).expect("ownable"),
             )]);
-            client
-                .call_method(
-                    None::<&str>,
-                    OBJECT_PATH,
-                    Some("org.freedesktop.impl.portal.Account"),
-                    "GetUserInformation",
-                    &(
-                        ObjectPath::try_from(HANDLE).expect("a path"),
-                        "org.example.Mail",
-                        "",
-                        options,
-                    ),
-                )
-                .expect("GetUserInformation answered")
-                .body()
-                .deserialize()
-                .expect("its reply")
+            zbus::block_on(client.call_method(
+                None::<&str>,
+                OBJECT_PATH,
+                Some("org.freedesktop.impl.portal.Account"),
+                "GetUserInformation",
+                &(
+                    ObjectPath::try_from(HANDLE).expect("a path"),
+                    "org.example.Mail",
+                    "",
+                    options,
+                ),
+            ))
+            .expect("GetUserInformation answered")
+            .body()
+            .deserialize()
+            .expect("its reply")
         })
     }
 
@@ -1970,13 +1964,13 @@ mod tests {
     }
 
     /// Call `ComposeEmail` with one recipient, returning its response.
-    fn compose(client: &zbus::blocking::Connection) -> u32 {
+    fn compose(client: &zbus::Connection) -> u32 {
         let options = HashMap::from([(
             "address".to_string(),
-            OwnedValue::try_from(Value::from("a@example.com")).expect("ownable"),
+            OwnedVariant::try_from(Variant::from("a@example.com")).expect("ownable"),
         )]);
-        let (response, results): (u32, HashMap<String, OwnedValue>) = client
-            .call_method(
+        let (response, results): (u32, HashMap<String, OwnedVariant>) =
+            zbus::block_on(client.call_method(
                 None::<&str>,
                 OBJECT_PATH,
                 Some("org.freedesktop.impl.portal.Email"),
@@ -1987,7 +1981,7 @@ mod tests {
                     "",
                     options,
                 ),
-            )
+            ))
             .expect("ComposeEmail answered")
             .body()
             .deserialize()
@@ -2056,19 +2050,18 @@ mod tests {
     }
 
     /// The `Lockdown` switch `name`, as a client reads it.
-    fn switch(client: &zbus::blocking::Connection, name: &str) -> bool {
-        let value: OwnedValue = client
-            .call_method(
-                None::<&str>,
-                OBJECT_PATH,
-                Some("org.freedesktop.DBus.Properties"),
-                "Get",
-                &("org.freedesktop.impl.portal.Lockdown", name),
-            )
-            .expect("Get answered")
-            .body()
-            .deserialize()
-            .expect("a value");
+    fn switch(client: &zbus::Connection, name: &str) -> bool {
+        let value: OwnedVariant = zbus::block_on(client.call_method(
+            None::<&str>,
+            OBJECT_PATH,
+            Some("org.freedesktop.DBus.Properties"),
+            "Get",
+            &("org.freedesktop.impl.portal.Lockdown", name),
+        ))
+        .expect("Get answered")
+        .body()
+        .deserialize()
+        .expect("a value");
         bool::try_from(value).expect("a boolean")
     }
 
@@ -2083,12 +2076,14 @@ mod tests {
     #[test]
     fn a_new_lockdown_is_signaled_and_then_read() {
         let served = served(true);
-        let signals = zbus::blocking::MessageIterator::from(&served.client);
-        let lockdown = served
-            .server
-            .object_server()
-            .interface::<_, Lockdown>(OBJECT_PATH)
-            .expect("Lockdown is served");
+        let mut signals = zbus::MessageStream::from(&served.client);
+        let lockdown = zbus::block_on(
+            served
+                .server
+                .object_server()
+                .interface::<_, Lockdown>(OBJECT_PATH),
+        )
+        .expect("Lockdown is served");
 
         lockdown::changed(
             &lockdown,
@@ -2099,7 +2094,7 @@ mod tests {
         )
         .expect("signaled");
 
-        let signal = signals
+        let signal = std::iter::from_fn(|| zbus::block_on(signals.next()))
             .map(|message| message.expect("a message"))
             .find(|message| {
                 message
@@ -2108,7 +2103,7 @@ mod tests {
                     .is_some_and(|member| member == "PropertiesChanged")
             })
             .expect("a PropertiesChanged signal");
-        let (interface, changed, _): (String, HashMap<String, OwnedValue>, Vec<String>) =
+        let (interface, changed, _): (String, HashMap<String, OwnedVariant>, Vec<String>) =
             signal.body().deserialize().expect("its body");
         assert_eq!(interface, "org.freedesktop.impl.portal.Lockdown");
         assert_eq!(
@@ -2124,9 +2119,9 @@ mod tests {
         let served = served(true);
         let client = served.client.clone();
         let preparing = thread::spawn(move || {
-            let empty = HashMap::<String, OwnedValue>::new();
-            let (response, _): (u32, HashMap<String, OwnedValue>) = client
-                .call_method(
+            let empty = HashMap::<String, OwnedVariant>::new();
+            let (response, _): (u32, HashMap<String, OwnedVariant>) =
+                zbus::block_on(client.call_method(
                     None::<&str>,
                     OBJECT_PATH,
                     Some("org.freedesktop.impl.portal.Print"),
@@ -2140,7 +2135,7 @@ mod tests {
                         &empty,
                         &empty,
                     ),
-                )
+                ))
                 .expect("PreparePrint answered")
                 .body()
                 .deserialize()

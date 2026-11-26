@@ -20,17 +20,13 @@ pub fn in_a_window(host: Option<&OsStr>) -> bool {
 }
 
 /// Takes `name` or queues for it. See the module docs.
-pub fn take(
-    connection: &zbus::blocking::Connection,
-    name: &str,
-    in_a_window: bool,
-) -> zbus::Result<()> {
+pub fn take(connection: &zbus::Connection, name: &str, in_a_window: bool) -> zbus::Result<()> {
     let flags = if in_a_window {
-        RequestNameFlags::AllowReplacement.into()
+        RequestNameFlags::ALLOW_REPLACEMENT
     } else {
-        RequestNameFlags::AllowReplacement | RequestNameFlags::ReplaceExisting
+        RequestNameFlags::ALLOW_REPLACEMENT | RequestNameFlags::REPLACE_EXISTING
     };
-    connection.request_name_with_flags(name, flags).map(drop)
+    zbus::block_on(connection.request_name_with_flags(name, flags)).map(drop)
 }
 
 #[cfg(test)]

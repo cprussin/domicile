@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use zbus::zvariant::Value;
+use zbus::Variant;
 
 /// The application name shown on notifications.
 const APP_NAME: &str = "Domicile";
@@ -21,27 +21,25 @@ const CRITICAL: u8 = 2;
 pub const ANSWER_WITHIN: Duration = Duration::from_secs(2);
 
 /// Builds a connection whose calls time out after [`ANSWER_WITHIN`].
-pub fn connected(
-    builder: zbus::blocking::connection::Builder<'_>,
-) -> Result<zbus::blocking::Connection, zbus::Error> {
-    builder.method_timeout(ANSWER_WITHIN).build()
+pub fn connected(builder: zbus::connection::Builder<'_>) -> Result<zbus::Connection, zbus::Error> {
+    zbus::block_on(builder.method_timeout(ANSWER_WITHIN).build())
 }
 
 /// Connects to the session bus with [`connected`].
-pub fn session_bus() -> Result<zbus::blocking::Connection, zbus::Error> {
-    connected(zbus::blocking::connection::Builder::session()?)
+pub fn session_bus() -> Result<zbus::Connection, zbus::Error> {
+    connected(zbus::connection::Builder::session())
 }
 
 /// Shows a notification through the server on `bus`, drawn with `icon`: an
 /// icon's name or a path, as `app_icon` takes it, or empty for Domicile's.
 pub fn notify(
-    bus: &zbus::blocking::Connection,
+    bus: &zbus::Connection,
     icon: &str,
     summary: &str,
     body: &str,
 ) -> Result<(), zbus::Error> {
-    let hints = HashMap::from([("urgency", Value::from(CRITICAL))]);
-    bus.call_method(
+    let hints = HashMap::from([("urgency", Variant::from(CRITICAL))]);
+    zbus::block_on(bus.call_method(
         Some("org.freedesktop.Notifications"),
         "/org/freedesktop/Notifications",
         Some("org.freedesktop.Notifications"),
@@ -56,6 +54,6 @@ pub fn notify(
             hints,
             -1_i32,
         ),
-    )
+    ))
     .map(drop)
 }

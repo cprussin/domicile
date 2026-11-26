@@ -1,9 +1,9 @@
 //! `--tray`: a tray icon on the session bus, with a menu, as a chat app shows
 //! one.
 
-use zbus::blocking::Connection;
 use zbus::interface;
-use zbus::zvariant::{ObjectPath, OwnedValue};
+use zbus::Connection;
+use zbus::{ObjectPath, OwnedVariant};
 
 /// Where the icon is served, as the spec suggests.
 const PATH: &str = "/StatusNotifierItem";
@@ -51,7 +51,7 @@ struct Menu;
 
 #[interface(name = "com.canonical.dbusmenu")]
 impl Menu {
-    fn event(&self, id: i32, event_id: String, _data: OwnedValue, _timestamp: u32) {
+    fn event(&self, id: i32, event_id: String, _data: OwnedVariant, _timestamp: u32) {
         if event_id == "clicked" {
             crate::say!("menu", "clicked({id})");
         }
@@ -62,16 +62,16 @@ impl Menu {
 ///
 /// Returns the connection, which serves the icon while it lives.
 pub fn show() -> zbus::Result<Connection> {
-    let bus = Connection::session()?;
-    bus.object_server().at(PATH, Item)?;
-    bus.object_server().at(MENU_PATH, Menu)?;
-    bus.call_method(
+    let bus = zbus::block_on(Connection::session())?;
+    zbus::block_on(bus.object_server().at(PATH, Item))?;
+    zbus::block_on(bus.object_server().at(MENU_PATH, Menu))?;
+    zbus::block_on(bus.call_method(
         Some("org.kde.StatusNotifierWatcher"),
         "/StatusNotifierWatcher",
         Some("org.kde.StatusNotifierWatcher"),
         "RegisterStatusNotifierItem",
         &(PATH,),
-    )?;
+    ))?;
     crate::say!("tray", "shown()");
     Ok(bus)
 }

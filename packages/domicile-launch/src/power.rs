@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use domicile_protocol::SHELL_APP_ID;
-use zbus::zvariant::{ObjectPath, OwnedValue, Value};
+use zbus::{ObjectPath, OwnedVariant, Variant};
 
 /// The desktop's own portal backend, which the compositor serves.
 const BACKEND: &str = "org.freedesktop.impl.portal.desktop.domicile";
@@ -74,7 +74,7 @@ impl Power {
 /// Asks the user on `bus`. Returns whether they said yes.
 ///
 /// A canceled dialog, or one with no shell to show it, is a no.
-pub fn confirmed(bus: &zbus::blocking::Connection, power: Power) -> Result<bool, String> {
+pub fn confirmed(bus: &zbus::Connection, power: Power) -> Result<bool, String> {
     let (title, subtitle, grant) = power.question();
     let handle = format!(
         "{BACKEND_PATH}/request/launcher/{}_{}",
@@ -83,20 +83,19 @@ pub fn confirmed(bus: &zbus::blocking::Connection, power: Power) -> Result<bool,
     );
     let handle = ObjectPath::try_from(handle.as_str()).map_err(|why| why.to_string())?;
     let options = HashMap::from([
-        ("grant_label", Value::from(grant)),
-        ("deny_label", Value::from("Cancel")),
-        ("destructive", Value::from(true)),
+        ("grant_label", Variant::from(grant)),
+        ("deny_label", Variant::from("Cancel")),
+        ("destructive", Variant::from(true)),
     ]);
-    let (response, _): (u32, HashMap<String, OwnedValue>) = bus
-        .call_method(
-            Some(BACKEND),
-            BACKEND_PATH,
-            Some(ACCESS),
-            "AccessDialog",
-            &(handle, SHELL_APP_ID, "", title, subtitle, "", options),
-        )
-        .and_then(|reply| reply.body().deserialize())
-        .map_err(|why| format!("the desktop's Access dialog did not answer: {why}"))?;
+    let (response, _): (u32, HashMap<String, OwnedVariant>) = zbus::block_on(bus.call_method(
+        Some(BACKEND),
+        BACKEND_PATH,
+        Some(ACCESS),
+        "AccessDialog",
+        &(handle, SHELL_APP_ID, "", title, subtitle, "", options),
+    ))
+    .and_then(|reply| reply.body().deserialize())
+    .map_err(|why| format!("the desktop's Access dialog did not answer: {why}"))?;
     match response {
         0 => Ok(true),
         1 | 2 => Ok(false),

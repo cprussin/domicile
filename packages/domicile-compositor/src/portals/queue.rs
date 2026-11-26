@@ -16,7 +16,7 @@ use domicile_host::portals::{Portals, Unknown};
 use domicile_protocol::{Capturing, CapturingKind, PortalAnswer, PortalKind, PortalRequest};
 use tracing::{debug, warn};
 use zbus::object_server::ObjectServer;
-use zbus::zvariant::OwnedObjectPath;
+use zbus::OwnedObjectPath;
 
 use super::request::Request;
 use crate::reply::{reply, Replier};

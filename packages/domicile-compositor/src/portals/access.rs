@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use domicile_protocol::{AccessDialog, PortalKind};
 use zbus::object_server::ObjectServer;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::{OwnedObjectPath, OwnedVariant};
 
 use super::queue::{ask, Queue};
 
@@ -29,8 +29,8 @@ impl Access {
         title: String,
         subtitle: String,
         body: String,
-        options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let kind = dialog(title, subtitle, body, options);
         let answer = ask(&self.queue, server, handle, app_id, &parent_window, kind).await;
         (answer.response(), HashMap::new())
@@ -42,7 +42,7 @@ fn dialog(
     title: String,
     subtitle: String,
     body: String,
-    mut options: HashMap<String, OwnedValue>,
+    mut options: HashMap<String, OwnedVariant>,
 ) -> PortalKind {
     let mut label = |name: &str| {
         options
@@ -65,14 +65,14 @@ fn dialog(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zbus::zvariant::Value;
+    use zbus::Variant;
 
-    fn options(sent: Vec<(&str, Value<'static>)>) -> HashMap<String, OwnedValue> {
+    fn options(sent: Vec<(&str, Variant<'static>)>) -> HashMap<String, OwnedVariant> {
         sent.into_iter()
             .map(|(name, value)| {
                 (
                     name.to_string(),
-                    OwnedValue::try_from(value).expect("an ownable value"),
+                    OwnedVariant::try_from(value).expect("an ownable value"),
                 )
             })
             .collect()
@@ -85,10 +85,10 @@ mod tests {
             "Example wants to see you".into(),
             String::new(),
             options(vec![
-                ("grant_label", Value::from("Allow")),
-                ("deny_label", Value::from(7u32)),
-                ("modal", Value::from(true)),
-                ("destructive", Value::from(true)),
+                ("grant_label", Variant::from("Allow")),
+                ("deny_label", Variant::from(7u32)),
+                ("modal", Variant::from(true)),
+                ("destructive", Variant::from(true)),
             ]),
         );
 
@@ -111,7 +111,7 @@ mod tests {
             "Use the camera?".into(),
             String::new(),
             String::new(),
-            options(vec![("destructive", Value::from("yes"))]),
+            options(vec![("destructive", Variant::from("yes"))]),
         );
 
         let PortalKind::Access(asked) = asked else {

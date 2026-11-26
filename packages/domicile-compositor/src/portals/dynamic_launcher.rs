@@ -17,7 +17,7 @@ use domicile_host::launcher_icon::icon_url;
 use domicile_protocol::{LauncherDialog, LauncherType, PortalAnswer, PortalKind};
 use tracing::debug;
 use zbus::object_server::ObjectServer;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
 use super::queue::{ask, Queue};
 
@@ -46,9 +46,9 @@ impl DynamicLauncher {
         app_id: String,
         parent_window: String,
         name: String,
-        icon_v: OwnedValue,
-        options: HashMap<String, OwnedValue>,
-    ) -> (u32, HashMap<String, OwnedValue>) {
+        icon_v: OwnedVariant,
+        options: HashMap<String, OwnedVariant>,
+    ) -> (u32, HashMap<String, OwnedVariant>) {
         let (kind, modal) = asked(name, &icon_v, options);
         let parent_window = if modal { parent_window.as_str() } else { "" };
         match ask(&self.queue, server, handle, app_id, parent_window, kind).await {
@@ -57,7 +57,7 @@ impl DynamicLauncher {
                 HashMap::from([
                     (
                         "name".to_string(),
-                        OwnedValue::from(zbus::zvariant::Str::from(name)),
+                        OwnedVariant::from(zbus::Str::from(name)),
                     ),
                     ("icon".to_string(), icon_v),
                 ]),
@@ -70,7 +70,11 @@ impl DynamicLauncher {
     }
 
     /// Refused for every application, so each install shows the dialog.
-    fn request_install_token(&self, app_id: String, _options: HashMap<String, OwnedValue>) -> u32 {
+    fn request_install_token(
+        &self,
+        app_id: String,
+        _options: HashMap<String, OwnedVariant>,
+    ) -> u32 {
         debug!(%app_id, "no application installs launchers without asking");
         2
     }
@@ -90,8 +94,8 @@ impl DynamicLauncher {
 /// mistyped option reads as absent.
 fn asked(
     name: String,
-    icon_v: &OwnedValue,
-    mut options: HashMap<String, OwnedValue>,
+    icon_v: &OwnedVariant,
+    mut options: HashMap<String, OwnedVariant>,
 ) -> (PortalKind, bool) {
     let mut flag = |key: &str, default: bool| {
         options
@@ -123,12 +127,12 @@ fn asked(
 
 /// The bytes of a `GBytesIcon` as `g_icon_serialize()` writes it:
 /// `("bytes", <ay>)`.
-fn icon_bytes(icon_v: &OwnedValue) -> Option<Vec<u8>> {
-    let Value::Structure(icon) = &**icon_v else {
+fn icon_bytes(icon_v: &OwnedVariant) -> Option<Vec<u8>> {
+    let Variant::Structure(icon) = &**icon_v else {
         return None;
     };
     match icon.fields() {
-        [Value::Str(kind), Value::Value(data)] if kind.as_str() == "bytes" => {
+        [Variant::Str(kind), Variant::Variant(data)] if kind.as_str() == "bytes" => {
             Vec::<u8>::try_from(data.try_clone().ok()?).ok()
         }
         _ => None,
@@ -143,7 +147,7 @@ mod tests {
     use std::time::Duration;
 
     use domicile_protocol::PortalRequest;
-    use zbus::zvariant::ObjectPath;
+    use zbus::ObjectPath;
 
     use crate::portals::socket_pair::connected;
 
@@ -152,10 +156,10 @@ mod tests {
     const PNG: &[u8] = b"\x89PNG\r\n\x1a\nicon";
 
     struct Served {
-        client: zbus::blocking::Connection,
+        client: zbus::Connection,
         queue: Arc<Queue>,
         published: Receiver<Vec<PortalRequest>>,
-        _server: zbus::blocking::Connection,
+        _server: zbus::Connection,
     }
 
     fn served() -> Served {
@@ -169,11 +173,8 @@ mod tests {
             |_| None,
         );
         let serving = Arc::clone(&queue);
-        let (server, client) = connected(move |builder| {
-            builder
-                .serve_at(PATH, DynamicLauncher { queue: serving })
-                .expect("served")
-        });
+        let (server, client) =
+            connected(move |builder| builder.serve_at(PATH, DynamicLauncher { queue: serving }));
         Served {
             client,
             queue,
@@ -182,25 +183,27 @@ mod tests {
         }
     }
 
-    fn icon() -> OwnedValue {
-        OwnedValue::try_from(Value::from(("bytes", Value::from(PNG.to_vec())))).expect("ownable")
+    fn icon() -> OwnedVariant {
+        OwnedVariant::try_from(Variant::from(("bytes", Variant::from(PNG.to_vec()))))
+            .expect("ownable")
     }
 
     /// Call `PrepareInstall` from another thread.
     fn prepare_install(
-        client: &zbus::blocking::Connection,
-    ) -> thread::JoinHandle<(u32, HashMap<String, OwnedValue>)> {
+        client: &zbus::Connection,
+    ) -> thread::JoinHandle<(u32, HashMap<String, OwnedVariant>)> {
         let client = client.clone();
         thread::spawn(move || {
             let options = HashMap::from([
-                ("launcher_type".to_string(), OwnedValue::from(WEBAPP)),
+                ("launcher_type".to_string(), OwnedVariant::from(WEBAPP)),
                 (
                     "target".to_string(),
-                    OwnedValue::try_from(Value::from("https://mail.example.com")).expect("ownable"),
+                    OwnedVariant::try_from(Variant::from("https://mail.example.com"))
+                        .expect("ownable"),
                 ),
             ]);
-            client
-                .call_method(
+            zbus::block_on(
+                client.call_method(
                     None::<&str>,
                     PATH,
                     Some(INTERFACE),
@@ -211,14 +214,15 @@ mod tests {
                         "org.example.Browser",
                         "",
                         "Mail",
-                        Value::from(icon()),
+                        Variant::from(icon()),
                         options,
                     ),
-                )
-                .expect("PrepareInstall answered")
-                .body()
-                .deserialize()
-                .expect("its reply")
+                ),
+            )
+            .expect("PrepareInstall answered")
+            .body()
+            .deserialize()
+            .expect("its reply")
         })
     }
 
@@ -285,19 +289,20 @@ mod tests {
     fn no_application_installs_without_asking() {
         let served = served();
 
-        let response: u32 = served
-            .client
-            .call_method(
-                None::<&str>,
-                PATH,
-                Some(INTERFACE),
-                "RequestInstallToken",
-                &("org.example.Browser", HashMap::<String, OwnedValue>::new()),
-            )
-            .expect("RequestInstallToken answered")
-            .body()
-            .deserialize()
-            .expect("a response");
+        let response: u32 = zbus::block_on(served.client.call_method(
+            None::<&str>,
+            PATH,
+            Some(INTERFACE),
+            "RequestInstallToken",
+            &(
+                "org.example.Browser",
+                HashMap::<String, OwnedVariant>::new(),
+            ),
+        ))
+        .expect("RequestInstallToken answered")
+        .body()
+        .deserialize()
+        .expect("a response");
 
         assert_eq!(response, 2);
     }
@@ -306,19 +311,17 @@ mod tests {
     fn applications_and_web_apps_are_supported() {
         let served = served();
         let property = |name: &str| -> u32 {
-            let value: OwnedValue = served
-                .client
-                .call_method(
-                    None::<&str>,
-                    PATH,
-                    Some("org.freedesktop.DBus.Properties"),
-                    "Get",
-                    &(INTERFACE, name),
-                )
-                .expect("Get answered")
-                .body()
-                .deserialize()
-                .expect("a value");
+            let value: OwnedVariant = zbus::block_on(served.client.call_method(
+                None::<&str>,
+                PATH,
+                Some("org.freedesktop.DBus.Properties"),
+                "Get",
+                &(INTERFACE, name),
+            ))
+            .expect("Get answered")
+            .body()
+            .deserialize()
+            .expect("a value");
             u32::try_from(value).expect("a u")
         };
 
@@ -330,11 +333,11 @@ mod tests {
     fn an_icon_that_is_no_picture_is_left_out() {
         let (kind, modal) = asked(
             "Mail".into(),
-            &OwnedValue::try_from(Value::from(("themed", Value::from(vec!["mail"]))))
+            &OwnedVariant::try_from(Variant::from(("themed", Variant::from(vec!["mail"]))))
                 .expect("ownable"),
             HashMap::from([
-                ("modal".to_string(), OwnedValue::from(false)),
-                ("editable_name".to_string(), OwnedValue::from(false)),
+                ("modal".to_string(), OwnedVariant::from(false)),
+                ("editable_name".to_string(), OwnedVariant::from(false)),
             ]),
         );
 

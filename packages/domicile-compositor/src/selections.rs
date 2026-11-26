@@ -28,7 +28,7 @@ use smithay::{
     delegate_primary_selection,
 };
 use tracing::{debug, warn};
-use zbus::zvariant::OwnedObjectPath;
+use zbus::OwnedObjectPath;
 
 use domicile_host::clipboard::{image_mime, text_mime, Contents, LONGEST_COPY, LONGEST_IMAGE};
 use domicile_protocol::HostMessage;

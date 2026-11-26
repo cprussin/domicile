@@ -8,9 +8,10 @@ use std::io::{self, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::time::Duration;
 
-use zbus::blocking::{Connection, MessageIterator, Proxy};
-use zbus::zvariant::OwnedObjectPath;
+use zbus::export::ordered_stream::OrderedStreamExt;
 use zbus::MatchRule;
+use zbus::OwnedObjectPath;
+use zbus::{Connection, MessageStream, Proxy};
 
 use crate::wfd::RTSP_PORT;
 
@@ -63,20 +64,24 @@ pub fn find(connection: &Connection, changed: impl Fn(Vec<Display>)) -> Result<(
     // cached before a match on the browser's own path could be added.
     let rule = MatchRule::builder()
         .msg_type(zbus::message::Type::Signal)
-        .interface(BROWSER)?
-        .build();
-    let signals = MessageIterator::for_match_rule(rule, connection, None)?;
-    let server = Proxy::new(connection, AVAHI, "/", "org.freedesktop.Avahi.Server")
-        .map_err(MiceError::NoAvahi)?;
-    let browser: OwnedObjectPath = server
-        .call(
-            "ServiceBrowserNew",
-            &(ANY_INTERFACE, IPV4, SERVICE, "", 0u32),
-        )
-        .map_err(MiceError::NoAvahi)?;
+        .interface(BROWSER)
+        .build()?;
+    let mut signals = zbus::block_on(MessageStream::for_match_rule(rule, connection, None))?;
+    let server = zbus::block_on(Proxy::new(
+        connection,
+        AVAHI,
+        "/",
+        "org.freedesktop.Avahi.Server",
+    ))
+    .map_err(MiceError::NoAvahi)?;
+    let browser: OwnedObjectPath = zbus::block_on(server.call(
+        "ServiceBrowserNew",
+        &(ANY_INTERFACE, IPV4, SERVICE, "", 0u32),
+    ))
+    .map_err(MiceError::NoAvahi)?;
     let mut displays: HashMap<String, Display> = HashMap::new();
     changed(Vec::new());
-    for message in signals {
+    for message in std::iter::from_fn(|| zbus::block_on(signals.next())) {
         let message = message?;
         let header = message.header();
         if header.path().map(|path| path.as_str()) != Some(browser.as_str()) {
@@ -134,21 +139,25 @@ type Resolved = (
 
 /// Where `display` takes MICE connections.
 fn resolve(connection: &Connection, display: &Display) -> Result<SocketAddr, MiceError> {
-    let server = Proxy::new(connection, AVAHI, "/", "org.freedesktop.Avahi.Server")?;
-    let resolved: Resolved = server
-        .call(
-            "ResolveService",
-            &(
-                display.interface,
-                IPV4,
-                &display.name,
-                SERVICE,
-                &display.domain,
-                IPV4,
-                0u32,
-            ),
-        )
-        .map_err(|_| MiceError::Gone)?;
+    let server = zbus::block_on(Proxy::new(
+        connection,
+        AVAHI,
+        "/",
+        "org.freedesktop.Avahi.Server",
+    ))?;
+    let resolved: Resolved = zbus::block_on(server.call(
+        "ResolveService",
+        &(
+            display.interface,
+            IPV4,
+            &display.name,
+            SERVICE,
+            &display.domain,
+            IPV4,
+            0u32,
+        ),
+    ))
+    .map_err(|_| MiceError::Gone)?;
     let address: IpAddr = resolved.7.parse().map_err(|_| MiceError::Gone)?;
     Ok(SocketAddr::new(address, resolved.8))
 }

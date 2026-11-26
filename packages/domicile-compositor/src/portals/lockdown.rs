@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use domicile_config::LockdownConfig;
 use zbus::fdo::Properties;
 use zbus::object_server::Interface;
-use zbus::zvariant::Value;
+use zbus::Variant;
 
 /// The `Lockdown` backend object. Its properties are read-only: the config
 /// file sets them.
@@ -54,32 +54,31 @@ impl Lockdown {
 
 /// Stores `next` and signals every property in one `PropertiesChanged`.
 pub fn changed(
-    served: &zbus::blocking::object_server::InterfaceRef<Lockdown>,
+    served: &zbus::object_server::InterfaceRef<Lockdown>,
     next: LockdownConfig,
 ) -> zbus::Result<()> {
     // Release the lock before the signal is sent.
     {
-        served.get_mut().config = next.clone();
+        zbus::block_on(served.get_mut()).config = next.clone();
     }
     let switches = HashMap::from([
-        ("disable-printing", Value::from(next.disable_printing)),
+        ("disable-printing", Variant::from(next.disable_printing)),
         (
             "disable-save-to-disk",
-            Value::from(next.disable_save_to_disk),
+            Variant::from(next.disable_save_to_disk),
         ),
         (
             "disable-application-handlers",
-            Value::from(next.disable_application_handlers),
+            Variant::from(next.disable_application_handlers),
         ),
-        ("disable-location", Value::from(next.disable_location)),
-        ("disable-camera", Value::from(next.disable_camera)),
-        ("disable-microphone", Value::from(next.disable_microphone)),
+        ("disable-location", Variant::from(next.disable_location)),
+        ("disable-camera", Variant::from(next.disable_camera)),
+        ("disable-microphone", Variant::from(next.disable_microphone)),
         (
             "disable-sound-output",
-            Value::from(next.disable_sound_output),
+            Variant::from(next.disable_sound_output),
         ),
     ]);
-    // zbus's blocking API has no signal emitter, so block on the async one.
     zbus::block_on(Properties::properties_changed(
         served.signal_emitter(),
         Lockdown::name(),

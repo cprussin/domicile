@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use domicile_host::clipboard::Contents;
 use zbus::fdo;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
 use super::Backends;
 
@@ -96,7 +96,7 @@ impl Clipboard {
     async fn request_clipboard(
         &self,
         session_handle: OwnedObjectPath,
-        _options: HashMap<String, OwnedValue>,
+        _options: HashMap<String, OwnedVariant>,
     ) -> fdo::Result<()> {
         self.backends.remotes.ask_for_the_clipboard(&session_handle)
     }
@@ -105,7 +105,7 @@ impl Clipboard {
     async fn set_selection(
         &self,
         session_handle: OwnedObjectPath,
-        options: HashMap<String, OwnedValue>,
+        options: HashMap<String, OwnedVariant>,
     ) -> fdo::Result<()> {
         self.backends.remotes.sharing(&session_handle)?;
         let mime_types = options
@@ -123,7 +123,7 @@ impl Clipboard {
         &self,
         session_handle: OwnedObjectPath,
         serial: u32,
-    ) -> fdo::Result<zbus::zvariant::OwnedFd> {
+    ) -> fdo::Result<zbus::OwnedFd> {
         let mut transfers = self.backends.transfers.lock().unwrap();
         match transfers.pending.remove(&serial) {
             Some((session, fd)) if session == session_handle => Ok(fd.into()),
@@ -161,7 +161,7 @@ impl Clipboard {
         &self,
         session_handle: OwnedObjectPath,
         mime_type: String,
-    ) -> fdo::Result<zbus::zvariant::OwnedFd> {
+    ) -> fdo::Result<zbus::OwnedFd> {
         self.backends.remotes.sharing(&session_handle)?;
         let (read, write) = crate::clipboard::pipe()
             .map_err(|why| fdo::Error::Failed(format!("no pipe: {why}")))?;
@@ -179,13 +179,14 @@ impl Clipboard {
 }
 
 /// The `SelectionOwnerChanged` options for one session.
-pub fn owner_changed(mime_types: &[String], is_owner: bool) -> HashMap<String, OwnedValue> {
+pub fn owner_changed(mime_types: &[String], is_owner: bool) -> HashMap<String, OwnedVariant> {
     HashMap::from([
         (
             "mime_types".to_string(),
-            OwnedValue::try_from(Value::from(mime_types.to_vec())).expect("strings are ownable"),
+            OwnedVariant::try_from(Variant::from(mime_types.to_vec()))
+                .expect("strings are ownable"),
         ),
-        ("session_is_owner".to_string(), OwnedValue::from(is_owner)),
+        ("session_is_owner".to_string(), OwnedVariant::from(is_owner)),
     ])
 }
 
@@ -193,10 +194,11 @@ pub fn owner_changed(mime_types: &[String], is_owner: bool) -> HashMap<String, O
 mod tests {
     use super::*;
     use std::io::{Read, Write};
+    use zbus::export::ordered_stream::OrderedStreamExt;
 
     use domicile_protocol::{Devices, PortalAnswer, PortalKind, RemoteDesktopDialog};
-    use zbus::blocking::MessageIterator;
     use zbus::MatchRule;
+    use zbus::MessageStream;
 
     use crate::portals::fixture::{
         call, next, options, path, served, starting, Results, Served, SESSION,
@@ -209,7 +211,7 @@ mod tests {
     /// A session that asked for the keyboard and the clipboard, granted
     /// `clipboard`.
     fn sharing(served: &Served, clipboard: bool) -> Results {
-        let started = starting(served, options(vec![("types", Value::from(1u32))]), true);
+        let started = starting(served, options(vec![("types", Variant::from(1u32))]), true);
         let (items, _) = next(served);
         assert_eq!(
             items[0].kind,
@@ -234,18 +236,17 @@ mod tests {
         started.join().expect("Start returned").1
     }
 
-    fn signals(served: &Served, member: &'static str) -> MessageIterator {
-        MessageIterator::for_match_rule(
+    fn signals(served: &Served, member: &'static str) -> MessageStream {
+        zbus::block_on(MessageStream::for_match_rule(
             MatchRule::builder()
                 .msg_type(zbus::message::Type::Signal)
                 .interface(CLIPBOARD)
-                .expect("a name")
                 .member(member)
-                .expect("a name")
-                .build(),
+                .build()
+                .expect("a match rule"),
             &served.client,
             None,
-        )
+        ))
         .expect("listening")
     }
 
@@ -272,7 +273,7 @@ mod tests {
 
         assert_eq!(
             results.get("clipboard_enabled"),
-            Some(&OwnedValue::from(true))
+            Some(&OwnedVariant::from(true))
         );
     }
 
@@ -287,7 +288,7 @@ mod tests {
             "SetSelection",
             &(
                 path(SESSION),
-                options(vec![("mime_types", Value::from(vec![TEXT]))]),
+                options(vec![("mime_types", Variant::from(vec![TEXT]))]),
             ),
         );
 
@@ -297,14 +298,14 @@ mod tests {
     /// A client pasting the session's offer: its read end, and the serial
     /// the application heard.
     fn pasting(served: &Served) -> (OwnedFd, u32) {
-        let transfers = signals(served, "SelectionTransfer");
+        let mut transfers = signals(served, "SelectionTransfer");
         call(
             served,
             CLIPBOARD,
             "SetSelection",
             &(
                 path(SESSION),
-                options(vec![("mime_types", Value::from(vec![TEXT]))]),
+                options(vec![("mime_types", Variant::from(vec![TEXT]))]),
             ),
         )
         .expect("SetSelection answered");
@@ -323,8 +324,7 @@ mod tests {
         // The Wayland thread hands over the client's pipe.
         let (pasted, paste) = crate::clipboard::pipe().expect("a pipe");
         served.backends.transfer(session, TEXT.into(), paste);
-        let signal = transfers
-            .into_iter()
+        let signal = std::iter::from_fn(|| zbus::block_on(transfers.next()))
             .next()
             .expect("a signal")
             .expect("read");
@@ -353,7 +353,7 @@ mod tests {
             &(path(SESSION), serial),
         )
         .expect("SelectionWrite answered");
-        let write: zbus::zvariant::OwnedFd = write.body().deserialize().expect("a pipe");
+        let write: zbus::OwnedFd = write.body().deserialize().expect("a pipe");
         std::fs::File::from(OwnedFd::from(write))
             .write_all(b"from afar")
             .expect("it writes");
@@ -380,16 +380,14 @@ mod tests {
         sharing(&served, true);
         let (pasted, _) = pasting(&served);
 
-        served
-            .client
-            .call_method(
-                None::<&str>,
-                SESSION,
-                Some("org.freedesktop.impl.portal.Session"),
-                "Close",
-                &(),
-            )
-            .expect("Close answered");
+        zbus::block_on(served.client.call_method(
+            None::<&str>,
+            SESSION,
+            Some("org.freedesktop.impl.portal.Session"),
+            "Close",
+            &(),
+        ))
+        .expect("Close answered");
 
         assert!(ends_empty(pasted));
     }
@@ -408,10 +406,13 @@ mod tests {
     fn the_application_reads_the_clipboard_and_hears_it_change() {
         let served = served(Tokens::load(None));
         sharing(&served, true);
-        let changes = signals(&served, "SelectionOwnerChanged");
+        let mut changes = signals(&served, "SelectionOwnerChanged");
 
         served.backends.selection_changed(vec![TEXT.into()], None);
-        let signal = changes.into_iter().next().expect("a signal").expect("read");
+        let signal = std::iter::from_fn(|| zbus::block_on(changes.next()))
+            .next()
+            .expect("a signal")
+            .expect("read");
         let (session, changed): (OwnedObjectPath, Results) =
             signal.body().deserialize().expect("its arguments");
         assert_eq!(session.as_str(), SESSION);
@@ -419,7 +420,7 @@ mod tests {
 
         let read = call(&served, CLIPBOARD, "SelectionRead", &(path(SESSION), TEXT))
             .expect("SelectionRead answered");
-        let read: zbus::zvariant::OwnedFd = read.body().deserialize().expect("a pipe");
+        let read: zbus::OwnedFd = read.body().deserialize().expect("a pipe");
         let Selection::Read { mime_type, into } = selected(&served) else {
             panic!("a read")
         };

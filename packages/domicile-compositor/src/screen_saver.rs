@@ -17,10 +17,11 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use tracing::debug;
-use zbus::blocking::connection::Builder;
-use zbus::blocking::MessageIterator;
+use zbus::connection::Builder;
+use zbus::export::ordered_stream::OrderedStreamExt;
 use zbus::message::{Header, Type};
 use zbus::MatchRule;
+use zbus::MessageStream;
 
 const NAME: &str = "org.freedesktop.ScreenSaver";
 
@@ -134,27 +135,27 @@ pub fn serve(in_a_window: bool, tell: impl Fn(Vec<Hold>, Change) + Send + Sync +
 /// Serves the object, then drops the holds of applications that leave the
 /// bus. Returns only on failure.
 fn answer(shared: &Arc<Shared>, in_a_window: bool) -> zbus::Result<()> {
-    let connection = Builder::session()?.build()?;
+    let connection = zbus::block_on(Builder::session().build())?;
     for path in PATHS {
-        connection.object_server().at(
+        zbus::block_on(connection.object_server().at(
             path,
             ScreenSaver {
                 shared: Arc::clone(shared),
             },
-        )?;
+        ))?;
     }
     // Listen before taking the name, so an application that asks and exits
     // at once is not missed.
-    let left = MessageIterator::for_match_rule(
+    let left = zbus::block_on(MessageStream::for_match_rule(
         MatchRule::builder()
             .msg_type(Type::Signal)
-            .sender("org.freedesktop.DBus")?
-            .interface("org.freedesktop.DBus")?
-            .member("NameOwnerChanged")?
-            .build(),
+            .sender("org.freedesktop.DBus")
+            .interface("org.freedesktop.DBus")
+            .member("NameOwnerChanged")
+            .build()?,
         &connection,
         None,
-    )?;
+    ))?;
     crate::bus_names::take(&connection, NAME, in_a_window)?;
     debug!("this desktop serves the screen saver");
 
@@ -170,9 +171,9 @@ fn answer(shared: &Arc<Shared>, in_a_window: bool) -> zbus::Result<()> {
 }
 
 /// Sends each unique name that leaves the bus through `told`.
-fn listen(messages: MessageIterator, told: Sender<String>) {
+fn listen(mut messages: MessageStream, told: Sender<String>) {
     thread::spawn(move || {
-        for message in messages.flatten() {
+        for message in std::iter::from_fn(|| zbus::block_on(messages.next())).flatten() {
             let Ok((name, _, owner)) = message.body().deserialize::<(String, String, String)>()
             else {
                 continue;

@@ -10,8 +10,9 @@ use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver};
 use std::time::{Duration, Instant};
 
-use zbus::blocking::fdo::DBusProxy;
-use zbus::blocking::MessageIterator;
+use zbus::export::ordered_stream::OrderedStreamExt;
+use zbus::fdo::DBusProxy;
+use zbus::MessageStream;
 use zbus::{message, MatchRule};
 
 use crate::running::bus::Bus;
@@ -36,7 +37,7 @@ const NO_HOST: [(&str, &str); 1] = [("WAYLAND_DISPLAY", "")];
 
 /// The pids in `name`'s queue, owner first.
 fn queue(bus: &DBusProxy<'_>, name: &str) -> Vec<u32> {
-    let queued = match bus.list_queued_owners(name.try_into().expect("a name")) {
+    let queued = match zbus::block_on(bus.list_queued_owners(name.try_into().expect("a name"))) {
         Ok(queued) => queued,
         Err(zbus::fdo::Error::NameHasNoOwner(_)) => Vec::new(),
         Err(why) => panic!("the bus did not list {name}'s queue: {why}"),
@@ -44,7 +45,7 @@ fn queue(bus: &DBusProxy<'_>, name: &str) -> Vec<u32> {
     queued
         .into_iter()
         .map(|unique| {
-            bus.get_connection_unix_process_id(unique.into())
+            zbus::block_on(bus.get_connection_unix_process_id(unique.into()))
                 .expect("the bus knows a queued pid")
         })
         .collect()
@@ -74,7 +75,7 @@ fn until(bus: &DBusProxy<'_>, what: &str, wanted: impl Fn(&str) -> bool) {
 fn a_desk_in_a_window_leaves_the_sessions_names_alone() {
     let bus = Bus::started();
     let client = bus.client();
-    let proxy = DBusProxy::new(&client).expect("the bus");
+    let proxy = zbus::block_on(DBusProxy::new(&client)).expect("the bus");
     let session = Compositor::started_with_env(
         ONE_DISPLAY,
         None,
@@ -109,23 +110,22 @@ fn activation_calls(bus: &Bus) -> Receiver<(u32, Option<String>)> {
     let rule = MatchRule::builder()
         .msg_type(message::Type::MethodCall)
         .interface("org.freedesktop.DBus")
-        .expect("an interface")
         .member("UpdateActivationEnvironment")
-        .expect("a member")
-        .build();
-    monitor
-        .call_method(
-            Some("org.freedesktop.DBus"),
-            "/org/freedesktop/DBus",
-            Some("org.freedesktop.DBus.Monitoring"),
-            "BecomeMonitor",
-            &(vec![rule.to_string()], 0u32),
-        )
-        .expect("the bus takes a monitor");
+        .build()
+        .expect("a match rule");
+    zbus::block_on(monitor.call_method(
+        Some("org.freedesktop.DBus"),
+        "/org/freedesktop/DBus",
+        Some("org.freedesktop.DBus.Monitoring"),
+        "BecomeMonitor",
+        &(vec![rule.to_string()], 0u32),
+    ))
+    .expect("the bus takes a monitor");
     let (heard, calls) = channel();
     std::thread::spawn(move || {
-        let names = DBusProxy::new(&names).expect("the bus");
-        for call in MessageIterator::from(monitor) {
+        let names = zbus::block_on(DBusProxy::new(&names)).expect("the bus");
+        let mut monitored = MessageStream::from(monitor);
+        for call in std::iter::from_fn(|| zbus::block_on(monitored.next())) {
             let call = call.expect("a message");
             // The bus also sends a monitor its own messages, such as
             // `NameLost` for the monitor's unique name.
@@ -135,7 +135,8 @@ fn activation_calls(bus: &Bus) -> Receiver<(u32, Option<String>)> {
             let sender = call.header().sender().expect("a caller").to_owned();
             // A caller that has since exited has no pid, and is not the
             // desk this waits for.
-            let Ok(pid) = names.get_connection_unix_process_id(sender.into()) else {
+            let Ok(pid) = zbus::block_on(names.get_connection_unix_process_id(sender.into()))
+            else {
                 continue;
             };
             let environment: HashMap<String, String> =
@@ -155,7 +156,7 @@ fn activation_calls(bus: &Bus) -> Receiver<(u32, Option<String>)> {
 fn a_second_session_hands_the_desk_back_when_it_exits() {
     let bus = Bus::started();
     let client = bus.client();
-    let proxy = DBusProxy::new(&client).expect("the bus");
+    let proxy = zbus::block_on(DBusProxy::new(&client)).expect("the bus");
     let env = [
         ("DBUS_SESSION_BUS_ADDRESS", bus.address.as_str()),
         NO_HOST[0],

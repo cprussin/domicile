@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use zbus::blocking::Connection;
+use zbus::Connection;
 
 use crate::mice::{self, Display, MiceError};
 use crate::p2p::{P2p, P2pError};

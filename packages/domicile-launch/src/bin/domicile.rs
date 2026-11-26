@@ -693,7 +693,7 @@ fn ran_app(entry: &str, here: &Path) -> Result<ExitCode, String> {
 fn powered(power: Power) -> Result<ExitCode, String> {
     let session = std::env::var("XDG_SESSION_ID").ok();
     let (program, args) = power.command(session.as_deref())?;
-    let bus = zbus::blocking::Connection::session()
+    let bus = zbus::block_on(zbus::Connection::session())
         .map_err(|why| format!("cannot reach the session bus: {why}"))?;
     match confirmed(&bus, power)? {
         true => Err(format!(
@@ -1492,15 +1492,17 @@ fn sign_in_dialog(
     matching: &str,
     handle: &str,
 ) -> Result<u32, zbus::Error> {
-    use zbus::zvariant::{ObjectPath, Value};
-    let bus = zbus::blocking::connection::Builder::session()?
-        .method_timeout(std::time::Duration::from_millis(mcp::ASK_MS))
-        .build()?;
+    use zbus::{ObjectPath, Variant};
+    let bus = zbus::block_on(
+        zbus::connection::Builder::session()
+            .method_timeout(std::time::Duration::from_millis(mcp::ASK_MS))
+            .build(),
+    )?;
     let options = std::collections::HashMap::from([
-        ("grant_label", Value::from("Allow")),
-        ("deny_label", Value::from("Cancel")),
+        ("grant_label", Variant::from("Allow")),
+        ("deny_label", Variant::from("Cancel")),
     ]);
-    let called = bus.call_method(
+    let called = zbus::block_on(bus.call_method(
         Some("org.freedesktop.impl.portal.desktop.domicile"),
         "/org/freedesktop/portal/desktop",
         Some("org.freedesktop.impl.portal.Access"),
@@ -1517,25 +1519,23 @@ fn sign_in_dialog(
             ),
             options,
         ),
-    );
+    ));
     match called {
         Ok(reply) => {
-            let (response, _): (
-                u32,
-                std::collections::HashMap<String, zbus::zvariant::OwnedValue>,
-            ) = reply.body().deserialize()?;
+            let (response, _): (u32, std::collections::HashMap<String, zbus::OwnedVariant>) =
+                reply.body().deserialize()?;
             Ok(response)
         }
         Err(why) => {
             // Unanswered in time, or the call failed: the sign-in no longer
             // waits, so the dialog goes too.
-            let closed = bus.call_method(
+            let closed = zbus::block_on(bus.call_method(
                 Some("org.freedesktop.impl.portal.desktop.domicile"),
                 handle,
                 Some("org.freedesktop.impl.portal.Request"),
                 "Close",
                 &(),
-            );
+            ));
             if let Err(closing) = closed {
                 agents_error(&format!("could not close the sign-in dialog: {closing}"));
             }
@@ -3008,7 +3008,7 @@ fn session(session: &Path) -> Milestone {
 struct SaidSession {
     is_the_session: bool,
     scope_clients: bool,
-    manager: Mutex<Option<zbus::blocking::Connection>>,
+    manager: Mutex<Option<zbus::Connection>>,
     /// This run's control socket and the session it took over, once said.
     took_over: Mutex<Option<(PathBuf, Vec<String>)>>,
 }
@@ -3027,7 +3027,7 @@ impl SaidSession {
     }
 
     /// Exports the desktop's name. Says why on stderr when it cannot.
-    fn named() -> Option<zbus::blocking::Connection> {
+    fn named() -> Option<zbus::Connection> {
         let named = notification::session_bus().and_then(|manager| {
             graphical_session::name(&manager)?;
             Ok(manager)
@@ -3048,9 +3048,11 @@ impl SaidSession {
     /// stderr when not.
     fn a_user_manager_answers() -> bool {
         let answered = notification::session_bus().and_then(|bus| {
-            zbus::blocking::fdo::DBusProxy::new(&bus)?
-                .name_has_owner("org.freedesktop.systemd1".try_into()?)
-                .map_err(zbus::Error::from)
+            zbus::block_on(
+                zbus::block_on(zbus::fdo::DBusProxy::new(&bus))?
+                    .name_has_owner("org.freedesktop.systemd1".try_into()?),
+            )
+            .map_err(zbus::Error::from)
         });
         match answered {
             Ok(true) => true,
@@ -3090,7 +3092,7 @@ impl SaidSession {
         }
     }
 
-    fn said(places: &Runtime) -> Result<(zbus::blocking::Connection, Vec<String>), String> {
+    fn said(places: &Runtime) -> Result<(zbus::Connection, Vec<String>), String> {
         let session = published(places)?;
         let manager = notification::session_bus().map_err(|why| why.to_string())?;
         let earlier = graphical_session::begin(&manager, &session.wayland_display, &places.control)

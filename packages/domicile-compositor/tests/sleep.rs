@@ -12,9 +12,9 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
 
 use domicile_protocol::HostMessage;
-use zbus::blocking::Connection;
 use zbus::object_server::SignalEmitter;
-use zbus::zvariant::{OwnedFd, OwnedObjectPath};
+use zbus::Connection;
+use zbus::{OwnedFd, OwnedObjectPath};
 
 use crate::running::bus::Bus;
 use crate::running::Compositor;
@@ -103,16 +103,14 @@ struct Logind {
 impl Logind {
     fn serving(bus: &Bus) -> Logind {
         let (taken, inhibitors) = channel();
-        let connection = zbus::blocking::connection::Builder::address(bus.address.as_str())
-            .expect("an address")
-            .name(LOGIND)
-            .expect("logind's name")
-            .serve_at(MANAGER, Manager { taken })
-            .expect("the manager is served")
-            .serve_at(SESSION, Session)
-            .expect("the session is served")
-            .build()
-            .expect("logind is on the bus");
+        let connection = zbus::block_on(
+            zbus::connection::Builder::address(bus.address.as_str())
+                .name(LOGIND)
+                .serve_at(MANAGER, Manager { taken })
+                .serve_at(SESSION, Session)
+                .build(),
+        )
+        .expect("logind is on the bus");
         Logind {
             connection,
             inhibitors,
@@ -132,12 +130,12 @@ impl Logind {
     }
 
     fn prepare_for_sleep(&self, start: bool) {
-        let emitter = SignalEmitter::new(self.connection.inner(), MANAGER).expect("a path");
+        let emitter = SignalEmitter::new(&self.connection, MANAGER).expect("a path");
         zbus::block_on(Manager::prepare_for_sleep(&emitter, start)).expect("the signal is sent");
     }
 
     fn lock_the_session(&self) {
-        let emitter = SignalEmitter::new(self.connection.inner(), SESSION).expect("a path");
+        let emitter = SignalEmitter::new(&self.connection, SESSION).expect("a path");
         zbus::block_on(Session::lock(&emitter)).expect("the signal is sent");
     }
 }
