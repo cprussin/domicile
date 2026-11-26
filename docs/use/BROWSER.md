@@ -174,9 +174,9 @@ and your words are never sent anywhere to be checked.
 Every profile keeps these from the sites you visit, unless you turn one off:
 
 - **Block ads and trackers.** Ads, and the trackers that follow you from site
-  to site, never load. Standard blocks what other sites put on a page; Strict
-  also blocks a site's own, which can break some sites. Private windows use
-  Strict.
+  to site, never load, and the boxes they would have filled are hidden.
+  Standard blocks what other sites put on a page; Strict also blocks a site's
+  own, which can break some sites. Private windows use Strict.
 - **Block cookies from other sites.** A page's ads, buttons and embeds from
   other sites can't keep cookies that follow you from site to site. Sign-ins
   that open in their own window still work.

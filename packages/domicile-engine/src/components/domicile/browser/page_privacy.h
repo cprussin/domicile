@@ -13,6 +13,7 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "url/gurl.h"
 
 class PrefService;
 
@@ -46,6 +47,10 @@ class PagePrivacy : public content::WebContentsObserver,
   // site's, else its profile's.
   AdBlockingMode mode() const;
   AdBlockingSetFor set_for() const;
+
+  // The mode a page at `page` would have in this window, as mode() has it
+  // for the committed one: for a navigation before it commits.
+  AdBlockingMode ModeFor(const GURL& page) const;
 
   // Requests blocked since the page was committed.
   int blocked() const { return blocked_; }

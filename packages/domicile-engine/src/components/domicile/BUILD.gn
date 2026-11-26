@@ -962,6 +962,40 @@ source_set("electron_preload") {
   ]
 }
 
+# A frame's cosmetic filters in the renderer: hides what the browser's ad
+# blocker names by its elements. See docs/architecture/AD-BLOCKING.md.
+source_set("cosmetic_filters") {
+  sources = [
+    "renderer/cosmetic_filters.cc",
+    "renderer/cosmetic_filters.h",
+  ]
+
+  public_deps = [
+    "//components/domicile/mojom",
+    "//content/public/renderer",
+    "//mojo/public/cpp/bindings",
+  ]
+
+  deps = [
+    ":cosmetic_stylesheet",
+    "//base",
+    "//third_party/blink/public:blink",
+    "//third_party/blink/public/common",
+  ]
+}
+
+# The stylesheet :cosmetic_filters puts in a page, and how it reads an
+# element's classes. Its own target so its test needs no renderer: //base
+# only.
+source_set("cosmetic_stylesheet") {
+  sources = [
+    "renderer/cosmetic_stylesheet.cc",
+    "renderer/cosmetic_stylesheet.h",
+  ]
+
+  deps = [ "//base" ]
+}
+
 # One running Electron app on the Electron socket: its requests to the desk and
 # its windows' events. Its own target for the reason :file_choice is one: it
 # needs no browser, which is where its tests are.
@@ -1402,6 +1436,7 @@ source_set("page_privacy") {
     "//base",
     "//components/prefs",
     "//content/public/browser",
+    "//url",
   ]
 
   deps = [
@@ -1738,6 +1773,7 @@ source_set("unit_tests") {
     "browser/electron_session_events_unittest.cc",
     "common/electron_schemes_unittest.cc",
     "renderer/context_bridge_unittest.cc",
+    "renderer/cosmetic_stylesheet_unittest.cc",
     "browser/browser_profiles_unittest.cc",
     "browser/extension_installer_unittest.cc",
     "browser/extension_menu_unittest.cc",
@@ -1849,6 +1885,7 @@ source_set("unit_tests") {
     ":electron_protocol",
     ":electron_schemes",
     ":context_bridge",
+    ":cosmetic_stylesheet",
     ":extension_installer",
     ":extension_menu",
     ":extension_settings",

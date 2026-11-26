@@ -4,6 +4,8 @@
 //! Brave's filter engine, adblock-rust, as `domicile::AdBlocker` asks it. See
 //! docs/architecture/AD-BLOCKING.md.
 
+use std::collections::HashSet;
+
 use adblock::lists::{FilterSet, ParseOptions, RuleTypes};
 use adblock::request::Request;
 use adblock::url_parser::{set_domain_resolver, ResolvesDomain};
@@ -19,6 +21,19 @@ mod ffi {
         important: bool,
         /// An exception rule (`@@`) matched.
         exception: bool,
+    }
+
+    /// What one engine hides on a page at one address, before the page's
+    /// classes and ids are known.
+    struct Cosmetics {
+        /// CSS selectors to hide, as `display: none !important`: the site's
+        /// own rules and the generic ones that aren't a bare class or id.
+        hide_selectors: Vec<String>,
+        /// Class and id selectors (`.ad`, `#ad`) the site's rules except from
+        /// the generic ones. For `hidden_class_id_selectors`.
+        exceptions: Vec<String>,
+        /// A `$generichide` exception matched: no generic rule applies.
+        generichide: bool,
     }
 
     unsafe extern "C++" {
@@ -57,6 +72,17 @@ mod ffi {
             third_party: bool,
             method: &str,
         ) -> Verdict;
+
+        /// What the engine hides on the page at `url`.
+        fn cosmetics(self: &FilterEngine, url: &str) -> Cosmetics;
+        /// The generic rules' selectors for the page's `classes` and `ids`
+        /// (without `.` or `#`), but those in `exceptions`.
+        fn hidden_class_id_selectors(
+            self: &FilterEngine,
+            classes: &Vec<String>,
+            ids: &Vec<String>,
+            exceptions: &Vec<String>,
+        ) -> Vec<String>;
     }
 }
 
@@ -86,8 +112,7 @@ fn new_filter_set() -> Box<FilterSetBuilder> {
 
 impl FilterSetBuilder {
     fn add_list(&mut self, text: &str) {
-        // Network rules only, for now: nothing applies cosmetic ones yet.
-        let options = ParseOptions { rule_types: RuleTypes::NetworkOnly, ..ParseOptions::default() };
+        let options = ParseOptions { rule_types: RuleTypes::All, ..ParseOptions::default() };
         self.0.add_filter_list(text.to_owned(), options);
     }
 }
@@ -114,5 +139,25 @@ impl FilterEngine {
             important: result.important,
             exception: result.exception.is_some(),
         }
+    }
+
+    fn cosmetics(&self, url: &str) -> ffi::Cosmetics {
+        let resources = self.0.url_cosmetic_resources(url);
+        let mut hide_selectors: Vec<String> = resources.hide_selectors.into_iter().collect();
+        let mut exceptions: Vec<String> = resources.exceptions.into_iter().collect();
+        // In order, so a page gets the same stylesheet each time.
+        hide_selectors.sort_unstable();
+        exceptions.sort_unstable();
+        ffi::Cosmetics { hide_selectors, exceptions, generichide: resources.generichide }
+    }
+
+    fn hidden_class_id_selectors(
+        &self,
+        classes: &Vec<String>,
+        ids: &Vec<String>,
+        exceptions: &Vec<String>,
+    ) -> Vec<String> {
+        let exceptions: HashSet<String> = exceptions.iter().cloned().collect();
+        self.0.hidden_class_id_selectors(classes, ids, &exceptions)
     }
 }

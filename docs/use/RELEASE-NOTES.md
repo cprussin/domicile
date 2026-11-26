@@ -9,7 +9,7 @@ _Unreleased_
 
 ### Ads and trackers blocked
 
-Browser windows now block ads and the trackers that follow you from site to site, with the same lists uBlock Origin uses, built into the browser, so pages load faster and nothing has to be installed. Standard blocks what other sites put on a page; Strict also blocks a site's own, and private windows use it. Each profile also blocks cookies from other sites, asks sites not to sell or share your data, and hides your local network address from video calls. All of it is on by default. When a site doesn't work, the shield at the end of the address field shows what was blocked and turns protections off for this window only, or always on that site. Choose how much each profile blocks, and undo what you changed for a site, in Settings, under Privacy.
+Browser windows now block ads and the trackers that follow you from site to site, with the same lists uBlock Origin uses, built into the browser, so pages load faster and nothing has to be installed. The empty boxes ads leave, and the ads a site serves itself that the lists name, are hidden too. Standard blocks what other sites put on a page; Strict also blocks a site's own, and private windows use it. Each profile also blocks cookies from other sites, asks sites not to sell or share your data, and hides your local network address from video calls. All of it is on by default. When a site doesn't work, the shield at the end of the address field shows what was blocked and turns protections off for this window only, or always on that site. Choose how much each profile blocks, and undo what you changed for a site, in Settings, under Privacy.
 
 [Privacy](BROWSER.md#privacy)
 

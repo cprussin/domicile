@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # A profile's ad blocking reaches its pages: the config's filter lists and the
-# user's own rules block a website's requests in the mode of the profile its
-# page is in, and a profile with blocking off loads everything.
+# user's own rules block a website's requests, and hide what they name by its
+# elements, in the mode of the profile its page is in, and a profile with
+# blocking off loads and shows everything.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-ad-blocking.sh /build/chromium/src
@@ -14,10 +15,14 @@
 # (ad_blocker_unittest.cc); this checks that a page's requests are asked at
 # all: that the lists are read and built before the page loads, that
 # ProxyAdBlocking is in front of the frame's loads (the patch that names this
-# guard), and that each profile's mode is the one used.
+# guard), that its frames get their cosmetic filters (CosmeticFiltering and
+# the renderer's CosmeticFilters, patch 0292), and that each profile's mode is
+# the one used.
 #
 # The list, a file this guard writes, names `/ads/*` and makes an exception for
-# `/ads/allowed.js`. The user's rules name `/mine/*`. The stand-in compositor
+# `/ads/allowed.js`, and hides `.site-promo` on 127.0.0.1, `.ad-banner`,
+# `div[data-ad]`, `.late-ad` and `.kept` anywhere, but `.kept` on 127.0.0.1.
+# The user's rules name `/mine/*`. The stand-in compositor
 # sends profile `default`, on standard, `strict`, and `off`. The shell opens a
 # window in each at 127.0.0.1, whose page loads five scripts (see
 # guard-ad-blocking-server.py). Asserted, as third first mine allowed ok:
@@ -32,6 +37,16 @@
 #                                      the others' blocks are the blocker's
 #   no blocked script was served       a block is the blocker's, before the
 #                                      network, not a failed load
+#
+# and, as site generic complex late kept plain:
+#
+#   default: H H H H S S               the site's rule, a generic class, a
+#                                      generic rule that is not a class, and a
+#                                      class added after the load are hidden;
+#                                      the site's exception and an unnamed
+#                                      element are shown
+#   strict:  H H H H S S               the same: hiding is no stricter
+#   off:     S S S S S S               the control: nothing is hidden
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -98,7 +113,9 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
 }
 
 # 1. The list, as a path: a guard fetches nothing from the internet.
-printf '! a list for guard-ad-blocking.sh\n/ads/*\n@@/ads/allowed.js\n' >"$LIST"
+printf '%s\n' '! a list for guard-ad-blocking.sh' '/ads/*' '@@/ads/allowed.js' \
+  '127.0.0.1##.site-promo' '##.ad-banner' '##div[data-ad]' '##.late-ad' \
+  '##.kept' '127.0.0.1#@#.kept' >"$LIST"
 
 # 2. The pages, on their own server like every <webview> guard's: `crux`
 #    reaches no arbitrary host.
@@ -157,16 +174,19 @@ rm -f "$ENGINE_LOG"
   --domicile-broker-socket="$BROKER" >"$ENGINE_LOG" 2>&1 &
 STARTED+=($!)
 
-# 5. Wait for the three pages to say which scripts ran.
+# 5. Wait for the three pages to say which scripts ran and, a few seconds
+#    later, what they hide.
 TRIES=$((FOR_SECONDS * 4))
 for _ in $(seq 1 "$TRIES"); do
-  [ "$(grep -c "GUARD ads as=" "$ENGINE_LOG" 2>/dev/null)" -ge 3 ] && break
+  [ "$(grep -c "GUARD hidden as=" "$ENGINE_LOG" 2>/dev/null)" -ge 3 ] && break
   sleep 0.25
 done
 
 # Whether the shell ran; for default, strict and off, which of third, first,
 # mine, allowed and ok ran, a letter each (B blocked, L loaded, ? no report);
-# and how many scripts a page said were blocked that the server served.
+# how many scripts a page said were blocked that the server served; and for
+# each profile again, which of site, generic, complex, late, kept and plain
+# are hidden (H hidden, S shown, ? no report).
 READ="$(awk '
   /GUARD shell-loaded/ { shell = 1 }
   match($0, /GUARD ads as=[a-z0-9-]+( [a-z]+=[a-z]+)+/) {
@@ -175,6 +195,14 @@ READ="$(awk '
     for (i = 2; i <= n; i++) {
       split(f[i], kv, /=/)
       ran[a[2] SUBSEP kv[1]] = kv[2]
+    }
+  }
+  match($0, /GUARD hidden as=[a-z0-9-]+( [a-z]+=[a-z]+)+/) {
+    n = split(substr($0, RSTART + 13, RLENGTH - 13), f, / /)
+    split(f[1], a, /=/)
+    for (i = 2; i <= n; i++) {
+      split(f[i], kv, /=/)
+      hid[a[2] SUBSEP kv[1]] = kv[2]
     }
   }
   match($0, /^GUARD served as=[a-z0-9-]+ what=[a-z]+$/) {
@@ -190,39 +218,51 @@ READ="$(awk '
     }
     return out
   }
+  function shown(as,   out, i, w, how) {
+    split("site generic complex late kept plain", w, / /)
+    out = ""
+    for (i = 1; i <= 6; i++) {
+      how = hid[as SUBSEP w[i]]
+      out = out (how == "hidden" ? "H" : how == "shown" ? "S" : "?")
+    }
+    return out
+  }
   END {
     leaked = 0
     for (k in served) if (ran[k] == "blocked") leaked += served[k]
-    printf "%d %s %s %s %d\n", shell, letters("default"), letters("strict"),
-      letters("off"), leaked
+    printf "%d %s %s %s %d %s %s %s\n", shell, letters("default"),
+      letters("strict"), letters("off"), leaked, shown("default"),
+      shown("strict"), shown("off")
   }' "$ENGINE_LOG" "$HTTP_LOG" 2>/dev/null)"
 
 MEASURED="$READ"
 echo
 echo "measured: $MEASURED"
-echo "  (shell default strict off leaked; each profile as third first mine allowed ok)"
+echo "  (shell default strict off leaked, each profile as third first mine allowed ok;"
+echo "   then default strict off, each as site generic complex late kept plain)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-ad-blocking-guard.sh`
 # runs the reading and this block directly.
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"1 BLBLL BBBLL LLLLL 0")
+"1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS")
   PASSED="a profile's ad blocking reached its pages: default blocked another \
 site's listed script and not the page's own, strict blocked both, the user's \
-rule blocked in either and the list's exception loaded; off loaded everything, \
-and no blocked script reached the server"
+rule blocked in either and the list's exception loaded; both hid what the \
+list names by its elements, a late one too, and not the site's exception; off \
+loaded and showed everything, and no blocked script reached the server"
   ;;
 "0 "*)
   FAILURE="the shell page never ran, so nothing here was set up: the module \
 did not load, or it threw, and the engine log has its console"
   ;;
 *"?"*)
-  FAILURE="a page never said which scripts ran: openBrowserWindow opened no \
-window in a profile, the list never reached the shell, or a page's scripts \
-never settled"
+  FAILURE="a page never said which scripts ran or what it hid: \
+openBrowserWindow opened no window in a profile, the list never reached the \
+shell, or a page's scripts never settled"
   ;;
-*" "[1-9]*)
+"1 "?????" "?????" "?????" "[1-9]*)
   FAILURE="a script a page called blocked was served all the same, so it \
 failed after the network, not in front of it: the blocker did not block it \
 and something else (the server, a MIME check) made it fail"
@@ -263,6 +303,48 @@ not the one used (another profile's, or Off)"
 "1 "?????" "?L*)
   FAILURE="STRICT LOADED THE PAGE'S OWN LISTED SCRIPT: the strict mode never \
 reached the engine (AdBlockingModeOf) or block_first_party is not passed"
+  ;;
+*" "??????" "??????" "*H*)
+  FAILURE="off, with blocking off, hid an element, so something other than \
+the lists hides it (CosmeticFiltering ignores Off, or the page's own style) \
+and the other profiles' hiding proves nothing"
+  ;;
+*" 0 SSSSSS "*)
+  FAILURE="THE DEFAULT PROFILE HID NOTHING THE LIST NAMES BY ITS ELEMENTS: the \
+renderer never got its cosmetic filters (CosmeticFiltering in \
+AttachTabHelpers, the RenderFrameCreated hook of patch 0292) or never put them \
+in the page (CosmeticFilters::Insert)"
+  ;;
+*" 0 S"*)
+  FAILURE="the default profile showed what the site's own rule hides: \
+CosmeticsFor found no rule for the page's site (url_cosmetic_resources, the \
+domain resolver)"
+  ;;
+*" 0 "?S*)
+  FAILURE="the default profile showed a generic class rule's element: the \
+page's classes were never asked about (CosmeticFilters::Gather, its host) or \
+the answer never hid them (HiddenClassIdSelectors)"
+  ;;
+*" 0 "??S*)
+  FAILURE="the default profile showed a generic rule's element that is not a \
+bare class or id: CosmeticsFor left the lists' generic selectors out"
+  ;;
+*" 0 "???S*)
+  FAILURE="the default profile showed a class added after the load: the \
+page's classes are not gathered again after it loaded (CosmeticFilters' \
+timer)"
+  ;;
+*" 0 "????H*)
+  FAILURE="the default profile hid what the site makes an exception for: the \
+host does not pass the site's exceptions to HiddenClassIdSelectors"
+  ;;
+*" 0 "?????H*)
+  FAILURE="an element nothing names was hidden: the stylesheet hides more \
+than the lists say (CosmeticStylesheetOf)"
+  ;;
+*" 0 HHHHSS "*)
+  FAILURE="strict hid other than default did: cosmetic filters are the same \
+in both, so the strict profile's page got another's, or none"
   ;;
 *)
   FAILURE="there is no measurement here this guard can place ($MEASURED) -- \

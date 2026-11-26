@@ -29,13 +29,20 @@
 #include "components/domicile/browser/browser_profiles.h"
 #include "components/domicile/browser/page_privacy.h"
 #include "components/domicile/browser/site_privacy.h"
+#include "components/domicile/mojom/cosmetic_filters.mojom.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/global_routing_id.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
+#include "content/public/browser/web_contents_user_data.h"
 #include "crypto/hash.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/self_owned_associated_receiver.h"
 #include "net/base/net_errors.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/resource_request.h"
@@ -46,6 +53,7 @@
 #include "services/network/public/cpp/url_loader_factory_builder.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -420,6 +428,107 @@ class AdBlockingURLLoaderFactory final
   base::WeakPtrFactory<AdBlockingURLLoaderFactory> weak_factory_{this};
 };
 
+// Answers one document's CosmeticFilters about its classes and ids, with the
+// generic rules its site's exceptions leave. Owned by its receiver, so it
+// goes with the document.
+class CosmeticFiltersHost final : public mojom::CosmeticFiltersHost {
+ public:
+  explicit CosmeticFiltersHost(std::vector<std::string> exceptions)
+      : exceptions_(std::move(exceptions)) {}
+
+  // mojom::CosmeticFiltersHost:
+  void HiddenSelectors(const std::vector<std::string>& classes,
+                       const std::vector<std::string>& ids,
+                       HiddenSelectorsCallback answer) override {
+    // The blocker of the moment: a fetch may have rebuilt it since the page
+    // committed.
+    const AdBlocker* blocker = AdBlocking::Get().blocker();
+    if (blocker == nullptr) {
+      std::move(answer).Run({});
+      return;
+    }
+    std::move(answer).Run(
+        blocker->HiddenClassIdSelectors(classes, ids, exceptions_));
+  }
+
+ private:
+  const std::vector<std::string> exceptions_;
+};
+
+// Sends each website frame of one guest its cosmetic filters before it
+// commits. See AttachCosmeticFiltering.
+class CosmeticFiltering final
+    : public content::WebContentsObserver,
+      public content::WebContentsUserData<CosmeticFiltering> {
+ public:
+  CosmeticFiltering(const CosmeticFiltering&) = delete;
+  CosmeticFiltering& operator=(const CosmeticFiltering&) = delete;
+  ~CosmeticFiltering() override = default;
+
+  // content::WebContentsObserver:
+  void ReadyToCommitNavigation(content::NavigationHandle* navigation) override {
+    if (navigation->IsSameDocument() || navigation->IsErrorPage()) {
+      return;
+    }
+    // A prerendered or fenced page is not the window's yet; it is hidden
+    // when the window navigates to it.
+    if (navigation->IsInMainFrame() && !navigation->IsInPrimaryMainFrame()) {
+      return;
+    }
+    const GURL& url = navigation->GetURL();
+    if (!url.SchemeIsHTTPOrHTTPS()) {
+      return;
+    }
+    // An app may take a window over after it was attached.
+    if (ElectronPage::SessionOf(GetWebContents())) {
+      return;
+    }
+    const AdBlocker* blocker = AdBlocking::Get().blocker();
+    if (blocker == nullptr) {
+      return;
+    }
+    // The page's mode: for its main frame, the page about to commit's; for
+    // a frame in it, the committed page's.
+    PagePrivacy::CreateForWebContents(&GetWebContents());
+    const PagePrivacy& privacy =
+        *PagePrivacy::FromWebContents(&GetWebContents());
+    const AdBlockingMode mode = navigation->IsInPrimaryMainFrame()
+                                    ? privacy.ModeFor(url)
+                                    : privacy.mode();
+    if (mode == AdBlockingMode::kOff) {
+      return;
+    }
+    AdBlocker::Cosmetics cosmetics = blocker->CosmeticsFor(url);
+    mojo::PendingAssociatedRemote<mojom::CosmeticFiltersHost> host;
+    if (!cosmetics.generichide) {
+      mojo::MakeSelfOwnedAssociatedReceiver(
+          std::make_unique<CosmeticFiltersHost>(
+              std::move(cosmetics.exceptions)),
+          host.InitWithNewEndpointAndPassReceiver());
+    }
+    VLOG(1) << "domicile: ad blocking: hiding "
+            << cosmetics.hide_selectors.size() << " selectors"
+            << (cosmetics.generichide ? ", and no generic ones," : "")
+            << " in " << url.possibly_invalid_spec() << " ("
+            << AdBlockingModeName(mode) << ")";
+    mojo::AssociatedRemote<mojom::CosmeticFilters> frame;
+    navigation->GetRenderFrameHost()
+        ->GetRemoteAssociatedInterfaces()
+        ->GetInterface(&frame);
+    frame->Hide(std::move(cosmetics.hide_selectors), std::move(host));
+  }
+
+ private:
+  friend class content::WebContentsUserData<CosmeticFiltering>;
+  explicit CosmeticFiltering(content::WebContents* contents)
+      : content::WebContentsObserver(contents),
+        content::WebContentsUserData<CosmeticFiltering>(*contents) {}
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
+};
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(CosmeticFiltering);
+
 }  // namespace
 
 void ProxyAdBlocking(content::RenderFrameHost* frame,
@@ -439,6 +548,10 @@ void ProxyAdBlocking(content::RenderFrameHost* frame,
   auto [receiver, network] = builder.Append();
   base::MakeSelfDeleting<AdBlockingURLLoaderFactory>(
       std::move(receiver), std::move(network), frame->GetGlobalId());
+}
+
+void AttachCosmeticFiltering(content::WebContents& guest) {
+  CosmeticFiltering::CreateForWebContents(&guest);
 }
 
 }  // namespace domicile

@@ -20,6 +20,7 @@
 
 namespace content {
 class RenderFrameHost;
+class WebContents;
 }  // namespace content
 
 namespace network {
@@ -128,6 +129,13 @@ class AdBlocking {
 // ChromeContentBrowserClient::WillCreateURLLoaderFactory.
 void ProxyAdBlocking(content::RenderFrameHost* frame,
                      network::URLLoaderFactoryBuilder& builder);
+
+// Hides what the lists name by its elements in each website page `guest`
+// commits, in its mode (Standard and Strict alike; Off hides nothing): sends
+// the page's frame its cosmetic filters before it commits, for
+// CosmeticFilters in the renderer. Not an Electron app's pages. From
+// AttachTabHelpers.
+void AttachCosmeticFiltering(content::WebContents& guest);
 
 }  // namespace domicile
 
