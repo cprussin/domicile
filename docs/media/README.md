@@ -31,6 +31,10 @@ nested sway with these helpers (`packages/site/scripts/docs-media/lib.sh`):
 | `keys <wtype args...>` | Types into the desktop, then waits `KEYS_SETTLE` seconds (1 unless the scene sets it). |
 | `click <x> <y>` | Clicks at a point on the output, with a virtual pointer. |
 | `config <json>` | The desktop's config, written before `desktop`. Without it the desktop has none. |
+| `agent [--remember] <name>` | Lets agent `<name>` in to the whole desk, its session in `$AGENT` for `--agent`. With `--remember`, before `desktop`, it is let in without the dialog. Each line written to fd 8 shows in the bar as what it did. |
+| `agent_glide <x1> <y1> <x2> <y2>` | Moves the agent's own pointer between two points over about half a second. |
+| `shell_spot <name>` | Prints the middle of the shell's element with that accessible name, as `click` takes it. |
+| `page_spot <window> <name>` | The same for an element in a browser window's page. |
 
 `shot`, `record`, `keys` and `click` fail the scene if the engine has exited:
 `domicile` restarts it, so the capture would go on with a fresh desktop. A

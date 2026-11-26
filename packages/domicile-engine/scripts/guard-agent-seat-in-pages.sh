@@ -16,6 +16,9 @@
 #   typed       the page's field has "ab"
 #   kept        the user's field is still the shell's activeElement
 #   untouched   nothing was typed into the user's field
+#   unheard     the window's <webview> never heard the agent's keys as the
+#               user's (`domicile-key-delivered`), which a shell raises and
+#               focuses the window on
 #   shell       a press at a point in the shell's strip is refused, since
 #               agents act on the shell by ref
 #
@@ -237,6 +240,7 @@ SAW_TYPED=$(saw "GUARD guest-input value=ab")
 SAW_ANY_TYPED=$(saw "GUARD guest-input")
 SAW_USER_INPUT=$(saw "GUARD user-input")
 SAW_REACHED=$(saw "GUARD window-reached")
+SAW_DELIVERED=$(saw "GUARD key-delivered")
 REACHED_ALL=0
 [ "$(reached "$POINTED")$(reached "$PRESSED")$(reached "$TYPED_A")$(reached "$TYPED_B")" = "1111" ] && REACHED_ALL=1
 BARRED_ALL=0
@@ -255,7 +259,7 @@ echo "typed: $TYPED_A $TYPED_B"
 echo "at the shell: $SHELL_POINTED / $SHELL_PRESSED"
 echo "shell's activeElement: ${ACTIVE:0:200}"
 echo "shell=$SAW_SHELL page=$SAW_PAGE press=$SAW_PRESS typed=$SAW_TYPED any-typed=$SAW_ANY_TYPED"
-echo "the shell heard: reached=$SAW_REACHED user-input=$SAW_USER_INPUT kept=$KEPT"
+echo "the shell heard: reached=$SAW_REACHED key-delivered=$SAW_DELIVERED user-input=$SAW_USER_INPUT kept=$KEPT"
 grep -F "GUARD guest-input" "$ENGINE_LOG" | tail -3
 
 FAILURE=""
@@ -282,10 +286,12 @@ elif [ "$SAW_USER_INPUT" = "1" ]; then
   FAILURE="THE AGENT TYPED INTO THE USER'S FIELD"
 elif [ "$SAW_REACHED" = "1" ] || [ "$KEPT" != "1" ]; then
   FAILURE="THE AGENT'S PRESS MOVED THE USER'S FOCUS: reached=$SAW_REACHED, the shell's activeElement is ${ACTIVE:0:120}"
+elif [ "$SAW_DELIVERED" = "1" ]; then
+  FAILURE="THE SHELL HEARD THE AGENT'S KEYS AS THE USER'S: the window's <webview> fired domicile-key-delivered, on which a shell raises and focuses the window, taking the user's keyboard"
 elif [ "$SHELL_REFUSED" != "1" ]; then
   FAILURE="THE AGENT'S PRESS REACHED THE SHELL: a press in the strip was answered $SHELL_PRESSED, not refused"
 else
-  PASSED="the agent seat pressed and typed in a browser window at a desk position, the user's field kept the focus and got nothing, and a press on the shell was refused"
+  PASSED="the agent seat pressed and typed in a browser window at a desk position, the user's field kept the focus and got nothing, the shell never heard the keys as the user's, and a press on the shell was refused"
 fi
 
 if [ -n "$PASSED" ]; then
