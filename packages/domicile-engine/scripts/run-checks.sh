@@ -51,6 +51,7 @@ TOGETHER=(
   guard-webview-framing
   guard-agent-devtools-shell
   guard-agent-input-keeps-focus
+  guard-agent-file-chooser
   guard-agent-seat-in-pages
   guard-shell-local-network
   guard-webview-notifications
@@ -119,12 +120,14 @@ TOGETHER=(
   guard-webview-survives-load-shell
   guard-webview-hidden
   guard-webview-moved
+  guard-webview-discard
   guard-profile-routing
   guard-webview-paused
   guard-animation-main-frames
   guard-one-spare-renderer
   guard-webview-scale-animation
   guard-webview-reshown-tiles
+  guard-webview-slide-screen-rects
   guard-webview-crash
   guard-desktop-geometry
   guard-windows-state

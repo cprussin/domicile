@@ -27,6 +27,7 @@
   X(gesture, Gesture)                                             \
   X(focusrequested, Focusrequested)                               \
   X(displayschanged, Displayschanged)                             \
+  X(browsermemoryshort, Browsermemoryshort)                       \
   X(browserprofileschanged, Browserprofileschanged)               \
   X(browserwindowschanged, Browserwindowschanged)                 \
   X(castsinkschanged, Castsinkschanged)                           \

@@ -439,7 +439,11 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
             other => Err(refusal_or_surprise(other)),
         },
         AppRequest::OpenUrl { url } => {
-            match (host.ask)(&Request::OpenUrl { url, profile: None })? {
+            match (host.ask)(&Request::OpenUrl {
+                url,
+                profile: None,
+                agent: None,
+            })? {
                 Response::Opened => Ok(json!({"type": "opened"})),
                 other => Err(refusal_or_surprise(other)),
             }

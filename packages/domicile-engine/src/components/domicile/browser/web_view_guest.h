@@ -422,6 +422,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   // This guest's WebContents. Lives as long as the guest.
   content::WebContents& contents() const { return *guest_contents_; }
 
+  // Whether a <webview> shows this browser window's page, or is about to.
+  bool IsAttached() const;
+  // Whether a <webview> shows this window's page, or would but for the shell's
+  // own page being hidden. One that is not rendered does not.
+  bool IsShown() const;
+
   // Gives a new window's page a copy of `source`'s history and takes `step`
   // there, as Chrome's middle-clicked back button does with a cloned tab. In
   // place of the first Navigate. See BrowserWindowHost::OpenHistoryStep.
@@ -435,9 +441,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   // BrowserWindowHost::Reopen.
   void MoveHistoryFrom(WebViewGuest& source, const PageMove& move);
 
-  // This window's page was replaced by `MoveHistoryFrom`'s: tells its
-  // <webview>, which asks for the window again, and lets go of it.
-  void Replaced();
+  // This window's page was replaced, by `MoveHistoryFrom`'s or by an
+  // `unloaded` one: tells its <webview>, which asks for the window again, and
+  // lets go of it.
+  void Replaced(bool unloaded);
 
   // The browser profile this window's page moves to as the user takes it
   // from `from` to `to`, or nothing; see BrowserWindowHost::ProfileToMoveTo.
@@ -482,6 +489,35 @@ class WebViewGuest : public mojom::WebViewGuest,
       const base::FilePath& suggested_path,
       base::OnceCallback<void(std::optional<std::vector<base::FilePath>>)>
           chosen);
+
+  // An agent's own input, DevTools or its seat's, gave this page a press or a
+  // key. Until a person's does, a file request the page makes is the agent's
+  // to answer, not the shell's: see AgentFileRequest and
+  // docs/architecture/AGENT-SEATS.md.
+  void NoteAgentInput();
+
+  // A person's own press or key reached this page: its file requests ask the
+  // shell again.
+  void NotePersonInput();
+
+  // A file request held for the agent whose input set it off: a chooser,
+  // dialog or download's save, as FileChooserRequested would have asked the
+  // shell. Nothing when none waits.
+  struct AgentFileRequest {
+    mojom::WebViewFileChooserMode mode;
+    // As FileChooserRequested's.
+    std::vector<std::string> accept;
+    std::string suggested_name;
+    std::string folder;
+  };
+  std::optional<AgentFileRequest> agent_file_request() const;
+
+  // Answers the request agent_file_request() describes with `paths`, absolute
+  // or home-relative, or cancels it with nothing. Says why not when none
+  // waits or the paths do not fit its mode. Checks no file: the caller does,
+  // off the UI thread.
+  base::expected<void, std::string> AnswerAgentFileRequest(
+      std::optional<std::vector<std::string>> paths);
 
   // Asks the shell to answer a permission prompt for `origin`. See
   // PermissionRequested in the mojom.
@@ -908,9 +944,16 @@ class WebViewGuest : public mojom::WebViewGuest,
   bool PreHandleMouseEvent(content::WebContents* source,
                            const blink::WebMouseEvent& event) override;
 
+  // Notes the widget under the pointer, whose coordinates PreHandleMouseEvent
+  // reads, and hides the tooltip when it changes, as Chrome's CursorManager
+  // does.
+  void DomicileMouseEventTo(content::WebContents* source,
+                            content::RenderWidgetHost* widget) override;
+
   // Reports the page's tooltip to the shell, which draws it; Chrome draws
   // none. See TooltipChanged in the mojom. `widget` is the page's or a frame's
-  // in another process, and the pointer is in its coordinates.
+  // in another process. Only the widget under the pointer's counts, as in
+  // Chrome: entering a frame, its parent reports the frame element's title.
   bool DomicileTooltip(content::WebContents* source,
                        content::RenderWidgetHost* widget,
                        const std::u16string& text) override;
@@ -1196,6 +1239,17 @@ class WebViewGuest : public mojom::WebViewGuest,
   // a bad message for an id the element was never sent.
   bool IsNewestContextMenu(int32_t menu);
 
+  // Asks for files as FileChooserRequested does: the shell, or the agent when
+  // its input set the request off (NoteAgentInput). `answered` runs once, with
+  // nothing if the request is canceled, replaced or never answered.
+  using FilesAnswered =
+      base::OnceCallback<void(const std::optional<std::vector<std::string>>&)>;
+  void AskForFiles(mojom::WebViewFileChooserMode mode,
+                   std::vector<std::string> accept,
+                   std::string suggested_name,
+                   std::string folder,
+                   FilesAnswered answered);
+
   // Runs `command` once this guest has focus, retrying up to `tries` times.
   //
   // Edits act on the focused frame. The element refocuses the page first, but
@@ -1248,12 +1302,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Sends the tooltip as it is now, if it changed, at the pointer.
   void SendTooltip();
   // The tooltip to show: none while the pointer is outside the page, or once
-  // the widget that reported it is gone.
+  // the widget under it is gone.
   const std::string& TooltipNow() const;
-  // The widget that reported `tooltip_`, or null once it or its view is gone.
-  content::RenderWidgetHost* TooltipWidget() const;
-  // The pointer in the page's coordinates. `pointer_` is in the tooltip
-  // widget's, which for a frame in another process are the frame's own.
+  // The widget under the pointer, or null once it or its view is gone.
+  content::RenderWidgetHost* PointerWidget() const;
+  // The pointer in the page's coordinates. `pointer_` is in the widget under
+  // it's, which for a frame in another process are the frame's own.
   gfx::Point PointerInPage(content::RenderWidgetHost& widget) const;
   // `point`, in `view`'s coordinates, in the page's.
   gfx::Point InPage(content::RenderWidgetHostView& view,
@@ -1404,6 +1458,15 @@ class WebViewGuest : public mojom::WebViewGuest,
   content::GlobalRenderFrameHostId context_menu_frame_;
   std::optional<content::ContextMenuParams> context_menu_params_;
 
+  // Whether an agent's input, not a person's, last pressed or keyed in this
+  // page. See NoteAgentInput.
+  bool agent_drove_last_ = false;
+
+  // The file request held for an agent, and its answer, which runs with
+  // nothing if it is dropped. See AskForFiles.
+  std::optional<AgentFileRequest> agent_file_request_;
+  FilesAnswered agent_files_answered_;
+
   mojo::Receiver<mojom::WebViewGuest> receiver_;
 
   // The element. Bound from creation, so every report has a receiver.
@@ -1431,14 +1494,15 @@ class WebViewGuest : public mojom::WebViewGuest,
   // The renderer's last link, which stays set while the pointer is outside the
   // page. See PreHandleMouseEvent.
   GURL renderer_target_url_;
-  // The renderer's last tooltip, which stays set while the pointer is outside
-  // the page, and the one the shell has. See DomicileTooltip.
+  // The last tooltip of the widget under the pointer, which stays set while
+  // the pointer is outside the page, and the one the shell has. See
+  // DomicileTooltip.
   std::string tooltip_;
   std::string reported_tooltip_;
-  // The widget that reported `tooltip_`, as RenderWidgetHost::FromID's
-  // arguments: a frame's widget can go away under its tooltip.
-  int tooltip_process_ = 0;
-  int tooltip_routing_ = 0;
+  // The widget under the pointer, as RenderWidgetHost::FromID's arguments: a
+  // frame's widget can go away under it. See DomicileMouseEventTo.
+  int pointer_process_ = 0;
+  int pointer_routing_ = 0;
   // Runs out when a new tooltip shows. See ReportTooltip.
   base::OneShotTimer tooltip_delay_;
   // Where the pointer last was over the page, in the DIPs of the widget under

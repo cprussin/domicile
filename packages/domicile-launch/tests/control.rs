@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
+use domicile_launch::command::BrowserWindowLayout;
 use domicile_launch::control::{
     answer, parse_response, AppReuse, Desktop, IdleTimes, LoadShell, OpenUrl, Response, Screenshot,
     SendShell, SettingsFiles, Shot,
@@ -164,9 +165,10 @@ fn a_desktop_told_to_open_an_address_tells_the_engine() {
     let told = Cell::new(None);
     let answered = answered_opening(
         "{\"type\":\"open_url\",\"url\":\"https://example.com/\"}",
-        &|url, profile| {
+        &|url, profile, agent| {
             told.set(Some((url.to_string(), profile.map(str::to_string))));
-            Ok(())
+            assert_eq!(agent, None);
+            Ok(Some("7".to_string()))
         },
     );
 
@@ -182,13 +184,84 @@ fn a_desktop_hands_the_engine_the_profile_an_address_opens_in() {
     let told = Cell::new(None);
     answered_opening(
         "{\"type\":\"open_url\",\"url\":\"https://example.com/\",\"profile\":\"work\"}",
-        &|_, profile| {
+        &|_, profile, _| {
             told.set(profile.map(str::to_string));
-            Ok(())
+            Ok(None)
         },
     );
 
     assert_eq!(told.take(), Some("work".to_string()));
+}
+
+#[test]
+fn an_address_opened_for_an_agent_puts_its_seats_keyboard_in_the_window() {
+    // So the seat holds the window from the start, and the user's focus stays
+    // where it was.
+    let opened = Cell::new(None);
+    let sent = RefCell::new(None);
+    let answered = reply_to(
+        "{\"type\":\"open_url\",\"url\":\"https://example.com/\",\"agent\":3}",
+        &Desktop {
+            open: &|_, _, agent| {
+                opened.set(agent);
+                Ok(Some("7".to_string()))
+            },
+            emulate: &|input, agent| {
+                *sent.borrow_mut() = Some((input.to_vec(), agent));
+                Ok(())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(answered, Response::Opened);
+    assert_eq!(opened.take(), Some(3));
+    assert_eq!(
+        sent.take(),
+        Some((
+            vec![EmulatedInput::Focus {
+                window: "7".to_string()
+            }],
+            Some(3)
+        ))
+    );
+}
+
+#[test]
+fn an_agent_whose_engine_names_no_window_is_told_it_opened_unheld() {
+    let Response::Refused { why } = reply_to(
+        "{\"type\":\"open_url\",\"url\":\"https://example.com/\",\"agent\":3}",
+        &Desktop {
+            open: &|_, _, _| Ok(None),
+            ..nothing_dialed()
+        },
+    ) else {
+        panic!("a window no seat holds is not what the agent asked for");
+    };
+    assert_eq!(
+        why,
+        "the address opened, but the engine didn't name its window, so your seat can't hold \
+         it. Don't open it again"
+    );
+}
+
+#[test]
+fn an_agent_whose_seat_cannot_take_the_window_is_told_it_opened_and_why() {
+    let Response::Refused { why } = reply_to(
+        "{\"type\":\"open_url\",\"url\":\"https://example.com/\",\"agent\":3}",
+        &Desktop {
+            open: &|_, _, _| Ok(Some("7".to_string())),
+            emulate: &|_, _| Err("no agent is in as session 3".to_string()),
+            ..nothing_dialed()
+        },
+    ) else {
+        panic!("the seat never took the window");
+    };
+    assert_eq!(
+        why,
+        "the address opened in browser window 7, but your seat can't hold it yet: no agent \
+         is in as session 3. Don't open it again; act in window 7 once you can"
+    );
 }
 
 #[test]
@@ -334,7 +407,7 @@ fn a_desktop_told_to_reuse_an_app_window_tells_the_engine_which() {
 fn an_engine_that_would_not_open_the_address_is_quoted() {
     let Response::Refused { why } = answered_opening(
         "{\"type\":\"open_url\",\"url\":\"https://example.com/\"}",
-        &|_, _| Err("this engine has no shell page to open it in".to_string()),
+        &|_, _, _| Err("this engine has no shell page to open it in".to_string()),
     ) else {
         panic!("an engine that refused the address is not one that opened it");
     };
@@ -545,6 +618,7 @@ fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
             "{\"type\":\"windows\"}",
             &Desktop {
                 windows: &|| Ok(vec![window.clone()]),
+                browser_layouts: &|| Ok(Vec::new()),
                 ..nothing_dialed()
             },
         ),
@@ -1405,7 +1479,7 @@ fn nothing_dialed() -> Desktop<'static> {
         load_unpacked: &|_| panic!("only load_unpacked loads an extension"),
         media_devices: &|| panic!("only media_devices lists media devices"),
         shell: Box::leak(Box::new(served_from("/shell.js"))),
-        open: &|_, _| panic!("only open_url opens a browser window"),
+        open: &|_, _, _| panic!("only open_url opens a browser window"),
         open_app: &|_, _, _, _| panic!("only open_app opens an app window"),
         run_app: &|_, _| panic!("only run_app runs an app module"),
         launch: &|_, _| panic!("only launch starts a program"),
@@ -1426,6 +1500,7 @@ fn nothing_dialed() -> Desktop<'static> {
         monitors: &|| panic!("only monitors lists the monitors"),
         displays: &|| panic!("only displays lists the displays"),
         windows: &|| panic!("only windows lists the windows"),
+        browser_layouts: &|| panic!("only windows lists the browser windows' layouts"),
         status: &|| panic!("only status asks how the desktop is"),
         shell_commands: &|| panic!("only shell_commands lists the shell's commands"),
         shell_bindings: &|| panic!("only shell_bindings lists the shell's bindings"),
@@ -1628,6 +1703,102 @@ fn three_windows() -> Result<Vec<ListedWindow>, String> {
         ..mail.clone()
     };
     Ok(vec![native, mail, private])
+}
+
+#[test]
+fn windows_lists_a_browser_windows_focus_and_size_from_the_engine() {
+    let Response::Windows { windows } = reply_to(
+        "{\"type\":\"windows\"}",
+        &Desktop {
+            windows: &|| {
+                three_windows().map(|windows| {
+                    windows
+                        .into_iter()
+                        .map(|window| ListedWindow {
+                            // No native window has the keyboard.
+                            focused: false,
+                            ..window
+                        })
+                        .collect()
+                })
+            },
+            browser_layouts: &|| {
+                Ok(vec![
+                    BrowserWindowLayout {
+                        id: "3".to_string(),
+                        focused: true,
+                        width: Some(1280),
+                        height: Some(720),
+                    },
+                    BrowserWindowLayout {
+                        id: "7".to_string(),
+                        focused: false,
+                        width: None,
+                        height: None,
+                    },
+                ])
+            },
+            ..nothing_dialed()
+        },
+    ) else {
+        panic!("windows answers with the windows");
+    };
+
+    let listed: Vec<_> = windows
+        .iter()
+        .map(|window| (window.focused, window.size))
+        .collect();
+    assert_eq!(
+        listed,
+        vec![
+            (false, Some([640.0, 480.0])),
+            (true, Some([1280.0, 720.0])),
+            (false, None),
+        ]
+    );
+}
+
+#[test]
+fn a_browser_window_is_not_focused_while_a_native_one_has_the_keyboard() {
+    // The shell's focused page keeps its focus while the user types in a
+    // native window.
+    let Response::Windows { windows } = reply_to(
+        "{\"type\":\"windows\"}",
+        &Desktop {
+            windows: &three_windows,
+            browser_layouts: &|| {
+                Ok(vec![BrowserWindowLayout {
+                    id: "3".to_string(),
+                    focused: true,
+                    width: Some(1280),
+                    height: Some(720),
+                }])
+            },
+            ..nothing_dialed()
+        },
+    ) else {
+        panic!("windows answers with the windows");
+    };
+
+    let focused: Vec<_> = windows.iter().map(|window| window.focused).collect();
+    assert_eq!(focused, vec![true, false, false]);
+}
+
+#[test]
+fn windows_is_refused_when_the_engine_cannot_list_its_windows() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"windows\"}",
+            &Desktop {
+                windows: &three_windows,
+                browser_layouts: &|| Err("the engine is gone".to_string()),
+                ..nothing_dialed()
+            },
+        ),
+        Response::Refused {
+            why: "the engine is gone".to_string()
+        }
+    );
 }
 
 #[test]

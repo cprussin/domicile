@@ -8,9 +8,12 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "base/check.h"
 #include "base/containers/span.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -19,10 +22,13 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_view_util.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/types/expected.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
+#include "components/domicile/browser/file_choice.h"
+#include "components/domicile/browser/web_view_guest.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -151,6 +157,161 @@ class OneMethod : public content::DevToolsAgentHostClient {
   base::OneShotTimer timeout_;
 };
 
+// The file chooser mode as agents and shells name it: the
+// `domicile-file-chooser` event's `mode`.
+std::string_view ModeName(mojom::WebViewFileChooserMode mode) {
+  switch (mode) {
+    case mojom::WebViewFileChooserMode::kOpen:
+      return "open";
+    case mojom::WebViewFileChooserMode::kOpenMultiple:
+      return "open-multiple";
+    case mojom::WebViewFileChooserMode::kOpenFolder:
+      return "open-folder";
+    case mojom::WebViewFileChooserMode::kSave:
+      return "save";
+  }
+}
+
+// Whether `method` with `params` presses or keys in a page, which gives it
+// user activation: what lets a page open a file chooser.
+bool PressesOrKeys(const std::string& method, const base::DictValue& params) {
+  const std::string* type = params.FindString("type");
+  if (type == nullptr) {
+    return false;
+  }
+  return (method == "Input.dispatchMouseEvent" && *type == "mousePressed") ||
+         (method == "Input.dispatchKeyEvent" &&
+          (*type == "keyDown" || *type == "rawKeyDown"));
+}
+
+// Answers Domicile.fileChooser: the file request `guest`'s page holds for the
+// agent, under `chooser`, or no `chooser` when none waits.
+base::DictValue FileChooserOf(const WebViewGuest& guest) {
+  base::DictValue answer;
+  std::optional<WebViewGuest::AgentFileRequest> request =
+      guest.agent_file_request();
+  if (!request.has_value()) {
+    return answer;
+  }
+  base::ListValue accept;
+  for (const std::string& extension : request->accept) {
+    accept.Append(extension);
+  }
+  base::DictValue chooser;
+  chooser.Set("mode", ModeName(request->mode));
+  chooser.Set("accept", std::move(accept));
+  chooser.Set("suggestedName", request->suggested_name);
+  chooser.Set("folder", request->folder);
+  answer.Set("chooser", std::move(chooser));
+  return answer;
+}
+
+// Why `paths` can't answer a request in `mode`, if they can't: a file an open
+// names that is not there, or a save into no folder. Blocking; run on the
+// thread pool.
+std::optional<std::string> MissingFrom(mojom::WebViewFileChooserMode mode,
+                                       const std::vector<std::string>& paths) {
+  const base::FilePath home = base::GetHomeDir();
+  for (const std::string& said : paths) {
+    std::optional<base::FilePath> path = ResolvedPath(home, said);
+    if (!path.has_value()) {
+      // AnswerAgentFileRequest refuses it, saying why.
+      continue;
+    }
+    switch (mode) {
+      case mojom::WebViewFileChooserMode::kOpen:
+      case mojom::WebViewFileChooserMode::kOpenMultiple:
+        if (!base::PathExists(*path) || base::DirectoryExists(*path)) {
+          return base::StrCat({"there is no file ", path->value()});
+        }
+        break;
+      case mojom::WebViewFileChooserMode::kOpenFolder:
+        if (!base::DirectoryExists(*path)) {
+          return base::StrCat({"there is no folder ", path->value()});
+        }
+        break;
+      case mojom::WebViewFileChooserMode::kSave:
+        if (!base::DirectoryExists(path->DirName())) {
+          return base::StrCat(
+              {"there is no folder ", path->DirName().value(), " to save in"});
+        }
+        break;
+    }
+  }
+  return std::nullopt;
+}
+
+// Carries out Domicile.chooseFiles on browser window `window`: answers its
+// held file request with `params`' `files`, or cancels it with `cancel`.
+void ChooseFiles(const std::string& window,
+                 const base::DictValue& params,
+                 DevToolsAnswered answered) {
+  content::WebContents* page = BrowserWindowContents(window);
+  WebViewGuest* guest =
+      page == nullptr ? nullptr : WebViewGuest::FromWebContents(page);
+  if (guest == nullptr) {
+    std::move(answered).Run(base::unexpected(
+        base::StrCat({"browser window ", window, " closed"})));
+    return;
+  }
+  const base::ListValue* files = params.FindList("files");
+  const bool cancel = params.FindBool("cancel").value_or(false);
+  if ((files == nullptr) == !cancel) {
+    std::move(answered).Run(base::unexpected(
+        "Domicile.chooseFiles takes \"files\", a list of paths, or "
+        "\"cancel\": true"));
+    return;
+  }
+  if (cancel) {
+    base::expected<void, std::string> done =
+        guest->AnswerAgentFileRequest(std::nullopt);
+    std::move(answered).Run(done.transform([] { return base::DictValue(); }));
+    return;
+  }
+  std::vector<std::string> paths;
+  for (const base::Value& file : *files) {
+    if (!file.is_string()) {
+      std::move(answered).Run(base::unexpected(
+          "Domicile.chooseFiles's \"files\" are paths, as strings"));
+      return;
+    }
+    paths.push_back(file.GetString());
+  }
+  std::optional<WebViewGuest::AgentFileRequest> request =
+      guest->agent_file_request();
+  if (!request.has_value()) {
+    // AnswerAgentFileRequest says why.
+    std::move(answered).Run(guest->AnswerAgentFileRequest(std::move(paths))
+                                .transform([] { return base::DictValue(); }));
+    return;
+  }
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(&MissingFrom, request->mode, paths),
+      base::BindOnce(
+          [](const std::string& window, std::vector<std::string> paths,
+             DevToolsAnswered answered, std::optional<std::string> missing) {
+            if (missing.has_value()) {
+              std::move(answered).Run(base::unexpected(*missing));
+              return;
+            }
+            content::WebContents* page = BrowserWindowContents(window);
+            WebViewGuest* guest = page == nullptr
+                                      ? nullptr
+                                      : WebViewGuest::FromWebContents(page);
+            if (guest == nullptr) {
+              std::move(answered).Run(base::unexpected(
+                  base::StrCat({"browser window ", window, " closed"})));
+              return;
+            }
+            std::move(answered).Run(
+                guest->AnswerAgentFileRequest(std::move(paths)).transform([] {
+                  return base::DictValue();
+                }));
+          },
+          window, std::move(paths), std::move(answered)));
+}
+
 }  // namespace
 
 void SendDevToolsToBrowserWindow(const std::string& window,
@@ -176,6 +337,32 @@ void SendDevToolsToBrowserWindow(const std::string& window,
         {"browser window ", window,
          " is private, and agents do not drive private windows"})));
     return;
+  }
+  // Domicile's own methods: a page's file request, held for the agent whose
+  // input set it off. See WebViewGuest::AskForFiles.
+  if (method == kFileChooserMethod || method == kChooseFilesMethod) {
+    WebViewGuest* guest = window == kShellWindow
+                              ? nullptr
+                              : WebViewGuest::FromWebContents(page);
+    if (guest == nullptr) {
+      std::move(answered).Run(base::unexpected(base::StrCat(
+          {method, " is for a browser window's page; the shell's own page "
+                   "asks the desktop's file chooser portal"})));
+      return;
+    }
+    if (method == kFileChooserMethod) {
+      std::move(answered).Run(base::ok(FileChooserOf(*guest)));
+      return;
+    }
+    ChooseFiles(window, params, std::move(answered));
+    return;
+  }
+  if (window != kShellWindow && PressesOrKeys(method, params)) {
+    // A file chooser this sets off is the agent's. Upstream's DevTools has
+    // the same for its own clients: Page.setInterceptFileChooserDialog.
+    if (WebViewGuest* guest = WebViewGuest::FromWebContents(page)) {
+      guest->NoteAgentInput();
+    }
   }
   // Owns itself until answered.
   (new OneMethod(content::DevToolsAgentHost::GetOrCreateFor(page),

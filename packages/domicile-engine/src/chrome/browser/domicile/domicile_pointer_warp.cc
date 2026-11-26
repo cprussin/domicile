@@ -70,13 +70,13 @@ void DrawForWhereItLanded(aura::Window* root, const gfx::Point& at) {
 void WarpPointerIn(content::GlobalRenderFrameHostId frame_id,
                    double x,
                    double y,
+                   const std::vector<gfx::RectF>& only_over,
                    const std::optional<gfx::RectF>& unless_over) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   // The shell cannot see the pointer over a browser window's page; this
-  // process can. `DeskPointer` is in the shell page's CSS pixels, as the box
-  // is.
-  if (unless_over.has_value() &&
-      PointerAlreadyOver(DeskPointer::Get().Now().at, *unless_over)) {
+  // process can. `DeskPointer` is in the shell page's CSS pixels, as the
+  // boxes are.
+  if (!PointerWarps(DeskPointer::Get().Now().at, only_over, unless_over)) {
     return;
   }
   content::RenderFrameHost* frame =

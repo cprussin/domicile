@@ -161,6 +161,30 @@ describe("FakeDomicileHost", () => {
     ]);
   });
 
+  it("lists a browser window as unloaded until its page loads", () => {
+    const fake = new FakeDomicileHost();
+    fake.host.openBrowserWindow("https://example.com");
+    let changes = 0;
+    fake.host.addEventListener("browserwindowschanged", () => {
+      changes += 1;
+    });
+
+    fake.host.discardBrowserWindow("1");
+    expect(fake.host.browserWindows).toMatchObject([
+      { id: "1", isDiscarded: true },
+    ]);
+
+    fake.discardBrowser("1", false);
+    expect(fake.host.browserWindows).toMatchObject([
+      { id: "1", isDiscarded: false },
+    ]);
+    expect(changes).toBe(2);
+    expect(fake.calls).toStrictEqual([
+      ["openBrowserWindow", "https://example.com"],
+      ["discardBrowserWindow", "1"],
+    ]);
+  });
+
   it("opens private browser windows as the engine does", () => {
     const fake = new FakeDomicileHost();
 

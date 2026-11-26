@@ -234,6 +234,18 @@ user's and every other partition, like a separate browser profile:
   `document.visibilityState` is `hidden`, timers slow and nothing paints.
   Showing the view shows the page. The page hears a hide 100ms late, so a
   view that is shown again within that time never reads `hidden`.
+- **Hidden pages are unloaded while memory is short**, much as Chrome unloads
+  tabs: a window no `<webview>` shows, or whose view is not rendered
+  (`display: none`). The engine unloads one every five seconds, the one hidden
+  longest first. A page stays for ten minutes after it is hidden, while it
+  plays audio, records, is captured or holds what the user typed, and in an app
+  window. An unloaded window `isDiscarded`, and keeps its history and scroll;
+  its page loads when a `<webview>` shows it. To extensions the unloaded page's
+  tab closes and a new one opens.
+  - `browser.discard(id)` unloads a hidden one now.
+  - `browser.on("memoryShort", (ids) => …)` hands the choice to your shell:
+    while it listens, the engine unloads nothing. `ids` are the windows it
+    would unload, hidden longest first.
 - **Lay out a hidden window while it `isCaptured`.** A screenshot, a picker's
   preview or a screen cast of the page alone sets it, and `browser.on("change")`
   fires. A page with no layout box draws nothing, so the capture would get no
@@ -472,6 +484,11 @@ no opener, as in Chrome.
 The new window's `opener` is the `id` of the browser window whose page opened
 it, so you can open it from there, or `undefined` for a window nothing opened
 and one a plain `<webview>`'s page opened.
+
+A window an agent opened (`domicile open --agent`) lists its seat as `agent`,
+such as `agent-3`. Open it without taking the user's focus: the agent's own
+keyboard goes in it, and the desk's seats say it holds it
+([AGENT-SEATS.md](architecture/AGENT-SEATS.md)).
 
 ## Views
 
@@ -835,7 +852,9 @@ save all fire `domicile-file-chooser`. The browser shows no dialog; you draw
 the picker. A dialog from the shell's own page asks the desktop's
 FileChooser portal instead, as an application's does
 ([PORTALS.md](PORTALS.md)). A folder dropped on a page's `webkitdirectory`
-input uploads its files, with no picker.
+input uploads its files, with no picker. A chooser an agent's press or key
+opened never reaches the shell: the agent answers it
+([AGENT-SEATS.md](/docs/architecture/AGENT-SEATS.md#file-choosers)).
 
 <!-- tab: React -->
 

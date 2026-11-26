@@ -195,6 +195,7 @@ class MODULES_EXPORT DomicileHost final
   void warpPointer(ScriptState*,
                    double x,
                    double y,
+                   const HeapVector<Member<DOMRectReadOnly>>& only_over,
                    DOMRectReadOnly* unless_over,
                    ExceptionState&);
   void closeApp(ScriptState*, const String& app_id, ExceptionState&);
@@ -323,6 +324,7 @@ class MODULES_EXPORT DomicileHost final
                                                     const String& selector,
                                                     ExceptionState&);
   void closeBrowserWindow(ScriptState*, const String& id, ExceptionState&);
+  void discardBrowserWindow(ScriptState*, const String& id, ExceptionState&);
   void reopenBrowserWindow(ScriptState*,
                            const String& id,
                            const String& profile,
@@ -556,6 +558,8 @@ class MODULES_EXPORT DomicileHost final
       Vector<domicile::mojom::blink::BrowserProfilePtr> profiles,
       const String& default_profile,
       const String& default_private_profile) override;
+  void MemoryShort(const Vector<String>& windows,
+                   MemoryShortCallback handled) override;
 
   // domicile::mojom::blink::CastSinksClient:
   void SinksChanged(

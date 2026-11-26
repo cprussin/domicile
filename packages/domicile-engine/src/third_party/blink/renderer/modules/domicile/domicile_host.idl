@@ -116,11 +116,12 @@
   // coordinate outside this page is clamped to its own box -- what a page may
   // move is the pointer over itself -- and NaN throws.
   //
-  // `unlessOver`, a box in the same coordinates, skips the warp while the
-  // pointer is over it. The page cannot see the pointer over a browser
-  // window's page; the browser process can.
+  // The warp happens only while the pointer is over one of `onlyOver`, boxes
+  // in the same coordinates, and not over `unlessOver`. The page cannot see
+  // the pointer over a browser window's page; the browser process can.
   [CallWith=ScriptState, RaisesException] undefined warpPointer(
-      double x, double y, optional DOMRectReadOnly? unlessOver = null);
+      double x, double y, sequence<DOMRectReadOnly> onlyOver,
+      optional DOMRectReadOnly? unlessOver = null);
 
   // Ask a client to close. Not a kill -- the client decides, which is why a
   // window can refuse and show a save dialog instead.
@@ -436,6 +437,13 @@
   // `browserWindows` for the current list.
   attribute EventHandler onbrowserwindowschanged;
 
+  // A MessageEvent whose `data` is the ids of the windows whose pages may be
+  // unloaded, hidden longest first, as a JSON array. Fires every few seconds
+  // while the computer is short of memory. The engine unloads the first one's
+  // page, unless this has a listener: the shell then decides, by
+  // discardBrowserWindow().
+  attribute EventHandler onbrowsermemoryshort;
+
   // The desk's browser profiles, in the config's order: sets of sign-ins,
   // site data and extensions, as the config's `browser.profiles` names them.
   // Null until the browser lists them. No [SameObject], for `displays`'
@@ -509,6 +517,14 @@
   // with a `beforeunload` handler may first ask to stay, as a `domicile-dialog`
   // on its <webview>; Cancel keeps the window. An unknown id does nothing.
   [CallWith=ScriptState, RaisesException] undefined closeBrowserWindow(
+      DOMString id);
+
+  // Unloads window `id`'s page to free its memory. Its history and scroll
+  // stay, and it loads again when a <webview> next shows the window; what was
+  // typed into it is not kept. Throws TypeError for an empty id. An unknown
+  // window, one a <webview> shows, an extension's popup window, a DevTools
+  // window, and an app module's or Electron app's do nothing.
+  [CallWith=ScriptState, RaisesException] undefined discardBrowserWindow(
       DOMString id);
 
   // Moves window `id`'s page to browser profile `profile`, one of

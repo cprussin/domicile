@@ -706,11 +706,13 @@ void DomicileHost::syncFrames(ScriptState*, ExceptionState& exception_state) {
   }
 }
 
-void DomicileHost::warpPointer(ScriptState*,
-                               double x,
-                               double y,
-                               DOMRectReadOnly* unless_over,
-                               ExceptionState& exception_state) {
+void DomicileHost::warpPointer(
+    ScriptState*,
+    double x,
+    double y,
+    const HeapVector<Member<DOMRectReadOnly>>& only_over,
+    DOMRectReadOnly* unless_over,
+    ExceptionState& exception_state) {
   // A coordinate that is not a number is not a place, and every arithmetic
   // that follows it -- the browser's clamp into this page's box, the round to
   // a pixel -- would carry it. Refused here because the page is where the
@@ -731,10 +733,22 @@ void DomicileHost::warpPointer(ScriptState*,
     exception_state.ThrowTypeError("warpPointer: unlessOver must be finite");
     return;
   }
+  // Refused for the same reason: a NaN box would never hold the pointer.
+  Vector<gfx::RectF> from;
+  for (const DOMRectReadOnly* box : only_over) {
+    if (!std::isfinite(box->x()) || !std::isfinite(box->y()) ||
+        !std::isfinite(box->width()) || !std::isfinite(box->height())) {
+      exception_state.ThrowTypeError("warpPointer: onlyOver must be finite");
+      return;
+    }
+    from.push_back(gfx::RectF(box->left(), box->top(),
+                              box->right() - box->left(),
+                              box->bottom() - box->top()));
+  }
   if (Ready(exception_state)) {
     warp_landing_.Warped(gfx::PointF(x, y));
     channel_->WarpPointer(
-        x, y,
+        x, y, from,
         unless_over == nullptr
             ? std::nullopt
             : std::make_optional(gfx::RectF(
@@ -2581,6 +2595,18 @@ void DomicileHost::closeBrowserWindow(ScriptState*,
   }
 }
 
+void DomicileHost::discardBrowserWindow(ScriptState*,
+                                        const String& id,
+                                        ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a browser window's id");
+    return;
+  }
+  if (Ready(exception_state)) {
+    windows_->Discard(id);
+  }
+}
+
 namespace {
 
 // The browser's answer to browserProfileFor().
@@ -3161,7 +3187,7 @@ void DomicileHost::ListBrowserWindows() {
         window->width, window->height, window->private_browsing,
         window->partition,
         window->profile.empty() ? String() : String(window->profile),
-        window->app, window->app_id, window->captured,
+        window->app, window->app_id, window->captured, window->discarded,
         toplevel_id == browser_toplevel_ids_.end() ? String()
                                                    : toplevel_id->value,
         window->parent.empty() ? String() : String(window->parent), window->x,
@@ -3173,7 +3199,8 @@ void DomicileHost::ListBrowserWindows() {
         window->wants_maximized, window->wants_minimized,
         window->wants_fullscreen, window->urgent, window->ignores_pointer,
         window->shape.empty() ? String() : window->shape,
-        window->opener.empty() ? String() : window->opener));
+        window->opener.empty() ? String() : window->opener,
+        window->agent.empty() ? String() : String(window->agent)));
   }
   browser_windows_ = MakeGarbageCollected<FrozenArray<DomicileBrowserWindow>>(
       std::move(listed));
@@ -3182,6 +3209,26 @@ void DomicileHost::ListBrowserWindows() {
 }
 
 // Stored, like WindowsChanged.
+void DomicileHost::MemoryShort(const Vector<String>& windows,
+                               MemoryShortCallback handled) {
+  const AtomicString& type = domicile_event_names::Browsermemoryshort();
+  if (!HasEventListeners(type)) {
+    std::move(handled).Run(false);
+    return;
+  }
+  auto ids = std::make_unique<JSONArray>();
+  for (const String& id : windows) {
+    ids->PushString(id);
+  }
+  MessageEvent* event = MessageEvent::Create();
+  event->initMessageEvent(type, /*bubbles=*/false, /*cancelable=*/false,
+                          ids->ToJSONString(), /*origin=*/nullptr,
+                          /*last_event_id=*/String(), /*source=*/nullptr,
+                          /*ports=*/nullptr);
+  DispatchEvent(*event);
+  std::move(handled).Run(true);
+}
+
 void DomicileHost::ProfilesChanged(
     Vector<domicile::mojom::blink::BrowserProfilePtr> profiles,
     const String& default_profile,

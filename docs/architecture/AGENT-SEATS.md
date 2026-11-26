@@ -103,9 +103,13 @@ it does to a client. It asks the browser instead:
   does not take the user's focus. The compositor knows it by the process
   that `exec` started, or a descendant of it, and sends the seats before it
   announces the window, so `heldBy` is set when the shell first sees it. A
-  shell opens such a window without focusing it. Manganese still focuses one
+  shell opens such a window without focusing it. Manganese opens a tiled one
+  in a group of its own beside the user's, so it shows, and still focuses one
   that opens on an empty workspace, where the user's keyboard has nowhere
   else to be.
+- A URL an agent opens gets a new browser window. The engine lists it with
+  `agent` set, so the shell opens it unfocused, and answers its id; `domicile`
+  then puts the seat's keyboard in it, as `focus_window` does.
 
 ### Clipboard
 
@@ -114,6 +118,23 @@ selection of the seat driving it, so an agent's copy never replaces the
 user's clipboard. Clipboard managers (data control) and the clipboard
 history see only the user's. An agent's selection ends with its session. Copying
 between them is explicit: a future `clipboard_read` / `clipboard_write` tool.
+
+### File choosers
+
+A file request an agent's input sets off is the agent's to answer, never a
+picker in the user's shell: an `<input type="file">`, a page's
+`showOpenFilePicker()` or `showSaveFilePicker()`, or a download's save.
+
+- Each browser window's page remembers who last pressed or keyed in it: an
+  agent (DevTools input or its seat) or the person. A request made while an
+  agent did is held for the agent; the shell gets no
+  `domicile-file-chooser`.
+- The agent reads it with `Domicile.fileChooser` and answers it with
+  `Domicile.chooseFiles`, the engine's own `devtools` methods. A path that
+  isn't there is refused and the request keeps waiting. A newer request
+  cancels the older one.
+- MCP: an act that leaves the page waiting says so, and
+  `browser_choose_files` answers it.
 
 ### Shell primitives
 
@@ -155,6 +176,8 @@ domicile.seats.giveBack(windowId);
 - **The browser routes an agent's input in browser windows**, because only
   it knows what is under a desk point inside the shell's surface. The
   compositor still owns the seat, and the browser answers each step.
+- **An agent's file chooser skips the shell**, because the agent can't use a
+  picker drawn in the user's shell, and the picker would interrupt the user.
 - **The shell draws agent cursors**, because there is one hardware cursor
   plane per CRTC and the page already knows where windows are.
 
@@ -181,6 +204,9 @@ domicile.seats.giveBack(windowId);
       (`agent_input`, patch 0277); the shell refuses them; the user's press
       or key takes the window
 - [x] manganese: ring, name tag and cursor on browser windows too
+- [x] engine and MCP: file choosers an agent's input opens wait for the
+      agent (`Domicile.fileChooser`, `Domicile.chooseFiles`,
+      `browser_choose_files`)
 
 ## Open questions
 

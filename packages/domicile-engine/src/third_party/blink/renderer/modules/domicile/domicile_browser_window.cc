@@ -18,6 +18,7 @@ DomicileBrowserWindow::DomicileBrowserWindow(
     bool is_app,
     const String& app_id,
     bool is_captured,
+    bool is_discarded,
     const String& toplevel_id,
     const String& parent,
     int32_t x,
@@ -34,7 +35,8 @@ DomicileBrowserWindow::DomicileBrowserWindow(
     bool urgent,
     bool ignores_pointer,
     const String& shape,
-    const String& opener)
+    const String& opener,
+    const String& agent)
     : id_(id),
       url_(url),
       title_(title),
@@ -47,6 +49,7 @@ DomicileBrowserWindow::DomicileBrowserWindow(
       is_app_(is_app),
       app_id_(app_id),
       is_captured_(is_captured),
+      is_discarded_(is_discarded),
       toplevel_id_(toplevel_id),
       parent_(parent),
       x_(x),
@@ -63,7 +66,8 @@ DomicileBrowserWindow::DomicileBrowserWindow(
       urgent_(urgent),
       ignores_pointer_(ignores_pointer),
       shape_(shape),
-      opener_(opener) {}
+      opener_(opener),
+      agent_(agent) {}
 
 DomicileBrowserWindow::~DomicileBrowserWindow() = default;
 

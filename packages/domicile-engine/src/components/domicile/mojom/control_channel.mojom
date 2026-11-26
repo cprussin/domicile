@@ -572,10 +572,12 @@ interface ControlChannel {
   // asks. What a page may move is the pointer over itself, which is
   // `PointerWarpTarget`'s to enforce and not this channel's to promise.
   //
-  // `unless_over`, in the page's coordinates, skips the warp while the pointer
-  // is over it. The page cannot see the pointer over a browser window's page;
-  // this process can. See `PointerAlreadyOver`.
-  WarpPointer(double x, double y, gfx.mojom.RectF? unless_over);
+  // The warp happens only while the pointer is over one of `only_over` and
+  // not over `unless_over`, boxes in the page's coordinates. The page cannot
+  // see the pointer over a browser window's page; this process can. See
+  // `PointerWarps`.
+  WarpPointer(double x, double y, array<gfx.mojom.RectF> only_over,
+              gfx.mojom.RectF? unless_over);
 
   // Keep a hand's pointer inside `boxes`, in the page's coordinates, for a
   // game that confined it to its window; none lets it go. Stops in the

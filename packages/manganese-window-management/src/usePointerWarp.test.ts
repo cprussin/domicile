@@ -19,14 +19,22 @@ const RIGHT = {
 } satisfies Focus;
 
 let warps: Spot[] = [];
+/** Each warp's `onlyOver`, in order. */
+let moveFrom: (readonly Rect[])[] = [];
 /** Each warp's `unlessOver`, in order. */
 let stayPutOver: (Rect | undefined)[] = [];
 
 /** The part of the host client this hook uses. */
 const recordingDomicile = {
   pointer: {
-    warp: (x: number, y: number, unlessOver?: Rect) => {
+    warp: (
+      x: number,
+      y: number,
+      onlyOver: readonly Rect[],
+      unlessOver?: Rect,
+    ) => {
       warps.push([x, y]);
+      moveFrom.push(onlyOver);
       stayPutOver.push(unlessOver);
     },
   },
@@ -65,6 +73,8 @@ const warping = (desktop: Desktop) => {
   );
   view.rerender(desktop);
   warps = [];
+  moveFrom = [];
+  stayPutOver = [];
   return {
     ...view,
     /** A key ran a command. */
@@ -111,6 +121,7 @@ const pointerAt = (x: number, y: number) => {
 
 beforeEach(() => {
   warps = [];
+  moveFrom = [];
   stayPutOver = [];
 });
 
@@ -187,13 +198,44 @@ describe("usePointerWarp", () => {
     expect(warps).toStrictEqual([]);
   });
 
-  it("leaves the pointer alone for a window that opens while it is over the top bar", () => {
+  it("asks the engine to move the pointer only from over another window", () => {
+    // Over the top bar, nothing would take focus from the new window. The page
+    // cannot see the pointer over a browser window's page, so the engine
+    // checks.
     const { rerender } = warping(desktopOf(LEFT, [LEFT.id]));
-    pointerAt(200, 10);
 
     rerender(desktopOf(RIGHT, BOTH));
 
-    expect(warps).toStrictEqual([]);
+    expect(moveFrom).toStrictEqual([[LEFT.frame]]);
+  });
+
+  it("asks the engine to leave a pointer over the top bar when a key switches tabs", () => {
+    // A hidden tab shows only its tab, so the pointer over the top bar is over
+    // no window, and nothing would take focus from the new tab.
+    const tab = { height: 30, width: 200, x: 200, y: 70 };
+    const { press, rerender } = warping({
+      focus: LEFT,
+      shown: [
+        { box: LEFT.frame, id: LEFT.id },
+        { box: tab, id: "firefox" },
+      ],
+      windows: [LEFT.id, "firefox"],
+    });
+    pointerAt(200, 10);
+
+    act(() => {
+      press();
+    });
+    rerender({
+      focus: { ...LEFT, id: "firefox" },
+      shown: [
+        { box: tab, id: LEFT.id },
+        { box: LEFT.frame, id: "firefox" },
+      ],
+      windows: [LEFT.id, "firefox"],
+    });
+
+    expect(moveFrom).toStrictEqual([[tab]]);
   });
 
   it("does not take it again once that window is no longer new", () => {
@@ -436,12 +478,28 @@ describe("usePointerWarp", () => {
   it("takes the pointer with the keyboard when a window closes", () => {
     // Closing the focused window moves focus elsewhere while the tiling slides
     // a window under the pointer.
+    const { rerender } = warping(desktopOf(LEFT, [...BOTH, "firefox"]));
+    pointerAt(200, 300);
+
+    rerender({
+      ...desktopOf(RIGHT, [RIGHT.id, "firefox"]),
+      shown: [
+        { box: LEFT.frame, id: "firefox" },
+        { box: RIGHT.frame, id: RIGHT.id },
+      ],
+    });
+
+    expect(warps).toStrictEqual([[600, 350]]);
+  });
+
+  it("leaves the pointer alone when a window closes and no other is shown", () => {
+    // Nothing is left to take focus from the one that has it.
     const { rerender } = warping(desktopOf(LEFT, BOTH));
     pointerAt(200, 300);
 
     rerender(desktopOf(RIGHT, [RIGHT.id]));
 
-    expect(warps).toStrictEqual([[600, 350]]);
+    expect(warps).toStrictEqual([]);
   });
 
   it("leaves the pointer alone when a tab closes onto the next one", () => {
@@ -456,26 +514,31 @@ describe("usePointerWarp", () => {
   });
 
   describe("a screen with nothing on it", () => {
-    /** A screen with no windows, where the screen itself is the focus. */
+    /**
+     * A screen with no windows, where the screen itself is the focus, right of
+     * one showing {@link LEFT}.
+     */
     const EMPTY: Focus = {
-      box: { height: 600, width: 800, x: 0, y: 0 },
-      frame: { height: 600, width: 800, x: 0, y: 0 },
+      box: { height: 600, width: 800, x: 1000, y: 0 },
+      frame: { height: 600, width: 800, x: 1000, y: 0 },
       id: undefined,
     };
+    const shown = [{ box: LEFT.frame, id: LEFT.id }];
 
     it("takes the pointer to its middle when a key brings the keyboard", () => {
       const { press, rerender } = warping({
-        focus: undefined,
-        shown: [],
-        windows: BOTH,
+        focus: LEFT,
+        shown,
+        windows: [LEFT.id],
       });
+      pointerAt(200, 300);
 
       act(() => {
         press();
       });
-      rerender({ focus: EMPTY, shown: [], windows: BOTH });
+      rerender({ focus: EMPTY, shown, windows: [LEFT.id] });
 
-      expect(warps).toStrictEqual([[400, 300]]);
+      expect(warps).toStrictEqual([[1400, 300]]);
     });
   });
 });

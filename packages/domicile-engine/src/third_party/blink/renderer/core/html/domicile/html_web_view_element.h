@@ -281,6 +281,8 @@ class CORE_EXPORT HTMLWebViewElement final
   void DispatchSuppressedFocus(mojom::blink::FocusType);
 
   LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
+  void AttachLayoutTree(AttachContext&) override;
+  void DidRecalcStyle(const StyleRecalcChange) override;
 
   // `src` never reaches HTMLFrameElementBase, which would navigate the
   // placeholder frame. Everything else does.
@@ -296,9 +298,17 @@ class CORE_EXPORT HTMLWebViewElement final
   // `insertBefore` does) asks for it again from its new frame.
   void RemovedFrom(ContainerNode& insertion_point) override;
 
+  // Shows the window's unloaded page if this is rendered. See
+  // `shows_when_rendered_`.
+  void ShowIfRendered();
+  void ShowSoonIfUnloaded();
+
+  // Whether it is laid out and not `visibility: hidden`.
+  bool IsRendered() const;
+
   // Requests a guest for the placeholder frame. Does nothing if there already
   // is one or there is no placeholder yet.
-  void RequestGuest();
+  void RequestGuest(bool rendered);
 
   // Sends the current `src` to the guest. Safe before the attach finishes.
   void NavigateGuest();
@@ -337,9 +347,9 @@ class CORE_EXPORT HTMLWebViewElement final
   // KeyboardEvent on this element. See UnhandledModifierUp in
   // components/domicile/mojom/web_view_guest.mojom.
   void UnhandledModifierUp(const String& key, const String& code) override;
-  // The window this shows has a new page, in another browser profile: shows
-  // it in a new placeholder. See WebViewGuestClient.Replaced.
-  void Replaced() override;
+  // The window this shows has a new page: shows it in a new placeholder, an
+  // unloaded one only once this is rendered. See WebViewGuestClient.Replaced.
+  void Replaced(bool unloaded) override;
 
   // Dispatches `domicile-key-delivered`, which names no key. See KeyDelivered
   // in components/domicile/mojom/web_view_guest.mojom.
@@ -503,6 +513,10 @@ class CORE_EXPORT HTMLWebViewElement final
   HeapMojoReceiver<domicile::mojom::blink::WebViewGuestClient,
                    HTMLWebViewElement>
       client_receiver_;
+
+  // Whether the window's page was unloaded while this was not rendered.
+  // Showing a page loads it, so this has no frame until it is rendered.
+  bool shows_when_rendered_ = false;
 
   // The browser's last reports. Defaults match a fresh guest, for which the
   // browser sends nothing. `security_` is empty, not "neutral", until the

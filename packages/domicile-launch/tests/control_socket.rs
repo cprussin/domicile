@@ -157,7 +157,7 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                         module: PathBuf::from("shell.js"),
                         root: PathBuf::from("/desktops/mine"),
                     },
-                    open: &|_, _| panic!("a question about this desktop reaches no engine"),
+                    open: &|_, _, _| panic!("a question about this desktop reaches no engine"),
                     open_app: &|_, _, _, _| {
                         panic!("a question about this desktop reaches no engine")
                     },
@@ -171,6 +171,7 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                     monitors: &|| panic!("a question about this desktop reaches no compositor"),
                     displays: &|| panic!("a question about this desktop reaches no compositor"),
                     windows: &|| panic!("a question about this desktop reaches no compositor"),
+                    browser_layouts: &|| panic!("a question about this desktop reaches no engine"),
                     status: &|| panic!("a question about this desktop reaches no compositor"),
                     shell_commands: &|| {
                         panic!("a question about this desktop reaches no compositor")

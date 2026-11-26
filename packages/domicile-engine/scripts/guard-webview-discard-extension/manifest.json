@@ -1,0 +1,11 @@
+{
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Domicile discard guard"
+  },
+  "description": "A page that opens a popup window, for guard-webview-discard.sh.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAm42Hv4lBFmjNFiGifwGj0niymv+/2rwRTk7lR4JqkQIdp4+H3raHxx3Ix6uQDYOi3MpD4L1nUVNJe1UoGHjf0Kycf0LUwylinF6bNe469PP7xziOK5Xdzafy1Ou8+unODYu+Acw91cV5IUaEF7gCyPHZy09/adwFkRgU9rjvBni2+ghtHqZjG2u5L69IzBfMjNF1BWmTXj/C05M5V+4wWeLJ8EnZXr0ebYDBCskd3/HTvfGl2MtzwJ3V/xG8+qhs6cQsJwI6VVrLgK7hwaJYET1lP+Kz42yr7+YeFYbKEqmHQeSN2WxUlfBppLByqUm2tmJOfcMYlEYUyrVoS4RL3wIDAQAB",
+  "manifest_version": 3,
+  "name": "Domicile discard guard",
+  "version": "1"
+}

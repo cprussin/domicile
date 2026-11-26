@@ -345,12 +345,14 @@ describe("a client's window requests", () => {
 
 describe("the desk's browser windows", () => {
   const EXAMPLE: DomicileBrowserWindow = {
+    agent: null,
     appId: "",
     height: 0,
     id: "1",
     ignoresPointer: false,
     isApp: false,
     isCaptured: false,
+    isDiscarded: false,
     isHidden: false,
     isPrivate: false,
     menu: null,
@@ -610,12 +612,14 @@ describe("a command", () => {
       const { host, result } = desktop([LEFT, RIGHT]);
       host.lists([
         {
+          agent: null,
           appId: "",
           height: 0,
           id: "1",
           ignoresPointer: false,
           isApp: false,
           isCaptured: false,
+          isDiscarded: false,
           isHidden: false,
           isPrivate: true,
           menu: null,
@@ -676,12 +680,14 @@ describe("a command", () => {
       useWindows(host.domicile, DISPLAYS, rules, BACKGROUND),
     );
     const window = {
+      agent: null,
       appId: "messages",
       height: 0,
       id: "1",
       ignoresPointer: false,
       isApp: true,
       isCaptured: false,
+      isDiscarded: false,
       isHidden: false,
       isPrivate: false,
       menu: null,

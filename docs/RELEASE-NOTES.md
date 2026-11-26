@@ -27,10 +27,15 @@ Each agent gets its own pointer, keyboard and clipboard, in native and browser w
 - Shader effects can draw through a mesh, sample images, take per-element arrays and draw past the element's bounds. A closed window's last frame stays while its `<app>` does, and windows say where they came from with `launchedFrom` and `opener`. [Shader effects](SHELL-SHADER-EFFECTS.md)
 - `domicile pointer`, `drag`, `scroll`, `key`, `type`, `focus-window`, `exec` and `open` take `--agent <session>`. `domicile list-windows` adds `held_by`, and `domicile idle-time --json` adds `local_seconds`. [The domicile command](CLI.md)
 - `domicile load-extension <directory>` loads or reloads an unpacked extension in every browser profile. [`domicile load-extension`](CLI.md#domicile-load-extension-directory)
+- Agents answer the file choosers their presses open: `devtools` methods `Domicile.fileChooser` and `Domicile.chooseFiles`, and the MCP server's `browser_choose_files`. [Agents](AGENTS.md) · [Agent seats](architecture/AGENT-SEATS.md#file-choosers)
+- Pages no `<webview>` shows are unloaded while the computer is short of memory, and load again when they are shown. A window has `isDiscarded`, and `browser.discard(id)` unloads one by hand. [Browser windows](SHELL-BROWSER-WINDOWS.md)
+- `domicile open --agent <session> <url>` opens a browser window held by the agent's seat (seat `agent-<session>`); the engine's `open_url` takes `"agent"` and answers with the window. [Browser windows](SHELL-BROWSER-WINDOWS.md) · [`domicile open`](CLI.md#domicile-open)
+- `domicile list-windows` and the MCP server's `list_windows` give a browser window `focused` and its page's `size`, from the engine's new `browser_windows` command. [`domicile list-windows`](CLI.md#domicile-list-windows---json)
 - `idle.ignore_pointer_motion` keeps a drifting mouse from holding the desktop awake. [`idle`](SHELL-CONFIG.md#idle)
 
 ### Breaking changes
 
+- `domicile.pointer.warp(x, y, onlyOver, unlessOver)` takes a required list of boxes, `onlyOver`: the pointer moves only while it is over one of them. Pass the other windows' frames so a focus change leaves a pointer over your bar where it is. [Writing a shell](WRITING-A-SHELL.md#focus-follows-the-mouse)
 - Panda CSS 2: a shell that runs Panda with the component library's preset or manganese's config needs `@pandacss/dev@2`, and `@domicile-desktop/manganese/css`'s generated entry points are `index.js` files. [Shell packaging](SHELL-PACKAGING.md#panda-with-manganeses-tokens)
 
 ### Fixes

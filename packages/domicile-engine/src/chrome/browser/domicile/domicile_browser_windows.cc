@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/barrier_callback.h"
 #include "base/barrier_closure.h"
 #include "base/callback_list.h"
 #include "base/check.h"
@@ -23,6 +24,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/memory/self_deleting.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
@@ -41,6 +43,7 @@
 #include "chrome/browser/domicile/domicile_browser_profiles.h"
 #include "chrome/browser/domicile/domicile_electron_page.h"
 #include "chrome/browser/domicile/domicile_electron_page_events.h"
+#include "chrome/browser/domicile/domicile_page_discarding.h"
 #include "chrome/browser/domicile/domicile_tab_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
@@ -58,6 +61,7 @@
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/document_service.h"
+#include "content/public/browser/domicile_agent_input.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -67,6 +71,8 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/url_constants.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
@@ -266,6 +272,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
   class Observer : public base::CheckedObserver {
    public:
     virtual void OnWindowsChanged() = 0;
+    // See mojom::BrowserWindowsClient.MemoryShort.
+    virtual void OnMemoryShort(const std::vector<std::string>& ids,
+                               base::OnceCallback<void(bool)> handled) = 0;
   };
 
   // Returns `profile`'s windows, creating them on first use.
@@ -282,6 +291,12 @@ class DeskWindows final : public base::SupportsUserData::Data,
 
   explicit DeskWindows(Profile* profile) : profile_(profile) {
     profile_observation_.Observe(profile);
+    // Unretained: it is a member.
+    discarding_.emplace(
+        base::BindRepeating(&DeskWindows::Discardable, base::Unretained(this)),
+        base::BindRepeating(&DeskWindows::AskMemoryShort,
+                            base::Unretained(this)),
+        base::BindRepeating(&DeskWindows::Discard, base::Unretained(this)));
   }
   DeskWindows(const DeskWindows&) = delete;
   DeskWindows& operator=(const DeskWindows&) = delete;
@@ -289,15 +304,18 @@ class DeskWindows final : public base::SupportsUserData::Data,
 
   // Opens a window at `url` as a tab of the desk's own window, in browser
   // profile `profile` (BrowserWindowHost::ContextFor), in `partition` when
-  // there is one. Returns it, or null when the profile has no shell to own
-  // it.
+  // there is one, for agent seat `agent` when it isn't empty. Returns it, or
+  // null when the profile has no shell to own it.
   WebViewGuest* Open(const GURL& url,
                      bool private_browsing,
                      const std::string& profile,
-                     const std::optional<WebViewPartition>& partition) {
+                     const std::optional<WebViewPartition>& partition,
+                     const std::string& agent = std::string()) {
     return Make([&](WebViewGuest& guest) { guest.Navigate(url); },
                 /*popup_window=*/std::nullopt, 0, 0, private_browsing, profile,
-                /*app=*/false, partition);
+                /*app=*/false, partition, /*app_host=*/std::string(),
+                /*app_id=*/std::string(), /*view=*/false,
+                /*app_title=*/std::string(), /*hidden=*/false, agent);
   }
 
   // Opens a window with a copy of `source`'s history and takes `step` there,
@@ -321,10 +339,13 @@ class DeskWindows final : public base::SupportsUserData::Data,
   // With an `app_id` and a `reuse` other than kNew, reuses the oldest open app
   // window with that id instead; see mojom::BrowserWindows.OpenApp. A new
   // one is in browser profile `profile`.
-  bool OpenApp(const GURL& url,
-               const std::string& app_id,
-               mojom::AppReuse reuse,
-               const std::string& profile) {
+  //
+  // Returns the id of the window it opened or reused, or nothing when the
+  // profile has no shell to own it.
+  std::optional<std::string> OpenApp(const GURL& url,
+                                     const std::string& app_id,
+                                     mojom::AppReuse reuse,
+                                     const std::string& profile) {
     if (!app_id.empty() && reuse != mojom::AppReuse::kNew) {
       auto open = std::ranges::find(windows_, app_id, &Window::app_id);
       if (open != windows_.end()) {
@@ -334,14 +355,19 @@ class DeskWindows final : public base::SupportsUserData::Data,
           open->guest->Navigate(url);
         }
         open->guest->RequestFocus();
-        return true;
+        return open->id;
       }
     }
-    return Make([&](WebViewGuest& guest) { guest.Navigate(url); },
-                /*popup_window=*/std::nullopt, 0, 0,
-                /*private_browsing=*/false, profile,
-                /*app=*/true, /*partition=*/std::nullopt,
-                /*app_host=*/std::string(), app_id) != nullptr;
+    WebViewGuest* made =
+        Make([&](WebViewGuest& guest) { guest.Navigate(url); },
+             /*popup_window=*/std::nullopt, 0, 0,
+             /*private_browsing=*/false, profile,
+             /*app=*/true, /*partition=*/std::nullopt,
+             /*app_host=*/std::string(), app_id);
+    if (made == nullptr) {
+      return std::nullopt;
+    }
+    return made->window_id();
   }
 
   // Opens an app window at `url` for an Electron app, with `app_id`, in its
@@ -807,12 +833,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
     // each.
     std::deque<AskedMessageBox> boxes = std::move(found->message_boxes);
     std::optional<ShownPopup> popup = std::move(found->popup_menu);
-    closing_.push_back({id, std::move(found->guest)});
-    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(&DeskWindows::Reap, weak_factory_.GetWeakPtr(),
-                       closing_.back().id),
-        kLinger);
+    ReapIn(kLinger, std::move(found->guest));
     windows_.erase(found);
     // Its views stay open, unlisted, as an Electron app's WebContentsViews
     // outlive the window that held them until the app closes them.
@@ -905,13 +926,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
     found->watch = std::move(watch);
     found->opened_at = GURL();
     // Its <webview> asks for the window again, and gets the new page.
-    replaced->Replaced();
+    replaced->Replaced(/*unloaded=*/false);
     replaced->contents().SetAudioMuted(true);
-    closing_.push_back({id, std::move(replaced)});
-    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(&DeskWindows::Reap, weak_factory_.GetWeakPtr(), id),
-        kLinger);
+    ReapIn(kLinger, std::move(replaced));
     // The profile-routing guard greps for this.
     LOG(INFO) << "domicile: moved browser window " << id
               << " to browser profile " << profile << ".";
@@ -965,6 +982,16 @@ class DeskWindows final : public base::SupportsUserData::Data,
     return found == windows_.end() ? nullptr : found->guest.get();
   }
 
+  // Each window's id and page, in open order.
+  std::vector<std::pair<std::string, content::WebContents*>> Pages() const {
+    std::vector<std::pair<std::string, content::WebContents*>> pages;
+    pages.reserve(windows_.size());
+    for (const Window& window : windows_) {
+      pages.emplace_back(window.id, &window.guest->contents());
+    }
+    return pages;
+  }
+
   // The id of the window `page` is the page of, or empty when none: for an
   // Electron app's view, the window holding it.
   std::string WindowOf(const content::WebContents& page) const {
@@ -975,6 +1002,20 @@ class DeskWindows final : public base::SupportsUserData::Data,
       return std::string();
     }
     return found->view ? found->parent : found->id;
+  }
+
+  // Unloads window `id`'s page; see mojom::BrowserWindows.Discard.
+  void Discard(const std::string& id) {
+    auto found = std::ranges::find(windows_, id, &Window::id);
+    const std::string refused =
+        found == windows_.end() ? "it is not open" : DiscardWindow(*found);
+    if (refused.empty()) {
+      LOG(INFO) << "domicile: unloaded browser window " << id << ".";
+      Changed();
+    } else {
+      LOG(WARNING) << "domicile: asked to unload browser window " << id << "; "
+                   << refused << ".";
+    }
   }
 
   // The id of the window showing `page`, or empty when none does.
@@ -1051,7 +1092,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
   }
 
  private:
-  // Reports a change to a page's address or title, and its loads.
+  // Reports a change to a page's address or title, and its loads. Knows
+  // whether the page is unloaded.
   class Watch final : public content::WebContentsObserver {
    public:
     Watch(content::WebContents& contents,
@@ -1061,6 +1103,18 @@ class DeskWindows final : public base::SupportsUserData::Data,
           id_(std::move(id)),
           changed_(std::move(changed)) {}
 
+    // Whether Discard made the page and nothing has loaded in it yet. Not
+    // NavigationController::NeedsReload, which a crashed hidden subframe
+    // sets too, under a page that runs.
+    bool discarded() const { return discarded_; }
+    void SetDiscarded() { discarded_ = true; }
+
+    void DidStartNavigation(content::NavigationHandle* navigation) override {
+      if (discarded_ && navigation->IsInPrimaryMainFrame()) {
+        discarded_ = false;
+        changed_.Run();
+      }
+    }
     void DOMContentLoaded(content::RenderFrameHost* frame) override {
       if (frame->IsInPrimaryMainFrame()) {
         BrowserWindowDomReadies().Notify(id_);
@@ -1082,6 +1136,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
    private:
     const std::string id_;
     base::RepeatingClosure changed_;
+    bool discarded_ = false;
   };
 
   // A message box a window asks, and where its answer goes.
@@ -1147,6 +1202,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
     std::string shape;
     // The browser window whose page opened it; empty for none.
     std::string opener;
+    // The agent seat that opened it, `agent-<session>`; empty for none.
+    std::string agent;
   };
 
   // `menu` as the shell lists it over `window`: {"menu": its entries, "x",
@@ -1196,8 +1253,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
             : std::string(),
         partition.has_value() ? WebViewPartitionAttribute(*partition)
                               : std::string(),
-        window.app, window.app_id, window.captures > 0, window.parent, window.x,
-        window.y, window.hidden, window.menu_bar.menu, window.menu_bar.visible,
+        window.app, window.app_id, window.captures > 0,
+        window.watch->discarded(), window.parent, window.x, window.y,
+        window.hidden, window.menu_bar.menu, window.menu_bar.visible,
         window.menu_bar.auto_hide,
         window.message_boxes.empty()
             ? std::string()
@@ -1206,7 +1264,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
                                       : std::string(),
         window.wanted_state.maximized, window.wanted_state.minimized,
         window.wanted_state.fullscreen, window.urgent, window.ignores_pointer,
-        window.shape, window.opener);
+        window.shape, window.opener, window.agent);
   }
 
   // Makes a window and gives it its first page with `load`. Returns it, or
@@ -1223,7 +1281,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
                      const std::string& app_id = std::string(),
                      bool view = false,
                      const std::string& app_title = std::string(),
-                     bool hidden = false) {
+                     bool hidden = false,
+                     const std::string& agent = std::string()) {
     // The shell owns every guest, browser windows included: content's guest
     // machinery reads the owner's WebContents when making a guest. A desk with
     // no shell has nothing to draw a window in anyway.
@@ -1257,19 +1316,30 @@ class DeskWindows final : public base::SupportsUserData::Data,
                .app_id = app_id,
                .view = view,
                .hidden = hidden,
-               .app_title = app_title});
+               .app_title = app_title,
+               .agent = agent});
     Changed();
     return made;
   }
 
-  // Destroys a closed window's page once its linger is over. A profile
+  // Destroys `guest`, which its window no longer shows, after `linger`.
+  void ReapIn(base::TimeDelta linger, std::unique_ptr<WebViewGuest> guest) {
+    const int serial = next_closing_++;
+    closing_.push_back({serial, std::move(guest)});
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&DeskWindows::Reap, weak_factory_.GetWeakPtr(), serial),
+        linger);
+  }
+
+  // Destroys a closed or replaced page once its linger is over. A profile
   // destroyed first already took it.
   //
   // Takes it out of the list first: destroying a page can close another
   // window, as DevTools closes its own with the page it inspects, and that
   // Close adds to `closing_` and posts its own Reap.
-  void Reap(const std::string& id) {
-    auto found = std::ranges::find(closing_, id, &Closing::id);
+  void Reap(int serial) {
+    auto found = std::ranges::find(closing_, serial, &Closing::serial);
     if (found == closing_.end()) {
       return;
     }
@@ -1332,6 +1402,101 @@ class DeskWindows final : public base::SupportsUserData::Data,
     return listing;
   }
 
+  // Gives `window` a new page with its page's history and mute, which loads
+  // when a <webview> next shows it, and ends the old one. To extensions that is
+  // a new tab. Returns why not, or an empty string.
+  //
+  // Not WebContents::Discard, which keeps the page and ends its renderer:
+  // content attaches no page whose renderer is gone to a <webview>.
+  std::string DiscardWindow(Window& window) {
+    WebViewGuest& old = *window.guest;
+    content::WebContents& page = old.contents();
+    // An Electron app's page is its app's to keep.
+    if (!window.profiled) {
+      return "it is in no browser profile";
+    }
+    // Its window closes with its one tab.
+    if (old.popup_window().has_value()) {
+      return "it is an extension's popup window";
+    }
+    // What it inspects is not kept: its front end loads again with no page.
+    if (page.GetLastCommittedURL().SchemeIs(content::kChromeDevToolsScheme)) {
+      return "it is a DevTools window";
+    }
+    if (old.IsShown()) {
+      return "a <webview> shows it";
+    }
+    if (window.watch->discarded()) {
+      return "it is unloaded already";
+    }
+    if (page.GetController().GetLastCommittedEntry()->IsInitialEntry()) {
+      return "it has shown nothing yet";
+    }
+    content::WebContents* shell = ShellContentsIn(profile_);
+    if (shell == nullptr) {
+      return "there is no shell to own its new page";
+    }
+    content::BrowserContext& context = *page.GetBrowserContext();
+    std::unique_ptr<WebViewGuest> guest = WebViewGuest::MakeWindow(
+        *shell, window.id, /*popup_window=*/std::nullopt,
+        context.IsOffTheRecord(), BrowserProfileRegistry::Get().IdOf(context),
+        old.partition(),
+        base::BindRepeating(window.app ? &AttachAppTabHelpers
+                                       : &AttachTabHelpers));
+    WatchProfileOf(*guest);
+    auto watch = std::make_unique<Watch>(
+        guest->contents(), window.id,
+        base::BindRepeating(&DeskWindows::Changed, base::Unretained(this)));
+    guest->contents().GetController().CopyStateFrom(&page.GetController(),
+                                                    /*needs_reload=*/true);
+    watch->SetDiscarded();
+    guest->contents().SetAudioMuted(page.IsAudioMuted());
+    std::unique_ptr<WebViewGuest> replaced =
+        std::exchange(window.guest, std::move(guest));
+    window.watch = std::move(watch);
+    window.opened_at = GURL();
+    // Not now, which may be under the page's own call stack. A <webview> that
+    // is not rendered holds it until it hears of this.
+    base::TimeDelta linger;
+    if (replaced->IsAttached()) {
+      replaced->Replaced(/*unloaded=*/true);
+      linger = kLinger;
+    }
+    ReapIn(linger, std::move(replaced));
+    return std::string();
+  }
+
+  // Asks every document whether its shell decides which of `ids` to unload.
+  void AskMemoryShort(const std::vector<std::string>& ids,
+                      base::OnceCallback<void(bool)> handled) {
+    size_t documents = 0;
+    for ([[maybe_unused]] Observer& observer : observers_) {
+      ++documents;
+    }
+    const auto answered = base::BarrierCallback<bool>(
+        documents, base::BindOnce([](std::vector<bool> answers) {
+                     return std::ranges::find(answers, true) != answers.end();
+                   }).Then(std::move(handled)));
+    for (Observer& observer : observers_) {
+      observer.OnMemoryShort(ids, answered);
+    }
+  }
+
+  // The windows a shortage of memory may unload: no app's, whose notifications
+  // would stop, and no extension's popup window.
+  std::vector<PageDiscarding::Candidate> Discardable() {
+    std::vector<PageDiscarding::Candidate> candidates;
+    for (const Window& window : windows_) {
+      content::WebContents& page = window.guest->contents();
+      if (window.profiled && !window.app &&
+          !window.guest->popup_window().has_value() &&
+          !window.guest->IsShown() && !window.watch->discarded()) {
+        candidates.push_back({window.id, raw_ref(page)});
+      }
+    }
+    return candidates;
+  }
+
   // ProfileObserver:
   void OnProfileWillBeDestroyed(Profile* profile) override {
     if (profile != profile_.get()) {
@@ -1363,11 +1528,13 @@ class DeskWindows final : public base::SupportsUserData::Data,
   // close animation, which draws its <webview> until the end.
   static constexpr base::TimeDelta kLinger = base::Seconds(1);
 
-  // A closed window awaiting Reap, by its old id. Ids are never reused.
+  // A page awaiting Reap. By a serial of its own, not its window's id: one
+  // window can have several, moved to another profile and then unloaded.
   struct Closing {
-    std::string id;
+    int serial;
     std::unique_ptr<WebViewGuest> guest;
   };
+  int next_closing_ = 0;
 
   // Closed and awaiting Reap. Held here, not in a DeleteSoon, so a profile
   // destroyed first takes them with it, before its desk's window.
@@ -1379,6 +1546,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
   // ones' off-the-record profiles. See WatchProfileOf.
   base::ScopedMultiSourceObservation<Profile, ProfileObserver> page_profiles_{
       this};
+
+  std::optional<PageDiscarding> discarding_;
 
   base::WeakPtrFactory<DeskWindows> weak_factory_{this};
 };
@@ -1654,6 +1823,8 @@ class BrowserWindowsService final
 
   void Close(const std::string& id) override { windows_->UserAskedToClose(id); }
 
+  void Discard(const std::string& id) override { windows_->Discard(id); }
+
   void ClickMenu(const std::string& id, int32_t command) override {
     if (command < 1) {
       ReportBadMessageAndDeleteThis(
@@ -1740,6 +1911,17 @@ class BrowserWindowsService final
   void OnWindowsChanged() override {
     if (client_.is_bound()) {
       client_->WindowsChanged(windows_->List());
+    }
+  }
+  void OnMemoryShort(const std::vector<std::string>& ids,
+                     base::OnceCallback<void(bool)> handled) override {
+    if (client_.is_bound()) {
+      // A document that goes first may have been a listener's, so nothing is
+      // unloaded until the next check.
+      client_->MemoryShort(ids, mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+                                    std::move(handled), true));
+    } else {
+      std::move(handled).Run(false);
     }
   }
 
@@ -1852,29 +2034,38 @@ void StartBrowserWindows() {
   SetNotificationWindowFinder(base::BindRepeating(&NotificationWindowOf));
 }
 
-bool OpenBrowserWindow(const GURL& url, const std::string& profile) {
+std::optional<std::string> OpenBrowserWindow(const GURL& url,
+                                             const std::string& profile,
+                                             const std::string& agent) {
   content::WebContents* shell = ShellContentsIn(nullptr);
   if (shell == nullptr) {
-    return false;
+    return std::nullopt;
   }
-  return DeskWindows::For(
-             Profile::FromBrowserContext(shell->GetBrowserContext()))
-             .Open(url, /*private_browsing=*/false,
-                   profile.empty() ? ProfileForUrl(
-                                         BrowserProfileRegistry::Get()
-                                             .profiles(),
-                                         url)
-                                   : profile,
-                   /*partition=*/std::nullopt) != nullptr;
+  WebViewGuest* made =
+      DeskWindows::For(Profile::FromBrowserContext(shell->GetBrowserContext()))
+          .Open(url, /*private_browsing=*/false,
+                profile.empty()
+                    ? ProfileForUrl(BrowserProfileRegistry::Get().profiles(),
+                                    url)
+                    : profile,
+                /*partition=*/std::nullopt, agent);
+  if (made == nullptr) {
+    return std::nullopt;
+  }
+  if (!agent.empty()) {
+    VLOG(1) << "domicile: opened browser window " << made->window_id()
+            << " for " << agent;
+  }
+  return made->window_id();
 }
 
-bool OpenAppWindow(const GURL& url,
-                   const std::string& app_id,
-                   mojom::AppReuse reuse,
-                   const std::string& profile) {
+std::optional<std::string> OpenAppWindow(const GURL& url,
+                                         const std::string& app_id,
+                                         mojom::AppReuse reuse,
+                                         const std::string& profile) {
   content::WebContents* shell = ShellContentsIn(nullptr);
   if (shell == nullptr) {
-    return false;
+    return std::nullopt;
   }
   return DeskWindows::For(
              Profile::FromBrowserContext(shell->GetBrowserContext()))
@@ -2083,6 +2274,29 @@ std::string BrowserWindowOfPage(content::WebContents* page) {
     }
   }
   return std::string();
+}
+
+std::vector<BrowserWindowState> BrowserWindowStates() {
+  DeskWindows* windows = ShellDeskWindows();
+  if (windows == nullptr) {
+    return {};
+  }
+  content::WebContents* shell = ShellContentsIn(nullptr);
+  content::WebContents* users = content::DomicileUsersFocusedPage(shell);
+  const std::string focused = users == nullptr || users == shell
+                                  ? std::string()
+                                  : BrowserWindowOfPage(users);
+  std::vector<BrowserWindowState> states;
+  for (const auto& [id, page] : windows->Pages()) {
+    BrowserWindowState state{.id = id, .focused = id == focused};
+    // A page the shell doesn't draw has no size of its own.
+    content::RenderWidgetHostView* view = page->GetRenderWidgetHostView();
+    if (page->GetOuterWebContents() != nullptr && view != nullptr) {
+      state.size = view->GetViewBounds().size();
+    }
+    states.push_back(std::move(state));
+  }
+  return states;
 }
 
 void FocusBrowserWindow(const std::string& id) {

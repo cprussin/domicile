@@ -33,6 +33,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
                         bool is_app,
                         const String& app_id,
                         bool is_captured,
+                        bool is_discarded,
                         const String& toplevel_id,
                         const String& parent,
                         int32_t x,
@@ -49,7 +50,8 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
                         bool urgent,
                         bool ignores_pointer,
                         const String& shape,
-                        const String& opener);
+                        const String& opener,
+                        const String& agent);
   ~DomicileBrowserWindow() override;
 
   const String& id() const { return id_; }
@@ -64,6 +66,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   bool isApp() const { return is_app_; }
   const String& appId() const { return app_id_; }
   bool isCaptured() const { return is_captured_; }
+  bool isDiscarded() const { return is_discarded_; }
   const String& toplevelId() const { return toplevel_id_; }
   // Null for a window, as the empty string the browser sends for none.
   const String& parent() const { return parent_; }
@@ -87,6 +90,8 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   const String& shape() const { return shape_; }
   // Null for none, as the empty string the browser sends.
   const String& opener() const { return opener_; }
+  // Null for none, as the empty string the browser sends.
+  const String& agent() const { return agent_; }
 
   void Trace(Visitor*) const override;
 
@@ -103,6 +108,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   bool is_app_ = false;
   String app_id_;
   bool is_captured_ = false;
+  bool is_discarded_ = false;
   String toplevel_id_;
   String parent_;
   int32_t x_ = 0;
@@ -120,6 +126,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   bool ignores_pointer_ = false;
   String shape_;
   String opener_;
+  String agent_;
 };
 
 }  // namespace blink

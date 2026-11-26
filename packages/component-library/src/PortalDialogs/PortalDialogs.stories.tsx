@@ -412,12 +412,14 @@ const screenCastOnDesk = {
 
 /** A browser window the engine lists, by `id` and `title`. */
 const browserWindow = (id: string, title: string): DomicileBrowserWindow => ({
+  agent: null,
   appId: "",
   height: 0,
   id,
   ignoresPointer: false,
   isApp: false,
   isCaptured: false,
+  isDiscarded: false,
   isHidden: false,
   isPrivate: false,
   menu: null,
