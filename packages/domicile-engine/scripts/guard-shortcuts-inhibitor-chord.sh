@@ -138,14 +138,14 @@ trap cleanup EXIT
 if command -v wtype >/dev/null; then
   WTYPE=(wtype)
 elif command -v nix >/dev/null; then
-  WTYPE=(nix shell nixpkgs#wtype --command wtype)
+  WTYPE=(nix shell --inputs-from "$SCRIPTS/../../.." nixpkgs#wtype --command wtype)
 else
   WTYPE=()
 fi
 if command -v swaymsg >/dev/null; then
   SWAYMSG=(swaymsg)
 elif command -v nix >/dev/null; then
-  SWAYMSG=(nix shell nixpkgs#sway --command swaymsg)
+  SWAYMSG=(nix shell --inputs-from "$SCRIPTS/../../.." nixpkgs#sway --command swaymsg)
 else
   SWAYMSG=()
 fi

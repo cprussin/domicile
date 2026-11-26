@@ -149,7 +149,7 @@ trap cleanup EXIT
 if command -v wtype >/dev/null; then
   WTYPE=(wtype)
 elif command -v nix >/dev/null; then
-  WTYPE=(nix shell nixpkgs#wtype --command wtype)
+  WTYPE=(nix shell --inputs-from "$SCRIPTS/../../.." nixpkgs#wtype --command wtype)
 else
   WTYPE=()
 fi

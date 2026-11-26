@@ -35,7 +35,7 @@ export PATH="$TOOLS:$PATH"
 # fontconfig: Inter for the desktop's text (`sans-serif` and `system-ui`),
 # JetBrains Mono for terminals and code, and Noto Color Emoji, which
 # Chromium falls back to for emoji.
-FONT_DIRS="$(nix build --no-link --print-out-paths nixpkgs#inter nixpkgs#jetbrains-mono \
+FONT_DIRS="$(nix build --inputs-from "$ROOT" --no-link --print-out-paths nixpkgs#inter nixpkgs#jetbrains-mono \
   nixpkgs#dejavu_fonts nixpkgs#noto-fonts-color-emoji |
   sed 's#.*#  <dir>&/share/fonts</dir>#')"
 export FONTCONFIG_FILE="$SCENE_TMP/fonts.conf"
@@ -53,7 +53,7 @@ FONTS_EOF
 
 # A session bus for the desktop, as a login has: `notify-send` reaches the
 # desktop's notification server over it. Started by `desktop`.
-DBUS="$(nix build --no-link --print-out-paths 'nixpkgs#dbus^out')"
+DBUS="$(nix build --inputs-from "$ROOT" --no-link --print-out-paths 'nixpkgs#dbus^out')"
 
 # The display apps join, set by `desktop`.
 APPS_DISPLAY=""
@@ -266,10 +266,10 @@ POINTER_PYTHON="$(nix build --no-link --print-out-paths --impure --expr \
   '(import (builtins.getFlake "nixpkgs") { }).python3.withPackages (ps: [ ps.pywayland ])')"
 # The scanner asks pkg-config for wayland.xml first, and fails outright when
 # there is no pkg-config at all; given none, it goes on to the files passed.
-POINTER_PKG_CONFIG="$(nix build --no-link --print-out-paths 'nixpkgs#pkg-config^out')"
+POINTER_PKG_CONFIG="$(nix build --inputs-from "$ROOT" --no-link --print-out-paths 'nixpkgs#pkg-config^out')"
 POINTER_XML=(
-  "$(nix build --no-link --print-out-paths 'nixpkgs#wayland-scanner^out')/share/wayland/wayland.xml"
-  "$(nix build --no-link --print-out-paths nixpkgs#wlr-protocols)/share/wlr-protocols/unstable/wlr-virtual-pointer-unstable-v1.xml"
+  "$(nix build --inputs-from "$ROOT" --no-link --print-out-paths 'nixpkgs#wayland-scanner^out')/share/wayland/wayland.xml"
+  "$(nix build --inputs-from "$ROOT" --no-link --print-out-paths nixpkgs#wlr-protocols)/share/wlr-protocols/unstable/wlr-virtual-pointer-unstable-v1.xml"
 )
 
 # Starts `pointer.py`, a virtual pointer that stays on the nested sway's seat
@@ -377,7 +377,7 @@ blender_scene() {
 
 # The photo GIMP edits and the clipboard scene copies: "Colorful Cups" by
 # Dmitri Popov, from KDE's wallpapers (LGPL 3).
-PHOTO="$(nix build --no-link --print-out-paths nixpkgs#kdePackages.plasma-workspace-wallpapers)/share/wallpapers/ColorfulCups/contents/images/2560x1600.jpg"
+PHOTO="$(nix build --inputs-from "$ROOT" --no-link --print-out-paths nixpkgs#kdePackages.plasma-workspace-wallpapers)/share/wallpapers/ColorfulCups/contents/images/2560x1600.jpg"
 
 # GIMP on the photo. The config skips the welcome dialog, which shows when the
 # config was written by another version, and the color profile question.

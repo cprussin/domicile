@@ -109,7 +109,7 @@ cd "$CHROMIUM" || {
 if command -v kitty >/dev/null; then
   KITTY=(kitty)
 elif command -v nix >/dev/null; then
-  KITTY=(nix shell nixpkgs#kitty --command kitty)
+  KITTY=(nix shell --inputs-from "$ROOT" nixpkgs#kitty --command kitty)
 else
   skip "guard-two-windows: no kitty to draw with, and no nix to fetch one"
   exit 77

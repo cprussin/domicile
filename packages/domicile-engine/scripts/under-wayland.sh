@@ -77,8 +77,11 @@ CONFIG_EOF
 # first card, which is often wrong when the GPU is behind nvidia-drm.
 # `nixpkgs#dbus` provides `dbus-daemon`: nixpkgs' sway wrapper runs
 # `dbus-run-session`, which finds `dbus-daemon` on PATH. Under a systemd
-# service (CI) there is none, and sway never starts.
-nix shell nixpkgs#sway nixpkgs#dbus --command env \
+# service (CI) there is none, and sway never starts. `--inputs-from` takes
+# sway from flake.lock's nixpkgs, the same one as the dev shell's
+# LD_LIBRARY_PATH: the host registry's sway can need an older glibc than those
+# libraries.
+nix shell --inputs-from "$SCRIPTS/../../.." nixpkgs#sway nixpkgs#dbus --command env \
   "$(compositor_env)" \
   XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
   WLR_BACKENDS=headless \

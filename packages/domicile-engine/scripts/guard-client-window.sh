@@ -124,7 +124,7 @@ CLIENT_NAME=kitty
 if command -v "$CLIENT_NAME" >/dev/null; then
   CLIENT=("$CLIENT_NAME")
 elif command -v nix >/dev/null; then
-  CLIENT=(nix shell "nixpkgs#$CLIENT_NAME" --command "$CLIENT_NAME")
+  CLIENT=(nix shell --inputs-from "$SCRIPTS/../../.." "nixpkgs#$CLIENT_NAME" --command "$CLIENT_NAME")
 else
   skip "guard-client-window: no $CLIENT_NAME to draw with, and no nix to fetch one"
   exit 77
@@ -223,7 +223,7 @@ else
   if [ "$SOFTWARE" = "1" ]; then
     WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout "$CLIENT_LIVES_FOR" \
       "${CLIENT[@]}" --config=/dev/null \
-            --override="colors.background=$COLOR" \
+            --override="colors-dark.background=$COLOR" \
             --window-size-pixels=640x480 \
             sh -c 'while :; do printf .; sleep 0.2; done' >"$CLI_LOG" 2>&1 &
   else
