@@ -56,6 +56,8 @@ export type Row = {
   sessionPssMib: Spread;
   /** CPU the host took for its other work, for runs that read it. */
   stealPercent?: Spread;
+  /** The busiest threads by their median run, for groups that read them. */
+  threads?: { cpuPercent: number; name: string }[];
   usedMib: Spread;
   workload: string;
 };
@@ -208,6 +210,35 @@ const stealSpread = (
     : {};
 };
 
+/** How many of a group's busiest threads its summary names. */
+const BUSIEST = 15;
+
+/**
+ * Each thread's median across the runs, a run it spent nothing in counting as
+ * nothing, busiest first; when every run read its threads.
+ */
+const threadMedians = (group: readonly Run[]): Pick<Row, "threads"> => {
+  const read = group.flatMap((run) =>
+    run.threads === undefined ? [] : [run.threads],
+  );
+  if (read.length === 0 || read.length !== group.length) {
+    return {};
+  }
+  const names = new Set(read.flatMap((threads) => threads.map((t) => t.name)));
+  const threads = [...names]
+    .map((name) => ({
+      cpuPercent: median(
+        read.map(
+          (threads) => threads.find((t) => t.name === name)?.cpuPercent ?? 0,
+        ),
+      ),
+      name,
+    }))
+    .toSorted((a, b) => b.cpuPercent - a.cpuPercent)
+    .slice(0, BUSIEST);
+  return { threads };
+};
+
 /** Groups runs by desktop and workload, in the order each first appears. */
 export const summarize = (runs: readonly Run[]): Row[] =>
   Map.groupBy(runs, (run) => `${run.desktop}\0${run.workload}`)
@@ -230,6 +261,7 @@ export const summarize = (runs: readonly Run[]): Row[] =>
         runs: measured.length,
         sessionPssMib: spread(measured.map((m) => m.sessionPssMib)),
         ...stealSpread(measured.map((m) => m.stealPercent)),
+        ...threadMedians(group),
         usedMib: spread(measured.map((m) => m.usedMib)),
         workload: first.workload,
       };
@@ -274,6 +306,32 @@ const hostCell =
   (row: Row): string =>
     row.host === undefined ? "–" : ranged(row.host[measure], unit);
 
+/** Each group's busiest threads, a table per desktop and workload. */
+const threadTables = (rows: readonly Row[]): string[] => {
+  const read = rows.flatMap((row) =>
+    row.threads === undefined ? [] : [{ ...row, threads: row.threads }],
+  );
+  return read.length === 0
+    ? []
+    : [
+        [
+          "### Busiest threads (% of one core, median run)",
+          ...read.map((row) =>
+            [
+              "",
+              `#### ${row.desktop}, ${row.workload}`,
+              "",
+              "| Thread | CPU |",
+              "| --- | --- |",
+              ...row.threads.map(
+                (t) => `| ${t.name} | ${String(t.cpuPercent)}% |`,
+              ),
+            ].join("\n"),
+          ),
+        ].join("\n"),
+      ];
+};
+
 /** The summary as markdown tables: the median run, then its range. */
 export const markdown = (rows: readonly Row[]): string =>
   [
@@ -316,4 +374,5 @@ export const markdown = (rows: readonly Row[]): string =>
           ),
         ]
       : []),
+    ...threadTables(rows),
   ].join("\n\n");

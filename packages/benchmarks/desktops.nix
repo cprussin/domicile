@@ -78,26 +78,36 @@ let
     '';
   };
 
-  # Every thread's CPU ticks so far, one per line: its /proc path, a label
-  # (program, Chromium's process type, thread), and utime + stime. Read at
-  # each end of the window, it says which threads spent the CPU.
+  # Every thread's CPU ticks so far, one per line: a key, a label (program,
+  # Chromium's process type, thread), and utime + stime. Read at each end of
+  # the window, it says which threads spent the CPU. Also, per process, what
+  # its children that exited spent (a program run every few seconds shows up
+  # there, under whoever reaped it), and the kernel's interrupt time.
   threads = pkgs.writeShellApplication {
     name = "bench-threads";
-    runtimeInputs = [ pkgs.coreutils pkgs.gnused ];
+    runtimeInputs = [ pkgs.coreutils pkgs.gnugrep ];
     text = ''
       for dir in /proc/[0-9]*; do
         program=$(cat "$dir/comm" 2>/dev/null) || continue
-        type=$(tr '\0' '\n' <"$dir/cmdline" 2>/dev/null | sed -n 's/^--type=//p' | head -1) || true
+        # Chromium's children rewrite their command line as one string, so
+        # the type is found among spaces as well as NULs.
+        type=$(tr '\0' ' ' <"$dir/cmdline" 2>/dev/null | grep -o -- '--type=[^ ]*' | head -1) || true
+        label="$program''${type:+[''${type#--type=}]}"
         for task in "$dir"/task/[0-9]*; do
           stat=$(cat "$task/stat" 2>/dev/null) || continue
           thread=$(cat "$task/comm" 2>/dev/null) || continue
           # The fields after the name, which can hold spaces: state is the
-          # first, so utime and stime are the 12th and 13th.
+          # first, so utime and stime are the 12th and 13th, and the
+          # children's (process-wide) the 14th and 15th.
           read -r -a fields <<<"''${stat##*) }"
-          printf '%s\t%s%s/%s\t%d\n' "$task" "$program" "''${type:+[$type]}" "$thread" \
-            "$((fields[11] + fields[12]))"
+          printf '%s\t%s/%s\t%d\n' "$task" "$label" "$thread" "$((fields[11] + fields[12]))"
         done
+        stat=$(cat "$dir/stat" 2>/dev/null) || continue
+        read -r -a fields <<<"''${stat##*) }"
+        printf '%s/children\t%s/(exited children)\t%d\n' "$dir" "$label" "$((fields[13] + fields[14]))"
       done
+      read -r _ _ _ _ _ _ irq softirq _ </proc/stat
+      printf 'kernel/irq\t(kernel)/irq\t%d\nkernel/softirq\t(kernel)/softirq\t%d\n' "$irq" "$softirq"
     '';
   };
 

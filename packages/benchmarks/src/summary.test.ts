@@ -138,3 +138,29 @@ describe("markdown", () => {
     expect(table).toContain("| sway | 4 MiB (4–4) | 8 MiB (8–8) |");
   });
 });
+
+describe("busiest threads", () => {
+  const busy = (threads: { cpuPercent: number; name: string }[]) => ({
+    ...run("domicile", "rest", 4096),
+    threads,
+  });
+
+  test("tables each group's threads by their median run", () => {
+    const table = markdown(
+      summarize([
+        busy([{ cpuPercent: 3, name: "bun/bun" }]),
+        busy([{ cpuPercent: 1, name: "bun/bun" }]),
+        // A run where the thread spent nothing counts as nothing.
+        busy([]),
+      ]),
+    );
+    expect(table).toContain("#### domicile, rest");
+    expect(table).toContain("| bun/bun | 1% |");
+  });
+
+  test("leaves them out when no run read them", () => {
+    expect(markdown(summarize([run("sway", "rest", 4096)]))).not.toContain(
+      "Busiest threads",
+    );
+  });
+});

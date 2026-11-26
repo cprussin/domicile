@@ -41,7 +41,10 @@ Slack's Electron and VSCodium's Electron run on their own.
   (`MemTotal - MemAvailable`), the PSS of every process and of the user's,
   CPU ticks and the load average. Over the same window it records each
   thread's CPU, so a run's `threads` names the 25 busiest (program,
-  Chromium's process type, thread) as a percentage of one core.
+  Chromium's process type, thread) as a percentage of one core. Each
+  process's exited children (`(exited children)`) and the kernel's interrupts
+  (`(kernel)/irq`, `(kernel)/softirq`) count too, so a program run every few
+  seconds still shows. The summary tables each run's 15 busiest.
 - The apps load live pages, so the network adds variance.
 
 `src/main.ts` reports the median run of each and its range.
