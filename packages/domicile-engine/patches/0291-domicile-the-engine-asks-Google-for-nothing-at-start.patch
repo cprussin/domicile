@@ -1,0 +1,292 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Connor Prussin <connor@prussin.net>
+Date: Thu, 26 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the engine asks Google for nothing at start
+
+An engine started with a fresh profile and left on about:blank asked
+Google for 21 components, most for Chrome features the engine has no UI
+for, then for the time and for whether AI Mode is offered, and kept a
+connection to www.google.com open.
+
+- RegisterComponentsForUpdate registers Widevine, CRLSet, PKI metadata,
+  origin trials, the autoplay preload list, hyphenation, Screen AI and
+  component extensions only.
+- CrxUpdateService::RegisterComponent refuses any other component,
+  wherever it is registered.
+- kNetworkTimeServiceQuerying is off: the system clock is the time.
+- kAimEnabled is off: no /async/folae request asking whether AI Mode is
+  offered.
+- On-device models (kDomicileOnDeviceModels, off) are never registered,
+  so their manifest and the gigabytes after it are never downloaded.
+- kPreconnectToSearch is off, and the field trial testing config's
+  PreconnectToSearchDesktop study, which turned it back on, is dropped:
+  no connection to the search engine before anyone searches.
+
+guard-engine-stays-quiet.sh checks it.
+---
+ chrome/browser/component_updater/optimization_guide_on_device_model_installer.cc | 13 ++++++++++++-
+ chrome/browser/component_updater/registration.cc                                 | 35 ++++++-----------------------------
+ chrome/browser/navigation_predictor/search_engine_preconnector.cc                |  5 ++++-
+ components/component_updater/component_updater_service.cc                        | 18 ++++++++++++++++++
+ components/network_time/network_time_tracker.cc                                  |  8 ++------
+ components/omnibox/browser/aim_eligibility_service_features.cc                   |  5 ++++-
+ testing/variations/fieldtrial_testing_config.json                                | 23 -----------------------
+ 7 files changed, 46 insertions(+), 61 deletions(-)
+
+diff --git a/chrome/browser/component_updater/optimization_guide_on_device_model_installer.cc b/chrome/browser/component_updater/optimization_guide_on_device_model_installer.cc
+index a6061095bbd6a..692ef2902bece 100644
+--- a/chrome/browser/component_updater/optimization_guide_on_device_model_installer.cc
++++ b/chrome/browser/component_updater/optimization_guide_on_device_model_installer.cc
+@@ -71,6 +71,11 @@ class OnDeviceModelUpdater {
+ 
+ namespace {
+ 
++// Domicile: off, so on-device models are never downloaded. Their manifest
++// is the first of them, gigabytes follow it, and nothing in the engine uses
++// them.
++BASE_FEATURE(kDomicileOnDeviceModels, base::FEATURE_DISABLED_BY_DEFAULT);
++
+ // This model asset predates Manifest and has a special install path.
+ // Extension id is fklghjjljmnfjoepjmlobpekiapffcja.
+ constexpr base::FilePath::CharType kLegacyBaseModelPath[] =
+@@ -457,6 +462,10 @@ class ManifestProviderImpl final : public optimization_guide::ManifestProvider {
+ 
+  private:
+   void MaybeRegisterManifestComponent() {
++    // Domicile: see kDomicileOnDeviceModels.
++    if (!base::FeatureList::IsEnabled(kDomicileOnDeviceModels)) {
++      return;
++    }
+     if (manifest_registered_ || !g_browser_process) {
+       return;
+     }
+@@ -735,7 +744,9 @@ class ManifestAssetManagerDelegateImpl final
+                                  const std::string& component_name) override {
+     CHECK_CURRENTLY_ON(content::BrowserThread::UI, base::NotFatalUntil::M161);
+     update_tracker_.InvalidatePendingUpdate(public_key_hex);
+-    if (!g_browser_process) {
++    // Domicile: see kDomicileOnDeviceModels.
++    if (!base::FeatureList::IsEnabled(kDomicileOnDeviceModels) ||
++        !g_browser_process) {
+       return;
+     }
+ 
+diff --git a/chrome/browser/component_updater/registration.cc b/chrome/browser/component_updater/registration.cc
+index 2e1d3741b7f3e..90b0695a3a2be 100644
+--- a/chrome/browser/component_updater/registration.cc
++++ b/chrome/browser/component_updater/registration.cc
+@@ -143,6 +143,12 @@ void DeleteOldComponents(const base::FilePath& user_data_dir) {
+ 
+ }  // namespace
+ 
++// Domicile registers only the components a page needs to load and play:
++// Widevine, certificate revocation and transparency (CRLSet, PKI metadata),
++// origin trials, the autoplay preload list, hyphenation, Screen AI's PDF text
++// on demand, and component extensions. The rest serve Chrome features the
++// engine has no UI for, or Google's services (Safe Browsing, optimization
++// hints, Privacy Sandbox tokens, AI), and each was a download at start.
+ void RegisterComponentsForUpdate() {
+   auto* const cus = g_browser_process->component_updater();
+ 
+@@ -154,21 +160,6 @@ void RegisterComponentsForUpdate() {
+   RegisterWidevineCdmComponent(cus);
+ #endif  // BUILDFLAG(ENABLE_WIDEVINE_CDM_COMPONENT)
+ 
+-  RegisterSubresourceFilterComponent(cus);
+-  RegisterOnDeviceHeadSuggestComponent(
+-      cus, g_browser_process->GetApplicationLocale());
+-  RegisterOptimizationHintsComponent(cus);
+-  RegisterTrustTokenKeyCommitmentsComponentIfTrustTokensEnabled(cus);
+-  RegisterPrivateVerificationTokensComponentIfEnabled(cus);
+-  RegisterActorSafetyListsComponent(cus, base::OnceClosure());
+-  RegisterSSLErrorAssistantComponent(cus);
+-
+-  RegisterIndigoComponent(cus);
+-
+-#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+-  RegisterFileTypePoliciesComponent(cus);
+-#endif
+-
+   RegisterCRLSetComponent(cus);
+ 
+   RegisterOriginTrialsComponent(cus);
+@@ -176,8 +167,6 @@ void RegisterComponentsForUpdate() {
+ 
+   MaybeRegisterPKIMetadataComponent(cus);
+ 
+-  RegisterSafetyTipsComponent(cus);
+-  RegisterCrowdDenyComponent(cus);
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+   RegisterSmartDimComponent(cus);
+@@ -189,10 +178,6 @@ void RegisterComponentsForUpdate() {
+ #endif
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+-  RegisterAutofillCustomFormControlScriptsComponent(cus);
+-  RegisterDictationConnectorComponent(cus);
+-  RegisterIwaKeyDistributionComponent(cus);
+-  RegisterZxcvbnDataComponent(cus);
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
+ #if BUILDFLAG(IS_ANDROID)
+@@ -203,8 +188,6 @@ void RegisterComponentsForUpdate() {
+   ManageScreenAIComponentRegistration(cus, g_browser_process->local_state());
+ #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
+ 
+-  RegisterCommerceHeuristicsComponent(cus);
+-
+ #if BUILDFLAG(ENABLE_ON_DEVICE_TRANSLATION)
+   // TODO(crbug.com/364795294): Support other platforms.
+   RegisterTranslateKitComponent(cus, g_browser_process->local_state(),
+@@ -220,16 +203,12 @@ void RegisterComponentsForUpdate() {
+ 
+ #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
+-  RegisterAmountExtractionHeuristicRegexesComponent(cus);
+ #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+         // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
+ 
+ #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+-  RegisterWasmTtsEngineComponent(cus, g_browser_process->local_state());
+ #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+ 
+-  RegisterCaptchaProviderComponent(cus);
+-
+   MaybeRegisterPlatformRuntimeComponent(cus);
+ 
+ #if BUILDFLAG(IS_WIN)
+@@ -238,8 +217,6 @@ void RegisterComponentsForUpdate() {
+ 
+   base::FilePath path;
+   if (base::PathService::Get(chrome::DIR_USER_DATA, &path)) {
+-    ManageAIEmbeddingsComponentRegistration(cus,
+-                                            g_browser_process->local_state());
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+     ManageComponentExtensionRegistrations(cus);
+ #endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+diff --git a/chrome/browser/navigation_predictor/search_engine_preconnector.cc b/chrome/browser/navigation_predictor/search_engine_preconnector.cc
+index f6aae9f370322..97d5bdfa23987 100644
+--- a/chrome/browser/navigation_predictor/search_engine_preconnector.cc
++++ b/chrome/browser/navigation_predictor/search_engine_preconnector.cc
+@@ -148,7 +148,10 @@ namespace features {
+ // Feature to control preconnect to search.
+ 
+ BASE_FEATURE(kPreconnectFromKeyedService, base::FEATURE_ENABLED_BY_DEFAULT);
+-BASE_FEATURE(kPreconnectToSearch, base::FEATURE_ENABLED_BY_DEFAULT);
++// Domicile: off. It connects to the default search engine at start and keeps
++// the connection warm, so an idle engine talks to Google, whether or not
++// anyone searches.
++BASE_FEATURE(kPreconnectToSearch, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+ // Feature to control binding the receivers every time we attempt to
+ // preconnect. This will trigger the destruction of the previous receiver
+diff --git a/components/component_updater/component_updater_service.cc b/components/component_updater/component_updater_service.cc
+index 22662f538fe7a..56e6d7b533fc1 100644
+--- a/components/component_updater/component_updater_service.cc
++++ b/components/component_updater/component_updater_service.cc
+@@ -11,6 +11,7 @@
+ #include <memory>
+ #include <optional>
+ #include <string>
++#include <string_view>
+ #include <utility>
+ #include <vector>
+ 
+@@ -182,6 +183,23 @@ bool CrxUpdateService::RegisterComponent(
+       !component.installer) {
+     return false;
+   }
++  // Domicile: only the components a page needs to load and play are
++  // updated, whoever registers them: CRLSet, PKI metadata, origin trials,
++  // the autoplay preload list, hyphenation, Screen AI and Widevine.
++  // Registration is spread across Chrome's features, and each one this
++  // refuses was a download from Google at start.
++  static constexpr std::string_view kDomicileKept[] = {
++      "hfnkpimlhhgieaddgfemjhofmfblmnib", "efniojlnjndmcbiieegkicadnoecjjef",
++      "llkgjffcdpffmhiakmfcdcblohccpfmo", "laoigpblnllgcgjnjnllmfolckpjlhki",
++      "jamhcnnkihinmdlkakkaopbjbbcngflc", "mfhmdacoffpmifoibamicehhklffanao",
++      "oimompecagnajdejgnnjijobebaeigek",
++  };
++  if (std::ranges::find(kDomicileKept, component.app_id) ==
++      std::end(kDomicileKept)) {
++    VLOG(1) << "domicile: component " << component.app_id
++            << " is not updated";
++    return false;
++  }
+ 
+   // Cancel any pending unregistration for this component.
+   std::erase(components_pending_unregistration_, component.app_id);
+diff --git a/components/network_time/network_time_tracker.cc b/components/network_time/network_time_tracker.cc
+index 6a2c71f8c367e..a2535e1ba0aac 100644
+--- a/components/network_time/network_time_tracker.cc
++++ b/components/network_time/network_time_tracker.cc
+@@ -72,13 +72,9 @@
+ 
+ namespace network_time {
+ 
+-// Network time queries are enabled on Android and all desktop platforms except
+-// Chrome OS, which uses tlsdated to set the system time.
+-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_IOS)
++// Domicile: off everywhere. The engine never asks Google for the time; the
++// system clock, which NixOS keeps with timesyncd, is the time.
+ BASE_FEATURE(kNetworkTimeServiceQuerying, base::FEATURE_DISABLED_BY_DEFAULT);
+-#else
+-BASE_FEATURE(kNetworkTimeServiceQuerying, base::FEATURE_ENABLED_BY_DEFAULT);
+-#endif
+ 
+ namespace {
+ 
+diff --git a/components/omnibox/browser/aim_eligibility_service_features.cc b/components/omnibox/browser/aim_eligibility_service_features.cc
+index c23cef8903ea8..dedfdd3d7ff13 100644
+--- a/components/omnibox/browser/aim_eligibility_service_features.cc
++++ b/components/omnibox/browser/aim_eligibility_service_features.cc
+@@ -8,7 +8,10 @@
+ 
+ namespace omnibox {
+ 
+-BASE_FEATURE(kAimEnabled, base::FEATURE_ENABLED_BY_DEFAULT);
++// Domicile: off. The engine shows no AI Mode, and with it on the eligibility
++// service asks Google whether AI Mode is offered at every start, whatever
++// kAimServerEligibilityEnabled says.
++BASE_FEATURE(kAimEnabled, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+ BASE_FEATURE(kAimServerEligibilityEnabled, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+diff --git a/testing/variations/fieldtrial_testing_config.json b/testing/variations/fieldtrial_testing_config.json
+index f5c4526034ffd..71601e06f3d18 100644
+--- a/testing/variations/fieldtrial_testing_config.json
++++ b/testing/variations/fieldtrial_testing_config.json
+@@ -16312,29 +16312,6 @@
+             ]
+         }
+     ],
+-    "PreconnectToSearchDesktop": [
+-        {
+-            "platforms": [
+-                "chromeos",
+-                "fuchsia",
+-                "linux",
+-                "mac",
+-                "windows"
+-            ],
+-            "experiments": [
+-                {
+-                    "name": "EnabledWithStartupDelayForegroundOnly",
+-                    "params": {
+-                        "skip_in_background": "true",
+-                        "startup_delay_ms": "5000"
+-                    },
+-                    "enable_features": [
+-                        "PreconnectToSearch"
+-                    ]
+-                }
+-            ]
+-        }
+-    ],
+     "PreemptiveSodaDownload": [
+         {
+             "platforms": [
+-- 
+2.43.0
+
