@@ -15,6 +15,7 @@ import { typedAddress } from "@domicile-desktop/manganese-address/typed-address"
 import type { SitePermission } from "@domicile-desktop/manganese-page-requests/site-permissions";
 import type { PermissionRequest } from "@domicile-desktop/manganese-page-requests/usePermissionRequest";
 import type {
+  WebViewAdBlocking,
   WebViewPermission,
   WebViewPermissionSetting,
 } from "@domicile-desktop/sdk/webview-element";
@@ -32,6 +33,9 @@ import type { MediaDeviceChoice } from "./media-devices";
 import { ProfileMenu } from "./ProfileMenu";
 import type { PageHistoryChoice } from "./page-history";
 import { SitePermissions } from "./SitePermissions";
+import type { ShieldScope } from "./SiteShield";
+import { SiteShield } from "./SiteShield";
+import type { SitePrivacy } from "./useSitePrivacy";
 import {
   isFullyZoomedIn,
   isFullyZoomedOut,
@@ -85,7 +89,11 @@ type Props = {
   onForwardInNewWindow: () => void;
   /** Loads `url`, already resolved from what was typed. */
   onNavigate: (url: string) => void;
+  /** Opens Settings, from the protections panel. */
+  onOpenPrivacySettings: () => void;
   onReload: () => void;
+  /** Sets the page's ad blocking for its site or this window. */
+  onSetAdBlocking: (mode: WebViewAdBlocking | null, scope: ShieldScope) => void;
   /** Opens the History app, from Back's and Forward's menus. */
   onShowAllHistory: () => void;
   /** Stores a site permission for the page's site. */
@@ -99,6 +107,11 @@ type Props = {
   onZoomReset: () => void;
   /** The permission request the page is waiting on, if any. */
   permissionRequest: PermissionRequest | undefined;
+  /**
+   * What the page blocks, for the protections button; nothing for a page
+   * that is never blocked, which shows none.
+   */
+  privacy: SitePrivacy | undefined;
   /** The browser's security state for {@link Props.address}. */
   security: ConnectionSafety;
   /** The page's site's permission settings. */
@@ -111,7 +124,8 @@ type Props = {
 
 /**
  * A browser window's toolbar: history controls, the page's browser profile,
- * address field with the connection and site permissions, and zoom.
+ * address field with the connection and site permissions before it and the
+ * protections after it, and zoom.
  * The desk's downloads show on the bar instead.
  *
  * Follows Chromium's layout, which users already know.
@@ -131,7 +145,9 @@ export const AddressBar = ({
   onForward,
   onForwardInNewWindow,
   onNavigate,
+  onOpenPrivacySettings,
   onReload,
+  onSetAdBlocking,
   onSetSitePermission,
   onShowAllHistory,
   onStop,
@@ -139,6 +155,7 @@ export const AddressBar = ({
   onZoomOut,
   onZoomReset,
   permissionRequest,
+  privacy,
   profile,
   security,
   sitePermissions,
@@ -241,6 +258,17 @@ export const AddressBar = ({
         }
         size="sm"
         spellCheck={false}
+        // At the field's end, where Brave keeps its Shields.
+        suffixButtons={
+          privacy === undefined ? undefined : (
+            <SiteShield
+              onOpenSettings={onOpenPrivacySettings}
+              onReload={onReload}
+              onSet={onSetAdBlocking}
+              privacy={privacy}
+            />
+          )
+        }
         suggestions={suggestionsFor(typed, visited)}
         value={typed}
       />

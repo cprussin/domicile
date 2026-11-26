@@ -73,6 +73,7 @@ import {
 import { useFileRequest } from "./browser/useFileRequest";
 import { usePageMenu } from "./browser/usePageMenu";
 import { useSitePermissions } from "./browser/useSitePermissions";
+import { useSitePrivacy } from "./browser/useSitePrivacy";
 import { useZoomPopup } from "./browser/useZoomPopup";
 import { ZoomPanel } from "./browser/ZoomPanel";
 import { zoomedIn, zoomedOut } from "./browser/zoom-steps";
@@ -371,6 +372,8 @@ export const BrowserWindow = ({
   // The page's site's permissions, and the request it is waiting on. The
   // engine draws no prompt; the address bar's site permissions panel does.
   const sitePermissions = useSitePermissions(view);
+  // What the page blocks, for the address bar's protections button.
+  const privacy = useSitePrivacy(view);
   // The camera and microphone a page that names none gets, picked in the
   // same panel.
   const mediaDevices = useMemo(
@@ -861,9 +864,25 @@ export const BrowserWindow = ({
               loaded.goForwardInNewWindow();
             })}
             onNavigate={navigate}
+            onOpenPrivacySettings={() => {
+              domicile.processes.launch(["domicile-settings"]);
+            }}
             onReload={drive((loaded) => {
               loaded.reload();
             })}
+            onSetAdBlocking={(mode, scope) => {
+              withView((loaded) => {
+                try {
+                  loaded.setBlockAdsAndTrackers(mode, scope);
+                } catch (error: unknown) {
+                  // biome-ignore lint/suspicious/noConsole: the page left its site as the panel was open, so the change has nothing to apply to
+                  console.error(
+                    `Couldn't set ad blocking to ${mode ?? "the default"} for this ${scope}`,
+                    error,
+                  );
+                }
+              });
+            }}
             onSetSitePermission={(permission, setting) => {
               withView((loaded) => {
                 loaded.setSitePermission(permission, setting);
@@ -885,6 +904,7 @@ export const BrowserWindow = ({
               run(BrowserCommand.ZoomReset);
             }}
             permissionRequest={permissionRequest}
+            privacy={privacy}
             profile={
               pageProfile === undefined
                 ? undefined
