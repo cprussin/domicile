@@ -30,7 +30,7 @@ pub(super) enum Browser {
 
 /// The window the browser tools name to reach the shell's own page: its
 /// bars, panels and dialogs.
-const SHELL: &str = crate::control::SHELL_WINDOW;
+pub(super) const SHELL: &str = crate::control::SHELL_WINDOW;
 
 /// The longest name or value a snapshot shows of one element, in characters.
 const LONGEST: usize = 200;
@@ -683,7 +683,9 @@ const KEYS: [(&str, &str, u32, Option<&str>); 14] = [
 /// The view a tool acts in and the element argument `ref` names, if given.
 /// A ref from a view, `<view>:<element>`, names its view; argument `view`
 /// names one for a tool given no ref.
-fn aimed(arguments: &Map<String, Value>) -> Result<(Option<String>, Option<u64>), String> {
+pub(super) fn aimed(
+    arguments: &Map<String, Value>,
+) -> Result<(Option<String>, Option<u64>), String> {
     let view = string(arguments, "view")?;
     let not_a_ref =
         |element: &Value| format!("ref is an element's ref from browser_snapshot, not {element}");

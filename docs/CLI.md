@@ -497,8 +497,9 @@ Ask the shell to show and focus the native window `id`, as `list-windows`
 prints it. This is the request a window makes for itself when it wants
 attention, so the shell decides: Manganese switches to its workspace.
 
-With `--agent`, give the window agent `<session>`'s own keyboard instead. The
-user's focus stays, and nothing is raised.
+With `--agent`, give the window agent `<session>`'s own keyboard instead, a
+native or a browser window, by the id `list-windows` prints. The user's focus
+stays, and nothing is raised.
 
 ## `domicile close-window <id>`
 
@@ -511,8 +512,8 @@ Kill the process of the native window `id` with `SIGKILL`, for an app that no
 longer answers. Every window of that process goes with it, and for an X11 app
 that is `xwayland-satellite` and every X11 window.
 
-`focus-window`, `close-window` and `kill-window` take only native windows.
-The shell shows and closes browser windows.
+`focus-window` without `--agent`, `close-window` and `kill-window` take only
+native windows. The shell shows and closes browser windows.
 
 ## `domicile exec [--agent <session>] <program> [<arg>...]`
 
@@ -703,7 +704,7 @@ Each tool runs a verb and answers what it printed, or its error:
 | `scroll` | `pointer`, then `scroll` |
 | `key`, `type_text` | `key <chord>`, `type <text>` |
 | `browser_snapshot` | `devtools <window> Accessibility.getFullAXTree`, then the same for each view the window holds, answered as an outline of the page and each view, one element a line with its ref. A view's refs are `<view>:<element>` |
-| `browser_click` | `devtools` scrolling the element into view, finding its box, and clicking its middle; or, given `at`, pressing at that point of the page, in `browser_screenshot`'s pixels, with `button` and `count` |
+| `browser_click` | `devtools` scrolling the element into view, finding its box, and clicking its middle; or, given `at`, pressing at that point of the page, in `browser_screenshot`'s pixels, with `button` and `count`. Then `focus-window --agent` on the window, unless it clicked in a view, so `key` and `type_text` type there; when the window can't have the agent's keyboard, the answer says why |
 | `browser_drag` | `devtools` pressing at `from`, moving to `to` in steps, and letting go |
 | `browser_scroll` | `devtools` turning the wheel at `at` by `by` |
 | `browser_type` | `devtools` focusing the element, if given a ref, then `Input.insertText` |

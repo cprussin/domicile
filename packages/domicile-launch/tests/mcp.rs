@@ -603,6 +603,10 @@ fn page<'a>(
         if args == ["list-windows", "--json"] {
             return printed("[{\"id\": \"w1\", \"views\": []}]\n");
         }
+        if args[0] == "focus-window" {
+            ran.push((args.join(" "), json!({})));
+            return printed("");
+        }
         assert_eq!(args[..2], ["devtools", "w1"]);
         let params: Value = serde_json::from_str(&args[3]).unwrap();
         ran.push((args[2].clone(), params));
@@ -869,7 +873,32 @@ fn a_browser_click_scrolls_the_element_into_view_and_clicks_its_middle() {
             // Read again, to answer what it changed.
             ("Domicile.fileChooser".to_string(), json!({})),
             ("Accessibility.getFullAXTree".to_string(), json!({})),
+            // The agent's keyboard goes where it clicked, as a hand's does.
+            ("focus-window --agent 7 w1".to_string(), json!({})),
         ]
+    );
+}
+
+#[test]
+fn a_browser_click_says_when_the_agents_keyboard_cant_follow_it() {
+    let mut ran = Vec::new();
+    let answers = [quads()];
+    let mut clicked = page(&answers, &mut ran);
+    let replies = served(
+        &[call("browser_click", json!({"window": "w1", "ref": 12}))],
+        |args: &[String]| {
+            if args[0] == "focus-window" {
+                return refused("the user is typing in w1");
+            }
+            clicked(args)
+        },
+    );
+    assert_eq!(replies[0]["result"]["isError"], false);
+    assert!(
+        texts(&replies[0]).contains(
+            "Your keyboard is not in it, so key and type_text can't type there: the user is typing in w1"
+        ),
+        "{replies:?}"
     );
 }
 
@@ -1189,7 +1218,8 @@ fn a_browser_screenshot_is_a_small_webp_of_the_page() {
 
 /// Stands in for `domicile` on Claude's window `w1`, whose page is empty and
 /// whose chat is view `9` at 200,40: answers each method from `answers` and
-/// records every run in `ran` with the view it went to.
+/// records every run in `ran` with the view it went to. Anything else, such
+/// as giving the window the agent's keyboard after a click in a view, fails.
 fn electron_window<'a>(
     answers: &'a [(&'a str, Value)],
     ran: &'a mut Vec<(Option<String>, String, Value)>,

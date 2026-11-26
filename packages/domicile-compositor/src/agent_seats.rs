@@ -872,13 +872,17 @@ impl DomicileCompositor {
                 })?;
                 self.agent_step(session, AgentStep::Send(Emulated::Key { keycode, pressed }))
             }
-            AgentStep::Focus { window } => {
+            AgentStep::Focus { window: said } => {
+                // By the id list-windows gives it, or the compositor's or
+                // engine's own. Refusals name it as the agent did.
+                let listed = self.hub.host.lock().unwrap().window_listed_as(&said);
+                let window = listed.unwrap_or_else(|| said.clone());
                 if self.toplevel_for(&window).is_some() {
-                    self.agent_focuses(session, &window)?;
+                    self.agent_focuses(session, &window, &said)?;
                     return Ok(None);
                 }
                 // Not native: a browser window's, if the browser has it.
-                self.taken(&window)?;
+                self.taken_said_as(&window, Some(said.as_str()))?;
                 let serial =
                     self.agent_asks_the_browser(session, AgentPageInput::Focus { window }, false);
                 Ok(serial.map(|serial| (serial, Asked::Focus)))
@@ -977,7 +981,7 @@ impl DomicileCompositor {
                     // A click gives the window the keyboard, as it would a
                     // hand's. A menu has the keyboard already.
                     (true, Some(window)) if self.toplevel_for(&window).is_some() => {
-                        self.agent_focuses(session, &window)?
+                        self.agent_focuses(session, &window, &window)?
                     }
                     (true, Some(_)) => {}
                     (false, _) => {}
@@ -1063,12 +1067,13 @@ impl DomicileCompositor {
         Ok(None)
     }
 
-    /// Give window `window` agent `session`'s keyboard.
-    fn agent_focuses(&mut self, session: u32, window: &str) -> Result<(), String> {
+    /// Give window `window` agent `session`'s keyboard. Refusals name it
+    /// `said`, as the agent did.
+    fn agent_focuses(&mut self, session: u32, window: &str, said: &str) -> Result<(), String> {
         let Some(surface) = self.toplevel_for(window).map(|on| on.wl_surface().clone()) else {
-            return Err(format!("window {window} has closed"));
+            return Err(format!("window {said} has closed"));
         };
-        self.taken(window)?;
+        self.taken_said_as(window, Some(said))?;
         self.someone_else_holds(session, &surface, true)?;
         if self.agent_seats.mine(session).typing_in_pages {
             // Out of the browser's pages, into a native window.
@@ -1084,7 +1089,14 @@ impl DomicileCompositor {
     /// Why no agent can drive window `app_id`, or a popup over it: the user
     /// took it.
     fn taken(&self, app_id: &str) -> Result<(), String> {
+        self.taken_said_as(app_id, None)
+    }
+
+    /// [`Self::taken`], naming the window `said` rather than the window
+    /// `app_id` names.
+    fn taken_said_as(&self, app_id: &str, said: Option<&str>) -> Result<(), String> {
         let window = self.window_named(app_id);
+        let said = said.unwrap_or(window.as_str());
         if self
             .agent_seats
             .seats
@@ -1092,7 +1104,7 @@ impl DomicileCompositor {
             .any(|agent| agent.taken.contains(&window))
         {
             return Err(format!(
-                "the user took over window {window}: act on it by ref, or wait until they give it \
+                "the user took over window {said}: act on it by ref, or wait until they give it \
                  back"
             ));
         }

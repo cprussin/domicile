@@ -192,6 +192,8 @@ struct TwoWindows {
     chrome: domicile_test_chrome::Chrome,
     users: (Client, String),
     other: (Client, String),
+    /// The other window's id as `list-windows` gives it.
+    other_listed: String,
 }
 
 fn two_windows(compositor: &Compositor) -> TwoWindows {
@@ -208,13 +210,18 @@ fn two_windows_with(compositor: &Compositor, extra: &[&str]) -> TwoWindows {
                 matches!(message, HostMessage::AppAppeared { title: Some(t), .. } if t == title)
             })
             .expect("a client that opened a window is announced to the chrome");
-        let HostMessage::AppAppeared { app_id, .. } = appeared else {
+        let HostMessage::AppAppeared {
+            app_id,
+            toplevel_id,
+            ..
+        } = appeared
+        else {
             unreachable!("the wait matched on this variant")
         };
-        (client, app_id)
+        ((client, app_id), toplevel_id)
     };
-    let users = opened("users", &[]);
-    let other = opened("other", extra);
+    let (users, _) = opened("users", &[]);
+    let (other, other_listed) = opened("other", extra);
     for (app_id, x) in [(&users.1, 0.0), (&other.1, 1000.0)] {
         chrome
             .say(&ChromeMessage::SetAppBounds {
@@ -244,7 +251,36 @@ fn two_windows_with(compositor: &Compositor, extra: &[&str]) -> TwoWindows {
         chrome,
         users,
         other,
+        other_listed,
     }
+}
+
+/// An agent focuses a native window by the id `list-windows` gives it, as
+/// its MCP tools name windows, and types there.
+#[test]
+fn an_agent_focuses_a_native_window_by_its_listed_id() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut desk = two_windows(&compositor);
+    let (_held, session) = an_agent_let_in(&compositor, &mut desk.chrome);
+
+    assert_eq!(
+        as_the_agent(
+            &compositor,
+            session,
+            vec![EmulatedInput::Focus {
+                window: desk.other_listed.clone()
+            }]
+        ),
+        None
+    );
+    assert_eq!(as_the_agent(&compositor, session, tap("a")), None);
+    assert!(
+        desk.other
+            .0
+            .wait_for_trace(&format!(", {EVDEV_KEY_A}, 1)"), 1),
+        "the agent's key never reached the window it focused; it traced:\n{}",
+        desk.other.0.trace()
+    );
 }
 
 /// The agent clicks and types in the other window while the user's pointer
@@ -884,6 +920,7 @@ fn a_closed_window_leaves_the_agents_seats() {
         mut chrome,
         users,
         other,
+        ..
     } = two_windows(&compositor);
     let (_held, session) = an_agent_let_in(&compositor, &mut chrome);
     assert_eq!(

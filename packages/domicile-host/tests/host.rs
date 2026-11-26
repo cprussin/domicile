@@ -270,6 +270,23 @@ fn a_browser_window_lists_the_views_it_holds() {
 }
 
 #[test]
+fn a_browser_window_is_found_by_the_id_list_windows_gives_it() {
+    // An agent names a window by the id list_windows gave it; the browser
+    // knows the window by its own.
+    let mut host = Host::new();
+    host.browser_toplevel_ids(BTreeMap::from([(
+        "5".to_string(),
+        "Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE".to_string(),
+    )]));
+
+    assert_eq!(
+        host.window_listed_as("Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE"),
+        Some("5".to_string())
+    );
+    assert_eq!(host.window_listed_as("5"), None);
+}
+
+#[test]
 fn the_status_says_how_the_desktop_is_and_what_is_holding_or_watching_it() {
     // What a person checks before walking away: the theme, the lock, the
     // keymap, whether the screens are off, what keeps them on, and what is

@@ -1001,7 +1001,8 @@ fn called(
     match tool {
         Tool::Screenshot => return screenshot(arguments, domicile, view),
         Tool::Browser(browser) => {
-            return browser::called(browser, arguments, domicile, read, titles, quiet)
+            let answer = browser::called(browser, arguments, domicile, read, titles, quiet)?;
+            return keyboard_follows_a_click(browser, arguments, seat, domicile, answer);
         }
         _ => {}
     }
@@ -1040,6 +1041,44 @@ fn called(
         _ => {}
     }
     Ok(said(true, printed))
+}
+
+/// `answer` to a browser tool, after a click gives the window it landed in
+/// the agent's own keyboard, as a hand's click does, so `key` and
+/// `type_text` type there. Says so when the window can't have it, such as
+/// one the user is typing in. The shell's bars take no keyboard, and a
+/// click in a view leaves it: the seat focuses a window's own page.
+fn keyboard_follows_a_click(
+    browser: Browser,
+    arguments: &Map<String, Value>,
+    seat: u32,
+    domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
+    mut answer: Value,
+) -> io::Result<Value> {
+    // A bad window or ref already made `answer` an error.
+    let (Ok(Some(window)), Ok((None, _))) =
+        (string(arguments, "window"), browser::aimed(arguments))
+    else {
+        return Ok(answer);
+    };
+    if browser != Browser::Click || window == browser::SHELL || answer["isError"] != false {
+        return Ok(answer);
+    }
+    let ran = domicile(&[
+        "focus-window".to_string(),
+        "--agent".to_string(),
+        seat.to_string(),
+        window,
+    ])?;
+    if !ran.success {
+        let text = &mut answer["content"][0]["text"];
+        *text = Value::String(format!(
+            "{}\nYour keyboard is not in it, so key and type_text can't type there: {}",
+            text.as_str().expect("a browser tool answers text"),
+            ran.stderr.trim_end()
+        ));
+    }
+    Ok(answer)
 }
 
 /// What changed in native window `window` since it was last read, reading

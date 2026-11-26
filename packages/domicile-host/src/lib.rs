@@ -856,6 +856,22 @@ impl Host {
         })
     }
 
+    /// The id the compositor or the engine knows the window `list-windows`
+    /// lists as `toplevel_id` by: a native window's app id, or a browser
+    /// window's engine id. `None` when no window is listed so.
+    pub fn window_listed_as(&self, toplevel_id: &str) -> Option<String> {
+        self.apps
+            .values()
+            .find(|app| app.toplevel_id == toplevel_id && app.mapped.is_some())
+            .map(|app| app.app_id.clone())
+            .or_else(|| {
+                self.browser_toplevel_ids
+                    .iter()
+                    .find(|(_, listed)| *listed == toplevel_id)
+                    .map(|(engine_id, _)| engine_id.clone())
+            })
+    }
+
     fn describe_browser_toplevel_ids(&self) -> HostMessage {
         HostMessage::BrowserToplevelIds {
             toplevel_ids: self.browser_toplevel_ids.clone(),

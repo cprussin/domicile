@@ -52,6 +52,7 @@ Each agent gets its own pointer, keyboard and clipboard, in native and browser w
 - Setting a site's permission lets a site ask again that Chrome stopped for unanswered requests. [Browser windows](SHELL-BROWSER-WINDOWS.md)
 - A browser window's page runs `pagehide` and `unload` when the user logs out, for two seconds at most, so an app can give up a lock or save its work.
 - A screenshot or screen cast of one window draws its subsurfaces, so Firefox's content shows.
+- An agent's `focus_window` and `domicile focus-window --agent` take a native or browser window by the id `list-windows` gives it, and the MCP server's `browser_click` in a window's own page gives that window the agent's keyboard, so `key` and `type_text` type there. [Agents](AGENTS.md)
 
 ## 1.3.1
 

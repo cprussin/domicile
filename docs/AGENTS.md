@@ -69,6 +69,8 @@ The `browser_` and `app_` tools act by ref and run any time. The `browser_`
 tools reach a browser window through DevTools on its own page, which gives
 that page focus of its own: the user's focus stays where it is, and typed
 text goes to the agent's page, never the one the user is typing in.
+A `browser_click` in a window's own page also gives that window the agent's
+seat keyboard, as a hand's click would, so `key` and `type_text` type there.
 
 A file chooser an agent's click or key opens, such as an upload button's,
 goes to the agent, never to a picker in the user's shell. The act says the
