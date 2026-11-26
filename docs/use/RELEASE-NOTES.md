@@ -39,6 +39,7 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 - Moving the pointer into an embedded frame, such as an artifact on claude.ai, no longer shows the frame's label far away from the pointer.
 - Workspace switches stay smooth with busy pages open: a sliding page no longer redraws on every frame of the slide.
 - Switching tabs or windows with the keyboard no longer moves the pointer off the top bar.
+- On a computer with no sound server running, the desktop checks for one less and less often, rather than every five seconds, so it uses less CPU while you aren't doing anything.
 
 ## 1.3.0
 

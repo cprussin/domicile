@@ -70,6 +70,8 @@ export type Timing = {
   settleMs: number;
   /** Delay before subscribing again after a subscription ends. */
   reopenMs: number;
+  /** The longest delay, which doubles from `reopenMs` while there is no server. */
+  reopenMaxMs: number;
   /** Interval between meter reports. */
   tickMs: number;
 };
@@ -77,7 +79,12 @@ export type Timing = {
 /** Says that something keeps failing in the background. */
 export type Report = (message: string, detail: unknown) => void;
 
-const TIMING: Timing = { reopenMs: 5000, settleMs: 30, tickMs: 50 };
+const TIMING: Timing = {
+  reopenMaxMs: 60_000,
+  reopenMs: 5000,
+  settleMs: 30,
+  tickMs: 50,
+};
 
 /** The sound server, reached through `domicile`'s processes. */
 export const soundServer = (

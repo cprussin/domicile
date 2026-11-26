@@ -11,7 +11,12 @@ import { soundServer } from "./sound-server";
 import type { Answer } from "./system.fixture";
 import { FakeSystem } from "./system.fixture";
 
-const TIMING: Timing = { reopenMs: 20, settleMs: 5, tickMs: 10 };
+const TIMING: Timing = {
+  reopenMaxMs: 80,
+  reopenMs: 20,
+  settleMs: 5,
+  tickMs: 10,
+};
 
 const C = { env: { LC_ALL: "C" } };
 
@@ -177,6 +182,30 @@ describe("watch", () => {
         AudioError.Refused("Connection failure: Connection refused"),
       ],
     ]);
+  });
+});
+
+describe("watch without a sound server", () => {
+  it("waits twice as long before each try, up to reopenMaxMs", async () => {
+    const { sound, system } = server(() => ({
+      code: 1,
+      stderr: "Connection failure: Connection refused",
+      stdout: "",
+    }));
+    const stop = sound.watch(() => undefined);
+    const started: number[] = [];
+    for (let tries = 0; tries < 5; tries += 1) {
+      await system.spawnedAtLeast(tries + 1);
+      started.push(performance.now());
+      system.spawned[tries]?.exit(1);
+    }
+    stop();
+
+    const waits = started.slice(1).map((at, i) => at - (started[i] ?? 0));
+    // 20, 40, 80, then capped at 80 ms.
+    expect(waits[1]).toBeGreaterThanOrEqual(TIMING.reopenMs * 2);
+    expect(waits[2]).toBeGreaterThanOrEqual(TIMING.reopenMs * 4);
+    expect(waits[3]).toBeLessThan(TIMING.reopenMaxMs * 2);
   });
 });
 

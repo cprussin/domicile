@@ -1,5 +1,6 @@
 // Holds `pactl subscribe` open and reads the server again after each burst of
-// changes settles, subscribing again when the subscription ends.
+// changes settles, subscribing again when the subscription ends: at once after
+// one that read the server, and ever later while there is none.
 
 import type { Result } from "@cprussin/option-result";
 
@@ -45,6 +46,7 @@ const keepSubscribed = async (
   signal: AbortSignal,
 ) => {
   let said = false;
+  let waitMs = timing.reopenMs;
   while (!signal.aborted) {
     const ended = await subscribe(domicile, onAudio, timing, report, signal);
     if (!said) {
@@ -59,7 +61,12 @@ const keepSubscribed = async (
         Ok: () => false,
       });
     }
-    await sleep(timing.reopenMs, signal);
+    await sleep(waitMs, signal);
+    // Each try without a server runs pactl three times, so the tries slow down.
+    waitMs = ended.match({
+      Err: () => Math.min(waitMs * 2, timing.reopenMaxMs),
+      Ok: () => timing.reopenMs,
+    });
   }
 };
 

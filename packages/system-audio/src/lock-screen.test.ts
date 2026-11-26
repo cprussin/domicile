@@ -13,7 +13,7 @@ describe("on a lock screen", () => {
     const failed = Promise.withResolvers<void>();
     const sound = soundServer(
       appDesktop(host),
-      { reopenMs: 60_000, settleMs: 0, tickMs: 0 },
+      { reopenMaxMs: 60_000, reopenMs: 60_000, settleMs: 0, tickMs: 0 },
       () => {
         failed.resolve();
       },
