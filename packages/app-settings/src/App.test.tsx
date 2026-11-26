@@ -528,6 +528,48 @@ describe(App, () => {
       });
     });
 
+    it("stops asking sites not to sell your data in the default profile", async () => {
+      const { host, user } = await renderApp("Privacy");
+      const protections = await profileCard("Website protections");
+      expect(
+        protections.getByRole("combobox", { name: "Profile" }),
+      ).toHaveTextContent("Default");
+      await user.click(
+        protections.getByRole("switch", {
+          name: "Ask sites not to sell or share your data",
+        }),
+      );
+      await waitFor(() => {
+        const { profiles } = written(host.writes).browser;
+        expect(profiles.default.protections).toEqual({
+          global_privacy_control: false,
+        });
+        expect(profiles.private).toEqual({
+          color: "#a78bfa",
+          name: "Private",
+          private: true,
+        });
+      });
+    });
+
+    it("changes the protections of the profile chosen, keeping the others", async () => {
+      const { host, user } = await renderApp("Privacy", {
+        config: { browser: BROWSER },
+      });
+      await choose(user, "Profile", "Work");
+      await user.click(
+        screen.getByRole("switch", { name: "Block cookies from other sites" }),
+      );
+      await waitFor(() => {
+        const { profiles } = written(host.writes).browser;
+        expect(profiles.work).toEqual({
+          ...BROWSER.profiles.work,
+          protections: { block_third_party_cookies: false },
+        });
+        expect(profiles.personal).toEqual(BROWSER.profiles.personal);
+      });
+    });
+
     it("lists what the file search leaves out, starting from the default", async () => {
       const { host, user } = await renderApp("Launcher");
       await user.type(

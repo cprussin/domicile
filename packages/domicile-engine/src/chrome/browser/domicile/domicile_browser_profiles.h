@@ -242,6 +242,11 @@ class BrowserProfileRegistry final
 
   // Installs into every loaded profile, the shell's included, the config's
   // extensions, once they are known, and switches them.
+  // Sets each loaded profile's protections, and those of its private pages'
+  // off-the-record profile, as the config says. The default profile's are
+  // the shell's profile's.
+  void Protect();
+  void ProtectOne(Profile& profile, const BrowserProfile& config);
   void InstallExtensions();
   void InstallExtensionsOf(Profile& profile, const BrowserProfile& as);
 

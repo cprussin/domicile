@@ -68,6 +68,11 @@ pub fn hand_over_the_browser_profiles(host: &mut Host, browser: &BrowserConfig) 
                 color: String::from(profile.color),
                 private: profile.private,
                 extensions: profile.extensions.clone(),
+                protections: domicile_protocol::BrowserProtections {
+                    block_third_party_cookies: profile.protections.block_third_party_cookies,
+                    global_privacy_control: profile.protections.global_privacy_control,
+                    hide_local_ip_address: profile.protections.hide_local_ip_address,
+                },
             })
             .collect(),
         browser.default_profile.clone(),

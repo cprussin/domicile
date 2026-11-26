@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Connor Prussin <connor@prussin.net>
+Date: Thu, 26 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a profile's Global Privacy Control reaches its
+ pages
+
+A desk's profile asks sites not to sell or share its data unless its
+config's `protections.global_privacy_control` is off. Chrome has the
+signal (`Sec-GPC: 1` and `navigator.globalPrivacyControl`) and reads it
+from universal_optout's pref, but only while kUniversalOptOutSettings is
+on, and it is off by default.
+
+kUniversalOptOutSettings is on. ApplyProtections sets the pref per
+profile; guard-browser-protections.sh checks it.
+---
+ components/universal_optout/features.cc | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/components/universal_optout/features.cc b/components/universal_optout/features.cc
+index a31476e..84f0c50 100644
+--- a/components/universal_optout/features.cc
++++ b/components/universal_optout/features.cc
+@@ -26,7 +26,9 @@ BASE_FEATURE(kUniversalOptOutExtension, base::FEATURE_ENABLED_BY_DEFAULT);
+ BASE_FEATURE(kUniversalOptOutExtensionSilent,
+              base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+-BASE_FEATURE(kUniversalOptOutSettings, base::FEATURE_DISABLED_BY_DEFAULT);
++// Domicile: on. A profile's `protections.global_privacy_control` sets
++// kUniversalOptOutEnabled, which only reaches pages while this is on.
++BASE_FEATURE(kUniversalOptOutSettings, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ BASE_FEATURE(kUniversalOptOutUpdateOnGeoLocationChanged,
+              base::FEATURE_ENABLED_BY_DEFAULT);
+-- 
+2.43.0
+

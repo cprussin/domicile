@@ -2,7 +2,9 @@ import { describe, expect, it } from "bun:test";
 
 import type { BrowserConfig } from "./browser-profiles";
 import {
+  asWritten,
   isProfileSite,
+  PROTECTIONS_ON,
   profileIdFor,
   profileOrder,
   withDefault,
@@ -21,18 +23,21 @@ const BROWSER: BrowserConfig = {
       extensions: undefined,
       name: "Personal",
       private: false,
+      protections: PROTECTIONS_ON,
     },
     private: {
       color: "#a78bfa",
       extensions: undefined,
       name: "Private",
       private: true,
+      protections: PROTECTIONS_ON,
     },
     work: {
       color: "#d97706",
       extensions: undefined,
       name: "Work",
       private: false,
+      protections: PROTECTIONS_ON,
     },
   },
   sites: { "*.acme.com": "work" },
@@ -113,5 +118,39 @@ describe(withProfileMoved, () => {
 describe(withSite, () => {
   it("unlists a site moved to the default profile", () => {
     expect(withSite(BROWSER, "*.acme.com", "personal").sites).toEqual({});
+  });
+});
+
+describe("asWritten", () => {
+  it("leaves out protections that are on", () => {
+    expect(asWritten(BROWSER).profiles.personal).toEqual({
+      color: "#0d9488",
+      extensions: undefined,
+      name: "Personal",
+      private: false,
+    });
+  });
+
+  it("keeps only the protections that are off", () => {
+    const written = asWritten({
+      ...BROWSER,
+      profiles: {
+        ...BROWSER.profiles,
+        work: {
+          color: "#d97706",
+          extensions: undefined,
+          name: "Work",
+          private: false,
+          protections: { ...PROTECTIONS_ON, global_privacy_control: false },
+        },
+      },
+    });
+    expect(written.profiles.work).toEqual({
+      color: "#d97706",
+      extensions: undefined,
+      name: "Work",
+      private: false,
+      protections: { global_privacy_control: false },
+    });
   });
 });

@@ -13,6 +13,13 @@ export type BrowserConfig = Settings["browser"];
 /** One profile in the config. */
 export type ConfigProfile = BrowserConfig["profiles"][string];
 
+/** A new profile's protections: every one on, as `domicile-config` has it. */
+export const PROTECTIONS_ON: ConfigProfile["protections"] = {
+  block_third_party_cookies: true,
+  global_privacy_control: true,
+  hide_local_ip_address: true,
+};
+
 /** The colors a new profile and the color row pick from. */
 export const PROFILE_COLORS = [
   "#06b6d4",
@@ -78,6 +85,7 @@ export const withNewProfile = (
         extensions: undefined,
         name,
         private: false,
+        protections: PROTECTIONS_ON,
       },
     },
   };
@@ -196,3 +204,23 @@ export const withProfileMoved = (
   order.splice(to, 0, id);
   return { ...browser, order };
 };
+
+/**
+ * `browser` as the config file should have it: each profile's protections
+ * only where one is off, so a file never spells out a default. Every one is
+ * on unless the config says otherwise.
+ */
+export const asWritten = (browser: BrowserConfig) => ({
+  ...browser,
+  profiles: Object.fromEntries(
+    Object.entries(browser.profiles).map(([id, { protections, ...rest }]) => {
+      const off = Object.fromEntries(
+        Object.entries(protections).filter(([, on]) => !on),
+      );
+      return [
+        id,
+        Object.keys(off).length === 0 ? rest : { ...rest, protections: off },
+      ];
+    }),
+  ),
+});

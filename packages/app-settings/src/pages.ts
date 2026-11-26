@@ -50,9 +50,9 @@ export const PAGES = [
   },
   {
     description:
-      "What apps are asked not to do. An app that ignores the request is not stopped.",
+      "What sites can learn about you in browser windows, and what apps are asked not to do.",
     id: PageId.Privacy,
-    sections: [["lockdown"]],
+    sections: [["browser", "profiles"], ["lockdown"]],
     title: "Privacy",
   },
   {

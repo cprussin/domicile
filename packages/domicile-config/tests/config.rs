@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use domicile_config::{
     AccentColor, Config, ConfigError, ConfigStore, Contrast, DisplayConfig, ExtensionSettings,
-    KeyRepeat, LockdownConfig, SiteAccess, SiteAccessMode, ThemeMode, Written,
+    KeyRepeat, LockdownConfig, Protections, SiteAccess, SiteAccessMode, ThemeMode, Written,
 };
 
 // ---- parsing & defaults ---------------------------------------------------
@@ -860,6 +860,47 @@ fn a_profile_names_extensions_by_id() {
     )
     .unwrap_err();
     assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
+}
+
+#[test]
+fn every_profile_starts_with_every_protection_on() {
+    let browser = Config::parse(&browser_config("")).unwrap().browser;
+    for profile in browser.profiles.values() {
+        assert_eq!(profile.protections, Protections::default());
+        assert!(profile.protections.block_third_party_cookies);
+        assert!(profile.protections.global_privacy_control);
+        assert!(profile.protections.hide_local_ip_address);
+    }
+}
+
+#[test]
+fn a_profile_turns_off_the_protections_it_names() {
+    let browser = Config::parse(
+        r##"{ "browser": { "profiles": {
+            "default": { "name": "Default", "color": "#0d9488",
+                         "protections": { "block_third_party_cookies": false } },
+            "private": { "name": "Private", "color": "#a78bfa", "private": true }
+        } } }"##,
+    )
+    .unwrap()
+    .browser;
+    let protections = &browser.profiles["default"].protections;
+    assert!(!protections.block_third_party_cookies);
+    assert!(protections.global_privacy_control);
+    assert!(protections.hide_local_ip_address);
+}
+
+#[test]
+fn a_protection_the_desk_does_not_know_is_refused() {
+    let err = Config::parse(
+        r##"{ "browser": { "profiles": {
+            "default": { "name": "Default", "color": "#0d9488",
+                         "protections": { "block_everything": true } },
+            "private": { "name": "Private", "color": "#a78bfa", "private": true }
+        } } }"##,
+    )
+    .unwrap_err();
+    assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
 }
 
 // ---- electron -------------------------------------------------------------

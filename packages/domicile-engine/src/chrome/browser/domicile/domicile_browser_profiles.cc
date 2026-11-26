@@ -32,6 +32,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
 #include "components/domicile/browser/control_channel.h"
+#include "components/domicile/browser/protection_settings.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -163,6 +164,7 @@ void BrowserProfileRegistry::Configure(Profile& shell,
     }
   }
   InstallExtensions();
+  Protect();
   if (profiles_ != before) {
     for (Observer& observer : observers_) {
       observer.OnBrowserProfilesChanged();
@@ -257,7 +259,16 @@ Profile* BrowserProfileRegistry::ContextOf(Profile& shell,
     // with it, so finish it now and start a new one.
     ProfileDestroyer::DestroyOTRProfileImmediately(loaded.ending.get());
   }
-  return home->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+  if (home->HasPrimaryOTRProfile()) {
+    return home->GetPrimaryOTRProfile(/*create_if_needed=*/false);
+  }
+  // A new one, made with Chrome's defaults: Configure only protects the
+  // ones that are already open.
+  Profile* otr = home->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+  VLOG(1) << "domicile: browser profile " << profile->id
+          << " protections applied to its new off-the-record profile.";
+  ApplyProtections(*otr->GetPrefs(), profile->protections);
+  return otr;
 }
 
 void BrowserProfileRegistry::WhenLoaded(Profile& shell,
@@ -361,6 +372,9 @@ void BrowserProfileRegistry::UseShell(Profile& shell) {
     pinned_[site] = profile.GetString();
   }
   Update();
+  // Before the compositor says, and for a host with no config, which never
+  // does: the default protections.
+  Protect();
   // Chrome asks which profile to start in once there are two. A desk's
   // profiles are not Chrome's to pick between: the shell's is the one it
   // starts.
@@ -425,8 +439,39 @@ void BrowserProfileRegistry::Adopt(const std::string& id, Profile& profile) {
     observations_.AddObservation(&profile);
   }
   LOG(INFO) << "domicile: loaded browser profile " << id << ".";
+  ProtectOne(profile, *profiles_.Find(id));
   if (extensions_.has_value()) {
     InstallExtensionsOf(profile, *profiles_.Find(id));
+  }
+}
+
+void BrowserProfileRegistry::Protect() {
+  if (shell_ != nullptr) {
+    ProtectOne(*shell_, *profiles_.Find(profiles_.default_profile));
+  }
+  for (auto& [id, loaded] : loaded_) {
+    ProtectOne(*loaded.profile, *profiles_.Find(id));
+  }
+}
+
+void BrowserProfileRegistry::ProtectOne(Profile& profile,
+                                        const BrowserProfile& config) {
+  const BrowserProtections& protections = config.protections;
+  VLOG(1) << "domicile: browser profile " << config.id
+          << " protections:" << " third-party cookies "
+          << (protections.block_third_party_cookies ? "blocked" : "allowed")
+          << ", Global Privacy Control "
+          << (protections.global_privacy_control ? "on" : "off")
+          << ", local IP address "
+          << (protections.hide_local_ip_address ? "hidden" : "shown")
+          << (profile.HasPrimaryOTRProfile() ? ", and its off-the-record one"
+                                             : "")
+          << ".";
+  ApplyProtections(*profile.GetPrefs(), config.protections);
+  if (profile.HasPrimaryOTRProfile()) {
+    ApplyProtections(
+        *profile.GetPrimaryOTRProfile(/*create_if_needed=*/false)->GetPrefs(),
+        config.protections);
   }
 }
 
@@ -460,9 +505,9 @@ void BrowserProfileRegistry::InstallExtensionsOf(Profile& profile,
   // The ones installed already. Each still installing is switched as it
   // installs (OnExtensionInstalled).
   extensions::ExtensionSystem::Get(&profile)->ready().Post(
-      FROM_HERE, base::BindOnce(&BrowserProfileRegistry::SwitchExtensions,
-                                weak_factory_.GetWeakPtr(),
-                                profile.GetWeakPtr()));
+      FROM_HERE,
+      base::BindOnce(&BrowserProfileRegistry::SwitchExtensions,
+                     weak_factory_.GetWeakPtr(), profile.GetWeakPtr()));
 }
 
 std::vector<std::string> BrowserProfileRegistry::ConfigExtensionIds() const {
@@ -550,9 +595,8 @@ void BrowserProfileRegistry::SwitchExtension(Profile& profile,
   // the config does not set is the user's, which Chrome keeps; one the
   // config stops setting stays where the config left it. One installed
   // before switches existed keeps the switch the user gave it.
-  const bool first =
-      !std::ranges::contains(profile.GetPrefs()->GetList(kSwitchedPref),
-                             base::Value(id));
+  const bool first = !std::ranges::contains(
+      profile.GetPrefs()->GetList(kSwitchedPref), base::Value(id));
   if (first) {
     ScopedListPrefUpdate(profile.GetPrefs(), kSwitchedPref)->Append(id);
   }
@@ -740,18 +784,18 @@ void BrowserProfileRegistry::ReloadUnpackedElsewhere(Profile& from,
       continue;
     }
     const BrowserProfile* as = AsBrowserProfile(*profile);
-    LoadUnpackedInto(
-        *profile, directory,
-        base::BindOnce(
-            [](const std::string& name, const std::string& id,
-               base::expected<std::string, std::string> loaded) {
-              if (!loaded.has_value()) {
-                LOG(ERROR) << "domicile: the unpacked extension " << id
-                           << " did not reload in browser profile " << name
-                           << ": " << loaded.error();
-              }
-            },
-            as == nullptr ? std::string() : as->id, id));
+    LoadUnpackedInto(*profile, directory,
+                     base::BindOnce(
+                         [](const std::string& name, const std::string& id,
+                            base::expected<std::string, std::string> loaded) {
+                           if (!loaded.has_value()) {
+                             LOG(ERROR)
+                                 << "domicile: the unpacked extension " << id
+                                 << " did not reload in browser profile "
+                                 << name << ": " << loaded.error();
+                           }
+                         },
+                         as == nullptr ? std::string() : as->id, id));
   }
   // A profile where an earlier load failed still lacks it, and a reload is no
   // install that mirrors it.
@@ -1031,8 +1075,7 @@ void BrowserProfileRegistry::OnExtensionUninstalled(
     for (auto& [profile, switches] : pending_switches_) {
       switches.erase(extension->id());
     }
-    UninstallEverywhere(*Profile::FromBrowserContext(context),
-                        extension->id());
+    UninstallEverywhere(*Profile::FromBrowserContext(context), extension->id());
   }
   ExtensionsChanged();
 }

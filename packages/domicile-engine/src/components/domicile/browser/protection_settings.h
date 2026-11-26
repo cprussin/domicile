@@ -1,0 +1,27 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+#ifndef COMPONENTS_DOMICILE_BROWSER_PROTECTION_SETTINGS_H_
+#define COMPONENTS_DOMICILE_BROWSER_PROTECTION_SETTINGS_H_
+
+#include "components/domicile/browser/browser_profiles.h"
+
+class PrefService;
+
+namespace domicile {
+
+// Makes a profile protect as `protections` say, in Chrome's prefs, which its
+// cookie settings, renderer preferences and requests follow as they change.
+//
+// - Third-party cookies: `profile.cookie_controls_mode`, Chrome's "Block
+//   third-party cookies".
+// - Global Privacy Control: Chrome's own, universal_optout's pref.
+// - The local address: `webrtc.ip_handling_policy`, as
+//   `default_public_interface_only`, which lets a call through on the
+//   interface that reaches the internet and names no other.
+void ApplyProtections(PrefService& prefs,
+                      const BrowserProtections& protections);
+
+}  // namespace domicile
+
+#endif  // COMPONENTS_DOMICILE_BROWSER_PROTECTION_SETTINGS_H_

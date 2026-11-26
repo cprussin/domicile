@@ -1,7 +1,16 @@
 import { Card } from "@domicile-desktop/component-library/Card";
+import { Select } from "@domicile-desktop/component-library/Select";
+import { useState } from "react";
 
+import {
+  asWritten,
+  profileOrder,
+  withProfileChanged,
+} from "../browser-profiles";
+import { valueAt } from "../config-document";
 import type { ConfigPageProps } from "../config-editor";
 import { Page } from "../Page";
+import { SettingRow } from "../SettingRow";
 import { SwitchRow } from "../SwitchRow";
 
 /** Each `lockdown` switch, as a person reads it. */
@@ -18,16 +27,99 @@ const SWITCHES = [
   },
 ] as const;
 
-/** `lockdown`: what apps are asked not to do, through the Lockdown portal. */
+/** Each of a browser profile's `protections`, as a person reads it. */
+const PROTECTIONS = [
+  {
+    hint: "Stops the sites a page embeds from following you from site to site.",
+    key: "block_third_party_cookies",
+    label: "Block cookies from other sites",
+  },
+  {
+    hint: "Tells every site you visit. In some places, sites must honor it by law.",
+    key: "global_privacy_control",
+    label: "Ask sites not to sell or share your data",
+  },
+  {
+    hint: "Keeps video calls and other sites from learning your address on your home or office network.",
+    key: "hide_local_ip_address",
+    label: "Hide your local network address",
+  },
+] as const;
+
+/**
+ * `lockdown`, what apps are asked not to do through the Lockdown portal, and
+ * each browser profile's `protections`, what its pages keep from sites.
+ */
 export const PrivacyPage = ({
   description,
   editor,
   title,
 }: ConfigPageProps) => {
-  const { readOnly, set, settings } = editor;
+  const { document, readOnly, set, settings } = editor;
+  const { browser } = settings;
+  const [chosen, setChosen] = useState(browser.default_profile);
+  // A profile removed elsewhere falls back to the default.
+  const id = chosen in browser.profiles ? chosen : browser.default_profile;
+  const profile = browser.profiles[id];
+  if (profile === undefined) {
+    throw new Error(`The config has no browser profile ${id}`);
+  }
   return (
     <Page description={description} readOnly={readOnly} title={title}>
-      <Card>
+      <Card title="Website protections">
+        <SettingRow
+          hint="What its browser windows keep from the sites you visit."
+          title="Profile"
+        >
+          <Select
+            aria-label="Profile"
+            onValueChange={(each) => {
+              if (each !== null) {
+                setChosen(each);
+              }
+            }}
+            options={profileOrder(browser).map((each) => ({
+              label: browser.profiles[each]?.name ?? each,
+              value: each,
+            }))}
+            size="sm"
+            value={id}
+            width={36}
+          />
+        </SettingRow>
+        {PROTECTIONS.map(({ hint, key, label }) => (
+          <SwitchRow
+            checked={profile.protections[key]}
+            disabled={readOnly !== undefined}
+            hint={hint}
+            key={key}
+            label={label}
+            onChange={(on) => {
+              if (
+                valueAt(document, ["browser", "profiles", id]) === undefined
+              ) {
+                // The file has no such profile, only the default ones: it
+                // gets them all, as it would on the Profiles page.
+                set(
+                  ["browser"],
+                  asWritten(
+                    withProfileChanged(browser, id, {
+                      protections: { ...profile.protections, [key]: on },
+                    }),
+                  ),
+                );
+              } else {
+                set(
+                  ["browser", "profiles", id, "protections", key],
+                  on ? undefined : false,
+                );
+              }
+            }}
+            path={["browser", "profiles", id, "protections", key]}
+          />
+        ))}
+      </Card>
+      <Card title="Apps">
         {SWITCHES.map(({ key, label }) => (
           <SwitchRow
             checked={settings.lockdown[key]}

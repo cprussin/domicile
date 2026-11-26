@@ -24,6 +24,7 @@ import { circle, flex, grid } from "../../styled-system/patterns";
 import { AddRow } from "../AddRow";
 import type { BrowserConfig } from "../browser-profiles";
 import {
+  asWritten,
   isProfileSite,
   PROFILE_COLORS,
   withDefault,
@@ -168,7 +169,7 @@ export const ProfilesPage = ({
   const change = configurable
     ? (next: (browser: BrowserConfig) => BrowserConfig) => {
         try {
-          editor.set(["browser"], next(editor.settings.browser));
+          editor.set(["browser"], asWritten(next(editor.settings.browser)));
         } catch (error) {
           report("Couldn't change the profiles")(error);
         }

@@ -112,6 +112,11 @@ export type BrowserProfile = {
   name: string;
   /** Keeps no history, sign-ins or site data after its last page closes. */
   private?: boolean;
+  /**
+   * What it keeps sites from learning about you. Each is on unless the
+   * config turns it off.
+   */
+  protections?: Protections;
 };
 
 /** Buttons assigned to one-, two- and three-finger taps. */
@@ -533,6 +538,28 @@ export type Profile = {
    * profile applies.
    */
   name: string;
+};
+
+/**
+ * What a browser profile keeps sites from learning about you. See
+ * [`BrowserProfile::protections`].
+ */
+export type Protections = {
+  /**
+   * Blocks cookies a page's embedded sites set or read, which track you
+   * from site to site.
+   */
+  block_third_party_cookies?: boolean;
+  /**
+   * Asks sites not to sell or share your data, with the
+   * `Sec-GPC: 1` header and `navigator.globalPrivacyControl`.
+   */
+  global_privacy_control?: boolean;
+  /**
+   * Keeps WebRTC, as video calls use, from telling sites your local
+   * network address.
+   */
+  hide_local_ip_address?: boolean;
 };
 
 /** How a touchpad generates scrolling. */

@@ -15,6 +15,12 @@ Workspace switches blur as they slide, the overview blurs your wallpaper, and wi
 
 [Window effects](APPEARANCE.md#window-effects)
 
+### Privacy protections
+
+Browser windows keep more from the sites you visit. Each profile blocks cookies from other sites, asks sites not to sell or share your data, and hides your local network address from video calls, all on by default. Turn any of them off for a profile in Settings, under Privacy.
+
+[Privacy](BROWSER.md#privacy)
+
 ### Agents work beside you
 
 ![Claude opening a page in its own window and searching there with its own pointer while you type in yours, then you taking its window over and giving it back](../media/release-agents.png)

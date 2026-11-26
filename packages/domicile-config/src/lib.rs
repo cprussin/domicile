@@ -902,6 +902,7 @@ impl Default for BrowserConfig {
             color: AccentColor(color),
             private,
             extensions: None,
+            protections: Protections::default(),
         };
         BrowserConfig {
             profiles: BTreeMap::from([
@@ -939,6 +940,36 @@ pub struct BrowserProfile {
     /// profile, whose pages stay away from extensions unless allowed.
     #[serde(default)]
     pub extensions: Option<Vec<String>>,
+    /// What it keeps sites from learning about you. Each is on unless the
+    /// config turns it off.
+    #[serde(default)]
+    pub protections: Protections,
+}
+
+/// What a browser profile keeps sites from learning about you. See
+/// [`BrowserProfile::protections`].
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct Protections {
+    /// Blocks cookies a page's embedded sites set or read, which track you
+    /// from site to site.
+    pub block_third_party_cookies: bool,
+    /// Asks sites not to sell or share your data, with the
+    /// `Sec-GPC: 1` header and `navigator.globalPrivacyControl`.
+    pub global_privacy_control: bool,
+    /// Keeps WebRTC, as video calls use, from telling sites your local
+    /// network address.
+    pub hide_local_ip_address: bool,
+}
+
+impl Default for Protections {
+    fn default() -> Self {
+        Protections {
+            block_third_party_cookies: true,
+            global_privacy_control: true,
+            hide_local_ip_address: true,
+        }
+    }
 }
 
 /// Whether `id` can name a profile's directory.

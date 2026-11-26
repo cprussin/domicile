@@ -53,13 +53,23 @@
               "color": "#0d9488",
               "extensions": null,
               "name": "Default",
-              "private": false
+              "private": false,
+              "protections": {
+                "block_third_party_cookies": true,
+                "global_privacy_control": true,
+                "hide_local_ip_address": true
+              }
             },
             "private": {
               "color": "#a78bfa",
               "extensions": null,
               "name": "Private",
-              "private": true
+              "private": true,
+              "protections": {
+                "block_third_party_cookies": true,
+                "global_privacy_control": true,
+                "hide_local_ip_address": true
+              }
             }
           },
           "description": "The profiles, by id. An id is a directory name: lowercase letters,\ndigits and `-`.",
@@ -100,6 +110,15 @@
           "default": false,
           "description": "Keeps no history, sign-ins or site data after its last page closes.",
           "type": "boolean"
+        },
+        "protections": {
+          "$ref": "#/$defs/Protections",
+          "default": {
+            "block_third_party_cookies": true,
+            "global_privacy_control": true,
+            "hide_local_ip_address": true
+          },
+          "description": "What it keeps sites from learning about you. Each is on unless the\nconfig turns it off."
         }
       },
       "required": ["name", "color"],
@@ -727,6 +746,28 @@
       "required": ["name", "displays"],
       "type": "object"
     },
+    "Protections": {
+      "additionalProperties": false,
+      "description": "What a browser profile keeps sites from learning about you. See\n[`BrowserProfile::protections`].",
+      "properties": {
+        "block_third_party_cookies": {
+          "default": true,
+          "description": "Blocks cookies a page's embedded sites set or read, which track you\nfrom site to site.",
+          "type": "boolean"
+        },
+        "global_privacy_control": {
+          "default": true,
+          "description": "Asks sites not to sell or share your data, with the\n`Sec-GPC: 1` header and `navigator.globalPrivacyControl`.",
+          "type": "boolean"
+        },
+        "hide_local_ip_address": {
+          "default": true,
+          "description": "Keeps WebRTC, as video calls use, from telling sites your local\nnetwork address.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "ScrollMethod": {
       "description": "How a touchpad generates scrolling.",
       "enum": ["default", "two_finger", "edge", "on_button_down"],
@@ -1045,13 +1086,23 @@
             "color": "#0d9488",
             "extensions": null,
             "name": "Default",
-            "private": false
+            "private": false,
+            "protections": {
+              "block_third_party_cookies": true,
+              "global_privacy_control": true,
+              "hide_local_ip_address": true
+            }
           },
           "private": {
             "color": "#a78bfa",
             "extensions": null,
             "name": "Private",
-            "private": true
+            "private": true,
+            "protections": {
+              "block_third_party_cookies": true,
+              "global_privacy_control": true,
+              "hide_local_ip_address": true
+            }
           }
         },
         "sites": {}
