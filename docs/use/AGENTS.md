@@ -72,9 +72,11 @@ ask to sign in again.
   replaces what you copied, and what it copies stays out of your clipboard
   history.
 - An app or browser window you're using is yours. Click or type in one the
-  agent is using and it lets go at once. The window says **Yours now**, and
-  the agent waits until you click **Give back**. **Close** hides the note and keeps
-  the window yours, and the pill's panel can still give it back.
+  agent is using and it lets go at once. A banner on the window says
+  **You're using this window**, the agent's pill turns amber and says
+  **Paused**, and the agent waits until you click **Give back**. **Hide** puts
+  the banner away and keeps the window yours, and the pill's panel can still
+  give it back.
 - An agent waits to run shell commands, like switching workspaces, until
   you've left the keyboard and mouse alone for 30 seconds.
 - Private browser windows are never offered to an agent.

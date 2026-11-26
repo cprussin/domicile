@@ -11,8 +11,8 @@ at the computer ([AGENTS.md](../AGENTS.md)). The `browser_` and `app_` tools
 act by ref and need no seat.
 
 UX mockup: violet agent cursor with its name, a ring and name tag on held
-windows, a "Yours now · Give back" strip, and held windows listed in the bar
-pill.
+windows, a "You're using this window" banner with Give back, and held
+windows listed in the bar pill.
 
 ## Design
 
@@ -196,8 +196,8 @@ domicile.seats.giveBack(windowId);
 - [x] protocol and SDK: `seats`, `heldBy`, `takeOver`, `giveBack`
 - [x] MCP: raw tools on the agent seat
 - [x] MCP: `heldBy` in `list_windows` (`held_by`)
-- [x] manganese: agent cursor, ring and name tag, "Yours now · Give back"
-      strip, held windows in the agent pill
+- [x] manganese: agent cursor, ring and name tag, "You're using this
+      window" banner with Give back, held windows in the agent pill
 - [x] new windows from an agent's `open`/`exec` start held by it
 - [x] engine and compositor: an agent seat's pointer, buttons, scrolls,
       keys and drags reach browser windows at desk positions

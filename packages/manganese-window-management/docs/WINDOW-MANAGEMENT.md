@@ -100,9 +100,9 @@ Workspaces belong to the desktop, and screens show them, as in sway:
 - **Agents' windows stand out too** (`AgentSeats.tsx`). A client window an
   agent's seat holds gets a violet ring and the agent's name on its top edge;
   its pointer, named, shows while it is over one of them. A window the user
-  took from an agent gets a "Yours now" strip along its bottom, whose
-  **Give back** calls `seats.giveBack`. Each sits at its window's raised
-  depth; the pointer at `AGENT_POINTER`. Only windows at rest and shown are
+  took from an agent gets an amber ring and a "You're using this window"
+  banner under its title bar, whose **Give back** calls `seats.giveBack`.
+  Each sits at its window's raised depth; the pointer at `AGENT_POINTER`. Only windows at rest and shown are
   marked (`holdable-windows.ts`), and none in the overview. See
   [AGENT-SEATS.md](../../../docs/architecture/AGENT-SEATS.md).
 - **`xdg-activation` requests are granted.** The compositor forwards them as

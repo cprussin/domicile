@@ -5,7 +5,7 @@ import { portals } from "@domicile-desktop/sdk/desktop/portals";
 import type { DomicileSeat } from "@domicile-desktop/sdk/domicile-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { Agents } from "./Agents";
@@ -457,7 +457,7 @@ describe("Sharing", () => {
       expect(pill).toHaveTextContent("Claude Code · Paused");
     });
 
-    it("says for a moment that the user took a window, and gives it back", async () => {
+    it("drops no notice when the user takes a window, which its banner tells", async () => {
       const host = new FakeHost();
       const seats = new FakeDomicileHost();
       seats.appear("report", { title: "Expense report" });
@@ -472,51 +472,8 @@ describe("Sharing", () => {
         });
       });
 
-      const notice = await screen.findByRole("status");
-      expect(notice).toHaveTextContent("Claude Code paused");
-      expect(notice).toHaveTextContent(
-        "You took over Expense report. Claude Code will wait until you give it back.",
-      );
-      await userEvent.click(
-        within(notice).getByRole("button", { name: "Give back" }),
-      );
-      expect(seats.calls).toContainEqual(["giveBack", "report"]);
-    });
-
-    it("puts the notice away on Dismiss", async () => {
-      const host = new FakeHost();
-      const seats = new FakeDomicileHost();
-      seats.appear("report", { title: "Expense report" });
-      seats.set({ seats: [seat()] });
-      render(<Agents domicile={sharing(host, seats)} />);
-      host.capture([CLAUDE]);
-      await screen.findByRole("button", { name: "Claude Code" });
-      act(() => {
-        seats.set({ seats: [seat({ holds: [], taken: ["report"] })] });
-      });
-
-      await userEvent.click(
-        within(await screen.findByRole("status")).getByRole("button", {
-          name: "Dismiss",
-        }),
-      );
-
-      await waitFor(() => {
-        expect(screen.queryByText("Claude Code paused")).toBeNull();
-      });
-      expect(seats.calls).not.toContainEqual(["giveBack", "report"]);
-    });
-
-    it("raises no notice for a window already taken when the bar starts", async () => {
-      const host = new FakeHost();
-      const seats = new FakeDomicileHost();
-      seats.appear("report", { title: "Expense report" });
-      seats.set({ seats: [seat({ holds: [], taken: ["report"] })] });
-      render(<Agents domicile={sharing(host, seats)} />);
-      host.capture([CLAUDE]);
-
       await screen.findByRole("button", { name: "Claude Code · Paused" });
-      expect(screen.queryByText("Claude Code paused")).toBeNull();
+      expect(screen.queryByRole("status")).toBeNull();
     });
 
     it("lists nothing it uses before it uses a window", async () => {
