@@ -35,7 +35,8 @@ class PortalPicker {
 std::unique_ptr<PortalPicker> MakePortalPicker();
 
 // Asks the compositor what node `node`'s portal stream shows, with its
-// `org.domicile.ScreenCast.Pick`. webrtc gives the engine the node alone.
+// `com.domicile_desktop.ScreenCast.Pick`. webrtc gives the engine the node
+// alone.
 // `told` runs on this sequence, with nullopt when the desktop cannot say, as
 // another portal cannot.
 using ToldWhatThePortalPicked =

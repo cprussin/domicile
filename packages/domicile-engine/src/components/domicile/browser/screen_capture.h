@@ -35,7 +35,7 @@ blink::mojom::StreamDevicesSetPtr AsRequested(
     blink::mojom::StreamDevicesSetPtr answer);
 
 // What the desktop says a ScreenCast portal pick shows: the compositor's
-// `org.domicile.ScreenCast.Pick` (see AskWhatThePortalPicked).
+// `com.domicile_desktop.ScreenCast.Pick` (see AskWhatThePortalPicked).
 struct PortalPick {
   // The ScreenCast portal's source type: 1 a monitor, 2 a window, 4 a region.
   uint32_t source_type = 1;

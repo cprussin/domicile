@@ -325,7 +325,7 @@ fn a_page_hears_which_application_holds_the_desktop_awake() {
 
     let film = compositor.client_with("film", &["--hold-the-screens-on"]);
     chrome
-        .wait_for(holders(&["dev.domicile.test-client"]))
+        .wait_for(holders(&["com.domicile_desktop.test-client"]))
         .expect("the page hears the film hold the desktop awake");
 
     drop(film);

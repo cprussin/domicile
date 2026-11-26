@@ -228,7 +228,7 @@ SESSION="$USR/share/wayland-sessions/domicile.desktop"
 holds_line "the session runs domicile" "$SESSION" "Exec=/usr/bin/domicile"
 holds_line "the session names the desktop" "$SESSION" "DesktopNames=domicile"
 MIRACAST="$USR/lib/systemd/user/domicile-miracast.service"
-holds_line "D-Bus starts Miracast as a unit" "$USR/share/dbus-1/services/net.domicile.Miracast.service" \
+holds_line "D-Bus starts Miracast as a unit" "$USR/share/dbus-1/services/com.domicile_desktop.Miracast.service" \
   "SystemdService=domicile-miracast.service"
 holds_line "the Miracast unit runs domicile-miracast" "$MIRACAST" "ExecStart=/usr/bin/domicile-miracast"
 holds_line "the Miracast unit ends with the desk" "$MIRACAST" "PartOf=graphical-session.target"

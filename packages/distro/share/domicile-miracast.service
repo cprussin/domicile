@@ -1,5 +1,5 @@
 # The Miracast service, which D-Bus starts on the shell's first call
-# (`net.domicile.Miracast.service`).
+# (`com.domicile_desktop.Miracast.service`).
 #
 # It lives in the desk's graphical session: it stops with
 # `graphical-session.target`, and with it the casts and their `gst-launch-1.0`
@@ -13,5 +13,5 @@ After=graphical-session.target
 
 [Service]
 Type=dbus
-BusName=net.domicile.Miracast
+BusName=com.domicile_desktop.Miracast
 ExecStart=@bin@/domicile-miracast

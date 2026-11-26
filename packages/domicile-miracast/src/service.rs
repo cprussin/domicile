@@ -1,5 +1,5 @@
-//! `net.domicile.Miracast1` at `/net/domicile/Miracast`: the TVs found, and
-//! casts to them. The shell reaches it through `domicile.dbus`; see
+//! `com.domicile_desktop.Miracast1` at `/com/domicile_desktop/Miracast`: the
+//! TVs found, and casts to them. The shell reaches it through `domicile.dbus`; see
 //! `miracastCast` in `@domicile-desktop/sdk/cast`.
 //!
 //! - `Sinks() -> a(ss)`: each TV's id and name. `SinksChanged` says to ask
@@ -20,9 +20,9 @@ use crate::cast::{self, Buses, Tv};
 use crate::mice::Display;
 use crate::p2p::Peer;
 
-pub const NAME: &str = "net.domicile.Miracast";
-pub const PATH: &str = "/net/domicile/Miracast";
-pub const INTERFACE: &str = "net.domicile.Miracast1";
+pub const NAME: &str = "com.domicile_desktop.Miracast";
+pub const PATH: &str = "/com/domicile_desktop/Miracast";
+pub const INTERFACE: &str = "com.domicile_desktop.Miracast1";
 
 /// What the finders saw, and the casts running.
 #[derive(Default)]
@@ -96,7 +96,7 @@ pub fn displays_found(state: &Mutex<State>, connection: &Connection, displays: V
     sinks_changed(connection);
 }
 
-#[zbus::interface(name = "net.domicile.Miracast1")]
+#[zbus::interface(name = "com.domicile_desktop.Miracast1")]
 impl Miracast {
     fn sinks(&self) -> Vec<(String, String)> {
         self.state

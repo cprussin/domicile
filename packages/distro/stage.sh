@@ -136,8 +136,8 @@ launcher shutdown "$ROOT/packages/distro/share/launcher"
 launcher reboot "$ROOT/packages/distro/share/launcher"
 launcher logout "$ROOT/packages/distro/share/launcher"
 
-fill "$ROOT/packages/distro/share/net.domicile.Miracast.service" \
-  "$USR/share/dbus-1/services/net.domicile.Miracast.service"
+fill "$ROOT/packages/distro/share/com.domicile_desktop.Miracast.service" \
+  "$USR/share/dbus-1/services/com.domicile_desktop.Miracast.service"
 fill "$ROOT/packages/distro/share/domicile-miracast.service" \
   "$USR/lib/systemd/user/domicile-miracast.service"
 

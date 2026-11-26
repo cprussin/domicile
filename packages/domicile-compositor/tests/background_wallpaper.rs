@@ -27,7 +27,7 @@ const OBJECT_PATH: &str = "/org/freedesktop/portal/desktop";
 const BACKGROUND: &str = "org.freedesktop.impl.portal.Background";
 const WALLPAPER: &str = "org.freedesktop.impl.portal.Wallpaper";
 /// The app id `domicile-test-client` gives its window.
-const TEST_CLIENT: &str = "dev.domicile.test-client";
+const TEST_CLIENT: &str = "com.domicile_desktop.test-client";
 const PATIENCE: Duration = Duration::from_secs(20);
 
 /// A private session bus. Stopped on drop.

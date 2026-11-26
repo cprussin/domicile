@@ -221,7 +221,7 @@ describe("reading", () => {
       `"source_outputs": [`,
       `"source_outputs": [
     {"index": 9, "source": 52, "mute": false, "volume": {"mono": {"value": 65536}},
-     "properties": {"application.id": "org.domicile.meter"}},`,
+     "properties": {"application.id": "com.domicile_desktop.meter"}},`,
     );
 
     expect(read(list).recording.map(({ id }) => id)).toStrictEqual([

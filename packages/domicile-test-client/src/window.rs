@@ -886,7 +886,7 @@ impl Client {
         toplevel.set_title(self.title.clone());
         crate::say!(toplevel.id(), "set_title(\"{}\")", self.title);
         // Chromes identify windows by app id; the title is for people.
-        toplevel.set_app_id("dev.domicile.test-client".to_string());
+        toplevel.set_app_id("com.domicile_desktop.test-client".to_string());
         if let Some((width, height)) = self.min_size {
             toplevel.set_min_size(width, height);
         }

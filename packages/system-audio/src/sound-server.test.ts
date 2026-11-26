@@ -339,7 +339,7 @@ describe("meters", () => {
       "--channels=1",
       "--rate=1000",
       "--latency-msec=30",
-      "--property=application.id=org.domicile.meter",
+      "--property=application.id=com.domicile_desktop.meter",
     ];
     expect(system.spawned.map(({ argv, options }) => [argv, options])).toEqual([
       [["parec", "--device=mic", ...common], C],

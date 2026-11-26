@@ -109,7 +109,7 @@ export const Disabled = {
   render: (args) => (
     <FieldComponent {...args}>
       <Input
-        defaultValue="connor@dourolabs.xyz"
+        defaultValue="connor@domicile-desktop.com"
         placeholder="you@example.com"
         prefixIcon={<EnvelopeIcon />}
         type="email"

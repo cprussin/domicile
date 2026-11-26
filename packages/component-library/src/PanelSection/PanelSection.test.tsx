@@ -8,14 +8,14 @@ describe(PanelSection, () => {
     it("is a region named by its label, which heads it", () => {
       render(
         <PanelSection label="Inboxes">
-          <p>PrussinNet</p>
+          <p>Domicile</p>
         </PanelSection>,
       );
       const section = screen.getByRole("region", { name: "Inboxes" });
       expect(section).toContainElement(
         screen.getByRole("heading", { level: 3, name: "Inboxes" }),
       );
-      expect(section).toContainElement(screen.getByText("PrussinNet"));
+      expect(section).toContainElement(screen.getByText("Domicile"));
     });
 
     it("puts its controls beside its label", () => {

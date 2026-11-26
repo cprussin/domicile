@@ -46,7 +46,7 @@ class FakeService {
           Err({
             kind: SystemErrorKind.Dbus,
             message:
-              "org.freedesktop.DBus.Error.ServiceUnknown: The name net.domicile.Miracast was not provided",
+              "org.freedesktop.DBus.Error.ServiceUnknown: The name com.domicile_desktop.Miracast was not provided",
           }),
         );
       }
@@ -94,9 +94,9 @@ class FakeService {
       controller.enqueue(
         Heard.Heard({
           body,
-          interface: "net.domicile.Miracast1",
+          interface: "com.domicile_desktop.Miracast1",
           member,
-          path: "/net/domicile/Miracast",
+          path: "/com/domicile_desktop/Miracast",
           sender: ":1.2",
           signature: "",
         }),

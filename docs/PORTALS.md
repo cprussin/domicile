@@ -338,7 +338,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   same picker and indicator. The engine asks before it answers the page, so a
   cancel rejects `getDisplayMedia()`; the capture then restores the pick from
   the picker session's restore token (`persist_mode` 1). The engine then
-  asks the compositor's `org.domicile.ScreenCast.Pick(node)`, on this
+  asks the compositor's `com.domicile_desktop.ScreenCast.Pick(node)`, on this
   backend's bus name and path, what the picker stream's node shows: its
   source type, the browser window, and its sound node. The page's
   `displaySurface` is the source's, and asking for audio gets the sound

@@ -532,8 +532,8 @@
         # reason.
         cp ${domicileBinaries}/bin/domicile-miracast "$out/bin/domicile-miracast"
         mkdir -p "$out/share/dbus-1/services"
-        substitute ${./packages/distro/share/net.domicile.Miracast.service} \
-          "$out/share/dbus-1/services/net.domicile.Miracast.service" \
+        substitute ${./packages/distro/share/com.domicile_desktop.Miracast.service} \
+          "$out/share/dbus-1/services/com.domicile_desktop.Miracast.service" \
           --subst-var-by bin "$out/bin"
         mkdir -p "$out/lib/systemd/user"
         substitute ${./packages/distro/share/domicile-miracast.service} \
@@ -1522,12 +1522,12 @@
             # D-Bus starts the Miracast service as a unit in the graphical
             # session, so it ends with the desk instead of outliving it.
             grep -qxF 'SystemdService=domicile-miracast.service' \
-              ${domicilePackage}/share/dbus-1/services/net.domicile.Miracast.service || {
+              ${domicilePackage}/share/dbus-1/services/com.domicile_desktop.Miracast.service || {
               echo "D-Bus starts domicile-miracast outside the graphical session" >&2
               exit 1
             }
             miracast=${domicilePackage}/lib/systemd/user/domicile-miracast.service
-            for line in 'PartOf=graphical-session.target' 'Requisite=graphical-session.target' 'BusName=net.domicile.Miracast' 'ExecStart=${domicilePackage}/bin/domicile-miracast'; do
+            for line in 'PartOf=graphical-session.target' 'Requisite=graphical-session.target' 'BusName=com.domicile_desktop.Miracast' 'ExecStart=${domicilePackage}/bin/domicile-miracast'; do
               grep -qxF "$line" "$miracast" || {
                 echo "domicile-miracast.service is missing: $line" >&2
                 cat "$miracast" >&2

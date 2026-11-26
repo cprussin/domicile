@@ -133,8 +133,8 @@ describe(ListRow, () => {
           <List>
             <ListRow
               end="3"
-              label="PrussinNet"
-              name="PrussinNet: 3 unread"
+              label="Domicile"
+              name="Domicile: 3 unread"
               onPress={() => {
                 resolve(true);
               }}
@@ -143,7 +143,7 @@ describe(ListRow, () => {
         );
       });
       await userEvent.click(
-        screen.getByRole("button", { name: "PrussinNet: 3 unread" }),
+        screen.getByRole("button", { name: "Domicile: 3 unread" }),
       );
       expect(await pressed).toBe(true);
     });

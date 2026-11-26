@@ -10,9 +10,9 @@ import type { Dbus } from "./desktop/dbus";
 import type { DbusSignal, Listened, Listening, SystemError } from "./system";
 import { Bus, ListenedKind } from "./system";
 
-const SERVICE = "net.domicile.Miracast";
-const PATH = "/net/domicile/Miracast";
-const INTERFACE = "net.domicile.Miracast1";
+const SERVICE = "com.domicile_desktop.Miracast";
+const PATH = "/com/domicile_desktop/Miracast";
+const INTERFACE = "com.domicile_desktop.Miracast1";
 
 /**
  * The mode an extended desk takes on a Miracast TV: the service sends at

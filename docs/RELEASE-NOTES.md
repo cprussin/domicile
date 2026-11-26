@@ -38,6 +38,7 @@ Each agent gets its own pointer, keyboard and clipboard, in native and browser w
 
 - `domicile.pointer.warp(x, y, onlyOver, unlessOver)` takes a required list of boxes, `onlyOver`: the pointer moves only while it is over one of them. Pass the other windows' frames so a focus change leaves a pointer over your bar where it is. [Writing a shell](WRITING-A-SHELL.md#focus-follows-the-mouse)
 - **The engine runs extensions' keys.** A page does not get the keys of its profile's extensions, except those `extensions.reserveKeys()` names for your shell. Listen for `extensions.on("commandPressed")` to run the commands yourself. [Commands](SHELL-EXTENSIONS.md#commands)
+- Domicile's D-Bus names are under `com.domicile_desktop`: Miracast is `com.domicile_desktop.Miracast1` at `/com/domicile_desktop/Miracast` (was `net.domicile.Miracast1`), and the screen-cast picker is `com.domicile_desktop.ScreenCast` (was `org.domicile.ScreenCast`). [Casting to TVs](CASTING-TO-TVS.md)
 - Panda CSS 2: a shell that runs Panda with the component library's preset or manganese's config needs `@pandacss/dev@2`, and `@domicile-desktop/manganese/css`'s generated entry points are `index.js` files. [Shell packaging](SHELL-PACKAGING.md#panda-with-manganeses-tokens)
 
 ### Fixes

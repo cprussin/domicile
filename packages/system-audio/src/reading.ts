@@ -21,7 +21,7 @@ import { Target, targetId } from "./ids";
 export const NORMAL = 65_536;
 
 /** Application id of this library's meters, so they are hidden from the lists. */
-export const METER_APPLICATION = "org.domicile.meter";
+export const METER_APPLICATION = "com.domicile_desktop.meter";
 
 /** Applications whose streams are level meters. Matches pavucontrol's list. */
 const MIXERS = new Set([

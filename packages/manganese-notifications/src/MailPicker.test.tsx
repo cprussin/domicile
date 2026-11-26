@@ -7,9 +7,21 @@ import type { Sender } from "./MailPicker";
 import { MailPicker } from "./MailPicker";
 
 const SENDERS: readonly Sender[] = [
-  { address: "me@prussin.net", icon: EnvelopeSimpleIcon, inbox: "PrussinNet" },
-  { address: "me@alias.net", icon: EnvelopeSimpleIcon, inbox: "PrussinNet" },
-  { address: "me@meat.com", icon: EnvelopeSimpleIcon, inbox: "Meat Proxy" },
+  {
+    address: "me@domicile-desktop.com",
+    icon: EnvelopeSimpleIcon,
+    inbox: "Domicile",
+  },
+  {
+    address: "alias@domicile-desktop.com",
+    icon: EnvelopeSimpleIcon,
+    inbox: "Domicile",
+  },
+  {
+    address: "proxy@domicile-desktop.com",
+    icon: EnvelopeSimpleIcon,
+    inbox: "Proxy",
+  },
 ];
 
 const picker = (
@@ -41,9 +53,9 @@ describe(MailPicker, () => {
       screen.getByRole("dialog", { name: "Write to alex@example.com" }),
     ).toBeInTheDocument();
     expect(screen.getAllByRole("radio").map((row) => row.textContent)).toEqual([
-      "PrussinNetme@prussin.net",
-      "PrussinNetme@alias.net",
-      "Meat Proxyme@meat.com",
+      "Domicileme@domicile-desktop.com",
+      "Domicilealias@domicile-desktop.com",
+      "Proxyproxy@domicile-desktop.com",
     ]);
     expect(
       screen.getByText("mailto:alex@example.com?subject=Hello"),
@@ -53,24 +65,26 @@ describe(MailPicker, () => {
   it("writes from the first address", async () => {
     const first = picker();
     await userEvent.click(screen.getByRole("button", { name: "Write email" }));
-    expect(first.chosen).toEqual(["me@prussin.net"]);
+    expect(first.chosen).toEqual(["me@domicile-desktop.com"]);
   });
 
   it("starts on the address picked last time", async () => {
-    const { chosen } = picker({ lastChoice: "me@meat.com" });
+    const { chosen } = picker({ lastChoice: "proxy@domicile-desktop.com" });
 
     await userEvent.click(screen.getByRole("button", { name: "Write email" }));
 
-    expect(chosen).toEqual(["me@meat.com"]);
+    expect(chosen).toEqual(["proxy@domicile-desktop.com"]);
   });
 
   it("writes from the address picked", async () => {
     const { chosen } = picker();
 
-    await userEvent.click(screen.getByRole("radio", { name: /me@alias.net/ }));
+    await userEvent.click(
+      screen.getByRole("radio", { name: /alias@domicile-desktop.com/ }),
+    );
     await userEvent.click(screen.getByRole("button", { name: "Write email" }));
 
-    expect(chosen).toEqual(["me@alias.net"]);
+    expect(chosen).toEqual(["alias@domicile-desktop.com"]);
   });
 
   it("names a link with no recipient as a new email, and who asked", () => {
@@ -85,10 +99,12 @@ describe(MailPicker, () => {
   it("writes from the address picked with the keyboard on Enter", async () => {
     const { chosen } = picker();
 
-    await userEvent.click(screen.getByRole("radio", { name: /me@meat.com/ }));
+    await userEvent.click(
+      screen.getByRole("radio", { name: /proxy@domicile-desktop.com/ }),
+    );
     await userEvent.keyboard("{Enter}");
 
-    expect(chosen).toEqual(["me@meat.com"]);
+    expect(chosen).toEqual(["proxy@domicile-desktop.com"]);
   });
 
   it("cancels", async () => {
