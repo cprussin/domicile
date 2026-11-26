@@ -47,10 +47,14 @@ std::string PagePrivacy::site() const {
 }
 
 AdBlockingMode PagePrivacy::mode() const {
+  return ModeFor(GetWebContents().GetPrimaryMainFrame()->GetLastCommittedURL());
+}
+
+AdBlockingMode PagePrivacy::ModeFor(const GURL& page) const {
   if (window_.has_value()) {
     return *window_;
   }
-  const std::string page_site = site();
+  const std::string page_site = PrivacySiteOf(page);
   if (!page_site.empty()) {
     if (const std::optional<AdBlockingMode> mode =
             SiteAdBlocking(prefs(), page_site)) {

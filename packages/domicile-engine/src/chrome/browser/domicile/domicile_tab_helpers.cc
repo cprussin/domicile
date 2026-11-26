@@ -4,6 +4,7 @@
 #include "chrome/browser/domicile/domicile_tab_helpers.h"
 
 #include "base/check.h"
+#include "chrome/browser/domicile/domicile_ad_blocking.h"
 #include "chrome/browser/domicile/domicile_desk.h"
 #include "chrome/browser/domicile/domicile_devtools.h"
 #include "chrome/browser/domicile/domicile_permissions.h"
@@ -32,6 +33,8 @@ void Attach(content::WebContents& guest, bool records_history) {
   AttachPermissionPrompts(guest);
   // A popup's page may print too.
   AttachPrinting(guest);
+  // And a popup's page may show ads too.
+  AttachCosmeticFiltering(guest);
 
   // An action popup is not a tab, as in Chrome. Without a SessionTabHelper,
   // tabs.getCurrent() returns nothing and it never becomes the active tab.

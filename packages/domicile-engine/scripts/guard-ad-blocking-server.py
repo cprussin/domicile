@@ -17,6 +17,24 @@ each X `loaded` or `blocked`:
                                       and makes an exception for
   ok       localhost/ok.js            another site's, which nothing names
 
+It also has six elements, which the list hides by their classes and ids or
+doesn't, and logs which of them are hidden once its scripts have settled and
+a seventh, added a few seconds after the page loaded, has had a few seconds
+more:
+
+  GUARD hidden as=ID site=X generic=X complex=X late=X kept=X plain=X
+
+each X `hidden` or `shown`:
+
+  site     .site-promo     the page's site's own rule (127.0.0.1##)
+  generic  .ad-banner      a generic class rule, which the page's classes are
+                           asked about
+  complex  div[data-ad]    a generic rule that is not a bare class or id
+  late     .late-ad        a generic class rule, on an element added late
+  kept     .kept           a generic class rule the site makes an exception
+                           for (127.0.0.1#@#)
+  plain    .plain          nothing names it
+
 This server logs each script it is asked for, to its stdout:
 
   GUARD served as=ID what=WHAT
@@ -37,9 +55,14 @@ PAGE = """<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>a page that loads ads and says which ran</title>
+    <title>a page that loads and shows ads and says which ran</title>
   </head>
   <body>
+    <div class="site-promo" id="site">a site's own ad</div>
+    <div class="ad-banner" id="generic">a generic ad</div>
+    <div data-ad="1" id="complex">an ad by its attribute</div>
+    <div class="kept" id="kept">an ad the site keeps</div>
+    <div class="plain" id="plain">no ad</div>
     <script>
       const as = new URLSearchParams(location.search).get("as");
       const port = location.port;
@@ -68,6 +91,33 @@ PAGE = """<!doctype html>
             `mine=${ran.mine} allowed=${ran.allowed} ok=${ran.ok}`,
         );
       });
+      // An ad a page adds after it loaded, as many do, then a look at what
+      // is hidden once the engine has had time to gather it again.
+      const loaded = new Promise((resolve) => {
+        addEventListener("load", resolve);
+      });
+      const after = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      Promise.all([...settled, loaded])
+        .then(() => after(3000))
+        .then(() => {
+          const late = document.createElement("div");
+          late.className = "late-ad";
+          late.id = "late";
+          late.textContent = "a late ad";
+          document.body.append(late);
+          return after(5000);
+        })
+        .then(() => {
+          const how = (id) =>
+            getComputedStyle(document.getElementById(id)).display === "none"
+              ? "hidden"
+              : "shown";
+          console.log(
+            `GUARD hidden as=${as} site=${how("site")} ` +
+              `generic=${how("generic")} complex=${how("complex")} ` +
+              `late=${how("late")} kept=${how("kept")} plain=${how("plain")}`,
+          );
+        });
     </script>
   </body>
 </html>

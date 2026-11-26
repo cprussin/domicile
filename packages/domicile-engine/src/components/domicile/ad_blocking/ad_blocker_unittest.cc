@@ -103,6 +103,54 @@ TEST_F(AdBlockerTest, NoListsAndNoRulesBlockNothing) {
                       kStrict));
 }
 
+TEST_F(AdBlockerTest, HidesWhatASitesRulesAndTheGenericOnesName) {
+  Build({"example.com##.site-ad\n##div[data-ad]\nother.example##.theirs\n"},
+        {"example.com##.mine\n"});
+  const AdBlocker::Cosmetics cosmetics =
+      blocker_->CosmeticsFor(GURL("https://www.example.com/page"));
+  EXPECT_EQ(cosmetics.hide_selectors,
+            (std::vector<std::string>{".mine", ".site-ad", "div[data-ad]"}));
+  EXPECT_FALSE(cosmetics.generichide);
+}
+
+TEST_F(AdBlockerTest, HidesAPagesClassesAndIdsTheGenericRulesName) {
+  Build({"##.ad-banner\n###sponsor\n##.other-ad\n"}, {"##.my-ad\n"});
+  const AdBlocker::Cosmetics cosmetics =
+      blocker_->CosmeticsFor(GURL("https://news.example/"));
+  EXPECT_EQ(blocker_->HiddenClassIdSelectors({"ad-banner", "my-ad", "story"},
+                                              {"sponsor"},
+                                              cosmetics.exceptions),
+            (std::vector<std::string>{"#sponsor", ".ad-banner", ".my-ad"}));
+}
+
+TEST_F(AdBlockerTest, ASitesExceptionKeepsAGenericRuleOffItsPages) {
+  Build({"##.ad-banner\nexample.com#@#.ad-banner\n"}, {});
+  const AdBlocker::Cosmetics cosmetics =
+      blocker_->CosmeticsFor(GURL("https://example.com/"));
+  EXPECT_EQ(cosmetics.exceptions, (std::vector<std::string>{".ad-banner"}));
+  EXPECT_TRUE(blocker_
+                  ->HiddenClassIdSelectors({"ad-banner"}, {},
+                                           cosmetics.exceptions)
+                  .empty());
+}
+
+TEST_F(AdBlockerTest, AGenerichideExceptionLeavesOnlyTheSitesOwn) {
+  Build({"##div[data-ad]\n@@||example.com^$generichide\n"
+         "example.com##.site-ad\n"},
+        {});
+  const AdBlocker::Cosmetics cosmetics =
+      blocker_->CosmeticsFor(GURL("https://example.com/"));
+  EXPECT_TRUE(cosmetics.generichide);
+  EXPECT_EQ(cosmetics.hide_selectors,
+            (std::vector<std::string>{".site-ad"}));
+}
+
+TEST_F(AdBlockerTest, APageThatIsNotAWebsiteHidesNothing) {
+  Build({"##div[data-ad]\n"}, {});
+  EXPECT_TRUE(blocker_->CosmeticsFor(GURL("domicile://shell/"))
+                  .hide_selectors.empty());
+}
+
 TEST(AdBlockRequestTypeTest, NamesWhatARequestFetchesAsFiltersDo) {
   EXPECT_EQ(AdBlockRequestType(RequestDestination::kScript), "script");
   EXPECT_EQ(AdBlockRequestType(RequestDestination::kServiceWorker), "script");

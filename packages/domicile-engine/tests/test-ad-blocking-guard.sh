@@ -9,6 +9,7 @@
 #   - A blocked script the server served anyway fails: the block was not the
 #     blocker's.
 #   - off blocking anything fails: the control proves nothing then.
+#   - off hiding anything fails, for the same reason.
 #   - Each wrong letter names the part of the blocker it points at.
 set -u
 
@@ -98,67 +99,110 @@ ads() { # $1 as, then third first mine allowed ok
   echo "ads as=$1 third=$2 first=$3 mine=$4 allowed=$5 ok=$6"
 }
 
+hidden() { # $1 as, then site generic complex late kept plain
+  echo "hidden as=$1 site=$2 generic=$3 complex=$4 late=$5 kept=$6 plain=$7"
+}
+
 echo "reading the logs"
-expect "the three profiles as configured" "1 BLBLL BBBLL LLLLL 0" \
+expect "the three profiles as configured" "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS" \
   "$(reads shell-loaded \
     "$(ads default blocked loaded blocked loaded loaded)" \
     "$(ads strict blocked blocked blocked loaded loaded)" \
     "$(ads off loaded loaded loaded loaded loaded)" \
+    "$(hidden default hidden hidden hidden hidden shown shown)" \
+    "$(hidden strict hidden hidden hidden hidden shown shown)" \
+    "$(hidden off shown shown shown shown shown shown)" \
     served=default:first served=default:allowed served=default:ok \
     served=off:third served=off:mine)"
-expect "a page that never reported" "1 ????? ????? ????? 0" "$(reads shell-loaded)"
-expect "an empty log reads nothing" "0 ????? ????? ????? 0" "$(reads)"
-expect "a blocked script the server served is a leak" "1 BLBLL ????? ????? 1" \
+expect "a page that never reported" "1 ????? ????? ????? 0 ?????? ?????? ??????" "$(reads shell-loaded)"
+expect "an empty log reads nothing" "0 ????? ????? ????? 0 ?????? ?????? ??????" "$(reads)"
+expect "a blocked script the server served is a leak" "1 BLBLL ????? ????? 1 ?????? ?????? ??????" \
   "$(reads shell-loaded "$(ads default blocked loaded blocked loaded loaded)" \
     served=default:third)"
-expect "a script served for another profile is not" "1 BLBLL ????? ????? 0" \
+expect "a script served for another profile is not" "1 BLBLL ????? ????? 0 ?????? ?????? ??????" \
   "$(reads shell-loaded "$(ads default blocked loaded blocked loaded loaded)" \
     served=off:third)"
 
-# MEASURED is "<shell> <default> <strict> <off> <leaked>", each profile as
-# third first mine allowed ok.
+# MEASURED is "<shell> <default> <strict> <off> <leaked> <default> <strict>
+# <off>", each profile as third first mine allowed ok, then as site generic
+# complex late kept plain.
 echo
 echo "the verdict"
 expect "the three profiles as configured is the pass" "pass" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS")"
 expect "a shell that never ran is a failure" "fail" \
-  "$(verdict "0 ????? ????? ????? 0")"
+  "$(verdict "0 ????? ????? ????? 0 HHHHSS HHHHSS SSSSSS")"
 expect "a page that never reported is a failure" "fail" \
-  "$(verdict "1 BLBLL ????? LLLLL 0")"
+  "$(verdict "1 BLBLL ????? LLLLL 0 HHHHSS HHHHSS SSSSSS")"
 expect "a served blocked script is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 1")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 1 HHHHSS HHHHSS SSSSSS")"
 expect "and says it failed after the network" "yes" \
-  "$(says "1 BLBLL BBBLL LLLLL 1" "after the network")"
+  "$(says "1 BLBLL BBBLL LLLLL 1 HHHHSS HHHHSS SSSSSS" "after the network")"
 expect "off blocking anything is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL BLLLL 0")"
+  "$(verdict "1 BLBLL BBBLL BLLLL 0 HHHHSS HHHHSS SSSSSS")"
 expect "and says the claim then proves nothing" "yes" \
-  "$(says "1 BLBLL BBBLL LLBLL 0" "prove nothing")"
+  "$(says "1 BLBLL BBBLL LLBLL 0 HHHHSS HHHHSS SSSSSS" "prove nothing")"
 expect "default loading another site's listed script is a failure" "fail" \
-  "$(verdict "1 LLBLL BBBLL LLLLL 0")"
+  "$(verdict "1 LLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS")"
 expect "and names the proxy" "yes" \
-  "$(says "1 LLBLL BBBLL LLLLL 0" "ProxyAdBlocking")"
+  "$(says "1 LLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS" "ProxyAdBlocking")"
 expect "default blocking the page's own is a failure" "fail" \
-  "$(verdict "1 BBBLL BBBLL LLLLL 0")"
+  "$(verdict "1 BBBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS")"
 expect "and names standard's third-party check" "yes" \
-  "$(says "1 BBBLL BBBLL LLLLL 0" "third_party")"
+  "$(says "1 BBBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS" "third_party")"
 expect "the user's rule not blocking is a failure" "fail" \
-  "$(verdict "1 BLLLL BBBLL LLLLL 0")"
+  "$(verdict "1 BLLLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS")"
 expect "and names block_rules" "yes" \
-  "$(says "1 BLLLL BBBLL LLLLL 0" "block_rules")"
+  "$(says "1 BLLLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS" "block_rules")"
 expect "the exception blocked is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBBL LLLLL 0")"
+  "$(verdict "1 BLBLL BBBBL LLLLL 0 HHHHSS HHHHSS SSSSSS")"
 expect "and names exceptions" "yes" \
-  "$(says "1 BLBLL BBBBL LLLLL 0" "exception")"
+  "$(says "1 BLBLL BBBBL LLLLL 0 HHHHSS HHHHSS SSSSSS" "exception")"
 expect "an unlisted script blocked is a failure" "fail" \
-  "$(verdict "1 BLBLB BBBLL LLLLL 0")"
+  "$(verdict "1 BLBLB BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS")"
 expect "strict loading the page's own is a failure" "fail" \
-  "$(verdict "1 BLBLL BLBLL LLLLL 0")"
+  "$(verdict "1 BLBLL BLBLL LLLLL 0 HHHHSS HHHHSS SSSSSS")"
 expect "and names the strict mode" "yes" \
-  "$(says "1 BLBLL BLBLL LLLLL 0" "AdBlockingModeOf")"
+  "$(says "1 BLBLL BLBLL LLLLL 0 HHHHSS HHHHSS SSSSSS" "AdBlockingModeOf")"
 expect "strict loading what default blocked is a failure" "fail" \
-  "$(verdict "1 BLBLL LLLLL LLLLL 0")"
+  "$(verdict "1 BLBLL LLLLL LLLLL 0 HHHHSS HHHHSS SSSSSS")"
 expect "and says the mode is not strict's" "yes" \
-  "$(says "1 BLBLL LLLLL LLLLL 0" "not the one used")"
+  "$(says "1 BLBLL LLLLL LLLLL 0 HHHHSS HHHHSS SSSSSS" "not the one used")"
+
+expect "off hiding anything is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSHSSS")"
+expect "and says the claim then proves nothing" "yes" \
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS HSSSSS" "proves nothing")"
+expect "default hiding nothing is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 SSSSSS SSSSSS SSSSSS")"
+expect "and names the renderer's hook" "yes" \
+  "$(says "1 BLBLL BBBLL LLLLL 0 SSSSSS SSSSSS SSSSSS" "patch 0292")"
+expect "the site's own rule not hiding is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 SHHHSS HHHHSS SSSSSS")"
+expect "and names CosmeticsFor" "yes" \
+  "$(says "1 BLBLL BBBLL LLLLL 0 SHHHSS HHHHSS SSSSSS" "CosmeticsFor")"
+expect "a generic class not hiding is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HSHHSS HHHHSS SSSSSS")"
+expect "and names the gathering" "yes" \
+  "$(says "1 BLBLL BBBLL LLLLL 0 HSHHSS HHHHSS SSSSSS" "Gather")"
+expect "a generic rule that is not a class not hiding is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHSHSS HHHHSS SSSSSS")"
+expect "and names the generic selectors" "yes" \
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHSHSS HHHHSS SSSSSS" "generic selectors")"
+expect "a late class not hiding is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHSSS HHHHSS SSSSSS")"
+expect "and names the timer" "yes" \
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHSSS HHHHSS SSSSSS" "timer")"
+expect "the site's exception hidden is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHHS HHHHSS SSSSSS")"
+expect "and names the exceptions" "yes" \
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHHS HHHHSS SSSSSS" "exceptions")"
+expect "an unnamed element hidden is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSH HHHHSS SSSSSS")"
+expect "strict hiding other than default is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS SSSSSS SSSSSS")"
+expect "and says they are the same" "yes" \
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS SSSSSS SSSSSS" "same")"
 
 echo
 if [ "$FAILED" -eq 0 ]; then

@@ -1,0 +1,29 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+module domicile.mojom;
+
+// A website frame's cosmetic filters: what the lists hide by its elements,
+// as `##.ad` and `example.com##.promo` do. See
+// docs/architecture/AD-BLOCKING.md.
+//
+// Associated with the frame's channel, so a Hide sent before a navigation
+// commits reaches the renderer before the commit does.
+
+// The renderer's end, in every frame.
+interface CosmeticFilters {
+  // Hide `selectors` in the document about to commit, from its first style.
+  // With `host`, also ask it about the document's classes and ids as they
+  // appear: none when a `$generichide` exception keeps the generic rules
+  // off the page.
+  Hide(array<string> selectors,
+       pending_associated_remote<CosmeticFiltersHost>? host);
+};
+
+// The browser's end, for one document.
+interface CosmeticFiltersHost {
+  // The generic rules' selectors that hide any of `classes` and `ids`, the
+  // document's, without `.` or `#`: those it has not asked about before.
+  HiddenSelectors(array<string> classes, array<string> ids)
+      => (array<string> selectors);
+};

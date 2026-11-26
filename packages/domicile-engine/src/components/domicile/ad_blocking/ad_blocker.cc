@@ -3,6 +3,7 @@
 
 #include "components/domicile/ad_blocking/ad_blocker.h"
 
+#include <set>
 #include <utility>
 
 #include "base/check.h"
@@ -20,6 +21,26 @@ using network::mojom::RequestDestination;
 
 rust::Str Str(std::string_view text) {
   return rust::Str(text.data(), text.size());
+}
+
+rust::Vec<rust::String> RustStrings(const std::vector<std::string>& strings) {
+  rust::Vec<rust::String> out;
+  out.reserve(strings.size());
+  for (const std::string& each : strings) {
+    // Class and id names come from a page, which may hold anything; rust
+    // strings must be UTF-8, and a selector that isn't matches no rule.
+    if (base::IsStringUTF8(each)) {
+      out.push_back(rust::String(each));
+    }
+  }
+  return out;
+}
+
+void AddAll(std::set<std::string>& into,
+            const rust::Vec<rust::String>& from) {
+  for (const rust::String& each : from) {
+    into.insert(std::string(each));
+  }
 }
 
 rust::Box<ad_blocking::FilterEngine> EngineOf(
@@ -93,6 +114,11 @@ std::unique_ptr<AdBlocker> AdBlocker::Build(
       Engines{.lists = EngineOf(lists), .rules = EngineOf({own})})));
 }
 
+AdBlocker::Cosmetics::Cosmetics() = default;
+AdBlocker::Cosmetics::Cosmetics(Cosmetics&&) = default;
+AdBlocker::Cosmetics& AdBlocker::Cosmetics::operator=(Cosmetics&&) = default;
+AdBlocker::Cosmetics::~Cosmetics() = default;
+
 AdBlocker::AdBlocker(std::unique_ptr<Engines> engines)
     : engines_(std::move(engines)) {}
 
@@ -124,6 +150,42 @@ bool AdBlocker::ShouldBlock(const GURL& url,
   }
   return listed.matched && !listed.exception &&
          (third_party || block_first_party);
+}
+
+AdBlocker::Cosmetics AdBlocker::CosmeticsFor(const GURL& page) const {
+  Cosmetics cosmetics;
+  if (!page.SchemeIsHTTPOrHTTPS()) {
+    return cosmetics;
+  }
+  const ad_blocking::Cosmetics mine = engines_->rules->cosmetics(
+      Str(page.spec()));
+  const ad_blocking::Cosmetics listed = engines_->lists->cosmetics(
+      Str(page.spec()));
+  std::set<std::string> hide;
+  AddAll(hide, mine.hide_selectors);
+  AddAll(hide, listed.hide_selectors);
+  std::set<std::string> exceptions;
+  AddAll(exceptions, mine.exceptions);
+  AddAll(exceptions, listed.exceptions);
+  cosmetics.hide_selectors.assign(hide.begin(), hide.end());
+  cosmetics.exceptions.assign(exceptions.begin(), exceptions.end());
+  cosmetics.generichide = mine.generichide || listed.generichide;
+  return cosmetics;
+}
+
+std::vector<std::string> AdBlocker::HiddenClassIdSelectors(
+    const std::vector<std::string>& classes,
+    const std::vector<std::string>& ids,
+    const std::vector<std::string>& exceptions) const {
+  const rust::Vec<rust::String> rust_classes = RustStrings(classes);
+  const rust::Vec<rust::String> rust_ids = RustStrings(ids);
+  const rust::Vec<rust::String> rust_exceptions = RustStrings(exceptions);
+  std::set<std::string> selectors;
+  AddAll(selectors, engines_->rules->hidden_class_id_selectors(
+                        rust_classes, rust_ids, rust_exceptions));
+  AddAll(selectors, engines_->lists->hidden_class_id_selectors(
+                        rust_classes, rust_ids, rust_exceptions));
+  return std::vector<std::string>(selectors.begin(), selectors.end());
 }
 
 }  // namespace domicile

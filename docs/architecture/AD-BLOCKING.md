@@ -63,6 +63,9 @@ user's block, then the lists' verdict.
   in its page's mode and counts what it blocks.
 - **`components/domicile/browser/page_privacy.h`**: a page's mode and count,
   which its `<webview>` reports (`SitePrivacyChanged`).
+- **`components/domicile/renderer/cosmetic_filters.h`**: a frame's cosmetic
+  filters, in the renderer (see [What is hidden](#what-is-hidden)). Patch 0292
+  gives every frame one, from `ChromeContentRendererClient::RenderFrameCreated`.
 - **Patch 0287**: `ChromeContentBrowserClient::WillCreateURLLoaderFactory`
   calls `ProxyAdBlocking`, after an Electron app's handlers and before
   extensions' webRequest, so a blocked request reaches no extension.
@@ -102,7 +105,39 @@ fetches and WebSockets, whose page is the frame's tab's main page. Not:
 A blocked request fails with `ERR_BLOCKED_BY_CLIENT`, which a page sees as a
 network error. `--vmodule=domicile_ad_blocking=1` logs each one.
 
-`guard-ad-blocking.sh` checks what a page loads in each mode.
+`guard-ad-blocking.sh` checks what a page loads and hides in each mode.
+
+## What is hidden
+
+The lists also hide ads by their elements: `##.ad-banner` anywhere,
+`example.com##.promo` on one site, `example.com#@#.ad-banner` to keep one on
+a site, and `@@||example.com^$generichide` to keep every generic one off it.
+They hide the same in Standard and Strict; Off hides nothing.
+
+- **Before a page commits**, `CosmeticFiltering` (in
+  `domicile_ad_blocking.cc`) asks the blocker what the page's address hides
+  (`AdBlocker::CosmeticsFor`) and sends it to the frame's renderer
+  (`mojom::CosmeticFilters.Hide`), over an associated interface, so it gets
+  there before the commit does. Each frame of a website's page gets its own,
+  by its own address, in its page's mode.
+- **In the renderer**, `components/domicile/renderer/cosmetic_filters.h`
+  puts it in the new document as a user stylesheet, each selector its own
+  `display: none !important` rule, as the document element is made: it
+  applies from the first style, and the page's own `!important` can't undo
+  it. A selector with `{` or `}` in it is dropped.
+- **Generic class and id rules** are tens of thousands, so they aren't sent.
+  The renderer gathers the document's classes and ids once it has parsed,
+  once it has loaded and every 2 seconds for 30 seconds after, as pages add
+  ads late, and asks the browser (`CosmeticFiltersHost.HiddenSelectors`)
+  about those it hasn't asked about before; what comes back goes in another
+  stylesheet. The host keeps the site's exceptions, and asks the blocker of
+  the moment. A `$generichide` page gets no host.
+
+With EasyList, EasyPrivacy and uBlock Origin's filters, a news site's page
+gets about 450 selectors, found in well under a millisecond.
+
+Not yet: procedural filters (`:has-text()`, `:upward()`) and scriptlets
+(`##+js()`), which need a script in the page's world.
 
 ## Key decisions
 
@@ -111,8 +146,13 @@ network error. `--vmodule=domicile_ad_blocking=1` logs each one.
   allowing an extension in it.
 - **adblock-rust over a filter engine of our own**: Brave's, maintained, and
   it reads uBlock Origin's syntax, so the lists people already use work.
-- **Network rules only, for now.** Cosmetic filters and scriptlets need the
-  renderer; they come with their own guard.
+- **Cosmetic filters pushed before the commit, as a user stylesheet.** Brave
+  asks from the renderer once the document exists, which can show an ad for a
+  frame; a push over an associated interface is there first, and a user
+  stylesheet beats the page's `!important`.
+- **The same hiding in Standard and Strict.** The lists' cosmetic rules
+  rarely break a site the way blocking its own scripts does, so Strict only
+  blocks more.
 - **Standard by default, strict in private**, as the mockup settled: strict's
   breakage is a site's own scripts, which a person in a private window is
   likelier to accept.
@@ -126,6 +166,7 @@ network error. `--vmodule=domicile_ad_blocking=1` logs each one.
       shell (`view.blockAdsAndTrackers`, `setBlockAdsAndTrackers`)
 - [x] manganese's shield in the address bar, with "This window only"
 - [x] Settings lists the sites with their own mode (`site_privacy`)
-- [ ] cosmetic filters, scriptlets, cookie banners and tracking removed from
-      links
+- [x] cosmetic filters: what the lists hide by a page's elements
+- [ ] scriptlets and procedural filters, cookie banners, and tracking
+      removed from links
 - [ ] fingerprinting protection

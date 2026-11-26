@@ -33,6 +33,26 @@ std::string_view AdBlockRequestType(network::mojom::RequestDestination);
 // asked where requests start.
 class AdBlocker {
  public:
+  // What a page at one address hides by its elements (cosmetic filters, as
+  // `##.ad` and `example.com##.promo`), before its classes and ids are known.
+  struct Cosmetics {
+    Cosmetics();
+    Cosmetics(Cosmetics&&);
+    Cosmetics& operator=(Cosmetics&&);
+    ~Cosmetics();
+
+    // CSS selectors to hide, from the lists and the user's rules: the site's
+    // own and the generic ones that aren't a bare class or id. In order,
+    // without repeats.
+    std::vector<std::string> hide_selectors;
+    // Class and id selectors (`.ad`) the site's rules except from the
+    // generic ones, for HiddenClassIdSelectors.
+    std::vector<std::string> exceptions;
+    // A `$generichide` exception matched: no generic rule applies, so the
+    // page's classes and ids need no asking about.
+    bool generichide = false;
+  };
+
   // `lists` are filter lists' texts, each valid UTF-8; `rules` the user's own
   // rules, one per entry.
   static std::unique_ptr<AdBlocker> Build(const std::vector<std::string>& lists,
@@ -56,6 +76,17 @@ class AdBlocker {
                    std::string_view type,
                    std::string_view method,
                    bool block_first_party) const;
+
+  // What the page at `page` hides. See docs/architecture/AD-BLOCKING.md.
+  Cosmetics CosmeticsFor(const GURL& page) const;
+
+  // The generic rules' selectors for a page's `classes` and `ids`, without
+  // their `.` or `#`, but those in `exceptions` (Cosmetics::exceptions). In
+  // order, without repeats.
+  std::vector<std::string> HiddenClassIdSelectors(
+      const std::vector<std::string>& classes,
+      const std::vector<std::string>& ids,
+      const std::vector<std::string>& exceptions) const;
 
  private:
   struct Engines;
