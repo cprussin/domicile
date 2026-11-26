@@ -190,6 +190,19 @@ Ads are blocked with the lists uBlock Origin uses by default: EasyList,
 EasyPrivacy and uBlock Origin's own. They're kept up to date by themselves,
 and kept on your computer, so blocking works before you're online.
 
+### When a site doesn't work
+
+The shield at the end of the address field shows how many ads and trackers
+were blocked on the page. If a site breaks, open it and turn **Protections**
+off. It asks how long:
+
+- **This window only** turns them off until you close the window.
+- **Always on this site** keeps them off for that site in this profile.
+
+Either way the page reloads. Turn the switch back on to block again. The shield
+is outlined while protections are off. You can also pick Strict for one site
+there.
+
 <!-- tab: Settings app -->
 
 Open **Settings**, then **Privacy**. **Website protections** has a choice of

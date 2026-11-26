@@ -21,7 +21,9 @@ const BAR = {
   onForward: () => undefined,
   onForwardInNewWindow: () => undefined,
   onNavigate: () => undefined,
+  onOpenPrivacySettings: () => undefined,
   onReload: () => undefined,
+  onSetAdBlocking: () => undefined,
   onSetSitePermission: () => undefined,
   onShowAllHistory: () => undefined,
   onStop: () => undefined,
@@ -29,6 +31,7 @@ const BAR = {
   onZoomOut: () => undefined,
   onZoomReset: () => undefined,
   permissionRequest: undefined,
+  privacy: undefined,
   security: ConnectionSafety.Secure,
   sitePermissions: [],
   visited: ["https://example.com"],
@@ -293,6 +296,34 @@ describe("AddressBar", () => {
       await userEvent.click(control("Browser profile: Work"));
 
       expect(screen.queryByRole("button", { name: /by default$/ })).toBeNull();
+    });
+  });
+
+  describe("protections", () => {
+    const PRIVACY = {
+      blocked: 23,
+      mode: "standard",
+      setFor: "profile",
+      site: "nytimes.com",
+    } as const;
+
+    it("sit at the end of the address field, with no count", () => {
+      render(<AddressBar {...BAR} privacy={PRIVACY} />);
+
+      const field = screen.getByRole("combobox", { name: "Address" });
+      const shield = control("Protections");
+
+      expect(
+        field.compareDocumentPosition(shield) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(screen.queryByText(/23/)).toBeNull();
+    });
+
+    it("show nothing for a page that is never blocked", () => {
+      render(<AddressBar {...BAR} />);
+
+      expect(screen.queryByRole("button", { name: /^Protections/ })).toBeNull();
     });
   });
 
