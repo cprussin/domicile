@@ -32,6 +32,7 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 
 ### Fixes
 
+- The clipboard history's Remove button has a trash icon, so it reads as a button, as Forget does on saved Wi-Fi networks. [Clipboard](CLIPBOARD.md)
 - A Wi-Fi network's sign-in page, as at a hotel or an airport, now opens even when the network is slow to answer at first.
 - Switching tabs no longer slides the new tab past the edge of its group.
 - Element no longer says it is open in another window after you log out and quickly in again.

@@ -19,6 +19,7 @@ import { ImageIcon } from "@phosphor-icons/react/dist/ssr/Image";
 import { LinkSimpleIcon } from "@phosphor-icons/react/dist/ssr/LinkSimple";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { TextTIcon } from "@phosphor-icons/react/dist/ssr/TextT";
+import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
 import type { KeyboardEvent } from "react";
 import { memo, useId, useRef, useState } from "react";
 
@@ -299,6 +300,7 @@ const Remove = ({
 }) => (
   <Button
     aria-hidden={pointerOnly ? true : undefined}
+    beforeIcon={<TrashIcon aria-hidden size={14} />}
     onClick={(event) => {
       event.stopPropagation();
       onRemove();
