@@ -127,6 +127,22 @@ describe(ListRow, () => {
       ).toBe("0rem");
     });
 
+    it("keeps a footer's action off the edge of a tile with no drawer", () => {
+      render(
+        <List>
+          <ListRow label="Home" surface="filled">
+            <PanelFooter action={<Button>Forget</Button>} />
+          </ListRow>
+        </List>,
+      );
+
+      expect(
+        globalThis.getComputedStyle(
+          screen.getByRole("button", { name: "Forget" }),
+        ).marginInlineEnd,
+      ).toBe("0rem");
+    });
+
     it("is one button when it can be pressed, named for assistive tech", async () => {
       const pressed = new Promise((resolve) => {
         render(

@@ -389,25 +389,27 @@ const endStyles = flex({
   textStyle: "panelDetail",
 });
 
-// Lined up under the label, past the icon and its gap.
+// Lined up under the label, past the icon and its gap. A `PanelFooter`'s
+// action stays inside the padding rather than hanging past it, as it does at a
+// panel's edge, so it keeps a gap from the tile's edge.
 const belowStyles = cva({
-  base: flex.raw({
-    direction: "column",
-    gap: 1.5,
-    paddingBlockEnd: 2,
-    paddingInline: 2,
-  }),
+  base: {
+    ...flex.raw({
+      direction: "column",
+      gap: 1.5,
+      paddingBlockEnd: 2,
+      paddingInline: 2,
+    }),
+    "& > footer > button:last-child": { marginInlineEnd: 0 },
+  },
   variants: {
     // Room above and below the folded details, as tight as the rows they
     // fold under. A `PanelFooter` in it closes up to its rule to match, so
-    // its rule and button sit evenly spaced. Its action stays inside the
-    // drawer's padding rather than hanging past it, so it keeps a gap from
-    // the tile's edge.
+    // its rule and button sit evenly spaced.
     drawer: {
       false: {},
       true: {
         "& > footer": { paddingBlockStart: 1.5 },
-        "& > footer > button:last-child": { marginInlineEnd: 0 },
         gap: 1.5,
         paddingBlockEnd: 1.5,
         paddingBlockStart: 1.5,
