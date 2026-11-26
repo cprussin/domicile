@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import type { BrowserConfig } from "./browser-profiles";
 import {
+  adBlockingOf,
   asWritten,
   isProfileSite,
   PROTECTIONS_ON,
@@ -14,6 +15,8 @@ import {
 } from "./browser-profiles";
 
 const BROWSER: BrowserConfig = {
+  block_lists: [],
+  block_rules: [],
   default_private_profile: "private",
   default_profile: "personal",
   order: [],
@@ -151,6 +154,65 @@ describe("asWritten", () => {
       name: "Work",
       private: false,
       protections: { global_privacy_control: false },
+    });
+  });
+});
+
+/** {@link BROWSER}'s profile `id`. */
+const profileIn = (id: string) => {
+  const profile = BROWSER.profiles[id];
+  if (profile === undefined) {
+    throw new Error(`BROWSER has no profile ${id}`);
+  }
+  return profile;
+};
+
+describe("adBlockingOf", () => {
+  it("is standard for a profile that doesn't say, and strict for a private one", () => {
+    expect(adBlockingOf(profileIn("personal"))).toBe("standard");
+    expect(adBlockingOf(profileIn("private"))).toBe("strict");
+  });
+
+  it("is what the profile says", () => {
+    expect(
+      adBlockingOf({
+        ...profileIn("private"),
+        protections: { ...PROTECTIONS_ON, block_ads_and_trackers: "off" },
+      }),
+    ).toBe("off");
+  });
+});
+
+describe("asWritten's ad blocking", () => {
+  const blocking = (
+    profile: "personal" | "private",
+    mode: "standard" | "strict" | "off",
+  ) =>
+    asWritten({
+      ...BROWSER,
+      profiles: {
+        ...BROWSER.profiles,
+        [profile]: {
+          ...profileIn(profile),
+          protections: { ...PROTECTIONS_ON, block_ads_and_trackers: mode },
+        },
+      },
+    }).profiles[profile];
+
+  it("leaves out a profile's default", () => {
+    expect(blocking("personal", "standard")).not.toHaveProperty("protections");
+    expect(blocking("private", "strict")).not.toHaveProperty("protections");
+  });
+
+  it("keeps any other", () => {
+    expect(blocking("personal", "strict")).toHaveProperty("protections", {
+      block_ads_and_trackers: "strict",
+    });
+    expect(blocking("private", "standard")).toHaveProperty("protections", {
+      block_ads_and_trackers: "standard",
+    });
+    expect(blocking("personal", "off")).toHaveProperty("protections", {
+      block_ads_and_trackers: "off",
     });
   });
 });

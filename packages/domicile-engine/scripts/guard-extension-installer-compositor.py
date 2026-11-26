@@ -22,13 +22,18 @@ import socket
 import sys
 
 # What `domicile-config` gives a profile whose config names no protections:
-# every one on. The real compositor always sends them, so a guard's profile
-# that leaves them out gets these, as a desk's would.
+# every one on, and ads blocked on standard, or strict in a private profile.
+# The real compositor always sends them, so a guard's profile that leaves them
+# out gets these, as a desk's would.
 PROTECTIONS = {
     "block_third_party_cookies": True,
     "global_privacy_control": True,
     "hide_local_ip_address": True,
 }
+
+# Unlike a desk's, no filter lists unless the guard names some, so a guard
+# that is not about blocking fetches none.
+BLOCKING = {"block_lists": [], "block_rules": []}
 
 
 def send(connection, message):
@@ -121,8 +126,17 @@ def main():
         if arguments.browser_profiles is None
         else json.loads(arguments.browser_profiles)
     )
+    if profiles is not None:
+        profiles = dict(BLOCKING, **profiles)
     for profile in [] if profiles is None else profiles["profiles"]:
-        profile["protections"] = dict(PROTECTIONS, **profile.get("protections", {}))
+        ads = "strict" if profile.get("private") else "standard"
+        # A literal, not `dict(..., **given)`: a guard that names
+        # `block_ads_and_trackers` itself would pass it twice.
+        profile["protections"] = {
+            **PROTECTIONS,
+            "block_ads_and_trackers": ads,
+            **profile.get("protections", {}),
+        }
     try:
         serve(
             arguments.socket,

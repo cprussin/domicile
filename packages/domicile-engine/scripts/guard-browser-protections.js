@@ -1,6 +1,7 @@
-// The shell for guard-browser-protections.sh. It opens a browser window in
-// each profile the guard names, at `?page=` with `?as=` the profile, and draws
-// each in its own <webview window>, side by side.
+// The shell for guard-browser-protections.sh and guard-ad-blocking.sh. It
+// opens a browser window in each profile the guard names, at `?page=` with
+// `?as=` the profile, and draws each in its own <webview window>, side by
+// side.
 //
 // - `?page=` is the page's address, without its query.
 // - `?profiles=` is the profiles, comma-separated.
@@ -9,8 +10,8 @@
 //
 //   GUARD shell-loaded     this module ran
 //
-// The page and its frame log what they found themselves; see
-// guard-browser-protections-server.py.
+// The pages log what they found themselves; see
+// guard-browser-protections-server.py and guard-ad-blocking-server.py.
 //
 // Everything is inside `HostShell`, which Domicile's document calls once the
 // module loads.

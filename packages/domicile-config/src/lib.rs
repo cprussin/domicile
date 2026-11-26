@@ -893,7 +893,23 @@ pub struct BrowserConfig {
     /// addresses under it. The most specific match wins. A site is never in
     /// `default_profile`, which opens every unlisted site.
     pub sites: BTreeMap<String, String>,
+    /// The filter lists ads and trackers are blocked with, in Adblock Plus
+    /// and uBlock Origin syntax: each an `https:` address, which the engine
+    /// fetches and keeps up to date, or an absolute path. EasyList,
+    /// EasyPrivacy and uBlock Origin's filters unless set; `[]` blocks with
+    /// `block_rules` only.
+    pub block_lists: Vec<String>,
+    /// Rules of your own, in the same syntax, which apply on top of
+    /// `block_lists`.
+    pub block_rules: Vec<String>,
 }
+
+/// The lists [`BrowserConfig::block_lists`] names unless set.
+pub const DEFAULT_BLOCK_LISTS: [&str; 3] = [
+    "https://easylist.to/easylist/easylist.txt",
+    "https://easylist.to/easylist/easyprivacy.txt",
+    "https://ublockorigin.github.io/uAssets/filters/filters.txt",
+];
 
 impl Default for BrowserConfig {
     fn default() -> Self {
@@ -919,6 +935,8 @@ impl Default for BrowserConfig {
             default_profile: "default".to_string(),
             default_private_profile: "private".to_string(),
             sites: BTreeMap::new(),
+            block_lists: DEFAULT_BLOCK_LISTS.map(String::from).to_vec(),
+            block_rules: Vec::new(),
         }
     }
 }
@@ -960,6 +978,37 @@ pub struct Protections {
     /// Keeps WebRTC, as video calls use, from telling sites your local
     /// network address.
     pub hide_local_ip_address: bool,
+    /// How the profile's pages block ads and trackers, with
+    /// [`BrowserConfig::block_lists`]. Unset: `standard`, or `strict` in a
+    /// private profile.
+    pub block_ads_and_trackers: Option<AdBlocking>,
+}
+
+/// How a profile's pages block ads and trackers. See
+/// [`Protections::block_ads_and_trackers`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum AdBlocking {
+    /// Blocks what the lists name from other sites, and lets a site's own
+    /// ads through unless a rule is `$important`, as Brave's Standard does.
+    Standard,
+    /// Blocks a site's own ads too. Some pages may break.
+    Strict,
+    /// Blocks nothing.
+    Off,
+}
+
+impl BrowserProfile {
+    /// How its pages block ads and trackers, defaults applied.
+    pub fn ad_blocking(&self) -> AdBlocking {
+        self.protections
+            .block_ads_and_trackers
+            .unwrap_or(if self.private {
+                AdBlocking::Strict
+            } else {
+                AdBlocking::Standard
+            })
+    }
 }
 
 impl Default for Protections {
@@ -968,8 +1017,17 @@ impl Default for Protections {
             block_third_party_cookies: true,
             global_privacy_control: true,
             hide_local_ip_address: true,
+            block_ads_and_trackers: None,
         }
     }
+}
+
+/// Whether `list` can name a filter list: an `https:` address, or an
+/// absolute path.
+fn is_block_list(list: &str) -> bool {
+    list.strip_prefix("https://")
+        .is_some_and(|rest| !rest.is_empty())
+        || std::path::Path::new(list).is_absolute()
 }
 
 /// Whether `id` can name a profile's directory.
@@ -1034,6 +1092,11 @@ impl BrowserConfig {
             return invalid(format!(
                 "browser.profiles' extension {id:?} is not an extension id, which is 32 \
                  letters from `a` to `p`"
+            ));
+        }
+        if let Some(list) = self.block_lists.iter().find(|list| !is_block_list(list)) {
+            return invalid(format!(
+                "browser.block_lists {list:?} is not an `https:` address or an absolute path"
             ));
         }
         match profile(&self.default_profile) {

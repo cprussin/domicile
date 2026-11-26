@@ -1749,6 +1749,7 @@ source_set("unit_tests") {
   }
 
   deps = [
+    "//components/domicile/ad_blocking:unit_tests",
     ":app_channel",
     ":app_roots",
     ":browser",

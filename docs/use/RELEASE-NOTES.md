@@ -7,6 +7,12 @@ building shells is in [Domicile's release notes](../RELEASE-NOTES.md).
 
 _Unreleased_
 
+### Ads and trackers blocked
+
+Browser windows now block ads and the trackers that follow you from site to site, with the same lists uBlock Origin uses, built into the browser, so pages load faster and nothing has to be installed. Standard blocks what other sites put on a page; Strict also blocks a site's own, and private windows use it. Each profile also blocks cookies from other sites, asks sites not to sell or share your data, and hides your local network address from video calls. All of it is on by default: choose how much each profile blocks in Settings, under Privacy.
+
+[Privacy](BROWSER.md#privacy)
+
 ### Window effects and smoother motion
 
 ![A workspace switch, the overview, a theme change and a window closing, with manganese's window effects](../media/release-window-effects.png)
@@ -14,12 +20,6 @@ _Unreleased_
 Workspace switches blur as they slide, the overview blurs your wallpaper, and windows, panels and toasts move on springs that turn back midway when you change your mind. Turn the effects off with Window effects in Settings.
 
 [Window effects](APPEARANCE.md#window-effects)
-
-### Privacy protections
-
-Browser windows keep more from the sites you visit. Each profile blocks cookies from other sites, asks sites not to sell or share your data, and hides your local network address from video calls, all on by default. Turn any of them off for a profile in Settings, under Privacy.
-
-[Privacy](BROWSER.md#privacy)
 
 ### Agents work beside you
 

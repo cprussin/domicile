@@ -742,25 +742,30 @@ TEST_F(ControlChannelTest, TheBrowserProfilesReachTheBrowserWithThePage) {
 
   Say("{\"type\":\"browser_profiles\",\"profiles\":[{\"id\":\"default\","
       "\"name\":\"Personal\",\"color\":\"#0d9488\",\"private\":false,"
-      "\"protections\":{\"block_third_party_cookies\":true,"
+      "\"protections\":{\"block_ads_and_trackers\":\"standard\","
+      "\"block_third_party_cookies\":true,"
       "\"global_privacy_control\":true,\"hide_local_ip_address\":true}}],"
       "\"default_profile\":\"work\",\"default_private_profile\":\"work\","
-      "\"sites\":{}}\n"
+      "\"block_lists\":[],\"block_rules\":[],\"sites\":{}}\n"
       "{\"type\":\"browser_profiles\",\"profiles\":[{\"id\":\"default\","
       "\"name\":\"Personal\",\"color\":\"#0d9488\",\"private\":false,"
-      "\"protections\":{\"block_third_party_cookies\":true,"
+      "\"protections\":{\"block_ads_and_trackers\":\"standard\","
+      "\"block_third_party_cookies\":true,"
       "\"global_privacy_control\":true,\"hide_local_ip_address\":true}},"
       "{\"id\":\"private\",\"name\":\"Private\",\"color\":\"#a78bfa\","
       "\"private\":true,"
-      "\"protections\":{\"block_third_party_cookies\":true,"
+      "\"protections\":{\"block_ads_and_trackers\":\"standard\","
+      "\"block_third_party_cookies\":true,"
       "\"global_privacy_control\":true,\"hide_local_ip_address\":true}},"
       "{\"id\":\"work\",\"name\":\"Work\","
       "\"color\":\"#2563eb\",\"private\":false,"
       "\"extensions\":[\"aeblfdkhhhdcdjpifhhbdiojplfjncoa\"],"
-      "\"protections\":{\"block_third_party_cookies\":true,"
+      "\"protections\":{\"block_ads_and_trackers\":\"standard\","
+      "\"block_third_party_cookies\":true,"
       "\"global_privacy_control\":true,\"hide_local_ip_address\":true}}],"
       "\"default_profile\":\"default\",\"default_private_profile\":"
-      "\"private\",\"sites\":{\"github.com/acme\":\"work\"}}\n");
+      "\"private\",\"block_lists\":[],\"block_rules\":[],"
+      "\"sites\":{\"github.com/acme\":\"work\"}}\n");
 
   const auto [page, profiles] = heard.Take();
   EXPECT_EQ(page, Page{});

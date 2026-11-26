@@ -79,3 +79,36 @@ fn the_chrome_gets_the_profiles_in_the_configs_order() {
         })
         .expect("the profiles come in the config's order, then the rest by id");
 }
+
+#[test]
+fn the_chrome_gets_each_profiles_ad_blocking_and_the_block_lists() {
+    use domicile_protocol::AdBlocking;
+    let compositor = Compositor::started_with(&A_WORK_PROFILE.replace(
+        r#""sites": {"#,
+        r#""block_rules": ["||ads.example^"], "sites": {"#,
+    ));
+    let mut chrome = compositor.chrome();
+
+    chrome
+        .wait_for(|message| match message {
+            HostMessage::BrowserProfiles {
+                profiles,
+                block_lists,
+                block_rules,
+                ..
+            } => {
+                let mode = |id: &str| {
+                    profiles
+                        .iter()
+                        .find(|profile| profile.id == id)
+                        .map(|profile| profile.protections.block_ads_and_trackers)
+                };
+                mode("default") == Some(AdBlocking::Standard)
+                    && mode("private") == Some(AdBlocking::Strict)
+                    && block_lists.len() == domicile_config::DEFAULT_BLOCK_LISTS.len()
+                    && block_rules == &["||ads.example^"]
+            }
+            _ => false,
+        })
+        .expect("a private profile blocks on strict, and the lists ride along");
+}

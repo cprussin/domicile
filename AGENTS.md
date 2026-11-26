@@ -198,6 +198,7 @@ not rules, and carry no authority level. Read the one for the area you work in.
 | [/docs/architecture/APP-MODULES.md](/docs/architecture/APP-MODULES.md) | Apps as modules: `domicile open --app <entry.js>` calls `main(root, host)` on `domicile://app-<id>/`; History and Settings as app modules instead of extensions. |
 | [/docs/architecture/ELECTRON-APPS.md](/docs/architecture/ELECTRON-APPS.md) | Electron apps on the engine: `electron-host` runs the main process with a stand-in `electron` module, windows are app windows, preload and IPC over the Electron socket. The plan. |
 | [/docs/architecture/BROWSER-PROFILES.md](/docs/architecture/BROWSER-PROFILES.md) | Browser profiles: a Chrome profile per profile, sites mapped to profiles, moving a page between them. The plan. |
+| [/docs/architecture/AD-BLOCKING.md](/docs/architecture/AD-BLOCKING.md) | The engine's ad and tracker blocking: adblock-rust in front of every website request, the config's lists kept up to date, standard, strict and off per profile, and the plan for the address-bar shield and cosmetic filters. |
 | [/docs/architecture/MOTION.md](/docs/architecture/MOTION.md) | Shader effects for shells (SkSL as a `filter` function run in viz) and the motion pass over manganese: springs, interruptible motion, per-surface changes. The plan. |
 | [/docs/architecture/AGENT-SEATS.md](/docs/architecture/AGENT-SEATS.md) | A seat per agent: its own pointer, focus and clipboard, multiplexed onto each client's one `wl_seat`; the person wins a window both want. The plan. |
 

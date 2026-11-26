@@ -13,12 +13,30 @@ export type BrowserConfig = Settings["browser"];
 /** One profile in the config. */
 export type ConfigProfile = BrowserConfig["profiles"][string];
 
-/** A new profile's protections: every one on, as `domicile-config` has it. */
+/** How a profile blocks ads and trackers. */
+export type AdBlocking = NonNullable<
+  ConfigProfile["protections"]["block_ads_and_trackers"]
+>;
+
+/**
+ * A new profile's protections: every one on, as `domicile-config` has it, and
+ * ads blocked as the profile's default (see {@link adBlockingOf}).
+ */
 export const PROTECTIONS_ON: ConfigProfile["protections"] = {
+  block_ads_and_trackers: undefined,
   block_third_party_cookies: true,
   global_privacy_control: true,
   hide_local_ip_address: true,
 };
+
+/**
+ * How `profile` blocks ads and trackers, as `domicile-config`'s
+ * `BrowserProfile::ad_blocking` has it: what it says, or strict for a private
+ * profile and standard for any other.
+ */
+export const adBlockingOf = (profile: ConfigProfile): AdBlocking =>
+  profile.protections.block_ads_and_trackers ??
+  (profile.private ? "strict" : "standard");
 
 /** The colors a new profile and the color row pick from. */
 export const PROFILE_COLORS = [
@@ -207,19 +225,28 @@ export const withProfileMoved = (
 
 /**
  * `browser` as the config file should have it: each profile's protections
- * only where one is off, so a file never spells out a default. Every one is
- * on unless the config says otherwise.
+ * only where one is not its default, so a file never spells out a default.
+ * Every switch is on, and ads are blocked as {@link adBlockingOf} has it,
+ * unless the config says otherwise.
  */
 export const asWritten = (browser: BrowserConfig) => ({
   ...browser,
   profiles: Object.fromEntries(
-    Object.entries(browser.profiles).map(([id, { protections, ...rest }]) => {
-      const off = Object.fromEntries(
-        Object.entries(protections).filter(([, on]) => !on),
-      );
+    Object.entries(browser.profiles).map(([id, profile]) => {
+      const { protections, ...rest } = profile;
+      const { block_ads_and_trackers: _ads, ...switches } = protections;
+      const ads = adBlockingOf(profile);
+      const changed: Partial<ConfigProfile["protections"]> = {
+        ...(ads === adBlockingOf({ ...profile, protections: PROTECTIONS_ON })
+          ? {}
+          : { block_ads_and_trackers: ads }),
+        ...Object.fromEntries(Object.entries(switches).filter(([, on]) => !on)),
+      };
       return [
         id,
-        Object.keys(off).length === 0 ? rest : { ...rest, protections: off },
+        Object.keys(changed).length === 0
+          ? rest
+          : { ...rest, protections: changed },
       ];
     }),
   ),

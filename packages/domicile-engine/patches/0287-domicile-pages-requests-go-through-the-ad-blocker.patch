@@ -1,0 +1,82 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Connor Prussin <connor@prussin.net>
+Date: Thu, 26 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: pages' requests go through the ad blocker
+
+ChromeContentBrowserClient::WillCreateURLLoaderFactory puts
+domicile::ProxyAdBlocking in front of a frame's network loads, after an
+Electron app's handlers and before extensions' webRequest, so a request
+the blocker refuses fails with ERR_BLOCKED_BY_CLIENT and reaches no
+extension, as in Brave. See chrome/browser/domicile/domicile_ad_blocking.h.
+
+adblock-rust derives serde's traits for its bitflags types, so bitflags
+is built with its serde feature, as adblock-rust's Cargo.toml asks, and
+regex, which it matches regex rules with, is no longer test-only. The
+crate and those it needs that the pin does not vendor come from
+packages/domicile-engine/crates/CRATES, with BUILD.gn files the series
+lays down under third_party/rust; guard-ad-blocking.sh checks what a page
+loads.
+---
+ chrome/browser/chrome_content_browser_client.cc | 4 ++++
+ third_party/rust/bitflags/v2/BUILD.gn           | 6 ++++++
+ third_party/rust/regex/v1/BUILD.gn              | 5 ++++-
+ 3 files changed, 14 insertions(+), 1 deletion(-)
+
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index 2935537..b73b58a 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "chrome/browser/chrome_content_browser_client.h"
+ 
++#include "chrome/browser/domicile/domicile_ad_blocking.h"
+ #include "chrome/browser/domicile/domicile_electron_certificates.h"
+ #include "chrome/browser/domicile/domicile_electron_loader.h"
+ #include "chrome/browser/domicile/domicile_electron_page.h"
+@@ -7148,6 +7149,9 @@ void ChromeContentBrowserClient::WillCreateURLLoaderFactory(
+   // for http or https answers its page's request before anything else sees
+   // it, as in Electron.
+   domicile::ProxyElectronNetworkLoads(frame, factory_builder);
++  // Then ad blocking, so a request it blocks reaches no extension's
++  // webRequest, as in Brave. Not an Electron app's pages.
++  domicile::ProxyAdBlocking(frame, factory_builder);
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+   auto* web_request_api =
+diff --git a/third_party/rust/bitflags/v2/BUILD.gn b/third_party/rust/bitflags/v2/BUILD.gn
+index e4a65c8..229acb2 100644
+--- a/third_party/rust/bitflags/v2/BUILD.gn
++++ b/third_party/rust/bitflags/v2/BUILD.gn
+@@ -74,6 +74,12 @@ cargo_crate("lib") {
+ 
+   allow_unsafe = false
+ 
++  # Domicile's engine fork: adblock-rust derives serde's traits for its flags,
++  # which its Cargo.toml asks bitflags' `serde` feature for. See
++  # packages/domicile-engine/crates/CRATES.
++  deps = [ "//third_party/rust/serde_core/v1:lib" ]
++  features = [ "serde" ]
++
+   #####################################################################
+   # Tweaking which GN `config`s apply to this target.
+ 
+diff --git a/third_party/rust/regex/v1/BUILD.gn b/third_party/rust/regex/v1/BUILD.gn
+index c96c5a5..3b00f94 100644
+--- a/third_party/rust/regex/v1/BUILD.gn
++++ b/third_party/rust/regex/v1/BUILD.gn
+@@ -71,7 +71,10 @@ cargo_crate("lib") {
+   # //third_party/rust/chromium_crates_io/Cargo.toml to use
+   # it from first-party code.
+   visibility = [ "//third_party/rust/*" ]
+-  testonly = true
++
++  # Domicile's engine fork: adblock-rust, which the engine ships, matches its
++  # lists' regex rules with it, so it is not only for tests. See
++  # packages/domicile-engine/crates/CRATES.
+ 
+   #####################################################################
+   # Tweaking which GN `config`s apply to this target.
+-- 
+2.43.0
+

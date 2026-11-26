@@ -54,6 +54,12 @@ export type AccelProfile = "adaptive" | "flat";
 export type AccentColor = string;
 
 /**
+ * How a profile's pages block ads and trackers. See
+ * [`Protections::block_ads_and_trackers`].
+ */
+export type AdBlocking = "standard" | "strict" | "off";
+
+/**
  * Agents that drive the desktop, such as Claude Code. See
  * `docs/AGENTS.md`.
  */
@@ -74,6 +80,19 @@ export type AgentsConfig = {
  * sites each opens. See `docs/architecture/BROWSER-PROFILES.md`.
  */
 export type BrowserConfig = {
+  /**
+   * The filter lists ads and trackers are blocked with, in Adblock Plus
+   * and uBlock Origin syntax: each an `https:` address, which the engine
+   * fetches and keeps up to date, or an absolute path. EasyList,
+   * EasyPrivacy and uBlock Origin's filters unless set; `[]` blocks with
+   * `block_rules` only.
+   */
+  block_lists?: string[];
+  /**
+   * Rules of your own, in the same syntax, which apply on top of
+   * `block_lists`.
+   */
+  block_rules?: string[];
   /** The profile a new private window opens in. Private. */
   default_private_profile?: string;
   /** The profile a site opens in when `sites` names none. Not private. */
@@ -545,6 +564,12 @@ export type Profile = {
  * [`BrowserProfile::protections`].
  */
 export type Protections = {
+  /**
+   * How the profile's pages block ads and trackers, with
+   * [`BrowserConfig::block_lists`]. Unset: `standard`, or `strict` in a
+   * private profile.
+   */
+  block_ads_and_trackers?: AdBlocking | null;
   /**
    * Blocks cookies a page's embedded sites set or read, which track you
    * from site to site.

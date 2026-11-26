@@ -26,6 +26,8 @@ action("domicile_dictionaries") {
 
 source_set("domicile") {
   sources = [
+    "domicile_ad_blocking.cc",
+    "domicile_ad_blocking.h",
     "domicile_agent_devtools.cc",
     "domicile_agent_devtools.h",
     "domicile_agent_input.cc",
@@ -150,6 +152,8 @@ source_set("domicile") {
     "//third_party/webrtc_overrides:webrtc_component",
     "//chrome/browser/ui/browser_window",
     "//chrome/browser/web_applications",
+    # Ad and tracker blocking, with Brave's filter engine.
+    "//components/domicile/ad_blocking",
     "//components/domicile:app_roots",
     # Finds a browser window's page for a capture of it alone.
     "//components/domicile:browser_window_capture_target",
@@ -206,6 +210,7 @@ source_set("domicile") {
     "//content/public/browser",
     # Electron sessions' clearData removes their downloads.
     "//components/download/public/common:public",
+    "//crypto",
     "//net",
     # The certificates an Electron app is asked about, and their chains.
     "//third_party/boringssl",

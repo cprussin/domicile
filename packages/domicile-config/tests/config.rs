@@ -8,8 +8,9 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use domicile_config::{
-    AccentColor, Config, ConfigError, ConfigStore, Contrast, DisplayConfig, ExtensionSettings,
-    KeyRepeat, LockdownConfig, Protections, SiteAccess, SiteAccessMode, ThemeMode, Written,
+    AccentColor, AdBlocking, BrowserConfig, Config, ConfigError, ConfigStore, Contrast,
+    DisplayConfig, ExtensionSettings, KeyRepeat, LockdownConfig, Protections, SiteAccess,
+    SiteAccessMode, ThemeMode, Written,
 };
 
 // ---- parsing & defaults ---------------------------------------------------
@@ -901,6 +902,88 @@ fn a_protection_the_desk_does_not_know_is_refused() {
     )
     .unwrap_err();
     assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
+}
+
+#[test]
+fn a_profile_blocks_ads_on_standard_and_a_private_one_on_strict() {
+    let browser = Config::parse(&browser_config("")).unwrap().browser;
+    assert_eq!(
+        browser.profiles["personal"].ad_blocking(),
+        AdBlocking::Standard
+    );
+    assert_eq!(
+        browser.profiles["incognito"].ad_blocking(),
+        AdBlocking::Strict
+    );
+    let defaults = BrowserConfig::default();
+    assert_eq!(
+        defaults.profiles["default"].ad_blocking(),
+        AdBlocking::Standard
+    );
+    assert_eq!(
+        defaults.profiles["private"].ad_blocking(),
+        AdBlocking::Strict
+    );
+}
+
+#[test]
+fn a_profile_sets_how_it_blocks_ads() {
+    let browser = Config::parse(
+        r##"{ "browser": { "profiles": {
+            "default": { "name": "Default", "color": "#0d9488",
+                         "protections": { "block_ads_and_trackers": "strict" } },
+            "private": { "name": "Private", "color": "#a78bfa", "private": true,
+                         "protections": { "block_ads_and_trackers": "off" } }
+        } } }"##,
+    )
+    .unwrap()
+    .browser;
+    assert_eq!(
+        browser.profiles["default"].ad_blocking(),
+        AdBlocking::Strict
+    );
+    assert_eq!(browser.profiles["private"].ad_blocking(), AdBlocking::Off);
+}
+
+#[test]
+fn ads_are_blocked_with_easylist_easyprivacy_and_ublock_origins_filters() {
+    let browser = Config::parse(&browser_config("")).unwrap().browser;
+    assert_eq!(
+        browser.block_lists,
+        [
+            "https://easylist.to/easylist/easylist.txt",
+            "https://easylist.to/easylist/easyprivacy.txt",
+            "https://ublockorigin.github.io/uAssets/filters/filters.txt",
+        ]
+    );
+    assert!(browser.block_rules.is_empty());
+}
+
+#[test]
+fn the_config_names_its_own_block_lists_and_rules() {
+    let browser = Config::parse(&browser_config(
+        r#", "block_lists": ["https://example.com/list.txt", "/etc/domicile/mine.txt"],
+            "block_rules": ["||ads.example^"]"#,
+    ))
+    .unwrap()
+    .browser;
+    assert_eq!(
+        browser.block_lists,
+        ["https://example.com/list.txt", "/etc/domicile/mine.txt"]
+    );
+    assert_eq!(browser.block_rules, ["||ads.example^"]);
+}
+
+#[test]
+fn a_block_list_is_an_https_address_or_an_absolute_path() {
+    for list in ["http://example.com/list.txt", "lists/mine.txt", ""] {
+        let err =
+            Config::parse(&browser_config(&format!(r#", "block_lists": [{list:?}]"#))).unwrap_err();
+        assert!(
+            matches!(err, ConfigError::Validation(_)),
+            "{list:?}: got {err:?}"
+        );
+    }
 }
 
 // ---- electron -------------------------------------------------------------

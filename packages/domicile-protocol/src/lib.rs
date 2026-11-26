@@ -112,6 +112,22 @@ pub struct BrowserProtections {
     pub global_privacy_control: bool,
     /// Keeps WebRTC from telling sites the local network address.
     pub hide_local_ip_address: bool,
+    /// How its pages block ads and trackers.
+    pub block_ads_and_trackers: AdBlocking,
+}
+
+/// How a profile's pages block ads and trackers, in
+/// [`BrowserProtections`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AdBlocking {
+    /// Blocks other sites' ads and trackers; a site's own only for an
+    /// `$important` rule.
+    Standard,
+    /// Blocks a site's own ads and trackers too.
+    Strict,
+    /// Blocks nothing.
+    Off,
 }
 
 /// One extension's chrome://extensions settings, in
@@ -1212,6 +1228,11 @@ pub enum HostMessage {
         default_private_profile: String,
         /// Profile ids by site: a host, `*.host`, or a host and path.
         sites: BTreeMap<String, String>,
+        /// The filter lists ads and trackers are blocked with: `https:`
+        /// addresses and absolute paths.
+        block_lists: Vec<String>,
+        /// Filter rules of the user's own, on top of `block_lists`.
+        block_rules: Vec<String>,
     },
 
     /// The config's `spellcheck`: whether the browser checks spelling in
