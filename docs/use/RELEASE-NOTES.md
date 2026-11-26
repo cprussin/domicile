@@ -31,6 +31,7 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 
 ### Fixes
 
+- A Wi-Fi network's sign-in page, as at a hotel or an airport, now opens even when the network is slow to answer at first.
 - Switching tabs no longer slides the new tab past the edge of its group.
 - Element no longer says it is open in another window after you log out and quickly in again.
 - Tabs and windows you can't see turn with the theme, so they no longer flash the old theme the first time you show them.

@@ -108,6 +108,8 @@ import { checkPortal } from "@domicile-desktop/system-network/portal";
 - `checkPortal` asks `curl` for `http://www.gstatic.com/generate_204`
   without following redirects, as Chrome does. `204` is `None`. Any other
   answer is `Some` of the sign-in page: the redirect's target, else the probe.
+- Each try gets 15 seconds, so a name lookup can wait out two dead
+  nameservers, such as a VPN's while the portal holds its tunnel down.
 - It retries a probe with no answer three times, since an address can arrive
   after the link. An `Err` is a probe that never got an answer.
 - `curl` must be on the compositor's `PATH`.

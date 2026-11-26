@@ -10,6 +10,9 @@ import { LinkKind } from "@domicile-desktop/system-network/network";
 /** How long to wait between checks while the sign-in page shows. */
 const RECHECK_MS = 3000;
 
+/** The longest wait after checks that got no answer, which double from {@link RECHECK_MS}. */
+const MOST_PATIENCE_MS = 60_000;
+
 type Options = {
   network: SharedWatch<Result<Network, SystemError>>;
   /** Where to sign in, or `None` for a network with no portal. */
@@ -18,8 +21,8 @@ type Options = {
   show: (url: string | undefined) => void;
   /** Hears a check that got no answer. */
   report: (error: SystemError) => void;
-  /** Calls `then` after a while; returns what cancels it. */
-  wait?: (then: () => void) => () => void;
+  /** Calls `then` after `ms`; returns what cancels it. */
+  wait?: (ms: number, then: () => void) => () => void;
 };
 
 /** What {@link followPortals} returns. */
@@ -35,7 +38,9 @@ export type PortalWatch = {
  *
  * A network is checked once on joining, so a signal change does not check it
  * again. While the page shows, the check repeats, and the page hides once the
- * portal lets the desk through or the desk leaves the network.
+ * portal lets the desk through or the desk leaves the network. A check that
+ * gets no answer, such as one whose name lookup outlasts it, repeats too,
+ * waiting longer each time, until one gets an answer.
  */
 export const followPortals = ({
   check,
@@ -58,18 +63,19 @@ export const followPortals = ({
     state.cancel = undefined;
   };
 
-  const run = (round: number) => {
+  const run = (round: number, unanswered: number) => {
     check()
       .then((checked) => {
         if (round === state.round) {
           checked.match({
             Err: (error) => {
               report(error);
-              if (state.shown) {
-                state.cancel = wait(() => {
-                  run(round);
-                });
-              }
+              state.cancel = wait(
+                Math.min(RECHECK_MS * 2 ** unanswered, MOST_PATIENCE_MS),
+                () => {
+                  run(round, unanswered + 1);
+                },
+              );
             },
             Ok: (portal) => {
               portal.match({
@@ -84,8 +90,8 @@ export const followPortals = ({
                     state.shown = true;
                     show(url);
                   }
-                  state.cancel = wait(() => {
-                    run(round);
+                  state.cancel = wait(RECHECK_MS, () => {
+                    run(round, 0);
                   });
                 },
               });
@@ -113,7 +119,7 @@ export const followPortals = ({
             show(undefined);
           }
           if (name !== undefined) {
-            run(state.round);
+            run(state.round, 0);
           }
         }
       },
@@ -143,8 +149,8 @@ type FollowState = {
   shown: boolean;
 };
 
-const waitToRecheck = (then: () => void): (() => void) => {
-  const timer = setTimeout(then, RECHECK_MS);
+const waitToRecheck = (ms: number, then: () => void): (() => void) => {
+  const timer = setTimeout(then, ms);
   return () => {
     clearTimeout(timer);
   };

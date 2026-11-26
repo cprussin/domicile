@@ -12,8 +12,12 @@ import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 /** Chrome's portal probe: `204 No Content` on the open internet. Plain http, so a portal can intercept it. */
 export const PORTAL_PROBE = "http://www.gstatic.com/generate_204";
 
-/** Seconds each try may take, and how many more tries follow a failed one. */
-const PATIENCE = "5";
+/**
+ * Seconds each try may take, and how many more tries follow a failed one.
+ * A try outlasts a name lookup that waits out two dead nameservers, 5 seconds
+ * each, such as a VPN's while the portal holds its tunnel down.
+ */
+const PATIENCE = "15";
 const RETRIES = "3";
 
 /**

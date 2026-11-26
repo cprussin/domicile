@@ -25,6 +25,14 @@ describe("checkPortal", () => {
     expect(system.argv.at(-1)).toBe(PORTAL_PROBE);
   });
 
+  it("outlasts a name lookup that waits out two dead nameservers", async () => {
+    // glibc gives each nameserver 5 seconds before asking the next.
+    const system = curl(0, "204 ");
+    await checkPortal({ processes: system });
+    const patience = system.argv[system.argv.indexOf("--max-time") + 1];
+    expect(Number(patience)).toBeGreaterThan(10);
+  });
+
   it("finds no portal when the probe answers 204", async () => {
     expect(await checkPortal({ processes: curl(0, "204 ") })).toStrictEqual(
       Ok(None()),

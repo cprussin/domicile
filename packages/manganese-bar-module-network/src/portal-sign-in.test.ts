@@ -48,9 +48,10 @@ const checking = (...answers: Checked[]) => {
   };
 };
 
-/** A wait the test ends by calling `elapse`. */
+/** A wait the test ends by calling `elapse`, recording each wait's length. */
 const heldWait = () => {
   const pending: { next: (() => void) | undefined } = { next: undefined };
+  const waited: number[] = [];
   return {
     elapse: () => {
       const next = pending.next;
@@ -60,12 +61,14 @@ const heldWait = () => {
     get pending() {
       return pending.next !== undefined;
     },
-    wait: (then: () => void) => {
+    wait: (ms: number, then: () => void) => {
+      waited.push(ms);
       pending.next = then;
       return () => {
         pending.next = undefined;
       };
     },
+    waited,
   };
 };
 
@@ -78,23 +81,30 @@ const NEVER = () => {
 
 const PORTAL: Checked = Ok(Some("http://10.0.0.1/login"));
 const OPEN: Checked = Ok(None());
+const NO_ANSWER: Checked = Err({
+  kind: SystemErrorKind.Other,
+  message: "curl exited 28 asking for the portal probe",
+});
 
-/** Follows `network` with `answers`, recording what is shown. */
+/** Follows `network` with `answers`, recording what is shown and reported. */
 const follow = (...answers: Checked[]) => {
   const network = heldNetwork();
   const portal = checking(...answers);
   const timer = heldWait();
   const shown: (string | undefined)[] = [];
+  const reported: SystemError[] = [];
   const watch = followPortals({
     check: portal.check,
     network: network.watch,
-    report: NEVER,
+    report: (error) => {
+      reported.push(error);
+    },
     show: (url) => {
       shown.push(url);
     },
     wait: timer.wait,
   });
-  return { network, portal, shown, timer, watch };
+  return { network, portal, reported, shown, timer, watch };
 };
 
 describe("followPortals", () => {
@@ -156,6 +166,52 @@ describe("followPortals", () => {
     watch.dismiss();
     expect(timer.pending).toBe(false);
     expect(portal.checks).toBe(1);
+  });
+
+  it("keeps checking a network whose check got no answer", async () => {
+    const { network, portal, shown, timer } = follow(
+      NO_ANSWER,
+      NO_ANSWER,
+      PORTAL,
+    );
+    network.report(Link.Wifi("Airport", 0.5));
+    await settled();
+    timer.elapse();
+    await settled();
+    timer.elapse();
+    await settled();
+    expect(portal.checks).toBe(3);
+    expect(shown).toStrictEqual(["http://10.0.0.1/login"]);
+  });
+
+  it("waits longer after each check with no answer, up to a minute", async () => {
+    const { network, timer } = follow(NO_ANSWER);
+    network.report(Link.Wifi("Airport", 0.5));
+    for (let tries = 0; tries < 7; tries += 1) {
+      await settled();
+      timer.elapse();
+    }
+    expect(timer.waited).toStrictEqual([
+      3000, 6000, 12_000, 24_000, 48_000, 60_000, 60_000,
+    ]);
+  });
+
+  it("stops checking once a check finds the internet", async () => {
+    const { network, portal, timer } = follow(NO_ANSWER, OPEN);
+    network.report(Link.Wifi("Airport", 0.5));
+    await settled();
+    timer.elapse();
+    await settled();
+    expect(portal.checks).toBe(2);
+    expect(timer.pending).toBe(false);
+  });
+
+  it("stops checking a network with no answer on leaving it", async () => {
+    const { network, timer } = follow(NO_ANSWER);
+    network.report(Link.Wifi("Airport", 0.5));
+    await settled();
+    network.report(Link.None());
+    expect(timer.pending).toBe(false);
   });
 
   it("reports a check that failed", async () => {

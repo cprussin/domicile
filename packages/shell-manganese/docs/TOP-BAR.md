@@ -212,6 +212,9 @@ button, and their controls in one panel, each labeled in words.
   wpa_supplicant too. Any answer but `204` is a portal.
   - While the dialog shows, the check repeats every 3 seconds. The dialog
     closes once the probe answers `204`, or on leaving the network.
+  - A check that gets no answer repeats, after 3 seconds, then twice as long
+    each time, up to a minute, until one gets an answer or the desk leaves the
+    network.
   - Closing it by hand stops the checks until the next network.
 - Hidden only on a machine with no network hardware.
 - The compositor refuses the service's calls while locked, so the watches
