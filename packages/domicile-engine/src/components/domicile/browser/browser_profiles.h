@@ -20,6 +20,17 @@ class GURL;
 
 namespace domicile {
 
+// How a profile's pages block ads and trackers: the config's
+// `block_ads_and_trackers`. See components/domicile/ad_blocking/ad_blocker.h.
+enum class AdBlockingMode {
+  // Other sites' ads and trackers; a site's own only for `$important` rules
+  // and the user's own.
+  kStandard,
+  // A site's own too.
+  kStrict,
+  kOff,
+};
+
 // What a browser profile keeps sites from learning: the config's
 // `browser.profiles.<id>.protections`.
 struct BrowserProtections {
@@ -29,6 +40,7 @@ struct BrowserProtections {
   bool global_privacy_control = true;
   // Keeps WebRTC from telling sites the local network address.
   bool hide_local_ip_address = true;
+  AdBlockingMode block_ads_and_trackers = AdBlockingMode::kStandard;
 
   friend bool operator==(const BrowserProtections&,
                          const BrowserProtections&) = default;
@@ -73,6 +85,11 @@ struct BrowserProfiles {
   std::string default_private_profile;
   // Profile ids by site: a host, `*.host`, or a host and path.
   std::map<std::string, std::string> sites;
+  // The filter lists ads and trackers are blocked with: `https:` addresses
+  // and absolute paths.
+  std::vector<std::string> block_lists;
+  // The user's own filter rules, on top of the lists'.
+  std::vector<std::string> block_rules;
 };
 
 // The profiles of a desk whose compositor sends none: `default` and
@@ -85,9 +102,12 @@ BrowserProfiles DefaultBrowserProfiles();
 //                  "private": false, "extensions": ["<id>", ...] | null,
 //                  "protections": {"block_third_party_cookies": true,
 //                                  "global_privacy_control": true,
-//                                  "hide_local_ip_address": true}}],
+//                                  "hide_local_ip_address": true,
+//                                  "block_ads_and_trackers": "standard"}}],
 //    "default_profile": "personal", "default_private_profile": "private",
-//    "sites": {"github.com/acme": "work"}}
+//    "sites": {"github.com/acme": "work"},
+//    "block_lists": ["https://easylist.to/easylist/easylist.txt"],
+//    "block_rules": ["||ads.example^"]}
 //
 // Nothing when malformed, or when it contradicts itself as the config refuses
 // to: a default that is no profile or is private, a default private profile

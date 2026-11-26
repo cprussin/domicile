@@ -2,8 +2,11 @@ import { Card } from "@domicile-desktop/component-library/Card";
 import { Select } from "@domicile-desktop/component-library/Select";
 import { useState } from "react";
 
+import type { AdBlocking } from "../browser-profiles";
 import {
+  adBlockingOf,
   asWritten,
+  PROTECTIONS_ON,
   profileOrder,
   withProfileChanged,
 } from "../browser-profiles";
@@ -46,6 +49,13 @@ const PROTECTIONS = [
   },
 ] as const;
 
+/** Each way a profile can block ads and trackers, as a person reads it. */
+const AD_BLOCKING: { label: string; value: AdBlocking }[] = [
+  { label: "Standard", value: "standard" },
+  { label: "Strict", value: "strict" },
+  { label: "Off", value: "off" },
+];
+
 /**
  * `lockdown`, what apps are asked not to do through the Lockdown portal, and
  * each browser profile's `protections`, what its pages keep from sites.
@@ -84,6 +94,55 @@ export const PrivacyPage = ({
             }))}
             size="sm"
             value={id}
+            width={36}
+          />
+        </SettingRow>
+        <SettingRow
+          hint="Standard blocks ads and trackers that other sites put on a page. Strict also blocks the site's own, which can break some sites."
+          title="Block ads and trackers"
+        >
+          <Select
+            aria-label="Block ads and trackers"
+            disabled={readOnly !== undefined}
+            onValueChange={(ads) => {
+              if (ads === null) {
+                return;
+              }
+              if (
+                valueAt(document, ["browser", "profiles", id]) === undefined
+              ) {
+                // As a switch's change does, below.
+                set(
+                  ["browser"],
+                  asWritten(
+                    withProfileChanged(browser, id, {
+                      protections: {
+                        ...profile.protections,
+                        block_ads_and_trackers: ads,
+                      },
+                    }),
+                  ),
+                );
+              } else {
+                const fallback = adBlockingOf({
+                  ...profile,
+                  protections: PROTECTIONS_ON,
+                });
+                set(
+                  [
+                    "browser",
+                    "profiles",
+                    id,
+                    "protections",
+                    "block_ads_and_trackers",
+                  ],
+                  ads === fallback ? undefined : ads,
+                );
+              }
+            }}
+            options={AD_BLOCKING}
+            size="sm"
+            value={adBlockingOf(profile)}
             width={36}
           />
         </SettingRow>

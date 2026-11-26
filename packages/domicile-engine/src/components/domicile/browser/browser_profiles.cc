@@ -31,6 +31,23 @@ std::optional<std::vector<std::string>> Strings(const base::ListValue& value) {
   return strings;
 }
 
+// The config's name for an AdBlockingMode, or nothing for another.
+std::optional<AdBlockingMode> AdBlockingModeOf(const std::string* name) {
+  if (name == nullptr) {
+    return std::nullopt;
+  }
+  if (*name == "standard") {
+    return AdBlockingMode::kStandard;
+  }
+  if (*name == "strict") {
+    return AdBlockingMode::kStrict;
+  }
+  if (*name == "off") {
+    return AdBlockingMode::kOff;
+  }
+  return std::nullopt;
+}
+
 std::optional<BrowserProfile> ParseProfile(const base::Value& value) {
   const base::DictValue* dict = value.GetIfDict();
   if (dict == nullptr) {
@@ -54,9 +71,12 @@ std::optional<BrowserProfile> ParseProfile(const base::Value& value) {
       protections->FindBool("global_privacy_control");
   const std::optional<bool> hide_local_ip_address =
       protections->FindBool("hide_local_ip_address");
+  const std::optional<AdBlockingMode> block_ads_and_trackers =
+      AdBlockingModeOf(protections->FindString("block_ads_and_trackers"));
   if (!block_third_party_cookies.has_value() ||
       !global_privacy_control.has_value() ||
-      !hide_local_ip_address.has_value()) {
+      !hide_local_ip_address.has_value() ||
+      !block_ads_and_trackers.has_value()) {
     return std::nullopt;
   }
   BrowserProfile profile{
@@ -68,6 +88,7 @@ std::optional<BrowserProfile> ParseProfile(const base::Value& value) {
           .block_third_party_cookies = *block_third_party_cookies,
           .global_privacy_control = *global_privacy_control,
           .hide_local_ip_address = *hide_local_ip_address,
+          .block_ads_and_trackers = *block_ads_and_trackers,
       }};
   const base::Value* extensions = dict->Find("extensions");
   if (extensions != nullptr && !extensions->is_none()) {
@@ -151,10 +172,12 @@ BrowserProfiles DefaultBrowserProfiles() {
   BrowserProfiles profiles;
   profiles.profiles = {
       BrowserProfile{.id = "default", .name = "Default", .color = "#0d9488"},
-      BrowserProfile{.id = "private",
-                     .name = "Private",
-                     .color = "#a78bfa",
-                     .is_private = true},
+      BrowserProfile{
+          .id = "private",
+          .name = "Private",
+          .color = "#a78bfa",
+          .is_private = true,
+          .protections = {.block_ads_and_trackers = AdBlockingMode::kStrict}},
   };
   profiles.default_profile = "default";
   profiles.default_private_profile = "private";
@@ -168,8 +191,10 @@ std::optional<BrowserProfiles> ParseBrowserProfiles(
   const std::string* fallback_private =
       message.FindString("default_private_profile");
   const base::DictValue* sites = message.FindDict("sites");
+  const base::ListValue* block_lists = message.FindList("block_lists");
+  const base::ListValue* block_rules = message.FindList("block_rules");
   if (list == nullptr || fallback == nullptr || fallback_private == nullptr ||
-      sites == nullptr) {
+      sites == nullptr || block_lists == nullptr || block_rules == nullptr) {
     return std::nullopt;
   }
   BrowserProfiles profiles;
@@ -186,6 +211,13 @@ std::optional<BrowserProfiles> ParseBrowserProfiles(
     }
     profiles.sites[site] = id.GetString();
   }
+  std::optional<std::vector<std::string>> lists = Strings(*block_lists);
+  std::optional<std::vector<std::string>> rules = Strings(*block_rules);
+  if (!lists.has_value() || !rules.has_value()) {
+    return std::nullopt;
+  }
+  profiles.block_lists = *std::move(lists);
+  profiles.block_rules = *std::move(rules);
   profiles.default_profile = *fallback;
   profiles.default_private_profile = *fallback_private;
   if (!Consistent(profiles)) {

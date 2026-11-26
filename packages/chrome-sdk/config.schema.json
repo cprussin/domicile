@@ -10,6 +10,26 @@
       "pattern": "^#[0-9a-fA-F]{6}$",
       "type": "string"
     },
+    "AdBlocking": {
+      "description": "How a profile's pages block ads and trackers. See\n[`Protections::block_ads_and_trackers`].",
+      "oneOf": [
+        {
+          "const": "standard",
+          "description": "Blocks what the lists name from other sites, and lets a site's own\nads through unless a rule is `$important`, as Brave's Standard does.",
+          "type": "string"
+        },
+        {
+          "const": "strict",
+          "description": "Blocks a site's own ads too. Some pages may break.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Blocks nothing.",
+          "type": "string"
+        }
+      ]
+    },
     "AgentsConfig": {
       "additionalProperties": false,
       "description": "Agents that drive the desktop, such as Claude Code. See\n`docs/AGENTS.md`.",
@@ -26,6 +46,26 @@
       "additionalProperties": false,
       "description": "Browser profiles: sets of sign-ins, site data and extensions, and the\nsites each opens. See `docs/architecture/BROWSER-PROFILES.md`.",
       "properties": {
+        "block_lists": {
+          "default": [
+            "https://easylist.to/easylist/easylist.txt",
+            "https://easylist.to/easylist/easyprivacy.txt",
+            "https://ublockorigin.github.io/uAssets/filters/filters.txt"
+          ],
+          "description": "The filter lists ads and trackers are blocked with, in Adblock Plus\nand uBlock Origin syntax: each an `https:` address, which the engine\nfetches and keeps up to date, or an absolute path. EasyList,\nEasyPrivacy and uBlock Origin's filters unless set; `[]` blocks with\n`block_rules` only.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "block_rules": {
+          "default": [],
+          "description": "Rules of your own, in the same syntax, which apply on top of\n`block_lists`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "default_private_profile": {
           "default": "private",
           "description": "The profile a new private window opens in. Private.",
@@ -55,6 +95,7 @@
               "name": "Default",
               "private": false,
               "protections": {
+                "block_ads_and_trackers": null,
                 "block_third_party_cookies": true,
                 "global_privacy_control": true,
                 "hide_local_ip_address": true
@@ -66,6 +107,7 @@
               "name": "Private",
               "private": true,
               "protections": {
+                "block_ads_and_trackers": null,
                 "block_third_party_cookies": true,
                 "global_privacy_control": true,
                 "hide_local_ip_address": true
@@ -114,6 +156,7 @@
         "protections": {
           "$ref": "#/$defs/Protections",
           "default": {
+            "block_ads_and_trackers": null,
             "block_third_party_cookies": true,
             "global_privacy_control": true,
             "hide_local_ip_address": true
@@ -750,6 +793,18 @@
       "additionalProperties": false,
       "description": "What a browser profile keeps sites from learning about you. See\n[`BrowserProfile::protections`].",
       "properties": {
+        "block_ads_and_trackers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AdBlocking"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How the profile's pages block ads and trackers, with\n[`BrowserConfig::block_lists`]. Unset: `standard`, or `strict` in a\nprivate profile."
+        },
         "block_third_party_cookies": {
           "default": true,
           "description": "Blocks cookies a page's embedded sites set or read, which track you\nfrom site to site.",
@@ -1078,6 +1133,12 @@
     "browser": {
       "$ref": "#/$defs/BrowserConfig",
       "default": {
+        "block_lists": [
+          "https://easylist.to/easylist/easylist.txt",
+          "https://easylist.to/easylist/easyprivacy.txt",
+          "https://ublockorigin.github.io/uAssets/filters/filters.txt"
+        ],
+        "block_rules": [],
         "default_private_profile": "private",
         "default_profile": "default",
         "order": [],
@@ -1088,6 +1149,7 @@
             "name": "Default",
             "private": false,
             "protections": {
+              "block_ads_and_trackers": null,
               "block_third_party_cookies": true,
               "global_privacy_control": true,
               "hide_local_ip_address": true
@@ -1099,6 +1161,7 @@
             "name": "Private",
             "private": true,
             "protections": {
+              "block_ads_and_trackers": null,
               "block_third_party_cookies": true,
               "global_privacy_control": true,
               "hide_local_ip_address": true

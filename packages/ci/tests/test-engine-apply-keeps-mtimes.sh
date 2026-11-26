@@ -34,10 +34,12 @@ for script in engine-reset.sh engine-apply.sh engine-keep-mtimes.sh; do
   cp "$ROOT/.github/scripts/$script" "$FAKE/.github/scripts/"
 done
 cp "$ROOT/packages/domicile-engine/scripts/apply.sh" "$ENGINE/scripts/"
-# Electron's Node has its own checkouts and its own test,
-# test-engine-node.sh.
-printf '#!/bin/sh\n' >"$FAKE/.github/scripts/engine-node.sh"
-chmod +x "$FAKE/.github/scripts/engine-node.sh"
+# Electron's Node and the crates have their own tests, test-engine-node.sh
+# and test-engine-crates.sh.
+for script in engine-node.sh engine-crates.sh; do
+  printf '#!/bin/sh\n' >"$FAKE/.github/scripts/$script"
+  chmod +x "$FAKE/.github/scripts/$script"
+done
 echo "// laid down" >"$ENGINE/src/components/domicile/thing.cc"
 
 TREE="$WORK/chromium/src"

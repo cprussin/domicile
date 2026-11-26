@@ -23,6 +23,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/types/expected.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/domicile/domicile_ad_blocking.h"
 #include "chrome/browser/domicile/domicile_extension_installer.h"
 #include "chrome/browser/domicile/domicile_extension_settings.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -165,6 +166,7 @@ void BrowserProfileRegistry::Configure(Profile& shell,
   }
   InstallExtensions();
   Protect();
+  AdBlocking::Get().Configure(config_.block_lists, config_.block_rules);
   if (profiles_ != before) {
     for (Observer& observer : observers_) {
       observer.OnBrowserProfilesChanged();

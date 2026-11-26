@@ -552,6 +552,45 @@ describe(App, () => {
       });
     });
 
+    it("blocks a site's own ads too in the default profile", async () => {
+      const { host, user } = await renderApp("Privacy");
+      await choose(user, "Block ads and trackers", "Strict");
+      await waitFor(() => {
+        const { profiles } = written(host.writes).browser;
+        expect(profiles.default.protections).toEqual({
+          block_ads_and_trackers: "strict",
+        });
+      });
+    });
+
+    it("shows a private profile on strict, and writes nothing to keep it there", async () => {
+      const { host, user } = await renderApp("Privacy", {
+        config: {
+          browser: {
+            ...BROWSER,
+            profiles: {
+              ...BROWSER.profiles,
+              private: {
+                ...BROWSER.profiles.private,
+                protections: { block_ads_and_trackers: "off" },
+              },
+            },
+          },
+        },
+      });
+      await choose(user, "Profile", "Private");
+      expect(
+        screen.getByRole("combobox", { name: "Block ads and trackers" }),
+      ).toHaveTextContent("Off");
+      await choose(user, "Block ads and trackers", "Strict");
+      await waitFor(() => {
+        const { profiles } = written(host.writes).browser;
+        expect(profiles.private).toEqual({
+          ...BROWSER.profiles.private,
+        });
+      });
+    });
+
     it("changes the protections of the profile chosen, keeping the others", async () => {
       const { host, user } = await renderApp("Privacy", {
         config: { browser: BROWSER },

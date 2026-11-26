@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+"""The pages guard-ad-blocking.sh shows, at two sites.
+
+`/page?as=ID` is the page a browser window in profile ID opens at 127.0.0.1.
+It loads five scripts and logs, to the console the engine writes to its log,
+which of them ran:
+
+  GUARD ads as=ID third=X first=X mine=X allowed=X ok=X
+
+each X `loaded` or `blocked`:
+
+  third    localhost/ads/third.js     another site's, which the list names
+  first    127.0.0.1/ads/first.js     the page's own, which the list names
+  mine     127.0.0.1/mine/own.js      the page's own, which the user's rule
+                                      names
+  allowed  localhost/ads/allowed.js   another site's, which the list names
+                                      and makes an exception for
+  ok       localhost/ok.js            another site's, which nothing names
+
+This server logs each script it is asked for, to its stdout:
+
+  GUARD served as=ID what=WHAT
+
+so a script that did not run because it was blocked is one the server never
+served. Served over HTTP for guard-webview-guest-page.py's reason: `crux`
+reaches no arbitrary host, and a bundled fixture cannot change under the
+guard.
+"""
+
+import argparse
+import re
+import sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlsplit
+
+PAGE = """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>a page that loads ads and says which ran</title>
+  </head>
+  <body>
+    <script>
+      const as = new URLSearchParams(location.search).get("as");
+      const port = location.port;
+      const scripts = {
+        third: `http://localhost:${port}/ads/third.js`,
+        first: `http://127.0.0.1:${port}/ads/first.js`,
+        mine: `http://127.0.0.1:${port}/mine/own.js`,
+        allowed: `http://localhost:${port}/ads/allowed.js`,
+        ok: `http://localhost:${port}/ok.js`,
+      };
+      const ran = {};
+      const settled = Object.entries(scripts).map(
+        ([what, url]) =>
+          new Promise((resolve) => {
+            const script = document.createElement("script");
+            script.src = `${url}?as=${as}`;
+            script.onload = () => resolve([what, "loaded"]);
+            script.onerror = () => resolve([what, "blocked"]);
+            document.head.append(script);
+          }),
+      );
+      Promise.all(settled).then((results) => {
+        for (const [what, how] of results) ran[what] = how;
+        console.log(
+          `GUARD ads as=${as} third=${ran.third} first=${ran.first} ` +
+            `mine=${ran.mine} allowed=${ran.allowed} ok=${ran.ok}`,
+        );
+      });
+    </script>
+  </body>
+</html>
+"""
+
+SCRIPTS = {
+    "/ads/third.js": "third",
+    "/ads/first.js": "first",
+    "/mine/own.js": "mine",
+    "/ads/allowed.js": "allowed",
+    "/ok.js": "ok",
+}
+
+# A profile id, as the config allows one. Anything else is not logged as-is.
+ID = re.compile(r"^[a-z0-9-]+$")
+
+
+class TwoSites(BaseHTTPRequestHandler):
+    """Answers /page and the scripts, and everything else with a 404."""
+
+    def do_GET(self):  # noqa: N802 - the name is BaseHTTPRequestHandler's
+        url = urlsplit(self.path)
+        as_ = parse_qs(url.query).get("as", [""])[0]
+        if (url.path != "/page" and url.path not in SCRIPTS) or not ID.match(as_):
+            self.send_error(404, "this server has /page?as=ID and its scripts")
+            return
+
+        if url.path == "/page":
+            body = PAGE.encode("utf-8")
+            kind = "text/html; charset=utf-8"
+        else:
+            print("GUARD served as=%s what=%s" % (as_, SCRIPTS[url.path]), flush=True)
+            body = b"// a script that ran\n"
+            kind = "text/javascript"
+        self.send_response(200)
+        self.send_header("Content-Type", kind)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, fmt, *args):
+        # To stderr, which the guard keeps.
+        sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--port",
+        type=int,
+        required=True,
+        help="0 for any free one; the serving line names the one taken",
+    )
+    arguments = parser.parse_args()
+
+    # 127.0.0.1, not 0.0.0.0: nothing off this machine should reach a guard's
+    # fixture. localhost reaches it too.
+    server = ThreadingHTTPServer(("127.0.0.1", arguments.port), TwoSites)
+    print(
+        "serving two sites' pages on 127.0.0.1:%d" % server.server_address[1],
+        flush=True,
+    )
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

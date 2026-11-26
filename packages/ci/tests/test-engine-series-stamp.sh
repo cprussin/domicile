@@ -286,6 +286,13 @@ expect "changing Electron's Node patches is a different series" ok \
   "$([ "$(stamp identity)" != "$out" ] && echo ok || echo "it did not move")"
 rm -rf "$FAKE/packages/domicile-engine/node"
 
+# The crates go in after the apply too, from CRATES' sums.
+out="$(stamp identity)"
+mkdir -p "$FAKE/packages/domicile-engine/crates"
+echo "adblock 0.13.6 adblock-v0_13 0000" >"$FAKE/packages/domicile-engine/crates/CRATES"
+expect "changing the crates is a different series" ok \
+  "$([ "$(stamp identity)" != "$out" ] && echo ok || echo "it did not move")"
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1

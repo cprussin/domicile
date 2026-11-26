@@ -72,12 +72,23 @@ pub fn hand_over_the_browser_profiles(host: &mut Host, browser: &BrowserConfig) 
                     block_third_party_cookies: profile.protections.block_third_party_cookies,
                     global_privacy_control: profile.protections.global_privacy_control,
                     hide_local_ip_address: profile.protections.hide_local_ip_address,
+                    block_ads_and_trackers: match profile.ad_blocking() {
+                        domicile_config::AdBlocking::Standard => {
+                            domicile_protocol::AdBlocking::Standard
+                        }
+                        domicile_config::AdBlocking::Strict => {
+                            domicile_protocol::AdBlocking::Strict
+                        }
+                        domicile_config::AdBlocking::Off => domicile_protocol::AdBlocking::Off,
+                    },
                 },
             })
             .collect(),
         browser.default_profile.clone(),
         browser.default_private_profile.clone(),
         browser.sites.clone(),
+        browser.block_lists.clone(),
+        browser.block_rules.clone(),
     );
 }
 

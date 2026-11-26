@@ -485,6 +485,8 @@ const extensionsSchema = z.looseObject({
 // `browser`. Sent with the handshake and on config reload. The browser process
 // reads it; see `docs/architecture/BROWSER-PROFILES.md`.
 const browserProfilesSchema = z.looseObject({
+  block_lists: z.array(z.string()),
+  block_rules: z.array(z.string()),
   default_private_profile: z.string(),
   default_profile: z.string(),
   profiles: z.array(
@@ -495,6 +497,7 @@ const browserProfilesSchema = z.looseObject({
       name: z.string(),
       private: z.boolean(),
       protections: z.looseObject({
+        block_ads_and_trackers: z.enum(["standard", "strict", "off"]),
         block_third_party_cookies: z.boolean(),
         global_privacy_control: z.boolean(),
         hide_local_ip_address: z.boolean(),

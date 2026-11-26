@@ -552,12 +552,16 @@ impl Host {
         default_profile: String,
         default_private_profile: String,
         sites: BTreeMap<String, String>,
+        block_lists: Vec<String>,
+        block_rules: Vec<String>,
     ) {
         self.browser_profiles = Some(HostMessage::BrowserProfiles {
             profiles,
             default_profile,
             default_private_profile,
             sites,
+            block_lists,
+            block_rules,
         });
     }
 

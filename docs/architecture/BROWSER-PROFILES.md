@@ -51,7 +51,12 @@ every page and keep one state (one Bitwarden login).
   and `hide_local_ip_address` (WebRTC's `default_public_interface_only`
   policy). The engine sets them as the profile's prefs when the profiles
   arrive, and on a private profile's off-the-record one as it is made
-  (`protection_settings.cc`).
+  (`protection_settings.cc`). `block_ads_and_trackers` is `standard`,
+  `strict` or `off`, unset `standard` or `strict` in a private profile: see
+  [Ad and tracker blocking](AD-BLOCKING.md).
+- **`block_lists`** and **`block_rules`**: the filter lists every profile
+  that blocks ads uses, and the user's own rules on top. See
+  [Ad and tracker blocking](AD-BLOCKING.md#the-config).
 - **`order`**: the order the compositor sends the profiles in, and so the
   order the shell and Settings list them in: these ids, then the rest by id.
   Each id must be a profile, once.

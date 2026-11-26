@@ -173,6 +173,10 @@ and your words are never sent anywhere to be checked.
 
 Every profile keeps these from the sites you visit, unless you turn one off:
 
+- **Block ads and trackers.** Ads, and the trackers that follow you from site
+  to site, never load. Standard blocks what other sites put on a page; Strict
+  also blocks a site's own, which can break some sites. Private windows use
+  Strict.
 - **Block cookies from other sites.** A page's ads, buttons and embeds from
   other sites can't keep cookies that follow you from site to site. Sign-ins
   that open in their own window still work.
@@ -182,10 +186,15 @@ Every profile keeps these from the sites you visit, unless you turn one off:
   address your network shows the internet, not the one on your home or office
   network.
 
+Ads are blocked with the lists uBlock Origin uses by default: EasyList,
+EasyPrivacy and uBlock Origin's own. They're kept up to date by themselves,
+and kept on your computer, so blocking works before you're online.
+
 <!-- tab: Settings app -->
 
-Open **Settings**, then **Privacy**. **Website protections** has a switch for
-each, for the profile you choose.
+Open **Settings**, then **Privacy**. **Website protections** has a choice of
+Standard, Strict or Off for ads and trackers, and a switch for each of the
+rest, for the profile you choose.
 
 <!-- tab: Config file -->
 
@@ -197,16 +206,27 @@ each, for the profile you choose.
       "work": {
         "name": "Work",
         "color": "#d97706",
-        "protections": { "block_third_party_cookies": false }
+        "protections": {
+          "block_ads_and_trackers": "off",
+          "block_third_party_cookies": false
+        }
       },
       "private": { "name": "Private", "color": "#a78bfa", "private": true }
-    }
+    },
+    "block_rules": ["||ads.example.com^", "@@||example.org/ads.js"]
   }
 }
 ```
 
-`protections` takes `block_third_party_cookies`, `global_privacy_control` and
-`hide_local_ip_address`, each `true` unless set.
+`protections` takes `block_ads_and_trackers`, which is `"standard"`,
+`"strict"` or `"off"`, and `block_third_party_cookies`,
+`global_privacy_control` and `hide_local_ip_address`, each `true` unless set.
+
+`browser.block_lists` replaces the lists: each is an `https:` address or a
+file's absolute path, in the syntax uBlock Origin and Adblock Plus read.
+`browser.block_rules` adds rules of your own in the same syntax, in every
+profile that blocks ads: a rule that starts with `@@` lets something load that
+a list blocks.
 
 <!-- /tabs -->
 

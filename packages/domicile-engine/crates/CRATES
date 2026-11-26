@@ -1,0 +1,21 @@
+# The crates ad blocking adds to Chromium's third_party/rust: Brave's filter
+# engine, adblock-rust, and the crates it needs that the pin does not vendor.
+# .github/scripts/engine-crates.sh fetches each from crates.io into
+# third_party/rust/chromium_crates_io/vendor/<directory>, and
+# generate-build-files.py writes their BUILD.gn and README.chromium under
+# src/third_party/rust from the same sources.
+#
+# Each line: name, version, directory, sha256 of the .crate file (crates.io's
+# checksum). To move one: change its line, run
+#   python3 packages/domicile-engine/crates/generate-build-files.py
+# and commit what it writes.
+adblock 0.13.6 adblock-v0_13 7d0e54f8c5fda98d15b910f3d787a6290cbdf5448b6318ce4fcaa39ff8ce2b0c
+arrayvec 0.7.8 arrayvec-v0_7 d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56
+flatbuffers 25.12.19 flatbuffers-v25 35f6839d7b3b98adde531effaf34f0c2badc6f4735d26fe74709d8e513a96ef3
+idna 1.1.0 idna-v1 3b0875f23caa03898994f6ddc501886a45c7d3d62d04d2d90788d47be1b1e4de
+idna_adapter 1.2.2 idna_adapter-v1 cb68373c0d6620ef8105e855e7745e18b0d00d3bdb07fb532e434244cdb9a714
+percent-encoding 2.3.2 percent-encoding-v2 9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220
+rustc-hash 2.1.3 rustc-hash-v2 6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d
+seahash 4.1.0 seahash-v4 1c107b6f4780854c8b126e228ea8869f4d7b71260f962fefb57b996b8959ba6b
+thiserror 1.0.69 thiserror-v1 b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52
+thiserror-impl 1.0.69 thiserror-impl-v1 4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1

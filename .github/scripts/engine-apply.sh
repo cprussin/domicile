@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Apply the patch series over the pin, and assert that it went on. Then put
-# Electron's Node in, with engine-node.sh.
+# Electron's Node in, with engine-node.sh, and the crates ad blocking needs,
+# with engine-crates.sh.
 #
 #   .github/scripts/engine-apply.sh <path to chromium/src>
 #
@@ -39,3 +40,6 @@ echo "series applied: $(git -C "$CHROMIUM" log --oneline "$pin..HEAD" | wc -l) p
 # Electron's Node and its patches to V8 and BoringSSL, which the build reads
 # from checkouts of their own.
 .github/scripts/engine-node.sh "$CHROMIUM"
+# The crates ad blocking builds with, from crates.io rather than this
+# repository: see packages/domicile-engine/crates/CRATES.
+.github/scripts/engine-crates.sh "$CHROMIUM"

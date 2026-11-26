@@ -16,6 +16,16 @@ export const accentColorSchema = z
   .regex(new RegExp("^#[0-9a-fA-F]{6}$"));
 
 /**
+ * How a profile's pages block ads and trackers. See
+ * [`Protections::block_ads_and_trackers`].
+ */
+export const adBlockingSchema = z.union([
+  z.literal("standard"),
+  z.literal("strict"),
+  z.literal("off"),
+]);
+
+/**
  * Agents that drive the desktop, such as Claude Code. See
  * `docs/AGENTS.md`.
  */
@@ -28,6 +38,9 @@ export const agentsConfigSchema = z.strictObject({
  * [`BrowserProfile::protections`].
  */
 export const protectionsSchema = z.strictObject({
+  block_ads_and_trackers: adBlockingSchema
+    .nullish()
+    .transform((value) => value ?? undefined),
   block_third_party_cookies: z.boolean().prefault(true),
   global_privacy_control: z.boolean().prefault(true),
   hide_local_ip_address: z.boolean().prefault(true),
@@ -43,6 +56,7 @@ export const browserProfileSchema = z.strictObject({
   name: z.string(),
   private: z.boolean().prefault(false),
   protections: protectionsSchema.prefault({
+    block_ads_and_trackers: null,
     block_third_party_cookies: true,
     global_privacy_control: true,
     hide_local_ip_address: true,
@@ -54,6 +68,14 @@ export const browserProfileSchema = z.strictObject({
  * sites each opens. See `docs/architecture/BROWSER-PROFILES.md`.
  */
 export const browserConfigSchema = z.strictObject({
+  block_lists: z
+    .array(z.string())
+    .prefault([
+      "https://easylist.to/easylist/easylist.txt",
+      "https://easylist.to/easylist/easyprivacy.txt",
+      "https://ublockorigin.github.io/uAssets/filters/filters.txt",
+    ]),
+  block_rules: z.array(z.string()).prefault([]),
   default_private_profile: z.string().prefault("private"),
   default_profile: z.string().prefault("default"),
   order: z.array(z.string()).prefault([]),
@@ -64,6 +86,7 @@ export const browserConfigSchema = z.strictObject({
       name: "Default",
       private: false,
       protections: {
+        block_ads_and_trackers: null,
         block_third_party_cookies: true,
         global_privacy_control: true,
         hide_local_ip_address: true,
@@ -75,6 +98,7 @@ export const browserConfigSchema = z.strictObject({
       name: "Private",
       private: true,
       protections: {
+        block_ads_and_trackers: null,
         block_third_party_cookies: true,
         global_privacy_control: true,
         hide_local_ip_address: true,
@@ -544,6 +568,12 @@ export const configSchema = z.strictObject({
     .transform((value) => value ?? undefined),
   agents: agentsConfigSchema.prefault({ web: false }),
   browser: browserConfigSchema.prefault({
+    block_lists: [
+      "https://easylist.to/easylist/easylist.txt",
+      "https://easylist.to/easylist/easyprivacy.txt",
+      "https://ublockorigin.github.io/uAssets/filters/filters.txt",
+    ],
+    block_rules: [],
     default_private_profile: "private",
     default_profile: "default",
     order: [],
@@ -554,6 +584,7 @@ export const configSchema = z.strictObject({
         name: "Default",
         private: false,
         protections: {
+          block_ads_and_trackers: null,
           block_third_party_cookies: true,
           global_privacy_control: true,
           hide_local_ip_address: true,
@@ -565,6 +596,7 @@ export const configSchema = z.strictObject({
         name: "Private",
         private: true,
         protections: {
+          block_ads_and_trackers: null,
           block_third_party_cookies: true,
           global_privacy_control: true,
           hide_local_ip_address: true,

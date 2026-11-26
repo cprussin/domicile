@@ -1,0 +1,57 @@
+# Copyright 2026 Connor Prussin
+# SPDX-License-Identifier: MIT
+
+# Ad and tracker blocking with Brave's filter engine, adblock-rust. See
+# docs/architecture/AD-BLOCKING.md.
+
+import("//build/rust/rust_static_library.gni")
+
+# What adblock-rust asks of a host's domain, from Chromium's registry.
+source_set("domains") {
+  visibility = [ ":*" ]
+  sources = [
+    "domains.cc",
+    "domains.h",
+  ]
+  deps = [
+    "//build/rust:cxx_cppdeps",
+    "//net",
+  ]
+}
+
+# adblock-rust, behind the few calls AdBlocker makes.
+rust_static_library("filter_engine") {
+  visibility = [ ":*" ]
+  crate_root = "filter_engine.rs"
+  sources = [ "filter_engine.rs" ]
+  allow_unsafe = true  # The FFI that `cxx` generates.
+  cxx_bindings = [ "filter_engine.rs" ]
+  deps = [
+    ":domains",
+    "//third_party/rust/adblock/v0_13:lib",
+  ]
+}
+
+source_set("ad_blocking") {
+  sources = [
+    "ad_blocker.cc",
+    "ad_blocker.h",
+  ]
+  public_deps = [ "//services/network/public/mojom" ]
+  deps = [
+    ":filter_engine",
+    "//base",
+    "//net",
+    "//url",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [ "ad_blocker_unittest.cc" ]
+  deps = [
+    ":ad_blocking",
+    "//testing/gtest",
+    "//url",
+  ]
+}

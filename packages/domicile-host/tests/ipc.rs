@@ -10,9 +10,9 @@ use std::thread;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::{Appearances, Host};
 use domicile_protocol::{
-    AccessDialog, Appearance, BoundShortcut, BrowserProfile, BrowserProtections, Capturing,
-    CapturingKind, ChromeMessage, Devices, ExtensionSettings, HostMessage, Notification, Owner,
-    PortalKind, PortalRequest, PortalWallpaper, Theme, TrayItem, Urgency, PROTOCOL_VERSION,
+    AccessDialog, AdBlocking, Appearance, BoundShortcut, BrowserProfile, BrowserProtections,
+    Capturing, CapturingKind, ChromeMessage, Devices, ExtensionSettings, HostMessage, Notification,
+    Owner, PortalKind, PortalRequest, PortalWallpaper, Theme, TrayItem, Urgency, PROTOCOL_VERSION,
 };
 
 /// A window's owner, for tests about anything else.
@@ -313,6 +313,7 @@ fn the_browser_profiles_ride_with_the_handshake() {
             block_third_party_cookies: true,
             global_privacy_control: true,
             hide_local_ip_address: true,
+            block_ads_and_trackers: AdBlocking::Strict,
         },
     }];
     let sites: std::collections::BTreeMap<String, String> =
@@ -322,6 +323,8 @@ fn the_browser_profiles_ride_with_the_handshake() {
         "work".into(),
         "private".into(),
         sites.clone(),
+        vec!["https://easylist.to/easylist/easylist.txt".into()],
+        vec!["||ads.example^".into()],
     );
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
@@ -335,6 +338,8 @@ fn the_browser_profiles_ride_with_the_handshake() {
             default_profile: "work".into(),
             default_private_profile: "private".into(),
             sites,
+            block_lists: vec!["https://easylist.to/easylist/easylist.txt".into()],
+            block_rules: vec!["||ads.example^".into()],
         }),
         "{out:?}"
     );
