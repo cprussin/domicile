@@ -188,8 +188,9 @@ const failed = cloth.update(app, { points: new Float32Array(1700) });
 - An element's arrays hold at most 64 KiB across its effects.
 - It returns `Some(why)` for an array the effect does not have, or values that
   do not fit, and `None()` otherwise.
-- Set them from `requestAnimationFrame` while something moves. A compositor
-  animation of the filter keeps the last arrays the page set.
+- Set them from `requestAnimationFrame` while something moves, even while
+  a compositor animation of the filter runs: the animation draws with the
+  last arrays the page set.
 
 ## Animating on the compositor
 

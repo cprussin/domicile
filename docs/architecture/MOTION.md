@@ -131,6 +131,12 @@ app[data-closing] {
     rebuilds the filter in the next frame without a style recalc. A
     compositor animation of the filter keeps the arrays the page committed.
     An element's arrays hold at most 64 KiB.
+  - Under a compositor animation of the filter, Blink calls new arrays a
+    simple value and writes them straight to the cc effect node, as it does
+    opacity, keeping the node's filter values, which the animation owns
+    (patch 0284). Blink calls any other filter change under the animation
+    the animation's, and schedules no property tree update for it, so the
+    arrays would otherwise wait for an unrelated one.
   - `outset: "screen"` is the viewport's longer side.
   - A filter animation whose only pixel-moving filters are shader effects
     runs on the compositor when every keyframe has the same outsets, since
