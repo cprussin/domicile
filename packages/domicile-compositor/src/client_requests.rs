@@ -212,6 +212,12 @@ pub enum ClientRequest {
         change: domicile_protocol::DisplayChange,
         answer: crate::configured_displays::Answer,
     },
+    /// Settings or the shell's theme toggle changed the config until the
+    /// desktop stops. See [`DomicileCompositor::change_the_config`].
+    ChangeConfig {
+        change: crate::config_overrides::ConfigChange,
+        answer: crate::config_overrides::Answer,
+    },
     /// The chrome asked the client of `app_id` to close its window.
     CloseApp {
         app_id: String,
@@ -377,6 +383,10 @@ impl DomicileCompositor {
         };
         if let Some(refusal) = refusal {
             say_what_the_lock_refused(refusal);
+            // A config change has a caller waiting; it hears why.
+            if let ClientRequest::ChangeConfig { answer, .. } = event {
+                answer.give(Err("the desktop is locked".into()));
+            }
             return;
         }
         // Input the lock let through, before it reaches the seat.
@@ -804,6 +814,9 @@ impl DomicileCompositor {
                 change,
                 answer,
             } => answer.give(self.configure_display(&display, &change)),
+            ClientRequest::ChangeConfig { change, answer } => {
+                answer.give(self.change_the_config(change));
+            }
             ClientRequest::AgentInput {
                 session,
                 steps,

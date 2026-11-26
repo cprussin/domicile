@@ -21,10 +21,10 @@ use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 use domicile_protocol::{
-    AdaptiveSync, DeskRect, DeskShot, DesktopStatus, DisplayChange, DisplayHdr, DisplayInfo,
-    DisplayTransform, EmulatedInput, InputConnection, InputKind, ListedDisplay, ListedInput,
-    ListedView, ListedWindow, LogLevel, LogLevels, MonitorInfo, ShellBinding, ShellCommandHelp,
-    Subsystem, Theme, WindowAct, WindowKind,
+    AdaptiveSync, ChromeMessage, ConfigKey, ConfigOverride, DeskRect, DeskShot, DesktopStatus,
+    DisplayChange, DisplayHdr, DisplayInfo, DisplayTransform, EmulatedInput, InputConnection,
+    InputKind, ListedDisplay, ListedInput, ListedView, ListedWindow, LogLevel, LogLevels,
+    MonitorInfo, ShellBinding, ShellCommandHelp, Subsystem, Theme, WindowAct, WindowKind,
 };
 
 #[test]
@@ -818,6 +818,66 @@ fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
 }
 
 #[test]
+fn a_temporary_change_to_the_config_goes_to_the_compositor() {
+    let changed = ConfigOverride {
+        path: vec![
+            ConfigKey::Name("theme".to_string()),
+            ConfigKey::Name("mode".to_string()),
+        ],
+        value: "\"dark\"".to_string(),
+        written: "\"light\"".to_string(),
+    };
+    for (request, sent) in [
+        (
+            r#"{"type":"set_config_override","path":["theme","mode"],"value":"\"dark\""}"#,
+            ChromeMessage::SetConfigOverride {
+                path: changed.path.clone(),
+                value: changed.value.clone(),
+            },
+        ),
+        (
+            r#"{"type":"reset_config_overrides","paths":[["theme","mode"]]}"#,
+            ChromeMessage::ResetConfigOverrides {
+                paths: vec![changed.path.clone()],
+            },
+        ),
+        (
+            r#"{"type":"config_overrides"}"#,
+            ChromeMessage::WhichConfigOverrides,
+        ),
+    ] {
+        assert_eq!(
+            reply_to(
+                request,
+                &Desktop {
+                    config_overrides: &|asked| {
+                        assert_eq!(asked, sent);
+                        Ok(vec![changed.clone()])
+                    },
+                    ..nothing_dialed()
+                },
+            ),
+            Response::ConfigOverrides {
+                overrides: vec![changed.clone()]
+            },
+            "{request}"
+        );
+    }
+    assert_eq!(
+        reply_to(
+            r#"{"type":"config_overrides"}"#,
+            &Desktop {
+                config_overrides: &|_| Err("no compositor".to_string()),
+                ..nothing_dialed()
+            },
+        ),
+        Response::Refused {
+            why: "no compositor".to_string()
+        }
+    );
+}
+
+#[test]
 fn a_desktop_asked_its_monitors_asks_the_compositor() {
     let lit = MonitorInfo {
         names: vec!["drm-1".to_string()],
@@ -1498,6 +1558,7 @@ fn nothing_dialed() -> Desktop<'static> {
         logs_in_the_journal: false,
         logs: &|| panic!("only recent_logs and export_logs read the logs"),
         monitors: &|| panic!("only monitors lists the monitors"),
+        config_overrides: &|_| panic!("only the config override requests change the config"),
         displays: &|| panic!("only displays lists the displays"),
         windows: &|| panic!("only windows lists the windows"),
         browser_layouts: &|| panic!("only windows lists the browser windows' layouts"),

@@ -249,6 +249,23 @@ fn the_monitors_are_the_desktops() {
 }
 
 #[test]
+fn temporary_changes_to_the_config_are_the_desktops() {
+    let host = a_host(FILES.clone());
+    let answered = json!({
+        "id": 24,
+        "type": "config_overrides",
+        "overrides": [{"path": ["theme", "mode"], "value": "\"light\"", "written": "\"dark\""}],
+    });
+    for asked in [
+        json!({"id": 24, "type": "config_overrides"}),
+        json!({"id": 24, "type": "set_config_override", "path": ["theme", "mode"], "value": "\"light\""}),
+        json!({"id": 24, "type": "reset_config_overrides", "paths": [["output"]]}),
+    ] {
+        assert_eq!(host.answer(&asked), answered, "{asked}");
+    }
+}
+
+#[test]
 fn agents_are_listed_stopped_and_forgotten_on_the_desktop() {
     let host = a_host(FILES.clone());
     assert_eq!(
@@ -879,6 +896,18 @@ impl Fake {
                             },
                         },
                         Request::StopAgent { .. } | Request::ForgetAgent { .. } => Response::Done,
+                        Request::ConfigOverrides
+                        | Request::SetConfigOverride { .. }
+                        | Request::ResetConfigOverrides { .. } => Response::ConfigOverrides {
+                            overrides: vec![domicile_protocol::ConfigOverride {
+                                path: vec![
+                                    domicile_protocol::ConfigKey::Name("theme".to_string()),
+                                    domicile_protocol::ConfigKey::Name("mode".to_string()),
+                                ],
+                                value: "\"light\"".to_string(),
+                                written: "\"dark\"".to_string(),
+                            }],
+                        },
                         other => panic!("the host never asks {other:?}"),
                     })
                 },

@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use domicile_config::{
     AccentColor, Config, ConfigError, ConfigStore, Contrast, DisplayConfig, ExtensionSettings,
-    KeyRepeat, LockdownConfig, SiteAccess, SiteAccessMode, ThemeMode,
+    KeyRepeat, LockdownConfig, SiteAccess, SiteAccessMode, ThemeMode, Written,
 };
 
 // ---- parsing & defaults ---------------------------------------------------
@@ -1212,7 +1212,7 @@ fn the_startup_placeholder_is_not_a_setting() {
 
 #[test]
 fn store_reload_valid_swaps_current_and_clears_error() {
-    let mut store = ConfigStore::new(Config::default());
+    let mut store = ConfigStore::new(Written::default());
     store
         .reload_from_str(
             r#"
@@ -1226,7 +1226,7 @@ fn store_reload_valid_swaps_current_and_clears_error() {
 
 #[test]
 fn store_reload_invalid_keeps_last_good_and_records_error() {
-    let mut store = ConfigStore::new(Config::default());
+    let mut store = ConfigStore::new(Written::default());
     store
         .reload_from_str(
             r#"
@@ -1250,7 +1250,7 @@ fn store_reload_invalid_keeps_last_good_and_records_error() {
 
 #[test]
 fn store_recovers_after_fixing_a_bad_edit() {
-    let mut store = ConfigStore::new(Config::default());
+    let mut store = ConfigStore::new(Written::default());
     let _ = store.reload_from_str(r#"{ "output": "#);
     assert!(store.last_error().is_some());
 
@@ -1340,7 +1340,7 @@ fn store_reload_from_path_keeps_last_good_on_bad_file() {
     )
     .unwrap();
 
-    let mut store = ConfigStore::new(Config::load(&path).unwrap());
+    let mut store = ConfigStore::new(Written::load(&path).unwrap());
     assert_eq!(store.current().output.max_scale, 3);
 
     // Simulate a user saving a broken file.
@@ -1374,7 +1374,7 @@ fn a_save_reloads_and_then_the_watcher_goes_quiet() {
             reloaded = next;
         }
     }
-    assert_eq!(reloaded.unwrap().output.max_scale, 3);
+    assert_eq!(reloaded.unwrap().config().output.max_scale, 3);
 
     let quiet_for = Duration::from_millis(500);
     assert!(
@@ -1397,7 +1397,7 @@ fn a_save_that_truncates_before_it_writes_reloads_only_the_written_file() {
     std::io::Write::write_all(&mut file, br#"{ "output": { "max_scale": 3 } }"#).unwrap();
 
     let reloaded = watcher.rx.recv_timeout(Duration::from_secs(5)).unwrap();
-    assert_eq!(reloaded.unwrap().output.max_scale, 3);
+    assert_eq!(reloaded.unwrap().config().output.max_scale, 3);
 }
 
 #[test]

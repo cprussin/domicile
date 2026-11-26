@@ -46,9 +46,10 @@ use domicile_launch::components::{
     perfetto as perfetto_path, version_file, Components,
 };
 use domicile_launch::compositor_socket::{
-    act_on_window, agents, configure_display, displays, emulate, forget_agent, idle_time, inputs,
-    launch, lock, monitors, open_link, power_displays, screen_record, screenshot, send_shell,
-    set_log_levels, shell_bindings, shell_commands, shoot_desk, status, stop_agent, theme, windows,
+    act_on_window, agents, config_overrides, configure_display, displays, emulate, forget_agent,
+    idle_time, inputs, launch, lock, monitors, open_link, power_displays, screen_record,
+    screenshot, send_shell, set_log_levels, shell_bindings, shell_commands, shoot_desk, status,
+    stop_agent, theme, windows,
 };
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
@@ -1271,6 +1272,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         | Response::Cleared
         | Response::SiteData { .. }
         | Response::Monitors { .. }
+        | Response::ConfigOverrides { .. }
         // `listed` asks for these.
         | Response::Displays { .. }
         | Response::Windows { .. }
@@ -2692,6 +2694,10 @@ fn answer_a_command(
                     },
                     monitors: &|| {
                         monitors(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
+                    },
+                    config_overrides: &|request| {
+                        config_overrides(chrome, request, Some(ANSWER_WITHIN))
+                            .map_err(|why| why.to_string())
                     },
                     displays: &|| {
                         displays(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())

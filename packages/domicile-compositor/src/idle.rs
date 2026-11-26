@@ -423,6 +423,7 @@ pub fn somebody_is_here(
         | ClientRequest::ResizeVirtualMonitor { .. }
         // A command, maybe a script's, not a hand.
         | ClientRequest::ConfigureDisplay { .. }
+        | ClientRequest::ChangeConfig { .. }
         // A key or a click, which already counted.
         | ClientRequest::SelectKeymap { .. }
         | ClientRequest::SwitchShortcutsInhibitor { .. }

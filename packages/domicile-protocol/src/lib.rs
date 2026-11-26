@@ -226,6 +226,25 @@ pub struct SurfaceRect {
     pub height: i32,
 }
 
+/// One step from the top of the config down to a value: a key, or an index
+/// into a list.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ConfigKey {
+    Index(usize),
+    Name(String),
+}
+
+/// A temporary change to the config: `value`, JSON text, in place of what the
+/// config file has at `path`, which is `written` (`null` where it has
+/// nothing). See [`ChromeMessage::SetConfigOverride`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfigOverride {
+    pub path: Vec<ConfigKey>,
+    pub value: String,
+    pub written: String,
+}
+
 /// Messages sent from the chrome (in-page client) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -543,6 +562,22 @@ pub enum ChromeMessage {
     /// Answered with [`HostMessage::LogLevelsSet`] on this connection only.
     /// Sent by `domicile set-log-level`.
     SetLogLevels { levels: LogLevels },
+
+    /// Lay `value`, JSON text, over the config at `path` until the desktop
+    /// stops, the config file changes what it has there, or
+    /// [`ChromeMessage::ResetConfigOverrides`]. `null` takes the setting back
+    /// to its default. Refused, changing nothing, when the config would refuse
+    /// the result. Answered with [`HostMessage::ConfigOverrides`] on this
+    /// connection only. Sent by `domicile-app-host` for Settings.
+    SetConfigOverride { path: Vec<ConfigKey>, value: String },
+
+    /// End the temporary changes at or under each of `paths`. Answered with
+    /// [`HostMessage::ConfigOverrides`] on this connection only.
+    ResetConfigOverrides { paths: Vec<Vec<ConfigKey>> },
+
+    /// Report the temporary changes. Answered with
+    /// [`HostMessage::ConfigOverrides`] on this connection only.
+    WhichConfigOverrides,
 
     /// This page has captured its old frame for `theme`; the windows may now
     /// switch.
@@ -1047,6 +1082,17 @@ pub enum HostMessage {
     /// Answers [`ChromeMessage::ConfigureDisplay`] on the asking connection
     /// only: why it was not done, or nothing when the desktop took it.
     DisplayConfigured {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        refused: Option<String>,
+    },
+
+    /// Answers [`ChromeMessage::SetConfigOverride`],
+    /// [`ChromeMessage::ResetConfigOverrides`] and
+    /// [`ChromeMessage::WhichConfigOverrides`] on the asking connection only:
+    /// the temporary changes after the request, in the order they were made,
+    /// and why it was refused, if it was.
+    ConfigOverrides {
+        overrides: Vec<ConfigOverride>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         refused: Option<String>,
     },
@@ -3515,6 +3561,9 @@ pub enum WatchTopic {
     Inputs,
     /// [`HostMessage::Status`].
     Status,
+    /// [`HostMessage::ConfigOverrides`], for the Settings app to show a
+    /// temporary change another chrome made.
+    ConfigOverrides,
 }
 
 /// An input device as `domicile list-inputs` prints it. See
@@ -3914,6 +3963,25 @@ mod wire_names {
             serde_json::from_str::<ChromeMessage>(sent).expect("the SDK's own wire form"),
             ChromeMessage::SetTheme {
                 theme: Theme::Light
+            }
+        );
+    }
+
+    /// Settings' temporary change, as `domicile-app-host` sends it: keys and
+    /// indexes in the path, the value as JSON text.
+    #[test]
+    fn a_temporary_change_parses() {
+        let sent =
+            r#"{"type":"set_config_override","path":["browser","order",0],"value":"\"work\""}"#;
+        assert_eq!(
+            serde_json::from_str::<ChromeMessage>(sent).expect("the host's wire form"),
+            ChromeMessage::SetConfigOverride {
+                path: vec![
+                    ConfigKey::Name("browser".to_string()),
+                    ConfigKey::Name("order".to_string()),
+                    ConfigKey::Index(0)
+                ],
+                value: "\"work\"".to_string(),
             }
         );
     }

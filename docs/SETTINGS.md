@@ -8,7 +8,8 @@ not in the Extensions page or any extension list.
 - **Config pages:** Appearance, Keyboard, Displays, Power & lock, Privacy,
   Launcher, Startup and Shell cover every key of the config
   ([SHELL-CONFIG.md](SHELL-CONFIG.md)). A change is written to the file as soon
-  as it is made, and the desktop reloads it.
+  as it is made, and the desktop reloads it. A config Settings cannot write
+  takes [temporary changes](#temporary-changes).
 - **Extensions:** switch an extension on or off and open its options through
   the engine. While one is on, change the settings it can use: site access,
   local files and user scripts. What runs in private windows is a private
@@ -63,13 +64,14 @@ not in the Extensions page or any extension list.
 | The desktop's | Config pages | Code |
 |---|---|---|
 | JSON config, writable | edit | edit |
-| JSON config, read-only (for example, home-manager's link into the Nix store) | show | show |
-| Module config (`.ts`, `.js`) | show the JSON it evaluated to | edit |
-| No config file | show the defaults | nothing to show |
+| JSON config, read-only (for example, home-manager's link into the Nix store) | temporary changes | show |
+| Module config (`.ts`, `.js`) | temporary changes over the JSON it evaluated to | edit |
+| No config file | temporary changes over the defaults | nothing to show |
 | Shell that is a file | | edit, or show if read-only |
 | Shell that is a package | | nothing to show |
 
-- A read-only page says why above its settings.
+- A read-only page says why above its settings. Startup is read-only but for
+  a writable JSON config: its commands run only as the desktop starts.
 - The host refuses a JSON config the compositor would refuse, with the
   compositor's reason. The file is not written.
 - An edit made elsewhere shows at once: the host watches both files.
@@ -78,6 +80,38 @@ not in the Extensions page or any extension list.
   ([WRITING-A-SHELL.md](WRITING-A-SHELL.md#options)), a card per group. The
   host refuses a `shell_options` value the declaration refuses, naming it. A
   value already bad in the file does not block other edits.
+
+## Temporary changes
+
+A config Settings cannot write still changes from its pages: the compositor
+lays each change over the config until the desktop restarts.
+
+- A change says "Changed from your config" on its row, with **Reset**. The
+  page's note counts its changes, with **Reset all**.
+- A change ends when the desktop stops, when it is reset, or when the file
+  changes what it has at that setting. The file always wins.
+- A change the config would refuse is refused, with the compositor's reason.
+  If the file's next version and the changes no longer make a valid config,
+  every change ends.
+- Setting the file's own value ends the change.
+- The lock's own settings (`lock`, its PAM service) take no temporary
+  change, and a locked desktop takes only the theme toggle's. Other settings that bear on locking, such as
+  `idle.lock_after_seconds`, change for now like any setting.
+- The shell's theme toggle and `domicile theme` are temporary changes of
+  `theme.mode`, so Settings shows them, as it shows any change a shell makes
+  while it is open (`domicile-app-host` follows the compositor's
+  `config-overrides` watch topic).
+- A config Settings can write shows them too, with **Reset**. A choice made in
+  Settings writes the file and ends the change at that setting.
+- Extensions, Profiles and Startup do not take them.
+
+The compositor holds them (`ConfigStore::set_override` in `domicile-config`)
+and takes them up as it takes up an edit of the file. The host asks with
+`config_overrides`, `set_config_override` and `reset_config_overrides` on the
+control socket, which `domicile` relays to the compositor as
+`ChromeMessage::SetConfigOverride`, `ResetConfigOverrides` and
+`WhichConfigOverrides`. A path is keys and list indexes; a value is JSON text,
+and `null` takes the setting back to its default.
 
 ## How it works
 

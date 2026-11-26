@@ -2,20 +2,28 @@ import type { ReactNode } from "react";
 
 import { css } from "../styled-system/css";
 import { flex } from "../styled-system/patterns";
+import type { ConfigPath } from "./config-document";
+import { Changed } from "./temporary-changes";
 
 type Props = {
   /** The control, which names itself with the same `title`. */
   children: ReactNode;
   hint?: ReactNode | undefined;
   title: string;
+  /**
+   * Where the setting is in the config, so the row says when a temporary
+   * change differs from it.
+   */
+  path?: ConfigPath | undefined;
 };
 
 /** One setting: its name and hint beside its control. */
-export const SettingRow = ({ children, hint, title }: Props) => (
+export const SettingRow = ({ children, hint, path, title }: Props) => (
   <div className={rowStyles}>
     <div className={textStyles}>
       <span className={titleStyles}>{title}</span>
       {hint !== undefined && <span className={hintStyles}>{hint}</span>}
+      {path !== undefined && <Changed path={path} title={title} />}
     </div>
     <div className={controlStyles}>{children}</div>
   </div>

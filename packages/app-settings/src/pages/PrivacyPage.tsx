@@ -37,6 +37,7 @@ export const PrivacyPage = ({
             onChange={(on) => {
               set(["lockdown", key], on ? true : undefined);
             }}
+            path={["lockdown", key]}
           />
         ))}
       </Card>

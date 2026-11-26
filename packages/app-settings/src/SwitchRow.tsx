@@ -2,6 +2,8 @@ import { Switch } from "@domicile-desktop/component-library/Switch";
 
 import { css } from "../styled-system/css";
 import { flex } from "../styled-system/patterns";
+import type { ConfigPath } from "./config-document";
+import { Changed } from "./temporary-changes";
 
 type Props = {
   label: string;
@@ -9,6 +11,11 @@ type Props = {
   checked: boolean;
   disabled: boolean;
   onChange: (checked: boolean) => void;
+  /**
+   * Where the setting is in the config, so the row says when a temporary
+   * change differs from it.
+   */
+  path?: ConfigPath | undefined;
 };
 
 /** An on/off setting: the switch and its label, with a hint under them. */
@@ -18,6 +25,7 @@ export const SwitchRow = ({
   hint,
   label,
   onChange,
+  path,
 }: Props) => (
   <div className={rowStyles}>
     <Switch
@@ -27,6 +35,11 @@ export const SwitchRow = ({
       onCheckedChange={onChange}
     />
     {hint !== undefined && <span className={hintStyles}>{hint}</span>}
+    {path !== undefined && (
+      <span className={hintStyles}>
+        <Changed path={path} title={label} />
+      </span>
+    )}
   </div>
 );
 

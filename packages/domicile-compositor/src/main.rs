@@ -81,6 +81,7 @@ mod clipboard;
 mod color_management;
 mod compositor_casts;
 mod config_adoption;
+mod config_overrides;
 mod configure_answers;
 mod configured_displays;
 mod cursor_surface;
@@ -208,13 +209,12 @@ use crate::modifiers::Held;
 use crate::once_per_window::OncePerWindow;
 use crate::outputs::{advertise_output, screens_at_startup, LiveOutput};
 use crate::portals::{shell_appearance, Selection};
-use crate::restatement::Restatement;
 use crate::screens::{Advertised, Screens};
 use crate::spawning::{chrome_display, home_directory, start_client};
 use crate::subsurfaces::Subsurface;
 use crate::surface_commit::{LastBuffer, Role};
 use crate::windows::SizeLimits;
-use domicile_config::{Config, ConfigError, ConfigStore};
+use domicile_config::{ConfigError, ConfigStore, Written};
 use domicile_host::clipboard::{Contents, History};
 use domicile_host::data_dirs::data_dirs;
 use domicile_host::keymaps::Listed;
@@ -887,10 +887,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // A config that will not load is fatal. Shells generate it, so a bad one
     // means a broken shell, and falling back to defaults would hide that.
-    let config = match &arguments.config {
-        Some(path) => Config::load(path)?,
-        None => Config::default(),
+    let written = match &arguments.config {
+        Some(path) => Written::load(path)?,
+        None => Written::default(),
     };
+    let config = written.config().clone();
     // Every process started from here on is told it; see `desk_terminal`.
     domicile_host::desk_terminal::set(config.terminal.clone());
     // Before any client starts, so the launcher's first listing has them.
@@ -1449,7 +1450,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         seat,
         output_manager_state,
         outputs,
-        config: ConfigStore::new(config.clone()),
+        config: ConfigStore::new(written),
         engine_displays: Vec::new(),
         display_overrides: Vec::new(),
         virtual_displays: Vec::new(),
@@ -1772,7 +1773,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         None => debug!("no config file, so the desktop is fixed for this run"),
         Some(path) => match domicile_config::watch(path) {
             Ok(watcher) => {
-                let (reload_tx, reload_rx) = channel::<Result<Config, ConfigError>>();
+                let (reload_tx, reload_rx) = channel::<Result<Written, ConfigError>>();
                 thread::spawn(move || {
                     // Bind the whole watcher so the closure captures it.
                     // Edition 2021 closures capture only the fields used, so
@@ -1802,39 +1803,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         tracing::error!(%err, "keeping the last config that parsed");
                         return;
                     }
-                    // Processes started after the reload get the new one.
-                    domicile_host::desk_terminal::set(data.state.config.current().terminal.clone());
-                    let restated = Restatement::between(&was, data.state.config.current());
-                    let rebuilt = data.state.output_settings().and_then(|output| {
-                        data.state.screens.reloaded_into(
-                            &output,
-                            &data.state.engine_displays,
-                            &data.state.vendors,
-                            &data.state.virtual_displays,
-                        )
-                    });
-                    match rebuilt {
-                        // No change: an undescribed config with no monitors
-                        // read. The window controls the desktop, and rebuilding
-                        // would undo its negotiated density.
-                        Ok(None) => {}
-                        Ok(Some(screens)) => {
-                            let dh = data.display.handle();
-                            data.state.adopt_the_desktop(&dh, screens);
-                        }
-                        // A profile matches the plugged-in monitors but cannot
-                        // be applied. The config is accepted; the current
-                        // desktop stays.
-                        Err(err) => tracing::error!(
-                            %err,
-                            "keeping the desktop that is up; the reloaded profile does not \
-                             describe one these monitors can make"
-                        ),
-                    }
-                    // Then the rest of the config, after the desktop so scale
-                    // is advertised against the settled outputs. Always runs:
-                    // even a failed profile may come with keyboard changes.
-                    data.state.adopt_the_rest_of_the_config(&restated);
+                    let dh = data.display.handle();
+                    data.state.take_up_the_changed_config(&dh, &was);
                 })?;
             }
             Err(err) => {

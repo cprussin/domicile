@@ -134,6 +134,7 @@ const FromTheWeb = ({
         onChange={(checked) => {
           editor?.set(["agents", "web"], checked ? true : undefined);
         }}
+        path={["agents", "web"]}
       />
       {on && (
         <SettingRow

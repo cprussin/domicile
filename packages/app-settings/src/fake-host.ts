@@ -1,7 +1,10 @@
 // An in-memory stand-in for the settings host, for the app's tests.
 
+import type { ConfigPath } from "./config-document";
+import { parseDocument, valueAt } from "./config-document";
 import type {
   BrowserProfiles,
+  ConfigOverride,
   ExtensionSettings,
   InstalledExtension,
   KnownAgents,
@@ -38,6 +41,8 @@ export type FakeHostState = {
   profiles?: BrowserProfiles | undefined;
   /** Whether detailed logging is on; off by default. */
   detailed?: boolean | undefined;
+  /** The temporary changes to the config; none by default. */
+  overrides?: ConfigOverride[] | undefined;
   /** The reason every write is refused, if any. */
   refuse?: string | undefined;
 };
@@ -48,6 +53,13 @@ export type FakeHostState = {
  */
 export const fakeHost = (state: FakeHostState) => {
   const changes = new Set<() => void>();
+  /** What the config file (or the evaluated module) has at `path`. */
+  const writtenAt = (path: ConfigPath): unknown => {
+    const text = state.files.evaluated ?? state.files.config?.text ?? "{}";
+    // A Nix config, which the fake does not evaluate, has nothing.
+    const document = parseDocument(text).unwrapOr({});
+    return valueAt(document, path) ?? null;
+  };
   const writes: { file: Target; text: string }[] = [];
   const loaded: string[] = [];
   const uninstalled: string[] = [];
@@ -91,6 +103,8 @@ export const fakeHost = (state: FakeHostState) => {
       return Promise.resolve();
     },
     configExtensions: () => Promise.resolve([...state.configExtensions]),
+    configOverrides: () =>
+      Promise.resolve(structuredClone(state.overrides ?? [])),
     configureExtension: (id, settings) => {
       const found = state.installed.find((extension) => extension.id === id);
       if (found === undefined) {
@@ -151,9 +165,28 @@ export const fakeHost = (state: FakeHostState) => {
       return Promise.resolve();
     },
     read: () => Promise.resolve(structuredClone(state.files)),
+    resetConfigOverrides: (paths) => {
+      state.overrides = (state.overrides ?? []).filter(
+        ({ path }) => !paths.some((under) => startsWith(path, under)),
+      );
+      return Promise.resolve(structuredClone(state.overrides));
+    },
     retryWebAgents: () => {
       retried.times += 1;
       return Promise.resolve();
+    },
+    setConfigOverride: (path, value) => {
+      if (state.refuse === undefined) {
+        state.overrides = [
+          ...(state.overrides ?? []).filter(
+            (change) => !startsWith(change.path, path),
+          ),
+          { path: [...path], value: value ?? null, written: writtenAt(path) },
+        ];
+        return Promise.resolve(structuredClone(state.overrides));
+      } else {
+        return Promise.reject(new Error(state.refuse));
+      }
     },
     setDetailedLogging: (on) => {
       state.detailed = on;
@@ -265,3 +298,7 @@ export const fakeHost = (state: FakeHostState) => {
     writes,
   };
 };
+
+/** Whether `path` is `under` or below it. */
+const startsWith = (path: ConfigPath, under: ConfigPath) =>
+  under.every((key, at) => path[at] === key);

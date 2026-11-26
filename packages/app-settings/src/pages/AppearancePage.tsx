@@ -36,6 +36,7 @@ export const AppearancePage = ({
       <Card>
         <SettingRow
           hint="The shell and every window that follows the desktop's theme."
+          path={["theme", "mode"]}
           title="Theme"
         >
           <Select
@@ -52,6 +53,7 @@ export const AppearancePage = ({
         </SettingRow>
         <SettingRow
           hint="The color windows highlight with. Unset, each app picks its own."
+          path={["theme", "accent_color"]}
           title="Accent color"
         >
           <ColorWell
@@ -77,6 +79,7 @@ export const AppearancePage = ({
         </SettingRow>
         <SettingRow
           hint="High draws text and edges at full strength."
+          path={["theme", "contrast"]}
           title="Contrast"
         >
           <Select
@@ -96,6 +99,7 @@ export const AppearancePage = ({
         </SettingRow>
         <SettingRow
           hint="An icon theme's directory name, such as Papirus-Dark. Empty uses hicolor."
+          path={["theme", "icon_theme"]}
           title="Icon theme"
         >
           <TextSetting
@@ -130,6 +134,7 @@ export const AppearancePage = ({
           onChange={(reduced) => {
             set(["theme", "reduced_motion"], reduced ? true : undefined);
           }}
+          path={["theme", "reduced_motion"]}
         />
       </Card>
     </Page>

@@ -372,6 +372,11 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::PointerButton { .. }
             | ClientRequest::PointerAxis { .. },
         ) => Some(Refusal::Hand),
+        // The shell's theme toggle may run on the lock screen; any other
+        // change could undo what the lock keeps, so it waits for the user.
+        Asked::OnTheWaylandThread(ClientRequest::ChangeConfig { change, .. }) => {
+            (!change.is_the_theme_toggles()).then_some(Refusal::Command)
+        }
         Asked::OnTheWaylandThread(
             ClientRequest::CloseApp { .. }
             | ClientRequest::Spawn { .. }
@@ -444,11 +449,10 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::PowerDisplays { .. }
             // Like `sleep-displays`: arranging the monitors shows nothing the
             // lock hides, and docking a locked laptop may need it.
-            | ClientRequest::ConfigureDisplay { .. },
+            | ClientRequest::ConfigureDisplay { .. }
         )
         | Asked::OnTheConnection(
-            ConnectionRequest::SetTheme { .. }
-            | ConnectionRequest::WhichTheme
+            ConnectionRequest::WhichTheme
             | ConnectionRequest::WhichMonitors
             | ConnectionRequest::WhichDisplays
             | ConnectionRequest::WhichWindows
@@ -986,6 +990,19 @@ mod tests {
                     answer: PortalAnswer::Released,
                 },
             ),
+            (
+                "a temporary change other than the theme toggle's",
+                ClientRequest::ChangeConfig {
+                    change: crate::config_overrides::ConfigChange::Set {
+                        path: vec![
+                            domicile_config::ConfigKey::Name("idle".into()),
+                            domicile_config::ConfigKey::Name("lock_after_seconds".into()),
+                        ],
+                        value: serde_json::json!(0),
+                    },
+                    answer: crate::config_overrides::Answer::new().0,
+                },
+            ),
         ] {
             assert_eq!(
                 refused(Asked::OnTheWaylandThread(&request)),
@@ -1154,6 +1171,19 @@ mod tests {
                 "the pointer changing shape over the lock screen",
                 ClientRequest::DeskCursor { image: None },
             ),
+            (
+                "the shell's theme toggle",
+                ClientRequest::ChangeConfig {
+                    change: crate::config_overrides::ConfigChange::Set {
+                        path: vec![
+                            domicile_config::ConfigKey::Name("theme".into()),
+                            domicile_config::ConfigKey::Name("mode".into()),
+                        ],
+                        value: serde_json::json!("dark"),
+                    },
+                    answer: crate::config_overrides::Answer::new().0,
+                },
+            ),
         ] {
             assert_eq!(
                 refused(Asked::OnTheWaylandThread(&request)),
@@ -1164,7 +1194,6 @@ mod tests {
         }
         // Answered on the connection, but checked by the same `match`.
         for request in [
-            ConnectionRequest::SetTheme { theme: Theme::Dark },
             ConnectionRequest::WhichTheme,
             ConnectionRequest::WhichMonitors,
             ConnectionRequest::WhichDisplays,

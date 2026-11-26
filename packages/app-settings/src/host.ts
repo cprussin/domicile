@@ -16,6 +16,8 @@ import type {
 } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
+import type { ConfigPath } from "./config-document";
+
 /** Logs Save logs wrote. */
 export type ExportedLogs = {
   /** The file. */
@@ -56,6 +58,19 @@ const fileSchema = z.object({
 
 /** A file the app edits. */
 export type HostFile = z.infer<typeof fileSchema>;
+
+const configOverrideSchema = z.object({
+  path: z.array(z.union([z.string(), z.number()])),
+  value: z.string().transform((text): unknown => JSON.parse(text)),
+  written: z.string().transform((text): unknown => JSON.parse(text)),
+});
+
+/**
+ * A temporary change to the config: `value` in place of what the config has
+ * at `path`, `written`, until the desktop stops. `null` is the setting's
+ * default, or where the config has nothing.
+ */
+export type ConfigOverride = z.output<typeof configOverrideSchema>;
 
 /** Which file a write replaces. */
 export type Target = "config" | "shell";
@@ -343,6 +358,21 @@ export type SettingsHost = {
   mediaDevices: () => Promise<MediaDevices>;
   /** The lit monitors. */
   monitors: () => Promise<Monitor[]>;
+  /** The temporary changes to the config, in the order they were made. */
+  configOverrides: () => Promise<ConfigOverride[]>;
+  /**
+   * Lays `value` over the config at `path` until the desktop stops;
+   * `undefined` takes the setting back to its default. Resolves with the
+   * temporary changes after it. The desktop refuses a value the config would.
+   */
+  setConfigOverride: (
+    path: ConfigPath,
+    value: unknown,
+  ) => Promise<ConfigOverride[]>;
+  /** Ends the temporary changes at or under each of `paths`. */
+  resetConfigOverrides: (
+    paths: readonly ConfigPath[],
+  ) => Promise<ConfigOverride[]>;
   /** Gives device `id` to sites that ask for a `kind` without naming one. */
   setMediaDevice: (kind: MediaKind, id: string) => Promise<void>;
   /** The agents in now, and those remembered. */
@@ -477,6 +507,8 @@ export const spawnedHost = (
         throw unexpected(reply, "config_extensions");
       }
     },
+    configOverrides: async () =>
+      overridesOf(await ask({ type: "config_overrides" })),
     configureExtension: async (extension, settings) => {
       const reply = await ask({
         extension,
@@ -582,12 +614,22 @@ export const spawnedHost = (
         throw unexpected(reply, "files");
       }
     },
+    resetConfigOverrides: async (paths) =>
+      overridesOf(await ask({ paths, type: "reset_config_overrides" })),
     retryWebAgents: async () => {
       const reply = await ask({ type: "retry_web_agents" });
       if (reply.type !== "done") {
         throw unexpected(reply, "done");
       }
     },
+    setConfigOverride: async (path, value) =>
+      overridesOf(
+        await ask({
+          path,
+          type: "set_config_override",
+          value: JSON.stringify(value ?? null),
+        }),
+      ),
     setDetailedLogging: async (on) => {
       const reply = await ask({ on, type: "set_detailed_logging" });
       if (reply.type === "detailed_logging") {
@@ -717,6 +759,11 @@ const replySchema = z.discriminatedUnion("type", [
     type: z.literal("monitors"),
   }),
   z.object({
+    id: z.number(),
+    overrides: z.array(configOverrideSchema),
+    type: z.literal("config_overrides"),
+  }),
+  z.object({
     extensions: z.array(extensionSchema),
     id: z.number(),
     type: z.literal("extensions"),
@@ -794,6 +841,15 @@ const received = (
         waiting.resolve(reply);
       }
     }
+  }
+};
+
+/** The temporary changes `reply` gives. */
+const overridesOf = (reply: Reply): ConfigOverride[] => {
+  if (reply.type === "config_overrides") {
+    return reply.overrides;
+  } else {
+    throw unexpected(reply, "config_overrides");
   }
 };
 

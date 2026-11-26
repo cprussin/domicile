@@ -118,6 +118,11 @@ pub struct ChromeHub {
     /// The connections `domicile subscribe` holds. The writer thread tells
     /// them; see [`serve_outbound`].
     pub watchers: Watchers,
+    /// The temporary changes to the config as they last stood, for
+    /// [`WatchTopic::ConfigOverrides`]. The Wayland thread holds the config
+    /// and sets this as it takes up each change
+    /// ([`crate::config_overrides`]).
+    pub config_overrides: Mutex<Vec<domicile_protocol::ConfigOverride>>,
     /// The last input the idle clock counts, or when the hub was made if there
     /// has been none. The Wayland thread sets it with [`ChromeHub::stirred`];
     /// see [`ChromeHub::idle_time`].
@@ -168,6 +173,7 @@ impl ChromeHub {
             virtual_monitors: VirtualMonitors::default(),
             keymaps: Keymaps::default(),
             watchers: Watchers::default(),
+            config_overrides: Mutex::new(Vec::new()),
             stirred_at: Mutex::new(Instant::now()),
             touched_at: Mutex::new(Instant::now()),
         });
@@ -274,6 +280,10 @@ impl ChromeHub {
             WatchTopic::Displays => self.host.lock().unwrap().list_displays(),
             WatchTopic::Inputs => self.host.lock().unwrap().list_inputs(),
             WatchTopic::Status => self.status(),
+            WatchTopic::ConfigOverrides => HostMessage::ConfigOverrides {
+                overrides: self.config_overrides.lock().unwrap().clone(),
+                refused: None,
+            },
         }
     }
 

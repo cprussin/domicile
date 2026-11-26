@@ -15,6 +15,11 @@ export type ConfigEditor = {
   set: (path: ConfigPath, value: unknown) => void;
   /** Reports a value the page refused, or a change that failed. */
   report: Report;
+  /**
+   * Whether changes are temporary, laid over a config the desktop cannot
+   * write until it restarts.
+   */
+  temporary: boolean;
 };
 
 /** Reports a failure as a toast titled `title`. */

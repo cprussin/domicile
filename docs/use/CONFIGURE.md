@@ -42,8 +42,9 @@ windows stay open.
 - `$schema` lets your editor complete and check it.
 - A mistake is logged, and the last good settings stay.
 - `domicile check-config ~/.config/domicile/domicile.json` checks it.
-- If the file is read-only, as with home-manager, Settings shows it but
-  can't change it.
+- If the file is read-only, as with home-manager, a change in Settings lasts
+  until the desktop restarts or the file changes that setting. Settings marks
+  each one, with **Reset**.
 
 ### A config module
 
@@ -60,7 +61,8 @@ export const Shell = runManganese({
 ```
 
 - Each export other than `Shell` is a section of the JSON.
-- Settings shows what it evaluates to, and its **Code** page edits it.
+- Settings shows what it evaluates to, and its **Code** page edits it. Other
+  pages' changes last until the desktop restarts.
 
 ### Home-manager
 

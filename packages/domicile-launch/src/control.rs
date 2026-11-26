@@ -14,9 +14,10 @@ use std::path::{Path, PathBuf};
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    AgentReach, DeskRect, DeskShot, DesktopStatus, DisplayChange, EmulatedInput, HostMessage,
-    KnownAgents, ListedDisplay, ListedInput, ListedWindow, LogLevel, LogLevels, MonitorInfo, Scale,
-    ShellBinding, ShellCommandHelp, Subsystem, Theme, WatchTopic, WindowAct, WindowKind,
+    AgentReach, ChromeMessage, ConfigKey, ConfigOverride, DeskRect, DeskShot, DesktopStatus,
+    DisplayChange, EmulatedInput, HostMessage, KnownAgents, ListedDisplay, ListedInput,
+    ListedWindow, LogLevel, LogLevels, MonitorInfo, Scale, ShellBinding, ShellCommandHelp,
+    Subsystem, Theme, WatchTopic, WindowAct, WindowKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -186,6 +187,14 @@ pub enum Request {
     /// by. Asked by `domicile-app-host`, so Settings offers HDR only where a
     /// monitor takes it.
     Monitors,
+    /// Lay `value`, JSON text, over the config at `path` until the desktop
+    /// stops. Answered with the temporary changes. Asked by
+    /// `domicile-app-host` for Settings. See `docs/SETTINGS.md`.
+    SetConfigOverride { path: Vec<ConfigKey>, value: String },
+    /// End the temporary changes at or under each of `paths`.
+    ResetConfigOverrides { paths: Vec<Vec<ConfigKey>> },
+    /// Report the temporary changes to the config.
+    ConfigOverrides,
     /// Report every display: its names, mode, layout and whether it is lit.
     /// The compositor owns the displays, so this works with any shell.
     Displays,
@@ -475,6 +484,10 @@ pub enum Response {
 
     /// Answers `monitors`.
     Monitors { monitors: Vec<MonitorInfo> },
+
+    /// Answers `set_config_override`, `reset_config_overrides` and
+    /// `config_overrides`: the temporary changes after the request.
+    ConfigOverrides { overrides: Vec<ConfigOverride> },
 
     /// Answers `displays`.
     Displays { displays: Vec<ListedDisplay> },
@@ -779,6 +792,13 @@ pub type ReadingLogs<'a> = &'a dyn Fn() -> Result<Vec<Said>, String>;
 /// [`crate::compositor_socket::monitors`] in a desktop; a closure in tests.
 pub type ListMonitors<'a> = &'a dyn Fn() -> Result<Vec<MonitorInfo>, String>;
 
+/// Sends the compositor a request of the temporary changes to the config, and
+/// returns them after it.
+///
+/// [`crate::compositor_socket::config_overrides`] in a desktop; a closure in
+/// tests.
+pub type ChangingTheConfig<'a> = &'a dyn Fn(ChromeMessage) -> Result<Vec<ConfigOverride>, String>;
+
 /// Asks the compositor for every display.
 ///
 /// [`crate::compositor_socket::displays`] in a desktop; a closure in tests.
@@ -899,6 +919,7 @@ pub struct Desktop<'a> {
     pub logs_in_the_journal: bool,
     pub logs: ReadingLogs<'a>,
     pub monitors: ListMonitors<'a>,
+    pub config_overrides: ChangingTheConfig<'a>,
     pub displays: ListDisplays<'a>,
     pub windows: ListWindows<'a>,
     pub browser_layouts: ListBrowserLayouts<'a>,
@@ -1158,6 +1179,17 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(monitors) => Response::Monitors { monitors },
             Err(why) => Response::Refused { why },
         }),
+        Ok(Request::SetConfigOverride { path, value }) => to_line(&overridden(
+            desktop,
+            ChromeMessage::SetConfigOverride { path, value },
+        )),
+        Ok(Request::ResetConfigOverrides { paths }) => to_line(&overridden(
+            desktop,
+            ChromeMessage::ResetConfigOverrides { paths },
+        )),
+        Ok(Request::ConfigOverrides) => {
+            to_line(&overridden(desktop, ChromeMessage::WhichConfigOverrides))
+        }
         Ok(Request::Displays) => to_line(&match (desktop.displays)() {
             Ok(displays) => Response::Displays { displays },
             Err(why) => Response::Refused { why },
@@ -1502,6 +1534,14 @@ fn switched(to: Option<Switch>, set: DisableWhileTyping) -> Result<bool, String>
         Some(Switch::On) => set(Some(true)),
         Some(Switch::Off) => set(Some(false)),
         Some(Switch::Toggle) => set(Some(!set(None)?)),
+    }
+}
+
+/// The answer to a request of the temporary changes to the config.
+fn overridden(desktop: &Desktop, request: ChromeMessage) -> Response {
+    match (desktop.config_overrides)(request) {
+        Ok(overrides) => Response::ConfigOverrides { overrides },
+        Err(why) => Response::Refused { why },
     }
 }
 

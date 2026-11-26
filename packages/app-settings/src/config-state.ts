@@ -28,12 +28,17 @@ export const ConfigState = {
     kind: ConfigKind.Json as const,
     settings,
   }),
-  Module: (path: string, settings: Settings) => ({
+  Module: (path: string, document: ConfigDocument, settings: Settings) => ({
+    document,
     kind: ConfigKind.Module as const,
     path,
     settings,
   }),
-  None: (settings: Settings) => ({ kind: ConfigKind.None as const, settings }),
+  None: (settings: Settings) => ({
+    document: {},
+    kind: ConfigKind.None as const,
+    settings,
+  }),
   Unreadable: (path: string, why: string) => ({
     kind: ConfigKind.Unreadable as const,
     path,
@@ -81,10 +86,14 @@ const moduleState = (
     throw new Error(`The desktop did not evaluate ${path}`);
   } else {
     return parseDocument(evaluated)
-      .andThen(readSettings)
+      .andThen((document) =>
+        readSettings(document).map((settings) =>
+          ConfigState.Module(path, document, settings),
+        ),
+      )
       .match<ConfigState>({
         Err: (why) => ConfigState.Unreadable(path, why),
-        Ok: (settings) => ConfigState.Module(path, settings),
+        Ok: (state) => state,
       });
   }
 };

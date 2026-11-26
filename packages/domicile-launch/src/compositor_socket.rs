@@ -15,10 +15,10 @@ use std::time::Duration;
 
 use domicile_host::system::DisplayPower;
 use domicile_protocol::{
-    AgentReach, ChromeMessage, DeskRect, DeskShot, DesktopStatus, DisplayChange, EmulatedInput,
-    HostMessage, KnownAgents, ListedDisplay, ListedInput, ListedWindow, LogLevels, MonitorInfo,
-    ShellBinding, ShellCommandHelp, SystemError, SystemErrorKind, SystemEvent, SystemReply,
-    SystemRequest, Theme, WatchTopic, WindowAct,
+    AgentReach, ChromeMessage, ConfigOverride, DeskRect, DeskShot, DesktopStatus, DisplayChange,
+    EmulatedInput, HostMessage, KnownAgents, ListedDisplay, ListedInput, ListedWindow, LogLevels,
+    MonitorInfo, ShellBinding, ShellCommandHelp, SystemError, SystemErrorKind, SystemEvent,
+    SystemReply, SystemRequest, Theme, WatchTopic, WindowAct,
 };
 
 use crate::cli::MonitorMode;
@@ -364,6 +364,32 @@ pub fn theme(
     let said = exchanged(socket, &messages, patience)?;
     match serde_json::from_str::<HostMessage>(&said) {
         Ok(HostMessage::Theme { theme }) => Ok(theme),
+        _ => Err(CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said,
+        }),
+    }
+}
+
+/// Sends the compositor at `socket` `request`, one of
+/// [`ChromeMessage::SetConfigOverride`],
+/// [`ChromeMessage::ResetConfigOverrides`] and
+/// [`ChromeMessage::WhichConfigOverrides`], and returns the temporary changes
+/// to the config after it.
+pub fn config_overrides(
+    socket: &Path,
+    request: ChromeMessage,
+    patience: Option<Duration>,
+) -> Result<Vec<ConfigOverride>, CompositorError> {
+    let said = exchanged(socket, &[request], patience)?;
+    match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::ConfigOverrides {
+            overrides,
+            refused: None,
+        }) => Ok(overrides),
+        Ok(HostMessage::ConfigOverrides {
+            refused: Some(why), ..
+        }) => Err(CompositorError::Refused { why }),
         _ => Err(CompositorError::Unreadable {
             path: socket.display().to_string(),
             said,

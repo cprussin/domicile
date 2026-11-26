@@ -169,6 +169,9 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                         panic!("a question about this desktop reaches no compositor")
                     },
                     monitors: &|| panic!("a question about this desktop reaches no compositor"),
+                    config_overrides: &|_| {
+                        panic!("a question about this desktop reaches no compositor")
+                    },
                     displays: &|| panic!("a question about this desktop reaches no compositor"),
                     windows: &|| panic!("a question about this desktop reaches no compositor"),
                     browser_layouts: &|| panic!("a question about this desktop reaches no engine"),

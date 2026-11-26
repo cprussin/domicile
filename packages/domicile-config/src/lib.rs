@@ -15,6 +15,7 @@
 mod desktop;
 mod files;
 mod input_devices;
+mod overrides;
 mod pointers;
 mod profile;
 mod startup;
@@ -25,6 +26,7 @@ pub use input_devices::{
     AccelProfile, ButtonMap, ClickMethod, DisableWhileTyping, MouseConfig, ScrollMethod,
     TouchpadConfig,
 };
+pub use overrides::{ConfigKey, ConfigOverride};
 pub use pointers::{PointerConfig, PointerTarget};
 pub use profile::{
     Connected, Desk, DisplayOverride, DisplayPlacement, Layout, Placed, Profile, Scanout,
@@ -1379,6 +1381,13 @@ impl Config {
         Config::settled(parsed, home)
     }
 
+    /// [`Config::parse`] on JSON already parsed.
+    pub fn from_value(value: serde_json::Value) -> Result<Config, ConfigError> {
+        let parsed: Config =
+            serde_json::from_value(value).map_err(|e| ConfigError::Parse(e.to_string()))?;
+        Config::settled(parsed, home_directory().as_deref())
+    }
+
     /// A config as it was written, with its paths taken from `home` and
     /// validated.
     fn settled(parsed: Config, home: Option<&Path>) -> Result<Config, ConfigError> {
@@ -1432,7 +1441,56 @@ fn home_directory() -> Option<PathBuf> {
     std::env::var_os("HOME").map(PathBuf::from)
 }
 
-/// Holds the live configuration and applies hot-reloads.
+/// A config as its file holds it, and parsed.
+///
+/// The JSON is kept so temporary changes can be laid over it
+/// ([`ConfigStore::set_override`]).
+#[derive(Debug, Clone)]
+pub struct Written {
+    value: serde_json::Value,
+    config: Config,
+}
+
+impl Default for Written {
+    /// No config file: no keys, every default.
+    fn default() -> Self {
+        Written {
+            value: serde_json::Value::Object(serde_json::Map::new()),
+            config: Config::default(),
+        }
+    }
+}
+
+impl Written {
+    /// A config from JSON text, applying defaults and validating it.
+    pub fn parse(text: &str) -> Result<Written, ConfigError> {
+        let config = Config::parse(text)?;
+        let value = serde_json::from_str(text).map_err(|e| ConfigError::Parse(e.to_string()))?;
+        Ok(Written { value, config })
+    }
+
+    /// Read and parse a config from a file.
+    pub fn load(path: impl AsRef<Path>) -> Result<Written, ConfigError> {
+        let path = path.as_ref();
+        let text = std::fs::read_to_string(path).map_err(|e| ConfigError::Io {
+            path: path.display().to_string(),
+            message: e.to_string(),
+        })?;
+        // Add the path to parse errors; the read error above already has it.
+        Written::parse(&text).map_err(|why| ConfigError::At {
+            path: path.display().to_string(),
+            why: Box::new(why),
+        })
+    }
+
+    /// The parsed config.
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+}
+
+/// Holds the live configuration, applies hot-reloads, and lays temporary
+/// changes over the config as written.
 ///
 /// A reload replaces the live config only when the new one is valid.
 /// Otherwise the previous config stays and the error is kept in
@@ -1440,19 +1498,23 @@ fn home_directory() -> Option<PathBuf> {
 /// compositor.
 #[derive(Debug, Clone)]
 pub struct ConfigStore {
+    written: serde_json::Value,
+    overrides: Vec<ConfigOverride>,
     current: Config,
     last_error: Option<ConfigError>,
 }
 
 impl ConfigStore {
-    pub fn new(initial: Config) -> Self {
+    pub fn new(initial: Written) -> Self {
         ConfigStore {
-            current: initial,
+            written: initial.value,
+            overrides: Vec::new(),
+            current: initial.config,
             last_error: None,
         }
     }
 
-    /// The live configuration.
+    /// The live configuration: the file's, with the temporary changes.
     pub fn current(&self) -> &Config {
         &self.current
     }
@@ -1462,21 +1524,106 @@ impl ConfigStore {
         self.last_error.as_ref()
     }
 
+    /// The temporary changes, in the order they were made.
+    pub fn overrides(&self) -> Vec<ConfigOverride> {
+        self.overrides.clone()
+    }
+
+    /// What the file has at `path`, under any temporary change: `null` where
+    /// it has nothing.
+    pub fn written_at(&self, path: &[ConfigKey]) -> serde_json::Value {
+        overrides::value_at(&self.written, path)
+            .cloned()
+            .unwrap_or(serde_json::Value::Null)
+    }
+
+    /// Lays `value` over the config at `path` until the desktop stops, a
+    /// reload changes what the file has there, or
+    /// [`reset_overrides`](ConfigStore::reset_overrides). `null` takes the
+    /// setting back to its default. A value the config already has there,
+    /// under the other changes, ends the change instead. Refused, changing nothing, when the config would
+    /// refuse the result, or when an index in `path` is more than one past
+    /// the end of its list.
+    pub fn set_override(
+        &mut self,
+        path: Vec<ConfigKey>,
+        value: serde_json::Value,
+    ) -> Result<(), ConfigError> {
+        let mut overrides: Vec<ConfigOverride> = self
+            .overrides
+            .iter()
+            .filter(|change| !change.path.starts_with(&path))
+            .cloned()
+            .collect();
+        // Compared with the file under the other changes, so a change under
+        // an earlier change of a section above it stays.
+        let without = overrides::overridden(&self.written, &overrides);
+        overrides::within_reach(&without, &path).map_err(ConfigError::Validation)?;
+        let unchanged =
+            overrides::value_at(&without, &path).unwrap_or(&serde_json::Value::Null) == &value;
+        if !unchanged {
+            overrides.push(ConfigOverride { path, value });
+        }
+        self.take_up(overrides)
+    }
+
+    /// Ends the temporary changes at or under each of `paths`.
+    pub fn reset_overrides(&mut self, paths: &[Vec<ConfigKey>]) -> Result<(), ConfigError> {
+        let overrides = self
+            .overrides
+            .iter()
+            .filter(|change| !paths.iter().any(|path| change.path.starts_with(path)))
+            .cloned()
+            .collect();
+        self.take_up(overrides)
+    }
+
+    /// Makes `overrides` the temporary changes, if the config they make is
+    /// valid.
+    fn take_up(&mut self, overrides: Vec<ConfigOverride>) -> Result<(), ConfigError> {
+        self.current = Config::from_value(overrides::overridden(&self.written, &overrides))?;
+        self.overrides = overrides;
+        Ok(())
+    }
+
     /// Attempt to replace the live config from JSON text.
     pub fn reload_from_str(&mut self, text: &str) -> Result<(), ConfigError> {
-        self.apply(Config::parse(text))
+        self.apply(Written::parse(text))
     }
 
     /// Attempt to replace the live config from a file on disk.
     pub fn reload_from_path(&mut self, path: impl AsRef<Path>) -> Result<(), ConfigError> {
-        self.apply(Config::load(path))
+        self.apply(Written::load(path))
     }
 
-    fn apply(&mut self, result: Result<Config, ConfigError>) -> Result<(), ConfigError> {
+    /// Takes up a reloaded file. A temporary change whose setting the file
+    /// changed ends, as does one past the end of a list the file shortened,
+    /// and every one when together they no longer make a valid config.
+    fn apply(&mut self, result: Result<Written, ConfigError>) -> Result<(), ConfigError> {
         match result {
-            Ok(config) => {
-                self.current = config;
+            Ok(written) => {
+                // In order, so a change still reaches the list it adds to
+                // when the file shortened it only by what earlier changes put
+                // back.
+                let kept = self.overrides.iter().fold(Vec::new(), |mut kept, change| {
+                    let alike = overrides::value_at(&self.written, &change.path)
+                        == overrides::value_at(&written.value, &change.path);
+                    let reached = overrides::within_reach(
+                        &overrides::overridden(&written.value, &kept),
+                        &change.path,
+                    )
+                    .is_ok();
+                    if alike && reached {
+                        kept.push(change.clone());
+                    }
+                    kept
+                });
+                self.written = written.value;
                 self.last_error = None;
+                if self.take_up(kept).is_err() {
+                    self.overrides.clear();
+                    self.current = written.config;
+                }
                 Ok(())
             }
             Err(err) => {
@@ -1490,7 +1637,7 @@ impl ConfigStore {
 /// How long a config file must go unchanged before a watcher reloads it.
 const SETTLE: Duration = Duration::from_millis(100);
 
-/// Watches a config file and sends a parsed [`Config`] or [`ConfigError`] on
+/// Watches a config file and sends a parsed [`Written`] or [`ConfigError`] on
 /// `rx` after each burst of changes, once the file has settled. Pass the
 /// results to [`ConfigStore::apply_watch`].
 ///
@@ -1505,7 +1652,7 @@ const SETTLE: Duration = Duration::from_millis(100);
 /// to move the whole struct.
 pub struct ConfigWatcher {
     _watcher: notify::RecommendedWatcher,
-    pub rx: std::sync::mpsc::Receiver<Result<Config, ConfigError>>,
+    pub rx: std::sync::mpsc::Receiver<Result<Written, ConfigError>>,
 }
 
 /// Begin watching `path` for changes.
@@ -1530,7 +1677,7 @@ pub fn watch(path: impl AsRef<Path>) -> Result<ConfigWatcher, ConfigError> {
             // A save truncates, then writes. Reloading between the two reads an
             // empty file, so wait for the file to settle.
             while heard.recv_timeout(SETTLE).is_ok() {}
-            if tx.send(Config::load(&reload_path)).is_err() {
+            if tx.send(Written::load(&reload_path)).is_err() {
                 return;
             }
         }
@@ -1576,7 +1723,7 @@ pub fn watch(path: impl AsRef<Path>) -> Result<ConfigWatcher, ConfigError> {
 
 impl ConfigStore {
     /// Apply a reload result delivered by a [`ConfigWatcher`].
-    pub fn apply_watch(&mut self, result: Result<Config, ConfigError>) -> Result<(), ConfigError> {
+    pub fn apply_watch(&mut self, result: Result<Written, ConfigError>) -> Result<(), ConfigError> {
         self.apply(result)
     }
 }

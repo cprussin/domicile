@@ -778,6 +778,21 @@ const displayConfiguredSchema = z.looseObject({
   type: z.literal("display_configured"),
 });
 
+// Answers `set_config_override`, `reset_config_overrides` and
+// `which_config_overrides` on the asking connection only, for Settings: the
+// temporary changes, each value as JSON text, and why it was refused.
+const configOverridesSchema = z.looseObject({
+  overrides: z.array(
+    z.looseObject({
+      path: z.array(z.union([z.string(), z.number()])),
+      value: z.string(),
+      written: z.string(),
+    }),
+  ),
+  refused: z.string().optional(),
+  type: z.literal("config_overrides"),
+});
+
 // Answers `set_log_levels` on the asking connection only, for `domicile
 // set-log-level`: why not, or nothing.
 const logLevelsSetSchema = z.looseObject({
@@ -1079,6 +1094,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   windowActedSchema,
   displayConfiguredSchema,
   logLevelsSetSchema,
+  configOverridesSchema,
   deskShotSchema,
   emulatedSchema,
   executedSchema,
@@ -1152,6 +1168,7 @@ export type InputListMessage = z.infer<typeof inputListSchema>;
 export type WindowActedMessage = z.infer<typeof windowActedSchema>;
 export type DisplayConfiguredMessage = z.infer<typeof displayConfiguredSchema>;
 export type LogLevelsSetMessage = z.infer<typeof logLevelsSetSchema>;
+export type ConfigOverridesMessage = z.infer<typeof configOverridesSchema>;
 export type KeymapMessage = z.infer<typeof keymapSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;
 export type FocusRequestedMessage = z.infer<typeof focusRequestedSchema>;

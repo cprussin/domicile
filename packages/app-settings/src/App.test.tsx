@@ -249,18 +249,78 @@ describe(App, () => {
       });
     });
 
-    it("shows a read-only config's values and says why it cannot change", async () => {
-      await renderApp("Appearance", {
+    it("changes a read-only config's settings until the desktop restarts", async () => {
+      const { host, user } = await renderApp("Appearance", {
         config: { theme: { mode: "light" } },
         writable: false,
       });
       expect(screen.getByRole("status")).toHaveTextContent(
-        "These settings come from your config file, which cannot be changed here. Change them where the file is made, such as your home-manager config.",
+        "Your config file can't be changed here, so changes you make last until the desktop restarts or your config changes them.",
       );
-      expect(screen.getByRole("img", { name: "Locked" })).toBeInTheDocument();
-      const theme = screen.getByRole("combobox", { name: "Theme" });
-      expect(theme).toHaveTextContent("Light");
-      expect(theme).toBeDisabled();
+      await choose(user, "Theme", "Dark");
+      await waitFor(() => {
+        expect(host.state.overrides).toEqual([
+          { path: ["theme", "mode"], value: null, written: "light" },
+        ]);
+      });
+      expect(host.writes).toEqual([]);
+      expect(screen.getByRole("combobox", { name: "Theme" })).toHaveTextContent(
+        "Dark",
+      );
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "1 setting differs from your config until the desktop restarts or your config changes it.",
+      );
+      expect(screen.getByText("Changed from your config")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Reset Theme" }));
+      await waitFor(() => {
+        expect(
+          screen.getByRole("combobox", { name: "Theme" }),
+        ).toHaveTextContent("Light");
+      });
+      expect(host.state.overrides).toEqual([]);
+    });
+
+    it("shows a change the shell made over a writable config, and writes over it", async () => {
+      const { host, user } = await renderApp("Appearance", {
+        config: { theme: { mode: "light" } },
+      });
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      host.state.overrides = [
+        { path: ["theme", "mode"], value: "dark", written: "light" },
+      ];
+      host.change();
+      expect(
+        await screen.findByText("Changed from your config"),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: "Theme" })).toHaveTextContent(
+        "Dark",
+      );
+      await choose(user, "Theme", "Light");
+      await waitFor(() => {
+        expect(host.state.overrides).toEqual([]);
+      });
+      expect(written(host.writes)).toEqual({ theme: { mode: "light" } });
+    });
+
+    it("resets every change on the page at once", async () => {
+      const { host, user } = await renderApp("Appearance", {
+        writable: false,
+      });
+      host.state.overrides = [
+        { path: ["theme", "mode"], value: "light", written: "dark" },
+        { path: ["theme", "contrast"], value: "high", written: null },
+        { path: ["idle", "blank_after_seconds"], value: 60, written: null },
+      ];
+      host.change();
+      await user.click(
+        await screen.findByRole("button", { name: "Reset all" }),
+      );
+      await waitFor(() => {
+        expect(host.state.overrides).toEqual([
+          { path: ["idle", "blank_after_seconds"], value: 60, written: null },
+        ]);
+      });
     });
 
     it("says why the desktop refused a change", async () => {

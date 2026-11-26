@@ -453,6 +453,42 @@ fn a_shell_can_lock_the_desk_on_purpose() {
     compositor.wait_for_log("this desktop is locked");
 }
 
+/// A locked desk takes the theme toggle's temporary change, and refuses any
+/// other with a reason rather than leaving the caller to time out.
+#[test]
+fn a_locked_desk_says_it_refused_a_config_change() {
+    use domicile_protocol::ConfigKey;
+    let compositor = Compositor::started_with(A_DESK);
+    let mut chrome = compositor.chrome();
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::Locked { locked: false }))
+        .expect("a desk that can lock tells a page that says hello it is open");
+    chrome
+        .say(&ChromeMessage::Lock)
+        .expect("the chrome socket takes a lock");
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::Locked { locked: true }))
+        .expect("the desk locks when the shell asks");
+
+    let patience = Some(std::time::Duration::from_secs(10));
+    let change = |keys: [&str; 2], value: &str| {
+        domicile_launch::compositor_socket::config_overrides(
+            compositor.socket(),
+            ChromeMessage::SetConfigOverride {
+                path: keys.map(|key| ConfigKey::Name(key.into())).to_vec(),
+                value: value.into(),
+            },
+            patience,
+        )
+    };
+    let refused = change(["output", "max_scale"], "2");
+    assert!(
+        matches!(&refused, Err(domicile_launch::compositor_socket::CompositorError::Refused { why }) if why.contains("locked")),
+        "{refused:?}"
+    );
+    change(["theme", "mode"], r#""light""#).expect("the theme toggle runs on the lock screen");
+}
+
 /// A machine that declares no PAM service, as in a `nix run` trial, does not
 /// lock: locked, nothing would open it. It says so at startup, in the log and
 /// in a notification.

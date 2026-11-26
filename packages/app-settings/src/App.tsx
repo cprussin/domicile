@@ -7,12 +7,18 @@ import { useCallback, useMemo, useState } from "react";
 
 import { css } from "../styled-system/css";
 import { grid, vstack } from "../styled-system/patterns";
-import { serialize, withValue } from "./config-document";
+import type { ConfigDocument } from "./config-document";
 import type { ConfigEditor, ConfigPageProps, Report } from "./config-editor";
+import { readSettings } from "./config-schema";
 import type { ConfigState } from "./config-state";
 import { ConfigKind, configState, whyReadOnly } from "./config-state";
 import type { Extensions } from "./extensions";
-import type { SettingsFiles, SettingsHost, Target } from "./host";
+import type {
+  ConfigOverride,
+  SettingsFiles,
+  SettingsHost,
+  Target,
+} from "./host";
 import { Notice } from "./Notice";
 import { Page } from "./Page";
 import { PAGES, PageId } from "./pages";
@@ -32,7 +38,14 @@ import { SiteDataPage } from "./pages/SiteDataPage";
 import { StartupPage } from "./pages/StartupPage";
 import { TroubleshootingPage } from "./pages/TroubleshootingPage";
 import { Sidebar } from "./Sidebar";
+import type { TemporaryChanges } from "./temporary-changes";
+import {
+  TemporaryChangesProvider,
+  useConfigOverrides,
+  withOverrides,
+} from "./temporary-changes";
 import { useSettingsFiles } from "./useSettingsFiles";
+import { writtenOver } from "./written-over";
 
 /** How long a toast stays. */
 const TOAST_MS = 6000;
@@ -47,6 +60,8 @@ export const App = ({ extensions, host }: Props) => {
   const [toasts] = useState(createToastManager);
   const [page, setPage] = useState(PageId.Appearance);
   const { failure, files, write } = useSettingsFiles(host);
+  const overrides = useConfigOverrides(host);
+  const unreachable: unknown = failure ?? overrides.failure;
 
   const report: Report = useCallback(
     (title) => (cause) => {
@@ -65,36 +80,55 @@ export const App = ({ extensions, host }: Props) => {
     [files],
   );
   const editor = useMemo(
-    () => (state === undefined ? undefined : editorFor(state, write, report)),
-    [state, write, report],
+    () =>
+      state === undefined
+        ? undefined
+        : editorFor(state, write, overrides, report),
+    [state, write, overrides, report],
   );
-  const { description, title } = PAGES[page];
+  const shown = PAGES[page];
+  const { description, title } = shown;
+  // A writable config shows them too: the shell's theme toggle and the
+  // tray make them whatever the config is.
+  const changes: TemporaryChanges | undefined =
+    editor === undefined
+      ? undefined
+      : {
+          overrides: overrides.overrides,
+          reset: overrides.reset,
+          sections: "sections" in shown ? shown.sections : [],
+          temporary: editor.temporary,
+        };
 
   return (
     <Toaster.Provider toastManager={toasts}>
       <div className={layoutStyles}>
         <Sidebar onPage={setPage} page={page} />
         <main className={mainStyles}>
-          {failure !== undefined && (
+          {unreachable !== undefined && (
             <div className={failureStyles}>
               <Notice tone="danger">
                 Couldn't reach the desktop's settings:{" "}
-                {failure instanceof Error ? failure.message : String(failure)}
+                {unreachable instanceof Error
+                  ? unreachable.message
+                  : String(unreachable)}
               </Notice>
             </div>
           )}
-          <PageContent
-            description={description}
-            editor={editor}
-            extensions={extensions}
-            files={files}
-            host={host}
-            page={page}
-            report={report}
-            state={state}
-            title={title}
-            write={write}
-          />
+          <TemporaryChangesProvider changes={changes}>
+            <PageContent
+              description={description}
+              editor={editor}
+              extensions={extensions}
+              files={files}
+              host={host}
+              page={page}
+              report={report}
+              state={state}
+              title={title}
+              write={write}
+            />
+          </TemporaryChangesProvider>
         </main>
         <div className={toastAreaStyles}>
           <Toaster label="Notifications">
@@ -218,8 +252,23 @@ const PageContent = ({
       return configPage(PrivacyPage);
     case PageId.Launcher:
       return configPage(LauncherPage);
+    // Startup commands run once, as the desktop starts, so a change that
+    // lasts until it restarts would never run.
     case PageId.Startup:
-      return configPage(StartupPage);
+      return configPageOf((ready) => (
+        <StartupPage
+          {...named}
+          editor={
+            ready.temporary
+              ? {
+                  ...ready,
+                  readOnly:
+                    "Startup commands run only as the desktop starts, so they change only in your config.",
+                }
+              : ready
+          }
+        />
+      ));
     case PageId.Shell:
       return configPageOf((ready) => (
         <ShellPage {...named} declared={files?.options} editor={ready} />
@@ -229,41 +278,89 @@ const PageContent = ({
 
 /**
  * The editor for a config the form can show, or `undefined` for one it
- * cannot read. Only a writable JSON config takes changes.
+ * cannot read. A writable JSON config takes changes in the file, showing the
+ * temporary changes others made over it until one is written; any other
+ * takes them as temporary changes, laid over it until the desktop restarts.
  */
 const editorFor = (
   state: ConfigState,
   write: (file: Target, text: string) => Promise<void>,
+  overrides: Pick<
+    ReturnType<typeof useConfigOverrides>,
+    "overrides" | "reset" | "set"
+  >,
   report: Report,
 ): ConfigEditor | undefined => {
   switch (state.kind) {
     case ConfigKind.Unreadable:
       return undefined;
+    case ConfigKind.Json:
+      return state.file.writable
+        ? {
+            ...changedEditor(state.document, overrides.overrides),
+            readOnly: undefined,
+            report,
+            set: (path, value) => {
+              const { ended, text } = writtenOver(
+                state.document,
+                overrides.overrides,
+                path,
+                value,
+              );
+              write("config", text)
+                .then(() => {
+                  if (ended.length > 0) {
+                    overrides.reset(ended);
+                  }
+                })
+                .catch(report("Couldn't change the setting"));
+            },
+            temporary: false,
+          }
+        : temporaryEditor(state.document, overrides, report);
     case ConfigKind.None:
     case ConfigKind.Module:
-      return {
-        document: {},
-        readOnly: whyReadOnly(state),
-        report,
-        set: () => {
-          throw new Error("This config cannot be changed here");
-        },
-        settings: state.settings,
-      };
-    case ConfigKind.Json:
-      return {
-        document: state.document,
-        readOnly: whyReadOnly(state),
-        report,
-        set: (path, value) => {
-          write(
-            "config",
-            serialize(withValue(state.document, path, value)),
-          ).catch(report("Couldn't change the setting"));
-        },
-        settings: state.settings,
-      };
+      return temporaryEditor(state.document, overrides, report);
   }
+};
+
+/** An editor whose changes are temporary, laid over `document`. */
+const temporaryEditor = (
+  document: ConfigDocument,
+  {
+    overrides,
+    set,
+  }: Pick<ReturnType<typeof useConfigOverrides>, "overrides" | "set">,
+  report: Report,
+): ConfigEditor => {
+  return {
+    ...changedEditor(document, overrides),
+    readOnly: undefined,
+    report,
+    set: (path, value) => {
+      set(path, value).catch(report("Couldn't change the setting"));
+    },
+    temporary: true,
+  };
+};
+
+/** `document` with `overrides` laid over it, and the settings it makes. */
+const changedEditor = (
+  document: ConfigDocument,
+  overrides: readonly ConfigOverride[],
+): Pick<ConfigEditor, "document" | "settings"> => {
+  const changed = withOverrides(document, overrides);
+  return {
+    document: changed,
+    settings: readSettings(changed).match({
+      Err: (why) => {
+        throw new Error(
+          `The desktop took a change the form can't read: ${why}`,
+        );
+      },
+      Ok: (settings) => settings,
+    }),
+  };
 };
 
 const layoutStyles = grid({

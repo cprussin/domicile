@@ -7,7 +7,7 @@ import { TextSetting } from "../TextSetting";
 
 /** `idle` and `lock`: when the screens go dark, when the desktop locks, and how it unlocks. */
 export const PowerPage = ({ description, editor, title }: ConfigPageProps) => {
-  const { readOnly, set, settings } = editor;
+  const { readOnly, set, settings, temporary } = editor;
   const { idle, lock } = settings;
   const disabled = readOnly !== undefined;
   return (
@@ -15,6 +15,7 @@ export const PowerPage = ({ description, editor, title }: ConfigPageProps) => {
       <Card>
         <SettingRow
           hint="With no input for this long, the screens go dark. Empty is never."
+          path={["idle", "blank_after_seconds"]}
           title="Blank the screens after"
         >
           <TextSetting
@@ -30,6 +31,7 @@ export const PowerPage = ({ description, editor, title }: ConfigPageProps) => {
       <Card title="Lock">
         <SettingRow
           hint="With no input for this long, the desktop locks, on its own clock from blanking. Empty is only when the shell asks."
+          path={["idle", "lock_after_seconds"]}
           title="Lock after"
         >
           <TextSetting
@@ -42,11 +44,16 @@ export const PowerPage = ({ description, editor, title }: ConfigPageProps) => {
           />
         </SettingRow>
         <SettingRow
-          hint="Your password unlocks the desktop, checked by this PAM service in /etc/pam.d. Empty is domicile. Applies when saved; saving never unlocks a locked desktop."
+          hint={
+            temporary
+              ? "Your password unlocks the desktop, checked by this PAM service in /etc/pam.d. Empty is domicile. It changes only in your config, so nothing here can loosen the lock."
+              : "Your password unlocks the desktop, checked by this PAM service in /etc/pam.d. Empty is domicile. Applies when saved; saving never unlocks a locked desktop."
+          }
+          path={["lock", "pam_service"]}
           title="PAM service"
         >
           <TextSetting
-            disabled={disabled}
+            disabled={disabled || temporary}
             label="PAM service"
             onCommit={(service) => {
               set(

@@ -62,6 +62,7 @@ export const DisplaysPage = ({
       <Card>
         <SettingRow
           hint="For Domicile's own window when no displays are described below. 1 turns scaling off."
+          path={["output", "max_scale"]}
           title="Highest scale"
         >
           <NumberSetting

@@ -23,6 +23,7 @@ use tracing::{debug, error, info, warn};
 use crate::agent_seats::AgentStep;
 use crate::chrome_hub::{broadcast_focus_request, Chrome, ChromeHub};
 use crate::client_requests::ClientRequest;
+use crate::config_overrides::ConfigChange;
 use crate::configured_displays::Answer;
 use crate::emulated_input::{steps, Step};
 use crate::grepped;
@@ -34,6 +35,7 @@ use crate::portals::agent::OpenWindows;
 use crate::scale::output_scale;
 use crate::spawning::{desktop_environment, home_directory, terminal_variable};
 use crate::theme_turnover::chrome_key;
+use domicile_config::ConfigKey;
 
 /// A chrome request answered on its own connection thread.
 ///
@@ -42,7 +44,6 @@ use crate::theme_turnover::chrome_key;
 /// [`ClientRequest`]; see [`crate::lock::Asked`].
 pub enum ConnectionRequest {
     SearchFiles { query: String },
-    SetTheme { theme: Theme },
     WhichTheme,
     WhichMonitors,
     WhichDisplays,
@@ -490,8 +491,30 @@ fn read_chrome_messages(
             Ok(ChromeMessage::Exec { command, agent }) => vec![HostMessage::Executed {
                 refused: exec(hub, command, agent).err(),
             }],
+            // A temporary change of `theme.mode`, so Settings shows it, the
+            // file's next change of the mode ends it, and the desktop takes it
+            // up as it takes up the file. Waits for the Wayland thread, so a
+            // `which_theme` after it reads the new theme.
             Ok(ChromeMessage::SetTheme { theme }) => {
-                answer_on_the_connection(hub, ConnectionRequest::SetTheme { theme })
+                if let Err(why) = change_the_config(hub, the_theme_mode(theme)) {
+                    error!(%why, "couldn't set the theme");
+                }
+                Vec::new()
+            }
+            Ok(ChromeMessage::SetConfigOverride { path, value }) => {
+                config_overrides(hub, crate::config_overrides::set_of(path, &value))
+            }
+            Ok(ChromeMessage::ResetConfigOverrides { paths }) => config_overrides(
+                hub,
+                Ok(ConfigChange::Reset {
+                    paths: paths
+                        .into_iter()
+                        .map(crate::config_overrides::path_of)
+                        .collect(),
+                }),
+            ),
+            Ok(ChromeMessage::WhichConfigOverrides) => {
+                config_overrides(hub, Ok(ConfigChange::Which))
             }
             Ok(ChromeMessage::WhichTheme) => {
                 answer_on_the_connection(hub, ConnectionRequest::WhichTheme)
@@ -1176,6 +1199,53 @@ fn configure_display(
         .map_err(|_| "the desktop did not answer in time".to_string())?
 }
 
+/// How long the Wayland thread may take to change the config.
+const CHANGING_THE_CONFIG: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// `theme` as a temporary change of `theme.mode`.
+fn the_theme_mode(theme: Theme) -> ConfigChange {
+    ConfigChange::Set {
+        path: vec![
+            ConfigKey::Name("theme".to_string()),
+            ConfigKey::Name("mode".to_string()),
+        ],
+        value: serde_json::Value::String(
+            match theme {
+                Theme::Dark => "dark",
+                Theme::Light => "light",
+            }
+            .to_string(),
+        ),
+    }
+}
+
+/// Has the Wayland thread do `change`, and returns the temporary changes after
+/// it.
+fn change_the_config(
+    hub: &ChromeHub,
+    change: ConfigChange,
+) -> Result<Vec<domicile_protocol::ConfigOverride>, String> {
+    let (answer, answered) = crate::config_overrides::Answer::new();
+    hub.send_request(ClientRequest::ChangeConfig { change, answer });
+    answered
+        .recv_timeout(CHANGING_THE_CONFIG)
+        .map_err(|_| "the desktop did not answer in time".to_string())?
+}
+
+/// Answers a chrome's request of the temporary changes: the changes after it,
+/// or why it was refused with the changes as they stand.
+fn config_overrides(hub: &ChromeHub, change: Result<ConfigChange, String>) -> Vec<HostMessage> {
+    let done = change.and_then(|change| change_the_config(hub, change));
+    let refused = done.as_ref().err().cloned();
+    let overrides = match done {
+        Ok(overrides) => overrides,
+        // The changes as the hub last heard them: asking again could fail
+        // the same way.
+        Err(_) => hub.config_overrides.lock().unwrap().clone(),
+    };
+    vec![HostMessage::ConfigOverrides { overrides, refused }]
+}
+
 /// Answer a message from an app's connection: a system call it may make, or
 /// nothing.
 fn answer_an_app(
@@ -1232,17 +1302,6 @@ fn call_the_system(
 /// Answer a connection request.
 fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Vec<HostMessage> {
     match request {
-        // Handled here because Wayland clients learn the theme through the
-        // settings portal, which this process serves.
-        //
-        // No direct response. Every chrome, this one included, gets the `theme`
-        // broadcast from `take_up_the_theme`, so all monitors switch together.
-        ConnectionRequest::SetTheme { theme } => {
-            hub.take_up_the_theme(theme);
-            Vec::new()
-        }
-        // Answered here, after any `set_theme` this connection sent, so
-        // `domicile theme` reads back the theme it set.
         ConnectionRequest::WhichTheme => vec![hub.host.lock().unwrap().describe_theme()],
         // So Settings can offer HDR only on the monitors that take it.
         ConnectionRequest::WhichMonitors => vec![hub.host.lock().unwrap().monitors()],

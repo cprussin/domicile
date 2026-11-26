@@ -6,8 +6,9 @@
 #
 # The unit tests cover the protocol (`domicile_launch::app_host`). This covers
 # the binary: the framing on real pipes, reading and writing real files, the
-# read-only check, and the change notice when a file is edited elsewhere. The
-# desktop is a fake that answers `settings_files`.
+# read-only check, and the change notice when a file is edited elsewhere or a
+# temporary change is made. The desktop is a fake that answers
+# `settings_files` and holds a `subscribe` to the temporary changes open.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -36,16 +37,28 @@ with open(shell, "w") as f:
     f.write("export const Shell = runManganese();\n")
 os.chmod(shell, 0o444)
 
-# The desktop: answers each connection's one line.
+# The desktop: answers each connection's one line, and keeps the one
+# following the temporary changes, which it says first as they stand.
 sock_path = os.path.join(work, "control.sock")
 server = socket.socket(socket.AF_UNIX)
 server.bind(sock_path)
 server.listen()
+following = []
+followed = threading.Event()
+
+def heard(overrides):
+    return (json.dumps({"type": "heard", "message": {
+        "type": "config_overrides", "overrides": overrides}}) + "\n").encode()
 
 def desktop():
     while True:
         conn, _ = server.accept()
         request = json.loads(conn.makefile().readline())
+        if request == {"type": "subscribe", "topics": ["config-overrides"]}:
+            conn.sendall(heard([]))
+            following.append(conn)
+            followed.set()
+            continue
         assert request == {"type": "settings_files"}, request
         reply = {"type": "settings_files",
                  "files": {"config": config, "evaluated": None, "shell": shell}}
@@ -102,6 +115,12 @@ with open(config, "w") as f:
     f.write('{"idle":{"blank_after_seconds":60}}\n')
 noticed = receive()
 check("it tells the app of an edit made elsewhere", noticed == {"type": "changed"}, noticed)
+
+check("it follows the desktop's temporary changes", followed.wait(timeout=5), "")
+following[0].sendall(heard([{"path": ["theme", "mode"], "value": "\"dark\"",
+                             "written": "null"}]))
+noticed = receive()
+check("it tells the app of a temporary change", noticed == {"type": "changed"}, noticed)
 
 proc.stdin.close()
 check("it ends when the app goes", proc.wait(timeout=5) == 0, proc.returncode)

@@ -220,6 +220,48 @@ describe(spawnedHost, () => {
       await stored;
     });
 
+    it("lists, sets and resets temporary changes to the config", async () => {
+      const { asked, host, processes } = await started((host) =>
+        host.configOverrides(),
+      );
+      expect(processes[0]?.sent.at(-1)).toEqual({
+        id: 1,
+        type: "config_overrides",
+      });
+      const dark = [
+        { path: ["theme", "mode"], value: '"dark"', written: '"light"' },
+      ];
+      processes[0]?.answer({
+        id: 1,
+        overrides: dark,
+        type: "config_overrides",
+      });
+      expect(await asked).toEqual([
+        { path: ["theme", "mode"], value: "dark", written: "light" },
+      ]);
+
+      const set = host.setConfigOverride(["browser", "order", 0], undefined);
+      await settled();
+      expect(processes[0]?.sent.at(-1)).toEqual({
+        id: 2,
+        path: ["browser", "order", 0],
+        type: "set_config_override",
+        value: "null",
+      });
+      processes[0]?.answer({ id: 2, overrides: [], type: "config_overrides" });
+      expect(await set).toEqual([]);
+
+      const reset = host.resetConfigOverrides([["theme"]]);
+      await settled();
+      expect(processes[0]?.sent.at(-1)).toEqual({
+        id: 3,
+        paths: [["theme"]],
+        type: "reset_config_overrides",
+      });
+      processes[0]?.answer({ id: 3, overrides: [], type: "config_overrides" });
+      expect(await reset).toEqual([]);
+    });
+
     it("lists the monitors", async () => {
       const { asked, processes } = await started((host) => host.monitors());
       const monitors = [{ hdr: "unsupported" as const, names: ["drm-1"] }];

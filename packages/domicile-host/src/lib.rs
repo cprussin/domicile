@@ -1223,6 +1223,9 @@ impl Host {
             | ChromeMessage::InvokeNotificationAction { .. }
             | ChromeMessage::ReplyToNotification { .. }
             | ChromeMessage::SetTheme { .. }
+            | ChromeMessage::SetConfigOverride { .. }
+            | ChromeMessage::ResetConfigOverrides { .. }
+            | ChromeMessage::WhichConfigOverrides
             | ChromeMessage::WhichTheme
             | ChromeMessage::WhichMonitors
             | ChromeMessage::WhichDisplays

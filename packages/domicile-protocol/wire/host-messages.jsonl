@@ -37,6 +37,8 @@
 {"type":"window_acted","refused":"the desktop is locked"}
 {"type":"display_configured","refused":"no monitor HDMI-A-9 is plugged in; domicile list-displays lists them"}
 {"type":"log_levels_set","refused":"the levels make no filter: invalid filter directive"}
+{"type":"config_overrides","overrides":[{"path":["theme","mode"],"value":"\"dark\"","written":"\"light\""},{"path":["browser","order",0],"value":"\"work\"","written":"null"}]}
+{"type":"config_overrides","overrides":[],"refused":"the config would refuse it: theme.mode: unknown variant `purple`"}
 {"type":"desk_shot","shot":{"place":{"position":[-1920,0],"size":[3840,1080]},"width":1568,"height":441}}
 {"type":"emulated","refused":"the desktop is locked"}
 {"type":"executed","refused":"kitty is not on the desktop's PATH; give its full path"}

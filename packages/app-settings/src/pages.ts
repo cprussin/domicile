@@ -18,38 +18,47 @@ export enum PageId {
   Troubleshooting,
 }
 
-/** Each page's name and what it holds. */
+/**
+ * Each page's name, what it holds, and the config sections it changes, whose
+ * temporary changes it shows.
+ */
 export const PAGES = [
   {
     description: "Theme, accent color, contrast, motion and icons.",
     id: PageId.Appearance,
+    sections: [["theme"]],
     title: "Appearance",
   },
   {
     description:
       "The keyboard layout, as xkb names it, or the keymaps to switch between.",
     id: PageId.Keyboard,
+    sections: [["input"]],
     title: "Keyboard",
   },
   {
     description: "Where each monitor goes, and how large things are on it.",
     id: PageId.Displays,
+    sections: [["output"]],
     title: "Displays",
   },
   {
     description: "When the screens go dark, and how the desktop unlocks.",
     id: PageId.Power,
+    sections: [["idle"], ["lock"]],
     title: "Power & lock",
   },
   {
     description:
       "What apps are asked not to do. An app that ignores the request is not stopped.",
     id: PageId.Privacy,
+    sections: [["lockdown"]],
     title: "Privacy",
   },
   {
     description: "What the launcher's file search leaves out.",
     id: PageId.Launcher,
+    sections: [["files"]],
     title: "Launcher",
   },
   {
@@ -60,6 +69,7 @@ export const PAGES = [
   {
     description: "The options the shell declares.",
     id: PageId.Shell,
+    sections: [["shell_options"]],
     title: "Shell",
   },
   {
@@ -77,6 +87,7 @@ export const PAGES = [
     description:
       "Apps like Claude Code that can see and use your desktop. Each asks before it starts.",
     id: PageId.Agents,
+    sections: [["agents"]],
     title: "Agents",
   },
   {

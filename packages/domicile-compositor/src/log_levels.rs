@@ -142,6 +142,7 @@ const MODULES: [(Subsystem, &[&str]); 13] = [
             "restatement",
             "shell_config",
             "config_adoption",
+            "config_overrides",
             "theme_turnover",
             "watchers",
             "file_indexing",

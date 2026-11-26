@@ -19,10 +19,11 @@ use std::sync::{Arc, Mutex};
 
 use domicile_launch::app_host::{answer, read_message, watched, write_message, Host};
 use domicile_launch::control::{Request, Response};
-use domicile_launch::control_socket::{advertised, ask, PATIENCE, VARIABLE};
+use domicile_launch::control_socket::{advertised, ask, listen, PATIENCE, VARIABLE};
 use domicile_launch::folder_chooser::choose_folder;
 use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::notification::session_bus;
+use domicile_protocol::WatchTopic;
 use notify::Watcher as _;
 use serde_json::json;
 
@@ -52,6 +53,7 @@ fn run() -> Result<(), String> {
     };
     let output = Arc::new(Mutex::new(std::io::stdout()));
     let _watching = watching(&asking, Arc::clone(&output))?;
+    following_the_changes(socket.clone(), Arc::clone(&output));
 
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let env = |name: &str| std::env::var(name).ok();
@@ -146,6 +148,46 @@ fn watching(
             .map_err(|why| format!("cannot watch {}: {why}", directory.display()))?;
     }
     Ok(watcher)
+}
+
+/// Tells the app `{"type":"changed"}` whenever the desktop's temporary
+/// changes to the config change, as when the shell's theme toggle or the tray
+/// makes one, so Settings shows it. Runs until the desktop hangs up.
+fn following_the_changes(socket: PathBuf, output: Arc<Mutex<std::io::Stdout>>) {
+    std::thread::spawn(move || {
+        // The first answer is the changes as they stand, which the app asks
+        // for itself.
+        let mut first = true;
+        let followed = listen(
+            &socket,
+            &Request::Subscribe {
+                topics: vec![WatchTopic::ConfigOverrides],
+            },
+            |response| match response {
+                Response::Heard { .. } => {
+                    if !std::mem::take(&mut first) {
+                        if let Err(why) = say(&output, &json!({"type": "changed"})) {
+                            eprintln!("domicile-app-host: {why}");
+                        }
+                    }
+                    true
+                }
+                other => {
+                    eprintln!(
+                        "domicile-app-host: the desktop answered {other:?} to following its \
+                         temporary changes, so Settings misses those others make"
+                    );
+                    false
+                }
+            },
+        );
+        if let Err(why) = followed {
+            eprintln!(
+                "domicile-app-host: stopped following the desktop's temporary changes, so \
+                 Settings misses those others make: {why}"
+            );
+        }
+    });
 }
 
 /// Sends one message to the app. Replies and change notices share stdout.
