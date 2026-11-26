@@ -43,6 +43,7 @@ TEST_F(ProtectionSettingsTest, EveryProtectionOnSetsChromesOwnPrefs) {
   EXPECT_EQ(prefs_.GetString(kWebRTCIPHandlingPolicy),
             "default_public_interface_only");
   EXPECT_TRUE(prefs_.GetBoolean(kRemoveLinkTrackingPref));
+  EXPECT_TRUE(prefs_.GetBoolean(kHideDeviceDetailsPref));
   EXPECT_EQ(ProfileAdBlocking(prefs_), AdBlockingMode::kStandard);
 }
 
@@ -53,6 +54,7 @@ TEST_F(ProtectionSettingsTest, AProtectionTurnedOffPutsChromesDefaultBack) {
                                .global_privacy_control = false,
                                .hide_local_ip_address = false,
                                .remove_tracking_from_links = false,
+                               .hide_device_details = false,
                                .block_ads_and_trackers = AdBlockingMode::kOff,
                            });
   EXPECT_EQ(prefs_.GetInteger(prefs::kCookieControlsMode),
@@ -61,6 +63,7 @@ TEST_F(ProtectionSettingsTest, AProtectionTurnedOffPutsChromesDefaultBack) {
       prefs_.GetBoolean(universal_optout::prefs::kUniversalOptOutEnabled));
   EXPECT_EQ(prefs_.GetString(kWebRTCIPHandlingPolicy), "default");
   EXPECT_FALSE(prefs_.GetBoolean(kRemoveLinkTrackingPref));
+  EXPECT_FALSE(prefs_.GetBoolean(kHideDeviceDetailsPref));
   EXPECT_EQ(ProfileAdBlocking(prefs_), AdBlockingMode::kOff);
 }
 

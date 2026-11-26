@@ -21,6 +21,8 @@ namespace domicile {
 //   interface that reaches the internet and names no other.
 // - Tracking in links: `domicile.link_tracking.remove`, which
 //   LinkTrackingThrottle reads.
+// - The device's details: `domicile.device_details.hide`, which
+//   DeviceDetailsHiding reads.
 // - Ad and tracker blocking: `domicile.ad_blocking.profile`, which a page's
 //   requests are checked in unless its site or window says otherwise
 //   (site_privacy.h).

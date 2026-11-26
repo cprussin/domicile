@@ -10,6 +10,8 @@
 #     blocker's.
 #   - off blocking anything fails: the control proves nothing then.
 #   - off hiding anything, or dropping a parameter, fails for the same reason.
+#   - Each profile but off reading the canvas, audio and processor count a
+#     little off, the same way twice, passes; off's must be the truth.
 #   - Each wrong letter names the part of the blocker it points at.
 set -u
 
@@ -107,8 +109,12 @@ landed() { # $1 as, then keep fbclid utm_source
   echo "landed as=$1 keep=$2 fbclid=$3 utm_source=$4"
 }
 
+device() { # $1 as, then cores canvas canvas_again image audio
+  echo "device as=$1 cores=$2 canvas=$3 canvas_again=$4 image=$5 audio=$6"
+}
+
 echo "reading the logs"
-expect "the three profiles as configured" "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK" \
+expect "the three profiles as configured" "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S" \
   "$(reads shell-loaded \
     "$(ads default blocked loaded blocked loaded loaded)" \
     "$(ads strict blocked blocked blocked loaded loaded)" \
@@ -119,119 +125,163 @@ expect "the three profiles as configured" "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS S
     "$(landed default kept dropped kept)" \
     "$(landed strict kept dropped dropped)" \
     "$(landed off kept kept kept)" \
+    "$(device default 4 c1 c1 i1 a1)" \
+    "$(device strict 3 c2 c2 i2 a2)" \
+    "$(device off 8 c0 c0 i0 a0)" \
     served=default:first served=default:allowed served=default:ok \
     served=off:third served=off:mine)"
-expect "a page that never reported" "1 ????? ????? ????? 0 ?????? ?????? ?????? ??? ??? ???" "$(reads shell-loaded)"
-expect "an empty log reads nothing" "0 ????? ????? ????? 0 ?????? ?????? ?????? ??? ??? ???" "$(reads)"
-expect "a blocked script the server served is a leak" "1 BLBLL ????? ????? 1 ?????? ?????? ?????? ??? ??? ???" \
+expect "a page that never reported" "1 ????? ????? ????? 0 ?????? ?????? ?????? ??? ??? ??? ????? ????? ?" "$(reads shell-loaded)"
+expect "an empty log reads nothing" "0 ????? ????? ????? 0 ?????? ?????? ?????? ??? ??? ??? ????? ????? ?" "$(reads)"
+expect "a blocked script the server served is a leak" "1 BLBLL ????? ????? 1 ?????? ?????? ?????? ??? ??? ??? ????? ????? ?" \
   "$(reads shell-loaded "$(ads default blocked loaded blocked loaded loaded)" \
     served=default:third)"
-expect "a script served for another profile is not" "1 BLBLL ????? ????? 0 ?????? ?????? ?????? ??? ??? ???" \
+expect "a page that read the device's true details" "1 ????? ????? ????? 0 ?????? ?????? ?????? ??? ??? ??? TTTKS CTCXV S" \
+  "$(reads shell-loaded "$(device default 8 c0 c0 i0 a0)" \
+    "$(device strict 9 c2 c3 i0 a2)" "$(device off 8 c0 c0 i0 a0)")"
+expect "one processor stays one" "1 ????? ????? ????? 0 ?????? ?????? ?????? ??? ??? ??? CCCKS ????? S" \
+  "$(reads shell-loaded "$(device default 1 c1 c1 i1 a1)" "$(device off 1 c0 c0 i0 a0)")"
+expect "nothing to compare without off" "1 ????? ????? ????? 0 ?????? ?????? ?????? ??? ??? ??? ????? ????? ?" \
+  "$(reads shell-loaded "$(device default 4 c1 c1 i1 a1)")"
+expect "a script served for another profile is not" "1 BLBLL ????? ????? 0 ?????? ?????? ?????? ??? ??? ??? ????? ????? ?" \
   "$(reads shell-loaded "$(ads default blocked loaded blocked loaded loaded)" \
     served=off:third)"
 
 # MEASURED is "<shell> <default> <strict> <off> <leaked> <default> <strict>
-# <off> <default> <strict> <off>", each profile as third first mine allowed
+# <off> <default> <strict> <off> <default> <strict> <off>", each profile as third first mine allowed
 # ok, then as site generic complex late kept plain, then as keep fbclid
-# utm_source.
+# utm_source, then "<default> <strict>" as canvas image audio cores again and
+# "<off>" as again.
 echo
 echo "the verdict"
 expect "the three profiles as configured is the pass" "pass" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "a shell that never ran is a failure" "fail" \
-  "$(verdict "0 ????? ????? ????? 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "0 ????? ????? ????? 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "a page that never reported is a failure" "fail" \
-  "$(verdict "1 BLBLL ????? LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL ????? LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "a served blocked script is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 1 HHHHSS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 1 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "and says it failed after the network" "yes" \
-  "$(says "1 BLBLL BBBLL LLLLL 1 HHHHSS HHHHSS SSSSSS KDK KDD KKK" "after the network")"
+  "$(says "1 BLBLL BBBLL LLLLL 1 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S" "after the network")"
 expect "off blocking anything is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL BLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL BBBLL BLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "and says the claim then proves nothing" "yes" \
-  "$(says "1 BLBLL BBBLL LLBLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK" "prove nothing")"
+  "$(says "1 BLBLL BBBLL LLBLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S" "prove nothing")"
 expect "default loading another site's listed script is a failure" "fail" \
-  "$(verdict "1 LLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 LLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "and names the proxy" "yes" \
-  "$(says "1 LLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK" "ProxyAdBlocking")"
+  "$(says "1 LLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S" "ProxyAdBlocking")"
 expect "default blocking the page's own is a failure" "fail" \
-  "$(verdict "1 BBBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BBBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "and names standard's third-party check" "yes" \
-  "$(says "1 BBBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK" "third_party")"
+  "$(says "1 BBBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S" "third_party")"
 expect "the user's rule not blocking is a failure" "fail" \
-  "$(verdict "1 BLLLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLLLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "and names block_rules" "yes" \
-  "$(says "1 BLLLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK" "block_rules")"
+  "$(says "1 BLLLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S" "block_rules")"
 expect "the exception blocked is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBBL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL BBBBL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "and names exceptions" "yes" \
-  "$(says "1 BLBLL BBBBL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK" "exception")"
+  "$(says "1 BLBLL BBBBL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S" "exception")"
 expect "an unlisted script blocked is a failure" "fail" \
-  "$(verdict "1 BLBLB BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLB BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "strict loading the page's own is a failure" "fail" \
-  "$(verdict "1 BLBLL BLBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL BLBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "and names the strict mode" "yes" \
-  "$(says "1 BLBLL BLBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK" "AdBlockingModeOf")"
+  "$(says "1 BLBLL BLBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S" "AdBlockingModeOf")"
 expect "strict loading what default blocked is a failure" "fail" \
-  "$(verdict "1 BLBLL LLLLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL LLLLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "and says the mode is not strict's" "yes" \
-  "$(says "1 BLBLL LLLLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK" "not the one used")"
+  "$(says "1 BLBLL LLLLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S" "not the one used")"
 
 expect "off hiding anything is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSHSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSHSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "and says the claim then proves nothing" "yes" \
-  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS HSSSSS KDK KDD KKK" "proves nothing")"
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS HSSSSS KDK KDD KKK CCCKS CCCKS S" "proves nothing")"
 expect "default hiding nothing is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0 SSSSSS SSSSSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 SSSSSS SSSSSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "and names the renderer's hook" "yes" \
-  "$(says "1 BLBLL BBBLL LLLLL 0 SSSSSS SSSSSS SSSSSS KDK KDD KKK" "patch 0292")"
+  "$(says "1 BLBLL BBBLL LLLLL 0 SSSSSS SSSSSS SSSSSS KDK KDD KKK CCCKS CCCKS S" "patch 0292")"
 expect "the site's own rule not hiding is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0 SHHHSS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 SHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "and names CosmeticsFor" "yes" \
-  "$(says "1 BLBLL BBBLL LLLLL 0 SHHHSS HHHHSS SSSSSS KDK KDD KKK" "CosmeticsFor")"
+  "$(says "1 BLBLL BBBLL LLLLL 0 SHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S" "CosmeticsFor")"
 expect "a generic class not hiding is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0 HSHHSS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HSHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "and names the gathering" "yes" \
-  "$(says "1 BLBLL BBBLL LLLLL 0 HSHHSS HHHHSS SSSSSS KDK KDD KKK" "Gather")"
+  "$(says "1 BLBLL BBBLL LLLLL 0 HSHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S" "Gather")"
 expect "a generic rule that is not a class not hiding is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHSHSS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHSHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "and names the generic selectors" "yes" \
-  "$(says "1 BLBLL BBBLL LLLLL 0 HHSHSS HHHHSS SSSSSS KDK KDD KKK" "generic selectors")"
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHSHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S" "generic selectors")"
 expect "a late class not hiding is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHSSS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHSSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "and names the timer" "yes" \
-  "$(says "1 BLBLL BBBLL LLLLL 0 HHHSSS HHHHSS SSSSSS KDK KDD KKK" "timer")"
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHSSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S" "timer")"
 expect "the site's exception hidden is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHHS HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHHS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "and names the exceptions" "yes" \
-  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHHS HHHHSS SSSSSS KDK KDD KKK" "exceptions")"
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHHS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S" "exceptions")"
 expect "an unnamed element hidden is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSH HHHHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSH HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "strict hiding other than default is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS SSSSSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS SSSSSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
 expect "and says they are the same" "yes" \
-  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS SSSSSS SSSSSS KDK KDD KKK" "same")"
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS SSSSSS SSSSSS KDK KDD KKK CCCKS CCCKS S" "same")"
 
 expect "off losing a parameter is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KDK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KDK CCCKS CCCKS S")"
 expect "and says the drops then prove nothing" "yes" \
-  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKD" "prove nothing")"
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKD CCCKS CCCKS S" "prove nothing")"
 expect "a link losing a parameter that is no tracking is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS DDK KDD KKK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS DDK KDD KKK CCCKS CCCKS S")"
 expect "and names WithoutTracking" "yes" \
-  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK DDD KKK" "WithoutTracking drops")"
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK DDD KKK CCCKS CCCKS S" "WithoutTracking drops")"
 expect "default keeping the click id is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KKK KDD KKK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KKK KDD KKK CCCKS CCCKS S")"
 expect "and names the throttle" "yes" \
-  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KKK KDD KKK" "MaybeCreateAndAdd")"
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KKK KDD KKK CCCKS CCCKS S" "MaybeCreateAndAdd")"
 expect "default dropping the campaign parameter is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDD KDD KKK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDD KDD KKK CCCKS CCCKS S")"
 expect "strict keeping the campaign parameter is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDK KKK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDK KKK CCCKS CCCKS S")"
 expect "and names strict's mode" "yes" \
-  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDK KKK" "strict profile's mode")"
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDK KKK CCCKS CCCKS S" "strict profile's mode")"
 expect "strict hiding other than default, with every link right, is a failure" "fail" \
-  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHSHSS SSSSSS KDK KDD KKK")"
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHSHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")"
+
+expect "default reading every true detail is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK TTTKS CCCKS S")"
+expect "and names patch 0293" "yes" \
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK TTTKS CCCKS S" "patch 0293")"
+expect "strict reading every true detail is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS TTTKS S")"
+expect "and names DeviceDetailsHiding" "yes" \
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS TTTKS S" "DeviceDetailsHiding")"
+expect "a true canvas export is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK TCCKS CCCKS S")"
+expect "and names ToDataURLInternal" "yes" \
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK TCCKS CCCKS S" "ToDataURLInternal")"
+expect "true pixels is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CTCKS CCCKS S")"
+expect "and names DomicileFarbleImageData" "yes" \
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CTCKS CCCKS S" "DomicileFarbleImageData")"
+expect "true audio is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCTKS S")"
+expect "and names DomicileFarbleAudio" "yes" \
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCTKS S" "DomicileFarbleAudio")"
+expect "a processor count above the true one is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCXS CCCKS S")"
+expect "and names FarbledHardwareConcurrency" "yes" \
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCXS CCCKS S" "FarbledHardwareConcurrency")"
+expect "a canvas farbled two ways is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKV S")"
+expect "and names FarblePixels" "yes" \
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKV S" "FarblePixels")"
+expect "off's canvas varying by itself is a failure" "fail" \
+  "$(verdict "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS V")"
+expect "and names varies on this machine" "yes" \
+  "$(says "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS V" "varies on this machine")"
 
 echo
 if [ "$FAILED" -eq 0 ]; then

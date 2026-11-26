@@ -73,12 +73,15 @@ std::optional<BrowserProfile> ParseProfile(const base::Value& value) {
       protections->FindBool("hide_local_ip_address");
   const std::optional<bool> remove_tracking_from_links =
       protections->FindBool("remove_tracking_from_links");
+  const std::optional<bool> hide_device_details =
+      protections->FindBool("hide_device_details");
   const std::optional<AdBlockingMode> block_ads_and_trackers =
       AdBlockingModeOf(protections->FindString("block_ads_and_trackers"));
   if (!block_third_party_cookies.has_value() ||
       !global_privacy_control.has_value() ||
       !hide_local_ip_address.has_value() ||
       !remove_tracking_from_links.has_value() ||
+      !hide_device_details.has_value() ||
       !block_ads_and_trackers.has_value()) {
     return std::nullopt;
   }
@@ -92,6 +95,7 @@ std::optional<BrowserProfile> ParseProfile(const base::Value& value) {
           .global_privacy_control = *global_privacy_control,
           .hide_local_ip_address = *hide_local_ip_address,
           .remove_tracking_from_links = *remove_tracking_from_links,
+          .hide_device_details = *hide_device_details,
           .block_ads_and_trackers = *block_ads_and_trackers,
       }};
   const base::Value* extensions = dict->Find("extensions");

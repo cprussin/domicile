@@ -36,6 +36,11 @@ const SWITCHES = [
 /** Each of a browser profile's `protections`, as a person reads it. */
 const PROTECTIONS = [
   {
+    hint: "Sites see slightly different graphics, audio and processor details on each start, so they can't recognize you by them.",
+    key: "hide_device_details",
+    label: "Hide your device's details",
+  },
+  {
     hint: "Stops the sites a page embeds from following you from site to site.",
     key: "block_third_party_cookies",
     label: "Block cookies from other sites",

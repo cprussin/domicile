@@ -1019,6 +1019,40 @@ source_set("cosmetic_filters") {
 
   deps = [
     ":cosmetic_stylesheet",
+    ":device_details",
+    "//base",
+    "//third_party/blink/public:blink",
+    "//third_party/blink/public/common",
+  ]
+}
+
+# How a page that hides the device's details sees them: the farbling Blink
+# does where a page reads them. //base only, so Blink and its test can both
+# have it.
+source_set("device_details") {
+  sources = [
+    "common/device_details.cc",
+    "common/device_details.h",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
+# A frame's device details seed in the renderer, which Blink farbles with.
+# See docs/architecture/AD-BLOCKING.md.
+source_set("device_details_agent") {
+  sources = [
+    "renderer/device_details_agent.cc",
+    "renderer/device_details_agent.h",
+  ]
+
+  public_deps = [
+    "//components/domicile/mojom",
+    "//content/public/renderer",
+    "//mojo/public/cpp/bindings",
+  ]
+
+  deps = [
     "//base",
     "//third_party/blink/public:blink",
     "//third_party/blink/public/common",
@@ -1815,6 +1849,7 @@ source_set("unit_tests") {
     "common/electron_schemes_unittest.cc",
     "renderer/context_bridge_unittest.cc",
     "renderer/cosmetic_stylesheet_unittest.cc",
+    "common/device_details_unittest.cc",
     "browser/link_tracking_unittest.cc",
     "browser/browser_profiles_unittest.cc",
     "browser/extension_installer_unittest.cc",
@@ -1928,6 +1963,7 @@ source_set("unit_tests") {
     ":electron_schemes",
     ":context_bridge",
     ":cosmetic_stylesheet",
+    ":device_details",
     ":link_tracking",
     ":extension_installer",
     ":extension_menu",

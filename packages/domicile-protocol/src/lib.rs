@@ -114,6 +114,8 @@ pub struct BrowserProtections {
     pub hide_local_ip_address: bool,
     /// Takes the click ids out of links to other sites.
     pub remove_tracking_from_links: bool,
+    /// Farbles what pages read of the device.
+    pub hide_device_details: bool,
     /// How its pages block ads and trackers.
     pub block_ads_and_trackers: AdBlocking,
 }

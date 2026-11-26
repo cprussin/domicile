@@ -314,6 +314,7 @@ fn the_browser_profiles_ride_with_the_handshake() {
             global_privacy_control: true,
             hide_local_ip_address: true,
             remove_tracking_from_links: false,
+            hide_device_details: true,
             block_ads_and_trackers: AdBlocking::Strict,
         },
     }];

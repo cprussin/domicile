@@ -49,8 +49,9 @@ every page and keep one state (one Bitwarden login).
   `false`: `block_third_party_cookies` (the profile's cookie controls mode),
   `global_privacy_control` (`Sec-GPC` and `navigator.globalPrivacyControl`)
   `hide_local_ip_address` (WebRTC's `default_public_interface_only`
-  policy) and `remove_tracking_from_links` (`LinkTrackingThrottle`, see
-  [Links](AD-BLOCKING.md#links)). The engine sets them as the profile's prefs when the profiles
+  policy), `remove_tracking_from_links` (`LinkTrackingThrottle`, see
+  [Links](AD-BLOCKING.md#links)) and `hide_device_details` (canvas, audio and
+  processor count farbled, see [Device details](AD-BLOCKING.md#device-details)). The engine sets them as the profile's prefs when the profiles
   arrive, and on a private profile's off-the-record one as it is made
   (`protection_settings.cc`). `block_ads_and_trackers` is `standard`,
   `strict` or `off`, unset `standard` or `strict` in a private profile: see

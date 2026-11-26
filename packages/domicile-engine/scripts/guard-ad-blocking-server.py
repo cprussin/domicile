@@ -41,7 +41,12 @@ localhost, which logs what reached it:
 
   GUARD landed as=ID keep=X fbclid=X utm_source=X
 
-each X `kept` or `dropped`.
+each X `kept` or `dropped`, and then what it reads of the device:
+
+  GUARD device as=ID cores=N canvas=H canvas_again=H image=H audio=S
+
+the processor count, a hash of a canvas's toDataURL, again, of its
+getImageData, and the sum of an OfflineAudioContext's rendering.
 
 This server logs each script it is asked for, to its stdout:
 
@@ -144,10 +149,50 @@ LANDING = """<!doctype html>
     <script>
       const query = new URLSearchParams(location.search);
       const how = (name) => (query.has(name) ? "kept" : "dropped");
+      const as = query.get("as");
       console.log(
-        `GUARD landed as=${query.get("as")} keep=${how("keep")} ` +
+        `GUARD landed as=${as} keep=${how("keep")} ` +
           `fbclid=${how("fbclid")} utm_source=${how("utm_source")}`,
       );
+
+      // FNV-1a, as hex: enough to tell two readings apart.
+      const hash = (values) => {
+        let h = 0x811c9dc5;
+        for (const value of values) {
+          h = Math.imul(h ^ value, 0x01000193) >>> 0;
+        }
+        return h.toString(16);
+      };
+      const drawn = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 200;
+        canvas.height = 50;
+        const context = canvas.getContext("2d");
+        context.fillStyle = "#f60";
+        context.fillRect(10, 10, 100, 30);
+        context.fillStyle = "#069";
+        context.font = "16px sans-serif";
+        context.fillText("Domicile, device details", 2, 20);
+        return { canvas, context };
+      };
+      const exported = () =>
+        hash([...drawn().canvas.toDataURL()].map((c) => c.charCodeAt(0)));
+      const pixels = () => hash(drawn().context.getImageData(0, 0, 200, 50).data);
+      const audio = new OfflineAudioContext(1, 5000, 44100);
+      const oscillator = audio.createOscillator();
+      oscillator.type = "triangle";
+      oscillator.frequency.value = 10000;
+      oscillator.connect(audio.destination);
+      oscillator.start(0);
+      audio.startRendering().then((rendered) => {
+        let sum = 0;
+        for (const sample of rendered.getChannelData(0)) sum += Math.abs(sample);
+        console.log(
+          `GUARD device as=${as} cores=${navigator.hardwareConcurrency} ` +
+            `canvas=${exported()} canvas_again=${exported()} ` +
+            `image=${pixels()} audio=${sum}`,
+        );
+      });
     </script>
   </body>
 </html>

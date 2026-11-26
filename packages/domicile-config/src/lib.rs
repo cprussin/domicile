@@ -982,6 +982,11 @@ pub struct Protections {
     /// other sites, and in [`AdBlocking::Strict`] the `utm_` campaign
     /// parameters too. Not on a site or in a window whose ad blocking is off.
     pub remove_tracking_from_links: bool,
+    /// Shows sites the device's canvas drawing, audio and processor count a
+    /// little off, the same way for a site until the desktop starts again,
+    /// as Brave's farbling does, so they can't recognize the device by
+    /// them. Not on a site or in a window whose ad blocking is off.
+    pub hide_device_details: bool,
     /// How the profile's pages block ads and trackers, with
     /// [`BrowserConfig::block_lists`]. Unset: `standard`, or `strict` in a
     /// private profile.
@@ -1022,6 +1027,7 @@ impl Default for Protections {
             global_privacy_control: true,
             hide_local_ip_address: true,
             remove_tracking_from_links: true,
+            hide_device_details: true,
             block_ads_and_trackers: None,
         }
     }

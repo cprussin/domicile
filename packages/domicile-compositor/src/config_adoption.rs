@@ -73,6 +73,7 @@ pub fn hand_over_the_browser_profiles(host: &mut Host, browser: &BrowserConfig) 
                     global_privacy_control: profile.protections.global_privacy_control,
                     hide_local_ip_address: profile.protections.hide_local_ip_address,
                     remove_tracking_from_links: profile.protections.remove_tracking_from_links,
+                    hide_device_details: profile.protections.hide_device_details,
                     block_ads_and_trackers: match profile.ad_blocking() {
                         domicile_config::AdBlocking::Standard => {
                             domicile_protocol::AdBlocking::Standard

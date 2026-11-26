@@ -28,6 +28,8 @@ source_set("domicile") {
   sources = [
     "domicile_ad_blocking.cc",
     "domicile_ad_blocking.h",
+    "domicile_device_details.cc",
+    "domicile_device_details.h",
     "domicile_agent_devtools.cc",
     "domicile_agent_devtools.h",
     "domicile_agent_input.cc",
@@ -208,6 +210,9 @@ source_set("domicile") {
     # Each page's ad blocking, its site's and its window's, for the shield.
     "//components/domicile:page_privacy",
     "//components/domicile:site_privacy",
+    # The seed each page's device details are farbled with, under a key the
+    # profile keeps for the session.
+    "//components/user_prefs",
     "//components/domicile:shortcut_registry",
     "//components/tabs:public",
     "//content/public/browser",
