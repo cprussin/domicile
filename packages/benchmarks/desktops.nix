@@ -138,6 +138,141 @@ let
     '';
   };
 
+  # GNOME Shell takes screenshots and runs `Eval` only from callers it allows
+  # by bus name, and gnome-screenshot hung. Its unsafe mode, which GNOME's
+  # own tests use, allows any: this extension turns it on.
+  gnomeUnsafeMode = pkgs.runCommand "bench-unsafe-mode" { } ''
+    dir=$out/share/gnome-shell/extensions/bench-unsafe-mode@domicile-desktop.com
+    mkdir -p $dir
+    cat >$dir/metadata.json <<'JSON'
+    {
+      "uuid": "bench-unsafe-mode@domicile-desktop.com",
+      "name": "Benchmark unsafe mode",
+      "description": "Lets the benchmark take screenshots and focus windows.",
+      "shell-version": ["${lib.versions.major pkgs.gnome-shell.version}"]
+    }
+    JSON
+    cat >$dir/extension.js <<'JS'
+    export default class {
+      enable() {
+        global.context.unsafe_mode = true;
+      }
+
+      disable() {
+        global.context.unsafe_mode = false;
+      }
+    }
+    JS
+  '';
+
+  # A screenshot on GNOME, from the Shell's own D-Bus call.
+  gnomeScreenshot = pkgs.writeShellApplication {
+    name = "bench-gnome-screenshot";
+    runtimeInputs = [ pkgs.glib ];
+    text = ''
+      reply=$(gdbus call --session --dest org.gnome.Shell.Screenshot \
+        --object-path /org/gnome/Shell/Screenshot \
+        --method org.gnome.Shell.Screenshot.Screenshot false false "$1")
+      case "$reply" in
+        "(true,"*) ;;
+        *) echo "the Shell took no screenshot: $reply" >&2; exit 1 ;;
+      esac
+    '';
+  };
+
+  # Gives the keyboard to the window whose class holds `$1`, on GNOME: it
+  # doesn't focus a window started without an activation token.
+  gnomeFocus = pkgs.writeShellApplication {
+    name = "bench-gnome-focus";
+    runtimeInputs = [ pkgs.coreutils pkgs.glib ];
+    # `global.get_current_time()` is 0 outside an event, and mutter's focus
+    # stealing prevention ignores an activation at time 0, so this takes a
+    # current timestamp instead, then checks which window has the focus.
+    text = ''
+      shell_eval() {
+        gdbus call --session --dest org.gnome.Shell \
+          --object-path /org/gnome/Shell --method org.gnome.Shell.Eval "$1"
+      }
+      reply=$(shell_eval "global.display.list_all_windows().find((w) => (w.get_wm_class() ?? \"\").toLowerCase().includes(\"$1\")).activate(global.display.get_current_time_roundtrip())")
+      case "$reply" in
+        "(true,"*) ;;
+        *) echo "couldn't focus $1: $reply" >&2; exit 1 ;;
+      esac
+      sleep 0.5
+      focused=$(shell_eval "global.display.focus_window?.get_wm_class() ?? 'nothing'")
+      case "''${focused,,}" in
+        "(true,"*"$1"*) ;;
+        *) echo "activated $1, but the focus is on $focused" >&2; exit 1 ;;
+      esac
+    '';
+  };
+
+  # Starts an app the way GNOME Shell's own launcher does, with an activation
+  # token from Shell: mutter gives the keyboard only to a window that brings
+  # one, and the other desktops here focus a new window anyway.
+  gnomeLaunch = pkgs.writeShellApplication {
+    name = "bench-gnome-launch";
+    runtimeInputs = [ pkgs.glib pkgs.gnused ];
+    text = ''
+      reply=$(gdbus call --session --dest org.gnome.Shell \
+        --object-path /org/gnome/Shell --method org.gnome.Shell.Eval \
+        "global.create_app_launch_context(0, -1).get_startup_notify_id(Gio.AppInfo.get_all().find((a) => (a.get_executable() ?? \"\").split(\"/\").pop() === \"$1\"), [])")
+      case "$reply" in
+        "(true, '\""*) ;;
+        *) echo "Shell gave no activation token for $1: $reply" >&2; exit 1 ;;
+      esac
+      token=$(printf '%s' "$reply" | sed -E "s/^\(true, '\"(.*)\"'\)$/\1/")
+      export XDG_ACTIVATION_TOKEN="$token" DESKTOP_STARTUP_ID="$token"
+      exec "$@"
+    '';
+  };
+
+  # Evaluates a JavaScript expression in a DevTools page, given its WebSocket
+  # address, awaiting a promise, and prints the value as JSON. With `--front`
+  # in place of the expression it instead brings the page's tab to the front
+  # and gives it the browser's own focus.
+  evaluate = pkgs.writers.writePython3Bin "bench-eval" {
+    libraries = [ pkgs.python3Packages.websockets ];
+  } ''
+    import asyncio
+    import json
+    import sys
+
+    from websockets.asyncio.client import connect
+
+
+    async def main(address, expression):
+        if expression == "--front":
+            request = {"id": 1, "method": "Page.bringToFront"}
+        else:
+            request = {
+                "id": 1,
+                "method": "Runtime.evaluate",
+                "params": {
+                    "expression": expression,
+                    "awaitPromise": True,
+                    "returnByValue": True,
+                },
+            }
+        async with connect(address, max_size=None) as page:
+            await page.send(json.dumps(request))
+            while True:
+                answer = json.loads(await page.recv())
+                if answer.get("id") == 1:
+                    break
+        if "error" in answer:
+            raise RuntimeError(answer["error"])
+        result = answer["result"]
+        if expression == "--front":
+            return
+        if "exceptionDetails" in result:
+            raise RuntimeError(result["exceptionDetails"])
+        print(json.dumps(result["result"].get("value")))
+
+
+    asyncio.run(main(sys.argv[1], sys.argv[2]))
+  '';
+
   # Runs a command in the environment the desktop gives its apps: the
   # compositor's own, which root copies to /tmp/session-environ first
   # (Hyprland's isn't readable by its own user), its Wayland socket and the
@@ -175,7 +310,12 @@ let
     browserDevtoolsPort = 9222;
     slack = [ "slack" "--password-store=basic" "--remote-debugging-port=9223" "@LINK@" ];
     slackDevtoolsPort = 9223;
-    editor = [ "codium" "--disable-workspace-trust" "--password-store=basic" "${project}" ];
+    editor = [ "codium" "--disable-workspace-trust" "--password-store=basic"
+               "--remote-debugging-port=9224" "${project}" ];
+    editorDevtoolsPort = 9224;
+    # The other desktops show every window they open, so there's nothing to
+    # arrange.
+    split = null;
   };
 
   ttyLogin = command: {
@@ -193,6 +333,7 @@ let
     console = {
       compositor = null;
       apps = ownApps;
+      screenshot = null;
       module = ttyLogin "true";
     };
 
@@ -205,7 +346,14 @@ let
         slackDevtoolsPort = 9222;
         editor = [ "domicile" "open" "--electron" "codium.desktop" "--"
                    "codium" "--disable-workspace-trust" "${project}" ];
+        # Manganese opens each window as a tab of the focused group, so only
+        # one would show while the other desktops show them all. Slack, the
+        # browser's pages and the editor each get a group, side by side.
+        editorDevtoolsPort = 9222;
+        split = [ "domicile" "send-shell" "split" "h" ];
+        windows = [ "domicile" "list-windows" "--json" ];
       };
+      screenshot = [ "domicile" "screenshot" ];
       module.imports = [
         {
           imports = [ self.nixosModules.domicile ];
@@ -237,6 +385,7 @@ let
     sway = {
       compositor = "bin/sway";
       apps = ownApps;
+      screenshot = [ "grim" ];
       module.imports = [
         { programs.sway.enable = true; }
         # pixman: the CPU renderer, for a card with no 3D.
@@ -247,6 +396,7 @@ let
     hyprland = {
       compositor = "Hyprland";
       apps = ownApps;
+      screenshot = [ "grim" ];
       module.imports = [
         { programs.hyprland.enable = true; }
         (ttyLogin "exec Hyprland >/tmp/desktop.log 2>&1")
@@ -256,6 +406,12 @@ let
     gnome = {
       compositor = "bin/gnome-shell";
       apps = ownApps;
+      screenshot = [ "bench-gnome-screenshot" ];
+      launch = [ "bench-gnome-launch" ];
+      focusBrowser = [ "bench-gnome-focus" "chromium" ];
+      # QEMU's key presses never reach the page under GNOME, though Shell and
+      # the page both say it has the keyboard (2026-11-26): no key lag here.
+      keyLag = false;
       module = {
         services.displayManager.gdm.enable = true;
         services.displayManager.autoLogin = { enable = true; user = "alice"; };
@@ -270,6 +426,7 @@ let
             "org/gnome/desktop/session".idle-delay = lib.gvariant.mkUint32 0;
             "org/gnome/desktop/screensaver".lock-enabled = false;
             "org/gnome/settings-daemon/plugins/power".sleep-inactive-ac-type = "nothing";
+            "org/gnome/shell".enabled-extensions = [ "bench-unsafe-mode@domicile-desktop.com" ];
           };
         }];
       };
@@ -278,6 +435,8 @@ let
     plasma = {
       compositor = "kwin_wayland";
       apps = ownApps;
+      # KWin lets only Spectacle read the screen. Background, no notification.
+      screenshot = [ "spectacle" "-b" "-n" "-f" "-o" ];
       module = {
         services.displayManager.sddm = { enable = true; wayland.enable = true; };
         services.displayManager.autoLogin = { enable = true; user = "alice"; };
@@ -341,10 +500,18 @@ let
       top
       threads
       console
+      evaluate
       pkgs.curl
       pkgs.chromium
       unfree.slack
       pkgs.vscodium
+      # Screenshots, taken in the session (see `screenshot` in vm/benchmark.py).
+      pkgs.grim
+      gnomeScreenshot
+      gnomeFocus
+      gnomeLaunch
+      gnomeUnsafeMode
+      pkgs.kdePackages.spectacle
     ]
     # For proof of what draws: `eglinfo` names the GL renderer.
     ++ lib.optional gpu pkgs.mesa-demos
@@ -359,7 +526,7 @@ let
     qemu.package = lib.mkIf gpu pkgs.qemu_kvm;
     nodes.machine = machine gpu name desktop;
     testScript = builtins.replaceStrings [ "@DESKTOP@" ] [
-      (builtins.toJSON ({ inherit gpu name pages; inherit (desktop) compositor; } // desktop.apps))
+      (builtins.toJSON ({ inherit gpu name pages; inherit (desktop) compositor screenshot; focusBrowser = desktop.focusBrowser or null; launch = desktop.launch or [ ]; keyLag = desktop.keyLag or true; } // desktop.apps))
     ] (builtins.readFile ./vm/benchmark.py);
   }).driver;
 

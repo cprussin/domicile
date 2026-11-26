@@ -30,6 +30,8 @@ const runSchema = z.object({
   cores: z.number().int().positive(),
   desktop: z.string(),
   hostTicksPerSecond: z.number().positive().optional(),
+  /** Measures taken once per run, by name: see `MEASURES`. */
+  measures: z.record(z.string(), z.number()),
   run: z.number().int(),
   samples: z.array(sampleSchema).min(2),
   /** The busiest threads over the window, as % of one core. */
@@ -42,6 +44,37 @@ const runSchema = z.object({
 
 export type Run = z.infer<typeof runSchema>;
 
+/** Each once-per-run measure's table title and unit, in table order. */
+const MEASURES: Readonly<Record<string, { title: string; unit: string }>> = {
+  browserLaunchSeconds: {
+    title: "Browser: start to every page loaded",
+    unit: " s",
+  },
+  editorLaunchSeconds: {
+    title: "Editor: start to workbench drawn",
+    unit: " s",
+  },
+  frameRate: { title: "Frame rate of an animated page", unit: " fps" },
+  gpuBusyPercent: {
+    title: "GPU busy, averaged over the window (read on the host)",
+    unit: "%",
+  },
+  inputLagMs: { title: "Key press to next paint (median)", unit: " ms" },
+  inputLagP95Ms: {
+    title: "Key press to next paint (95th percentile)",
+    unit: " ms",
+  },
+  longFrames: {
+    title: "Long frames of an animated page (over 25 ms, per 10 s)",
+    unit: "",
+  },
+  slackLaunchSeconds: { title: "Slack: start to signed in", unit: " s" },
+  storeMib: {
+    title: "Installed size (the VM's whole Nix store, the same apps on each)",
+    unit: " MiB",
+  },
+};
+
 /** The median of a measure across runs, and its lowest and highest run. */
 type Spread = { max: number; median: number; min: number };
 
@@ -49,9 +82,15 @@ type Spread = { max: number; median: number; min: number };
 export type Row = {
   cpuPercent: Spread;
   desktop: string;
+  /** Memory in use at the window's end less at its start. */
+  driftMib: Spread;
   /** Read on the host, for runs on its GPU. */
   host?: { gpuMib: Spread; gpuPercent: Spread; qemuCpuPercent: Spread };
   load1: Spread;
+  /** Once-per-run measures, by name. */
+  measures: Record<string, Spread>;
+  /** The most memory in use at any sample. */
+  peakMib: Spread;
   runs: number;
   sessionPssMib: Spread;
   /** CPU the host took for its other work, for runs that read it. */
@@ -190,11 +229,24 @@ const hostSpread = (
   };
 };
 
+/** Memory in use at the last sample less at the first. */
+const driftMib = (run: Run): number => {
+  const first = run.samples[0];
+  const last = run.samples.at(-1);
+  if (first === undefined || last === undefined) {
+    throw new Error(`${run.desktop}/${run.workload} has no samples`);
+  }
+  return mib(last.usedKib - first.usedKib);
+};
+
 /** One run's measures: medians over its window, and its CPU. */
 const perRun = (run: Run) => ({
   cpuPercent: cpuPercent(run),
+  driftMib: driftMib(run),
   host: hostMeasures(run),
   load1: median(run.samples.map((sample) => sample.load1)),
+  measures: run.measures,
+  peakMib: mib(Math.max(...run.samples.map((sample) => sample.usedKib))),
   sessionPssMib: mib(median(run.samples.map((s) => s.sessionPssKib))),
   stealPercent: stealPercent(run),
   usedMib: mib(median(run.samples.map((sample) => sample.usedKib))),
@@ -239,6 +291,26 @@ const threadMedians = (group: readonly Run[]): Pick<Row, "threads"> => {
   return { threads };
 };
 
+/** Each once-per-run measure across a group's runs, which all took it. */
+const measureSpreads = (
+  measured: readonly Record<string, number>[],
+  name: string,
+): Record<string, Spread> => {
+  const names = [...new Set(measured.flatMap((m) => Object.keys(m)))];
+  return Object.fromEntries(
+    names.map((measure) => {
+      const values = measured.flatMap((m) => {
+        const value = m[measure];
+        return value === undefined ? [] : [value];
+      });
+      if (values.length !== measured.length) {
+        throw new Error(`${name} took ${measure} on some runs only`);
+      }
+      return [measure, spread(values)];
+    }),
+  );
+};
+
 /** Groups runs by desktop and workload, in the order each first appears. */
 export const summarize = (runs: readonly Run[]): Row[] =>
   Map.groupBy(runs, (run) => `${run.desktop}\0${run.workload}`)
@@ -256,8 +328,14 @@ export const summarize = (runs: readonly Run[]): Row[] =>
       return {
         cpuPercent: spread(measured.map((m) => m.cpuPercent)),
         desktop: first.desktop,
+        driftMib: spread(measured.map((m) => m.driftMib)),
         ...(host === undefined ? {} : { host }),
         load1: spread(measured.map((m) => m.load1)),
+        measures: measureSpreads(
+          measured.map((m) => m.measures),
+          `${first.desktop}/${first.workload}`,
+        ),
+        peakMib: spread(measured.map((m) => m.peakMib)),
         runs: measured.length,
         sessionPssMib: spread(measured.map((m) => m.sessionPssMib)),
         ...stealSpread(measured.map((m) => m.stealPercent)),
@@ -332,11 +410,34 @@ const threadTables = (rows: readonly Row[]): string[] => {
       ];
 };
 
+/** A table per once-per-run measure any row took, in `MEASURES` order. */
+const measureTables = (rows: readonly Row[]): string[] => {
+  const taken = new Set(rows.flatMap((row) => Object.keys(row.measures)));
+  const unknown = [...taken].filter((name) => MEASURES[name] === undefined);
+  if (unknown.length > 0) {
+    throw new Error(`no title for measures ${unknown.join(", ")}`);
+  }
+  return Object.entries(MEASURES)
+    .filter(([name]) => taken.has(name))
+    .map(([name, { title, unit }]) =>
+      table(rows, title, (row) => {
+        const value = row.measures[name];
+        return value === undefined ? "–" : ranged(value, unit);
+      }),
+    );
+};
+
 /** The summary as markdown tables: the median run, then its range. */
 export const markdown = (rows: readonly Row[]): string =>
   [
     table(rows, "Memory in use (whole VM)", (row) =>
       ranged(row.usedMib, " MiB"),
+    ),
+    table(rows, "Peak memory in use (whole VM)", (row) =>
+      ranged(row.peakMib, " MiB"),
+    ),
+    table(rows, "Memory growth over the window", (row) =>
+      ranged(row.driftMib, " MiB"),
     ),
     table(rows, "Session processes (PSS)", (row) =>
       ranged(row.sessionPssMib, " MiB"),
@@ -374,5 +475,6 @@ export const markdown = (rows: readonly Row[]): string =>
           ),
         ]
       : []),
+    ...measureTables(rows),
     ...threadTables(rows),
   ].join("\n\n");
