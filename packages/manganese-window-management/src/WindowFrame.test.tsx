@@ -190,6 +190,13 @@ describe("WindowFrame", () => {
       ]).toStrictEqual(["-1", "0"]);
     });
 
+    // The slide stays inside the tab group rather than spilling past its edge.
+    it("clips a revealed tab to its frame", () => {
+      expect(
+        styleOf("revealing", undefined, false, { x: -1, y: 0 }).wrapper?.clip,
+      ).toBe("rect(300px, 640px, 700px, 40px)");
+    });
+
     // A dialog grows out of the window it is for; a window sent away flies
     // into its workspace's chip.
     it("gives its parts the window's travel", () => {

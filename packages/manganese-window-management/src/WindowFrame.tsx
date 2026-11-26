@@ -15,6 +15,7 @@ import { traveled } from "./travel";
 import type { WindowMotion } from "./window-motion";
 import {
   clippedTo,
+  clippedToFrame,
   screenClipStyles,
   slidAcross,
   slidingAcross,
@@ -87,7 +88,8 @@ const KEY_DELIVERED = new Set([
  *
  * Takes no space, stacking or pointer of its own (see `screenClipStyles`).
  * Its children inherit the slide distances, travel and tab edge from it, and
- * it clips them to their screen during a workspace switch. Each part also
+ * it clips them to their frame during a tab switch and to their screen during
+ * a workspace switch. Each part also
  * clips itself to its workspace then (see `clippedAlong`). In the overview, it
  * shows them through their workspace's tile.
  */
@@ -141,6 +143,7 @@ export const WindowFrame = ({
       style={{
         ...unedgedOn(fillsScreen),
         ...tabSlidFrom(revealedFrom),
+        ...clippedToFrame(frame, motion),
         ...traveled(travel),
         ...(screen === undefined
           ? {}

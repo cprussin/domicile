@@ -480,7 +480,8 @@ condition in `panda-preset.ts`:
   slides into view. Switching back before it ends is a switch the other way,
   started where the windows are, as the scratchpad's slides do.
 - Tab switch: the revealed tab slides a short way in from its tab's side of
-  the hidden one and fades in over it. On a workspace sliding in, the tab
+  the hidden one and fades in over it, clipped to its frame so it stays inside
+  its group (`clippedToFrame`). On a workspace sliding in, the tab
   switched to slides with it instead. Parts first drawn partway through (a hidden tab's
   contents, the strip it opens) start where the slide has got to
   (`DrawnWindow.shownRewound`).

@@ -5,6 +5,7 @@ import type { WindowMotion } from "./window-motion";
 import {
   clippedAlong,
   clippedTo,
+  clippedToFrame,
   collapsedAlong,
   contentsScaledAbout,
   movingStyles,
@@ -260,6 +261,24 @@ describe("clippedTo", () => {
   // A float dragged across screens draws on both.
   it("leaves any other window unclipped", () => {
     expect(clippedTo(SCREEN, "resting")).toStrictEqual({});
+  });
+});
+
+describe("clippedToFrame", () => {
+  // A revealed tab slides in from its tab's side; past its frame it would
+  // spill out of its tab group.
+  it("clips a revealing window to its frame", () => {
+    expect(clippedToFrame(RECT, "revealing")).toStrictEqual({
+      clip: "rect(20px, 310px, 220px, 10px)",
+    });
+  });
+
+  it("leaves any other window unclipped", () => {
+    expect(clippedToFrame(RECT, "concealing")).toStrictEqual({});
+  });
+
+  it("leaves a window with no frame unclipped", () => {
+    expect(clippedToFrame(undefined, "revealing")).toStrictEqual({});
   });
 });
 

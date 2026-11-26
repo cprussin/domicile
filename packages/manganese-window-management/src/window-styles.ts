@@ -293,6 +293,29 @@ export const clippedTo = (
 };
 
 /**
+ * Inline style clipping a window's wrapper to its `frame` while a tab switch
+ * slides it in (see `tabSlidFrom`), or none.
+ *
+ * The slide starts a short way off the frame, which would spill past its tab
+ * group's edge. A plain `clip`, as {@link clippedTo}, so the slide stays on
+ * the compositor thread.
+ */
+export const clippedToFrame = (
+  frame: Rect | undefined,
+  motion: WindowMotion,
+): CSSProperties => {
+  if (frame !== undefined && motion === "revealing") {
+    const top = `${frame.y.toString()}px`;
+    const right = `${(frame.x + frame.width).toString()}px`;
+    const bottom = `${(frame.y + frame.height).toString()}px`;
+    const left = `${frame.x.toString()}px`;
+    return { clip: `rect(${top}, ${right}, ${bottom}, ${left})` };
+  } else {
+    return {};
+  }
+};
+
+/**
  * The screen a workspace switch slides a window across, or `undefined` when
  * no switch is sliding it. See {@link clippedAlong}.
  */
