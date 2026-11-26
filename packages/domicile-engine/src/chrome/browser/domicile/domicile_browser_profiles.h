@@ -25,6 +25,7 @@
 #include "chrome/browser/profiles/profile_observer.h"
 #include "components/domicile/browser/browser_profiles.h"
 #include "components/domicile/browser/extension_installer.h"
+#include "components/domicile/browser/extension_settings.h"
 #include "components/domicile/browser/private_pages.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
@@ -62,9 +63,12 @@ namespace domicile {
 // user installed in any profile, each switched on or off in it (Chrome's own
 // enabled state, which keeps an extension's data while it is off). A profile
 // whose config names its extensions has the config's switched by the config,
-// and the user cannot change them; any other extension starts at
-// DefaultSwitch the first time it is installed there, and the user switches
-// it from there. One the user uninstalls from a profile leaves every profile.
+// and only a temporary change to the config switches them; any other of the
+// config's starts at DefaultSwitch the first time it is installed there, and
+// one the user installed starts off, for the shell to ask which profiles it
+// goes on in. The user switches either from there. One the user uninstalls
+// from a profile leaves every profile, and their site and file access are
+// the same in every profile (ConfigureEverywhere).
 //
 // One per process, as the desk is. UI thread only.
 class BrowserProfileRegistry final
@@ -133,14 +137,28 @@ class BrowserProfileRegistry final
   std::vector<ExtensionSwitch> ExtensionSwitchesOf(const std::string& id);
 
   // Switches extension `extension` on or off in profile `id`, kept across
-  // restarts. Says why not for a profile the desk does not have or has not
-  // loaded yet, an extension the profile does not have, and one the config
-  // switches.
+  // restarts. For an extension the user installed that the profile has not
+  // loaded or installed yet, the switch waits for it (pending_switches_), as
+  // a just installed extension reaches the other profiles a moment later.
+  // Says why not for a profile the desk does not have, one still loading or
+  // without the extension when it is not one the user installed elsewhere,
+  // and an extension the config switches.
   base::expected<void, std::string> SetExtensionEnabled(
       Profile& shell,
       const std::string& id,
       const std::string& extension,
       bool enabled);
+
+  // Sets each of `settings` that is set on extension `id` in `from`, the
+  // Chrome profile a shell asked in, and the same in every other loaded
+  // profile with it: an extension's site and file access are the user's, not
+  // one profile's. Says why not, from `from`; another profile's refusal is
+  // logged. A profile that installs it or loads later takes them up from the
+  // shell's (TakeUpTheShellsSettings).
+  base::expected<void, std::string> ConfigureEverywhere(
+      Profile& from,
+      const std::string& id,
+      const ExtensionSettings& settings);
 
   // Whether the config switches extension `extension` in `profile`, a
   // browser profile's Chrome profile, so the user cannot.
@@ -166,6 +184,10 @@ class BrowserProfileRegistry final
   // browser profile's context; otherwise `context`'s original profile.
   Profile& HomeOf(content::BrowserContext& context) const;
 
+  // Uninstalls extension `id` from `profile`, a copy that finished loading
+  // after the user uninstalled it everywhere else (OnExtensionInstalled).
+  void UninstallAbandoned(base::WeakPtr<Profile> profile,
+                          const std::string& id);
   // Reloads the unpacked extension `id` in every loaded profile but `from`,
   // where it just reloaded: each profile runs its own copy. One without it
   // installs it.
@@ -243,9 +265,19 @@ class BrowserProfileRegistry final
   std::vector<std::string> ConfigExtensionIds() const;
   // The browser profile `profile`, a Chrome profile, is: null for none.
   const BrowserProfile* AsBrowserProfile(Profile& profile) const;
-  // Switches each of the config's extensions in `profile` as the config
-  // says (SwitchExtension), once its extension system is ready.
+  // Once `profile`'s extension system is ready: gives each of its extensions
+  // the shell's profile's settings (TakeUpTheShellsSettings), and switches
+  // each of the config's as the config says (SwitchExtension).
   void SwitchExtensions(base::WeakPtr<Profile> profile);
+  // Gives `profile`'s copy of `extension`, just installed or just loaded, the
+  // site and file access the shell's profile's copy has (ConfigureEverywhere),
+  // changing only those that differ. Errors are logged.
+  void TakeUpTheShellsSettings(Profile& profile,
+                               const extensions::Extension& extension);
+  // TakeUpTheShellsSettings for extension `id` in `profile`, posted from
+  // OnExtensionInstalled. Nothing once either is gone.
+  void TakeUpTheShellsSettingsIn(base::WeakPtr<Profile> profile,
+                                 const std::string& id);
   // Switches extension `id` in `profile` as the config says, for one of the
   // config's, or, when it was `installed_now` there and never switched
   // before, to DefaultSwitch.
@@ -292,6 +324,10 @@ class BrowserProfileRegistry final
   std::set<std::pair<base::FilePath, std::string>> loading_unpacked_;
   // By id. Never the default profile, which is the shell's.
   std::map<std::string, Loaded> loaded_;
+  // Switches asked for before profile `id` had the extension, by profile id
+  // then extension id: SwitchExtension takes each up once it does. Kept only
+  // until the desk stops; an uninstall drops the extension's.
+  std::map<std::string, std::map<std::string, bool>> pending_switches_;
   // What waits on each profile that is loading (WhenLoaded), by id.
   std::map<std::string, std::vector<base::OnceClosure>> waiting_;
   base::ScopedMultiSourceObservation<Profile, ProfileObserver> observations_{

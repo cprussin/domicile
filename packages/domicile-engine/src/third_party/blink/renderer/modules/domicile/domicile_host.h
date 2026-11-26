@@ -172,6 +172,7 @@ class MODULES_EXPORT DomicileHost final
                            uint32_t id,
                            const String& answer,
                            ExceptionState&);
+  void changeConfig(ScriptState*, const String& request, ExceptionState&);
   void copyClipboardEntry(ScriptState*, uint32_t entry, ExceptionState&);
   void removeClipboardEntry(ScriptState*, uint32_t entry, ExceptionState&);
   void activateTrayItem(ScriptState*,
@@ -550,6 +551,7 @@ class MODULES_EXPORT DomicileHost final
   void FocusRequested(const String& app_id) override;
   void System(const String& message) override;
   void PortalRequests(const String& message) override;
+  void ConfigOverrides(const String& message) override;
   void CompositorReplaced() override;
   void Displays(
       Vector<domicile::mojom::blink::DisplayInfoPtr> displays) override;

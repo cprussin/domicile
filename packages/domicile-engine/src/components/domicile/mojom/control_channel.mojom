@@ -422,6 +422,15 @@ interface ControlChannel {
   // else of it; the compositor checks it. See docs/PORTALS.md.
   AnswerPortalRequest(uint32 id, string answer);
 
+  // A temporary change to the desk's config, until the desktop restarts or
+  // the config file changes that setting: `request` is a
+  // `set_config_override`, `reset_config_overrides` or
+  // `which_config_overrides` line, as JSON. The browser checks the type and
+  // reads nothing else of it; the compositor checks the rest. Answered on
+  // this channel with ControlChannelClient::ConfigOverrides, once per request
+  // and in order. See docs/SETTINGS.md#temporary-changes.
+  ChangeConfig(string request);
+
   // Put a row of the clipboard's history back on the clipboard. The id is one
   // a Clipboard message carried; the compositor holds the row's full text,
   // which the page never sees.
@@ -927,4 +936,9 @@ interface ControlChannelClient {
   // compositor wrote it. Pushed whole on every change and on connect. The page
   // parses it.
   PortalRequests(string message);
+
+  // An answer to a ChangeConfig: the compositor's `config_overrides` line,
+  // every temporary change after it and why it was refused, if it was. The
+  // page parses it.
+  ConfigOverrides(string message);
 };

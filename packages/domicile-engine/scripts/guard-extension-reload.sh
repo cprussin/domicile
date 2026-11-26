@@ -141,6 +141,33 @@ except OSError as failure:
 PY
 }
 
+# Switches extension $1 on in browser profile $2 through the command socket,
+# as the Settings app does once the user picks the profiles: an extension the
+# user loads starts off everywhere. Tries until the profile has its copy,
+# which another profile's load installs a moment later.
+switch_on() {
+  python3 - "$COMMAND" "$1" "$2" <<'PY' 2>&1 | tee -a "$ANSWERS"
+import json, socket, sys, time
+
+line = json.dumps({"type": "set_extension_enabled", "version": 1,
+                   "id": sys.argv[2], "enabled": True, "profile": sys.argv[3]})
+answer = "no answer"
+for _ in range(120):
+    try:
+        connection = socket.socket(socket.AF_UNIX)
+        connection.settimeout(10)
+        connection.connect(sys.argv[1])
+        connection.sendall((line + "\n").encode())
+        answer = connection.makefile().readline().strip()
+    except OSError as failure:
+        answer = "no answer: %s" % failure
+    if answer.startswith('{"type":"set"') or '"type":"set"' in answer:
+        break
+    time.sleep(0.25)
+print(answer)
+PY
+}
+
 # 1. The page, on its own server like every <webview> guard's: `crux` reaches
 #    no arbitrary host.
 rm -f "$HTTP_LOG"
@@ -196,7 +223,9 @@ STARTED+=($!)
 
 # 4. The loads, each once the pages run the edit before it.
 if wait_for_edit none; then
-  load "$FIRST_HOME"
+  ID="$(load "$FIRST_HOME" | python3 -c 'import json, sys; print(json.loads(sys.stdin.readline() or "{}").get("id", ""))' 2>/dev/null)"
+  switch_on "$ID" default
+  switch_on "$ID" work
   if wait_for_edit first; then
     edit "$FIRST_HOME" second
     if [ "$NEGATIVE" = "1" ]; then

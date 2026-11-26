@@ -35,6 +35,7 @@ const HEADER = [
 /** What each event is dispatched as, which `EventHandler` does not say. */
 const EVENT_TYPES = {
   browsermemoryshort: "MessageEvent<string>",
+  configoverrides: "MessageEvent<string>",
   extensioncommandpressed: "MessageEvent<string>",
   extensionpopuprequested: "DomicileExtensionPopupEvent",
   focusrequested: "DomicileAppEvent",

@@ -32,6 +32,7 @@ Each agent gets its own pointer, keyboard and clipboard, in native and browser w
 - `domicile open --agent <session> <url>` opens a browser window held by the agent's seat (seat `agent-<session>`); the engine's `open_url` takes `"agent"` and answers with the window. [Browser windows](SHELL-BROWSER-WINDOWS.md) · [`domicile open`](CLI.md#domicile-open)
 - `domicile list-windows` and the MCP server's `list_windows` give a browser window `focused` and its page's `size`, from the engine's new `browser_windows` command. [`domicile list-windows`](CLI.md#domicile-list-windows---json)
 - Extensions' keys and menus: `extensions.commands` and `runCommand()` run `chrome.commands`, `extensions.menu()` has an action's `chrome.contextMenus` items, and a page's context menu event carries `extensionItems`. [Commands](SHELL-EXTENSIONS.md#commands) · [Menus](SHELL-EXTENSIONS.md#menus)
+- `domicile.config` makes temporary changes to the config, which last until the desktop restarts or the file changes that setting: `setOverride`, `resetOverrides` and `overrides`, each change with what the file has under it. An extension's site and file access are the same in every browser profile, and one the user installs starts off in every profile, for your shell to ask which profiles it goes on in. [Temporary changes](SETTINGS.md#temporary-changes) · [Extensions](architecture/EXTENSIONS.md)
 - `idle.ignore_pointer_motion` keeps a drifting mouse from holding the desktop awake. [`idle`](SHELL-CONFIG.md#idle)
 
 ### Breaking changes

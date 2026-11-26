@@ -58,11 +58,30 @@ bool IsSystemAnswer(std::string_view type) {
          type == "system_end";
 }
 
-bool IsSystemRequestLine(std::string_view line) {
+std::optional<std::string> ConfigChangeLine(std::string_view request) {
+  std::optional<base::DictValue> change =
+      base::JSONReader::ReadDict(request, base::JSON_PARSE_RFC);
+  const std::string* type = change ? change->FindString("type") : nullptr;
+  if (!type ||
+      (*type != "set_config_override" && *type != "reset_config_overrides" &&
+       *type != "which_config_overrides")) {
+    return std::nullopt;
+  }
+  // Written again rather than passed on, so the line is one line.
+  std::string line;
+  CHECK(base::JSONWriter::Write(*change, &line));
+  return line;
+}
+
+bool IsConfigChangeAnswer(std::string_view type) {
+  return type == "config_overrides";
+}
+
+bool IsAskedOfOneCompositor(std::string_view line) {
   std::optional<base::DictValue> message =
       base::JSONReader::ReadDict(line, base::JSON_PARSE_RFC);
   const std::string* type = message ? message->FindString("type") : nullptr;
-  return type && *type == "system_request";
+  return type && (*type == "system_request" || ConfigChangeLine(line));
 }
 
 OpenCalls::OpenCalls() = default;

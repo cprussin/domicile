@@ -169,9 +169,11 @@ std::vector<UserExtension> UserExtensionsMissing(
 std::optional<bool> ConfigSwitch(const BrowserProfile& profile,
                                  std::string_view id);
 
-// Whether an extension the config does not switch starts on in `profile`
-// when it is first installed there: on, except in a private profile, whose
-// pages have always been kept from extensions unless allowed.
+// Whether one of the config's extensions that the config does not switch
+// starts on in `profile` when it is first installed there: on, except in a
+// private profile, whose pages have always been kept from extensions unless
+// allowed. One the user installed starts off everywhere, for the shell to ask
+// which profiles it goes on in.
 bool DefaultSwitch(const BrowserProfile& profile);
 
 }  // namespace domicile

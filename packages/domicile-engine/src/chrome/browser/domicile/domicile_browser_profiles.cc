@@ -20,9 +20,11 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/types/expected.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/domicile/domicile_extension_installer.h"
+#include "chrome/browser/domicile/domicile_extension_settings.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
@@ -508,12 +510,33 @@ void BrowserProfileRegistry::SwitchExtensions(base::WeakPtr<Profile> profile) {
   }
   extensions::ExtensionRegistry* registry =
       extensions::ExtensionRegistry::Get(profile.get());
+  // A setting changed while it loaded reached only the profiles ready then,
+  // and the copies it loaded from disk have the settings they last had.
+  if (shell_ != nullptr && profile.get() != shell_) {
+    for (const scoped_refptr<const extensions::Extension>& extension :
+         registry->GenerateInstalledExtensionsSet()) {
+      TakeUpTheShellsSettings(*profile, *extension);
+    }
+  }
   for (const std::string& id : ConfigExtensionIds()) {
     const extensions::Extension* extension =
         registry->GetInstalledExtension(id);
     if (extension != nullptr) {
       // Chrome switched it off as it loaded if it was never granted them.
       GrantPermissionsOf(*profile, *extension);
+      SwitchExtension(*profile, *as, id, /*installed_now=*/false);
+    }
+  }
+  // Those switched while it loaded.
+  if (auto pending = pending_switches_.find(as->id);
+      pending != pending_switches_.end()) {
+    std::vector<std::string> asked;
+    for (const auto& [id, on] : pending->second) {
+      if (registry->GetInstalledExtension(id) != nullptr) {
+        asked.push_back(id);
+      }
+    }
+    for (const std::string& id : asked) {
       SwitchExtension(*profile, *as, id, /*installed_now=*/false);
     }
   }
@@ -536,10 +559,24 @@ void BrowserProfileRegistry::SwitchExtension(Profile& profile,
   const std::optional<bool> configured =
       std::ranges::contains(ConfigExtensionIds(), id) ? ConfigSwitch(as, id)
                                                       : std::nullopt;
-  if (!configured.has_value() && (!first || !installed_now)) {
+  // The user's switch from before this profile had it.
+  std::optional<bool> asked;
+  if (auto pending = pending_switches_.find(as.id);
+      pending != pending_switches_.end()) {
+    if (auto switched = pending->second.find(id);
+        switched != pending->second.end()) {
+      asked = switched->second;
+      pending->second.erase(switched);
+    }
+  }
+  if (!configured.has_value() && !asked.has_value() &&
+      (!first || !installed_now)) {
     return;
   }
-  const bool on = configured.value_or(DefaultSwitch(as));
+  // One the user installed starts off: the shell asks which profiles it goes
+  // on in, and switches it on there.
+  const bool on = configured.value_or(asked.value_or(
+      std::ranges::contains(ConfigExtensionIds(), id) && DefaultSwitch(as)));
   extensions::ExtensionRegistry* registry =
       extensions::ExtensionRegistry::Get(&profile);
   if (on == registry->enabled_extensions().Contains(id)) {
@@ -663,6 +700,25 @@ void BrowserProfileRegistry::OnMirroredUnpackedLoaded(
   }
 }
 
+void BrowserProfileRegistry::UninstallAbandoned(base::WeakPtr<Profile> profile,
+                                                const std::string& id) {
+  if (!profile || extensions::ExtensionRegistry::Get(profile.get())
+                          ->GetInstalledExtension(id) == nullptr) {
+    return;
+  }
+  // Not USER_INITIATED, which would uninstall it everywhere again.
+  std::u16string error;
+  if (!extensions::ExtensionRegistrar::Get(profile.get())
+           ->UninstallExtension(
+               id, extensions::UNINSTALL_REASON_ORPHANED_EXTERNAL_EXTENSION,
+               &error)) {
+    LOG(ERROR) << "domicile: extension " << id
+               << " would not uninstall from a browser profile it loaded "
+                  "into after the user uninstalled it: "
+               << base::UTF16ToUTF8(error);
+  }
+}
+
 void BrowserProfileRegistry::ReloadUnpackedElsewhere(Profile& from,
                                                      const std::string& id) {
   const extensions::Extension* loaded =
@@ -758,12 +814,68 @@ base::expected<void, std::string> BrowserProfileRegistry::SetExtensionEnabled(
         base::StrCat({"the desk has no browser profile \"", id, "\""}));
   }
   Profile* profile = ExtensionsProfileOf(id);
-  if (profile == nullptr) {
-    return base::unexpected(
-        base::StrCat({"browser profile ", id, " is still loading"}));
+  const bool here =
+      profile != nullptr &&
+      extensions::ExtensionRegistry::Get(profile)->GetInstalledExtension(
+          extension) != nullptr;
+  if (!here) {
+    // One the user installed reaches this profile soon: as it loads, or
+    // through MirrorUserExtensions.
+    const bool coming = std::ranges::any_of(
+        ReadyExtensionProfiles(), [&extension](Profile* ready) {
+          const extensions::Extension* there =
+              extensions::ExtensionRegistry::Get(ready)->GetInstalledExtension(
+                  extension);
+          return there != nullptr && AsUserExtension(*there).has_value();
+        });
+    if (!coming) {
+      return base::unexpected(
+          profile == nullptr
+              ? base::StrCat({"browser profile ", id, " is still loading"})
+              : base::StrCat({"browser profile ", id, " has no extension ",
+                              extension, " installed"}));
+    }
+    LOG(INFO) << "domicile: extension " << extension << " switches "
+              << (enabled ? "on" : "off") << " in browser profile " << id
+              << " once it is installed there.";
+    pending_switches_[id][extension] = enabled;
+    return base::ok();
   }
   // SetExtensionEnabledIn refuses one the config switches (IsSwitchLocked).
   return SetExtensionEnabledIn(*profile, extension, enabled);
+}
+
+base::expected<void, std::string> BrowserProfileRegistry::ConfigureEverywhere(
+    Profile& from,
+    const std::string& id,
+    const ExtensionSettings& settings) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (base::expected<void, std::string> configured =
+          ConfigureExtensionIn(from, id, settings);
+      !configured.has_value()) {
+    return configured;
+  }
+  // Whether it runs in private pages is each profile's: a private profile's
+  // copy is allowed into its pages (ExtensionsFor).
+  ExtensionSettings elsewhere = settings;
+  elsewhere.in_private.reset();
+  for (Profile* profile : ReadyExtensionProfiles()) {
+    if (profile == &from ||
+        extensions::ExtensionRegistry::Get(profile)->GetInstalledExtension(
+            id) == nullptr) {
+      continue;
+    }
+    const base::expected<void, std::string> configured =
+        ConfigureExtensionIn(*profile, id, elsewhere);
+    if (!configured.has_value()) {
+      const BrowserProfile* as = AsBrowserProfile(*profile);
+      LOG(ERROR) << "domicile: extension " << id
+                 << "'s settings did not change in browser profile "
+                 << (as == nullptr ? std::string() : as->id) << ": "
+                 << configured.error();
+    }
+  }
+  return base::ok();
 }
 
 bool BrowserProfileRegistry::IsSwitchLocked(
@@ -801,7 +913,29 @@ void BrowserProfileRegistry::OnExtensionInstalled(
   const BrowserProfile* as = AsBrowserProfile(*profile);
   const bool configured =
       std::ranges::contains(ConfigExtensionIds(), extension->id());
-  const bool user = AsUserExtension(*extension).has_value();
+  const std::optional<UserExtension> user_extension =
+      AsUserExtension(*extension);
+  const bool user = user_extension.has_value();
+  // A copy MirrorUserExtensions was still loading when the user uninstalled
+  // the extension everywhere else: it leaves too, rather than going back
+  // into the others.
+  if (!is_update && user && !user_extension->unpacked.empty() &&
+      loading_unpacked_.contains(
+          {profile->GetPath(), user_extension->unpacked}) &&
+      std::ranges::none_of(ReadyExtensionProfiles(), [&](Profile* other) {
+        return other != profile &&
+               extensions::ExtensionRegistry::Get(other)->GetInstalledExtension(
+                   extension->id()) != nullptr;
+      })) {
+    LOG(INFO) << "domicile: extension " << extension->id()
+              << " finished loading in a browser profile after the user "
+                 "uninstalled it, so it leaves that one too.";
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&BrowserProfileRegistry::UninstallAbandoned,
+                                  weak_factory_.GetWeakPtr(),
+                                  profile->GetWeakPtr(), extension->id()));
+    return;
+  }
   // An update may ask for more; the config consents to that too.
   if (as != nullptr && (configured || (user && !is_update))) {
     GrantPermissionsOf(*profile, *extension);
@@ -809,11 +943,81 @@ void BrowserProfileRegistry::OnExtensionInstalled(
   if (!is_update && as != nullptr && (configured || user)) {
     SwitchExtension(*profile, *as, extension->id(), /*installed_now=*/true);
   }
+  if (!is_update && shell_ != nullptr && profile != shell_) {
+    // Posted: file access reloads the extension, which the registry is still
+    // telling its observers it installed (as InstallWatch does).
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&BrowserProfileRegistry::TakeUpTheShellsSettingsIn,
+                       weak_factory_.GetWeakPtr(), profile->GetWeakPtr(),
+                       extension->id()));
+  }
   if (!is_update) {
     // One the user installed here goes into every other profile.
     MirrorUserExtensions();
   }
   ExtensionsChanged();
+}
+
+void BrowserProfileRegistry::TakeUpTheShellsSettingsIn(
+    base::WeakPtr<Profile> profile,
+    const std::string& id) {
+  if (!profile || shell_ == nullptr) {
+    return;
+  }
+  if (const extensions::Extension* extension =
+          extensions::ExtensionRegistry::Get(profile.get())
+              ->GetInstalledExtension(id)) {
+    TakeUpTheShellsSettings(*profile, *extension);
+  }
+}
+
+void BrowserProfileRegistry::TakeUpTheShellsSettings(
+    Profile& profile,
+    const extensions::Extension& extension) {
+  const extensions::Extension* there =
+      extensions::ExtensionRegistry::Get(shell_)->GetInstalledExtension(
+          extension.id());
+  if (there == nullptr) {
+    return;
+  }
+  ExtensionSettings settings = SettingsOf(*shell_, *there);
+  settings.in_private.reset();
+  // Only those this copy can use: a version apart may ask for less.
+  const ExtensionSettings usable = SettingsOf(profile, extension);
+  if (!usable.file_access.has_value()) {
+    settings.file_access.reset();
+  }
+  if (!usable.user_scripts.has_value()) {
+    settings.user_scripts.reset();
+  }
+  if (!usable.site_access.has_value()) {
+    settings.site_access.reset();
+    settings.sites.clear();
+  }
+  // Only those that differ, since file access reloads the extension.
+  if (settings.file_access == usable.file_access) {
+    settings.file_access.reset();
+  }
+  if (settings.user_scripts == usable.user_scripts) {
+    settings.user_scripts.reset();
+  }
+  if (settings.site_access == usable.site_access &&
+      settings.sites == usable.sites) {
+    settings.site_access.reset();
+    settings.sites.clear();
+  }
+  if (settings == ExtensionSettings()) {
+    return;
+  }
+  const base::expected<void, std::string> configured =
+      ConfigureExtensionIn(profile, extension.id(), settings);
+  if (!configured.has_value()) {
+    LOG(ERROR) << "domicile: extension " << extension.id()
+               << " did not take up its settings in a browser profile it "
+                  "was just installed in: "
+               << configured.error();
+  }
 }
 
 void BrowserProfileRegistry::OnExtensionUninstalled(
@@ -824,6 +1028,9 @@ void BrowserProfileRegistry::OnExtensionUninstalled(
   // the config's: it installs them again.
   if (reason == extensions::UNINSTALL_REASON_USER_INITIATED &&
       !std::ranges::contains(ConfigExtensionIds(), extension->id())) {
+    for (auto& [profile, switches] : pending_switches_) {
+      switches.erase(extension->id());
+    }
     UninstallEverywhere(*Profile::FromBrowserContext(context),
                         extension->id());
   }

@@ -580,7 +580,8 @@ class ExtensionTray final
       return base::StrCat({"the desk's config sets ", *configured});
     }
     LOG(INFO) << "domicile: the tray configures " << id << ".";
-    return ErrorOf(ConfigureExtensionIn(profile(), id, *settings));
+    return ErrorOf(BrowserProfileRegistry::Get().ConfigureEverywhere(
+        profile(), id, *settings));
   }
 
   // extensions::ExtensionRegistryObserver:

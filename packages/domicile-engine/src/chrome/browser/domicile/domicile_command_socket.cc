@@ -558,7 +558,8 @@ base::expected<void, std::string> ConfigureShellExtension(
   if (profile == nullptr) {
     return base::unexpected(kNoProfile);
   }
-  return ConfigureExtensionIn(*profile, id, settings);
+  return BrowserProfileRegistry::Get().ConfigureEverywhere(*profile, id,
+                                                           settings);
 }
 
 // The cameras and microphones, ranked by the shell profile's preference, once

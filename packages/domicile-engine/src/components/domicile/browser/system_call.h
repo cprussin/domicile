@@ -32,9 +32,24 @@ std::optional<std::string> SystemRequestLine(uint32_t id,
 // to the page as it arrived.
 bool IsSystemAnswer(std::string_view type);
 
-// Whether `line` is a `system_request`. One queued for a compositor that hung
-// up is dropped, since OpenCalls::EndAll ends its call.
-bool IsSystemRequestLine(std::string_view line);
+// A page's temporary change to the desk's config, the line the compositor
+// takes: `request` itself when it is a JSON object whose `type` is
+// `set_config_override`, `reset_config_overrides` or
+// `which_config_overrides`, and nothing otherwise. The compositor checks the
+// rest and answers with a `config_overrides` line. See
+// docs/SETTINGS.md#temporary-changes.
+std::optional<std::string> ConfigChangeLine(std::string_view request);
+
+// Whether a compositor line of this `type` answers a ConfigChangeLine, and so
+// goes to the page as it arrived.
+bool IsConfigChangeAnswer(std::string_view type);
+
+// Whether `line` asks one compositor for its answer: a `system_request` or a
+// ConfigChangeLine. One queued for a compositor that hung up is dropped, since
+// the page hears that it ended (OpenCalls::EndAll, and a refused
+// `config_overrides` for a config change), so the next compositor must not
+// answer it too.
+bool IsAskedOfOneCompositor(std::string_view line);
 
 // The page's system calls one compositor has, so that a compositor that hangs
 // up can end them for the page. The SDK sends a watch or a D-Bus match ended

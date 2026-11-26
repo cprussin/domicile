@@ -62,6 +62,7 @@ const EVENT_NAMES = [
   "shelloptionschanged",
   "system",
   "portalrequests",
+  "configoverrides",
   "compositorreplaced",
   "shadereffectlost",
 ];

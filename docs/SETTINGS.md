@@ -111,7 +111,14 @@ and takes them up as it takes up an edit of the file. The host asks with
 control socket, which `domicile` relays to the compositor as
 `ChromeMessage::SetConfigOverride`, `ResetConfigOverrides` and
 `WhichConfigOverrides`. A path is keys and list indexes; a value is JSON text,
-and `null` takes the setting back to its default.
+and `null` takes the setting back to its default. Each change in an answer
+carries `written` too, what the file has under it.
+
+A shell makes them through the SDK's `domicile.config` (`setOverride`,
+`resetOverrides`, `overrides`), which calls the engine's
+`DomicileHost.changeConfig`. The browser checks only the request's type; the
+compositor answers each, in order, on that shell's channel, which the page
+hears as `configoverrides`.
 
 ## How it works
 

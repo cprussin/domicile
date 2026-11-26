@@ -643,6 +643,14 @@ void DomicileHost::answerPortalRequest(ScriptState*,
   }
 }
 
+void DomicileHost::changeConfig(ScriptState*,
+                                const String& request,
+                                ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->ChangeConfig(request);
+  }
+}
+
 // The whole of what a page may do about the lock, and it is an offer rather
 // than a decision: what opens the desk is the compositor agreeing, and what
 // this page hears about it is `lockedchanged` like every other chrome on the
@@ -3430,6 +3438,17 @@ void DomicileHost::CompositorReplaced() {
 void DomicileHost::PortalRequests(const String& message) {
   portal_requests_ = message;
   DispatchPortalRequests();
+}
+
+// A MessageEvent, as System() builds one. An answer rather than state, so a
+// listener added later hears only the answers after it.
+void DomicileHost::ConfigOverrides(const String& message) {
+  MessageEvent* event = MessageEvent::Create();
+  event->initMessageEvent(domicile_event_names::Configoverrides(),
+                          /*bubbles=*/false, /*cancelable=*/false, message,
+                          /*origin=*/nullptr, /*last_event_id=*/String(),
+                          /*source=*/nullptr, /*ports=*/nullptr);
+  DispatchEvent(*event);
 }
 
 // A MessageEvent, as System() builds one.

@@ -74,6 +74,10 @@
       "types": "./dist/desktop/clipboard.d.ts",
       "default": "./dist/desktop/clipboard.js"
     },
+    "./desktop/config": {
+      "types": "./dist/desktop/config.d.ts",
+      "default": "./dist/desktop/config.js"
+    },
     "./desktop/dbus": {
       "types": "./dist/desktop/dbus.d.ts",
       "default": "./dist/desktop/dbus.js"

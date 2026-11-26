@@ -65,6 +65,26 @@ TEST(SystemCallTest, OnlyTheThreeAnswersAreRelayed) {
 // A compositor that hangs up ends what it had: a call it started ends, one
 // waiting for its reply is answered, and one it finished is not heard of
 // again.
+TEST(SystemCallTest, AConfigChangeGoesAsThePageWroteIt) {
+  base::DictValue line = Parsed(ConfigChangeLine(
+      R"({"type":"set_config_override","path":["theme","mode"],)"
+      R"("value":"\"dark\""})"));
+  EXPECT_EQ(*line.FindString("type"), "set_config_override");
+  EXPECT_EQ(*line.FindString("value"), "\"dark\"");
+  EXPECT_TRUE(ConfigChangeLine(R"({"type":"which_config_overrides"})"));
+  EXPECT_TRUE(ConfigChangeLine(
+      R"({"type":"reset_config_overrides","paths":[["theme"]]})"));
+}
+
+TEST(SystemCallTest, AConfigChangeCannotBeAnotherMessage) {
+  EXPECT_FALSE(ConfigChangeLine(R"({"type":"unlock","passphrase":"x"})"));
+  EXPECT_FALSE(ConfigChangeLine(R"({"path":["theme"]})"));
+  EXPECT_FALSE(ConfigChangeLine("[]"));
+  EXPECT_FALSE(ConfigChangeLine("not json"));
+  EXPECT_TRUE(IsConfigChangeAnswer("config_overrides"));
+  EXPECT_FALSE(IsConfigChangeAnswer("system_reply"));
+}
+
 TEST(SystemCallTest, OpenCallsEndWithTheCompositor) {
   OpenCalls calls;
   calls.Called(1);
@@ -90,11 +110,12 @@ TEST(SystemCallTest, OpenCallsEndWithTheCompositor) {
   EXPECT_TRUE(calls.EndAll().empty());
 }
 
-TEST(SystemCallTest, OnlyARequestIsARequestLine) {
-  EXPECT_TRUE(IsSystemRequestLine(
+TEST(SystemCallTest, ARequestAndAConfigChangeAreAskedOfOneCompositor) {
+  EXPECT_TRUE(IsAskedOfOneCompositor(
       R"({"type":"system_request","id":1,"request":{"call":"stat"}})"));
-  EXPECT_FALSE(IsSystemRequestLine(R"({"type":"focus_chrome"})"));
-  EXPECT_FALSE(IsSystemRequestLine("not json"));
+  EXPECT_TRUE(IsAskedOfOneCompositor(R"({"type":"which_config_overrides"})"));
+  EXPECT_FALSE(IsAskedOfOneCompositor(R"({"type":"focus_chrome"})"));
+  EXPECT_FALSE(IsAskedOfOneCompositor("not json"));
 }
 
 }  // namespace

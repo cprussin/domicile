@@ -53,6 +53,7 @@
   X(shelloptionschanged, Shelloptionschanged)                     \
   X(system, System)                                               \
   X(portalrequests, Portalrequests)                               \
+  X(configoverrides, Configoverrides)                             \
   X(compositorreplaced, Compositorreplaced)                       \
   X(shadereffectlost, Shadereffectlost)
 

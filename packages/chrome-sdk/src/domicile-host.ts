@@ -881,6 +881,12 @@ export type DomicileHostEventMap = {
    */
   portalrequests: MessageEvent<string>;
   /**
+   * An answer to changeConfig(), as a MessageEvent whose `data` is the
+   * compositor's `config_overrides` line: every temporary change after it,
+   * and why it was refused if it was.
+   */
+  configoverrides: MessageEvent<string>;
+  /**
    * The compositor exited and a new one took over. Fired after every window
    * of the old one has closed and every system call it had has ended with
    * `compositor_gone`; the new one's windows and desk state follow. The page's
@@ -946,6 +952,17 @@ export type DomicileHost = {
    * docs/PORTALS.md.
    */
   answerPortalRequest(id: number, answer: string): void;
+  /**
+   * A temporary change to the desk's config, until the desktop restarts or
+   * the config file changes that setting. `request` is JSON: a
+   * `set_config_override` with a `path` and the `value` as JSON text, a
+   * `reset_config_overrides` with `paths`, or a `which_config_overrides`.
+   * One of another type is dropped in the browser; the compositor checks the
+   * rest. Each is answered, in order, with a `configoverrides` event. See
+   * docs/SETTINGS.md#temporary-changes and the SDK's `config` module, which
+   * is the way to call this.
+   */
+  changeConfig(request: string): void;
   /**
    * Put a row of the clipboard's history back on the clipboard.
    *

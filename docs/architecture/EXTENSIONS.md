@@ -75,12 +75,21 @@ reconciled once per profile: each gets every extension, switched on or off
 in it. An extension the user installs in one profile goes into the others
 too, from the Web Store or its unpacked directory, and one they uninstall
 leaves them all. A profile whose `browser.profiles.<id>.extensions` names its
-extensions has those on and the rest off, and the user cannot switch them.
-One that names none starts each extension on, or off in a private profile,
-the first time it is installed there, and the user switches it from then on
-(`BrowserProfileRegistry` in
+extensions has those on and the rest off, and the engine refuses to switch
+them: a shell switches one with a temporary change to that list instead
+(`domicile.config.setOverride`, [SETTINGS.md](/docs/SETTINGS.md#temporary-changes)),
+which lasts until the desktop restarts or the config changes the list. One
+that names none starts each of the config's extensions on, or off in a
+private profile, the first time it is installed there. One the user installs
+starts off in every profile, for the shell to ask which profiles it goes on
+in. The user switches either from then on (`BrowserProfileRegistry` in
 `chrome/browser/domicile/domicile_browser_profiles.h`). See
 [BROWSER-PROFILES.md](BROWSER-PROFILES.md).
+
+An extension's [settings](#settings) are the same in every profile: setting
+one from the Settings app or the tray sets it in every loaded profile's copy
+(`BrowserProfileRegistry::ConfigureEverywhere`), and a copy installed later
+takes up the shell profile's.
 
 The Settings app removes extensions by editing these lists, and switches
 extensions on and off through `chrome.management`

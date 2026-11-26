@@ -51,6 +51,17 @@
   [CallWith=ScriptState, RaisesException] undefined answerPortalRequest(
       unsigned long id, DOMString answer);
 
+  // A temporary change to the desk's config, until the desktop restarts or
+  // the config file changes that setting. `request` is JSON: a
+  // `set_config_override` with a `path` and the `value` as JSON text, a
+  // `reset_config_overrides` with `paths`, or a `which_config_overrides`.
+  // One of another type is dropped in the browser; the compositor checks the
+  // rest. Each is answered, in order, with a `configoverrides` event. See
+  // docs/SETTINGS.md#temporary-changes and the SDK's `config` module, which
+  // is the way to call this.
+  [CallWith=ScriptState, RaisesException] undefined changeConfig(
+      DOMString request);
+
   // Put a row of the clipboard's history back on the clipboard.
   //
   // `entry` is an id `clipboard` lists. The compositor holds each row's full
@@ -791,6 +802,11 @@
   // added later is sent the latest line, so a shell that listens late still
   // sees pending dialogs.
   attribute EventHandler onportalrequests;
+
+  // An answer to changeConfig(), as a MessageEvent whose `data` is the
+  // compositor's `config_overrides` line: every temporary change after it,
+  // and why it was refused if it was.
+  attribute EventHandler onconfigoverrides;
 
   // The compositor exited and a new one took over. Fired after every window
   // of the old one has closed and every system call it had has ended with

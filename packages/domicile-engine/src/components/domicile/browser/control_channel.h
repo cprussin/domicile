@@ -178,6 +178,7 @@ class ControlChannel : public mojom::ControlChannel {
   void SearchFiles(const std::string& query) override;
   void CallSystem(uint32_t id, const std::string& request) override;
   void AnswerPortalRequest(uint32_t id, const std::string& answer) override;
+  void ChangeConfig(const std::string& request) override;
   void CopyClipboardEntry(uint32_t entry) override;
   void RemoveClipboardEntry(uint32_t entry) override;
   void ActivateTrayItem(const std::string& id,
@@ -281,6 +282,9 @@ class ControlChannel : public mojom::ControlChannel {
   void OnWrite(int result);
   // Puts the line being written back at the front of the queue.
   void RequeueTheLineInFlight();
+  // Answers each of the page's config changes no compositor will answer, in
+  // order, with a refusal, so each the page sent has exactly one answer.
+  void RefuseTheUnansweredConfigChanges();
 
   // The registry's three deliveries, on this channel's own sequence. All are
   // registered wrapped in base::BindPostTask, because a press is matched on the
@@ -372,6 +376,11 @@ class ControlChannel : public mojom::ControlChannel {
   // the page's system calls.
   std::set<std::string> open_apps_;
   OpenCalls calls_;
+  // The page's config changes sent or queued and not yet answered. Answers
+  // carry no id, so the page matches them to its changes by order; every
+  // change must get one, from the compositor or from
+  // RefuseTheUnansweredConfigChanges.
+  int config_changes_unanswered_ = 0;
 
   base::TimeTicks give_up_at_;
   base::OneShotTimer retry_timer_;
