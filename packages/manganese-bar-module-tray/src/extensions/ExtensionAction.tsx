@@ -1,8 +1,6 @@
 /// <reference types="@domicile-desktop/manganese-host/domicile-elements" />
 
 import { Button } from "@domicile-desktop/component-library/Button";
-import type { Point } from "@domicile-desktop/component-library/ContextMenu";
-import { ContextMenu } from "@domicile-desktop/component-library/ContextMenu";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { DeviceAsk } from "@domicile-desktop/manganese-page-requests/DeviceAsk";
 import { PageDialog } from "@domicile-desktop/manganese-page-requests/PageDialog";
@@ -10,8 +8,6 @@ import { PermissionAsk } from "@domicile-desktop/manganese-page-requests/Permiss
 import { useDeviceRequest } from "@domicile-desktop/manganese-page-requests/useDeviceRequest";
 import { useDialogRequest } from "@domicile-desktop/manganese-page-requests/useDialogRequest";
 import { usePermissionRequest } from "@domicile-desktop/manganese-page-requests/usePermissionRequest";
-import { AppMenuEntries } from "@domicile-desktop/manganese-window-management/browser/AppMenuBar";
-import type { AppMenuEntry } from "@domicile-desktop/sdk/app-menu";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type {
   Extension,
@@ -20,6 +16,7 @@ import type {
 import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
 import { useEffect, useState } from "react";
 import { css } from "../../styled-system/css";
+import { useActionMenu } from "./useActionMenu";
 import { useContentSize } from "./useContentSize";
 import { useShown } from "./useShown";
 
@@ -53,7 +50,7 @@ type Props = {
  * popup's page has loaded, as Chrome's is.
  *
  * A right click opens the items the extension adds to its action's menu
- * (`chrome.contextMenus`), as Chrome's does, and nothing when it adds none.
+ * (`chrome.contextMenus`), as Chrome's does; see `useActionMenu`.
  *
  * The panel closes on an outside press, Escape, or the popup's
  * `window.close()`. Escape works only while the shell page has the keyboard,
@@ -71,9 +68,7 @@ export const ExtensionAction = ({
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
   const shown = useShown(view);
   const shownPopup = opened?.id === id ? opened : undefined;
-  const [menu, setMenu] = useState<
-    { at: Point; entries: readonly AppMenuEntry[] } | undefined
-  >(undefined);
+  const menu = useActionMenu(domicile, extension);
   return (
     <>
       <Popover
@@ -98,19 +93,7 @@ export const ExtensionAction = ({
             onContextMenu={(event) => {
               event.preventDefault();
               const box = event.currentTarget.getBoundingClientRect();
-              const at = { x: box.left, y: box.bottom };
-              domicile.extensions
-                .menu(id)
-                .then((entries) => {
-                  setMenu(entries.length === 0 ? undefined : { at, entries });
-                })
-                .catch((error: unknown) => {
-                  // biome-ignore lint/suspicious/noConsole: the menu stays shut; say why
-                  console.error(
-                    `Could not read ${extension.name}'s menu`,
-                    error,
-                  );
-                });
+              menu.show({ x: box.left, y: box.bottom });
             }}
             size="sm"
             variant="ghost"
@@ -135,25 +118,7 @@ export const ExtensionAction = ({
           />
         )}
       </Popover>
-      {menu !== undefined && (
-        <ContextMenu
-          at={menu.at}
-          label={extension.name}
-          onOpenChange={(open) => {
-            if (!open) {
-              setMenu(undefined);
-            }
-          }}
-          open
-        >
-          <AppMenuEntries
-            entries={menu.entries}
-            onChoose={(item) => {
-              domicile.extensions.runMenuItem(item);
-            }}
-          />
-        </ContextMenu>
-      )}
+      {menu.opened}
     </>
   );
 };

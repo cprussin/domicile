@@ -29,6 +29,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { css } from "../styled-system/css";
 import { center } from "../styled-system/patterns";
+import { useActionMenu } from "./extensions/useActionMenu";
 import type { MenuIcons } from "./menu-icons";
 import { extensionKey, statusNotifierKey } from "./tray-entry";
 import { useItemMenu } from "./useItemMenu";
@@ -471,16 +472,58 @@ const ExtensionRow = ({
       {confirm}
     </ListRow>
   ) : (
-    <ListRow
-      actions={controls}
+    <ActionRow
+      action={action}
+      controls={controls}
+      domicile={domicile}
       icon={icon}
-      label={name}
-      onPress={() => {
-        onActivate(action);
-      }}
+      onActivate={onActivate}
     >
       {differs}
       {confirm}
+    </ActionRow>
+  );
+};
+
+type ActionRowProps = Pick<ExtensionRowProps, "domicile" | "onActivate"> & {
+  action: Extension;
+  /** What goes below its label. */
+  children: ReactNode;
+  /** Its pin, switch and `⋯` menu. */
+  controls: ReactNode;
+  icon: ReactNode;
+};
+
+/**
+ * The row of an extension with an action. A click is its icon's click; a
+ * right click anywhere on it opens the action's menu there.
+ */
+const ActionRow = ({
+  action,
+  children,
+  controls,
+  domicile,
+  icon,
+  onActivate,
+}: ActionRowProps) => {
+  const menu = useActionMenu(domicile, action);
+  return (
+    <ListRow
+      // The menu beside the row's button, so its clicks don't bubble into it.
+      actions={
+        <>
+          {controls}
+          {menu.opened}
+        </>
+      }
+      icon={icon}
+      label={action.name}
+      onPress={() => {
+        onActivate(action);
+      }}
+      onSecondaryPress={menu.show}
+    >
+      {children}
     </ListRow>
   );
 };

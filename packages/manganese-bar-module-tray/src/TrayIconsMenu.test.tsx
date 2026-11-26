@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { None, Ok } from "@cprussin/option-result";
+import { appMenu } from "@domicile-desktop/sdk/app-menu";
 import type { watchMenu } from "@domicile-desktop/sdk/dbusmenu";
 import { MenuEntry } from "@domicile-desktop/sdk/dbusmenu";
 import type { BrowserProfile } from "@domicile-desktop/sdk/desktop/browser";
@@ -127,6 +128,23 @@ const recordingDomicile = (
         calls.push(["extensions.configure", ...args]);
         return Promise.resolve();
       },
+      menu: (id: string) =>
+        Promise.resolve(
+          appMenu(
+            JSON.stringify([
+              {
+                checked: false,
+                enabled: true,
+                id: 4,
+                label: `Read ${id}`,
+                type: "normal",
+                visible: true,
+              },
+            ]),
+          ),
+        ),
+      runMenuItem: (...args: unknown[]) =>
+        calls.push(["extensions.runMenuItem", ...args]),
       uninstall: (...args: unknown[]) => {
         calls.push(["extensions.uninstall", ...args]);
         return Promise.resolve();
@@ -283,6 +301,19 @@ describe(TrayIconsMenu, () => {
     );
 
     expect(calls).toStrictEqual([["menu.click", 1]]);
+  });
+
+  it("opens an extension's own menu from its row, and runs the entry chosen", async () => {
+    const calls: unknown[][] = [];
+    renderMenu({ calls });
+    await openMenu();
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Dark Reader" }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: `Read ${DARK}` }),
+    );
+
+    expect(calls).toStrictEqual([["extensions.runMenuItem", 4]]);
   });
 
   it("switches an extension off", async () => {

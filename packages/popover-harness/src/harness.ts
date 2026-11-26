@@ -1,6 +1,7 @@
 // Opens each crowded bar popover from the built Storybook, in Chromium through
-// Playwright, on a small screen. Fails a popover that runs off the screen, or
-// whose last row can't be scrolled into view. See the package README.
+// Playwright, on a small screen. Fails a popover that runs off the screen,
+// whose last row can't be scrolled into view, or that scrolls sideways. See the
+// package README.
 //
 //   bun src/harness.ts [--chromium <path>] [<crowd>...]
 
@@ -103,6 +104,7 @@ const checked = async (
   const problems = [
     ...offScreen("the panel", await boxOf(panel)),
     ...(await lastRowProblems(page, panel, crowd.last)),
+    ...(await sidewaysProblems(panel)),
   ];
   await page.close();
   if (problems.length === 0) {
@@ -168,6 +170,21 @@ const lastRowProblems = async (
     ...(inside ? [] : [`"${text}" is outside the panel`]),
   ];
 };
+
+/** Each part of `panel` that scrolls sideways, which a panel never does. */
+const sidewaysProblems = (panel: Locator): Promise<string[]> =>
+  panel.evaluate((root) =>
+    [root, ...root.querySelectorAll("*")]
+      .filter(
+        (element) =>
+          ["auto", "scroll"].includes(getComputedStyle(element).overflowX) &&
+          element.scrollWidth > element.clientWidth,
+      )
+      .map(
+        (element) =>
+          `the panel scrolls sideways: <${element.tagName.toLowerCase()}> holds ${(element.scrollWidth - element.clientWidth).toString()}px more than its width`,
+      ),
+  );
 
 const px = (value: number) => `${Math.round(value).toString()}px`;
 

@@ -585,7 +585,8 @@ extension with an action. See
     screen. A switched-off extension has no pin.
   - **Rows** click as their icon does. An unpinned extension's popup opens
     from the row's icon, shown while the popup is open. Right-clicking an
-    app's name opens its own menu.
+    app's or an extension's row opens its own menu, as right-clicking its
+    icon does.
   - **The tray's actions** are the same profile's, so an extension on only in
     another profile, such as a password manager kept to a work profile, shows
     once a page of that profile is focused, and its popup opens there.
@@ -628,7 +629,8 @@ extension with an action. See
     Escape closes it only if focus is on the shell, not inside the popup.
   - Without a popup, the click fires `action.onClicked`.
   - Right-click opens the items the extension adds to its action's menu
-    (`chrome.contextMenus`), and nothing when it adds none. A chosen item runs
-    on the focused browser window.
+    (`chrome.contextMenus`), and nothing when it adds none. Items an
+    extension nests under one entry, as Bitwarden does, show at the top. A
+    chosen item runs on the focused browser window.
   - Disabled actions are hidden. Action state follows the focused browser
     window. See [EXTENSIONS.md](../../../docs/architecture/EXTENSIONS.md).

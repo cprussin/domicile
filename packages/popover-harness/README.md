@@ -8,8 +8,8 @@ Chromium through Playwright, and fails on any that runs off the screen.
   monitor too, as one page for the desk does. Pick the item with the `crowd`
   control.
 - **The harness** (`src/harness.ts`) presses each item's buttons in turn,
-  then fails it when the panel runs off the laptop's screen or its last row
-  can't be scrolled into view.
+  then fails it when the panel runs off the laptop's screen, its last row
+  can't be scrolled into view, or any part of it scrolls sideways.
 - **`viewport-units.test.ts`** fails any popover's content sized in `vh` or
   `vw`, which measure the whole desk, not the panel's screen.
 

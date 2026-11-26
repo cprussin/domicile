@@ -34,7 +34,7 @@ export const CROWDS: readonly Crowd[] = [
   },
   {
     id: "tray",
-    last: "App 40",
+    last: "Extension 10 – A Name Longer Than Its Row",
     presses: ["All tray icons"],
     Scene: TrayScene,
   },

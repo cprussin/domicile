@@ -27,7 +27,8 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 - Extensions are switched on per profile, each with its own data. Installing one asks which profiles to turn it on in, the tray's menu switches it in the profile you're on, and its site and file access apply in every profile even while it's off. A config you can't write switches until the desktop restarts. [Extensions](BROWSER.md#extensions)
 - Settings changes a config file it can't write, such as home-manager's, until the desktop restarts or the file changes that setting. Each change says "Changed from your config", with Reset. [Configure](CONFIGURE.md)
 - Extensions' keyboard shortcuts work in browser windows, such as Bitwarden's Ctrl+Shift+L. The desk's and the browser's own shortcuts come first. [Extensions](BROWSER.md#extensions)
-- Extensions' items show in a page's right-click menu, above Inspect, and right-clicking an extension's icon in the bar shows its own. [Extensions](BROWSER.md#extensions)
+- Extensions' items show in a page's right-click menu, above Inspect, and right-clicking an extension's icon in the bar, or its row in the tray's menu, shows its own, without a submenu named after it. [Extensions](BROWSER.md#extensions)
+- Bar panels no longer scroll sideways, as the tray's menu did.
 - When memory runs low, pages you can't see, like background tabs and windows on other workspaces, unload as in Chrome, and load again where you left off when you switch to them.
 
 ### Fixes

@@ -132,28 +132,28 @@ const askCamera = (view: HTMLWebViewElement, answers: string[]) => {
   );
 };
 
-/** A host whose Counter has an action menu, recording the items run. */
-const menuDomicile = (ran: number[]): Domicile =>
+/** Counter's action menu: one item. */
+const COUNTER_MENU = [
+  {
+    checked: false,
+    enabled: true,
+    id: 7,
+    label: "Reset count",
+    type: "normal",
+    visible: true,
+  },
+];
+
+/**
+ * A host whose Counter has action menu `menu`, written as the engine writes
+ * it, recording the items run.
+ */
+const menuDomicile = (ran: number[], menu: unknown = COUNTER_MENU): Domicile =>
   ({
     extensions: {
       activate: () => undefined,
       menu: (id: string) =>
-        Promise.resolve(
-          id === COUNTER
-            ? appMenu(
-                JSON.stringify([
-                  {
-                    checked: false,
-                    enabled: true,
-                    id: 7,
-                    label: "Reset count",
-                    type: "normal",
-                    visible: true,
-                  },
-                ]),
-              )
-            : [],
-        ),
+        Promise.resolve(id === COUNTER ? appMenu(JSON.stringify(menu)) : []),
       runMenuItem: (item: number) => {
         ran.push(item);
       },
@@ -180,6 +180,40 @@ describe("ExtensionAction", () => {
       );
 
       expect(ran).toStrictEqual([7]);
+    });
+
+    it("shows the items of the one entry an extension nests them under", async () => {
+      render(
+        <ExtensionAction
+          domicile={menuDomicile(
+            [],
+            [
+              {
+                checked: false,
+                enabled: true,
+                id: 1,
+                label: "Counter",
+                submenu: COUNTER_MENU,
+                type: "submenu",
+                visible: true,
+              },
+            ],
+          )}
+          extension={counter}
+          onActivate={() => undefined}
+          onOpen={() => undefined}
+          opened={undefined}
+        />,
+      );
+
+      fireEvent.contextMenu(screen.getByRole("button", { name: "Counter" }));
+
+      expect(
+        await screen.findByRole("menuitem", { name: "Reset count" }),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("menuitem", { name: "Counter" }),
+      ).not.toBeInTheDocument();
     });
 
     it("opens nothing for an extension with no items", async () => {

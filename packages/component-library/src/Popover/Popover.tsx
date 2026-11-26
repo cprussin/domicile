@@ -328,7 +328,8 @@ const titleStyles = css({
 // Scrolls what the panel's height cuts off. A child with `minBlockSize: 0`
 // shrinks to fit instead, to scroll a part of itself. The margin and padding
 // cancel out, leaving room inside the scrolled box for focus rings at its
-// edges.
+// edges and for a `PanelFooter` action, which hangs 1.5 past the content's
+// end. Less room scrolls the body sideways.
 const bodyStyles = cva({
   base: {
     "[data-tone=overPhoto] > &": {
@@ -340,11 +341,13 @@ const bodyStyles = cva({
     fontSize: "xs",
     gap: 2,
     lineHeight: "normal",
-    margin: -1,
+    marginBlock: -1,
+    marginInline: -1.5,
     minBlockSize: 0,
     overflowY: "auto",
     overscrollBehavior: "contain",
-    padding: 1,
+    paddingBlock: 1,
+    paddingInline: 1.5,
   },
   variants: {
     hasTitle: {
