@@ -833,6 +833,36 @@ that isn't remembered does nothing.
 Check a config file without a desktop. Exits non-zero with the reason the
 compositor would refuse it. home-manager runs it on the file it writes.
 
+## `domicile completions bash|zsh|fish|nushell|elvish|powershell`
+
+Print the shell's tab completion script. The flake and the distribution
+packages install every one where its shell looks, so this is rarely needed.
+
+| Shell | Installed at |
+|---|---|
+| bash | `share/bash-completion/completions/domicile` |
+| zsh | `share/zsh/site-functions/_domicile` |
+| fish | `share/fish/vendor_completions.d/domicile.fish` |
+| nushell | `share/nushell/vendor/autoload/domicile.nu`, loaded from `XDG_DATA_DIRS`. It sets the external completer, calling any set before it |
+| elvish | not installed: add `eval (domicile completions elvish \| slurp)` to `rc.elv` |
+| PowerShell | not installed: add `domicile completions powershell \| Invoke-Expression` to `$PROFILE` |
+
+It completes commands, flags and their values, with values from the running
+desktop: window ids (with titles), display names and modes, agent sessions
+and names, browser profiles and programs on `PATH`.
+
+`send-shell` completes the running shell's own commands, read from each
+usage `list-shell-commands` prints, so any shell's commands complete:
+
+- `a|b` offers each word, `[...]` may be skipped.
+- `<window>` offers window ids and `<display>` display names. Any other
+  `<placeholder>` offers nothing.
+
+`domicile completions --complete=<word> [<word>...]` is what the scripts run:
+what can go in place of `<word>` after the words before it. The first line is
+`values`, `files` or `directories`; each line after it is a value, a tab, and
+what it is.
+
 ## `domicile help [command]`
 
 Print the commands, grouped, or one command's usage, options and examples.

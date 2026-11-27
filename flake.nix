@@ -484,6 +484,8 @@
       #                               `domicile-<name>` runs
       #   share/man/man1/             `domicile(1)` and a `domicile-<command>(1)`
       #                               for each command
+      #   share/{bash-completion,zsh,fish,nushell}/
+      #                               tab completion for each shell
       #   share/applications/         launcher entries for History,
       #                               Settings, Screenshot, Screen Record,
       #                               Shutdown, Reboot and Logout
@@ -514,6 +516,11 @@
         # `man domicile` and `man domicile-<command>`, from the same
         # definitions as `domicile --help`.
         "$out/bin/domicile" help --man "$out/share/man/man1"
+        # Tab completion, where each shell looks: bash-completion, zsh's
+        # site-functions, fish's vendor dir and nushell's vendor autoload
+        # (from `XDG_DATA_DIRS`).
+        ${pkgs.bash}/bin/bash ${./packages/distro/install-completions.sh} \
+          "$out/bin/domicile" "$out/share"
         cp ${domicileBinaries}/bin/domicile-compositor "$out/bin/domicile-compositor"
         # `BROWSER` inside a desktop. Copied for the same reason as above.
         cp ${domicileBinaries}/bin/domicile-open-url "$out/bin/domicile-open-url"

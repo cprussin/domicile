@@ -1048,6 +1048,29 @@ pub const COMMANDS: &[Command] = &[
         see_also: &[],
     },
     Command {
+        name: "completions",
+        group: Group::Other,
+        takes: "<shell>",
+        summary: "Print a shell's tab completion",
+        forms: &[
+            "completions bash|zsh|fish|nushell|elvish|powershell",
+            "completions --complete=<word> [<word>...]",
+        ],
+        about: &[
+            "Prints the script that tab-completes `domicile` in `<shell>`: commands, \
+             flags, and values from the running desktop, such as window ids, \
+             displays, agent sessions and the running shell's own `send-shell` \
+             commands. Packages install it, so it is rarely needed by hand.",
+            "With `--complete`, prints what can go in place of `<word>` after the \
+             words before it: `values`, `files` or `directories` on the first \
+             line, then a value and what it is, split by a tab, on each line. The \
+             scripts run this.",
+        ],
+        sections: &[],
+        examples: &["domicile completions fish | source"],
+        see_also: &["help"],
+    },
+    Command {
         name: "help",
         group: Group::Other,
         takes: "[command]",

@@ -925,6 +925,10 @@ bindKeys(
 - `commands` describes what `onCommand` runs: `domicile list-shell-commands`
   (and `send-shell --help`) prints it. `domicile list-bindings` prints your
   keybindings, which `bindKeys` describes for you.
+- Tab completion of `send-shell` reads each `usage`: `a|b` is a choice,
+  `[...]` optional, `<name>` a value. Call a window id `<window>` and a
+  display `<display>` to have them completed.
+  [`domicile completions`](CLI.md#domicile-completions-bashzshfishnushellelvishpowershell)
 - It returns `{ setMode, unbind }`. `setMode` keeps one mode across a desktop
   of several pages.
 - Command meanings are yours. Describe them in `commands`, and in your README,

@@ -57,6 +57,14 @@ done
   echo "  man domicile finds nothing" >&2
   exit 1
 }
+for completion in bash-completion/completions/domicile zsh/site-functions/_domicile \
+  fish/vendor_completions.d/domicile.fish nushell/vendor/autoload/domicile.nu; do
+  grep -q -- "--complete=" "$out/share/$completion" || {
+    echo "share/$completion is missing or does not ask domicile, so" >&2
+    echo "  tab completion does nothing in that shell" >&2
+    exit 1
+  }
+done
 for module in settings history; do
   [ -f "$out/libexec/domicile/app-modules/$module/$module.js" ] || {
     echo "libexec/domicile/app-modules/$module holds no $module.js, so" >&2

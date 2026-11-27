@@ -47,6 +47,20 @@ contents:
     type: tree
   - src: "@stage@/usr/share/man/man1/*"
     dst: /usr/share/man/man1/
+  - src: "@stage@/usr/share/bash-completion/completions/domicile"
+    dst: /usr/share/bash-completion/completions/domicile
+  # Debian's zsh looks in vendor-completions, Fedora's and Arch's in
+  # site-functions.
+  - src: "@stage@/usr/share/zsh/site-functions/_domicile"
+    dst: /usr/share/zsh/vendor-completions/_domicile
+    packager: deb
+  - src: "@stage@/usr/share/zsh/site-functions/_domicile"
+    dst: /usr/share/zsh/site-functions/_domicile
+    packager: rpm
+  - src: "@stage@/usr/share/fish/vendor_completions.d/domicile.fish"
+    dst: /usr/share/fish/vendor_completions.d/domicile.fish
+  - src: "@stage@/usr/share/nushell/vendor/autoload/domicile.nu"
+    dst: /usr/share/nushell/vendor/autoload/domicile.nu
   - src: "@stage@/usr/share/applications/*"
     dst: /usr/share/applications/
   - src: "@stage@/usr/share/wayland-sessions/*"

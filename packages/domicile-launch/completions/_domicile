@@ -1,0 +1,24 @@
+#compdef domicile
+# Tab completion for `domicile` in zsh, from `domicile completions zsh`.
+# `domicile completions --complete` says what can go where the cursor is.
+_domicile() {
+  local -a said described
+  local line
+  said=("${(@f)$(domicile completions "--complete=${words[CURRENT]}" "${(@)words[2,CURRENT-1]}" 2>/dev/null)}")
+  case $said[1] in
+    files) _files ;;
+    directories) _files -/ ;;
+    values)
+      for line in "${(@)said[2,-1]}"; do
+        [[ -n $line ]] || continue
+        described+=("${${line%%$'\t'*}//:/\\:}:${line#*$'\t'}")
+      done
+      _describe -V domicile described
+      ;;
+  esac
+}
+if [[ $funcstack[1] == _domicile ]]; then
+  _domicile "$@"
+else
+  compdef _domicile domicile
+fi

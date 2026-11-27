@@ -988,6 +988,7 @@ fn every_command_in_the_help_parses_as_a_verb() {
         "set-log-level",
         "logs",
         "export-logs",
+        "completions",
         "help",
     ];
     for verb in verbs {
@@ -2077,4 +2078,27 @@ fn export_logs_hides_urls_and_titles_unless_asked_to_show_everything() {
             extra: "more.txt".to_string()
         })
     );
+}
+
+#[test]
+fn completions_takes_a_shell_or_the_words_to_complete() {
+    use domicile_launch::completion::CompletionShell;
+    assert_eq!(
+        run(&["completions", "nushell"]),
+        Ok(Invocation::Completions {
+            shell: CompletionShell::Nushell
+        })
+    );
+    // An empty word survives, after the `=`.
+    assert_eq!(
+        run(&["completions", "--complete=", "send-shell", "--help"]),
+        Ok(Invocation::Complete {
+            words: vec!["send-shell".to_string(), "--help".to_string()],
+            current: String::new(),
+        })
+    );
+    assert!(matches!(
+        run(&["completions", "tcsh"]),
+        Err(CliError::NotACompletionShell { .. })
+    ));
 }

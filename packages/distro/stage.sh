@@ -77,6 +77,9 @@ done
 # `man domicile` and `man domicile-<command>`, as in `flake.nix`.
 "$USR/bin/domicile" help --man "$USR/share/man/man1"
 
+# Tab completion for each shell, as in `flake.nix`.
+"$ROOT/packages/distro/install-completions.sh" "$USR/bin/domicile" "$USR/share"
+
 # Unmodified. On a distribution, `libEGL.so.1` and the GSettings schemas are on
 # the default paths, so the engine needs no wrapper, unlike in `flake.nix`.
 cp -a "$ENGINE" "$LIBEXEC/engine"

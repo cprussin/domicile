@@ -6,6 +6,7 @@
 
 use crate::accessibility::Act;
 use crate::commands;
+use crate::completion::CompletionShell;
 use std::path::PathBuf;
 
 use domicile_protocol::{
@@ -274,6 +275,8 @@ pub enum CliError {
          domicile check-config ~/.config/domicile/domicile.json\n"
     )]
     NothingToCheck,
+    #[error("completions takes a shell: {shells}. It was given {said}.")]
+    NotACompletionShell { said: String, shells: String },
     #[error("check-config takes one config, and it was given {extra} as well.")]
     ExtraToCheck { extra: String },
     #[error(
@@ -447,6 +450,10 @@ pub enum Invocation {
     Manuals { dir: PathBuf },
     /// Print the version, the commit it was built from, and the engine's.
     Version,
+    /// Print `shell`'s completion script.
+    Completions { shell: CompletionShell },
+    /// Print what can go in place of `current` after `words`.
+    Complete { words: Vec<String>, current: String },
 }
 
 /// What a `list-*` verb, `status` or `idle-time` prints.
@@ -1103,6 +1110,26 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 }
                 Ok(Invocation::Subscribe { topics })
             }
+            Verb::Completing => match args.next() {
+                Some(flag) if flag.starts_with(COMPLETE) => Ok(Invocation::Complete {
+                    current: flag[COMPLETE.len()..].to_string(),
+                    words: args.collect(),
+                }),
+                said => match (
+                    said.as_deref().and_then(CompletionShell::named),
+                    args.next(),
+                ) {
+                    (Some(shell), None) => Ok(Invocation::Completions { shell }),
+                    (Some(shell), Some(extra)) => Err(CliError::Extra {
+                        verb: format!("{first} {}", shell.name()),
+                        extra,
+                    }),
+                    (None, _) => Err(CliError::NotACompletionShell {
+                        said: said.unwrap_or_else(|| "nothing".to_string()),
+                        shells: CompletionShell::ALL.map(CompletionShell::name).join(", "),
+                    }),
+                },
+            },
             Verb::Checking => match (args.next(), args.next()) {
                 (None, _) => Err(CliError::NothingToCheck),
                 (Some(config), None) => Ok(Invocation::Check {
@@ -1141,6 +1168,10 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
 
 /// The words that ask for help, first or right after a verb.
 const HELP: [&str; 3] = ["help", "--help", "-h"];
+
+/// `completions`' flag naming the word to complete, with it after the `=`
+/// so an empty word survives every shell's argument passing.
+const COMPLETE: &str = "--complete=";
 
 /// `help`'s flag for writing the man pages.
 const MAN: &str = "--man";
@@ -1238,6 +1269,8 @@ enum Verb {
     Sending,
     /// `check-config`, which takes a config file.
     Checking,
+    /// `completions`, which takes a shell or the words to complete.
+    Completing,
     /// `disable-while-typing`, which takes a [`Switch`] or nothing.
     Switching,
     /// `theme`, which takes a [`ThemeChange`] or nothing.
@@ -1495,6 +1528,7 @@ fn verb(word: &str) -> Option<Verb> {
         "devtools" => Some(Verb::DevTooling),
         "accessibility" => Some(Verb::Reading),
         "accessibility-act" => Some(Verb::Accessing),
+        "completions" => Some(Verb::Completing),
         _ => None,
     }
 }

@@ -40,6 +40,7 @@ use domicile_launch::command_socket::{
     set_site_permission, site_data, site_permissions, uninstall_extension, visits,
 };
 use domicile_launch::commands;
+use domicile_launch::completion::{complete, Completion, Sources};
 use domicile_launch::component_log::{self, Sink};
 use domicile_launch::components::{
     builder, components, electron_host, engine as engine_path, our_shell,
@@ -345,6 +346,14 @@ fn run() -> Result<ExitCode, String> {
             Ok(ExitCode::SUCCESS)
         }
         Invocation::Version => versioned(),
+        Invocation::Completions { shell } => {
+            print!("{}", shell.script());
+            Ok(ExitCode::SUCCESS)
+        }
+        Invocation::Complete { words, current } => {
+            print!("{}", completed(&words, &current).printed());
+            Ok(ExitCode::SUCCESS)
+        }
         Invocation::Trace { file, seconds } => {
             // Absolute here, since the recorder may not share this working
             // directory.
@@ -1651,6 +1660,73 @@ fn listed(listing: Listing, json: bool) -> Result<ExitCode, String> {
     };
     print!("{printed}");
     Ok(ExitCode::SUCCESS)
+}
+
+/// How long completion waits for the desktop: a tab press that hangs is
+/// worse than one that offers less.
+const COMPLETE_WITHIN: Duration = Duration::from_millis(750);
+
+/// What can go in place of `current` after `words`, with values from the
+/// running desktop. Outside a desktop, or when it does not answer, those
+/// values are left out: completion prints nothing to the terminal it runs in.
+fn completed(words: &[String], current: &str) -> Completion {
+    let socket = advertised(std::env::var(VARIABLE).ok().as_deref()).ok();
+    let asked = |request: Request| {
+        socket
+            .as_deref()
+            .and_then(|socket| ask(socket, &request, Some(COMPLETE_WITHIN)).ok())
+    };
+    complete(
+        words,
+        current,
+        &Sources {
+            windows: &|| match asked(Request::Windows) {
+                Some(Response::Windows { windows }) => windows,
+                _ => Vec::new(),
+            },
+            displays: &|| match asked(Request::Displays) {
+                Some(Response::Displays { displays }) => displays,
+                _ => Vec::new(),
+            },
+            agents: &|| match asked(Request::Agents) {
+                Some(Response::Agents { agents }) => agents,
+                _ => Default::default(),
+            },
+            profiles: &|| match asked(Request::BrowserProfiles) {
+                Some(Response::BrowserProfiles(list)) => list
+                    .profiles
+                    .into_iter()
+                    .map(|profile| (profile.id, profile.name))
+                    .collect(),
+                _ => Vec::new(),
+            },
+            shell_commands: &|| match asked(Request::ShellCommands) {
+                Some(Response::ShellCommands { commands }) => commands,
+                _ => Vec::new(),
+            },
+            programs: &programs_on_path,
+        },
+    )
+}
+
+/// The programs on `PATH` whose names start with `start`, each once.
+fn programs_on_path(start: &str) -> Vec<String> {
+    use std::os::unix::fs::PermissionsExt as _;
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let mut programs: Vec<String> = std::env::split_paths(&path)
+        .filter_map(|dir| std::fs::read_dir(dir).ok())
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().into_string().ok()?;
+            let executable = std::fs::metadata(entry.path())
+                .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0);
+            (name.starts_with(start) && executable).then_some(name)
+        })
+        .collect();
+    programs.sort();
+    programs.dedup();
+    programs
 }
 
 /// `listed` as pretty JSON, one line per field.
