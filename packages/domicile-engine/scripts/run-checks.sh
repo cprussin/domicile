@@ -170,6 +170,7 @@ TOGETHER=(
   guard-electron-preload
   guard-electron-schemes
   guard-electron-session
+  guard-electron-debugged
   guard-electron-views
   guard-clean-exit
   guard-desk-state
@@ -211,6 +212,7 @@ ONCE=(
   guard-electron-permissions
   guard-electron-schemes
   guard-electron-session
+  guard-electron-debugged
   guard-electron-socket
   guard-electron-views
   guard-electron-web-request
