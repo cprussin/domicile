@@ -2,7 +2,8 @@
 """The compositor's end of the control socket, for the guard that drives an
 agent seat's pointer and keys into a browser window at desk positions.
 
-It answers `hello` with a `welcome`. Then it takes the guard's events on
+It answers `hello` with a `welcome` and the desk's keymap, KEYMAP. Then it
+takes the guard's events on
 `--drive`, one JSON line each:
 
   {"seat": "agent-1", "input": {"kind": "pointer", "x": 40, "y": 104}}
@@ -21,6 +22,32 @@ import socket
 import sys
 import threading
 import time
+
+# The desk's keymap: the keys qwerty has a and b on type b and a. The agent's
+# keys are chosen on it, as the compositor chooses them on the desk's, and the
+# engine's own layout engine, headless, is a qwerty stub that refuses it, as a
+# nested engine's holds the host seat's keymap instead.
+KEYMAP = """xkb_keymap {
+  xkb_keycodes "guard" {
+    minimum = 8;
+    maximum = 255;
+    <AC01> = 38;
+    <AB05> = 56;
+  };
+  xkb_types "guard" {
+    virtual_modifiers NumLock;
+    type "ONE_LEVEL" {
+      modifiers = none;
+      level_name[Level1] = "Any";
+    };
+  };
+  xkb_compatibility "guard" { };
+  xkb_symbols "guard" {
+    key <AC01> { type = "ONE_LEVEL", [ b ] };
+    key <AB05> { type = "ONE_LEVEL", [ a ] };
+  };
+};
+"""
 
 # Serials grow from the clock, as the compositor's do.
 SERIAL = [int(time.time() * 1_000_000)]
@@ -66,6 +93,7 @@ def hear_browser(connection):
             said = json.loads(line)
             if said.get("type") == "hello":
                 send(connection, {"type": "welcome", "protocol_version": 1})
+                send(connection, {"type": "keymap", "keymap": KEYMAP})
                 try:
                     CHANNEL.put_nowait(connection)
                 except queue.Full:

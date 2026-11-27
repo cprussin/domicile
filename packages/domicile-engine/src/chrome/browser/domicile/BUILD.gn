@@ -241,6 +241,8 @@ source_set("domicile") {
     # Their copies and pastes in the pages they drove, on their own
     # clipboards.
     "//components/domicile:agent_clipboards",
+    # Their keys, on the desk's keymap.
+    "//components/domicile:keyboard_layout",
     "//components/input",
     "//third_party/blink/public/common:headers",
     "//ui/events/blink",

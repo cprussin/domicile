@@ -26,6 +26,7 @@
 #include "components/domicile/browser/agent_clipboards.h"
 #include "components/domicile/browser/agent_input_lines.h"
 #include "components/domicile/browser/control_channel.h"
+#include "components/domicile/browser/keyboard_layout.h"
 #include "components/domicile/browser/web_view_guest.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -51,7 +52,6 @@
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine.h"
-#include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -402,13 +402,12 @@ class AgentSeatsInPages : public ui::EventObserver {
   // The modifiers the seat holds, as ui::EventFlags.
   int Flags(const Seat& seat) {
     int flags = 0;
-    ui::KeyboardLayoutEngine* layout =
-        ui::KeyboardLayoutEngineManager::GetKeyboardLayoutEngine();
+    const ui::KeyboardLayoutEngine& layout = DeskKeyboardLayout();
     for (uint32_t key : seat.keys) {
       ui::DomKey dom_key;
       ui::KeyboardCode key_code;
-      if (!layout->Lookup(ui::KeycodeConverter::EvdevCodeToDomCode(key), 0,
-                          &dom_key, &key_code)) {
+      if (!layout.Lookup(ui::KeycodeConverter::EvdevCodeToDomCode(key), 0,
+                         &dom_key, &key_code)) {
         continue;
       }
       if (dom_key == ui::DomKey::SHIFT) {
@@ -666,8 +665,8 @@ class AgentSeatsInPages : public ui::EventObserver {
     const ui::DomCode dom_code = ui::KeycodeConverter::EvdevCodeToDomCode(code);
     ui::DomKey dom_key;
     ui::KeyboardCode key_code;
-    if (!ui::KeyboardLayoutEngineManager::GetKeyboardLayoutEngine()->Lookup(
-            dom_code, flags, &dom_key, &key_code)) {
+    // On the desk's keymap, which the compositor chose `code` on.
+    if (!DeskKeyboardLayout().Lookup(dom_code, flags, &dom_key, &key_code)) {
       LOG(WARNING) << "domicile: an agent pressed evdev key " << code
                    << ", which the desk's keyboard has nothing for";
       return;

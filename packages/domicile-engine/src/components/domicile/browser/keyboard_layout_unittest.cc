@@ -3,12 +3,16 @@
 
 #include "components/domicile/browser/keyboard_layout.h"
 
+#include <memory>
 
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
+#include "ui/events/ozone/layout/scoped_keyboard_layout_engine.h"
+#include "ui/events/ozone/layout/stub/stub_keyboard_layout_engine.h"
 #include "ui/events/ozone/layout/xkb/xkb_evdev_codes.h"
 #include "ui/events/ozone/layout/xkb/xkb_keyboard_layout_engine.h"
 
@@ -88,6 +92,25 @@ TEST(DomicileKeyboardLayoutTest, AKeymapXkbRefusesIsRefusedHere) {
   ui::XkbKeyboardLayoutEngine engine(evdev_codes);
 
   EXPECT_FALSE(ApplyKeymap(&engine, "xkb_keymap { this is not one };"));
+}
+
+// Nested, the process's engine holds the host seat's keymap, here a stub's
+// qwerty. An agent's key, chosen on the desk's keymap, is decoded on that one.
+TEST(DomicileKeyboardLayoutTest, TheDesksKeymapIsKeptApartFromTheProcesss) {
+  ui::ScopedKeyboardLayoutEngine process(
+      std::make_unique<ui::StubKeyboardLayoutEngine>());
+
+  SetProcessKeymap(kOnWhereQwertyHasS);
+
+  const Decoded on_the_desk = Press(DeskKeyboardLayout(), ui::DomCode::US_S);
+  ASSERT_TRUE(on_the_desk.answered);
+  EXPECT_EQ(ui::DomKey::FromCharacter('o'), on_the_desk.key)
+      << "the character the desk's keymap puts there";
+  const Decoded in_the_process =
+      Press(*ui::KeyboardLayoutEngineManager::GetKeyboardLayoutEngine(),
+            ui::DomCode::US_S);
+  EXPECT_EQ(ui::DomKey::FromCharacter('s'), in_the_process.key)
+      << "the process's own engine keeps its own keymap";
 }
 
 }  // namespace
