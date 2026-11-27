@@ -168,13 +168,23 @@ expect_carries "and going back to the recorded commit brings it back" true
 
 echo "somebody's work in progress" >"$TREE/upstream.cc"
 expect_carries "a tracked file modified in the checkout is not trusted" false
+contains "and it names the file" "upstream.cc" "$(said)"
 git -C "$TREE" checkout -q -- upstream.cc
 expect_carries "and restoring it brings it back" true
 
 echo "left behind" >"$TREE/stray.cc"
 expect_carries "an untracked file that is not the series' is not trusted" false
+contains "and it names the stray file" "stray.cc" "$(said)"
 rm "$TREE/stray.cc"
 expect_carries "and removing it brings it back" true
+
+# A series file git does not list as untracked, such as one a .gitignore
+# covers, is named, so the run that refuses says which.
+echo "components/domicile/" >"$TREE/.git/info/exclude"
+expect_carries "a series file git does not list is not trusted" false
+contains "and it names the file git did not list" "components/domicile/thing.cc" "$(said)"
+: >"$TREE/.git/info/exclude"
+expect_carries "and listing it again brings it back" true
 
 # A series file missing from the checkout. It is untracked, so `git status`
 # does not report it; only a file-by-file comparison does.
