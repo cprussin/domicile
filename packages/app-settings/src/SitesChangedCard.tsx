@@ -1,14 +1,15 @@
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Card } from "@domicile-desktop/component-library/Card";
 
-import type { SitePrivacy, SitePrivacyChange } from "./host";
+import type { SitePrivacy, SitePrivacyChange, SiteProtection } from "./host";
+import { SITE_PROTECTIONS } from "./host";
 import { Notice } from "./Notice";
 import { SettingRow } from "./SettingRow";
 
 type Props = {
   /** Why the sites could not be listed, if they could not. */
   failure: unknown;
-  /** Changes or clears a site's ad blocking. */
+  /** Changes or clears what a site changed. */
   onSet: (change: SitePrivacyChange) => void;
   /** The profile shown. */
   profile: string;
@@ -36,15 +37,7 @@ export const SitesChangedCard = ({ failure, onSet, profile, sites }: Props) => {
       {shown.map((site) => {
         const off = site.block_ads_and_trackers === "off";
         return (
-          <SettingRow
-            hint={
-              off
-                ? "Protections off"
-                : `Ads and trackers: ${MODE_NAMES[site.block_ads_and_trackers]}`
-            }
-            key={site.site}
-            title={site.site}
-          >
+          <SettingRow hint={hintOf(site)} key={site.site} title={site.site}>
             <Button
               label={
                 off
@@ -52,11 +45,7 @@ export const SitesChangedCard = ({ failure, onSet, profile, sites }: Props) => {
                   : `Remove ${site.site}`
               }
               onClick={() => {
-                onSet({
-                  block_ads_and_trackers: null,
-                  profile: site.profile,
-                  site: site.site,
-                });
+                onSet(cleared(site));
               }}
               size="sm"
               variant={off ? "ghost" : "dangerGhost"}
@@ -70,8 +59,53 @@ export const SitesChangedCard = ({ failure, onSet, profile, sites }: Props) => {
   );
 };
 
-const MODE_NAMES: Record<SitePrivacy["block_ads_and_trackers"], string> = {
+const MODE_NAMES: Record<
+  NonNullable<SitePrivacy["block_ads_and_trackers"]>,
+  string
+> = {
   off: "Off",
   standard: "Standard",
   strict: "Strict",
 };
+
+/** What a site has of its own, on or off, in words. */
+const PROTECTION_NAMES: Record<SiteProtection, Record<"off" | "on", string>> = {
+  hide_device_details: {
+    off: "Device details not hidden",
+    on: "Device details hidden",
+  },
+  remove_tracking_from_links: {
+    off: "Tracking kept in links",
+    on: "Tracking removed from links",
+  },
+};
+
+/** What a site changed, in words: protections off says it all. */
+export const hintOf = (site: SitePrivacy): string => {
+  if (site.block_ads_and_trackers === "off") {
+    return "Protections off";
+  }
+  const changed: string[] = [];
+  if (site.block_ads_and_trackers !== null) {
+    changed.push(
+      `Ads and trackers: ${MODE_NAMES[site.block_ads_and_trackers]}`,
+    );
+  }
+  for (const protection of SITE_PROTECTIONS) {
+    const on = site.protections[protection];
+    if (on !== undefined) {
+      changed.push(PROTECTION_NAMES[protection][on ? "on" : "off"]);
+    }
+  }
+  return changed.join(" · ");
+};
+
+/** The change that sends `site` back to its profile's for all it changed. */
+const cleared = (site: SitePrivacy): SitePrivacyChange => ({
+  block_ads_and_trackers: null,
+  profile: site.profile,
+  protections: Object.fromEntries(
+    Object.keys(site.protections).map((protection) => [protection, null]),
+  ),
+  site: site.site,
+});

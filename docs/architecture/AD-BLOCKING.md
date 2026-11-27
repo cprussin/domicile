@@ -28,6 +28,14 @@ sets the first two ([SHELL-BROWSER-WINDOWS.md](../SHELL-BROWSER-WINDOWS.md#ads-a
   the window closes. A shield's "This window only" is a quick fix that ends
   by itself, so it never outlives what it fixed.
 
+Each protection beside it, a profile's `hide_device_details` and
+`remove_tracking_from_links` (`PageProtection`), is the same: its window's,
+else its site's (`domicile.privacy.sites`, by name), else its profile's, and
+off on any page whose mode is `off`, so turning a site's shield off turns off
+everything it stands for. `PagePrivacy::IsOnFor` answers for a navigation
+before it commits, which both checks need: the link check before it follows a
+link, device hiding before the page's first script.
+
 The compositor hands all three to the engine with the profiles
 (`HostMessage::BrowserProfiles`).
 
@@ -222,6 +230,8 @@ Not yet: procedural filters (`:has-text()`, `:upward()`) and scriptlets
       shell (`view.blockAdsAndTrackers`, `setBlockAdsAndTrackers`)
 - [x] manganese's shield in the address bar, with "This window only"
 - [x] Settings lists the sites with their own mode (`site_privacy`)
+- [x] each protection on or off for a site or a window
+      (`setPrivacyProtection`), and listed in Settings
 - [x] cosmetic filters: what the lists hide by a page's elements
 - [x] tracking taken out of links to other sites
 - [ ] scriptlets and procedural filters, cookie banners, `$removeparam`

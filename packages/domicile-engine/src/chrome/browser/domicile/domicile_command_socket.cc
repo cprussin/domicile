@@ -587,10 +587,9 @@ void ListDeskSitePrivacy(SitePrivacyFound found) {
               if (prefs == nullptr) {
                 continue;
               }
-              for (const auto& [site, mode] : SitesWithOwnAdBlocking(*prefs)) {
-                sites.push_back({.profile = each.id,
-                                 .site = site,
-                                 .block_ads_and_trackers = mode});
+              for (const auto& [site, settings] : SitesWithOwnPrivacy(*prefs)) {
+                sites.push_back(
+                    {.profile = each.id, .site = site, .settings = settings});
               }
             }
             std::move(found).Run(std::move(sites));
@@ -609,7 +608,7 @@ void ListDeskSitePrivacy(SitePrivacyFound found) {
 base::expected<void, std::string> SetDeskSitePrivacy(
     const std::string& browser_profile,
     const std::string& site,
-    std::optional<AdBlockingMode> mode) {
+    const SitePrivacyChange& change) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (ShellProfile() == nullptr) {
     return base::unexpected(
@@ -627,10 +626,19 @@ base::expected<void, std::string> SetDeskSitePrivacy(
          "\" keeps no sites now: it has not loaded, or it is private with no "
          "window open"}));
   }
-  SetSiteAdBlocking(*prefs, site, mode);
-  VLOG(1) << "domicile: ad blocking for " << site << " in browser profile "
-          << browser_profile << " set to "
-          << (mode ? AdBlockingModeName(*mode) : "the profile's");
+  if (change.block_ads_and_trackers.has_value()) {
+    const std::optional<AdBlockingMode>& mode = *change.block_ads_and_trackers;
+    SetSiteAdBlocking(*prefs, site, mode);
+    VLOG(1) << "domicile: ad blocking for " << site << " in browser profile "
+            << browser_profile << " set to "
+            << (mode ? AdBlockingModeName(*mode) : "the profile's");
+  }
+  for (const auto& [protection, on] : change.protections) {
+    SetSiteProtection(*prefs, site, protection, on);
+    VLOG(1) << "domicile: " << PageProtectionName(protection) << " for " << site
+            << " in browser profile " << browser_profile << " set to "
+            << (on.has_value() ? (*on ? "on" : "off") : "the profile's");
+  }
   return base::ok();
 }
 

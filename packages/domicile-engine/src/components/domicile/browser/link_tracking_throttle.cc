@@ -17,7 +17,6 @@
 #include "components/domicile/browser/site_privacy.h"
 #include "components/domicile/browser/web_view_guest.h"
 #include "components/prefs/pref_service.h"
-#include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_handle.h"
@@ -99,16 +98,14 @@ content::NavigationThrottle::ThrottleCheckResult LinkTrackingThrottle::Check(
   if (guest.is_app_page()) {
     return PROCEED;
   }
-  if (!user_prefs::UserPrefs::Get(contents.GetBrowserContext())
-           ->GetBoolean(kRemoveLinkTrackingPref)) {
-    return PROCEED;
-  }
   PagePrivacy::CreateForWebContents(&contents);
-  const AdBlockingMode mode =
-      PagePrivacy::FromWebContents(&contents)->ModeFor(url);
-  if (mode == AdBlockingMode::kOff) {
+  const PagePrivacy& privacy = *PagePrivacy::FromWebContents(&contents);
+  // The profile's, the site's or the window's, and off with all of the
+  // page's protections.
+  if (!privacy.IsOnFor(PageProtection::kRemoveTrackingFromLinks, url)) {
     return PROCEED;
   }
+  const AdBlockingMode mode = privacy.ModeFor(url);
   const std::optional<GURL> without =
       WithoutTracking(url, mode == AdBlockingMode::kStrict);
   if (!without.has_value()) {

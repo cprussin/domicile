@@ -78,8 +78,8 @@ struct Told {
   std::string pinned_to;
   std::string privacy_profile;
   std::string privacy_site;
-  // Set once `set_site_privacy` ran: the mode, or none for the profile's.
-  std::optional<std::optional<AdBlockingMode>> privacy_mode;
+  // Set once `set_site_privacy` ran.
+  std::optional<SitePrivacyChange> privacy_change;
   std::string configured;
   std::optional<ExtensionSettings> settings;
   std::optional<HistorySearch> search;
@@ -332,17 +332,21 @@ std::string Answer(std::string_view line,
       std::move(found).Run(std::nullopt);
       return;
     }
+    SitePrivacySettings off;
+    off.block_ads_and_trackers = AdBlockingMode::kOff;
+    SitePrivacySettings strict;
+    strict.block_ads_and_trackers = AdBlockingMode::kStrict;
+    strict.protections = {{PageProtection::kHideDeviceDetails, false}};
+    SitePrivacySettings links;
+    links.protections = {{PageProtection::kRemoveTrackingFromLinks, false}};
     std::move(found).Run(std::vector<StoredSitePrivacy>{
-        {.profile = "work",
-         .site = "nytimes.com",
-         .block_ads_and_trackers = AdBlockingMode::kOff},
-        {.profile = "personal",
-         .site = "news.example",
-         .block_ads_and_trackers = AdBlockingMode::kStrict}});
+        {.profile = "work", .site = "nytimes.com", .settings = off},
+        {.profile = "personal", .site = "news.example", .settings = strict},
+        {.profile = "personal", .site = "shop.example", .settings = links}});
   };
-  auto set_site_privacy =
-      [told, has_window](const std::string& profile, const std::string& site,
-                         std::optional<AdBlockingMode> mode)
+  auto set_site_privacy = [told, has_window](const std::string& profile,
+                                             const std::string& site,
+                                             const SitePrivacyChange& change)
       -> base::expected<void, std::string> {
     if (!has_window) {
       return base::unexpected("no shell");
@@ -352,7 +356,7 @@ std::string Answer(std::string_view line,
     }
     told->privacy_profile = profile;
     told->privacy_site = site;
-    told->privacy_mode = mode;
+    told->privacy_change = change;
     return base::ok();
   };
   auto list_media_devices = [told, has_window](MediaDevicesFound found) {
@@ -1341,17 +1345,20 @@ TEST(CommandProtocolTest, PinsASiteToTheProfileARequestNames) {
 
 TEST(CommandProtocolTest, ListsEachProfilesSitesWithTheirOwnAdBlocking) {
   Told told;
-  EXPECT_EQ(
-      base::JSONReader::ReadDict(
-          Answer(R"({"type":"site_privacy","version":1})", &told),
-          base::JSON_PARSE_RFC),
-      base::JSONReader::ReadDict(
-          R"({"type":"site_privacy","sites":[)"
-          R"({"profile":"work","site":"nytimes.com",)"
-          R"("block_ads_and_trackers":"off"},)"
-          R"({"profile":"personal","site":"news.example",)"
-          R"("block_ads_and_trackers":"strict"}]})",
-          base::JSON_PARSE_RFC));
+  EXPECT_EQ(base::JSONReader::ReadDict(
+                Answer(R"({"type":"site_privacy","version":1})", &told),
+                base::JSON_PARSE_RFC),
+            base::JSONReader::ReadDict(
+                R"({"type":"site_privacy","sites":[)"
+                R"({"profile":"work","site":"nytimes.com",)"
+                R"("block_ads_and_trackers":"off","protections":{}},)"
+                R"({"profile":"personal","site":"news.example",)"
+                R"("block_ads_and_trackers":"strict",)"
+                R"("protections":{"hide_device_details":false}},)"
+                R"({"profile":"personal","site":"shop.example",)"
+                R"("block_ads_and_trackers":null,)"
+                R"("protections":{"remove_tracking_from_links":false}}]})",
+                base::JSON_PARSE_RFC));
   EXPECT_EQ(TypeOf(Answer(R"({"type":"site_privacy","version":1})", &told,
                           /*has_window=*/false)),
             "refused");
@@ -1366,9 +1373,9 @@ TEST(CommandProtocolTest, SetsASitesAdBlockingInAProfile) {
             "set");
   EXPECT_EQ(told.privacy_profile, "work");
   EXPECT_EQ(told.privacy_site, "nytimes.com");
-  EXPECT_EQ(told.privacy_mode,
-            std::optional<std::optional<AdBlockingMode>>(
-                AdBlockingMode::kStrict));
+  SitePrivacyChange strict;
+  strict.block_ads_and_trackers = AdBlockingMode::kStrict;
+  EXPECT_EQ(told.privacy_change, strict);
 }
 
 TEST(CommandProtocolTest, SetsASiteBackToItsProfilesAdBlockingWithNull) {
@@ -1378,19 +1385,58 @@ TEST(CommandProtocolTest, SetsASiteBackToItsProfilesAdBlockingWithNull) {
                           R"("block_ads_and_trackers":null})",
                           &told)),
             "set");
-  EXPECT_EQ(told.privacy_mode,
-            std::optional<std::optional<AdBlockingMode>>(std::in_place,
-                                                          std::nullopt));
+  SitePrivacyChange cleared;
+  cleared.block_ads_and_trackers =
+      std::optional<std::optional<AdBlockingMode>>(std::in_place, std::nullopt);
+  EXPECT_EQ(told.privacy_change, cleared);
+}
+
+TEST(CommandProtocolTest, SetsASitesProtectionsAloneOrWithItsMode) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"set_site_privacy","version":1,)"
+                          R"("profile":"work","site":"zoom.us",)"
+                          R"("protections":{"hide_device_details":false,)"
+                          R"("remove_tracking_from_links":null}})",
+                          &told)),
+            "set");
+  SitePrivacyChange protections;
+  // In the dictionary's order, which is by name.
+  protections.protections = {
+      {PageProtection::kHideDeviceDetails, false},
+      {PageProtection::kRemoveTrackingFromLinks, std::nullopt}};
+  EXPECT_EQ(told.privacy_change, protections);
+
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"set_site_privacy","version":1,)"
+                          R"("profile":"work","site":"zoom.us",)"
+                          R"("block_ads_and_trackers":null,)"
+                          R"("protections":{"hide_device_details":null}})",
+                          &told)),
+            "set");
+  SitePrivacyChange both;
+  both.block_ads_and_trackers =
+      std::optional<std::optional<AdBlockingMode>>(std::in_place, std::nullopt);
+  both.protections = {{PageProtection::kHideDeviceDetails, std::nullopt}};
+  EXPECT_EQ(told.privacy_change, both);
 }
 
 TEST(CommandProtocolTest, RefusesASitesAdBlockingItCannotSet) {
   for (const char* line : {
-           // No mode, not even null.
+           // Neither a mode nor protections, not even null.
            R"({"type":"set_site_privacy","version":1,"profile":"work",)"
            R"("site":"nytimes.com"})",
            // A mode that isn't one.
            R"({"type":"set_site_privacy","version":1,"profile":"work",)"
            R"("site":"nytimes.com","block_ads_and_trackers":"extreme"})",
+           // A protection that isn't one a site changes.
+           R"({"type":"set_site_privacy","version":1,"profile":"work",)"
+           R"("site":"nytimes.com",)"
+           R"("protections":{"block_third_party_cookies":false}})",
+           // A protection that is neither on, off nor null.
+           R"({"type":"set_site_privacy","version":1,"profile":"work",)"
+           R"("site":"nytimes.com","protections":{"hide_device_details":1}})",
+           // Protections that aren't by name.
+           R"({"type":"set_site_privacy","version":1,"profile":"work",)"
+           R"("site":"nytimes.com","protections":["hide_device_details"]})",
            // No site.
            R"({"type":"set_site_privacy","version":1,"profile":"work",)"
            R"("site":"","block_ads_and_trackers":"off"})",
@@ -1400,7 +1446,7 @@ TEST(CommandProtocolTest, RefusesASitesAdBlockingItCannotSet) {
        }) {
     Told told;
     EXPECT_EQ(TypeOf(Answer(line, &told)), "refused") << line;
-    EXPECT_FALSE(told.privacy_mode.has_value()) << line;
+    EXPECT_FALSE(told.privacy_change.has_value()) << line;
   }
 }
 

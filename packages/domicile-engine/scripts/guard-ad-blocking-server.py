@@ -46,7 +46,8 @@ each X `kept` or `dropped`, and then what it reads of the device:
   GUARD device as=ID cores=N canvas=H canvas_again=H image=H audio=S
 
 the processor count, a hash of a canvas's toDataURL, again, of its
-getImageData, and the sum of an OfflineAudioContext's rendering.
+getImageData, and the sum of an OfflineAudioContext's rendering. Then it goes
+to its own `#read`, so a shell sees from the address that it has logged both.
 
 This server logs each script it is asked for, to its stdout:
 
@@ -192,6 +193,8 @@ LANDING = """<!doctype html>
             `canvas=${exported()} canvas_again=${exported()} ` +
             `image=${pixels()} audio=${sum}`,
         );
+        // For a shell to see the page is done, as its address.
+        location.hash = "read";
       });
     </script>
   </body>

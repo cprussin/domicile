@@ -215,6 +215,17 @@ class CORE_EXPORT HTMLWebViewElement final
   void setBlockAdsAndTrackers(const String& mode,
                               const String& scope,
                               ExceptionState&);
+  // The page's other protections, by name, from SitePrivacyChanged.
+  const Vector<std::pair<String, String>>& privacyProtections() const {
+    return privacy_protections_;
+  }
+  const Vector<std::pair<String, String>>& privacyProtectionsSetFor() const {
+    return privacy_protections_set_for_;
+  }
+  void setPrivacyProtection(const String& protection,
+                            std::optional<bool> on,
+                            const String& scope,
+                            ExceptionState&);
   ScriptPromise<DomicileMediaDevices> mediaDevices(ScriptState*,
                                                    ExceptionState&);
   ScriptPromise<IDLUndefined> setMediaDevice(ScriptState*,
@@ -617,6 +628,9 @@ class CORE_EXPORT HTMLWebViewElement final
   String block_ads_and_trackers_ = g_empty_string;
   String block_ads_and_trackers_set_for_ = g_empty_string;
   int32_t blocked_count_ = 0;
+  // See privacyProtections().
+  Vector<std::pair<String, String>> privacy_protections_;
+  Vector<std::pair<String, String>> privacy_protections_set_for_;
 };
 
 }  // namespace blink

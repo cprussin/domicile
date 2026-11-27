@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# A page's ad blocking can be turned off for its window or its site, as a
-# shield in the address bar does, and the shell hears how many of its requests
-# were blocked.
+# A page's ad blocking, and each protection beside it, can be turned off for
+# its window or its site, as a shield in the address bar does, and the shell
+# hears how many of its requests were blocked and where each came from.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-site-privacy.sh /build/chromium/src
@@ -12,9 +12,11 @@
 #
 # WHY THIS EXISTS. `setBlockAdsAndTrackers` keeps a site's mode in its
 # profile's prefs and a window's on its page (page_privacy.h), and the request
-# check reads both (domicile_ad_blocking.cc). The unit tests check the prefs;
-# this checks that what a shell sets is what a page's requests are checked in,
-# for that window or that site only, and that what the shell is told matches.
+# check reads both (domicile_ad_blocking.cc); `setPrivacyProtection` does the
+# same for each protection, which the link check (link_tracking_throttle.cc)
+# and device hiding (domicile_device_details.cc) read. The unit tests check
+# the prefs; this checks that what a shell sets is what a page gets, for that
+# window or that site only, and that what the shell is told matches.
 #
 # The list and the rule are guard-ad-blocking.sh's, so on standard a page's
 # five scripts load as B L B L L (third first mine allowed ok), two blocked.
@@ -28,8 +30,19 @@
 #      a3 and b2: L L L L L, off for the site, 0 blocked
 #   5  b clears the site's: b3 B L B L L, standard for the profile, 2 blocked
 #
-# Every step's page is its own control: the step before or after it blocks on
-# the same site in the same run.
+# then, on the landing page at localhost, as keep fbclid utm_source and the
+# links and device protections, each on or off and where from, and the page's
+# canvas, pixels and audio against b7's:
+#
+#   6  a, tracking kept in its window: a6 K K K, off/window, on/profile
+#   7  b7: K D K, on/profile, on/profile: b is another window
+#   8  both off for the site, from a, a's own cleared:
+#      b8 K K K, off/site, off/site, and its device read is not b7's
+#   9  b clears the site's: b9 K D K, on/profile, on/profile, and its device
+#      read is b7's again
+#
+# Every step's page is its own control: the step before or after it blocks,
+# or removes or hides, on the same site in the same run.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -92,6 +105,17 @@ rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 wait_for_line() { # $1 tries, $2 pattern, $3 file
   for _ in $(seq 1 "$1"); do
     grep -qF -- "$2" "$3" 2>/dev/null && return 0
+    sleep 0.25
+  done
+  return 1
+}
+
+# As wait_for_line, for b's last report after the shell was done: one the
+# report before it may have said too.
+wait_for_later() { # $1 tries, $2 pattern
+  for _ in $(seq 1 "$1"); do
+    grep -F "GUARD privacy later" "$ENGINE_LOG" 2>/dev/null | tail -1 |
+      grep -qF -- "$2" && return 0
     sleep 0.25
   done
   return 1
@@ -160,10 +184,12 @@ for _ in $(seq 1 "$TRIES"); do
   sleep 0.25
 done
 
-# 6. As the Settings app does: set the site to strict in the default profile
-#    from the command socket, list it, then clear it and list again, waiting
-#    each time for b's page to be told without a load. Each answer goes to
-#    $ANSWERS as `SETTINGS <what>=<answer>`.
+# 6. As the Settings app does: set b's site, the landing page's, to strict in
+#    the default profile from the command socket, list it, then clear it and
+#    list again; then the same with only its link tracking. Each time, wait
+#    for b's page to be told without a load. Each answer goes to $ANSWERS as
+#    `SETTINGS <what>=<answer>`, each site as profile:site:mode, `-` for
+#    none, then `:name=on|off` for each protection of its own.
 settings() { # $1 what, $2 the request's JSON
   python3 - "$COMMAND" "$1" "$2" <<'PY' >>"$ANSWERS" 2>&1
 import json, socket, sys
@@ -180,9 +206,13 @@ except (OSError, ValueError) as failure:
     print("  (%s)" % failure)
     sys.exit(0)
 if answer.get("type") == "site_privacy":
-    sites = ["%s:%s:%s" % (each["profile"], each["site"],
-                           each["block_ads_and_trackers"])
-             for each in answer["sites"]]
+    sites = []
+    for each in answer["sites"]:
+        mode = each["block_ads_and_trackers"]
+        sites.append(":".join(
+            [each["profile"], each["site"], mode if mode is not None else "-"]
+            + ["%s=%s" % (name, "on" if on else "off")
+               for name, on in sorted(each.get("protections", {}).items())]))
     print("SETTINGS %s=%s" % (what, ",".join(sites) or "none"))
 else:
     print("SETTINGS %s=%s" % (what, answer.get("type")))
@@ -190,30 +220,39 @@ else:
 PY
 }
 if grep -q "GUARD privacy done" "$ENGINE_LOG" 2>/dev/null; then
-  settings set1 '{"type":"set_site_privacy","version":1,"profile":"default","site":"127.0.0.1","block_ads_and_trackers":"strict"}'
+  settings set1 '{"type":"set_site_privacy","version":1,"profile":"default","site":"localhost","block_ads_and_trackers":"strict"}'
   settings list1 '{"type":"site_privacy","version":1}'
-  wait_for_line 40 "GUARD privacy later view=b mode=strict" "$ENGINE_LOG"
-  settings set2 '{"type":"set_site_privacy","version":1,"profile":"default","site":"127.0.0.1","block_ads_and_trackers":null}'
+  wait_for_later 40 "mode=strict for=site links=on/profile"
+  settings set2 '{"type":"set_site_privacy","version":1,"profile":"default","site":"localhost","block_ads_and_trackers":null}'
   settings list2 '{"type":"site_privacy","version":1}'
-  wait_for_line 40 "GUARD privacy later view=b mode=standard" "$ENGINE_LOG"
+  wait_for_later 40 "mode=standard for=profile links=on/profile"
+  settings set3 '{"type":"set_site_privacy","version":1,"profile":"default","site":"localhost","protections":{"remove_tracking_from_links":false}}'
+  settings list3 '{"type":"site_privacy","version":1}'
+  wait_for_later 40 "mode=standard for=profile links=off/site"
+  settings set4 '{"type":"set_site_privacy","version":1,"profile":"default","site":"localhost","protections":{"remove_tracking_from_links":null}}'
+  settings list4 '{"type":"site_privacy","version":1}'
+  wait_for_later 40 "mode=standard for=profile links=on/profile"
 fi
 
 # Whether the shell ran and finished; each step's page as third first mine
 # allowed ok, a letter each (B blocked, L loaded, ? no report); the site the
 # shell was told; and what it read at each step, as mode/for/blocked (`?` for
-# no report); then the command socket's answers and b's reports after
-# them, mode/for each, without repeats (`?` for none).
+# no report); then each landing page as keep fbclid utm_source (K kept, D
+# dropped, ? none), what the shell read there as links/for,device/for, and
+# b8's and b9's device reads as canvas image audio against b7's (C changed, T
+# the same, ? none); then the command socket's answers and b's reports after
+# them, mode/for/links/for each, without repeats (`?` for none).
 READ="$(awk '
   /SETTINGS [a-z0-9]+=/ {
     split(substr($0, index($0, "SETTINGS ") + 9), kv, /=/)
-    answered[kv[1]] = kv[2]
+    answered[kv[1]] = substr($0, index($0, "SETTINGS ") + 9 + length(kv[1]) + 1)
   }
-  match($0, /GUARD privacy later view=b mode=[a-z]* for=[a-z]*/) {
+  match($0, /GUARD privacy later view=b mode=[a-z]* for=[a-z]* links=[a-z]*\/[a-z]*/) {
     split(substr($0, RSTART + 27, RLENGTH - 27), f, / /)
-    split(f[1], m, /=/); split(f[2], w, /=/)
-    if (m[2] "/" w[2] != last) {
-      later = later (later == "" ? "" : ",") m[2] "/" w[2]
-      last = m[2] "/" w[2]
+    split(f[1], m, /=/); split(f[2], w, /=/); split(f[3], l, /=/)
+    if (m[2] "/" w[2] "/" l[2] != last) {
+      later = later (later == "" ? "" : ",") m[2] "/" w[2] "/" l[2]
+      last = m[2] "/" w[2] "/" l[2]
     }
   }
   /GUARD shell-loaded/ { shell = 1 }
@@ -226,11 +265,34 @@ READ="$(awk '
       ran[a[2] SUBSEP kv[1]] = kv[2]
     }
   }
+  match($0, /GUARD landed as=[a-z0-9-]+( [a-z_]+=[a-z]+)+/) {
+    n = split(substr($0, RSTART + 13, RLENGTH - 13), f, / /)
+    split(f[1], a, /=/)
+    for (i = 2; i <= n; i++) {
+      split(f[i], kv, /=/)
+      landed[a[2] SUBSEP kv[1]] = kv[2]
+    }
+  }
+  match($0, /GUARD device as=[a-z0-9-]+( [a-z_]+=[^ "]+)+/) {
+    n = split(substr($0, RSTART + 13, RLENGTH - 13), f, / /)
+    split(f[1], a, /=/)
+    device[a[2]] = 1
+    for (i = 2; i <= n; i++) {
+      split(f[i], kv, /=/)
+      device[a[2] SUBSEP kv[1]] = kv[2]
+    }
+  }
   match($0, /GUARD privacy step=[0-9] view=[a-z] site=[^ ]* mode=[a-z]* for=[a-z]* blocked=[0-9]+/) {
     split(substr($0, RSTART + 14, RLENGTH - 14), f, / /)
     for (i in f) { split(f[i], kv, /=/); got[kv[1]] = kv[2] }
     read[got["step"] got["view"]] = got["mode"] "/" got["for"] "/" got["blocked"]
     if (site == "") site = got["site"]
+  }
+  match($0, /GUARD privacy protections step=[0-9] view=[a-z] site=[^ ]* links=[a-z]*\/[a-z]* device=[a-z]*\/[a-z]*/) {
+    split(substr($0, RSTART + 26, RLENGTH - 26), f, / /)
+    for (i in f) { split(f[i], kv, /=/); had[kv[1]] = kv[2] }
+    protected[had["step"] had["view"]] = had["links"] "," had["device"]
+    if (landing == "") landing = had["site"]
   }
   function letters(as,   out, i, w, how) {
     split("third first mine allowed ok", w, / /)
@@ -241,15 +303,41 @@ READ="$(awk '
     }
     return out
   }
+  function reached(as,   out, i, w, how) {
+    split("keep fbclid utm_source", w, / /)
+    out = ""
+    for (i = 1; i <= 3; i++) {
+      how = landed[as SUBSEP w[i]]
+      out = out (how == "kept" ? "K" : how == "dropped" ? "D" : "?")
+    }
+    return out
+  }
+  function versus(as,   out, i, w) {
+    if (!(as in device) || !("b7" in device)) return "???"
+    split("canvas image audio", w, / /)
+    out = ""
+    for (i = 1; i <= 3; i++) {
+      out = out (device[as SUBSEP w[i]] == device["b7" SUBSEP w[i]] ? "T" : "C")
+    }
+    return out
+  }
   function said(key) { return key in read ? read[key] : "?" }
+  function had_(key) { return key in protected ? protected[key] : "?" }
   function answer(key) { return key in answered ? answered[key] : "?" }
   END {
-    printf "%d %d %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\n",
+    printf "%d %d %s %s %s %s %s %s %s %s %s %s %s %s %s ",
       shell, done,
       letters("a1"), letters("a2"), letters("b1"), letters("a3"),
       letters("b2"), letters("b3"), (site == "" ? "?" : site),
-      said("1a"), said("2a"), said("3b"), said("4a"), said("4b"), said("5b"),
+      said("1a"), said("2a"), said("3b"), said("4a"), said("4b"), said("5b")
+    printf "%s %s %s %s %s %s %s %s %s %s %s ",
+      reached("a6"), reached("b7"), reached("b8"), reached("b9"),
+      (landing == "" ? "?" : landing),
+      had_("6a"), had_("7b"), had_("8b"), had_("9b"),
+      versus("b8"), versus("b9")
+    printf "%s %s %s %s %s %s %s %s %s\n",
       answer("set1"), answer("list1"), answer("set2"), answer("list2"),
+      answer("set3"), answer("list3"), answer("set4"), answer("list4"),
       (later == "" ? "?" : later)
   }' "$ANSWERS" "$ENGINE_LOG" 2>/dev/null)"
 
@@ -257,24 +345,30 @@ MEASURED="$READ"
 echo
 echo "measured: $MEASURED"
 echo "  (shell done a1 a2 b1 a3 b2 b3 site, then what the shell read at 1 2 3 4a 4b 5,"
-echo "   then Settings' set, list, clear and list, and b's reports after them)"
+echo "   then a6 b7 b8 b9 landed, the landing site, what the shell read at 6 7 8 9,"
+echo "   b8's and b9's device reads against b7's, then Settings' set, list, clear"
+echo "   and list, for the mode then for link tracking, and b's reports after them)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-site-privacy-guard.sh`
 # runs the reading and this block directly.
 FAILURE=""
 PASSED=""
-read -r RAN DONE A1 A2 B1 A3 B2 B3 SITE R1 R2 R3 R4A R4B R5 SET1 LIST1 SET2 LIST2 LATER <<<"$MEASURED"
+read -r RAN DONE A1 A2 B1 A3 B2 B3 SITE R1 R2 R3 R4A R4B R5 \
+  L6 L7 L8 L9 LANDING P6 P7 P8 P9 V8 V9 \
+  SET1 LIST1 SET2 LIST2 SET3 LIST3 SET4 LIST4 LATER <<<"$MEASURED"
 READS="$R1 $R2 $R3 $R4A $R4B $R5"
 BLOCKED="BLBLL"
 LOADED="LLLLL"
 TOLD="standard/profile/2 off/window/0 standard/profile/2 off/site/0 off/site/0 standard/profile/2"
+PROTECTED="$P6 $P7 $P8 $P9"
+PROTECTED_TOLD="off/window,on/profile on/profile,on/profile off/site,off/site on/profile,on/profile"
 if [ "$RAN" != 1 ]; then
   FAILURE="the shell page never ran, so nothing here was set up: the module \
 did not load, or it threw, and the engine log has its console"
 elif [ "$DONE" != 1 ]; then
   FAILURE="the shell never finished its steps: a page never loaded, or \
-setBlockAdsAndTrackers threw (its line says why), and the engine log has the \
-shell's console"
+setBlockAdsAndTrackers or setPrivacyProtection threw (its line says why), and \
+the engine log has the shell's console"
 elif [ "$A1" != "$BLOCKED" ]; then
   FAILURE="the first page was not blocked as guard-ad-blocking.sh's are \
 ($A1): this guard stands on that one, so look there first"
@@ -298,22 +392,53 @@ elif [ "$SITE" != "127.0.0.1" ] || [ "$READS" != "$TOLD" ]; then
 (site $SITE, and $READS for $TOLD): SitePrivacyChanged reports the wrong \
 site, mode, source or count, or reports late (ReportSitePrivacy, \
 PagePrivacy::Changed)"
-elif [ "$SET1" != set ] || [ "$SET2" != set ]; then
-  FAILURE="THE COMMAND SOCKET REFUSED A SITE'S AD BLOCKING ($SET1 $SET2), as \
-the Settings app sends it: set_site_privacy, or SetDeskSitePrivacy found no \
-prefs for the default profile (SitePrivacyPrefsOf); $ANSWERS has its answer"
-elif [ "$LIST1" != "default:127.0.0.1:strict" ] || [ "$LIST2" != none ]; then
+elif [ "$L6" != KKK ]; then
+  FAILURE="TRACKING KEPT IN LINKS FOR A WINDOW DID NOT REACH ITS PAGE ($L6): \
+SetProtectionForWindow never reached the page's PagePrivacy, or the link \
+check does not read it (PagePrivacy::IsOnFor in link_tracking_throttle.cc)"
+elif [ "$L7" != KDK ]; then
+  FAILURE="A WINDOW'S PROTECTION REACHED ANOTHER WINDOW ($L7): b's link kept \
+its click id after only a's window kept tracking, so it was kept for the site \
+or the profile, not the page (PagePrivacy::SetForWindow), or b's link was \
+never cleaned at all, which guard-ad-blocking.sh checks"
+elif [ "$L8" != KKK ]; then
+  FAILURE="tracking kept in links for the site did not reach another window \
+($L8): SetProtectionForSite kept it for another site than the page's, or \
+PagePrivacy::IsOnFor does not read kSiteProtectionsPref"
+elif [ "$V8" != CCC ]; then
+  FAILURE="DEVICE DETAILS WERE STILL HIDDEN WITH THE SITE'S HIDING OFF ($V8, \
+canvas image audio against b7's): domicile_device_details.cc does not ask \
+PagePrivacy::IsOnFor, or the site's setting was not kept"
+elif [ "$L9" != KDK ] || [ "$V9" != TTT ]; then
+  FAILURE="clearing the site's protections left them off ($L9, and $V9 \
+against b7's): SetSiteProtection with none did not remove them"
+elif [ "$LANDING" != localhost ] || [ "$PROTECTED" != "$PROTECTED_TOLD" ]; then
+  FAILURE="the pages got their protections as set, but the shell was told \
+otherwise (site $LANDING, and $PROTECTED for $PROTECTED_TOLD): \
+ReportSitePrivacy reports the wrong protections or their sources"
+elif [ "$SET1" != set ] || [ "$SET2" != set ] || [ "$SET3" != set ] ||
+  [ "$SET4" != set ]; then
+  FAILURE="THE COMMAND SOCKET REFUSED A SITE'S PRIVACY ($SET1 $SET2 $SET3 \
+$SET4), as the Settings app sends it: set_site_privacy, or \
+SetDeskSitePrivacy found no prefs for the default profile \
+(SitePrivacyPrefsOf); $ANSWERS has its answer"
+elif [ "$LIST1" != "default:localhost:strict" ] || [ "$LIST2" != none ] ||
+  [ "$LIST3" != "default:localhost:-:remove_tracking_from_links=off" ] ||
+  [ "$LIST4" != none ]; then
   FAILURE="Settings' list of sites was wrong ($LIST1, then $LIST2 once \
-cleared): site_privacy did not read the profile's sites \
-(ListDeskSitePrivacy, SitesWithOwnAdBlocking)"
-elif [ "$LATER" != "strict/site,standard/profile" ]; then
+cleared, then $LIST3 with only its link tracking, then $LIST4): \
+site_privacy did not read the profile's sites (ListDeskSitePrivacy, \
+SitesWithOwnPrivacy)"
+elif [ "$LATER" != "strict/site/on/profile,standard/profile/on/profile,standard/profile/off/site,standard/profile/on/profile" ]; then
   FAILURE="Settings' change did not reach the open page ($LATER): PagePrivacy \
-does not watch kSiteAdBlockingPref, or the view does not report it"
+does not watch kSiteAdBlockingPref or kSiteProtectionsPref, or the view does \
+not report it"
 else
   PASSED="a page's ad blocking went off for its window only, then for its \
 site in both windows, then back to the profile's, as the shell set it, and \
-the shell was told each mode, where it came from and how many requests were \
-blocked; and the Settings app's list and change reached the page"
+so did its link tracking and device hiding; the shell was told each, where \
+it came from and how many requests were blocked; and the Settings app's list \
+and changes reached the page"
 fi
 
 if [ -n "$PASSED" ]; then
