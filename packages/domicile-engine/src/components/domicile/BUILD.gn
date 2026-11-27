@@ -3,10 +3,6 @@
 
 import("//testing/test.gni")
 
-# For `use_xkbcommon`, which decides whether there is an
-# XkbKeyboardLayoutEngine for the keymap's tests to assert against.
-import("//ui/base/ui_features.gni")
-
 # The browser-process half of Domicile's engine fork: brokering viz frame sinks
 # to a compositing producer that is not a renderer. See
 # docs/architecture/ENGINE-FORK.md in the Domicile repository.
@@ -1220,18 +1216,22 @@ source_set("will_navigate_throttle") {
 # :shortcut_registry is one: it is the piece of this that can be asserted
 # against a real XkbKeyboardLayoutEngine with no socket, no mojo and no
 # browser, which is where the whole of the bug is written down as a test. What
-# it needs is //ui/events/ozone/layout and that is all -- no //content and no
-# //net.
+# it needs is //ui/events/ozone/layout and xkbcommon, and that is all -- no
+# //content and no //net.
 source_set("keyboard_layout") {
   sources = [
     "browser/keyboard_layout.cc",
     "browser/keyboard_layout.h",
   ]
 
+  # The desk's own XkbKeyboardLayoutEngine, whose header includes xkbcommon's.
+  configs += [ "//ui/events/ozone/layout:xkbcommon" ]
+
   public_deps = [
     "//base",
     "//ui/events/ozone/layout",
   ]
+  deps = [ "//ui/events/keycodes:xkb" ]
 }
 
 # How many private pages a profile has open, so its off-the-record profile
@@ -1914,17 +1914,11 @@ source_set("unit_tests") {
     "spike/window_diff_unittest.cc",
   ]
 
-  # The keymap's own tests need an XkbKeyboardLayoutEngine to assert against,
-  # and that class -- and the xkbcommon headers its own header reaches for
-  # through scoped_xkb.h -- are in //ui/events/ozone/layout only when
-  # xkbcommon is. The function under test takes the abstract
-  # KeyboardLayoutEngine and needs neither, which is why only the test is
-  # conditional. The config is the one //ui/events/ozone/layout:unittests adds
-  # for the same include, by the same name.
-  if (use_xkbcommon) {
-    sources += [ "browser/keyboard_layout_unittest.cc" ]
-    configs += [ "//ui/events/ozone/layout:xkbcommon" ]
-  }
+  # The keymap's own tests assert against an XkbKeyboardLayoutEngine, whose
+  # header reaches for xkbcommon's through scoped_xkb.h. :keyboard_layout
+  # needs xkbcommon too, for the desk's engine.
+  sources += [ "browser/keyboard_layout_unittest.cc" ]
+  configs += [ "//ui/events/ozone/layout:xkbcommon" ]
 
   deps = [
     "//components/domicile/ad_blocking:unit_tests",

@@ -22,11 +22,18 @@ namespace domicile {
 // whether xkb accepted the keymap, and logs a refusal.
 bool ApplyKeymap(ui::KeyboardLayoutEngine* engine, std::string_view keymap);
 
-// Applies `keymap` to this process's keyboard layout engine.
+// Applies `keymap` to DeskKeyboardLayout and this process's keyboard layout
+// engine.
 //
-// Must run on the UI thread, which owns the engine. ControlChannel's
+// Must run on the UI thread, which owns the engines. ControlChannel's
 // constructor receives this bound to a UI task runner.
 void SetProcessKeymap(const std::string& keymap);
+
+// The compositor's keymap alone: what a key the compositor names by evdev
+// code, such as an agent seat's, types. Not the process's engine, which on the
+// Wayland platform holds the host seat's keymap, and is replaced with each
+// keymap the host sends (wtype's, a virtual keyboard's, a layout switch).
+ui::KeyboardLayoutEngine& DeskKeyboardLayout();
 
 }  // namespace domicile
 

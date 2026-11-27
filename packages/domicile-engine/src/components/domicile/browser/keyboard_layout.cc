@@ -7,7 +7,10 @@
 #include <string_view>
 
 #include "base/logging.h"
+#include "base/no_destructor.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
+#include "ui/events/ozone/layout/xkb/xkb_evdev_codes.h"
+#include "ui/events/ozone/layout/xkb/xkb_keyboard_layout_engine.h"
 
 namespace domicile {
 
@@ -27,8 +30,15 @@ bool ApplyKeymap(ui::KeyboardLayoutEngine* engine, std::string_view keymap) {
 }
 
 void SetProcessKeymap(const std::string& keymap) {
+  ApplyKeymap(&DeskKeyboardLayout(), keymap);
   ApplyKeymap(ui::KeyboardLayoutEngineManager::GetKeyboardLayoutEngine(),
               keymap);
+}
+
+ui::KeyboardLayoutEngine& DeskKeyboardLayout() {
+  static base::NoDestructor<ui::XkbEvdevCodes> codes;
+  static base::NoDestructor<ui::XkbKeyboardLayoutEngine> engine(*codes);
+  return *engine;
 }
 
 }  // namespace domicile
