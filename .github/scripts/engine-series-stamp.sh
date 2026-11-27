@@ -83,22 +83,60 @@ pin() { grep -v '^#' "$PACKAGE/CHROMIUM_PIN" | tr -d '[:space:]'; }
 # engine-reset.sh's `series_files`.
 series_files() { (cd "$SERIES" && find . -type f | sed 's|^\./||'); }
 
+# Drops the paths on stdin that git ignores in the checkout.
+not_ignored() {
+  local paths ignored status=0
+  paths="$(cat)"
+  # Exits 1 when it ignores none of them.
+  ignored="$(printf '%s\n' "$paths" | git -C "$CHROMIUM" check-ignore --no-index --stdin)" ||
+    status=$?
+  case "$status" in
+    (0) ;;
+    (1) printf '%s\n' "$paths"; return ;;
+    (*)
+      echo "::error::git check-ignore failed in $CHROMIUM, so the series files cannot be told from the rest" >&2
+      exit 1
+      ;;
+  esac
+  LC_ALL=C comm -23 <(printf '%s\n' "$paths") <(printf '%s\n' "$ignored" | LC_ALL=C sort)
+}
+
+# Lists, as lines to append to `reason`, the series files git does not list as
+# untracked and the untracked files that are not the series'. At most 20 of
+# each, so a reset tree does not print thousands.
+untracked_difference() { # want, got
+  local unlisted stray
+  unlisted="$(LC_ALL=C comm -23 <(printf '%s\n' "$1") <(printf '%s\n' "$2") | sed '/^$/d')"
+  stray="$(LC_ALL=C comm -13 <(printf '%s\n' "$1") <(printf '%s\n' "$2") | sed '/^$/d')"
+  [ -z "$unlisted" ] || printf '\n  series files git does not list as untracked (%s):\n%s' \
+    "$(printf '%s\n' "$unlisted" | wc -l)" "$(printf '%s\n' "$unlisted" | head -20 | sed 's/^/    /')"
+  [ -z "$stray" ] || printf '\n  untracked files that are not the series'"'"' (%s):\n%s' \
+    "$(printf '%s\n' "$stray" | wc -l)" "$(printf '%s\n' "$stray" | head -20 | sed 's/^/    /')"
+}
+
 # Whether the checkout's only changes are the series' untracked files.
 #
 # `--untracked-files=all` because the default collapses an untracked directory
 # to one line, which would never match the file list.
 tree_is_as_applied() {
   local want got
-  want="$(series_files | LC_ALL=C sort)"
+  # A series file Chromium's .gitignore covers, such as one under
+  # third_party/rust/rustc_hash/ (`**/*_hash`), is never listed.
+  # `series_files_are_laid_down` still compares its bytes.
+  want="$(series_files | LC_ALL=C sort | not_ignored)"
   got="$(git -C "$CHROMIUM" status --porcelain --untracked-files=all |
            sed -n 's/^?? //p' | LC_ALL=C sort)"
   [ "$want" = "$got" ] || {
     reason="the checkout is not dirty the way a finished apply leaves it"
+    reason="$reason$(untracked_difference "$want" "$got")"
     return 1
   }
   # The listing above keeps only `??` lines, so check tracked files separately.
-  [ -z "$(git -C "$CHROMIUM" status --porcelain --untracked-files=no)" ] || {
-    reason="the checkout has modifications to files the series does not own"
+  local modified
+  modified="$(git -C "$CHROMIUM" status --porcelain --untracked-files=no)"
+  [ -z "$modified" ] || {
+    reason="the checkout has modifications to files the series does not own:
+$(printf '%s\n' "$modified" | head -20 | sed 's/^/    /')"
     return 1
   }
   return 0

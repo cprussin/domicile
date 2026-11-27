@@ -168,13 +168,37 @@ expect_carries "and going back to the recorded commit brings it back" true
 
 echo "somebody's work in progress" >"$TREE/upstream.cc"
 expect_carries "a tracked file modified in the checkout is not trusted" false
+contains "and it names the file" "upstream.cc" "$(said)"
 git -C "$TREE" checkout -q -- upstream.cc
 expect_carries "and restoring it brings it back" true
 
 echo "left behind" >"$TREE/stray.cc"
 expect_carries "an untracked file that is not the series' is not trusted" false
+contains "and it names the stray file" "stray.cc" "$(said)"
 rm "$TREE/stray.cc"
 expect_carries "and removing it brings it back" true
+
+# A series file under a path Chromium's .gitignore covers is still the series'.
+# `**/*_hash` covers third_party/rust/rustc_hash/, a crate's BUILD.gn.
+mkdir -p "$FAKE/packages/domicile-engine/src/third_party/rust/rustc_hash/v2" \
+         "$TREE/third_party/rust/rustc_hash/v2"
+echo "a crate's build file" \
+  >"$FAKE/packages/domicile-engine/src/third_party/rust/rustc_hash/v2/BUILD.gn"
+cp "$FAKE/packages/domicile-engine/src/third_party/rust/rustc_hash/v2/BUILD.gn" \
+   "$TREE/third_party/rust/rustc_hash/v2/BUILD.gn"
+echo '**/*_hash' >"$TREE/.git/info/exclude"
+out="$(stamp record "$TREE")"
+contains "a series file git ignores does not stop the record" "wrote down" "$out"
+expect_carries "and the checkout is taken" true
+echo "tampered" >"$TREE/third_party/rust/rustc_hash/v2/BUILD.gn"
+expect_carries "but an ignored series file that differs is not trusted" false
+contains "and it names the file" "third_party/rust/rustc_hash/v2/BUILD.gn" "$(said)"
+rm "$TREE/third_party/rust/rustc_hash/v2/BUILD.gn"
+expect_carries "nor is one that is missing" false
+rm -rf "$FAKE/packages/domicile-engine/src/third_party" "$TREE/third_party"
+: >"$TREE/.git/info/exclude"
+stamp record "$TREE" >/dev/null
+expect_carries "and without it the checkout is taken again" true
 
 # A series file missing from the checkout. It is untracked, so `git status`
 # does not report it; only a file-by-file comparison does.
