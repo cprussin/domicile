@@ -1,0 +1,75 @@
+name: Engine check repeat
+
+# Runs one engine check many times against the pinned engine, to see whether
+# and how often it fails on a build that does not change. The failing runs'
+# logs are in the job log. See .github/scripts/crux-check-repeat.sh.
+#
+# Dispatch only. It runs on `crux-light`, beside pinned-engine.yml, and needs
+# no Chromium tree. `crux-light` is one runner, so every pull request's
+# pinned-engine.yml waits while this runs: keep `times` to what the question
+# needs. Checks it can run: those run-checks.sh runs with the compositor and
+# launcher built, but not guard-latency, which takes the render node itself.
+on:
+  workflow_dispatch:
+    inputs:
+      check:
+        description: The check's name, such as guard-scrolling-bubble
+        required: true
+        type: string
+      times:
+        description: How many times to run it, at most 50
+        required: true
+        default: "20"
+        type: string
+      control:
+        description: Run each guard's control after its claim
+        required: true
+        default: false
+        type: boolean
+
+# Per ref, as test-engine-concurrency.sh requires of every `crux` workflow.
+concurrency:
+  group: engine-check-repeat-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  repeat:
+    # `crux-light` is a label set in cprussin/dotfiles:
+    # config/machines/crux/domicile-ci.nix.
+    runs-on: [self-hosted, crux-light]
+    timeout-minutes: 240
+
+    env:
+      CARD_OWNER: engine-check-repeat.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Fetch the engine this checkout pins
+        run: |
+          set -euo pipefail
+          ENGINE="$(nix build --no-link --print-out-paths .#engine)"
+          echo "the pin resolves to $ENGINE"
+          echo "ENGINE=$ENGINE" >> "$GITHUB_ENV"
+
+      - name: Build the compositor and launcher this checkout carries
+        run: .github/scripts/engine-render-node-lock.sh noisy "$CARD_OWNER" -- nix develop .#full --command cargo build -p domicile-compositor -p domicile-launch
+
+      # Each run takes the render node and drops it after. See
+      # crux-check-repeat.sh.
+      - name: Run the check
+        env:
+          CHECK: ${{ inputs.check }}
+          TIMES: ${{ inputs.times }}
+          DOMICILE_GUARD_CONTROL: ${{ inputs.control && '1' || '0' }}
+        run: |
+          DOMICILE_CHROMIUM="$ENGINE" DOMICILE_ENGINE_OUT=. \
+            nix develop .#full --command .github/scripts/crux-check-repeat.sh "$CHECK" "$TIMES"
+
+      # A run the job's timeout killed still holds it.
+      - name: Drop the render node
+        if: ${{ always() }}
+        run: .github/scripts/engine-render-node-lock.sh drop "$CARD_OWNER"

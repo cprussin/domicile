@@ -24,6 +24,15 @@ exceptions, and check that the layer is what a shell and an app get.
 CI runs them through `run-checks.sh`, which lists each one. Run one by hand
 inside the toolchain shell ([BUILD-MACHINE.md](BUILD-MACHINE.md#toolchain-shell)).
 
+To see whether a guard fails some runs of a build that does not change, run
+the **Engine check repeat** workflow (`engine-check-repeat.yml`) by hand. It
+runs one check as many times as asked against the pinned engine on
+`crux-light`, at most 50 times, says how many runs failed, and prints each
+failing run's logs. Every pull request's pinned-engine check waits for
+`crux-light` meanwhile, so ask for no more runs than the question needs. A
+guard that fails some runs is a bug in the guard or the engine, so never
+retry past it.
+
 ## Helpers
 
 | Script | Role |
