@@ -40,10 +40,9 @@ pub enum Submitted {
     Upload(UploadId),
 }
 
-/// A client's buffer is taken back at the hold deadline, so its client can
-/// draw. An upload waits for the leak deadline: [`crate::uploads`] makes
-/// another when every one is out, and copying a frame into one viz still
-/// shows tears the window.
+/// A client's buffer is taken back at the deadline, so its client can draw.
+/// An upload is not: [`crate::uploads`] makes another when every one is out,
+/// and copying a frame into one viz still shows tears the window.
 impl AtTheDeadline for Submitted {
     fn taken_back(&self) -> bool {
         matches!(self, Submitted::Client(_))
@@ -836,13 +835,11 @@ impl EngineSession {
             }
         }
     }
-    /// Buffers viz kept past their deadline, taken back: a client's so it can
-    /// draw, a copy of an shm frame so a viz that leaks them cannot make a
-    /// window allocate one a frame. Each one is an engine bug, and the caller
-    /// logs it.
+    /// Client buffers viz kept past the deadline, taken back so the client
+    /// can draw. Each one is an engine bug, and the caller logs it.
     ///
-    /// A copy viz kept past the hold deadline stays with viz until the leak
-    /// deadline, and is logged here once.
+    /// The compositor's copies of shm frames viz kept past the deadline stay
+    /// with viz until it releases them, and each is logged here once.
     pub fn overdue(&mut self, now: Instant) -> Vec<Release> {
         for (surface, id) in self.held.overstayed(now) {
             // Separate messages so `app_id` only ever holds an app id.
@@ -1192,10 +1189,9 @@ mod deadline_tests {
     use super::{AtTheDeadline, Submitted};
     use crate::uploads::UploadId;
 
-    // Copying a frame into an upload viz still shows tears the window, so
-    // only a client's own buffer is taken back at the hold deadline.
+    // Copying a frame into an upload viz still shows tears the window.
     #[test]
-    fn only_a_clients_buffer_is_taken_back_at_the_hold_deadline() {
+    fn an_upload_is_not_taken_back_at_the_deadline() {
         assert!(!Submitted::Upload(UploadId::for_tests(1)).taken_back());
     }
 }

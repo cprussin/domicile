@@ -10,12 +10,13 @@
 //! for a surface has no deadline: viz keeps it because it is the frame on
 //! screen, for as long as the client is idle.
 //!
-//! The compositor's copy of an shm frame is reported at the deadline instead,
-//! and taken back only at [`LEAK_DEADLINE`]. No client waits on it, since
-//! [`crate::uploads`] allocates another copy when every one is out, and
-//! copying the next frame into one viz still shows tears the window: a viz
-//! stalled past the hold deadline does just that. The later deadline still
-//! bounds the copies a viz that leaks them leaves out.
+//! Only a client's own buffer is taken back, since only its client waits on
+//! it. The compositor's copy of an shm frame stays with viz past the deadline
+//! and is reported once instead: [`crate::uploads`] allocates another copy
+//! when every one is out, so taking it back frees nothing, and copying the
+//! next frame into it while viz still shows it tears the window. A viz
+//! stalled past the deadline does just that. A copy viz leaks stays out for
+//! good, one buffer for each leak, and is logged when it overstays.
 //!
 //! A client that renders in place into a single dmabuf is not covered: its
 //! only hold is its newest, so it is never taken back. Shm frames are copied
@@ -31,12 +32,6 @@ use crate::engine::{BufferId, SurfaceId};
 ///
 /// Tens of frames at 60Hz, so a slow machine under load does not trip it.
 pub const HOLD_DEADLINE: Duration = Duration::from_millis(500);
-
-/// How long viz may keep a superseded copy of an shm frame before the
-/// compositor takes it back. A viz that has drawn no newer frame for this
-/// long has hung, not stalled, so drawing into the copy shows nothing wrong
-/// that the frozen screen does not already.
-pub const LEAK_DEADLINE: Duration = Duration::from_secs(10);
 
 /// A buffer the engine was given and has not handed back.
 #[derive(Debug)]
@@ -57,11 +52,11 @@ impl<B> Held<B> {
     }
 }
 
-/// What the hold deadline does to a held buffer.
+/// What the deadline does to a held buffer.
 pub trait AtTheDeadline {
-    /// True to take it back, since its owner waits on it. False to report it
-    /// and leave it with viz until [`LEAK_DEADLINE`]: nothing waits on it,
-    /// and drawing into it while viz shows it would tear.
+    /// True to take it back, since its owner waits on it. False to leave it
+    /// with viz and report it: nothing waits on it, and drawing into it while
+    /// viz shows it would tear.
     fn taken_back(&self) -> bool;
 }
 
@@ -98,28 +93,19 @@ pub struct Taken<B> {
 pub struct HeldBuffers<B> {
     held: HashMap<SurfaceId, HashMap<BufferId, Held<B>>>,
     deadline: Duration,
-    leak_deadline: Duration,
 }
 
 impl<B> Default for HeldBuffers<B> {
     fn default() -> Self {
-        Self::with_deadlines(HOLD_DEADLINE, LEAK_DEADLINE)
+        Self::with_deadline(HOLD_DEADLINE)
     }
 }
 
 impl<B> HeldBuffers<B> {
-    /// Takes back at `deadline` what [`AtTheDeadline::taken_back`] says to,
-    /// and the rest at [`LEAK_DEADLINE`].
-    #[cfg(test)]
     pub fn with_deadline(deadline: Duration) -> Self {
-        Self::with_deadlines(deadline, LEAK_DEADLINE)
-    }
-
-    pub fn with_deadlines(deadline: Duration, leak_deadline: Duration) -> Self {
         Self {
             held: HashMap::new(),
             deadline,
-            leak_deadline,
         }
     }
 
@@ -213,28 +199,20 @@ impl<B> HeldBuffers<B> {
 }
 
 impl<B: AtTheDeadline> HeldBuffers<B> {
-    /// Removes and returns every superseded buffer due to be taken back: one
-    /// [taken back](AtTheDeadline::taken_back) past the hold deadline, any
-    /// other past [`LEAK_DEADLINE`]. The caller logs each one.
+    /// Removes and returns every superseded buffer past its deadline that is
+    /// [taken back](AtTheDeadline::taken_back). The caller logs each one.
     ///
     /// The newest hold for a surface never expires: viz keeps it because it is
     /// on screen. The deadline runs from replacement, so viz has time to draw
     /// the newer frame before the old one is taken back.
     pub fn expired(&mut self, now: Instant) -> Vec<((SurfaceId, BufferId), B)> {
-        let (deadline, leak_deadline) = (self.deadline, self.leak_deadline);
+        let deadline = self.deadline;
         let expired = self
             .held
             .iter_mut()
             .flat_map(|(surface, holds)| {
                 holds
-                    .extract_if(|_, held| {
-                        let due = if held.buffer.taken_back() {
-                            deadline
-                        } else {
-                            leak_deadline
-                        };
-                        held.overdue(now, due)
-                    })
+                    .extract_if(|_, held| held.buffer.taken_back() && held.overdue(now, deadline))
                     .map(|(id, held)| ((*surface, id), held.buffer))
             })
             .collect();
@@ -242,10 +220,9 @@ impl<B: AtTheDeadline> HeldBuffers<B> {
         expired
     }
 
-    /// Every superseded buffer past the hold deadline that stays with viz,
-    /// each reported only the first time. The caller logs each one. Viz's
-    /// release still hands it back, or [`HeldBuffers::expired`] does at
-    /// [`LEAK_DEADLINE`].
+    /// Every superseded buffer past its deadline that stays with viz, each
+    /// reported only the first time. The caller logs each one. Viz's
+    /// release still hands it back.
     pub fn overstayed(&mut self, now: Instant) -> Vec<(SurfaceId, BufferId)> {
         let deadline = self.deadline;
         let mut overstayed = Vec::new();
@@ -266,15 +243,10 @@ impl<B: AtTheDeadline> HeldBuffers<B> {
         self.held
             .values()
             .flat_map(HashMap::values)
-            .filter_map(|held| {
-                let due = if held.reported {
-                    self.leak_deadline
-                } else {
-                    self.deadline
-                };
-                held.superseded.map(|superseded| superseded + due)
-            })
+            .filter(|held| !held.reported)
+            .filter_map(|held| held.superseded)
             .min()
+            .map(|superseded| superseded + self.deadline)
     }
 }
 
@@ -322,47 +294,14 @@ mod tests {
         );
         assert_eq!(
             held.next_expiry(),
-            Some(at(now, 100) + LEAK_DEADLINE),
-            "the loop wakes next to take it back, not again and again to report it"
+            None,
+            "or the loop would wake for it again and again"
         );
         assert_eq!(
             held.release(SURFACE, 1),
             Some(Copied("old")),
             "viz's release still hands it back"
         );
-    }
-
-    // A viz that leaks copies would otherwise leave a window allocating a new
-    // one every frame.
-    #[test]
-    fn a_copy_viz_never_releases_is_taken_back_at_the_leak_deadline() {
-        let now = Instant::now();
-        let mut held =
-            HeldBuffers::with_deadlines(Duration::from_millis(500), Duration::from_secs(10));
-        held.hold(SURFACE, 1, Copied("leaked"), now);
-        held.hold(SURFACE, 2, Copied("on screen"), at(now, 100));
-        held.overstayed(at(now, 600));
-
-        assert!(held.expired(at(now, 10_099)).is_empty());
-        assert_eq!(
-            held.expired(at(now, 10_100)),
-            vec![((SURFACE, 1), Copied("leaked"))]
-        );
-        assert_eq!(held.next_expiry(), None, "what is left is on screen");
-    }
-
-    // A reported copy does not hold back the wake a client's buffer is due.
-    #[test]
-    fn a_reported_copy_leaves_the_next_wake_to_a_clients_buffer() {
-        let now = Instant::now();
-        let mut held: HeldBuffers<Result<&str, Copied>> =
-            HeldBuffers::with_deadlines(Duration::from_millis(500), Duration::from_secs(10));
-        held.hold(SURFACE, 1, Err(Copied("copy")), now);
-        held.hold(SURFACE, 2, Ok("client"), at(now, 300));
-        held.hold(SURFACE, 3, Ok("on screen"), at(now, 400));
-        assert_eq!(held.overstayed(at(now, 800)), vec![(SURFACE, 1)]);
-
-        assert_eq!(held.next_expiry(), Some(at(now, 900)));
     }
 
     // A client's buffer is taken back on time beside a copy left with viz.
