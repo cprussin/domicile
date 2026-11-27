@@ -487,6 +487,7 @@ const extensionsSchema = z.looseObject({
 const browserProfilesSchema = z.looseObject({
   block_lists: z.array(z.string()),
   block_rules: z.array(z.string()),
+  cookie_banner_lists: z.array(z.string()),
   default_private_profile: z.string(),
   default_profile: z.string(),
   profiles: z.array(
@@ -500,6 +501,7 @@ const browserProfilesSchema = z.looseObject({
         block_ads_and_trackers: z.enum(["standard", "strict", "off"]),
         block_third_party_cookies: z.boolean(),
         global_privacy_control: z.boolean(),
+        hide_cookie_banners: z.boolean(),
         hide_device_details: z.boolean(),
         hide_local_ip_address: z.boolean(),
         remove_tracking_from_links: z.boolean(),

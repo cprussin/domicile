@@ -464,13 +464,14 @@ export type WebViewAdBlockingSetFor =
 
 /**
  * The protections a shield turns on and off one by one, beside ad blocking:
- * whether pages read the device's details a little off, and whether links to
- * other sites lose their click ids. Each is off while the page's ad blocking
- * is `off`.
+ * whether pages read the device's details a little off, whether links to
+ * other sites lose their click ids, and whether cookie banners are hidden.
+ * Each is off while the page's ad blocking is `off`.
  */
 export const WEBVIEW_PRIVACY_PROTECTIONS = [
   "hideDeviceDetails",
   "removeTrackingFromLinks",
+  "hideCookieBanners",
 ] as const;
 
 /** One of {@link WEBVIEW_PRIVACY_PROTECTIONS}. */

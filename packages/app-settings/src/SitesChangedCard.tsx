@@ -70,6 +70,10 @@ const MODE_NAMES: Record<
 
 /** What a site has of its own, on or off, in words. */
 const PROTECTION_NAMES: Record<SiteProtection, Record<"off" | "on", string>> = {
+  hide_cookie_banners: {
+    off: "Cookie banners shown",
+    on: "Cookie banners hidden",
+  },
   hide_device_details: {
     off: "Device details not hidden",
     on: "Device details hidden",

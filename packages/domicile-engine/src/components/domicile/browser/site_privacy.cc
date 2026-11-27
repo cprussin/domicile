@@ -22,6 +22,7 @@ void RegisterSitePrivacyPrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(kSiteAdBlockingPref);
   registry->RegisterBooleanPref(kRemoveLinkTrackingPref, true);
   registry->RegisterBooleanPref(kHideDeviceDetailsPref, true);
+  registry->RegisterBooleanPref(kHideCookieBannersPref, true);
   registry->RegisterDictionaryPref(kSiteProtectionsPref);
 }
 
@@ -100,6 +101,8 @@ std::string_view PageProtectionName(PageProtection protection) {
       return "hide_device_details";
     case PageProtection::kRemoveTrackingFromLinks:
       return "remove_tracking_from_links";
+    case PageProtection::kHideCookieBanners:
+      return "hide_cookie_banners";
   }
 }
 
@@ -118,6 +121,8 @@ bool ProfileProtection(const PrefService& prefs, PageProtection protection) {
       return prefs.GetBoolean(kHideDeviceDetailsPref);
     case PageProtection::kRemoveTrackingFromLinks:
       return prefs.GetBoolean(kRemoveLinkTrackingPref);
+    case PageProtection::kHideCookieBanners:
+      return prefs.GetBoolean(kHideCookieBannersPref);
   }
 }
 

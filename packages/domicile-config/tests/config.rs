@@ -873,6 +873,7 @@ fn every_profile_starts_with_every_protection_on() {
         assert!(profile.protections.hide_local_ip_address);
         assert!(profile.protections.remove_tracking_from_links);
         assert!(profile.protections.hide_device_details);
+        assert!(profile.protections.hide_cookie_banners);
     }
 }
 
@@ -893,6 +894,7 @@ fn a_profile_turns_off_the_protections_it_names() {
     assert!(protections.hide_local_ip_address);
     assert!(protections.remove_tracking_from_links);
     assert!(protections.hide_device_details);
+    assert!(protections.hide_cookie_banners);
 }
 
 #[test]
@@ -983,6 +985,46 @@ fn a_block_list_is_an_https_address_or_an_absolute_path() {
     for list in ["http://example.com/list.txt", "lists/mine.txt", ""] {
         let err =
             Config::parse(&browser_config(&format!(r#", "block_lists": [{list:?}]"#))).unwrap_err();
+        assert!(
+            matches!(err, ConfigError::Validation(_)),
+            "{list:?}: got {err:?}"
+        );
+    }
+}
+
+#[test]
+fn cookie_banners_are_hidden_with_the_easylist_cookie_list_and_ublock_origins() {
+    let browser = Config::parse(&browser_config("")).unwrap().browser;
+    assert_eq!(
+        browser.cookie_banner_lists,
+        [
+            "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt",
+            "https://ublockorigin.github.io/uAssets/filters/annoyances-cookies.txt",
+        ]
+    );
+}
+
+#[test]
+fn the_config_names_its_own_cookie_banner_lists() {
+    let browser = Config::parse(&browser_config(
+        r#", "cookie_banner_lists": ["/etc/domicile/cookies.txt"]"#,
+    ))
+    .unwrap()
+    .browser;
+    assert_eq!(browser.cookie_banner_lists, ["/etc/domicile/cookies.txt"]);
+    let none = Config::parse(&browser_config(r#", "cookie_banner_lists": []"#))
+        .unwrap()
+        .browser;
+    assert!(none.cookie_banner_lists.is_empty());
+}
+
+#[test]
+fn a_cookie_banner_list_is_an_https_address_or_an_absolute_path() {
+    for list in ["http://example.com/cookies.txt", "cookies.txt", ""] {
+        let err = Config::parse(&browser_config(&format!(
+            r#", "cookie_banner_lists": [{list:?}]"#
+        )))
+        .unwrap_err();
         assert!(
             matches!(err, ConfigError::Validation(_)),
             "{list:?}: got {err:?}"

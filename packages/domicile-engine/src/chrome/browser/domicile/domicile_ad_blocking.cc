@@ -139,20 +139,25 @@ AdBlocking::AdBlocking() {
 AdBlocking::~AdBlocking() = default;
 
 void AdBlocking::Configure(std::vector<std::string> lists,
-                           std::vector<std::string> rules) {
+                           std::vector<std::string> rules,
+                           std::vector<std::string> cookie_banner_lists) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (configured_ && lists == lists_ && rules == rules_) {
+  if (configured_ && lists == lists_ && rules == rules_ &&
+      cookie_banner_lists == cookie_banner_lists_) {
     return;
   }
   configured_ = true;
   lists_ = std::move(lists);
   rules_ = std::move(rules);
+  cookie_banner_lists_ = std::move(cookie_banner_lists);
   ++generation_;
   // A build under way is for the old config.
   ++build_;
   ready_ = false;
   VLOG(1) << "domicile: ad blocking: reading " << lists_.size()
-          << " block lists, with " << rules_.size() << " rules of the user's";
+          << " block lists and " << cookie_banner_lists_.size()
+          << " cookie banner lists, with " << rules_.size()
+          << " rules of the user's";
   // Paths are read again; fetched lists come from where they were kept.
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
@@ -184,7 +189,7 @@ void AdBlocking::Configure(std::vector<std::string> lists,
             }
             return read;
           },
-          kept_dir_, lists_),
+          kept_dir_, AllLists()),
       base::BindOnce(&AdBlocking::Started, weak_factory_.GetWeakPtr(),
                      generation_));
   if (!refresh_.IsRunning()) {
@@ -203,6 +208,24 @@ void AdBlocking::WhenReady(base::OnceClosure ready) {
   waiting_.push_back(std::move(ready));
 }
 
+std::vector<std::string> AdBlocking::AllLists() const {
+  std::vector<std::string> all = lists_;
+  all.insert(all.end(), cookie_banner_lists_.begin(),
+             cookie_banner_lists_.end());
+  return all;
+}
+
+std::vector<std::string> AdBlocking::TextsOf(
+    const std::vector<std::string>& lists) const {
+  std::vector<std::string> texts;
+  for (const std::string& list : lists) {
+    if (auto found = texts_.find(list); found != texts_.end()) {
+      texts.push_back(found->second);
+    }
+  }
+  return texts;
+}
+
 void AdBlocking::Started(int generation, Read read) {
   if (generation != generation_) {
     return;
@@ -215,30 +238,29 @@ void AdBlocking::Started(int generation, Read read) {
 
 void AdBlocking::Rebuild() {
   const int build = ++build_;
-  std::vector<std::string> texts;
-  for (const std::string& list : lists_) {
-    if (auto found = texts_.find(list); found != texts_.end()) {
-      texts.push_back(found->second);
-    }
-  }
+  std::vector<std::string> texts = TextsOf(lists_);
+  std::vector<std::string> cookie_texts = TextsOf(cookie_banner_lists_);
   VLOG(1) << "domicile: ad blocking: building from " << texts.size() << " of "
-          << lists_.size() << " block lists and " << rules_.size()
-          << " rules of the user's";
-  if (texts.empty() && rules_.empty()) {
+          << lists_.size() << " block lists, " << cookie_texts.size() << " of "
+          << cookie_banner_lists_.size() << " cookie banner lists and "
+          << rules_.size() << " rules of the user's";
+  if (texts.empty() && cookie_texts.empty() && rules_.empty()) {
     Built(build, nullptr);
     return;
   }
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::TaskPriority::USER_BLOCKING},
       base::BindOnce(
-          [](std::vector<std::string> texts, std::vector<std::string> rules) {
+          [](std::vector<std::string> texts, std::vector<std::string> rules,
+             std::vector<std::string> cookie_texts) {
             const base::TimeTicks start = base::TimeTicks::Now();
-            std::unique_ptr<AdBlocker> blocker = AdBlocker::Build(texts, rules);
+            std::unique_ptr<AdBlocker> blocker =
+                AdBlocker::Build(texts, rules, cookie_texts);
             VLOG(1) << "domicile: ad blocking: built in "
                     << (base::TimeTicks::Now() - start);
             return blocker;
           },
-          std::move(texts), rules_),
+          std::move(texts), rules_, std::move(cookie_texts)),
       base::BindOnce(&AdBlocking::Built, weak_factory_.GetWeakPtr(), build));
 }
 
@@ -259,7 +281,7 @@ void AdBlocking::Built(int build, std::unique_ptr<AdBlocker> blocker) {
 
 void AdBlocking::FetchStale() {
   const base::Time now = base::Time::Now();
-  for (const std::string& list : lists_) {
+  for (const std::string& list : AllLists()) {
     if (!IsFetched(list) || fetching_.contains(list)) {
       continue;
     }
@@ -303,7 +325,9 @@ void AdBlocking::Fetched(const std::string& list,
   }
   std::optional<std::string> text = Checked(list, std::move(body));
   // Not `base::Contains`: `base/containers/contains.h` is gone at our pin.
-  if (!text.has_value() || std::ranges::find(lists_, list) == lists_.end()) {
+  if (!text.has_value() || (std::ranges::find(lists_, list) == lists_.end() &&
+                            std::ranges::find(cookie_banner_lists_, list) ==
+                                cookie_banner_lists_.end())) {
     return;
   }
   VLOG(1) << "domicile: ad blocking: fetched " << list << ", "
@@ -410,16 +434,18 @@ class AdBlockingURLLoaderFactory final
       return false;
     }
     const bool strict = mode == AdBlockingMode::kStrict;
+    const bool cookie_banners =
+        privacy.IsOn(PageProtection::kHideCookieBanners);
     const std::string_view type = AdBlockRequestType(request.destination);
-    if (!blocker->ShouldBlock(request.url, page, type, request.method,
-                              strict)) {
+    if (!blocker->ShouldBlock(request.url, page, type, request.method, strict,
+                              cookie_banners)) {
       return false;
     }
     privacy.CountBlocked();
     VLOG(1) << "domicile: ad blocking: blocked a " << type << " request for "
             << request.url.possibly_invalid_spec() << " from "
-            << page.possibly_invalid_spec() << " ("
-            << AdBlockingModeName(mode) << ")";
+            << page.possibly_invalid_spec() << " (" << AdBlockingModeName(mode)
+            << (cookie_banners ? ", cookie banners hidden" : "") << ")";
     return true;
   }
 
@@ -433,8 +459,10 @@ class AdBlockingURLLoaderFactory final
 // goes with the document.
 class CosmeticFiltersHost final : public mojom::CosmeticFiltersHost {
  public:
-  explicit CosmeticFiltersHost(std::vector<std::string> exceptions)
-      : exceptions_(std::move(exceptions)) {}
+  CosmeticFiltersHost(std::vector<std::string> exceptions,
+                      bool hide_cookie_banners)
+      : exceptions_(std::move(exceptions)),
+        hide_cookie_banners_(hide_cookie_banners) {}
 
   // mojom::CosmeticFiltersHost:
   void HiddenSelectors(const std::vector<std::string>& classes,
@@ -447,12 +475,14 @@ class CosmeticFiltersHost final : public mojom::CosmeticFiltersHost {
       std::move(answer).Run({});
       return;
     }
-    std::move(answer).Run(
-        blocker->HiddenClassIdSelectors(classes, ids, exceptions_));
+    std::move(answer).Run(blocker->HiddenClassIdSelectors(
+        classes, ids, exceptions_, hide_cookie_banners_));
   }
 
  private:
   const std::vector<std::string> exceptions_;
+  // As the page was when it committed, as its other filters are.
+  const bool hide_cookie_banners_;
 };
 
 // Sends each website frame of one guest its cosmetic filters before it
@@ -498,19 +528,23 @@ class CosmeticFiltering final
     if (mode == AdBlockingMode::kOff) {
       return;
     }
-    AdBlocker::Cosmetics cosmetics = blocker->CosmeticsFor(url);
+    const bool cookie_banners =
+        navigation->IsInPrimaryMainFrame()
+            ? privacy.IsOnFor(PageProtection::kHideCookieBanners, url)
+            : privacy.IsOn(PageProtection::kHideCookieBanners);
+    AdBlocker::Cosmetics cosmetics = blocker->CosmeticsFor(url, cookie_banners);
     mojo::PendingAssociatedRemote<mojom::CosmeticFiltersHost> host;
     if (!cosmetics.generichide) {
       mojo::MakeSelfOwnedAssociatedReceiver(
-          std::make_unique<CosmeticFiltersHost>(
-              std::move(cosmetics.exceptions)),
+          std::make_unique<CosmeticFiltersHost>(std::move(cosmetics.exceptions),
+                                                cookie_banners),
           host.InitWithNewEndpointAndPassReceiver());
     }
     VLOG(1) << "domicile: ad blocking: hiding "
             << cosmetics.hide_selectors.size() << " selectors"
-            << (cosmetics.generichide ? ", and no generic ones," : "")
-            << " in " << url.possibly_invalid_spec() << " ("
-            << AdBlockingModeName(mode) << ")";
+            << (cosmetics.generichide ? ", and no generic ones," : "") << " in "
+            << url.possibly_invalid_spec() << " (" << AdBlockingModeName(mode)
+            << (cookie_banners ? ", cookie banners hidden" : "") << ")";
     mojo::AssociatedRemote<mojom::CosmeticFilters> frame;
     navigation->GetRenderFrameHost()
         ->GetRemoteAssociatedInterfaces()

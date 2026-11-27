@@ -242,6 +242,7 @@ enum WebViewAdBlockingSetFor {
 enum WebViewProtection {
   kHideDeviceDetails,
   kRemoveTrackingFromLinks,
+  kHideCookieBanners,
 };
 
 // Whether one protection is on for the page, and where that comes from. Off

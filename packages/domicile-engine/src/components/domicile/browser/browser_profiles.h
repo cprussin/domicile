@@ -44,6 +44,8 @@ struct BrowserProtections {
   bool remove_tracking_from_links = true;
   // Farbles what pages read of the device: canvas, audio and CPU count.
   bool hide_device_details = true;
+  // Hides cookie banners with the cookie banner lists.
+  bool hide_cookie_banners = true;
   AdBlockingMode block_ads_and_trackers = AdBlockingMode::kStandard;
 
   friend bool operator==(const BrowserProtections&,
@@ -94,6 +96,8 @@ struct BrowserProfiles {
   std::vector<std::string> block_lists;
   // The user's own filter rules, on top of the lists'.
   std::vector<std::string> block_rules;
+  // The filter lists cookie banners are hidden with, as `block_lists`.
+  std::vector<std::string> cookie_banner_lists;
 };
 
 // The profiles of a desk whose compositor sends none: `default` and
@@ -109,11 +113,14 @@ BrowserProfiles DefaultBrowserProfiles();
 //                                  "hide_local_ip_address": true,
 //                                  "remove_tracking_from_links": true,
 //                                  "hide_device_details": true,
+//                                  "hide_cookie_banners": true,
 //                                  "block_ads_and_trackers": "standard"}}],
 //    "default_profile": "personal", "default_private_profile": "private",
 //    "sites": {"github.com/acme": "work"},
 //    "block_lists": ["https://easylist.to/easylist/easylist.txt"],
-//    "block_rules": ["||ads.example^"]}
+//    "block_rules": ["||ads.example^"],
+//    "cookie_banner_lists": [
+//        "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt"]}
 //
 // Nothing when malformed, or when it contradicts itself as the config refuses
 // to: a default that is no profile or is private, a default private profile

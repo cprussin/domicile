@@ -15,6 +15,9 @@ does; the engine has neither limit.
   `[]` fetches none.
 - **`browser.block_rules`**: rules of the user's own, in the same syntax,
   which apply on top of the lists.
+- **`browser.cookie_banner_lists`**: the lists cookie banners are hidden
+  with, the same way. Unset: the EasyList Cookie List and uBlock Origin's
+  cookie notices (`DEFAULT_COOKIE_BANNER_LISTS`). `[]` hides none.
 - **A profile's `protections.block_ads_and_trackers`**: `standard`, `strict`
   or `off`. Unset: `standard`, or `strict` in a private profile.
 
@@ -28,8 +31,9 @@ sets the first two ([SHELL-BROWSER-WINDOWS.md](../SHELL-BROWSER-WINDOWS.md#ads-a
   the window closes. A shield's "This window only" is a quick fix that ends
   by itself, so it never outlives what it fixed.
 
-Each protection beside it, a profile's `hide_device_details` and
-`remove_tracking_from_links` (`PageProtection`), is the same: its window's,
+Each protection beside it, a profile's `hide_device_details`,
+`remove_tracking_from_links` and `hide_cookie_banners` (`PageProtection`), is
+the same: its window's,
 else its site's (`domicile.privacy.sites`, by name), else its profile's, and
 off on any page whose mode is `off`, so turning a site's shield off turns off
 everything it stands for. `PagePrivacy::IsOnFor` answers for a navigation
@@ -160,6 +164,21 @@ an Electron app's page. `--vmodule=link_tracking_throttle=1` logs each one.
 
 Not yet: the lists' `$removeparam` rules.
 
+## Cookie banners
+
+A profile with `protections.hide_cookie_banners` (on unless set `false`)
+checks its pages against the cookie banner lists too, in Standard and Strict,
+as Brave does with the EasyList Cookie List: a third engine beside the lists'
+and the user's (`AdBlocker`), fetched and kept as the lists are. Its network
+rules block a consent manager's scripts as the lists' do, another site's in
+Standard and any in Strict, and its element rules hide the banner and the
+dimmed page behind it. Its exceptions are its own: an `@@` in the cookie list
+lifts only the cookie list's rules, as one in EasyList lifts only EasyList's.
+
+Hiding a banner answers nothing, so a page that waits for consent before it
+sets its trackers' cookies never sets them. A page that locks its scrolling
+under the banner stays locked until scriptlets land (below).
+
 ## Device details
 
 A site can recognize a browser without a cookie by what it reads of the
@@ -234,6 +253,7 @@ Not yet: procedural filters (`:has-text()`, `:upward()`) and scriptlets
       (`setPrivacyProtection`), and listed in Settings
 - [x] cosmetic filters: what the lists hide by a page's elements
 - [x] tracking taken out of links to other sites
-- [ ] scriptlets and procedural filters, cookie banners, `$removeparam`
+- [x] cookie banners hidden with their own lists, a protection of their own
+- [ ] scriptlets and procedural filters, `$removeparam`
 - [x] fingerprinting protection: canvas, audio and processor count farbled
 - [ ] farbling in workers, WebGL, fonts and the screen
