@@ -963,13 +963,14 @@ fn ads_are_blocked_with_easylist_easyprivacy_and_ublock_origins_filters() {
         ]
     );
     assert!(browser.block_rules.is_empty());
+    assert!(!browser.block_in_electron_apps);
 }
 
 #[test]
 fn the_config_names_its_own_block_lists_and_rules() {
     let browser = Config::parse(&browser_config(
         r#", "block_lists": ["https://example.com/list.txt", "/etc/domicile/mine.txt"],
-            "block_rules": ["||ads.example^"]"#,
+            "block_rules": ["||ads.example^"], "block_in_electron_apps": true"#,
     ))
     .unwrap()
     .browser;
@@ -978,6 +979,7 @@ fn the_config_names_its_own_block_lists_and_rules() {
         ["https://example.com/list.txt", "/etc/domicile/mine.txt"]
     );
     assert_eq!(browser.block_rules, ["||ads.example^"]);
+    assert!(browser.block_in_electron_apps);
 }
 
 #[test]

@@ -273,6 +273,126 @@ TEST_F(AdBlockerTest,
               Not(HasSubstr("mark(")));
 }
 
+using Kind = AdBlocker::Decision::Kind;
+
+// The `$removeparam` rules here name `$script`: an untyped one applies to
+// documents, frames and fetches only, as in uBlock Origin.
+AdBlocker::Decision Decide(const AdBlocker& blocker,
+                           const char* url,
+                           const char* page,
+                           bool strict = kStandard,
+                           const char* method = "GET",
+                           bool cookie_banners = kCookieBannersHidden) {
+  return blocker.Decide(GURL(url), GURL(page), "script", method, strict,
+                        cookie_banners);
+}
+
+std::unique_ptr<AdBlocker> BuiltOf(std::vector<std::string> lists,
+                                   std::vector<std::string> rules = {},
+                                   std::vector<std::string> cookies = {}) {
+  return AdBlocker::Build(lists, rules, cookies, Scriptlets());
+}
+
+TEST(AdBlockerDecideTest, BlocksARedirectItHasNoStandInFor) {
+  EXPECT_EQ(Decide(*BuiltOf({"||ads.example^$script,redirect=noop.js\n"}),
+                   "https://ads.example/a.js", "https://news.example/")
+                .kind,
+            Kind::kBlock);
+}
+
+TEST(AdBlockerDecideTest, AnswersARedirectWithItsStandIn) {
+  std::vector<AdBlocker::Scriptlet> resources = Scriptlets();
+  resources.push_back(
+      ScriptletOf("noop.js", "application/javascript", "(function() {})();"));
+  const std::unique_ptr<AdBlocker> blocker = AdBlocker::Build(
+      {"||ads.example^$script,redirect=noop.js\n"}, {}, {}, resources);
+
+  const AdBlocker::Decision decision =
+      Decide(*blocker, "https://ads.example/a.js", "https://news.example/");
+
+  EXPECT_EQ(decision.kind, Kind::kRedirect);
+  EXPECT_TRUE(decision.url.SchemeIs("data")) << decision.url;
+  EXPECT_TRUE(decision.blocks());
+}
+
+TEST(AdBlockerDecideTest, RemovesTheParametersAListNames) {
+  EXPECT_EQ(Decide(*BuiltOf({"||cdn.example^$script,removeparam=utm_source\n"}),
+                   "https://cdn.example/a.js?utm_source=x&b=1",
+                   "https://news.example/"),
+            (AdBlocker::Decision{.kind = Kind::kRewrite,
+                                 .url = GURL("https://cdn.example/a.js?b=1")}));
+}
+
+TEST(AdBlockerDecideTest, LeavesAPostsParameters) {
+  EXPECT_EQ(Decide(*BuiltOf({"||cdn.example^$script,removeparam=utm_source\n"}),
+                   "https://cdn.example/a.js?utm_source=x",
+                   "https://news.example/", kStandard, "POST")
+                .kind,
+            Kind::kAllow);
+}
+
+TEST(AdBlockerDecideTest, RemovesAListsParametersFromASitesOwnOnlyInStrict) {
+  std::unique_ptr<AdBlocker> blocker =
+      BuiltOf({"$script,removeparam=utm_source\n"});
+  const char* own = "https://news.example/a.js?utm_source=x";
+  EXPECT_EQ(Decide(*blocker, own, "https://news.example/").kind, Kind::kAllow);
+  EXPECT_EQ(Decide(*blocker, own, "https://news.example/", kStrict).kind,
+            Kind::kRewrite);
+}
+
+TEST(AdBlockerDecideTest, RemovesTheUsersParametersEverywhere) {
+  EXPECT_EQ(
+      Decide(*BuiltOf({}, {"$script,removeparam=utm_source"}),
+             "https://news.example/a.js?utm_source=x", "https://news.example/")
+          .kind,
+      Kind::kRewrite);
+}
+
+TEST(AdBlockerDecideTest, RemovesTheCookieListsParametersOnlyWhereItApplies) {
+  std::unique_ptr<AdBlocker> blocker =
+      BuiltOf({}, {}, {"||cdn.example^$script,removeparam=consent\n"});
+  const char* url = "https://cdn.example/a.js?consent=1";
+  EXPECT_EQ(Decide(*blocker, url, "https://news.example/").kind,
+            Kind::kRewrite);
+  EXPECT_EQ(Decide(*blocker, url, "https://news.example/", kStandard, "GET",
+                   !kCookieBannersHidden)
+                .kind,
+            Kind::kAllow);
+}
+
+TEST(AdBlockerCspTest, AddsTheListsAndTheUsersPolicies) {
+  std::unique_ptr<AdBlocker> blocker =
+      BuiltOf({"||news.example^$csp=script-src 'none'\n"},
+              {"||news.example^$csp=img-src 'self'"});
+  EXPECT_EQ(blocker->CspDirectives(GURL("https://news.example/"),
+                                   GURL("https://news.example/"), "document",
+                                   "GET", kCookieBannersHidden),
+            "script-src 'none',img-src 'self'");
+}
+
+TEST(AdBlockerCspTest, IsEmptyWithoutACspRule) {
+  EXPECT_EQ(BuiltOf({"||ads.example^\n"})
+                ->CspDirectives(GURL("https://news.example/"),
+                                GURL("https://news.example/"), "document",
+                                "GET", kCookieBannersHidden),
+            "");
+}
+
+TEST(AdBlockerListExpiryTest, ReadsTheListsExpires) {
+  EXPECT_EQ(
+      AdBlocker::ListExpiry("! Title: A\n! Expires: 4 days\n||ads.example^\n"),
+      base::Days(4));
+  EXPECT_EQ(AdBlocker::ListExpiry("! Expires: 12 hours (update frequency)\n"),
+            base::Hours(12));
+}
+
+TEST(AdBlockerListExpiryTest, IsNothingWithoutOne) {
+  EXPECT_EQ(AdBlocker::ListExpiry("! Title: A\n||ads.example^\n"),
+            std::nullopt);
+  EXPECT_EQ(AdBlocker::ListExpiry("! Expires: soon\n"), std::nullopt);
+  EXPECT_EQ(AdBlocker::ListExpiry(""), std::nullopt);
+}
+
 TEST(AdBlockerScriptletsTest, ReadsAResourcesFilesScriptlets) {
   const std::optional<std::vector<AdBlocker::Scriptlet>> scriptlets =
       AdBlocker::ScriptletsIn(R"([
@@ -295,18 +415,23 @@ TEST(AdBlockerScriptletsTest, ReadsAResourcesFilesScriptlets) {
   EXPECT_EQ((*scriptlets)[2].kind, "application/javascript");
 }
 
-TEST(AdBlockerScriptletsTest, LeavesOutRedirectsAndThoseThatNeedAPermission) {
+TEST(AdBlockerScriptletsTest,
+     KeepsStandInsAndLeavesOutThoseThatNeedAPermission) {
   const std::optional<std::vector<AdBlocker::Scriptlet>> scriptlets =
       AdBlocker::ScriptletsIn(R"([
         {"name": "1x1.gif", "kind": {"mime": "image/gif"}, "content": "Zm4="},
         {"name": "trusted-set.js", "kind": {"mime": "application/javascript"},
          "content": "Zm4=", "permission": 1},
         {"name": "set.js", "kind": {"mime": "application/javascript"},
+         "content": "Zm4="},
+        {"name": "a.wasm", "kind": {"mime": "application/wasm"},
          "content": "Zm4="}
       ])");
   ASSERT_TRUE(scriptlets.has_value());
-  ASSERT_EQ(scriptlets->size(), 1u);
-  EXPECT_EQ((*scriptlets)[0].name, "set.js");
+  ASSERT_EQ(scriptlets->size(), 2u);
+  EXPECT_EQ((*scriptlets)[0].name, "1x1.gif");
+  EXPECT_EQ((*scriptlets)[0].kind, "image/gif");
+  EXPECT_EQ((*scriptlets)[1].name, "set.js");
 }
 
 TEST(AdBlockerScriptletsTest, RefusesAFileThatIsNotAResourcesFile) {

@@ -39,7 +39,7 @@ index 2935537..b73b58a 100644
    // it, as in Electron.
    domicile::ProxyElectronNetworkLoads(frame, factory_builder);
 +  // Then ad blocking, so a request it blocks reaches no extension's
-+  // webRequest, as in Brave. Not an Electron app's pages.
++  // webRequest, as in Brave. An Electron app's only as the config asks.
 +  domicile::ProxyAdBlocking(frame, factory_builder);
  
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)

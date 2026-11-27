@@ -22,8 +22,10 @@
 # goes through LinkTrackingThrottle, that the page it leads to reads the
 # device as DeviceDetailsHiding and patch 0293 farble it, that the scriptlets
 # the lists name are read from the resources file and run in the page's main
-# world before its own scripts (CosmeticFilters, patch 0297), and that each
-# profile's mode is the one used.
+# world before its own scripts (CosmeticFilters, patch 0297), that each
+# request goes through an AdBlockingLoader that answers `$redirect`,
+# `$removeparam` and `$csp` rules and checks a server's redirects, and that
+# each profile's mode is the one used.
 #
 # The list, a file this guard writes, names `/ads/*` and makes an exception for
 # `/ads/allowed.js`, and hides `.site-promo` on 127.0.0.1, `.ad-banner`,
@@ -91,6 +93,21 @@
 #   off:     N N                       the control: no scriptlet runs
 #   banners: R N                       the cookie banner list's alone is left
 #                                      out
+#
+# The list also has a rule of each kind that changes a request rather than
+# blocks it: `/stub/*$script,redirect=noop.js`, with `noop.js` in the
+# resources file, `||localhost^$xmlhttprequest,removeparam=trk` and
+# `||127.0.0.1^$csp=img-src 'none'`; and the page loads a script through a
+# redirect, from an address nothing names to one the list does. As stub rp
+# csp hop:
+#
+#   default: S D A B                   the stand-in ran in place of the
+#                                      server's script; the fetch lost `trk`;
+#                                      the page's image was refused; the
+#                                      redirect was blocked
+#   strict:  S D A B                   the same
+#   off:     L K N L                   the control: the server's script ran
+#                                      and the rest is untouched
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -158,10 +175,15 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
   return 1
 }
 
-# 1. The list, as a path: a guard fetches nothing from the internet.
+# 1. The list, as a path: a guard fetches nothing from the internet. Its `$`s
+#    are the rules' own, not the shell's.
+# shellcheck disable=SC2016
 printf '%s\n' '! a list for guard-ad-blocking.sh' '/ads/*' '@@/ads/allowed.js' \
   '127.0.0.1##.site-promo' '##.ad-banner' '##div[data-ad]' '##.late-ad' \
-  '##.kept' '127.0.0.1#@#.kept' '127.0.0.1##+js(guardlist)' >"$LIST"
+  '##.kept' '127.0.0.1#@#.kept' '127.0.0.1##+js(guardlist)' \
+  '/stub/*$script,redirect=noop.js' \
+  '||localhost^$xmlhttprequest,removeparam=trk' \
+  "||127.0.0.1^\$csp=img-src 'none'" >"$LIST"
 printf '%s\n' '! a cookie banner list for guard-ad-blocking.sh' '/consent/*' \
   '##.cookie-notice' '127.0.0.1##+js(guardbanner)' >"$COOKIES"
 # The scriptlets the lists name, as the resources file the engine fetches
@@ -173,7 +195,10 @@ scriptlet() { # $1 name
   printf '{"name": "%s.js", "kind": {"mime": "application/javascript"}, "content": "%s"}' \
     "$1" "$(printf 'function %s() { scriptletGlobals.guard = true; window.guardScriptlets = (window.guardScriptlets || []).concat("%s"); }' "$1" "$1" | base64 -w0)"
 }
-printf '[%s, %s]\n' "$(scriptlet guardlist)" "$(scriptlet guardbanner)" >"$SCRIPTLETS"
+# And the stand-in a `$redirect` rule answers with, which says it ran.
+NOOP="$(printf '%s' 'window.guardStub = "stubbed";' | base64 -w0)"
+printf '[%s, %s, {"name": "noop.js", "aliases": ["noopjs"], "kind": {"mime": "application/javascript"}, "content": "%s"}]\n' \
+  "$(scriptlet guardlist)" "$(scriptlet guardbanner)" "$NOOP" >"$SCRIPTLETS"
 
 # 2. The pages, on their own server like every <webview> guard's: `crux`
 #    reaches no arbitrary host.
@@ -260,7 +285,12 @@ done
 # strict, off and banners, whether its consent script was Blocked or Loaded
 # and its cookie banner Hidden or Shown (? for no report); then, after another
 # `|`, for each of them again, whether the list's scriptlet and the cookie
-# banner list's had Run before the page's first script or Not.
+# banner list's had Run before the page's first script or Not; then, after a
+# third `|`, for default, strict and off, whether the `$redirect` rule's
+# script was the Stand-in, the server's (Loaded), Blocked, or the stand-in
+# though the server served it too (W), the fetch's `trk` Kept or Dropped,
+# the page's `$csp` Applied or None, and the script a redirect took to a
+# listed address Blocked or Loaded.
 READ="$(awk '
   /GUARD shell-loaded/ { shell = 1 }
   match($0, /GUARD ads as=[a-z0-9-]+( [a-z]+=[a-z]+)+/) {
@@ -295,6 +325,14 @@ READ="$(awk '
       device[a[2] SUBSEP kv[1]] = kv[2]
     }
     read[a[2]] = 1
+  }
+  match($0, /GUARD rules as=[a-z0-9-]+( [a-z]+=[a-z]+)+/) {
+    n = split(substr($0, RSTART + 12, RLENGTH - 12), f, / /)
+    split(f[1], a, /=/)
+    for (i = 2; i <= n; i++) {
+      split(f[i], kv, /=/)
+      rule[a[2] SUBSEP kv[1]] = kv[2]
+    }
   }
   match($0, /^GUARD served as=[a-z0-9-]+ what=[a-z]+$/) {
     split(substr($0, 14), f, /[ =]/)
@@ -350,6 +388,17 @@ READ="$(awk '
     return (list == "ran" ? "R" : list == "none" ? "N" : "?") \
       (banner == "ran" ? "R" : banner == "none" ? "N" : "?")
   }
+  function rules(as,   stub, rp, csp, hop) {
+    stub = rule[as SUBSEP "stub"]
+    rp = rule[as SUBSEP "rp"]
+    csp = rule[as SUBSEP "csp"]
+    hop = rule[as SUBSEP "hop"]
+    return (stub == "stubbed" ? (served[as SUBSEP "stub"] ? "W" : "S") : \
+        stub == "loaded" ? "L" : stub == "blocked" ? "B" : "?") \
+      (rp == "dropped" ? "D" : rp == "kept" ? "K" : "?") \
+      (csp == "applied" ? "A" : csp == "none" ? "N" : "?") \
+      (hop == "blocked" ? "B" : hop == "loaded" ? "L" : "?")
+  }
   function truthful() {
     if (!read["off"]) return "?"
     return device["off" SUBSEP "canvas"] == device["off" SUBSEP "canvas_again"] ? "S" : "V"
@@ -357,28 +406,32 @@ READ="$(awk '
   END {
     leaked = 0
     for (k in served) if (ran[k] == "blocked") leaked += served[k]
-    printf "%d %s %s %s %d %s %s %s %s %s %s %s %s %s | %s %s %s %s | %s %s %s %s\n", shell,
+    printf "%d %s %s %s %d %s %s %s %s %s %s %s %s %s | %s %s %s %s | %s %s %s %s | %s %s %s\n", shell,
       letters("default"), letters("strict"), letters("off"), leaked,
       shown("default"), shown("strict"), shown("off"), reached("default"),
       reached("strict"), reached("off"), farbled("default"), farbled("strict"),
       truthful(), banners("default"), banners("strict"), banners("off"),
       banners("banners"), scriptlets("default"), scriptlets("strict"),
-      scriptlets("off"), scriptlets("banners")
+      scriptlets("off"), scriptlets("banners"), rules("default"),
+      rules("strict"), rules("off")
   }' "$ENGINE_LOG" "$HTTP_LOG" 2>/dev/null)"
 
 MEASURED="${READ%% | *}"
 REST="${READ#* | }"
 BANNERS="${REST%% | *}"
-SCRIPTLETS="${REST#* | }"
+REST="${REST#* | }"
+SCRIPTLETS="${REST%% | *}"
+RULES="${REST#* | }"
 echo
-echo "measured: $MEASURED | $BANNERS | $SCRIPTLETS"
+echo "measured: $MEASURED | $BANNERS | $SCRIPTLETS | $RULES"
 echo "  (shell default strict off leaked, each profile as third first mine allowed ok;"
 echo "   then default strict off, each as site generic complex late kept plain;"
 echo "   then default strict off, each as keep fbclid utm_source;"
 echo "   then default strict as canvas image audio cores again, and off as again;"
 echo "   then default strict off banners, each as consent banner;
    then default strict off banners, each as the list's scriptlet and the
-   cookie banner list's)"
+   cookie banner list's;
+   then default strict off, each as stub rp csp hop)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-ad-blocking-guard.sh`
 # runs the reading and this block directly.
@@ -390,7 +443,9 @@ case "$MEASURED" in
   "BH BH LS LS")
     case "$SCRIPTLETS" in
     "RR RR NN RN")
-      PASSED="a profile's ad blocking reached its pages: default blocked another \
+      case "$RULES" in
+      "SDAB SDAB LKNL")
+        PASSED="a profile's ad blocking reached its pages: default blocked another \
 site's listed script and not the page's own, strict blocked both, the user's \
 rule blocked in either and the list's exception loaded; both hid what the \
 list names by its elements, a late one too, and not the site's exception; a \
@@ -400,7 +455,56 @@ the same way twice; the cookie banner list blocked its script and hid its \
 banner in both, and not with cookie banners shown; off loaded, showed, kept \
 and told everything, and no blocked script reached the server; the \
 lists' scriptlets ran before the page's own scripts, the cookie banner list's \
-only where cookie banners are hidden"
+only where cookie banners are hidden; a \$redirect rule's script was its \
+stand-in, a \$removeparam rule took its parameter off a fetch, a \$csp rule's \
+policy refused the page an image and a redirect to a listed script was \
+blocked, in default and strict, and off changed none of them"
+        ;;
+      *"?"*)
+        FAILURE="a page never said what the lists' rules of other kinds did \
+($RULES): its stand-in script, fetch, image or redirected script never \
+settled, or its rules line lost a field"
+        ;;
+      ????" "????" "[!L]??? | ????" "????" "?[!K]?? | \
+        ????" "????" "??[!N]? | ????" "????" "???[!L])
+        FAILURE="off, with blocking off, was changed by a rule of another kind \
+($RULES), so something other than the blocker did it and the others' results \
+prove nothing"
+        ;;
+      B* | ????" "B*)
+        FAILURE="A \$redirect RULE'S SCRIPT WAS BLOCKED, NOT ANSWERED WITH ITS \
+STAND-IN ($RULES): the stand-in never reached the engine \
+(AdBlocker::ScriptletsIn, use_scriptlets), Decide gave kBlock for a verdict \
+with a redirect, or AdBlockingLoader::Stub failed"
+        ;;
+      W* | ????" "W*)
+        FAILURE="a \$redirect rule's script ran its stand-in but the server \
+served it too ($RULES): the request went on to the network after Stub \
+answered it"
+        ;;
+      L* | ????" "L*)
+        FAILURE="a \$redirect rule's script came from the server ($RULES): the \
+list's rule never matched it, or Decide gave kAllow for it"
+        ;;
+      ?K* | ????" "?K*)
+        FAILURE="THE FETCH KEPT WHAT \$removeparam REMOVES ($RULES): the \
+engine's rewritten_url never reached Decide, Decide gave no kRewrite, or \
+AdBlockingLoader::RedirectTo's redirect was not followed"
+        ;;
+      ??N* | ????" "??N*)
+        FAILURE="THE PAGE TOOK AN IMAGE ITS \$csp REFUSES ($RULES): the policy \
+never reached the document (CheckedInFor for its navigation, \
+AdBlockingLoader::OnReceiveResponse, PopulateParsedHeaders, CspDirectives)"
+        ;;
+      ???L* | ????" "???L*)
+        FAILURE="A REDIRECT TO A LISTED SCRIPT LOADED IT ($RULES): \
+AdBlockingLoader::OnReceiveRedirect never checked the address it goes to"
+        ;;
+      *)
+        FAILURE="a page did something with a rule of another kind this guard \
+can't place ($RULES)"
+        ;;
+      esac
       ;;
     *"?"*)
       FAILURE="a page never said whether the lists' scriptlets ran \

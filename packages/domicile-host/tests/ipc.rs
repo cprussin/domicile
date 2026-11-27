@@ -331,6 +331,7 @@ fn the_browser_profiles_ride_with_the_handshake() {
             block_rules: vec!["||ads.example^".into()],
             cookie_banner_lists: vec!["/etc/domicile/cookies.txt".into()],
             scriptlet_resources: Some("/etc/domicile/scriptlets.json".into()),
+            block_in_electron_apps: true,
         },
     );
 
@@ -349,6 +350,7 @@ fn the_browser_profiles_ride_with_the_handshake() {
             block_rules: vec!["||ads.example^".into()],
             cookie_banner_lists: vec!["/etc/domicile/cookies.txt".into()],
             scriptlet_resources: Some("/etc/domicile/scriptlets.json".into()),
+            block_in_electron_apps: true,
         }),
         "{out:?}"
     );

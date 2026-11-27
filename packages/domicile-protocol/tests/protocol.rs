@@ -305,6 +305,7 @@ fn browser_profiles_wire_shape_is_pinned() {
         block_rules: vec!["||ads.example^".into()],
         cookie_banner_lists: vec!["https://secure.fanboy.co.nz/fanboy-cookiemonster.txt".into()],
         scriptlet_resources: Some("/etc/domicile/scriptlets.json".into()),
+        block_in_electron_apps: true,
     })
     .unwrap();
     assert_eq!(
@@ -334,6 +335,7 @@ fn browser_profiles_wire_shape_is_pinned() {
             "block_rules": ["||ads.example^"],
             "cookie_banner_lists": ["https://secure.fanboy.co.nz/fanboy-cookiemonster.txt"],
             "scriptlet_resources": "/etc/domicile/scriptlets.json",
+            "block_in_electron_apps": true,
         })
     );
 }

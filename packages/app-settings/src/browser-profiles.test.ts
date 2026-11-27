@@ -15,6 +15,7 @@ import {
 } from "./browser-profiles";
 
 const BROWSER: BrowserConfig = {
+  block_in_electron_apps: false,
   block_lists: [],
   block_rules: [],
   cookie_banner_lists: [],

@@ -10,9 +10,9 @@
 #include <string_view>
 #include <vector>
 
+#include "base/time/time.h"
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
-
-class GURL;
+#include "url/gurl.h"
 
 namespace domicile {
 
@@ -36,6 +36,29 @@ std::string_view AdBlockRequestType(network::mojom::RequestDestination);
 // asked where requests start.
 class AdBlocker {
  public:
+  // What to do with one request. See Decide.
+  struct Decision {
+    enum class Kind {
+      kAllow,
+      kBlock,
+      // Answer with `url`, the `data:` URL of a `$redirect` rule's stand-in,
+      // instead of loading.
+      kRedirect,
+      // Load `url`, the request's less what `$removeparam` rules remove.
+      kRewrite,
+    };
+
+    // Whether the request is kept from the network.
+    bool blocks() const {
+      return kind == Kind::kBlock || kind == Kind::kRedirect;
+    }
+
+    friend bool operator==(const Decision&, const Decision&) = default;
+
+    Kind kind = Kind::kAllow;
+    GURL url;
+  };
+
   // What a page at one address hides by its elements (cosmetic filters, as
   // `##.ad` and `example.com##.promo`), before its classes and ids are known.
   struct Cosmetics {
@@ -84,9 +107,9 @@ class AdBlocker {
   };
 
   // The scriptlets in an adblock-rust resources file's text, a JSON array of
-  // resources; nothing when it is not one. Those that aren't JavaScript,
-  // which only `$redirect` rules use, are left out, and so are those that
-  // need a permission, which no list is given.
+  // resources, with the stand-ins `$redirect` rules answer with; nothing when
+  // it is not one. A type adblock-rust doesn't serve is left out, and so is
+  // one that needs a permission, which no list is given.
   static std::optional<std::vector<Scriptlet>> ScriptletsIn(
       std::string_view text);
 
@@ -119,6 +142,33 @@ class AdBlocker {
                    std::string_view method,
                    bool block_first_party,
                    bool hide_cookie_banners) const;
+
+  // ShouldBlock's verdict, with what a blocking rule's `$redirect` answers
+  // instead, when the blocker has that stand-in, and what an allowed
+  // request's `$removeparam` rules remove. A list's `$removeparam` applies
+  // where a list's block would, the user's everywhere, and only a GET or
+  // HEAD is rewritten: a redirect would send a body again.
+  Decision Decide(const GURL& url,
+                  const GURL& page,
+                  std::string_view type,
+                  std::string_view method,
+                  bool block_first_party,
+                  bool hide_cookie_banners) const;
+
+  // The `Content-Security-Policy` the lists' and the user's `$csp` rules add
+  // to the response for `url`, a document or frame of AdBlockRequestType
+  // `type` in the page at `page`, or empty for none: the cookie banner
+  // lists' too with `hide_cookie_banners`. Several are joined by commas, one
+  // policy each, all enforced.
+  std::string CspDirectives(const GURL& url,
+                            const GURL& page,
+                            std::string_view type,
+                            std::string_view method,
+                            bool hide_cookie_banners) const;
+
+  // How long a filter list's `text` says to keep it before it is fetched
+  // again (`! Expires: 4 days`), or nothing when it says nothing.
+  static std::optional<base::TimeDelta> ListExpiry(std::string_view text);
 
   // What the page at `page` hides, the cookie banner lists' too with
   // `hide_cookie_banners`. See docs/architecture/AD-BLOCKING.md.

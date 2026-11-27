@@ -37,7 +37,8 @@ constexpr char kBlocking[] =
     R"("block_lists":["https://easylist.to/easylist/easylist.txt"],)"
     R"("block_rules":["||ads.example^"],)"
     R"("cookie_banner_lists":["/etc/domicile/cookies.txt"],)"
-    R"("scriptlet_resources":"/etc/domicile/scriptlets.json",)";
+    R"("scriptlet_resources":"/etc/domicile/scriptlets.json",)"
+    R"("block_in_electron_apps":true,)";
 
 // A message with these sites and a Personal, Work and Private profile. Work
 // lets third-party cookies through and blocks no ads.
@@ -134,6 +135,7 @@ TEST(BrowserProfilesTest, AMessageReadsTheBlockListsAndRules) {
   EXPECT_EQ(read->cookie_banner_lists,
             std::vector<std::string>{"/etc/domicile/cookies.txt"});
   EXPECT_EQ(read->scriptlet_resources, "/etc/domicile/scriptlets.json");
+  EXPECT_TRUE(read->block_in_electron_apps);
 }
 
 TEST(BrowserProfilesTest, AMessageMayRunNoScriptlets) {
@@ -154,6 +156,14 @@ TEST(BrowserProfilesTest, AMessageWithoutScriptletResourcesIsRefused) {
   const std::string resources =
       R"("scriptlet_resources":"/etc/domicile/scriptlets.json",)";
   message.erase(message.find(resources), resources.size());
+
+  EXPECT_FALSE(ParseBrowserProfiles(Dict(message)));
+}
+
+TEST(BrowserProfilesTest, AMessageWithoutBlockInElectronAppsIsRefused) {
+  std::string message = Message("{}");
+  const std::string electron = R"("block_in_electron_apps":true,)";
+  message.erase(message.find(electron), electron.size());
 
   EXPECT_FALSE(ParseBrowserProfiles(Dict(message)));
 }

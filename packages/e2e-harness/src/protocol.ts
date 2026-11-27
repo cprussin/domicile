@@ -485,6 +485,7 @@ const extensionsSchema = z.looseObject({
 // `browser`. Sent with the handshake and on config reload. The browser process
 // reads it; see `docs/architecture/BROWSER-PROFILES.md`.
 const browserProfilesSchema = z.looseObject({
+  block_in_electron_apps: z.boolean(),
   block_lists: z.array(z.string()),
   block_rules: z.array(z.string()),
   cookie_banner_lists: z.array(z.string()),

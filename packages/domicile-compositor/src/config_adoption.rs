@@ -95,6 +95,7 @@ pub fn hand_over_the_browser_profiles(host: &mut Host, browser: &BrowserConfig) 
             block_rules: browser.block_rules.clone(),
             cookie_banner_lists: browser.cookie_banner_lists.clone(),
             scriptlet_resources: browser.scriptlet_resources.clone(),
+            block_in_electron_apps: browser.block_in_electron_apps,
         },
     );
 }

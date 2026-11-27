@@ -99,6 +99,8 @@ pub struct BrowserFilters {
     pub cookie_banner_lists: Vec<String>,
     /// The scriptlets the lists' `##+js(...)` rules run, if any.
     pub scriptlet_resources: Option<String>,
+    /// Whether Electron apps' web pages are blocked in too, in Standard.
+    pub block_in_electron_apps: bool,
 }
 
 /// A client window, whether or not the chrome has placed it.
@@ -603,6 +605,7 @@ impl Host {
             block_rules: filters.block_rules,
             cookie_banner_lists: filters.cookie_banner_lists,
             scriptlet_resources: filters.scriptlet_resources,
+            block_in_electron_apps: filters.block_in_electron_apps,
         });
     }
 

@@ -914,6 +914,10 @@ pub struct BrowserConfig {
     /// that one is left out. uBlock Origin's scriptlets, as Domicile's CI
     /// builds and publishes them, unless set; `null` runs none.
     pub scriptlet_resources: Option<String>,
+    /// Also blocks ads and trackers in Electron apps' web pages, in
+    /// Standard, with the lists' cosmetic filters too. Off unless set: an app
+    /// has no shield to turn blocking off with when it breaks one.
+    pub block_in_electron_apps: bool,
 }
 
 /// The file [`BrowserConfig::scriptlet_resources`] names unless set: uBlock
@@ -962,6 +966,7 @@ impl Default for BrowserConfig {
             block_rules: Vec::new(),
             cookie_banner_lists: DEFAULT_COOKIE_BANNER_LISTS.map(String::from).to_vec(),
             scriptlet_resources: Some(DEFAULT_SCRIPTLET_RESOURCES.to_string()),
+            block_in_electron_apps: false,
         }
     }
 }

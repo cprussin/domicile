@@ -41,6 +41,7 @@ BLOCKING = {
     "block_rules": [],
     "cookie_banner_lists": [],
     "scriptlet_resources": None,
+    "block_in_electron_apps": False,
 }
 
 

@@ -23,6 +23,10 @@ does; the engine has neither limit.
   may end in `#sha256=` and the file's hash, or an absolute path. Unset:
   uBlock Origin's, as CI builds them (`DEFAULT_SCRIPTLET_RESOURCES`, see
   [Scriptlets](#scriptlets)). `null` runs none.
+- **`browser.block_in_electron_apps`**: also blocks in an Electron app's web
+  pages, in Standard, with the lists' cosmetic filters, as an app's page is
+  in no profile and has no shield. Off unless set: an app can break in ways
+  no shield fixes.
 - **A profile's `protections.block_ads_and_trackers`**: `standard`, `strict`
   or `off`. Unset: `standard`, or `strict` in a private profile.
 
@@ -63,21 +67,22 @@ the breakage strict causes comes from.
 
 The user's rules are a second engine beside the lists', as in Brave, so their
 exceptions (`@@`) can unblock what a list blocks, and their blocks apply in
-either mode. `ShouldBlock` in `components/domicile/ad_blocking/ad_blocker.cc`
+either mode. `Decide` in `components/domicile/ad_blocking/ad_blocker.cc`
 has the order: an `$important` block, then the user's exception, then the
-user's block, then the lists' verdict.
+user's block, then the lists' verdict, and a `$removeparam` rewrite only for
+a request nothing blocks.
 
 ## Pieces
 
-- **`components/domicile/ad_blocking`**: `AdBlocker`, the two engines and
-  `ShouldBlock`, over a cxx bridge (`filter_engine.rs`) to
+- **`components/domicile/ad_blocking`**: `AdBlocker`, its engines and
+  `Decide`, over a cxx bridge (`filter_engine.rs`) to
   [adblock-rust](https://github.com/brave/adblock-rust). adblock-rust's
   public-suffix lookups go back to Chromium's registry (`domains.cc`), so the
   engine carries one list of suffixes, not two.
 - **`chrome/browser/domicile/domicile_ad_blocking.cc`**: `AdBlocking`, one
   per process, which keeps the lists and builds the blocker, and
-  `ProxyAdBlocking`, which puts it in front of a frame's loads, checks each
-  in its page's mode and counts what it blocks.
+  `ProxyAdBlocking`, which puts an `AdBlockingLoader` in front of each of a
+  frame's loads, checks it in its page's mode and counts what it blocks.
 - **`components/domicile/browser/page_privacy.h`**: a page's mode and count,
   which its `<webview>` reports (`SitePrivacyChanged`).
 - **`components/domicile/renderer/cosmetic_filters.h`**: a frame's cosmetic
@@ -98,7 +103,8 @@ An `https:` list is fetched through the system's network context, with no
 profile's cookies, and kept in the user data directory's
 `domicile-block-lists`, by the sha256 of its address. A start builds from
 what it kept, so blocking is up before the network is, then fetches any list
-kept for a day or more; a timer checks every hour. A path is read again at
+kept longer than its `! Expires:` says (`AdBlocker::ListExpiry`; EasyList's
+is 4 days), or a day when it names none; a timer checks every hour. A path is read again at
 each change of the config. A list that can't be read, or isn't UTF-8, is
 left out, and an error names it.
 
@@ -113,14 +119,42 @@ rebuild after a fetch keeps the old blocker until the new one is up.
 Every request a frame of a website's page makes: subresources, frames,
 fetches and WebSockets, whose page is the frame's tab's main page. Not:
 
-- a navigation of the page itself (`document`), which the user asked for;
+- a navigation of the page itself (`document`), which the user asked for,
+  though its response gets the lists' `$csp`;
 - a worker's own loads, which have no frame;
-- an Electron app's pages, the shell's, `domicile:` and `chrome-extension:`
-  pages;
+- an Electron app's pages, unless `browser.block_in_electron_apps`; the
+  shell's, `domicile:` and `chrome-extension:` pages;
 - a request that isn't `http(s)` or `ws(s)`.
 
 A blocked request fails with `ERR_BLOCKED_BY_CLIENT`, which a page sees as a
 network error. `--vmodule=domicile_ad_blocking=1` logs each one.
+
+Each checked request goes through an `AdBlockingLoader`, which acts on
+`AdBlocker::Decide`:
+
+- **`$redirect`**: a blocked request whose rule names a resource is answered
+  with that stand-in (`noop.js`, a 1×1 GIF) from the resources file, as
+  Brave's `MakeStubResponse` does, so a page that waits for the script still
+  runs. It counts as blocked. Without the resource it is only blocked.
+- **`$removeparam`**: an allowed GET or HEAD whose rules remove parameters is
+  redirected to the address without them before the network sees it, as an
+  extension's webRequest redirect is. A list's applies where a list's block
+  would (another site's request, or any in Strict); the user's everywhere.
+- **`$csp`**: a document's or frame's response gets the
+  `Content-Security-Policy` the lists' and the user's rules add, and the
+  cookie banner lists' where cookie banners are hidden, as Brave adds it; a
+  frame tree's own navigation is checked in the mode of the page it goes to.
+- **A server's redirect** is checked as a new request: one to a blocked
+  address fails.
+- **CNAME uncloaking**: a request nothing blocked, that the lists could
+  block (another site's, or any in Strict), is checked again under the
+  canonical name its host resolves to, as Brave does, so a tracker a site
+  serves from a subdomain of its own (`metrics.news.example` →
+  `news.example.tracker.example`) is blocked. The name is asked of the
+  frame's network context, keyed as the frame's own requests are. Not
+  behind a proxy, where the name here is not the one the request reaches
+  and a lookup would tell the DNS server what the proxy hides, and not for
+  an address that is an IP.
 
 `guard-ad-blocking.sh` checks what a page loads and hides in each mode.
 
@@ -167,7 +201,8 @@ keeps everything. It leaves alone a link within one site, whose parameters
 may be its own, a frame's navigation, a POST, back, forward and reload, and
 an Electron app's page. `--vmodule=link_tracking_throttle=1` logs each one.
 
-Not yet: the lists' `$removeparam` rules.
+The lists' `$removeparam` rules apply to a page's requests ([What is
+checked](#what-is-checked)), not to its navigation.
 
 ## Cookie banners
 
@@ -223,6 +258,12 @@ any of its scripts.
   Brave's is. Blink runs no script while it tells a frame's observers the
   document element exists, so the stylesheet goes in there and the
   scriptlets just after.
+
+The same file holds the stand-ins `$redirect` rules answer with ([What is
+checked](#what-is-checked)): each engine gets every resource of a type
+adblock-rust serves, not only scriptlets. CI's release carries uBlock Origin's
+scriptlets only, so until it carries their redirect resources too, a
+`$redirect` rule only blocks.
 
 Only a site's own `##+js` rules run, as in uBlock Origin; `#@#+js(...)`
 lifts one on a site. A page whose mode is off, or a frame the browser sends
@@ -308,6 +349,9 @@ Not yet: procedural filters (`:has-text()`, `:upward()`).
 - [x] tracking taken out of links to other sites
 - [x] cookie banners hidden with their own lists, a protection of their own
 - [x] scriptlets, uBlock Origin's, built in CI and pinned by hash
-- [ ] procedural filters, `$removeparam`
+- [x] `$redirect`, `$removeparam`, `$csp`, redirects and CNAME uncloaking
+- [x] each list kept as long as its `! Expires:` says
+- [x] Electron apps' pages, when the config asks
+- [ ] procedural filters
 - [x] fingerprinting protection: canvas, audio and processor count farbled
 - [ ] farbling in workers, WebGL, fonts and the screen

@@ -45,6 +45,20 @@ each X `hidden` or `shown`:
   plain    .plain          nothing names it
   banner   .cookie-notice  a generic class rule of a cookie banner list's only
 
+With the hidden line it also logs what the lists' rules of other kinds did:
+
+  GUARD rules as=ID stub=X rp=X csp=X hop=X
+
+  stub  localhost/stub/s.js, which a `$redirect=noop.js` rule names:
+        `stubbed` when the stand-in ran, `loaded` when the server's script
+        did, `blocked` when neither
+  rp    whether `trk`, which a `$removeparam` rule removes, reached
+        localhost/echo from a fetch: `kept` or `dropped`
+  csp   whether an image from localhost failed under the `$csp=img-src
+        'none'` the list adds to the page: `applied` or `none`
+  hop   localhost/bounce, which nothing names, redirected to
+        localhost/ads/hop.js, which the list names: `blocked` or `loaded`
+
 Then it follows a link to the other site that carries a click id and a
 campaign parameter, `/landing?as=ID&keep=1&fbclid=f&utm_source=u` at
 localhost, which logs what reached it:
@@ -70,6 +84,7 @@ guard.
 """
 
 import argparse
+import json
 import re
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -114,7 +129,39 @@ PAGE = """<!doctype html>
             document.head.append(script);
           }),
       );
-      Promise.all(settled).then((results) => {
+      // A script a `$redirect` rule answers with a stand-in, a fetch whose
+      // parameter a `$removeparam` rule removes, an image the page's `$csp`
+      // refuses, and a script a redirect takes to a listed address.
+      const loadedScript = (url, how) =>
+        new Promise((resolve) => {
+          const script = document.createElement("script");
+          script.src = url;
+          script.onload = () => resolve(how());
+          script.onerror = () => resolve("blocked");
+          document.head.append(script);
+        });
+      const rules = Promise.all([
+        loadedScript(`http://localhost:${port}/stub/s.js?as=${as}`, () =>
+          window.guardStub === "stubbed" ? "stubbed" : "loaded",
+        ),
+        fetch(`http://localhost:${port}/echo?as=${as}&keep=1&trk=1`)
+          .then((response) => response.json())
+          .then((echoed) => (echoed.keys.includes("trk") ? "kept" : "dropped"))
+          .catch(() => "failed"),
+        new Promise((resolve) => {
+          const image = new Image();
+          image.onload = () => resolve("none");
+          image.onerror = () => resolve("applied");
+          image.src = `http://localhost:${port}/pixel.gif?as=${as}`;
+        }),
+        loadedScript(
+          `http://localhost:${port}/bounce?as=${as}&to=hop`,
+          () => "loaded",
+        ),
+      ]);
+      // Once every request the page makes has settled, so a count of what
+      // was blocked (guard-site-privacy's) is whole when it says so.
+      Promise.all([Promise.all(settled), rules]).then(([results]) => {
         for (const [what, how] of results) ran[what] = how;
         console.log(
           `GUARD ads as=${as} third=${ran.third} first=${ran.first} ` +
@@ -130,7 +177,7 @@ PAGE = """<!doctype html>
         addEventListener("load", resolve);
       });
       const after = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-      Promise.all([...settled, loaded])
+      Promise.all([...settled, loaded, rules])
         .then(() => after(3000))
         .then(() => {
           const late = document.createElement("div");
@@ -150,6 +197,12 @@ PAGE = """<!doctype html>
               `generic=${how("generic")} complex=${how("complex")} ` +
               `late=${how("late")} kept=${how("kept")} plain=${how("plain")} ` +
               `banner=${how("banner")}`,
+          );
+          return rules;
+        })
+        .then(([stub, rp, csp, hop]) => {
+          console.log(
+            `GUARD rules as=${as} stub=${stub} rp=${rp} csp=${csp} hop=${hop}`,
           );
           location.href =
             `http://localhost:${port}/landing?as=${as}&keep=1&fbclid=f&` +
@@ -228,7 +281,15 @@ SCRIPTS = {
     "/ads/allowed.js": "allowed",
     "/ok.js": "ok",
     "/consent/banner.js": "consent",
+    "/stub/s.js": "stub",
+    "/ads/hop.js": "hop",
 }
+
+# A 1×1 transparent GIF.
+PIXEL = bytes.fromhex(
+    "47494638396101000100800000000000ffffff21f90401000000002c"
+    "00000000010001000002024401003b"
+)
 
 # A profile id, as the config allows one. Anything else is not logged as-is.
 ID = re.compile(r"^[a-z0-9-]+$")
@@ -241,15 +302,33 @@ class TwoSites(BaseHTTPRequestHandler):
         url = urlsplit(self.path)
         as_ = parse_qs(url.query).get("as", [""])[0]
         pages = {"/page": PAGE, "/landing": LANDING}
-        if (url.path not in pages and url.path not in SCRIPTS) or not ID.match(as_):
+        others = ("/echo", "/pixel.gif", "/bounce")
+        if (
+            url.path not in pages and url.path not in SCRIPTS and url.path not in others
+        ) or not ID.match(as_):
             self.send_error(
                 404, "this server has /page?as=ID, its scripts and /landing?as=ID"
             )
             return
 
+        if url.path == "/bounce":
+            # To a script the list names, which only a check of the redirect
+            # blocks.
+            self.send_response(302)
+            self.send_header("Location", "/ads/hop.js?as=%s" % as_)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if url.path in pages:
             body = pages[url.path].encode("utf-8")
             kind = "text/html; charset=utf-8"
+        elif url.path == "/echo":
+            # The parameter names that reached it, for another site's fetch.
+            body = json.dumps({"keys": sorted(parse_qs(url.query))}).encode()
+            kind = "application/json"
+        elif url.path == "/pixel.gif":
+            body = PIXEL
+            kind = "image/gif"
         else:
             print("GUARD served as=%s what=%s" % (as_, SCRIPTS[url.path]), flush=True)
             body = b"// a script that ran\n"
@@ -257,6 +336,8 @@ class TwoSites(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", kind)
         self.send_header("Content-Length", str(len(body)))
+        # For the other site's fetch of /echo.
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body)
 

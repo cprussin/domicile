@@ -40,8 +40,8 @@ class AdBlocker;
 // - An `https:` list is fetched through the system's network context, with
 //   no profile's cookies, and kept in the user data directory's
 //   `domicile-block-lists`. A start reads what it kept, so blocking is up
-//   before the network is, and fetches again a list kept for a day or more,
-//   checking every hour.
+//   before the network is, and fetches again a list kept for as long as its
+//   `! Expires:` says, or a day when it says nothing, checking every hour.
 // - A path is read at each change of the config.
 // - A list that cannot be read, or is not UTF-8 text, is left out, and an
 //   error names it.
@@ -68,6 +68,12 @@ class AdBlocking {
                  std::vector<std::string> rules,
                  std::vector<std::string> cookie_banner_lists,
                  std::optional<std::string> scriptlet_resources);
+
+  // The config's `browser.block_in_electron_apps`: whether an Electron
+  // app's web pages are checked too, in Standard. Takes effect at each
+  // request's start.
+  void BlockInElectronApps(bool block) { block_in_electron_apps_ = block; }
+  bool blocks_electron_apps() const { return block_in_electron_apps_; }
 
   // Runs `ready` once the blocker for the config is up: at once, unless the
   // config's lists are being read and built for the first time.
@@ -106,7 +112,10 @@ class AdBlocking {
   // Builds the blocker from the texts in hand, for `generation`.
   void Rebuild();
   void Built(int build, std::unique_ptr<AdBlocker> blocker);
-  // Fetches each `https:` list kept for a day or more, or not kept.
+  // Notes how long `list` is kept, by its `text`'s `! Expires:`.
+  void KeepFor(const std::string& list, const std::string& text);
+  // Fetches each `https:` list kept for as long as KeepFor says, or not
+  // kept.
   void FetchStale();
   void Fetched(const std::string& list,
                std::unique_ptr<network::SimpleURLLoader> loader,
@@ -134,26 +143,37 @@ class AdBlocking {
   std::vector<base::OnceClosure> waiting_;
   std::map<std::string, std::string> texts_;
   std::map<std::string, base::Time> kept_;
+  // How long each list in hand is kept before it is fetched again.
+  std::map<std::string, base::TimeDelta> keep_for_;
   std::set<std::string> fetching_;
+  bool block_in_electron_apps_ = false;
   std::unique_ptr<AdBlocker> blocker_;
   base::RepeatingTimer refresh_;
   base::WeakPtrFactory<AdBlocking> weak_factory_{this};
 };
 
-// Puts AdBlocking in front of `frame`'s network loads: a request a website's
-// page makes, in a profile that blocks ads, fails with
-// ERR_BLOCKED_BY_CLIENT when the blocker says so, and any other goes to the
-// network as before. Not for a worker's loads (no frame), an Electron app's
-// pages, or the shell's and extensions' own pages. Called from
-// ChromeContentBrowserClient::WillCreateURLLoaderFactory.
+// Puts AdBlocking in front of `frame`'s network loads, for each request a
+// website's page makes in a profile that blocks ads:
+// - one the blocker blocks fails with ERR_BLOCKED_BY_CLIENT, and one a
+//   `$redirect` rule names is answered with its stand-in;
+// - one a `$removeparam` rule matches is redirected, before the network sees
+//   it, to its address without those parameters;
+// - one nothing blocks is checked again under the canonical name its host
+//   resolves to (CNAME uncloaking), when it goes straight to the host;
+// - each redirect the network answers is checked as a new request;
+// - a document's response gets the policies `$csp` rules add.
+// Any other request goes to the network as before. An Electron app's pages
+// are checked in Standard when `browser.block_in_electron_apps` asks. Not for
+// a worker's loads (no frame), or the shell's and extensions' own pages.
+// Called from ChromeContentBrowserClient::WillCreateURLLoaderFactory.
 void ProxyAdBlocking(content::RenderFrameHost* frame,
                      network::URLLoaderFactoryBuilder& builder);
 
 // Hides what the lists name by its elements in each website page `guest`
 // commits, in its mode (Standard and Strict alike; Off hides nothing): sends
 // the page's frame its cosmetic filters before it commits, for
-// CosmeticFilters in the renderer. Not an Electron app's pages. From
-// AttachTabHelpers.
+// CosmeticFilters in the renderer. An Electron app's pages in Standard when
+// `browser.block_in_electron_apps` asks. From AttachTabHelpers.
 void AttachCosmeticFiltering(content::WebContents& guest);
 
 }  // namespace domicile

@@ -19,16 +19,17 @@
 # window or that site only, and that what the shell is told matches.
 #
 # The list and the rule are guard-ad-blocking.sh's, so on standard a page's
-# five scripts load as B L B L L (third first mine allowed ok), two blocked.
+# five scripts load as B L B L L (third first mine allowed ok), and with the
+# script a redirect takes to `/ads/hop.js`, three are blocked.
 # The shell (guard-site-privacy.js) draws two <webview>s, a and b, on the same
 # site, and asserted, as the page's scripts and then what the shell read:
 #
-#   1  a1: B L B L L  standard, for the profile, 2 blocked
+#   1  a1: B L B L L  standard, for the profile, 3 blocked
 #   2  a, off for its window: a2 L L L L L, off for the window, 0 blocked
 #   3  b1: B L B L L  b is another window, still standard
 #   4  off for the site, from a, a's own cleared:
 #      a3 and b2: L L L L L, off for the site, 0 blocked
-#   5  b clears the site's: b3 B L B L L, standard for the profile, 2 blocked
+#   5  b clears the site's: b3 B L B L L, standard for the profile, 3 blocked
 #
 # then, on the landing page at localhost, as keep fbclid utm_source and the
 # links and device protections, each on or off and where from, and the page's
@@ -359,7 +360,7 @@ read -r RAN DONE A1 A2 B1 A3 B2 B3 SITE R1 R2 R3 R4A R4B R5 \
 READS="$R1 $R2 $R3 $R4A $R4B $R5"
 BLOCKED="BLBLL"
 LOADED="LLLLL"
-TOLD="standard/profile/2 off/window/0 standard/profile/2 off/site/0 off/site/0 standard/profile/2"
+TOLD="standard/profile/3 off/window/0 standard/profile/3 off/site/0 off/site/0 standard/profile/3"
 PROTECTED="$P6 $P7 $P8 $P9"
 PROTECTED_TOLD="off/window,on/profile on/profile,on/profile off/site,off/site on/profile,on/profile"
 if [ "$RAN" != 1 ]; then
