@@ -69,6 +69,26 @@ describe(createProtocols, () => {
     ]);
   });
 
+  it("keeps the type of a file the handler fetched", async () => {
+    const { protocols, sent } = setUp();
+    const folder = await mkdtemp(`${tmpdir()}/protocol-`);
+    await Bun.write(`${folder}/main.js`, "export {};");
+    protocols
+      .forSession("")
+      .handle("app", () => fetch(`file://${folder}/main.js`));
+    sent.length = 0;
+
+    await protocols.answer(get("app://localhost/main.js"));
+
+    expect(sent[0]).toEqual({
+      headers: [["content-type", "text/javascript;charset=utf-8"]],
+      request: 1,
+      status: 200,
+      stream: true,
+      type: "protocol_response",
+    });
+  });
+
   it("gives a handler the request's body and headers", async () => {
     const { protocols } = setUp();
     let seen = "";
