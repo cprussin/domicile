@@ -341,7 +341,11 @@ fn browser_profiles_wire_shape_is_pinned() {
 #[test]
 fn host_messages_round_trip() {
     host_round_trip(&HostMessage::ShellConfig {
-        keys: [("Return".to_string(), 28), ("l".to_string(), 25)].into(),
+        keys: [
+            ("XF86AudioPlay".to_string(), vec![164, 207]),
+            ("l".to_string(), vec![25]),
+        ]
+        .into(),
         options: r#"{"clock":{"format":"12h"}}"#.to_string(),
     });
 }

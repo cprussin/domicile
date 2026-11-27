@@ -42,6 +42,7 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 
 ### Fixes
 
+- A headset's play button, such as squeezing an AirPod, now plays and pauses, as the keyboard's play/pause key does.
 - The clipboard history's Remove button has a trash icon, so it reads as a button, as Forget does on saved Wi-Fi networks. [Clipboard](CLIPBOARD.md)
 - A Wi-Fi network's sign-in page, as at a hotel or an airport, now opens even when the network is slow to answer at first.
 - Switching tabs no longer slides the new tab past the edge of its group.

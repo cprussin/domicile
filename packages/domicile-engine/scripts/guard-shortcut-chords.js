@@ -3,7 +3,7 @@
 // reports:
 //
 //   GUARD listening                   the channel is bound
-//   GUARD chords bad=<error> missing=<error> page=<…> heard=<chords> released=<chords> inhibited=<…> ungrabbed=<…>
+//   GUARD chords bad=<error> missing=<error> page=<…> heard=<chords> released=<chords> inhibited=<…> ungrabbed=<…> media=<…>
 //
 // `page` is, for Meta+Shift+l, the same held as a repeat, and Meta+k, whether
 // the engine took each from the page; `heard` is every `shortcut`'s chord and
@@ -12,7 +12,9 @@
 // the engine took Meta+Return while `viewer`, which holds a shortcuts
 // inhibitor, had the keyboard, then once the page took it back. `ungrabbed` is whether
 // the engine took Meta+Shift+l after the first of two grabs was given back,
-// then after both were.
+// then after both were. `media` is whether the engine took XF86AudioPlay
+// from each key it is on: the keyboard's play/pause, then a headset's play.
+// Letting go of the first, without Meta, releases the Meta+Return still held.
 
 const thrown = (grab) => {
   try {
@@ -62,9 +64,17 @@ const grabAndPress = (host, heard, released) => {
     once,
     press("KeyL", { metaKey: true, shiftKey: true }),
   ].join(",");
+  host.grabShortcut("XF86AudioPlay");
+  const media = ["MediaPlayPause", "MediaPlay"]
+    .map((code) => {
+      const taken = press(code, {});
+      key("keyup", code, {});
+      return taken;
+    })
+    .join(",");
   setTimeout(() => {
     console.log(
-      `GUARD chords bad=${bad} missing=${missing} page=${page} heard=${heard.join(",")} released=${released.join(",")} inhibited=${inhibited.join(",")} ungrabbed=${ungrabbed}`,
+      `GUARD chords bad=${bad} missing=${missing} page=${page} heard=${heard.join(",")} released=${released.join(",")} inhibited=${inhibited.join(",")} ungrabbed=${ungrabbed} media=${media}`,
     );
   }, 3500);
 };

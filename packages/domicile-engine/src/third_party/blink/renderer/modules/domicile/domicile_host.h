@@ -661,8 +661,9 @@ class MODULES_EXPORT DomicileHost final
   // matches one ratio, so hearing the next change means asking a new one.
   void ReportDevicePixelRatio();
 
-  // The chords grabbed by name: resolve each against `keys_`, and grab every
-  // one whose key moved. See grabShortcut(const String&).
+  // The chords grabbed by name: resolve each against `keys_`, grab every key
+  // each is newly on, and give back every key none is on any more. See
+  // grabShortcut(const String&).
   void ResolveChords();
   // The chord grabbed by name that `press` is, or empty.
   String ChordFor(const DomicilePress& press) const;
@@ -859,12 +860,13 @@ class MODULES_EXPORT DomicileHost final
       Vector<domicile::mojom::blink::ShaderEffectArrayPtr> arrays,
       const String& error);
 
-  // A chord grabbed by name, the press it is on the last keyboard heard, and
-  // how many grabShortcut calls no ungrabShortcut has answered yet.
+  // A chord grabbed by name, a press for each key it is on on the last
+  // keyboard heard, and how many grabShortcut calls no ungrabShortcut has
+  // answered yet.
   struct GrabbedChord {
     String written;
     DomicileWrittenChord chord;
-    std::optional<DomicilePress> press;
+    Vector<DomicilePress> presses;
     uint32_t holds = 1;
     // Whether any grab of it passed `whileInhibited`, so it stays the
     // desktop's while the keyboard window holds a shortcuts inhibitor.
@@ -888,9 +890,9 @@ class MODULES_EXPORT DomicileHost final
     uint32_t holds = 1;
   };
   Vector<GrabbedGesture> gestures_;
-  // Every keysym the keyboard types and the evdev key it is on, from the last
-  // `shell_config`; nullopt until the first.
-  std::optional<HashMap<String, uint32_t>> keys_;
+  // Every keysym the keyboard types and every evdev key it is on, from the
+  // last `shell_config`; nullopt until the first.
+  std::optional<HashMap<String, Vector<uint32_t>>> keys_;
   // `keydown` on the window, once a chord is grabbed by name.
   Member<NativeEventListener> key_listener_;
   // The chords fired and not yet released, wherever they were pressed.

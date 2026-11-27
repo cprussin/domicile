@@ -32,14 +32,14 @@ tells the person when it does not start.
 
 ```
 compositor: keymap.rs ─▶ shell_config { keys } ─▶ engine ─────────────▶ SDK bindKeys
-(keysym → evdev key)                              (grabShortcut(chord): (grabs every chord,
+(keysym → evdev keys)                             (grabShortcut(chord): (grabs every chord,
                                                    resolves, matches,    runs `shortcut` by
                                                    `shortcut.chord`)     chord and mode)
 ```
 
 | Piece | Where | Does |
 |---|---|---|
-| Key table | `domicile-compositor` (`keymap.rs`, `shell_config.rs`) | Maps each keysym the layout can type to the lowest key that types it |
+| Key table | `domicile-compositor` (`keymap.rs`, `shell_config.rs`) | Maps each keysym the layout can type to every key that types it, lowest first |
 | Wire | `HostMessage::ShellConfig { keys }`, `packages/e2e-harness/src/protocol.ts` | Sends the table on connect and when a reload changes the keyboard |
 | Chords | engine `modules/domicile/domicile_chord.*`, `DomicileHost.grabShortcut` | Parses chords and resolves them against the table, again when it changes. Throws `SyntaxError` on a bad chord and `NotFoundError` on a keysym the layout cannot type. A press arrives as `shortcut` with its `chord`, its release as `shortcutrelease` |
 | Modes | `@domicile-desktop/sdk/own-keybindings` | Gives each chord one spelling and files the bindings by mode |
@@ -88,7 +88,8 @@ domicile list-bindings       ─▶ ... ─▶ compositor (which_shell_bindings)
   commands, and TypeScript types them. Cost: a shell that fails to load has no
   keys. Recover with `domicile load-shell` from another VT or ssh.
 - **Chords name keysyms** (`parenleft`), as in sway. The compositor owns the
-  xkb keymap, so it reports which key types each keysym.
+  xkb keymap, so it reports which keys type each keysym. A chord fires from
+  every one: a headset's play button is not the keyboard's.
 - **The compositor sends the key table; the chords stay in the page.** Data
   flows one way, so it needs no reply message. The engine reads the table, so
   a chord is resolved where its press is matched.

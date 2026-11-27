@@ -247,10 +247,10 @@ pub struct Host {
     /// The [`HostMessage::BrowserProfiles`] the config's `browser` makes.
     /// `None` until set; a host without a config sends none.
     browser_profiles: Option<HostMessage>,
-    /// The keysyms the keymap types, with their keys, and the config's shell
+    /// The keysyms the keymap types, with every key each is on, and the config's shell
     /// options as JSON text, for [`HostMessage::ShellConfig`]. `None` until
     /// set, as for `keymap`.
-    shell_config: Option<(BTreeMap<String, u32>, String)>,
+    shell_config: Option<(BTreeMap<String, Vec<u32>>, String)>,
     /// The chromes' theme.
     ///
     /// Not an `Option`: a page always paints in some theme. The default
@@ -635,9 +635,9 @@ impl Host {
         self.spellcheck.clone()
     }
 
-    /// Replace the keysym-to-keycode map and the shell's options, for
+    /// Replace the keysym-to-keycodes map and the shell's options, for
     /// chromes that connect later.
-    pub fn set_shell_config(&mut self, keys: BTreeMap<String, u32>, options: String) {
+    pub fn set_shell_config(&mut self, keys: BTreeMap<String, Vec<u32>>, options: String) {
         self.shell_config = Some((keys, options));
     }
 

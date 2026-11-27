@@ -120,7 +120,11 @@ fn settings_on_the_wire(
 
 /// Give the host the resolved shell keybindings and the shell's options, for
 /// chromes that connect later.
-pub fn hand_over_the_shell_config(host: &mut Host, keys: BTreeMap<String, u32>, options: String) {
+pub fn hand_over_the_shell_config(
+    host: &mut Host,
+    keys: BTreeMap<String, Vec<u32>>,
+    options: String,
+) {
     host.set_shell_config(keys, options);
 }
 

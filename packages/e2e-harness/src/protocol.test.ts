@@ -512,17 +512,17 @@ describe("parseHostMessage", () => {
     ).toThrow();
   });
 
-  it("decodes every keysym's key and the shell's options as JSON text", () => {
+  it("decodes every keysym's keys and the shell's options as JSON text", () => {
     expect(
       parseHostMessage(
         JSON.stringify({
-          keys: { l: 38, Return: 28 },
+          keys: { l: [38], XF86AudioPlay: [164, 207] },
           options: '{"gaps":4}',
           type: "shell_config",
         }),
       ),
     ).toStrictEqual({
-      keys: { l: 38, Return: 28 },
+      keys: { l: [38], XF86AudioPlay: [164, 207] },
       options: '{"gaps":4}',
       type: "shell_config",
     });
@@ -532,7 +532,7 @@ describe("parseHostMessage", () => {
     expect(() =>
       parseHostMessage(
         JSON.stringify({
-          keys: { Return: -1 },
+          keys: { Return: [-1] },
           options: "{}",
           type: "shell_config",
         }),

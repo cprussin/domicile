@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
 
@@ -49,11 +50,11 @@ std::optional<DomicileWrittenChord> ParseDomicileChord(const String& written,
 std::optional<domicile::mojom::blink::TapModifier> ParseDomicileTap(
     const String& written);
 
-// The press `chord` arrives as on a keyboard whose keysyms are on `keys`, or
-// nullopt for a keysym the keyboard cannot type.
-std::optional<DomicilePress> ResolveDomicileChord(
+// Every press `chord` arrives as on a keyboard whose keysyms are on `keys`,
+// one per key its keysym is on; none for a keysym the keyboard cannot type.
+Vector<DomicilePress> ResolveDomicileChord(
     const DomicileWrittenChord& chord,
-    const HashMap<String, uint32_t>& keys);
+    const HashMap<String, Vector<uint32_t>>& keys);
 
 }  // namespace blink
 
