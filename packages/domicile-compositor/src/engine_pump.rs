@@ -435,6 +435,25 @@ impl DomicileCompositor {
                 Returned::Released => {}
                 // Include the app id: if only one window's buffers expire, viz
                 // is probably not drawing that surface.
+                Returned::Expired if matches!(release.buffer, Submitted::Upload(_)) => {
+                    // Separate messages so `app_id` only ever holds an app id.
+                    match self
+                        .engine
+                        .as_ref()
+                        .and_then(|session| session.app_for(release.surface))
+                    {
+                        Some(app_id) => tracing::error!(
+                            app_id,
+                            "the engine never released a copy of this window's frame; taking \
+                             it back, or the window would make a new copy every frame. \
+                             Something in viz is leaking the buffers it has finished with"
+                        ),
+                        None => tracing::error!(
+                            "the engine never released a copy of a frame of a window that has \
+                             since gone; taking it back"
+                        ),
+                    }
+                }
                 Returned::Expired => {
                     // Separate messages so `app_id` only ever holds an app id.
                     // `window_gone` drops all holds when it forgets an app, so
