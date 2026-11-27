@@ -402,6 +402,24 @@ base::expected<void, std::string> SetExtensionEnabledIn(Profile& profile,
   if (enabled) {
     // The user's switch is the consent, as chrome://extensions' prompt is.
     registrar->GrantPermissionsAndEnableExtension(*extension);
+    // A reloading extension, such as one taking the file access the config
+    // sets as it installs, is left to its reload, which keeps every reason it
+    // is off (ExtensionRegistrar::EnableExtension), so a switch off made
+    // before it would win over this one. Only that switch's own reason goes:
+    // the others (policy, blocklist, a permissions increase) stay the
+    // registrar's to judge.
+    extensions::ExtensionPrefs* prefs =
+        extensions::ExtensionPrefs::Get(&profile);
+    if (prefs->HasDisableReason(id,
+                                extensions::disable_reason::DISABLE_RELOAD) &&
+        prefs->HasDisableReason(
+            id, extensions::disable_reason::DISABLE_USER_ACTION)) {
+      LOG(INFO) << "domicile: extension " << id
+                << " is reloading; the switch that turned it off is cleared, "
+                   "so it comes back on.";
+      prefs->RemoveDisableReason(
+          id, extensions::disable_reason::DISABLE_USER_ACTION);
+    }
   } else {
     registrar->DisableExtension(
         id, {extensions::disable_reason::DISABLE_USER_ACTION});

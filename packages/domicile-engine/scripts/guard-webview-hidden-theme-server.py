@@ -3,8 +3,9 @@
 
 One path, `/page`: a page that is yellow in a light color scheme and blue in a
 dark one, so one pixel says which scheme a frame was drawn in. `?mode=control`
-turns it dark itself when it is hidden. It logs `GUARD scheme=<scheme> while
-<visibility>` when the desktop's scheme reaches it. Served over HTTP
+turns it dark itself when it is hidden, and logs `GUARD turned itself dark
+while hidden`. It logs `GUARD scheme=<scheme> while <visibility>` when the
+desktop's scheme reaches it. Served over HTTP
 for guard-webview-guest-page.py's reason: `crux` reaches no arbitrary host,
 and a bundled fixture cannot change under the guard.
 """
@@ -70,6 +71,7 @@ PAGE = b"""<!doctype html>
         document.addEventListener("visibilitychange", () => {
           if (document.visibilityState === "hidden") {
             document.documentElement.style.colorScheme = "dark";
+            console.log("GUARD turned itself dark while hidden");
           }
         });
       }

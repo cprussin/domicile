@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Connor Prussin <connor@prussin.net>
+Date: Fri, 27 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a <webview> logs whether it waits for its page
+
+A <webview> that embeds its page's new surface with the default deadline
+holds the shell's frame until the page draws, which a page paused on a
+dialog never does (patch 0155). guard-webview-paused counted the shell's
+frames to see that, and a frame count moves with the machine's load. Each
+embed now says, at VLOG(1), whether it waits and why, so the guard counts
+the waits themselves.
+---
+ .../blink/renderer/core/frame/remote_frame.cc        | 20 +++++++++++++++-----
+ 1 file changed, 15 insertions(+), 5 deletions(-)
+
+diff --git a/third_party/blink/renderer/core/frame/remote_frame.cc b/third_party/blink/renderer/core/frame/remote_frame.cc
+index 56206a6..0cdcc32 100644
+--- a/third_party/blink/renderer/core/frame/remote_frame.cc
++++ b/third_party/blink/renderer/core/frame/remote_frame.cc
+@@ -6,6 +6,7 @@
+ 
+ #include "base/check.h"
+ #include "base/feature_list.h"
++#include "base/logging.h"
+ #include "base/no_destructor.h"
+ #include "base/timer/elapsed_timer.h"
+ #include "base/types/optional_util.h"
+@@ -1104,11 +1105,20 @@ bool RemoteFrame::SynchronizeVisualProperties(
+   // shows at once too. A page paused on a dialog draws nothing until
+   // answered, and each wait held the shell for the whole deadline.
+   HTMLFrameOwnerElement* owner = DeprecatedLocalOwner();
+-  compositing_helper_->SetSurfaceId(
+-      surface_id, allow_paint_holding,
+-      IsA<HTMLWebViewElement>(owner) &&
+-          (owner->FastHasAttribute(html_names::kResizingAttr) ||
+-           !page_draws_anew));
++  const bool resizing = IsA<HTMLWebViewElement>(owner) &&
++                        owner->FastHasAttribute(html_names::kResizingAttr);
++  const bool at_once =
++      IsA<HTMLWebViewElement>(owner) && (resizing || !page_draws_anew);
++  // Which embeds wait is what decides whether a paused page holds the shell,
++  // so guard-webview-paused.sh counts these rather than frames.
++  if (synchronized_props_changed && IsA<HTMLWebViewElement>(owner)) {
++    VLOG(1) << "domicile: a <webview> embeds its page's new surface "
++            << (at_once ? "at once" : "and waits for the page to draw it")
++            << " (" << (resizing ? "resizing" : "not resizing") << ", "
++            << (page_draws_anew ? "the page draws anew" : "a new scale alone")
++            << ")";
++  }
++  compositing_helper_->SetSurfaceId(surface_id, allow_paint_holding, at_once);
+ 
+   bool rect_changed = !sent_visual_properties_ ||
+                       sent_visual_properties_->rect_in_local_root !=

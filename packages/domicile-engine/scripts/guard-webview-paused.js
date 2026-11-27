@@ -11,7 +11,8 @@
 //
 // Each animation is a CSS one, run on the compositor thread. The shell counts
 // its own frames meanwhile with requestAnimationFrame, which runs only as fast
-// as the shell's frames are shown.
+// as the shell's frames are shown. The guard prints those counts but asserts on
+// the engine's log of each embed, which a busy machine does not move.
 //
 // `?ms=` is each animation's length, and the wait before the first.
 //

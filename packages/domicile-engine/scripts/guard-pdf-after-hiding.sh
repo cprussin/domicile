@@ -101,7 +101,7 @@ rm -f "$ENGINE_LOG"
   --remote-debugging-port=0 \
   --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
-  --enable-logging=stderr --log-level=0 \
+  --enable-logging=stderr --log-level=0 --vmodule=widget_base=1 \
   --domicile-broker-socket="$BROKER" >"$ENGINE_LOG" 2>&1 &
 STARTED+=($!)
 
@@ -110,7 +110,8 @@ MEASURED=""
 if wait_for_line "$TRIES" "GUARD attached" "$ENGINE_LOG"; then
   if DEBUG_PORT="$(devtools_port "$PROFILE" "$TRIES")"; then
     MEASURED="$(python3 "$SCRIPTS/guard-pdf-after-hiding.py" \
-      --port "$DEBUG_PORT" --tries "$((FOR_SECONDS * 2))")"
+      --port "$DEBUG_PORT" --engine-log "$ENGINE_LOG" \
+      --tries "$((FOR_SECONDS * 2))")"
   else
     MEASURED="no-port"
   fi
@@ -128,6 +129,9 @@ before=*\ after=*)
   if [ "$((AFTER * 2))" -lt "$BEFORE" ]; then
     FAILURE="the PDF went blank after its <webview> was hidden and shown again ($AFTER white pixels, $BEFORE before): the viewer frame left the page's frame throttled, so it drew nothing (LocalFrame::WasShown, patch 0214)"
   fi
+  ;;
+hidden=never)
+  FAILURE="the <webview>'s page never said it was hidden after its box was hidden (no widget logged it: WidgetBase::SetHidden, patch 0285), so showing it again tests nothing"
   ;;
 no-port)
   FAILURE="the engine never said which debugging port it took"
