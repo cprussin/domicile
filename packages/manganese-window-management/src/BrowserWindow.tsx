@@ -883,6 +883,19 @@ export const BrowserWindow = ({
                 }
               });
             }}
+            onSetPrivacyProtection={(protection, on, scope) => {
+              withView((loaded) => {
+                try {
+                  loaded.setPrivacyProtection(protection, on, scope);
+                } catch (error: unknown) {
+                  // biome-ignore lint/suspicious/noConsole: the page left its site as the panel was open, so the change has nothing to apply to
+                  console.error(
+                    `Couldn't set ${protection} to ${String(on)} for this ${scope}`,
+                    error,
+                  );
+                }
+              });
+            }}
             onSetSitePermission={(permission, setting) => {
               withView((loaded) => {
                 loaded.setSitePermission(permission, setting);

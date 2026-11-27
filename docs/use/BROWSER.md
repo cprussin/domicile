@@ -211,6 +211,11 @@ Either way the page reloads. Turn the switch back on to block again. The shield
 is outlined while protections are off. You can also pick Strict for one site
 there.
 
+If only one thing breaks a site, such as a sign-in that needs a link's
+tracking, turn just that one off instead: **Hide cookie banners**, **Remove
+tracking from links** and **Hide your device's details** each have a switch
+under the shield, which asks how long the same way.
+
 <!-- tab: Settings app -->
 
 Open **Settings**, then **Privacy**. **Website protections** has a choice of
