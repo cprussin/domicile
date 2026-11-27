@@ -83,6 +83,19 @@ pin() { grep -v '^#' "$PACKAGE/CHROMIUM_PIN" | tr -d '[:space:]'; }
 # engine-reset.sh's `series_files`.
 series_files() { (cd "$SERIES" && find . -type f | sed 's|^\./||'); }
 
+# Lists, as lines to append to `reason`, the series files git does not list as
+# untracked and the untracked files that are not the series'. At most 20 of
+# each, so a reset tree does not print thousands.
+untracked_difference() { # want, got
+  local unlisted stray
+  unlisted="$(LC_ALL=C comm -23 <(printf '%s\n' "$1") <(printf '%s\n' "$2") | sed '/^$/d')"
+  stray="$(LC_ALL=C comm -13 <(printf '%s\n' "$1") <(printf '%s\n' "$2") | sed '/^$/d')"
+  [ -z "$unlisted" ] || printf '\n  series files git does not list as untracked (%s):\n%s' \
+    "$(printf '%s\n' "$unlisted" | wc -l)" "$(printf '%s\n' "$unlisted" | head -20 | sed 's/^/    /')"
+  [ -z "$stray" ] || printf '\n  untracked files that are not the series'"'"' (%s):\n%s' \
+    "$(printf '%s\n' "$stray" | wc -l)" "$(printf '%s\n' "$stray" | head -20 | sed 's/^/    /')"
+}
+
 # Whether the checkout's only changes are the series' untracked files.
 #
 # `--untracked-files=all` because the default collapses an untracked directory
@@ -94,11 +107,15 @@ tree_is_as_applied() {
            sed -n 's/^?? //p' | LC_ALL=C sort)"
   [ "$want" = "$got" ] || {
     reason="the checkout is not dirty the way a finished apply leaves it"
+    reason="$reason$(untracked_difference "$want" "$got")"
     return 1
   }
   # The listing above keeps only `??` lines, so check tracked files separately.
-  [ -z "$(git -C "$CHROMIUM" status --porcelain --untracked-files=no)" ] || {
-    reason="the checkout has modifications to files the series does not own"
+  local modified
+  modified="$(git -C "$CHROMIUM" status --porcelain --untracked-files=no)"
+  [ -z "$modified" ] || {
+    reason="the checkout has modifications to files the series does not own:
+$(printf '%s\n' "$modified" | head -20 | sed 's/^/    /')"
     return 1
   }
   return 0
