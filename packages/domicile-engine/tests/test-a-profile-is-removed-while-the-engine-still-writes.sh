@@ -4,8 +4,11 @@
 #
 # After the browser is killed, its children (the network service among them)
 # keep writing into the profile until they notice. A single `rm -rf` loses
-# that race with "Directory not empty". A writer here stands in for them: a
-# background loop creating files in `Default/`.
+# that race with "Directory not empty", or the next write recreates what it
+# removed. A stand-in for `rm` here plays the writer: after each removal it
+# writes a file back into `Default/`, for a set number of removals or for
+# all of them. The writer counts removals, not seconds, so how busy the
+# machine is cannot change which removal it stops after.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -15,54 +18,66 @@ LIB="$ROOT/packages/domicile-engine/scripts/lib-profile.sh"
 . "$LIB"
 
 WORK="$(mktemp -d)"
-WRITER=""
-trap '[ -z "$WRITER" ] || kill -KILL "$WRITER" 2>/dev/null; rm -rf "$WORK"' EXIT
+trap 'command rm -rf "$WORK"' EXIT
+# Fd 3 is the test's own stderr, since `remove_profile` sends its `rm`'s to
+# /dev/null.
+exec 3>&2
 
-# Writes files into `$1/Default` for `$2` seconds, as fast as it can. With
-# `$3` set, it also recreates `Default`, so the profile never goes.
-a_writer() {
-  local profile="$1" until=$((SECONDS + $2)) recreate="${3:-}" i=0
-  while [ "$SECONDS" -lt "$until" ]; do
-    i=$((i + 1))
-    [ -z "$recreate" ] || mkdir -p "$profile/Default" 2>/dev/null
-    { : >"$profile/Default/f$i"; } 2>/dev/null
-  done
+# The number of removals the writer writes after, or `always`.
+WRITES_AFTER=0
+# The number of times `remove_profile` has removed the profile.
+REMOVALS=0
+# A removal past this many means `remove_profile` never gives up. The test
+# fails then, rather than hang.
+MOST_REMOVALS=100
+
+# This stands in for `remove_profile`'s `rm`. It removes, then lets the
+# writer write once more.
+rm() {
+  command rm "$@"
+  REMOVALS=$((REMOVALS + 1))
+  if [ "$REMOVALS" -gt "$MOST_REMOVALS" ]; then
+    echo "FAIL: removal kept trying past $MOST_REMOVALS removals of a profile still written to" >&3
+    exit 1
+  fi
+  if [ "$WRITES_AFTER" = always ] || [ "$REMOVALS" -le "$WRITES_AFTER" ]; then
+    mkdir -p "$PROFILE/Default" && : >"$PROFILE/Default/f$REMOVALS"
+  fi
 }
 
-# Makes a fresh profile at `$WORK/$1` and starts `a_writer` on it with the
-# rest of the arguments. Sets PROFILE and WRITER.
+# Makes a fresh profile at `$WORK/$1` whose writer writes after `$2`
+# removals. Sets PROFILE.
 a_profile() {
   PROFILE="$WORK/$1"
-  shift
+  WRITES_AFTER="$2"
+  REMOVALS=0
   mkdir -p "$PROFILE/Default"
-  a_writer "$PROFILE" "$@" &
-  WRITER=$!
+  : >"$PROFILE/Default/f0"
 }
 
 failed=0
 
-# A writer that stops within the budget: the profile goes.
-a_profile stops 2
-sleep 0.2
+# A writer that stops: the profile goes once the writer has stopped.
+a_profile stops 3
 remove_profile "$PROFILE" 2>"$WORK/stops.err"
-wait "$WRITER"
 if [ -e "$PROFILE" ]; then
-  echo "FAIL: a profile written to for two seconds was left behind" >&2
+  echo "FAIL: a profile whose writer stopped after 3 removals was left behind after $REMOVALS" >&2
   cat "$WORK/stops.err" >&2
+  failed=1
+elif [ "$REMOVALS" -lt 4 ]; then
+  echo "FAIL: a profile written to after 3 removals was gone after $REMOVALS, before the writer stopped" >&2
   failed=1
 fi
 
-# A writer that outlasts the budget: removal gives up and says so.
-a_profile never 30 recreate
-sleep 0.2
-started=$SECONDS
+# A writer that never stops: removal gives up and says so.
+a_profile never always
 remove_profile "$PROFILE" 2>"$WORK/never.err"
-took=$((SECONDS - started))
-kill -KILL "$WRITER" 2>/dev/null
-wait "$WRITER" 2>/dev/null
-WRITER=""
-if [ "$took" -gt 10 ]; then
-  echo "FAIL: removal kept trying for ${took}s while the profile was written to" >&2
+if [ ! -e "$PROFILE" ]; then
+  echo "FAIL: a profile written to after every removal is gone, so the writer never wrote" >&2
+  failed=1
+fi
+if [ "$REMOVALS" -lt 2 ]; then
+  echo "FAIL: removal gave up after $REMOVALS removal(s) of a profile still written to" >&2
   failed=1
 fi
 if ! grep -qF "$PROFILE" "$WORK/never.err"; then
@@ -71,4 +86,4 @@ if ! grep -qF "$PROFILE" "$WORK/never.err"; then
 fi
 
 [ "$failed" -eq 0 ] || exit 1
-echo "ok: a profile still written to is removed once the writing stops"
+echo "ok: a profile still written to is removed once the writing stops, and given up on while it goes on ($REMOVALS tries)"
