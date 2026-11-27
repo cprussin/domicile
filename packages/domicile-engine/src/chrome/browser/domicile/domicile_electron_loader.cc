@@ -325,6 +325,14 @@ void ElectronURLLoader::Respond(ElectronResponse response) {
     network::ResourceRequest file_request = request_;
     file_request.url = net::FilePathToFileURL(*file);
     headers->RemoveHeader("content-length");
+    // The file loader gives the page these headers as they are, and a
+    // module script with no Content-Type fails strict MIME checking, so
+    // name the type from the file, as Electron does for a file it serves.
+    std::string file_type;
+    if (!headers->HasHeader("content-type") &&
+        net::GetWellKnownMimeTypeFromFile(*file, &file_type)) {
+      headers->SetHeader("Content-Type", file_type);
+    }
     content::CreateFileURLLoaderBypassingSecurityChecks(
         file_request, receiver_.Unbind(), client_.Unbind(),
         /*observer=*/nullptr, /*allow_directory_listing=*/false,
