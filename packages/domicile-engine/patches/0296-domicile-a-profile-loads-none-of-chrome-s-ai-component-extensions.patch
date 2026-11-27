@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 27 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a profile loads none of Chrome's AI component
+ extensions
+
+The field trial testing config turns on `Glic` (study GlicDogfood) and
+`ApiContextualTasksPrivate` (study ContextualTasksRearchitecture), so
+ComponentLoader::AddGlicExtension and AddContextualTasksExtension loaded
+Gemini in Chrome's and Contextual Tasks' extensions into every profile.
+Each one's service worker runs in a renderer of its own, about 30 MiB, at
+startup and again whenever a page opens. A desk has neither feature's UI.
+An Electron app's window woke them in both the desk's profiles, which is
+why the app cost more on the engine than on its own Electron in the
+`electron-app-on-a-tty` VM check.
+
+Both now add nothing.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`. Guarded by guard-no-chrome-component-extensions.
+---
+ chrome/browser/extensions/component_loader.cc | 24 ++++++++----------------
+ 1 file changed, 8 insertions(+), 16 deletions(-)
+
+diff --git a/chrome/browser/extensions/component_loader.cc b/chrome/browser/extensions/component_loader.cc
+index e88059b..241811f 100644
+--- a/chrome/browser/extensions/component_loader.cc
++++ b/chrome/browser/extensions/component_loader.cc
+@@ -586,22 +586,14 @@ void ComponentLoader::AddNewTabPageExtension() {
+ #endif  // BUILDFLAG(ENABLE_WEBUI_NTP)
+ }
+ 
+-void ComponentLoader::AddGlicExtension() {
+-  if (IsApiGlicPrivateEnabled()) {
+-    Add(IDR_GLIC_EXTENSION_MANIFEST,
+-        base::FilePath(FILE_PATH_LITERAL("glic_extension")));
+-  }
+-}
+-
+-void ComponentLoader::AddContextualTasksExtension() {
+-  if (base::FeatureList::IsEnabled(
+-          extensions_features::kApiContextualTasksPrivate) ||
+-      base::FeatureList::IsEnabled(
+-          extensions_features::kApiContextualTasksPrivateAba)) {
+-    Add(IDR_CONTEXTUAL_TASKS_EXTENSION_MANIFEST_JSON,
+-        base::FilePath(FILE_PATH_LITERAL("contextual_tasks_extension")));
+-  }
+-}
++// Domicile's engine fork: a desk has no Gemini in Chrome and no contextual
++// tasks side panel, so neither of their component extensions loads. The field
++// trial testing config turns on the features that load them, and then each
++// one's service worker starts a renderer in every profile, about 30 MiB each,
++// whenever a page opens.
++void ComponentLoader::AddGlicExtension() {}
++
++void ComponentLoader::AddContextualTasksExtension() {}
+ 
+ void ComponentLoader::AddWithNameAndDescription(
+     int manifest_resource_id,

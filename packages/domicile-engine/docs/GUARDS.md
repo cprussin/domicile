@@ -222,6 +222,7 @@ Headless.
 | `guard-webview-tabs.sh` | `tabs.query` and `tabs.setZoom` target the focused `<webview>` (patch 0057), `webNavigation.getAllFrames` lists its page, and `tabs.detectLanguage` is refused |
 | `guard-webview-active-tab.sh` | a tray click grants `activeTab` to the focused tab |
 | `guard-webview-popup-window.sh` | `windows.create({type: "popup"})` opens a browser window the shell draws at the requested size |
+| `guard-no-chrome-component-extensions.sh` | a profile loads neither Gemini in Chrome's nor Contextual Tasks' component extension, read from the Preferences the engine writes as it exits, which must still have the PDF viewer (patch 0296). Control: an extension from `--load-extension` is in them, found by its directory. Headless |
 
 ## Spikes
 

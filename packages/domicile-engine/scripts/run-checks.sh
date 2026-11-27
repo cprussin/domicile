@@ -77,6 +77,7 @@ TOGETHER=(
   guard-exit-unload
   guard-webview-page-picker
   guard-media-services-at-rest
+  guard-no-chrome-component-extensions
   guard-notification-site-icon
   guard-webview-paused
   guard-webview-keyboard

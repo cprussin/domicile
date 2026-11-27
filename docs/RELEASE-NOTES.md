@@ -53,6 +53,7 @@ Each agent gets its own pointer, keyboard and clipboard, in native and browser w
 
 ### Fixes
 
+- The engine no longer loads Chrome's Gemini in Chrome and Contextual Tasks extensions, which started two background processes of about 30 MiB each in every browser profile whenever a page opened.
 - An agent's Ctrl+C in a browser page goes to the agent's clipboard, not the user's, and its Ctrl+V pastes its own copy.
 - A `Popover` grows no taller than the room on its screen, and its body scrolls the rest; a child with `min-block-size: 0` shrinks to scroll a part of itself. `Select` and `Autocomplete` lists cap at the room too.
 - An extension that asks for a page's language, such as Ghostery, is refused and the desktop stays up. [Extensions](SHELL-EXTENSIONS.md)
