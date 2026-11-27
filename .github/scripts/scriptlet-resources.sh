@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build uBlock Origin's scriptlets as the resources file the engine fetches,
+# Build uBlock Origin's scriptlets and redirect stand-ins as the resources
+# file the engine fetches,
 # check it is the one the config pins, and with `--publish` put it on a release
 # in the builds repository.
 #
@@ -7,7 +8,7 @@
 #
 # The config's default `browser.scriptlet_resources`
 # (DEFAULT_SCRIPTLET_RESOURCES in packages/domicile-config/src/lib.rs) names
-# `ublock-origin-scriptlets-<version>/scriptlets.json` in the builds
+# `ublock-origin-resources-<version>/resources.json` in the builds
 # repository and pins it by its sha256, so the engine runs nothing but what
 # this built. This clones uBlock Origin at UBO_VERSION, checks the tag is
 # still UBO_COMMIT, and builds it with scriptlet-resources.ts. A build whose
@@ -45,8 +46,8 @@ esac
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CONFIG="${SCRIPTLETS_CONFIG:-$ROOT/packages/domicile-config/src/lib.rs}"
 BUILDS_REPO="${DOMICILE_BUILDS_REPO:-cprussin/domicile-builds}"
-TAG="ublock-origin-scriptlets-$UBO_VERSION"
-URL="https://github.com/$BUILDS_REPO/releases/download/$TAG/scriptlets.json"
+TAG="ublock-origin-resources-$UBO_VERSION"
+URL="https://github.com/$BUILDS_REPO/releases/download/$TAG/resources.json"
 
 # The pin: the default's address, then its hash.
 PINNED="$(grep -o 'DEFAULT_SCRIPTLET_RESOURCES: &str = "[^"]*"' "$CONFIG" | cut -d'"' -f2 || true)"
@@ -108,9 +109,9 @@ fi
 # Its own directory, apart from the checkout, so nothing in the checkout is
 # taken for this script's.
 mkdir "$work/out"
-bun "$ROOT/.github/scripts/scriptlet-resources.ts" "$CHECKOUT" "$work/out/scriptlets.json"
-BUILT="$(sha256sum "$work/out/scriptlets.json" | cut -d' ' -f1)"
-echo "built $TAG/scriptlets.json, sha256 $BUILT"
+bun "$ROOT/.github/scripts/scriptlet-resources.ts" "$CHECKOUT" "$work/out/resources.json"
+BUILT="$(sha256sum "$work/out/resources.json" | cut -d' ' -f1)"
+echo "built $TAG/resources.json, sha256 $BUILT"
 [ "$BUILT" = "$PIN" ] || {
   echo "the build's sha256 is $BUILT, but DEFAULT_SCRIPTLET_RESOURCES pins $PIN: pin $URL#sha256=$BUILT" >&2
   exit 1
@@ -123,12 +124,12 @@ fi
 : "${GH_TOKEN:?a token with Contents: write on $BUILDS_REPO is required}"
 
 cat >"$work/notes.md" <<NOTES
-uBlock Origin $UBO_VERSION's scriptlets ($UBO_REPO/tree/$UBO_COMMIT/src/js/resources), as the resources file Domicile's engine runs for filter lists' \`##+js(...)\` rules.
+uBlock Origin $UBO_VERSION's scriptlets ($UBO_REPO/tree/$UBO_COMMIT/src/js/resources) and redirect stand-ins ($UBO_REPO/tree/$UBO_COMMIT/src/web_accessible_resources), as the resources file Domicile's engine runs for filter lists' \`##+js(...)\` rules and answers their \`\$redirect\` rules with.
 
 They are uBlock Origin's, under the GPL-3.0 (https://github.com/gorhill/uBlock/blob/$UBO_COMMIT/LICENSE.txt), built by .github/scripts/scriptlet-resources.ts in cprussin/domicile at ${GITHUB_SHA:-a local checkout}. Those that need a trusted list are left out, and those uBlock Origin runs in its isolated world run in the page's.
 
 sha256: $PIN
 NOTES
-gh release create "$TAG" "$work/out/scriptlets.json" --repo "$BUILDS_REPO" \
-  --title "uBlock Origin $UBO_VERSION scriptlets" --notes-file "$work/notes.md"
+gh release create "$TAG" "$work/out/resources.json" --repo "$BUILDS_REPO" \
+  --title "uBlock Origin $UBO_VERSION scriptlets and stand-ins" --notes-file "$work/notes.md"
 echo "published $URL"

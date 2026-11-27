@@ -638,7 +638,7 @@ export const configSchema = z.strictObject({
       },
     },
     scriptlet_resources:
-      "https://github.com/cprussin/domicile-builds/releases/download/ublock-origin-scriptlets-1.77.2/scriptlets.json#sha256=4835b89416f27eea136e571fe23d38f76be26e6bc36d11bd58cf89910035ad6e",
+      "https://github.com/cprussin/domicile-builds/releases/download/ublock-origin-resources-1.77.2/resources.json#sha256=6bd4dd8a5068ab41d2c79caa4b364ce7063cccab92a854d7c97c9a568effc7b8",
     sites: {},
   }),
   electron: electronConfigSchema.prefault({ apps: [] }),

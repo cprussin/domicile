@@ -1035,13 +1035,13 @@ fn a_cookie_banner_list_is_an_https_address_or_an_absolute_path() {
 }
 
 #[test]
-fn scriptlets_are_ublock_origins_pinned_by_their_hash() {
+fn scriptlets_and_stand_ins_are_ublock_origins_pinned_by_their_hash() {
     let browser = Config::parse(&browser_config("")).unwrap().browser;
     let resources = browser.scriptlet_resources.unwrap();
     let (address, pin) = resources.split_once("#sha256=").unwrap();
     assert!(
         address.starts_with(
-            "https://github.com/cprussin/domicile-builds/releases/download/ublock-origin-scriptlets-"
+            "https://github.com/cprussin/domicile-builds/releases/download/ublock-origin-resources-"
         ),
         "{address}"
     );

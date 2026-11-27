@@ -907,12 +907,14 @@ pub struct BrowserConfig {
     /// `block_lists`. The EasyList Cookie List and uBlock Origin's cookie
     /// notices unless set; `[]` hides none.
     pub cookie_banner_lists: Vec<String>,
-    /// The scriptlets the lists' `##+js(...)` rules run in a page, as
+    /// The scriptlets the lists' `##+js(...)` rules run in a page, and the
+    /// stand-ins their `$redirect` rules answer a request with, as
     /// adblock-rust's resources file: an `https:` address, which the engine
     /// fetches and keeps up to date, or an absolute path. An address may end
     /// in `#sha256=` and the file's SHA-256, in hex, so a file that is not
-    /// that one is left out. uBlock Origin's scriptlets, as Domicile's CI
-    /// builds and publishes them, unless set; `null` runs none.
+    /// that one is left out. uBlock Origin's, as Domicile's CI builds and
+    /// publishes them, unless set; `null` runs none, and `$redirect` rules
+    /// only block.
     pub scriptlet_resources: Option<String>,
     /// Also blocks ads and trackers in Electron apps' web pages, in
     /// Standard, with the lists' cosmetic filters too. Off unless set: an app
@@ -921,9 +923,10 @@ pub struct BrowserConfig {
 }
 
 /// The file [`BrowserConfig::scriptlet_resources`] names unless set: uBlock
-/// Origin's scriptlets at the version `.github/scripts/scriptlet-resources.sh`
-/// builds and publishes, by its SHA-256, which that script checks.
-pub const DEFAULT_SCRIPTLET_RESOURCES: &str = "https://github.com/cprussin/domicile-builds/releases/download/ublock-origin-scriptlets-1.77.2/scriptlets.json#sha256=4835b89416f27eea136e571fe23d38f76be26e6bc36d11bd58cf89910035ad6e";
+/// Origin's scriptlets and redirect stand-ins at the version
+/// `.github/scripts/scriptlet-resources.sh` builds and publishes, by its
+/// SHA-256, which that script checks.
+pub const DEFAULT_SCRIPTLET_RESOURCES: &str = "https://github.com/cprussin/domicile-builds/releases/download/ublock-origin-resources-1.77.2/resources.json#sha256=6bd4dd8a5068ab41d2c79caa4b364ce7063cccab92a854d7c97c9a568effc7b8";
 
 /// The lists [`BrowserConfig::cookie_banner_lists`] names unless set.
 pub const DEFAULT_COOKIE_BANNER_LISTS: [&str; 2] = [

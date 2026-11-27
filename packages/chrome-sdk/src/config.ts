@@ -121,12 +121,14 @@ export type BrowserConfig = {
    */
   profiles?: Record<string, BrowserProfile>;
   /**
-   * The scriptlets the lists' `##+js(...)` rules run in a page, as
+   * The scriptlets the lists' `##+js(...)` rules run in a page, and the
+   * stand-ins their `$redirect` rules answer a request with, as
    * adblock-rust's resources file: an `https:` address, which the engine
    * fetches and keeps up to date, or an absolute path. An address may end
    * in `#sha256=` and the file's SHA-256, in hex, so a file that is not
-   * that one is left out. uBlock Origin's scriptlets, as Domicile's CI
-   * builds and publishes them, unless set; `null` runs none.
+   * that one is left out. uBlock Origin's, as Domicile's CI builds and
+   * publishes them, unless set; `null` runs none, and `$redirect` rules
+   * only block.
    */
   scriptlet_resources?: string | null;
   /**
