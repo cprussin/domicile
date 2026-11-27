@@ -401,6 +401,9 @@ The host carries out the webContents members that act on the page with
   `devtools_event {window, method, params, debugger?, session_id?}`, and the
   debugger's client going with its page as `debugger_detached {window,
   reason}`.
+  A client on the engine's debugging port that auto-attaches to new pages,
+  as CDP tools do, is attached to each window's page as it opens, and the
+  page loads on (`guard-electron-debugged.sh`).
 - **Settings** (caret browsing, the WebRTC policy, ignoring input) set
   before the page opens wait for it; the other calls reject. The engine
   puts caret browsing and the WebRTC policy back before each document, over

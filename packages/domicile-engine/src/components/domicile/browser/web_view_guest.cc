@@ -907,6 +907,15 @@ std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
       content::WebContents::Create(params);
 
   guest_contents_ = contents.get();
+  // Chrome's zoom modes, for chrome.tabs.setZoomSettings. The PDF viewer
+  // zooms its own page in manual mode. Before SetDelegate: from then on
+  // NavigationStateChanged reports the zoom, and a page can change state
+  // before `created` returns: a DevTools client auto-attached to new pages
+  // attaches in it, and attaching to a page on its initial empty document
+  // calls DidAccessInitialMainDocument, a URL change.
+  zoom::ZoomController::CreateForWebContents(guest_contents_);
+  zoom_observation_.Observe(
+      zoom::ZoomController::FromWebContents(guest_contents_));
   contents->SetUserData(
       kGuestUserDataKey,
       std::make_unique<GuestLink>(weak_factory_.GetWeakPtr()));
@@ -922,12 +931,6 @@ std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
   settings_observation_.Observe(
       permissions::PermissionsClient::Get()->GetSettingsMap(context));
   download_manager_observation_.Observe(context->GetDownloadManager());
-
-  // Chrome's zoom modes, for chrome.tabs.setZoomSettings. The PDF viewer
-  // zooms its own page in manual mode.
-  zoom::ZoomController::CreateForWebContents(guest_contents_);
-  zoom_observation_.Observe(
-      zoom::ZoomController::FromWebContents(guest_contents_));
 
   // The shield's: the page's ad blocking and its count.
   PagePrivacy::CreateForWebContents(guest_contents_);

@@ -168,6 +168,7 @@ TOGETHER=(
   guard-electron-message-box
   guard-electron-schemes
   guard-electron-session
+  guard-electron-debugged
   guard-electron-views
   guard-electron-web-request
   guard-video-codecs
@@ -207,6 +208,7 @@ ONCE=(
   guard-electron-permissions
   guard-electron-schemes
   guard-electron-session
+  guard-electron-debugged
   guard-electron-socket
   guard-electron-views
   guard-electron-web-request
