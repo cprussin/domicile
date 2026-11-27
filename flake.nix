@@ -2960,7 +2960,9 @@
                       switches = [word[:80] for word in COMMANDS.get(pid, "").split()
                                   if word.startswith("--") and word.split("=")[0] not in COMMON]
                       lines.append(f"{pid} ({pss // 1024} MiB): {' '.join(switches) or 'no other switches'}")
-                  return "; ".join(lines) or "none"
+                  gone = [f"{pid} ({name})" for pid, (name, _, _) in sorted(before.items())
+                          if pid not in after and name.startswith("engine ")]
+                  return ("; ".join(lines) or "none") + f" [exited: {', '.join(gone) or 'none'}]"
 
 
               def measured(side, kib, parts):
@@ -3038,6 +3040,8 @@
                             + f". Engine renderers that started with it on Electron, not counted: {uncounted_pages}")
                   print(f"memory: {memory}", flush=True)
                   assert on_the_engine < on_electron, f"the app cost more on the engine: {memory}"
+                  # TEMPORARY, never to merge: fail every run so CI shows the breakdown.
+                  raise AssertionError(f"diagnostic run: {memory}")
               except Exception:
                   machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
                   for command in [
