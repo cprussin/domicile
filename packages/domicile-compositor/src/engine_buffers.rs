@@ -10,6 +10,13 @@
 //! for a surface has no deadline: viz keeps it because it is the frame on
 //! screen, for as long as the client is idle.
 //!
+//! Only a client's own buffer is taken back, since only its client waits on
+//! it. The compositor's copy of an shm frame stays with viz past the deadline
+//! and is reported once instead: [`crate::uploads`] allocates another copy
+//! when every one is out, so taking it back frees nothing, and copying the
+//! next frame into it while viz still shows it tears the window. A viz
+//! stalled past the deadline does just that.
+//!
 //! A client that renders in place into a single dmabuf is not covered: its
 //! only hold is its newest, so it is never taken back. Shm frames are copied
 //! and released at once, and GL swapchains are at least double-buffered.
@@ -32,6 +39,24 @@ struct Held<B> {
     /// When a newer submission for the same surface replaced this one. The
     /// deadline starts here. `None` while it is the frame on screen.
     superseded: Option<Instant>,
+    /// Whether [`HeldBuffers::overstayed`] has reported it.
+    reported: bool,
+}
+
+impl<B> Held<B> {
+    /// Whether a newer frame replaced it at least `deadline` before `now`.
+    fn overdue(&self, now: Instant, deadline: Duration) -> bool {
+        self.superseded
+            .is_some_and(|superseded| now.duration_since(superseded) >= deadline)
+    }
+}
+
+/// What the deadline does to a held buffer.
+pub trait AtTheDeadline {
+    /// True to take it back, since its owner waits on it. False to leave it
+    /// with viz and report it: nothing waits on it, and drawing into it while
+    /// viz shows it would tear.
+    fn taken_back(&self) -> bool;
 }
 
 /// Why a buffer came back.
@@ -108,6 +133,7 @@ impl<B> HeldBuffers<B> {
                 Held {
                     buffer,
                     superseded: None,
+                    reported: false,
                 },
             )
             .map(|previous| previous.buffer)
@@ -131,40 +157,6 @@ impl<B> HeldBuffers<B> {
             self.held.remove(&surface);
         }
         released
-    }
-
-    /// Removes and returns every superseded buffer past its deadline. The
-    /// caller logs each one.
-    ///
-    /// The newest hold for a surface never expires: viz keeps it because it is
-    /// on screen. The deadline runs from replacement, so viz has time to draw
-    /// the newer frame before the old one is taken back.
-    pub fn expired(&mut self, now: Instant) -> Vec<((SurfaceId, BufferId), B)> {
-        let deadline = self.deadline;
-        let expired = self
-            .held
-            .iter_mut()
-            .flat_map(|(surface, holds)| {
-                holds
-                    .extract_if(|_, held| {
-                        held.superseded
-                            .is_some_and(|superseded| now.duration_since(superseded) >= deadline)
-                    })
-                    .map(|(id, held)| ((*surface, id), held.buffer))
-            })
-            .collect();
-        self.held.retain(|_, holds| !holds.is_empty());
-        expired
-    }
-
-    /// When the soonest superseded hold expires, if any is outstanding.
-    pub fn next_expiry(&self) -> Option<Instant> {
-        self.held
-            .values()
-            .flat_map(HashMap::values)
-            .filter_map(|held| held.superseded)
-            .min()
-            .map(|superseded| superseded + self.deadline)
     }
 
     /// Removes every hold after the engine is lost, split into each surface's
@@ -205,11 +197,134 @@ impl<B> HeldBuffers<B> {
     }
 }
 
+impl<B: AtTheDeadline> HeldBuffers<B> {
+    /// Removes and returns every superseded buffer past its deadline that is
+    /// [taken back](AtTheDeadline::taken_back). The caller logs each one.
+    ///
+    /// The newest hold for a surface never expires: viz keeps it because it is
+    /// on screen. The deadline runs from replacement, so viz has time to draw
+    /// the newer frame before the old one is taken back.
+    pub fn expired(&mut self, now: Instant) -> Vec<((SurfaceId, BufferId), B)> {
+        let deadline = self.deadline;
+        let expired = self
+            .held
+            .iter_mut()
+            .flat_map(|(surface, holds)| {
+                holds
+                    .extract_if(|_, held| held.buffer.taken_back() && held.overdue(now, deadline))
+                    .map(|(id, held)| ((*surface, id), held.buffer))
+            })
+            .collect();
+        self.held.retain(|_, holds| !holds.is_empty());
+        expired
+    }
+
+    /// Every superseded buffer past its deadline that stays with viz, each
+    /// reported only the first time. The caller logs each one. Viz's
+    /// release still hands it back.
+    pub fn overstayed(&mut self, now: Instant) -> Vec<(SurfaceId, BufferId)> {
+        let deadline = self.deadline;
+        let mut overstayed = Vec::new();
+        for (surface, holds) in &mut self.held {
+            for (id, held) in holds.iter_mut() {
+                if !held.buffer.taken_back() && !held.reported && held.overdue(now, deadline) {
+                    held.reported = true;
+                    overstayed.push((*surface, *id));
+                }
+            }
+        }
+        overstayed
+    }
+
+    /// When the soonest superseded hold is due to be taken back or reported,
+    /// if any is.
+    pub fn next_expiry(&self) -> Option<Instant> {
+        self.held
+            .values()
+            .flat_map(HashMap::values)
+            .filter(|held| !held.reported)
+            .filter_map(|held| held.superseded)
+            .min()
+            .map(|superseded| superseded + self.deadline)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     const SURFACE: SurfaceId = 1;
+
+    /// A client's buffer, which its client waits on.
+    impl AtTheDeadline for &str {
+        fn taken_back(&self) -> bool {
+            true
+        }
+    }
+
+    /// The compositor's copy of a client's shm frame.
+    #[derive(Debug, PartialEq)]
+    struct Copied(&'static str);
+
+    impl AtTheDeadline for Copied {
+        fn taken_back(&self) -> bool {
+            false
+        }
+    }
+
+    // Copying the next frame into a copy viz still shows tears the window,
+    // and a stalled viz can show it past the deadline.
+    #[test]
+    fn a_superseded_copy_stays_with_viz_and_is_reported_once() {
+        let now = Instant::now();
+        let mut held = HeldBuffers::with_deadline(Duration::from_millis(500));
+        held.hold(SURFACE, 1, Copied("old"), now);
+        held.hold(SURFACE, 2, Copied("new"), at(now, 100));
+
+        assert_eq!(held.next_expiry(), Some(at(now, 600)));
+        assert!(
+            held.expired(at(now, 600)).is_empty(),
+            "a copy taken back would be drawn into while viz may show it"
+        );
+        assert_eq!(held.overstayed(at(now, 600)), vec![(SURFACE, 1)]);
+        assert!(
+            held.overstayed(at(now, 5_000)).is_empty(),
+            "it is reported once"
+        );
+        assert_eq!(
+            held.next_expiry(),
+            None,
+            "or the loop would wake for it again and again"
+        );
+        assert_eq!(
+            held.release(SURFACE, 1),
+            Some(Copied("old")),
+            "viz's release still hands it back"
+        );
+    }
+
+    // A client's buffer is taken back on time beside a copy left with viz.
+    #[test]
+    fn only_a_clients_buffer_is_taken_back() {
+        let now = Instant::now();
+        let mut held: HeldBuffers<Result<&str, Copied>> =
+            HeldBuffers::with_deadline(Duration::from_millis(500));
+        held.hold(SURFACE, 1, Err(Copied("copy")), now);
+        held.hold(SURFACE, 2, Ok("client"), at(now, 10));
+        held.hold(SURFACE, 3, Ok("on screen"), at(now, 20));
+
+        assert_eq!(
+            held.expired(at(now, 600)),
+            vec![((SURFACE, 2), Ok("client"))]
+        );
+        assert_eq!(held.overstayed(at(now, 600)), vec![(SURFACE, 1)]);
+    }
+
+    impl AtTheDeadline for Result<&str, Copied> {
+        fn taken_back(&self) -> bool {
+            self.is_ok()
+        }
+    }
 
     fn at(base: Instant, millis: u64) -> Instant {
         base + Duration::from_millis(millis)

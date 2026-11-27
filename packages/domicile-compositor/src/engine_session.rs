@@ -20,7 +20,7 @@ use crate::engine::{
     BufferId, Capture, Clipboard, Color, Connector, Dmabuf, Engine, EngineError, Event, Pointer,
     Request, Subsurface, SurfaceId, VirtualDisplay, LIBRARY, NEWEST_BOX,
 };
-use crate::engine_buffers::{HeldBuffers, Returned};
+use crate::engine_buffers::{AtTheDeadline, HeldBuffers, Returned};
 use crate::engine_imports::{Imports, Route, Then};
 use crate::engine_lingering::{Linger, Lingering};
 use crate::engine_retired::Retired;
@@ -38,6 +38,15 @@ use crate::uploads::UploadId;
 pub enum Submitted {
     Client(wl_buffer::WlBuffer),
     Upload(UploadId),
+}
+
+/// A client's buffer is taken back at the deadline, so its client can draw.
+/// An upload is not: [`crate::uploads`] makes another when every one is out,
+/// and copying a frame into one viz still shows tears the window.
+impl AtTheDeadline for Submitted {
+    fn taken_back(&self) -> bool {
+        matches!(self, Submitted::Client(_))
+    }
 }
 
 /// Which buffer a frame shows.
@@ -828,7 +837,27 @@ impl EngineSession {
     }
     /// Buffers viz kept past the deadline, taken back so the client can draw.
     /// Each one is an engine bug, and the caller logs it.
+    ///
+    /// The compositor's copies of shm frames viz kept past the deadline stay
+    /// with viz, and each is logged here once.
     pub fn overdue(&mut self, now: Instant) -> Vec<Release> {
+        for (surface, id) in self.held.overstayed(now) {
+            // Separate messages so `app_id` only ever holds an app id.
+            match self.surfaces.app_for(surface) {
+                Some(app_id) => tracing::error!(
+                    app_id,
+                    buffer = id,
+                    "viz kept a copy of this window's frame past the deadline after a newer \
+                     one replaced it: viz is stalled or leaking it. It stays with viz, since \
+                     copying a frame into it while viz shows it would tear the window"
+                ),
+                None => tracing::error!(
+                    buffer = id,
+                    "viz kept a copy of a frame past the deadline after a newer one \
+                     replaced it, for a window that has since gone. It stays with viz"
+                ),
+            }
+        }
         let (retired, expired): (Vec<_>, Vec<_>) = self
             .held
             .expired(now)
