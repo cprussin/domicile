@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 26 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a container query unknown at first still depends on
+ its units
+
+ContainerQueryEvaluator caches a query's result unless its units say it
+can change without the evaluator hearing of it: rem, viewport and
+container units. MediaQueryEvaluator::EvalFeature recorded a feature's
+units only after evaluating it, so a width query evaluated while its
+container had no size came back unknown with no units. The cache kept
+that result through a root font size change, and with expensive
+DCHECKs on, the next evaluation failed
+`result.unit_flags == actual.unit_flags (0 vs. 2)` in
+container_query_evaluator.cc. Manganese's title bar hides itself with
+`@container (max-width: 10rem)`, which hit it now and then in the VM
+tests and guard-shell-manganese.
+
+EvalFeature now records the units before it can return unknown.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ third_party/blink/renderer/core/css/media_query_evaluator.cc | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/third_party/blink/renderer/core/css/media_query_evaluator.cc b/third_party/blink/renderer/core/css/media_query_evaluator.cc
+index 16f9d12f97722..531aa476fe76b 100644
+--- a/third_party/blink/renderer/core/css/media_query_evaluator.cc
++++ b/third_party/blink/renderer/core/css/media_query_evaluator.cc
+@@ -1646,6 +1646,14 @@ KleeneValue MediaQueryEvaluator::EvalFeature(
+     NOTREACHED();
+   }
+ 
++  // A feature's units are a dependency whether or not it can be evaluated
++  // yet: a container query that was unknown while its container had no size
++  // must still be dropped from ContainerQueryEvaluator's cache when the root
++  // font size or the viewport changes.
++  if (result_flags) {
++    result_flags->unit_flags |= feature.GetUnitFlags();
++  }
++
+   if (!media_values_->Width().has_value() && feature.IsWidthDependent()) {
+     return KleeneValue::kUnknown;
+   }
+@@ -1710,7 +1718,6 @@ KleeneValue MediaQueryEvaluator::EvalFeature(
+         result_flags->is_viewport_dependent || feature.IsViewportDependent();
+     result_flags->is_device_dependent =
+         result_flags->is_device_dependent || feature.IsDeviceDependent();
+-    result_flags->unit_flags |= feature.GetUnitFlags();
+   }
+ 
+   return result ? KleeneValue::kTrue : KleeneValue::kFalse;
+-- 
+2.43.0
+
