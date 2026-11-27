@@ -597,6 +597,11 @@ interface ControlChannel {
   // compositor moves. The browser lets go when the page goes away.
   ConfinePointer(array<gfx.mojom.RectF> boxes) => (bool confined);
 
+  // Where the pointer is on the desk, in the shell page's CSS pixels, or none
+  // when it is off the desk. Answered in the browser process for
+  // WarpPointer's reason. See DeskPointer.
+  PointerPosition() => (gfx.mojom.PointF? at);
+
   // The shell's module ran: its `Shell` returned. Or it did not, and `why` is
   // what the page's error screen says. `serial` is the ShellSource serial the
   // document names, so the browser hears only the page it served. Sent once

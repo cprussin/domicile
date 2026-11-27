@@ -1079,6 +1079,12 @@ export type DomicileHost = {
    */
   confinePointer(boxes: readonly DOMRectReadOnly[]): Promise<boolean>;
   /**
+   * Where the pointer is on the desk, in the shell page's CSS pixels, or null
+   * when it is off the desk. Over a browser window's page too, which this
+   * page cannot see the pointer over. `z` is 0 and `w` is 1.
+   */
+  pointerPosition(): Promise<DOMPointReadOnly | null>;
+  /**
    * Where the page put an <app>, in the page's CSS pixels. The client draws at
    * the scale of the monitor holding most of that box. Layout still places the
    * window; this only tells the compositor where it ended up.

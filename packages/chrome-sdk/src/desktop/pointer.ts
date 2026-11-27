@@ -26,15 +26,28 @@ export type Pointer = {
    * another compositor, or headless.
    */
   confine: (boxes: readonly Box[]) => Promise<boolean>;
+  /**
+   * Where the pointer is, in the shell page's CSS pixels, or `undefined` when
+   * it is off the desk. The engine answers, since the page cannot see the pointer
+   * over a browser window's page.
+   */
+  position: () => Promise<{ x: number; y: number } | undefined>;
 };
 
 const rect = ({ x, y, width, height }: Box): DOMRectReadOnly =>
   new DOMRectReadOnly(x, y, width, height);
 
 export const pointer = (
-  host: Pick<DomicileHost, "confinePointer" | "warpPointer">,
+  host: Pick<
+    DomicileHost,
+    "confinePointer" | "pointerPosition" | "warpPointer"
+  >,
 ): Pointer => ({
   confine: (boxes) => host.confinePointer(boxes.map(rect)),
+  position: async () => {
+    const at = await host.pointerPosition();
+    return at === null ? undefined : { x: at.x, y: at.y };
+  },
   warp: (x, y, onlyOver, unlessOver) => {
     host.warpPointer(
       x,

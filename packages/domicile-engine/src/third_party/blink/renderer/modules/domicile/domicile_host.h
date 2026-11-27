@@ -50,6 +50,7 @@ namespace blink {
 template <typename IDLType>
 class FrozenArray;
 
+class DOMPointReadOnly;
 class DOMRectReadOnly;
 class DomicileBrowserProfile;
 class DomicileBrowserWindow;
@@ -209,6 +210,9 @@ class MODULES_EXPORT DomicileHost final
   ScriptPromise<IDLBoolean> confinePointer(
       ScriptState*,
       const HeapVector<Member<DOMRectReadOnly>>& boxes,
+      ExceptionState&);
+  ScriptPromise<IDLNullable<DOMPointReadOnly>> pointerPosition(
+      ScriptState*,
       ExceptionState&);
   void setAppBounds(ScriptState*,
                     const String& app_id,

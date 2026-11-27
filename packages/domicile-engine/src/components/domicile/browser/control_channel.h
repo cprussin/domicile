@@ -196,6 +196,7 @@ class ControlChannel : public mojom::ControlChannel {
                    const std::optional<gfx::RectF>& unless_over) override;
   void ConfinePointer(const std::vector<gfx::RectF>& boxes,
                       ConfinePointerCallback confined) override;
+  void PointerPosition(PointerPositionCallback answer) override;
   void CloseApp(const std::string& app_id) override;
   void TakeOver(const std::string& app_id) override;
   void GiveBack(const std::string& app_id) override;

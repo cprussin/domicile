@@ -961,6 +961,26 @@ TEST_F(ControlChannelTest, ConfiningThePointerStopsInTheBrowser) {
   EXPECT_EQ(confined_to_[0].height(), 200);
 }
 
+// A page asking where the pointer is hears the browser's answer, and nothing
+// reaches the compositor.
+TEST_F(ControlChannelTest, WhereThePointerIsComesFromTheBrowser) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), kHello);
+  DeskPointer::Get().MovedTo({.at = gfx::PointF(12.5, 40)});
+  EXPECT_EQ(Heard(), R"({"at":[12.5,40.0],"type":"desk_pointer"})");
+
+  base::test::TestFuture<const std::optional<gfx::PointF>&> on;
+  control_->PointerPosition(on.GetCallback());
+  EXPECT_EQ(on.Get(), gfx::PointF(12.5, 40));
+
+  DeskPointer::Get().MovedTo({});
+  EXPECT_EQ(Heard(), R"({"type":"desk_pointer"})");
+  base::test::TestFuture<const std::optional<gfx::PointF>&> off;
+  control_->PointerPosition(off.GetCallback());
+  EXPECT_EQ(off.Get(), std::nullopt);
+}
+
 // A window's ask to lock or confine the pointer reaches the page, `null`
 // withdraws it, and a kind this engine does not know is dropped.
 TEST_F(ControlChannelTest, APointerConstraintReachesThePage) {

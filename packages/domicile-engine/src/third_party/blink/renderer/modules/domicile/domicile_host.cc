@@ -42,6 +42,7 @@
 #include "third_party/blink/renderer/core/dom/events/custom_event.h"
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
+#include "third_party/blink/renderer/core/geometry/dom_point_read_only.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect_read_only.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/event_target_names.h"
@@ -803,6 +804,13 @@ void SettleConfinement(ScriptPromiseResolver<IDLBoolean>* resolver,
   resolver->Resolve(confined);
 }
 
+void SettlePointerPosition(
+    ScriptPromiseResolver<IDLNullable<DOMPointReadOnly>>* resolver,
+    const std::optional<gfx::PointF>& at) {
+  resolver->Resolve(at ? DOMPointReadOnly::Create(at->x(), at->y(), 0, 1)
+                       : nullptr);
+}
+
 }  // namespace
 
 ScriptPromise<IDLBoolean> DomicileHost::confinePointer(
@@ -830,6 +838,21 @@ ScriptPromise<IDLBoolean> DomicileHost::confinePointer(
   auto promise = resolver->Promise();
   channel_->ConfinePointer(
       held, BindOnce(&SettleConfinement, WrapPersistent(resolver)));
+  return promise;
+}
+
+ScriptPromise<IDLNullable<DOMPointReadOnly>> DomicileHost::pointerPosition(
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<
+      ScriptPromiseResolver<IDLNullable<DOMPointReadOnly>>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  channel_->PointerPosition(
+      BindOnce(&SettlePointerPosition, WrapPersistent(resolver)));
   return promise;
 }
 

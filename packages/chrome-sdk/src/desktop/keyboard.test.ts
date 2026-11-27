@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { FakeDomicileHost } from "../fake-host";
 import { KeymapChoice } from "../keymap-choice";
 import { desktop } from "./desktop";
+import { pointer } from "./pointer";
 
 const pressed = {
   altKey: false,
@@ -134,6 +135,19 @@ describe("pointer", () => {
       ["confinePointer", [new DOMRectReadOnly(1, 2, 3, 4)]],
       ["confinePointer", []],
     ]);
+  });
+
+  it("asks the engine where the pointer is, and hears it is off the desk", async () => {
+    const answering = (at: DOMPointReadOnly | null) => ({
+      confinePointer: () => Promise.resolve(false),
+      pointerPosition: () => Promise.resolve(at),
+      warpPointer: () => undefined,
+    });
+
+    expect(
+      await pointer(answering(new DOMPointReadOnly(12.5, 40))).position(),
+    ).toStrictEqual({ x: 12.5, y: 40 });
+    expect(await pointer(answering(null)).position()).toBeUndefined();
   });
 
   it("hears the keymaps and switches them through the compositor", async () => {

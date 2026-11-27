@@ -810,6 +810,11 @@ the old window is still under the pointer. Move the pointer with
 - `shell-manganese` warps on its own focus changes (keyboard-driven, or a new
   window taking focus) only when the pointer is over another window.
 
+`domicile.pointer.position()` gives where the pointer is now, in the same
+coordinates, or `undefined` when it is off the desk. Use it to show something
+at the pointer, such as the new keyboard layout after a switch. The engine
+answers, so it is correct over a browser window's page too.
+
 ### Window scale on several monitors
 
 Call `domicile.windows.setBounds(appId, { x, y, width, height })` with each

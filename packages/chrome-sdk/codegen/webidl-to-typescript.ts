@@ -35,6 +35,7 @@ const PRIMITIVES: Readonly<Record<string, string>> = {
 
 /** Interfaces and typed arrays `lib.dom` declares, which the IDL takes by name. */
 const PLATFORM_TYPES: ReadonlySet<string> = new Set([
+  "DOMPointReadOnly",
   "DOMRectReadOnly",
   "Element",
   "Float32Array",

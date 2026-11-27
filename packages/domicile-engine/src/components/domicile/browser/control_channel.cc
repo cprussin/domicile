@@ -783,6 +783,11 @@ void ControlChannel::ConfinePointer(const std::vector<gfx::RectF>& boxes,
                     base::BindPostTaskToCurrentDefault(std::move(confined)));
 }
 
+// Nothing is sent, for WarpPointer's reason.
+void ControlChannel::PointerPosition(PointerPositionCallback answer) {
+  std::move(answer).Run(DeskPointer::Get().Now().at);
+}
+
 // Nothing is sent, for WarpPointer's reason: the compositor does not swap
 // shells. What the page says goes to the `load_shell` waiting on it.
 void ControlChannel::ShellRan(const std::string& serial) {

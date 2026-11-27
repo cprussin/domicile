@@ -55,6 +55,8 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # AdBlocker 15, AdBlockRequestType 1, AgentClipboards 6, CosmeticStylesheet 3, SitePrivacy 7,
 # LinkTracking 4, DeviceDetails 4.
 #
+# 1173, and it was 1172 — the page asking where the pointer is, is one
+# ControlChannel case. Before that
 # 1172, and it was 1168 — reading the device's details a little off is four
 # DeviceDetails cases. Before that
 # 1168, and it was 1164 — taking the tracking out of links is four
@@ -411,7 +413,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=1172
+FLOOR=1173
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

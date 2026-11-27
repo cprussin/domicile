@@ -49,7 +49,7 @@ The engine has two channels to the rest of Domicile:
   `displays`, `keymap`, `extensions`, `force_dark`, `spellcheck`, `tray`, `notifications`, `shell_config`,
   `idle`, `locked`, `system`, `portal_requests`.
 - **Handled in the browser, never sent to the compositor:** `grab_shortcut`,
-  `ungrab_shortcut`, `warp_pointer`, `confine_pointer`, and
+  `ungrab_shortcut`, `warp_pointer`, `confine_pointer`, `PointerPosition`, and
   `ShellRan`/`ShellFailed`, which
   `DomicileShell` sends once the shell's module ran or did not, for
   `load_shell` (below).
@@ -153,6 +153,13 @@ The engine has two channels to the rest of Domicile:
     `chrome/browser/domicile/domicile_pointer_warp.cc`.
   - The move that lands a warp reaches no client as relative motion: nobody
     moved the mouse. See `components/domicile/common/warp_landing.h`.
+- **`PointerPosition`**: answers where the pointer is on the desk, in the
+  shell page's coordinates, from `DeskPointer::Now()`, or none off the desk.
+  The page cannot see the pointer over a browser window's page.
+  - Use: showing something at the pointer, such as the keyboard layout after
+    a switch.
+  - Logic: `components/domicile/browser/desk_pointer.h`. Tests:
+    `ControlChannelTest.WhereThePointerIsComesFromTheBrowser`.
 - **`confine_pointer`**: holds the pointer inside boxes in the page's
   coordinates, for a game or VM viewer whose `zwp_pointer_constraints_v1`
   confinement the shell took. An empty list lets go, as does the page going
