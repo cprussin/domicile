@@ -20,7 +20,9 @@
 # guard), that its frames get their cosmetic filters (CosmeticFiltering and
 # the renderer's CosmeticFilters, patch 0292), that a link to another site
 # goes through LinkTrackingThrottle, that the page it leads to reads the
-# device as DeviceDetailsHiding and patch 0293 farble it, and that each
+# device as DeviceDetailsHiding and patch 0293 farble it, that the scriptlets
+# the lists name are read from the resources file and run in the page's main
+# world before its own scripts (CosmeticFilters, patch 0297), and that each
 # profile's mode is the one used.
 #
 # The list, a file this guard writes, names `/ads/*` and makes an exception for
@@ -78,6 +80,17 @@
 #   off:     L S                       the control: nothing is blocked
 #   banners: L S                       the protection off: the cookie banner
 #                                      list alone is left out
+#
+# The list names a scriptlet for 127.0.0.1, `##+js(guardlist)`, and the cookie
+# banner list another, `guardbanner`, both from a resources file this guard
+# writes in place of the release's. As whether each had run when the page's
+# first script did, the list's then the cookie banner list's:
+#
+#   default: R R                       both ran before the page's own scripts
+#   strict:  R R                       the same
+#   off:     N N                       the control: no scriptlet runs
+#   banners: R N                       the cookie banner list's alone is left
+#                                      out
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -104,6 +117,7 @@ CONTROL="${CONTROL:-/tmp/domicile-ad-blocking-control}"
 PROFILE="${PROFILE:-/tmp/domicile-ad-blocking-profile}"
 LIST="${LIST:-/tmp/domicile-ad-blocking-list.txt}"
 COOKIES="${COOKIES:-/tmp/domicile-ad-blocking-cookies.txt}"
+SCRIPTLETS="${SCRIPTLETS:-/tmp/domicile-ad-blocking-scriptlets.json}"
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-ad-blocking-engine.log}"
 SOCKET_LOG="${SOCKET_LOG:-/tmp/domicile-ad-blocking-socket.log}"
 HTTP_LOG="${HTTP_LOG:-/tmp/domicile-ad-blocking-http.log}"
@@ -119,7 +133,7 @@ cleanup() {
     kill "${STARTED[@]}" 2>/dev/null
   fi
   remove_profile "$PROFILE"
-  rm -f "$LIST" "$COOKIES"
+  rm -f "$LIST" "$COOKIES" "$SCRIPTLETS"
 }
 trap cleanup EXIT
 
@@ -147,9 +161,19 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
 # 1. The list, as a path: a guard fetches nothing from the internet.
 printf '%s\n' '! a list for guard-ad-blocking.sh' '/ads/*' '@@/ads/allowed.js' \
   '127.0.0.1##.site-promo' '##.ad-banner' '##div[data-ad]' '##.late-ad' \
-  '##.kept' '127.0.0.1#@#.kept' >"$LIST"
+  '##.kept' '127.0.0.1#@#.kept' '127.0.0.1##+js(guardlist)' >"$LIST"
 printf '%s\n' '! a cookie banner list for guard-ad-blocking.sh' '/consent/*' \
-  '##.cookie-notice' >"$COOKIES"
+  '##.cookie-notice' '127.0.0.1##+js(guardbanner)' >"$COOKIES"
+# The scriptlets the lists name, as the resources file the engine fetches
+# from a release takes them: each says it ran in a value the page's first
+# script reads, so it ran before any of the page's own. Each reads
+# `scriptletGlobals` first, as uBlock Origin's safeSelf does, so one run
+# without it throws and says nothing.
+scriptlet() { # $1 name
+  printf '{"name": "%s.js", "kind": {"mime": "application/javascript"}, "content": "%s"}' \
+    "$1" "$(printf 'function %s() { scriptletGlobals.guard = true; window.guardScriptlets = (window.guardScriptlets || []).concat("%s"); }' "$1" "$1" | base64 -w0)"
+}
+printf '[%s, %s]\n' "$(scriptlet guardlist)" "$(scriptlet guardbanner)" >"$SCRIPTLETS"
 
 # 2. The pages, on their own server like every <webview> guard's: `crux`
 #    reaches no arbitrary host.
@@ -182,7 +206,7 @@ PROFILES="{\"profiles\": [\
 \"private\": true, \"extensions\": null}], \
 \"default_profile\": \"default\", \"default_private_profile\": \"private\", \
 \"sites\": {}, \"block_lists\": [\"$LIST\"], \"block_rules\": [\"/mine/*\"], \
-\"cookie_banner_lists\": [\"$COOKIES\"]}"
+\"cookie_banner_lists\": [\"$COOKIES\"], \"scriptlet_resources\": \"$SCRIPTLETS\"}"
 rm -f "$SOCKET_LOG"
 python3 "$SCRIPTS/guard-extension-installer-compositor.py" \
   --socket "$CONTROL" --browser-profiles "$PROFILES" >"$SOCKET_LOG" 2>&1 &
@@ -234,7 +258,9 @@ done
 # if not), and whether a second export is the Same (V if it varies); and for
 # off whether its two exports agree (S or V); then, after a `|`, for default,
 # strict, off and banners, whether its consent script was Blocked or Loaded
-# and its cookie banner Hidden or Shown (? for no report).
+# and its cookie banner Hidden or Shown (? for no report); then, after another
+# `|`, for each of them again, whether the list's scriptlet and the cookie
+# banner list's had Run before the page's first script or Not.
 READ="$(awk '
   /GUARD shell-loaded/ { shell = 1 }
   match($0, /GUARD ads as=[a-z0-9-]+( [a-z]+=[a-z]+)+/) {
@@ -318,6 +344,12 @@ READ="$(awk '
     return (script == "blocked" ? "B" : script == "loaded" ? "L" : "?") \
       (banner == "hidden" ? "H" : banner == "shown" ? "S" : "?")
   }
+  function scriptlets(as,   list, banner) {
+    list = ran[as SUBSEP "listjs"]
+    banner = ran[as SUBSEP "bannerjs"]
+    return (list == "ran" ? "R" : list == "none" ? "N" : "?") \
+      (banner == "ran" ? "R" : banner == "none" ? "N" : "?")
+  }
   function truthful() {
     if (!read["off"]) return "?"
     return device["off" SUBSEP "canvas"] == device["off" SUBSEP "canvas_again"] ? "S" : "V"
@@ -325,23 +357,28 @@ READ="$(awk '
   END {
     leaked = 0
     for (k in served) if (ran[k] == "blocked") leaked += served[k]
-    printf "%d %s %s %s %d %s %s %s %s %s %s %s %s %s | %s %s %s %s\n", shell,
+    printf "%d %s %s %s %d %s %s %s %s %s %s %s %s %s | %s %s %s %s | %s %s %s %s\n", shell,
       letters("default"), letters("strict"), letters("off"), leaked,
       shown("default"), shown("strict"), shown("off"), reached("default"),
       reached("strict"), reached("off"), farbled("default"), farbled("strict"),
       truthful(), banners("default"), banners("strict"), banners("off"),
-      banners("banners")
+      banners("banners"), scriptlets("default"), scriptlets("strict"),
+      scriptlets("off"), scriptlets("banners")
   }' "$ENGINE_LOG" "$HTTP_LOG" 2>/dev/null)"
 
-MEASURED="${READ% | *}"
-BANNERS="${READ##* | }"
+MEASURED="${READ%% | *}"
+REST="${READ#* | }"
+BANNERS="${REST%% | *}"
+SCRIPTLETS="${REST#* | }"
 echo
-echo "measured: $MEASURED | $BANNERS"
+echo "measured: $MEASURED | $BANNERS | $SCRIPTLETS"
 echo "  (shell default strict off leaked, each profile as third first mine allowed ok;"
 echo "   then default strict off, each as site generic complex late kept plain;"
 echo "   then default strict off, each as keep fbclid utm_source;"
 echo "   then default strict as canvas image audio cores again, and off as again;"
-echo "   then default strict off banners, each as consent banner)"
+echo "   then default strict off banners, each as consent banner;
+   then default strict off banners, each as the list's scriptlet and the
+   cookie banner list's)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-ad-blocking-guard.sh`
 # runs the reading and this block directly.
@@ -351,7 +388,9 @@ case "$MEASURED" in
 "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")
   case "$BANNERS" in
   "BH BH LS LS")
-    PASSED="a profile's ad blocking reached its pages: default blocked another \
+    case "$SCRIPTLETS" in
+    "RR RR NN RN")
+      PASSED="a profile's ad blocking reached its pages: default blocked another \
 site's listed script and not the page's own, strict blocked both, the user's \
 rule blocked in either and the list's exception loaded; both hid what the \
 list names by its elements, a late one too, and not the site's exception; a \
@@ -359,7 +398,41 @@ link to another site lost its click id, and in strict its campaign parameter; \
 the page it led to read its canvas, audio and processor count a little off, \
 the same way twice; the cookie banner list blocked its script and hid its \
 banner in both, and not with cookie banners shown; off loaded, showed, kept \
-and told everything, and no blocked script reached the server"
+and told everything, and no blocked script reached the server; the \
+lists' scriptlets ran before the page's own scripts, the cookie banner list's \
+only where cookie banners are hidden"
+      ;;
+    *"?"*)
+      FAILURE="a page never said whether the lists' scriptlets ran \
+($SCRIPTLETS): the page's report lost its listjs or bannerjs field"
+      ;;
+    "N"* | ??" N"*)
+      FAILURE="THE LIST'S SCRIPTLET NEVER RAN BEFORE THE PAGE'S OWN SCRIPTS \
+($SCRIPTLETS): scriptlet_resources never reached AdBlocking::Configure or \
+was never read (AdBlocker::ScriptletsIn, use_scriptlets), CosmeticsFor left \
+out the engine's injected_script, the Hide never carried it, or the renderer \
+ran it late or not at all (CosmeticFilters::RunAtDocumentStart, patch 0297), \
+or without the scriptletGlobals uBlock Origin's scriptlets read"
+      ;;
+    "RN"* | ??" RN"*)
+      FAILURE="the cookie banner list's scriptlet never ran where cookie \
+banners are hidden ($SCRIPTLETS): CosmeticsFor leaves the cookie banner \
+engine's injected_script out, or that engine never got the scriptlets"
+      ;;
+    ??" "??" "[!N]?" "* | ??" "??" "?[!N]" "*)
+      FAILURE="off, with blocking off, ran a scriptlet ($SCRIPTLETS), so the \
+mode does not keep them off as it keeps the rest (CosmeticFiltering)"
+      ;;
+    ??" "??" "??" "[!R]?)
+      FAILURE="with cookie banners shown the list's own scriptlet did not run \
+($SCRIPTLETS): showing cookie banners took more than the cookie banner list \
+off"
+      ;;
+    *)
+      FAILURE="the cookie banner list's scriptlet ran with cookie banners \
+shown ($SCRIPTLETS): hide_cookie_banners is not passed to CosmeticsFor"
+      ;;
+    esac
     ;;
   *"?"*)
     FAILURE="a page never said whether its consent script ran or its cookie \

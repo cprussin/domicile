@@ -5,9 +5,9 @@
 It loads six scripts and logs, to the console the engine writes to its log,
 which of them ran:
 
-  GUARD ads as=ID third=X first=X mine=X allowed=X ok=X consent=X
+  GUARD ads as=ID third=X first=X mine=X allowed=X ok=X consent=X listjs=Y bannerjs=Y
 
-each X `loaded` or `blocked`:
+each X `loaded` or `blocked`, and each Y `ran` or `none`:
 
   third    localhost/ads/third.js     another site's, which the list names
   first    127.0.0.1/ads/first.js     the page's own, which the list names
@@ -19,6 +19,12 @@ each X `loaded` or `blocked`:
   consent  localhost/consent/banner.js
                                       another site's, which only a cookie
                                       banner list names
+  listjs   guardlist                  a scriptlet the list names for the
+                                      page's site (127.0.0.1##+js(...))
+  bannerjs guardbanner                one only a cookie banner list names
+
+each scriptlet as the page's first script found it: whether it had run before
+any of the page's own.
 
 It also has seven elements, which the list hides by their classes and ids or
 doesn't, and logs which of them are hidden once its scripts have settled and
@@ -74,6 +80,10 @@ PAGE = """<!doctype html>
   <head>
     <meta charset="utf-8" />
     <title>a page that loads and shows ads and says which ran</title>
+    <script>
+      // The page's first script: what the scriptlets did before it.
+      const early = window.guardScriptlets || [];
+    </script>
   </head>
   <body>
     <div class="site-promo" id="site">a site's own ad</div>
@@ -109,7 +119,9 @@ PAGE = """<!doctype html>
         console.log(
           `GUARD ads as=${as} third=${ran.third} first=${ran.first} ` +
             `mine=${ran.mine} allowed=${ran.allowed} ok=${ran.ok} ` +
-            `consent=${ran.consent}`,
+            `consent=${ran.consent} ` +
+            `listjs=${early.includes("guardlist") ? "ran" : "none"} ` +
+            `bannerjs=${early.includes("guardbanner") ? "ran" : "none"}`,
         );
       });
       // An ad a page adds after it loaded, as many do, then a look at what

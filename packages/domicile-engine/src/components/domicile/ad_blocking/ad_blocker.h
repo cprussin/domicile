@@ -5,6 +5,7 @@
 #define COMPONENTS_DOMICILE_AD_BLOCKING_AD_BLOCKER_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -27,7 +28,8 @@ std::string_view AdBlockRequestType(network::mojom::RequestDestination);
 // own rules, so a mode that lets a site's own requests through can still
 // apply the user's rules to them, and a rule of the user's can make an
 // exception to a list's. A third holds the cookie banner lists, which apply
-// as the lists do, but only to a page that hides cookie banners.
+// as the lists do, but only to a page that hides cookie banners. Each has
+// the scriptlets its `##+js(...)` rules run.
 //
 // Immutable once built. Building is slow (tens of milliseconds for EasyList,
 // EasyPrivacy and uBlock Origin's filters), so it is built on a worker and
@@ -52,14 +54,50 @@ class AdBlocker {
     // A `$generichide` exception matched: no generic rule applies, so the
     // page's classes and ids need no asking about.
     bool generichide = false;
+    // The scriptlets the page's `##+js(...)` rules run, as one script for
+    // its main world before its own: empty when none do.
+    std::string script;
   };
 
+  // One of adblock-rust's resources, as its resources file holds it: a
+  // scriptlet a `##+js(name, ...)` rule runs, or one it needs.
+  struct Scriptlet {
+    Scriptlet();
+    Scriptlet(const Scriptlet&);
+    Scriptlet(Scriptlet&&);
+    Scriptlet& operator=(const Scriptlet&);
+    Scriptlet& operator=(Scriptlet&&);
+    ~Scriptlet();
+
+    // Its name, such as `set-constant.js` or `safe-self.fn`, and others a
+    // rule may name it by.
+    std::string name;
+    std::vector<std::string> aliases;
+    // Its MIME type: `application/javascript` for a template a rule's
+    // arguments fill in, `fn/javascript` for a function a rule calls with
+    // them, as uBlock Origin's are.
+    std::string kind;
+    // Its text, in base64.
+    std::string content;
+    // The names of the scriptlets it needs, which go into the page with it.
+    std::vector<std::string> dependencies;
+  };
+
+  // The scriptlets in an adblock-rust resources file's text, a JSON array of
+  // resources; nothing when it is not one. Those that aren't JavaScript,
+  // which only `$redirect` rules use, are left out, and so are those that
+  // need a permission, which no list is given.
+  static std::optional<std::vector<Scriptlet>> ScriptletsIn(
+      std::string_view text);
+
   // `lists` and `cookie_banner_lists` are filter lists' texts, each valid
-  // UTF-8; `rules` the user's own rules, one per entry.
+  // UTF-8; `rules` the user's own rules, one per entry; `scriptlets` what
+  // their `##+js(...)` rules may run.
   static std::unique_ptr<AdBlocker> Build(
       const std::vector<std::string>& lists,
       const std::vector<std::string>& rules,
-      const std::vector<std::string>& cookie_banner_lists);
+      const std::vector<std::string>& cookie_banner_lists,
+      const std::vector<Scriptlet>& scriptlets);
 
   AdBlocker(const AdBlocker&) = delete;
   AdBlocker& operator=(const AdBlocker&) = delete;

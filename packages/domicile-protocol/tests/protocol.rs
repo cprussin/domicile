@@ -304,6 +304,7 @@ fn browser_profiles_wire_shape_is_pinned() {
         block_lists: vec!["https://easylist.to/easylist/easylist.txt".into()],
         block_rules: vec!["||ads.example^".into()],
         cookie_banner_lists: vec!["https://secure.fanboy.co.nz/fanboy-cookiemonster.txt".into()],
+        scriptlet_resources: Some("/etc/domicile/scriptlets.json".into()),
     })
     .unwrap();
     assert_eq!(
@@ -332,6 +333,7 @@ fn browser_profiles_wire_shape_is_pinned() {
             "block_lists": ["https://easylist.to/easylist/easylist.txt"],
             "block_rules": ["||ads.example^"],
             "cookie_banner_lists": ["https://secure.fanboy.co.nz/fanboy-cookiemonster.txt"],
+            "scriptlet_resources": "/etc/domicile/scriptlets.json",
         })
     );
 }

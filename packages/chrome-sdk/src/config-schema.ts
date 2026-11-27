@@ -123,6 +123,10 @@ export const browserConfigSchema = z.strictObject({
       },
     },
   }),
+  scriptlet_resources: z
+    .string()
+    .nullish()
+    .transform((value) => value ?? undefined),
   sites: z.record(z.string(), z.string()).prefault({}),
 });
 
@@ -631,6 +635,8 @@ export const configSchema = z.strictObject({
         },
       },
     },
+    scriptlet_resources:
+      "https://github.com/cprussin/domicile-builds/releases/download/ublock-origin-scriptlets-1.77.2/scriptlets.json#sha256=4835b89416f27eea136e571fe23d38f76be26e6bc36d11bd58cf89910035ad6e",
     sites: {},
   }),
   electron: electronConfigSchema.prefault({ apps: [] }),

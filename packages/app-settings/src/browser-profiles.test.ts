@@ -44,6 +44,7 @@ const BROWSER: BrowserConfig = {
       protections: PROTECTIONS_ON,
     },
   },
+  scriptlet_resources: undefined,
   sites: { "*.acme.com": "work" },
 };
 
