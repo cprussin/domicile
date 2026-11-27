@@ -98,15 +98,17 @@
 # blocks it: `/stub/*$script,redirect=noop.js`, with `noop.js` in the
 # resources file, `||localhost^$xmlhttprequest,removeparam=trk` and
 # `||127.0.0.1^$csp=img-src 'none'`; and the page loads a script through a
-# redirect, from an address nothing names to one the list does. As stub rp
-# csp hop:
+# redirect, from an address nothing names to one the list does. It also has
+# a procedural filter, `127.0.0.1##div:has-text(a procedural ad)`, which CSS
+# can't say. As stub rp csp hop proc:
 #
-#   default: S D A B                   the stand-in ran in place of the
+#   default: S D A B H                 the stand-in ran in place of the
 #                                      server's script; the fetch lost `trk`;
 #                                      the page's image was refused; the
-#                                      redirect was blocked
-#   strict:  S D A B                   the same
-#   off:     L K N L                   the control: the server's script ran
+#                                      redirect was blocked; `#proc` was
+#                                      hidden by its text
+#   strict:  S D A B H                 the same
+#   off:     L K N L S                 the control: the server's script ran
 #                                      and the rest is untouched
 set -u
 
@@ -183,7 +185,8 @@ printf '%s\n' '! a list for guard-ad-blocking.sh' '/ads/*' '@@/ads/allowed.js' \
   '##.kept' '127.0.0.1#@#.kept' '127.0.0.1##+js(guardlist)' \
   '/stub/*$script,redirect=noop.js' \
   '||localhost^$xmlhttprequest,removeparam=trk' \
-  "||127.0.0.1^\$csp=img-src 'none'" >"$LIST"
+  "||127.0.0.1^\$csp=img-src 'none'" \
+  '127.0.0.1##div:has-text(a procedural ad)' >"$LIST"
 printf '%s\n' '! a cookie banner list for guard-ad-blocking.sh' '/consent/*' \
   '##.cookie-notice' '127.0.0.1##+js(guardbanner)' >"$COOKIES"
 # The scriptlets the lists name, as the resources file the engine fetches
@@ -388,16 +391,18 @@ READ="$(awk '
     return (list == "ran" ? "R" : list == "none" ? "N" : "?") \
       (banner == "ran" ? "R" : banner == "none" ? "N" : "?")
   }
-  function rules(as,   stub, rp, csp, hop) {
+  function rules(as,   stub, rp, csp, hop, proc) {
     stub = rule[as SUBSEP "stub"]
     rp = rule[as SUBSEP "rp"]
     csp = rule[as SUBSEP "csp"]
     hop = rule[as SUBSEP "hop"]
+    proc = rule[as SUBSEP "proc"]
     return (stub == "stubbed" ? (served[as SUBSEP "stub"] ? "W" : "S") : \
         stub == "loaded" ? "L" : stub == "blocked" ? "B" : "?") \
       (rp == "dropped" ? "D" : rp == "kept" ? "K" : "?") \
       (csp == "applied" ? "A" : csp == "none" ? "N" : "?") \
-      (hop == "blocked" ? "B" : hop == "loaded" ? "L" : "?")
+      (hop == "blocked" ? "B" : hop == "loaded" ? "L" : "?") \
+      (proc == "hidden" ? "H" : proc == "shown" ? "S" : "?")
   }
   function truthful() {
     if (!read["off"]) return "?"
@@ -431,7 +436,7 @@ echo "   then default strict as canvas image audio cores again, and off as again
 echo "   then default strict off banners, each as consent banner;
    then default strict off banners, each as the list's scriptlet and the
    cookie banner list's;
-   then default strict off, each as stub rp csp hop)"
+   then default strict off, each as stub rp csp hop proc)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-ad-blocking-guard.sh`
 # runs the reading and this block directly.
@@ -444,7 +449,7 @@ case "$MEASURED" in
     case "$SCRIPTLETS" in
     "RR RR NN RN")
       case "$RULES" in
-      "SDAB SDAB LKNL")
+      "SDABH SDABH LKNLS")
         PASSED="a profile's ad blocking reached its pages: default blocked another \
 site's listed script and not the page's own, strict blocked both, the user's \
 rule blocked in either and the list's exception loaded; both hid what the \
@@ -458,47 +463,56 @@ lists' scriptlets ran before the page's own scripts, the cookie banner list's \
 only where cookie banners are hidden; a \$redirect rule's script was its \
 stand-in, a \$removeparam rule took its parameter off a fetch, a \$csp rule's \
 policy refused the page an image and a redirect to a listed script was \
-blocked, in default and strict, and off changed none of them"
+blocked, and a procedural filter hid what only its text names, in default \
+and strict, and off changed none of them"
         ;;
       *"?"*)
         FAILURE="a page never said what the lists' rules of other kinds did \
-($RULES): its stand-in script, fetch, image or redirected script never \
-settled, or its rules line lost a field"
+($RULES): its stand-in script, fetch, image, redirected script or procedural \
+filter never settled, or its rules line lost a field"
         ;;
-      ????" "????" "[!L]??? | ????" "????" "?[!K]?? | \
-        ????" "????" "??[!N]? | ????" "????" "???[!L])
+      ?????" "?????" "[!L]???? | ?????" "?????" "?[!K]??? | \
+        ?????" "?????" "??[!N]?? | ?????" "?????" "???[!L]? | \
+        ?????" "?????" "????[!S])
         FAILURE="off, with blocking off, was changed by a rule of another kind \
 ($RULES), so something other than the blocker did it and the others' results \
 prove nothing"
         ;;
-      B* | ????" "B*)
+      B* | ?????" "B*)
         FAILURE="A \$redirect RULE'S SCRIPT WAS BLOCKED, NOT ANSWERED WITH ITS \
 STAND-IN ($RULES): the stand-in never reached the engine \
 (AdBlocker::ScriptletsIn, use_scriptlets), Decide gave kBlock for a verdict \
 with a redirect, or AdBlockingLoader::Stub failed"
         ;;
-      W* | ????" "W*)
+      W* | ?????" "W*)
         FAILURE="a \$redirect rule's script ran its stand-in but the server \
 served it too ($RULES): the request went on to the network after Stub \
 answered it"
         ;;
-      L* | ????" "L*)
+      L* | ?????" "L*)
         FAILURE="a \$redirect rule's script came from the server ($RULES): the \
 list's rule never matched it, or Decide gave kAllow for it"
         ;;
-      ?K* | ????" "?K*)
+      ?K* | ?????" "?K*)
         FAILURE="THE FETCH KEPT WHAT \$removeparam REMOVES ($RULES): the \
 engine's rewritten_url never reached Decide, Decide gave no kRewrite, or \
 AdBlockingLoader::RedirectTo's redirect was not followed"
         ;;
-      ??N* | ????" "??N*)
+      ??N* | ?????" "??N*)
         FAILURE="THE PAGE TOOK AN IMAGE ITS \$csp REFUSES ($RULES): the policy \
 never reached the document (CheckedInFor for its navigation, \
 AdBlockingLoader::OnReceiveResponse, PopulateParsedHeaders, CspDirectives)"
         ;;
-      ???L* | ????" "???L*)
+      ???L* | ?????" "???L*)
         FAILURE="A REDIRECT TO A LISTED SCRIPT LOADED IT ($RULES): \
 AdBlockingLoader::OnReceiveRedirect never checked the address it goes to"
+        ;;
+      ????S* | ?????" "????S*)
+        FAILURE="A PROCEDURAL FILTER HID NOTHING ($RULES): adblock-rust parsed \
+\`:has-text()\` without css-validation, CosmeticsFor left out its \
+procedural_actions, the Hide never carried them, or content_cosmetic.ts never \
+ran in its isolated world (CosmeticFilters::RunProcedural, patch 0297) or \
+had no cf_worker (DidCreateScriptContext)"
         ;;
       *)
         FAILURE="a page did something with a rule of another kind this guard \

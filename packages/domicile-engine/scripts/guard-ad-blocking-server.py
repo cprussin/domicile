@@ -47,7 +47,7 @@ each X `hidden` or `shown`:
 
 With the hidden line it also logs what the lists' rules of other kinds did:
 
-  GUARD rules as=ID stub=X rp=X csp=X hop=X
+  GUARD rules as=ID stub=X rp=X csp=X hop=X proc=X
 
   stub  localhost/stub/s.js, which a `$redirect=noop.js` rule names:
         `stubbed` when the stand-in ran, `loaded` when the server's script
@@ -58,6 +58,8 @@ With the hidden line it also logs what the lists' rules of other kinds did:
         'none'` the list adds to the page: `applied` or `none`
   hop   localhost/bounce, which nothing names, redirected to
         localhost/ads/hop.js, which the list names: `blocked` or `loaded`
+  proc  #proc, which only a procedural filter (`:has-text()`) names:
+        `hidden` or `shown`
 
 Then it follows a link to the other site that carries a click id and a
 campaign parameter, `/landing?as=ID&keep=1&fbclid=f&utm_source=u` at
@@ -107,6 +109,7 @@ PAGE = """<!doctype html>
     <div class="kept" id="kept">an ad the site keeps</div>
     <div class="plain" id="plain">no ad</div>
     <div class="cookie-notice" id="banner">a cookie banner</div>
+    <div id="proc">a procedural ad</div>
     <script>
       const as = new URLSearchParams(location.search).get("as");
       const port = location.port;
@@ -201,8 +204,13 @@ PAGE = """<!doctype html>
           return rules;
         })
         .then(([stub, rp, csp, hop]) => {
+          const proc =
+            getComputedStyle(document.getElementById("proc")).display === "none"
+              ? "hidden"
+              : "shown";
           console.log(
-            `GUARD rules as=${as} stub=${stub} rp=${rp} csp=${csp} hop=${hop}`,
+            `GUARD rules as=${as} stub=${stub} rp=${rp} csp=${csp} hop=${hop} ` +
+              `proc=${proc}`,
           );
           location.href =
             `http://localhost:${port}/landing?as=${as}&keep=1&fbclid=f&` +

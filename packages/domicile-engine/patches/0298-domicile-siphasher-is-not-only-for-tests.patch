@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 27 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: siphasher is not only for tests
+
+adblock-rust parses procedural filters with selectors and cssparser,
+whose phf tables hash with siphasher, so the crate is no longer
+test-only, as patch 0287 has it for regex. The crates that need it come
+from packages/domicile-engine/crates/CRATES.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`. Guarded by guard-ad-blocking.
+---
+ third_party/rust/siphasher/v1/BUILD.gn | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/third_party/rust/siphasher/v1/BUILD.gn b/third_party/rust/siphasher/v1/BUILD.gn
+index e1c69dcd1f..652ea2aa92 100644
+--- a/third_party/rust/siphasher/v1/BUILD.gn
++++ b/third_party/rust/siphasher/v1/BUILD.gn
+@@ -38,7 +38,10 @@ cargo_crate("lib") {
+   # //third_party/rust/chromium_crates_io/Cargo.toml to use
+   # it from first-party code.
+   visibility = [ "//third_party/rust/*" ]
+-  testonly = true
++
++  # Domicile's engine fork: phf_shared, which adblock-rust's CSS parsing
++  # (selectors, cssparser) builds on, hashes with it, so it is not only for
++  # tests. See packages/domicile-engine/crates/CRATES.
+ 
+   #####################################################################
+   # Tweaking which GN `config`s apply to this target.
+-- 
+2.43.0
+

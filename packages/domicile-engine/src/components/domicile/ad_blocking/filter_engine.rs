@@ -44,6 +44,10 @@ mod ffi {
         /// The scriptlets the page's `##+js(...)` rules run, with those they
         /// need, as one script: empty when none do.
         injected_script: String,
+        /// The page's procedural filters (`:has-text()`, `:upward()`, and
+        /// those with an action such as `:style()` or `:remove()`), each as
+        /// adblock-rust's JSON for content_cosmetic.ts. In order.
+        procedural_actions: Vec<String>,
     }
 
     /// One of adblock-rust's resources, as its resources file holds it.
@@ -220,14 +224,18 @@ impl FilterEngine {
         let resources = self.0.url_cosmetic_resources(url);
         let mut hide_selectors: Vec<String> = resources.hide_selectors.into_iter().collect();
         let mut exceptions: Vec<String> = resources.exceptions.into_iter().collect();
+        let mut procedural_actions: Vec<String> =
+            resources.procedural_actions.into_iter().collect();
         // In order, so a page gets the same stylesheet each time.
         hide_selectors.sort_unstable();
         exceptions.sort_unstable();
+        procedural_actions.sort_unstable();
         ffi::Cosmetics {
             hide_selectors,
             exceptions,
             generichide: resources.generichide,
             injected_script: resources.injected_script,
+            procedural_actions,
         }
     }
 

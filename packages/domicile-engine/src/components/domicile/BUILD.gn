@@ -997,8 +997,25 @@ source_set("electron_preload") {
   ]
 }
 
+# Brave's content_cosmetic.ts, bundled by procedural_filters/bundle.sh, as
+# a string constant, kProceduralFiltersScript.
+action("procedural_filters_script") {
+  visibility = [ ":cosmetic_filters" ]
+  script = "renderer/procedural_filters/embed_script.py"
+  inputs = [ "renderer/procedural_filters/procedural_filters.js" ]
+  outputs = [
+    "$target_gen_dir/renderer/procedural_filters/procedural_filters_script.h",
+  ]
+  args = [
+    rebase_path(inputs[0], root_build_dir),
+    rebase_path(outputs[0], root_build_dir),
+    "kProceduralFiltersScript",
+  ]
+}
+
 # A frame's cosmetic filters in the renderer: hides what the browser's ad
-# blocker names by its elements. See docs/architecture/AD-BLOCKING.md.
+# blocker names by its elements, and runs its scriptlets and procedural
+# filters. See docs/architecture/AD-BLOCKING.md.
 source_set("cosmetic_filters") {
   sources = [
     "renderer/cosmetic_filters.cc",
@@ -1014,9 +1031,14 @@ source_set("cosmetic_filters") {
   deps = [
     ":cosmetic_stylesheet",
     ":device_details",
+    ":procedural_filters_script",
     "//base",
+    "//gin",
+    "//net",
     "//third_party/blink/public:blink",
     "//third_party/blink/public/common",
+    "//url",
+    "//v8",
   ]
 }
 

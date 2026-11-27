@@ -1072,6 +1072,12 @@ class CosmeticFiltering final
             << cosmetics.hide_selectors.size() << " selectors"
             << (cosmetics.generichide ? ", and no generic ones," : "")
             << (cosmetics.script.empty() ? "" : ", running scriptlets,")
+            << (cosmetics.procedural_filters.empty()
+                    ? ""
+                    : ", applying " +
+                          base::NumberToString(
+                              cosmetics.procedural_filters.size()) +
+                          " procedural filters,")
             << " in " << url.possibly_invalid_spec() << " ("
             << AdBlockingModeName(mode)
             << (cookie_banners ? ", cookie banners hidden" : "") << ")";
@@ -1080,7 +1086,8 @@ class CosmeticFiltering final
         ->GetRemoteAssociatedInterfaces()
         ->GetInterface(&frame);
     frame->Hide(std::move(cosmetics.hide_selectors),
-                std::move(cosmetics.script), std::move(host));
+                std::move(cosmetics.script),
+                std::move(cosmetics.procedural_filters), std::move(host));
   }
 
  private:

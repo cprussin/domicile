@@ -272,6 +272,33 @@ lifts one on a site. A page whose mode is off, or a frame the browser sends
 no Hide to, runs none. `--vmodule=domicile_ad_blocking=1` logs the scriptlets
 a page runs with its cosmetic filters.
 
+## Procedural filters
+
+Some of the lists' element rules say what CSS can't: `:has-text()` hides an
+element by its text, `:upward()` hides one of its ancestors, `:remove()`
+takes it out, and `:style()` gives it a style rather than hiding it. Brave
+applies them with its own content script, and so does Domicile, unchanged:
+`content_cosmetic.ts` and `procedural_filters.ts` (MPL-2.0), bundled into
+`components/domicile/renderer/procedural_filters/procedural_filters.js` by
+`bundle.sh` there and compiled into the engine as a string.
+
+- adblock-rust parses the filters with its `css-validation` feature (the
+  `cssparser` and `selectors` crates), so it can tell them from a selector,
+  and gives each page's as JSON (`procedural_actions`). `CosmeticsFor` sends
+  them, sorted and without repeats, with the page's Hide.
+- At document start, after the scriptlets, `CosmeticFilters::RunProcedural`
+  starts the script in an isolated world of its own
+  (`ISOLATED_WORLD_ID_DOMICILE_PROCEDURAL_FILTERS`, patch 0297), so the page
+  can neither see nor stop it. Its world's context gets `cf_worker`, Brave's
+  bridge, from `DidCreateScriptContext`: `injectStylesheet` (a user
+  stylesheet, as the other cosmetic filters) and `isFirstPartyUrl`.
+- The script watches the page and applies the filters as it changes. A
+  filter that is one selector with a `:style()` becomes a stylesheet rule,
+  as Brave does.
+- Flags set before it (`generichide`, `hide1pContent`) leave it only the
+  procedural filters: the class and id rules are `CosmeticFilters`' own, and
+  a page hides the same in Standard and Strict.
+
 ## Device details
 
 A site can recognize a browser without a cookie by what it reads of the
@@ -304,8 +331,6 @@ Not yet: workers (their `hardwareConcurrency` and `OffscreenCanvas`), WebGL's
 readings, an `AudioContext` played rather than rendered offline, and fonts and
 the screen's size.
 
-Not yet: procedural filters (`:has-text()`, `:upward()`).
-
 ## Key decisions
 
 - **In the engine over an extension** (uBlock Origin Lite): no rule cap, no
@@ -328,6 +353,9 @@ Not yet: procedural filters (`:has-text()`, `:upward()`).
 - **The same hiding in Standard and Strict.** The lists' cosmetic rules
   rarely break a site the way blocking its own scripts does, so Strict only
   blocks more.
+- **Brave's procedural filter script, unchanged, over one of our own.** It
+  reads adblock-rust's JSON as it comes and is maintained with it; MPL-2.0
+  is file-level, so the bundle stays under it, apart from the MIT engine.
 - **uBlock Origin's scriptlets built in CI and fetched, not bundled.** They
   are GPL-3.0 and the engine is MIT, and they change with the lists; a
   release of their own, pinned by hash, keeps them apart and lets a fix
@@ -354,6 +382,6 @@ Not yet: procedural filters (`:has-text()`, `:upward()`).
 - [x] `$redirect`, `$removeparam`, `$csp`, redirects and CNAME uncloaking
 - [x] each list kept as long as its `! Expires:` says
 - [x] Electron apps' pages, when the config asks
-- [ ] procedural filters
+- [x] procedural filters, with Brave's own script
 - [x] fingerprinting protection: canvas, audio and processor count farbled
 - [ ] farbling in workers, WebGL, fonts and the screen

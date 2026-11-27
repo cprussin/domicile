@@ -12,27 +12,47 @@ domicile::CosmeticFilters cannot run them there. Script may run just
 after, in ContentRendererClient::RunScriptsAtDocumentStart, where
 extensions' `document_start` scripts run: ChromeContentRendererClient
 now runs the frame's scriptlets there, after an Electron app window's
-preload and before extensions'. See
-components/domicile/renderer/cosmetic_filters.h.
+preload and before extensions', and starts its procedural filters in an
+isolated world of their own, ISOLATED_WORLD_ID_DOMICILE_PROCEDURAL_FILTERS.
+See components/domicile/renderer/cosmetic_filters.h.
 
 Verified: not built. This repository cannot build Chromium; the engine
 job builds it on `crux`. Guarded by guard-ad-blocking.
 ---
- chrome/renderer/chrome_content_renderer_client.cc | 7 +++++++
- 1 file changed, 7 insertions(+)
+ chrome/common/chrome_isolated_world_ids.h         | 4 ++++
+ chrome/renderer/chrome_content_renderer_client.cc | 9 +++++++++
+ 2 files changed, 13 insertions(+)
+
+diff --git a/chrome/common/chrome_isolated_world_ids.h b/chrome/common/chrome_isolated_world_ids.h
+index d158c41755..09816fe93d 100644
+--- a/chrome/common/chrome_isolated_world_ids.h
++++ b/chrome/common/chrome_isolated_world_ids.h
+@@ -27,6 +27,10 @@ enum ChromeIsolatedWorldIDs {
+   ISOLATED_WORLD_ID_APPLESCRIPT,
+ #endif  // BUILDFLAG(IS_MAC)
+ 
++  // Domicile's engine fork: the ad blocker's procedural filters. See
++  // components/domicile/renderer/cosmetic_filters.h.
++  ISOLATED_WORLD_ID_DOMICILE_PROCEDURAL_FILTERS,
++
+   // Numbers for isolated worlds for extensions are set in
+   // extensions/renderer/script_injection.cc, and are are greater than or equal
+   // to this number.
 
 diff --git a/chrome/renderer/chrome_content_renderer_client.cc b/chrome/renderer/chrome_content_renderer_client.cc
 index f288108..4e91b9e 100644
 --- a/chrome/renderer/chrome_content_renderer_client.cc
 +++ b/chrome/renderer/chrome_content_renderer_client.cc
-@@ -1596,6 +1596,13 @@ void ChromeContentRendererClient::RunScriptsAtDocumentStart(
+@@ -1596,6 +1596,15 @@ void ChromeContentRendererClient::RunScriptsAtDocumentStart(
      return;
    }
  
 +  // Domicile's engine fork. The scriptlets a website's filter rules name,
-+  // before the page's scripts and extensions'. They are page scripts and may
-+  // end the frame. See components/domicile/renderer/cosmetic_filters.h.
-+  if (!domicile::CosmeticFilters::RunAtDocumentStart(render_frame)) {
++  // before the page's scripts and extensions', and its procedural filters,
++  // in a world of their own. The scriptlets are page scripts and may end the
++  // frame. See components/domicile/renderer/cosmetic_filters.h.
++  if (!domicile::CosmeticFilters::RunAtDocumentStart(
++          render_frame, ISOLATED_WORLD_ID_DOMICILE_PROCEDURAL_FILTERS)) {
 +    return;
 +  }
 +
