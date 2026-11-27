@@ -865,7 +865,7 @@ export const BrowserWindow = ({
             })}
             onNavigate={navigate}
             onOpenPrivacySettings={() => {
-              domicile.processes.launch(["domicile-settings"]);
+              domicile.processes.launch(["domicile-settings", "privacy"]);
             }}
             onReload={drive((loaded) => {
               loaded.reload();

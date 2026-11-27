@@ -112,3 +112,16 @@ export const PAGES = [
     title: "Troubleshooting",
   },
 ] as const;
+
+/**
+ * The name a page goes by in Settings' address, `#privacy` or `#site-data`:
+ * its id's name in kebab case. `domicile-settings privacy` opens there.
+ */
+export const pageName = (page: PageId): string =>
+  PageId[page].replaceAll(/([a-z])([A-Z])/g, "$1-$2").toLowerCase();
+
+/** The page `hash`, an address's `#<name>`, names, if it names one. */
+export const pageNamed = (hash: string): PageId | undefined => {
+  const name = decodeURIComponent(hash.replace(/^#/, "")).toLowerCase();
+  return PAGES.find((page) => pageName(page.id) === name)?.id;
+};

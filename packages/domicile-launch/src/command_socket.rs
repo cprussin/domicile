@@ -106,14 +106,15 @@ pub fn browser_windows(
 }
 
 /// Tells the engine at `socket` to run the app module `module` under `root`
-/// in an app window.
+/// in an app window, at `#<fragment>` when there is one.
 pub fn run_app(
     socket: &Path,
     root: &Path,
     module: &Path,
+    fragment: Option<&str>,
     patience: Duration,
 ) -> Result<(), CommandError> {
-    match answered(socket, &run_app_line(root, module), patience)? {
+    match answered(socket, &run_app_line(root, module, fragment), patience)? {
         Reply::Opened { .. } => Ok(()),
         other => Err(unexpected(socket, &other)),
     }

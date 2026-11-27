@@ -41,6 +41,8 @@ namespace domicile {
 //   -> {"type":"refused","why":"..."}
 //
 //   {"type":"run_app","version":1,"root":"/opt/notes","module":"notes.js"}
+//   {"type":"run_app","version":1,"root":"/opt/notes","module":"notes.js",
+//    "fragment":"today"}         (opens at domicile://app-<id>/#today)
 //   -> {"type":"opened"}
 //   -> {"type":"refused","why":"..."}
 //
@@ -246,11 +248,13 @@ using LoadShell = base::FunctionRef<void(const base::FilePath& root,
 using WindowOpened = base::OnceCallback<void(bool opened)>;
 
 // Carries out `run_app`: serves the app module `module` under `root` and opens
-// an app window on it. Runs `opened` once, possibly after returning, as the
-// shell window's first page may still be loading. See
+// an app window on it, at `#<fragment>` when there is one, which the app
+// reads as `location.hash`. Runs `opened` once, possibly after returning, as
+// the shell window's first page may still be loading. See
 // docs/architecture/APP-MODULES.md.
 using RunApp = base::FunctionRef<void(const base::FilePath& root,
                                       const std::string& module,
+                                      std::optional<std::string> fragment,
                                       WindowOpened opened)>;
 
 // How `open_url` opens an app window: its id, and what to do when one with

@@ -2,6 +2,7 @@ import { describe, expect, it, setDefaultTimeout } from "bun:test";
 import type { Options } from "@domicile-desktop/sdk/options";
 import { defineOptions, option } from "@domicile-desktop/sdk/options";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -239,6 +240,60 @@ const choose = async (
 };
 
 describe(App, () => {
+  describe("its address", () => {
+    const opened = (hash: string) => {
+      location.hash = hash;
+      const host = fakeHost({
+        chosen: undefined,
+        configExtensions: [],
+        files: files({}),
+        installed: structuredClone(INSTALLED),
+        media: structuredClone(MEDIA),
+        siteData: structuredClone(SITE_DATA),
+        sites: structuredClone(SITES),
+      });
+      render(<App extensions={hostExtensions(host.host)} host={host.host} />);
+    };
+
+    it("opens on the page it names, as domicile-settings privacy does", async () => {
+      opened("#privacy");
+      try {
+        expect(
+          await screen.findByRole("heading", { level: 1, name: "Privacy" }),
+        ).toBeDefined();
+      } finally {
+        location.hash = "";
+      }
+    });
+
+    it("opens on the first page when it names none Settings has", async () => {
+      opened("#nowhere");
+      try {
+        expect(
+          await screen.findByRole("heading", { level: 1, name: "Appearance" }),
+        ).toBeDefined();
+      } finally {
+        location.hash = "";
+      }
+    });
+
+    it("turns to the page a new address names", async () => {
+      opened("");
+      await screen.findByRole("heading", { level: 1, name: "Appearance" });
+      location.hash = "#site-data";
+      act(() => {
+        dispatchEvent(new HashChangeEvent("hashchange"));
+      });
+      try {
+        expect(
+          await screen.findByRole("heading", { level: 1, name: "Site data" }),
+        ).toBeDefined();
+      } finally {
+        location.hash = "";
+      }
+    });
+  });
+
   describe("the config", () => {
     it("writes a choice as soon as it is made, keeping the rest", async () => {
       const { host, user } = await renderApp("Appearance", {
