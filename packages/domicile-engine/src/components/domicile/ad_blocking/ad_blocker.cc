@@ -3,12 +3,17 @@
 
 #include "components/domicile/ad_blocking/ad_blocker.h"
 
+#include <optional>
 #include <set>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/check.h"
+#include "base/json/json_reader.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
+#include "base/values.h"
 #include "components/domicile/ad_blocking/filter_engine.rs.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
@@ -43,8 +48,31 @@ void AddAll(std::set<std::string>& into,
   }
 }
 
+rust::Vec<rust::String> RustStringsOf(const std::vector<std::string>& strings) {
+  rust::Vec<rust::String> out;
+  out.reserve(strings.size());
+  for (const std::string& each : strings) {
+    out.push_back(rust::String(each));
+  }
+  return out;
+}
+
+// The strings in `list`, or nothing if it holds anything else, or a string
+// that is not UTF-8.
+std::optional<std::vector<std::string>> StringsIn(const base::ListValue& list) {
+  std::vector<std::string> strings;
+  for (const base::Value& each : list) {
+    if (!each.is_string() || !base::IsStringUTF8(each.GetString())) {
+      return std::nullopt;
+    }
+    strings.push_back(each.GetString());
+  }
+  return strings;
+}
+
 rust::Box<ad_blocking::FilterEngine> EngineOf(
-    const std::vector<std::string>& texts) {
+    const std::vector<std::string>& texts,
+    const rust::Vec<ad_blocking::Scriptlet>& scriptlets) {
   rust::Box<ad_blocking::FilterSetBuilder> builder =
       ad_blocking::new_filter_set();
   for (const std::string& text : texts) {
@@ -53,7 +81,10 @@ rust::Box<ad_blocking::FilterEngine> EngineOf(
     CHECK(base::IsStringUTF8(text));
     builder->add_list(Str(text));
   }
-  return ad_blocking::build(std::move(builder));
+  rust::Box<ad_blocking::FilterEngine> engine =
+      ad_blocking::build(std::move(builder));
+  engine->use_scriptlets(scriptlets);
+  return engine;
 }
 
 }  // namespace
@@ -102,20 +133,104 @@ struct AdBlocker::Engines {
   rust::Box<ad_blocking::FilterEngine> cookie_banners;
 };
 
+AdBlocker::Scriptlet::Scriptlet() = default;
+AdBlocker::Scriptlet::Scriptlet(const Scriptlet&) = default;
+AdBlocker::Scriptlet::Scriptlet(Scriptlet&&) = default;
+AdBlocker::Scriptlet& AdBlocker::Scriptlet::operator=(const Scriptlet&) =
+    default;
+AdBlocker::Scriptlet& AdBlocker::Scriptlet::operator=(Scriptlet&&) = default;
+AdBlocker::Scriptlet::~Scriptlet() = default;
+
+// static
+std::optional<std::vector<AdBlocker::Scriptlet>> AdBlocker::ScriptletsIn(
+    std::string_view text) {
+  std::optional<base::Value> json =
+      base::JSONReader::Read(text, base::JSON_PARSE_RFC);
+  if (!json.has_value() || !json->is_list()) {
+    return std::nullopt;
+  }
+  std::vector<Scriptlet> scriptlets;
+  for (const base::Value& each : json->GetList()) {
+    const base::DictValue* resource = each.GetIfDict();
+    if (resource == nullptr) {
+      return std::nullopt;
+    }
+    const std::string* name = resource->FindString("name");
+    const std::string* content = resource->FindString("content");
+    // `{"mime": "..."}`, or `"template"`, an older kind of scriptlet that
+    // adblock-rust fills in the same way.
+    const base::Value* kind = resource->Find("kind");
+    if (name == nullptr || content == nullptr || kind == nullptr ||
+        !base::IsStringUTF8(*name) || !base::IsStringASCII(*content)) {
+      return std::nullopt;
+    }
+    std::string mime;
+    if (kind->is_string() && kind->GetString() == "template") {
+      mime = "application/javascript";
+    } else if (const base::DictValue* of = kind->GetIfDict()) {
+      const std::string* named = of->FindString("mime");
+      if (named == nullptr) {
+        return std::nullopt;
+      }
+      mime = *named;
+    } else {
+      return std::nullopt;
+    }
+    if (mime != "application/javascript" && mime != "fn/javascript") {
+      continue;
+    }
+    if (resource->FindInt("permission").value_or(0) != 0) {
+      continue;
+    }
+    Scriptlet scriptlet;
+    scriptlet.name = *name;
+    scriptlet.kind = std::move(mime);
+    scriptlet.content = *content;
+    for (const auto& [key, into] :
+         {std::pair{"aliases", &scriptlet.aliases},
+          std::pair{"dependencies", &scriptlet.dependencies}}) {
+      const base::Value* found = resource->Find(key);
+      if (found == nullptr) {
+        continue;
+      }
+      std::optional<std::vector<std::string>> strings =
+          found->is_list() ? StringsIn(found->GetList()) : std::nullopt;
+      if (!strings.has_value()) {
+        return std::nullopt;
+      }
+      *into = *std::move(strings);
+    }
+    scriptlets.push_back(std::move(scriptlet));
+  }
+  return scriptlets;
+}
+
 // static
 std::unique_ptr<AdBlocker> AdBlocker::Build(
     const std::vector<std::string>& lists,
     const std::vector<std::string>& rules,
-    const std::vector<std::string>& cookie_banner_lists) {
+    const std::vector<std::string>& cookie_banner_lists,
+    const std::vector<Scriptlet>& scriptlets) {
   std::string own;
   for (const std::string& rule : rules) {
     own += rule;
     own += '\n';
   }
-  return base::WrapUnique(new AdBlocker(std::make_unique<Engines>(
-      Engines{.lists = EngineOf(lists),
-              .rules = EngineOf({own}),
-              .cookie_banners = EngineOf(cookie_banner_lists)})));
+  rust::Vec<ad_blocking::Scriptlet> rust_scriptlets;
+  rust_scriptlets.reserve(scriptlets.size());
+  for (const Scriptlet& scriptlet : scriptlets) {
+    // ScriptletsIn checked: rust strings must be UTF-8.
+    rust_scriptlets.push_back(ad_blocking::Scriptlet{
+        .name = rust::String(scriptlet.name),
+        .aliases = RustStringsOf(scriptlet.aliases),
+        .kind = rust::String(scriptlet.kind),
+        .content = rust::String(scriptlet.content),
+        .dependencies = RustStringsOf(scriptlet.dependencies)});
+  }
+  return base::WrapUnique(new AdBlocker(std::make_unique<Engines>(Engines{
+      .lists = EngineOf(lists, rust_scriptlets),
+      .rules = EngineOf({own}, rust_scriptlets),
+      .cookie_banners = EngineOf(cookie_banner_lists, rust_scriptlets)})));
 }
 
 AdBlocker::Cosmetics::Cosmetics() = default;
@@ -176,6 +291,9 @@ AdBlocker::Cosmetics AdBlocker::CosmeticsFor(const GURL& page,
     AddAll(hide, found.hide_selectors);
     AddAll(exceptions, found.exceptions);
     cosmetics.generichide = cosmetics.generichide || found.generichide;
+    // Each engine's on its own: one's may define what it runs, and two
+    // engines running the same scriptlet run it twice, as two rules would.
+    cosmetics.script += std::string(found.injected_script);
   };
   add(*engines_->rules);
   add(*engines_->lists);

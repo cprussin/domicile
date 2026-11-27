@@ -66,7 +66,8 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
         sender: "Domicile ad blocking"
         description:
           "Fetches a filter list that the desktop's config names, such as "
-          "EasyList, to block ads and trackers with."
+          "EasyList, to block ads and trackers with, or the scriptlets its "
+          "rules run."
         trigger:
           "The desktop starts, or the config names a list, with no copy kept "
           "or one kept for a day or more."
@@ -77,7 +78,7 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
         cookies_allowed: NO
         setting:
           "Set `browser.block_lists` in the desktop's config to the lists to "
-          "use, or to []."
+          "use, or to [], and `browser.scriptlet_resources` to null."
         policy_exception_justification: "Not a Chrome feature."
       })");
 
@@ -117,6 +118,17 @@ std::optional<std::string> Checked(const std::string& list,
   return text;
 }
 
+// Whether `text` is the file `pin`, a SHA-256 in lowercase hex, names: any
+// is without one.
+bool MatchesPin(const std::string& text,
+                const std::optional<std::string>& pin) {
+  return !pin.has_value() ||
+         base::ToLowerASCII(base::HexEncode(crypto::hash::Sha256(text))) ==
+             *pin;
+}
+
+constexpr char kPinned[] = "#sha256=";
+
 }  // namespace
 
 AdBlocking::Read::Read() = default;
@@ -140,16 +152,31 @@ AdBlocking::~AdBlocking() = default;
 
 void AdBlocking::Configure(std::vector<std::string> lists,
                            std::vector<std::string> rules,
-                           std::vector<std::string> cookie_banner_lists) {
+                           std::vector<std::string> cookie_banner_lists,
+                           std::optional<std::string> scriptlet_resources) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  // The config checked the pin is a whole SHA-256.
+  std::optional<std::string> scriptlets;
+  std::optional<std::string> pin;
+  if (scriptlet_resources.has_value()) {
+    const size_t at = scriptlet_resources->find(kPinned);
+    scriptlets = scriptlet_resources->substr(0, at);
+    if (at != std::string::npos) {
+      pin = base::ToLowerASCII(
+          scriptlet_resources->substr(at + std::size(kPinned) - 1));
+    }
+  }
   if (configured_ && lists == lists_ && rules == rules_ &&
-      cookie_banner_lists == cookie_banner_lists_) {
+      cookie_banner_lists == cookie_banner_lists_ &&
+      scriptlets == scriptlets_ && pin == scriptlets_pin_) {
     return;
   }
   configured_ = true;
   lists_ = std::move(lists);
   rules_ = std::move(rules);
   cookie_banner_lists_ = std::move(cookie_banner_lists);
+  scriptlets_ = std::move(scriptlets);
+  scriptlets_pin_ = std::move(pin);
   ++generation_;
   // A build under way is for the old config.
   ++build_;
@@ -157,12 +184,17 @@ void AdBlocking::Configure(std::vector<std::string> lists,
   VLOG(1) << "domicile: ad blocking: reading " << lists_.size()
           << " block lists and " << cookie_banner_lists_.size()
           << " cookie banner lists, with " << rules_.size()
-          << " rules of the user's";
+          << " rules of the user's and "
+          << (scriptlets_.has_value() ? "the scriptlets at " + *scriptlets_
+                                      : std::string("no scriptlets"))
+          << (scriptlets_pin_.has_value() ? " (pinned)" : "");
   // Paths are read again; fetched lists come from where they were kept.
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
       base::BindOnce(
-          [](base::FilePath dir, std::vector<std::string> lists) {
+          [](base::FilePath dir, std::vector<std::string> lists,
+             std::optional<std::string> scriptlets,
+             std::optional<std::string> pin) {
             Read read;
             for (const std::string& list : lists) {
               std::string text;
@@ -182,6 +214,15 @@ void AdBlocking::Configure(std::vector<std::string> lists,
                            << " cannot be read, so it is left out.";
                 continue;
               }
+              if (list == scriptlets && !MatchesPin(text, pin)) {
+                // A kept copy is the one fetched, which was checked: this
+                // is a pin the config changed, or a copy changed since.
+                LOG(ERROR) << "domicile: the scriptlets kept for " << list
+                           << " are not the file the config's #sha256= "
+                              "names, so they are fetched again.";
+                read.kept.erase(list);
+                continue;
+              }
               if (std::optional<std::string> checked =
                       Checked(list, std::move(text))) {
                 read.texts[list] = *std::move(checked);
@@ -189,7 +230,7 @@ void AdBlocking::Configure(std::vector<std::string> lists,
             }
             return read;
           },
-          kept_dir_, AllLists()),
+          kept_dir_, AllLists(), scriptlets_, scriptlets_pin_),
       base::BindOnce(&AdBlocking::Started, weak_factory_.GetWeakPtr(),
                      generation_));
   if (!refresh_.IsRunning()) {
@@ -212,7 +253,18 @@ std::vector<std::string> AdBlocking::AllLists() const {
   std::vector<std::string> all = lists_;
   all.insert(all.end(), cookie_banner_lists_.begin(),
              cookie_banner_lists_.end());
+  if (scriptlets_.has_value()) {
+    all.push_back(*scriptlets_);
+  }
   return all;
+}
+
+bool AdBlocking::Names(const std::string& list) const {
+  // Not `base::Contains`: `base/containers/contains.h` is gone at our pin.
+  return std::ranges::find(lists_, list) != lists_.end() ||
+         std::ranges::find(cookie_banner_lists_, list) !=
+             cookie_banner_lists_.end() ||
+         list == scriptlets_;
 }
 
 std::vector<std::string> AdBlocking::TextsOf(
@@ -240,10 +292,18 @@ void AdBlocking::Rebuild() {
   const int build = ++build_;
   std::vector<std::string> texts = TextsOf(lists_);
   std::vector<std::string> cookie_texts = TextsOf(cookie_banner_lists_);
+  std::optional<std::string> scriptlets_text;
+  if (scriptlets_.has_value()) {
+    if (auto found = texts_.find(*scriptlets_); found != texts_.end()) {
+      scriptlets_text = found->second;
+    }
+  }
   VLOG(1) << "domicile: ad blocking: building from " << texts.size() << " of "
           << lists_.size() << " block lists, " << cookie_texts.size() << " of "
           << cookie_banner_lists_.size() << " cookie banner lists and "
-          << rules_.size() << " rules of the user's";
+          << rules_.size() << " rules of the user's, "
+          << (scriptlets_text.has_value() ? "with" : "without")
+          << " scriptlets";
   if (texts.empty() && cookie_texts.empty() && rules_.empty()) {
     Built(build, nullptr);
     return;
@@ -252,15 +312,30 @@ void AdBlocking::Rebuild() {
       FROM_HERE, {base::TaskPriority::USER_BLOCKING},
       base::BindOnce(
           [](std::vector<std::string> texts, std::vector<std::string> rules,
-             std::vector<std::string> cookie_texts) {
+             std::vector<std::string> cookie_texts,
+             std::optional<std::string> scriptlets_at,
+             std::optional<std::string> scriptlets_text) {
             const base::TimeTicks start = base::TimeTicks::Now();
+            std::vector<AdBlocker::Scriptlet> scriptlets;
+            if (scriptlets_text.has_value()) {
+              std::optional<std::vector<AdBlocker::Scriptlet>> read =
+                  AdBlocker::ScriptletsIn(*scriptlets_text);
+              if (read.has_value()) {
+                scriptlets = *std::move(read);
+              } else {
+                LOG(ERROR) << "domicile: the scriptlets at " << *scriptlets_at
+                           << " are not an adblock-rust resources file, so "
+                              "no ##+js(...) rule runs.";
+              }
+            }
             std::unique_ptr<AdBlocker> blocker =
-                AdBlocker::Build(texts, rules, cookie_texts);
-            VLOG(1) << "domicile: ad blocking: built in "
-                    << (base::TimeTicks::Now() - start);
+                AdBlocker::Build(texts, rules, cookie_texts, scriptlets);
+            VLOG(1) << "domicile: ad blocking: built with " << scriptlets.size()
+                    << " scriptlets in " << (base::TimeTicks::Now() - start);
             return blocker;
           },
-          std::move(texts), rules_, std::move(cookie_texts)),
+          std::move(texts), rules_, std::move(cookie_texts), scriptlets_,
+          std::move(scriptlets_text)),
       base::BindOnce(&AdBlocking::Built, weak_factory_.GetWeakPtr(), build));
 }
 
@@ -286,7 +361,10 @@ void AdBlocking::FetchStale() {
       continue;
     }
     if (auto kept = kept_.find(list);
-        kept != kept_.end() && now - kept->second < kKeepFor) {
+        kept != kept_.end() &&
+        (now - kept->second < kKeepFor ||
+         // A pinned file can't change: the one kept is the one to use.
+         (list == scriptlets_ && scriptlets_pin_.has_value()))) {
       continue;
     }
     VLOG(1) << "domicile: ad blocking: fetching " << list;
@@ -323,11 +401,17 @@ void AdBlocking::Fetched(const std::string& list,
                  << "); trying again within " << kCheckEvery;
     return;
   }
+  if (list == scriptlets_ && !MatchesPin(*body, scriptlets_pin_)) {
+    // Not kept: the kept copy, if any, stays in use, and this is fetched
+    // again at the next check.
+    LOG(ERROR) << "domicile: the scriptlets fetched from " << list
+               << " are not the file the config's #sha256= names ("
+               << *scriptlets_pin_ << "), so they are left out; trying again "
+               << "within " << kCheckEvery;
+    return;
+  }
   std::optional<std::string> text = Checked(list, std::move(body));
-  // Not `base::Contains`: `base/containers/contains.h` is gone at our pin.
-  if (!text.has_value() || (std::ranges::find(lists_, list) == lists_.end() &&
-                            std::ranges::find(cookie_banner_lists_, list) ==
-                                cookie_banner_lists_.end())) {
+  if (!text.has_value() || !Names(list)) {
     return;
   }
   VLOG(1) << "domicile: ad blocking: fetched " << list << ", "
@@ -542,14 +626,17 @@ class CosmeticFiltering final
     }
     VLOG(1) << "domicile: ad blocking: hiding "
             << cosmetics.hide_selectors.size() << " selectors"
-            << (cosmetics.generichide ? ", and no generic ones," : "") << " in "
-            << url.possibly_invalid_spec() << " (" << AdBlockingModeName(mode)
+            << (cosmetics.generichide ? ", and no generic ones," : "")
+            << (cosmetics.script.empty() ? "" : ", running scriptlets,")
+            << " in " << url.possibly_invalid_spec() << " ("
+            << AdBlockingModeName(mode)
             << (cookie_banners ? ", cookie banners hidden" : "") << ")";
     mojo::AssociatedRemote<mojom::CosmeticFilters> frame;
     navigation->GetRenderFrameHost()
         ->GetRemoteAssociatedInterfaces()
         ->GetInterface(&frame);
-    frame->Hide(std::move(cosmetics.hide_selectors), std::move(host));
+    frame->Hide(std::move(cosmetics.hide_selectors),
+                std::move(cosmetics.script), std::move(host));
   }
 
  private:

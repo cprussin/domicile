@@ -1,0 +1,49 @@
+name: Scriptlets
+
+# Builds uBlock Origin's scriptlets as the resources file the engine fetches
+# for filter lists' `##+js(...)` rules, and checks it is the one the config's
+# default `browser.scriptlet_resources` pins by its sha256
+# (.github/scripts/scriptlet-resources.sh).
+#
+# - On a pull request that changes the pin or the build, so a wrong pin never
+#   reaches main. A failure says the sha256 to pin.
+# - On a push to main, which publishes the release in cprussin/domicile-builds
+#   when it is missing, so engines that read the new default can fetch it.
+#
+# A published release is only checked, never rebuilt or replaced.
+on:
+  pull_request:
+    paths:
+      - .github/scripts/scriptlet-resources.*
+      - .github/workflows/scriptlets.yml
+      - packages/domicile-config/src/lib.rs
+  push:
+    branches: [main]
+    paths:
+      - .github/scripts/scriptlet-resources.*
+      - .github/workflows/scriptlets.yml
+      - packages/domicile-config/src/lib.rs
+  workflow_dispatch:
+
+concurrency:
+  group: scriptlets-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  scriptlets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - name: Check
+        if: github.event_name == 'pull_request'
+        run: .github/scripts/scriptlet-resources.sh
+      - name: Publish
+        if: github.event_name != 'pull_request'
+        run: .github/scripts/scriptlet-resources.sh --publish
+        env:
+          GH_TOKEN: ${{ secrets.DOMICILE_BUILDS_TOKEN }}

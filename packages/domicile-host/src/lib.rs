@@ -97,6 +97,8 @@ pub struct BrowserFilters {
     pub block_rules: Vec<String>,
     /// The filter lists cookie banners are hidden with.
     pub cookie_banner_lists: Vec<String>,
+    /// The scriptlets the lists' `##+js(...)` rules run, if any.
+    pub scriptlet_resources: Option<String>,
 }
 
 /// A client window, whether or not the chrome has placed it.
@@ -600,6 +602,7 @@ impl Host {
             block_lists: filters.block_lists,
             block_rules: filters.block_rules,
             cookie_banner_lists: filters.cookie_banner_lists,
+            scriptlet_resources: filters.scriptlet_resources,
         });
     }
 
