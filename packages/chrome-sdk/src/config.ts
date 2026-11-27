@@ -81,6 +81,12 @@ export type AgentsConfig = {
  */
 export type BrowserConfig = {
   /**
+   * Also blocks ads and trackers in Electron apps' web pages, in
+   * Standard, with the lists' cosmetic filters too. Off unless set: an app
+   * has no shield to turn blocking off with when it breaks one.
+   */
+  block_in_electron_apps?: boolean;
+  /**
    * The filter lists ads and trackers are blocked with, in Adblock Plus
    * and uBlock Origin syntax: each an `https:` address, which the engine
    * fetches and keeps up to date, or an absolute path. EasyList,

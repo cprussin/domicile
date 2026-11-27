@@ -167,6 +167,7 @@ void BrowserProfileRegistry::Configure(Profile& shell,
   }
   InstallExtensions();
   Protect();
+  AdBlocking::Get().BlockInElectronApps(config_.block_in_electron_apps);
   AdBlocking::Get().Configure(config_.block_lists, config_.block_rules,
                               config_.cookie_banner_lists,
                               config_.scriptlet_resources);

@@ -1247,6 +1247,8 @@ pub enum HostMessage {
         /// end in `#sha256=` and the file's hash, or an absolute path.
         /// `None` runs none.
         scriptlet_resources: Option<String>,
+        /// Whether Electron apps' web pages are blocked in too, in Standard.
+        block_in_electron_apps: bool,
     },
 
     /// The config's `spellcheck`: whether the browser checks spelling in

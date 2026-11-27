@@ -6,7 +6,7 @@
 
 use std::collections::HashSet;
 
-use adblock::lists::{FilterSet, ParseOptions, RuleTypes};
+use adblock::lists::{ExpiresInterval, FilterSet, ParseOptions, RuleTypes};
 use adblock::request::Request;
 use adblock::resources::{MimeType, Resource, ResourceType};
 use adblock::url_parser::{set_domain_resolver, ResolvesDomain};
@@ -22,6 +22,12 @@ mod ffi {
         important: bool,
         /// An exception rule (`@@`) matched.
         exception: bool,
+        /// The `data:` URL a matched `$redirect` rule answers with instead,
+        /// or empty: empty too when the engine has no such stand-in.
+        redirect: String,
+        /// The URL less what `$removeparam` rules remove, or empty when they
+        /// remove nothing.
+        rewritten_url: String,
     }
 
     /// What one engine hides on a page at one address, before the page's
@@ -72,6 +78,9 @@ mod ffi {
         /// The engine for every list added. Slow: a few hundred milliseconds
         /// for EasyList and EasyPrivacy.
         fn build(builder: Box<FilterSetBuilder>) -> Box<FilterEngine>;
+        /// How long a list says to keep it before fetching it again, by its
+        /// `! Expires:`, in hours: 0 when it names none.
+        fn list_expires_hours(text: &str) -> u32;
         /// Gives the engine `scriptlets` for its `##+js(...)` rules to run,
         /// in place of any it had.
         fn use_scriptlets(self: &mut FilterEngine, scriptlets: &Vec<Scriptlet>);
@@ -90,6 +99,19 @@ mod ffi {
             third_party: bool,
             method: &str,
         ) -> Verdict;
+
+        /// The `Content-Security-Policy` the engine's `$csp` rules add to the
+        /// response for a document or frame, as `check` takes it, or empty
+        /// for none.
+        fn csp_directives(
+            self: &FilterEngine,
+            url: &str,
+            hostname: &str,
+            page_hostname: &str,
+            request_type: &str,
+            third_party: bool,
+            method: &str,
+        ) -> String;
 
         /// What the engine hides on the page at `url`.
         fn cosmetics(self: &FilterEngine, url: &str) -> Cosmetics;
@@ -139,6 +161,14 @@ fn build(builder: Box<FilterSetBuilder>) -> Box<FilterEngine> {
     Box::new(FilterEngine(Engine::new_with_filter_set(builder.0)))
 }
 
+fn list_expires_hours(text: &str) -> u32 {
+    match adblock::lists::read_list_metadata(text).expires {
+        Some(ExpiresInterval::Hours(hours)) => hours.into(),
+        Some(ExpiresInterval::Days(days)) => u32::from(days) * 24,
+        None => 0,
+    }
+}
+
 impl FilterEngine {
     fn use_scriptlets(&mut self, scriptlets: &Vec<ffi::Scriptlet>) {
         self.0.use_resources(scriptlets.iter().map(|scriptlet| Resource {
@@ -167,7 +197,23 @@ impl FilterEngine {
             matched: result.filter.is_some(),
             important: result.important,
             exception: result.exception.is_some(),
+            redirect: result.redirect.unwrap_or_default(),
+            rewritten_url: result.rewritten_url.unwrap_or_default(),
         }
+    }
+
+    fn csp_directives(
+        &self,
+        url: &str,
+        hostname: &str,
+        page_hostname: &str,
+        request_type: &str,
+        third_party: bool,
+        method: &str,
+    ) -> String {
+        let request =
+            Request::preparsed(url, hostname, page_hostname, request_type, third_party, method);
+        self.0.get_csp_directives(&request).unwrap_or_default()
     }
 
     fn cosmetics(&self, url: &str) -> ffi::Cosmetics {

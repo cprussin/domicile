@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/byte_size.h"
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
 #include "base/functional/bind.h"
@@ -19,6 +20,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
@@ -35,26 +37,49 @@
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "crypto/hash.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_associated_receiver.h"
+#include "mojo/public/cpp/system/data_pipe.h"
+#include "net/base/address_list.h"
+#include "net/base/data_url.h"
+#include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
+#include "net/base/network_anonymization_key.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "net/dns/public/dns_query_type.h"
+#include "net/http/http_response_headers.h"
+#include "net/http/http_status_code.h"
+#include "net/http/http_util.h"
+#include "net/proxy_resolution/proxy_info.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "net/url_request/redirect_info.h"
+#include "services/network/public/cpp/parsed_headers.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/self_deleting_url_loader_factory.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/simple_host_resolver.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/cpp/url_loader_factory_builder.h"
+#include "services/network/public/mojom/early_hints.mojom.h"
+#include "services/network/public/mojom/fetch_api.mojom.h"
+#include "services/network/public/mojom/host_resolver.mojom.h"
+#include "services/network/public/mojom/network_context.mojom.h"
+#include "services/network/public/mojom/proxy_lookup_client.mojom.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace domicile {
 
@@ -82,8 +107,8 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
         policy_exception_justification: "Not a Chrome feature."
       })");
 
-// How long a fetched list is kept before it is fetched again, and how often
-// that is checked.
+// How long a fetched list is kept before it is fetched again, when its
+// `! Expires:` says nothing, and how often that is checked.
 constexpr base::TimeDelta kKeepFor = base::Days(1);
 constexpr base::TimeDelta kCheckEvery = base::Hours(1);
 // The most `DownloadToString` takes (5 MB): it CHECKs the bound. EasyList,
@@ -284,6 +309,10 @@ void AdBlocking::Started(int generation, Read read) {
   }
   texts_ = std::move(read.texts);
   kept_ = std::move(read.kept);
+  keep_for_.clear();
+  for (const auto& [list, text] : texts_) {
+    KeepFor(list, text);
+  }
   Rebuild();
   FetchStale();
 }
@@ -354,6 +383,16 @@ void AdBlocking::Built(int build, std::unique_ptr<AdBlocker> blocker) {
   }
 }
 
+void AdBlocking::KeepFor(const std::string& list, const std::string& text) {
+  if (!IsFetched(list)) {
+    return;
+  }
+  const std::optional<base::TimeDelta> expiry = AdBlocker::ListExpiry(text);
+  keep_for_[list] = expiry.value_or(kKeepFor);
+  VLOG(1) << "domicile: ad blocking: " << list << " is fetched again after "
+          << keep_for_[list] << (expiry ? ", as its ! Expires: says" : "");
+}
+
 void AdBlocking::FetchStale() {
   const base::Time now = base::Time::Now();
   for (const std::string& list : AllLists()) {
@@ -362,7 +401,8 @@ void AdBlocking::FetchStale() {
     }
     if (auto kept = kept_.find(list);
         kept != kept_.end() &&
-        (now - kept->second < kKeepFor ||
+        (now - kept->second <
+             (keep_for_.contains(list) ? keep_for_.at(list) : kKeepFor) ||
          // A pinned file can't change: the one kept is the one to use.
          (list == scriptlets_ && scriptlets_pin_.has_value()))) {
       continue;
@@ -417,6 +457,7 @@ void AdBlocking::Fetched(const std::string& list,
   VLOG(1) << "domicile: ad blocking: fetched " << list << ", "
           << text->size() << " bytes";
   kept_[list] = base::Time::Now();
+  KeepFor(list, *text);
   base::ThreadPool::PostTask(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(
@@ -435,8 +476,451 @@ void AdBlocking::Fetched(const std::string& list,
 
 namespace {
 
-// Checks each request of one frame's page against AdBlocking. See
-// ProxyAdBlocking.
+// The page a request is checked for, and that page's mode.
+struct CheckedIn {
+  GURL page;
+  AdBlockingMode mode;
+  // Whether the page hides cookie banners, so the cookie banner lists'
+  // rules apply too.
+  bool cookie_banners = false;
+};
+
+// What `request`, from the frame `frame_id`, is checked in: nothing when it
+// is not checked, as when no blocker is up, the page is not a website's or
+// its mode is Off. A frame tree's own navigation (kDocument) is checked in
+// the mode of the page it goes to; any other request in the committed
+// page's.
+std::optional<CheckedIn> CheckedInFor(content::GlobalRenderFrameHostId frame_id,
+                                      const network::ResourceRequest& request) {
+  if (AdBlocking::Get().blocker() == nullptr ||
+      !(request.url.SchemeIsHTTPOrHTTPS() || request.url.SchemeIsWSOrWSS())) {
+    return std::nullopt;
+  }
+  content::RenderFrameHost* frame = content::RenderFrameHost::FromID(frame_id);
+  if (frame == nullptr) {
+    return std::nullopt;
+  }
+  content::WebContents* contents =
+      content::WebContents::FromRenderFrameHost(frame);
+  const bool navigation =
+      request.destination == network::mojom::RequestDestination::kDocument;
+  // The page is the guest's own top document: a <webview>'s embedder is the
+  // shell, not the site.
+  const GURL page =
+      navigation ? request.url
+                 : contents->GetPrimaryMainFrame()->GetLastCommittedURL();
+  // Checked when its loader starts, as an app may take a window over later.
+  if (ElectronPage::SessionOf(*contents)) {
+    // An app's page is in no profile, so has no mode of its own.
+    return AdBlocking::Get().blocks_electron_apps() &&
+                   page.SchemeIsHTTPOrHTTPS()
+               ? std::optional<CheckedIn>(
+                     {.page = page, .mode = AdBlockingMode::kStandard})
+               : std::nullopt;
+  }
+  PagePrivacy::CreateForWebContents(contents);
+  const PagePrivacy& privacy = *PagePrivacy::FromWebContents(contents);
+  CheckedIn checked = {
+      .page = page,
+      .mode = navigation ? privacy.ModeFor(page) : privacy.mode(),
+      .cookie_banners =
+          navigation ? privacy.IsOnFor(PageProtection::kHideCookieBanners, page)
+                     : privacy.IsOn(PageProtection::kHideCookieBanners)};
+  if (!checked.page.SchemeIsHTTPOrHTTPS() ||
+      checked.mode == AdBlockingMode::kOff) {
+    return std::nullopt;
+  }
+  return checked;
+}
+
+bool IsDocument(const network::ResourceRequest& request) {
+  using network::mojom::RequestDestination;
+  return request.destination == RequestDestination::kDocument ||
+         request.destination == RequestDestination::kIframe ||
+         request.destination == RequestDestination::kFrame ||
+         request.destination == RequestDestination::kFencedframe;
+}
+
+// One checked request, between the page's loader and the network's: blocks
+// it, answers a `$redirect` with its stand-in, loads it without what
+// `$removeparam` removes, checks it again under its host's canonical name,
+// checks each redirect the network answers, and adds a document's `$csp`.
+// See ProxyAdBlocking.
+class AdBlockingLoader final : public network::mojom::URLLoader,
+                               public network::mojom::URLLoaderClient,
+                               public network::mojom::ProxyLookupClient {
+ public:
+  AdBlockingLoader(
+      CheckedIn checked,
+      content::GlobalRenderFrameHostId frame,
+      mojo::PendingRemote<network::mojom::URLLoaderFactory> network,
+      int32_t request_id,
+      uint32_t options,
+      const network::ResourceRequest& request,
+      mojo::PendingReceiver<network::mojom::URLLoader> loader,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
+      : checked_(std::move(checked)),
+        frame_(frame),
+        network_(std::move(network)),
+        request_id_(request_id),
+        options_(options),
+        request_(request),
+        traffic_annotation_(traffic_annotation),
+        loader_(this, std::move(loader)),
+        client_(std::move(client)) {
+    loader_.set_disconnect_handler(
+        base::BindOnce(&AdBlockingLoader::Done, base::Unretained(this)));
+    client_.set_disconnect_handler(
+        base::BindOnce(&AdBlockingLoader::Done, base::Unretained(this)));
+  }
+
+  void Start() {
+    const AdBlocker::Decision decision = Decide(request_);
+    switch (decision.kind) {
+      case AdBlocker::Decision::Kind::kBlock:
+        return Fail(net::ERR_BLOCKED_BY_CLIENT);
+      case AdBlocker::Decision::Kind::kRedirect:
+        return Stub(decision.url);
+      case AdBlocker::Decision::Kind::kRewrite:
+        return RedirectTo(decision.url);
+      case AdBlocker::Decision::Kind::kAllow:
+        return Uncloak();
+    }
+  }
+
+  // network::mojom::ProxyLookupClient:
+  void OnProxyLookupComplete(
+      int32_t net_error,
+      const std::optional<net::ProxyInfo>& proxy_info) override {
+    proxy_lookup_.reset();
+    // Through a proxy, the name this host resolves to here is not the one
+    // the request reaches, and a lookup would tell the DNS server what the
+    // proxy is meant to hide. Brave skips these too.
+    if (net_error != net::OK || !proxy_info || !proxy_info->is_direct()) {
+      return StartOnTheNetwork();
+    }
+    content::RenderFrameHost* frame = content::RenderFrameHost::FromID(frame_);
+    if (frame == nullptr) {
+      return StartOnTheNetwork();
+    }
+    resolver_ = network::SimpleHostResolver::Create(
+        frame->GetStoragePartition()->GetNetworkContext());
+    auto parameters = network::mojom::ResolveHostParameters::New();
+    parameters->include_canonical_name = true;
+    parameters->dns_query_type = net::DnsQueryType::A;
+    resolver_->ResolveHost(
+        network::mojom::HostResolverHost::NewHostPortPair(
+            net::HostPortPair::FromURL(request_.url)),
+        anonymization_key_, std::move(parameters),
+        base::BindOnce(&AdBlockingLoader::Resolved, base::Unretained(this)));
+  }
+
+  // network::mojom::URLLoader:
+  void FollowRedirect(network::HttpRequestHeadersUpdateParams update,
+                      const std::optional<GURL>& new_url) override {
+    if (rewritten_) {
+      // RedirectTo's own: the network has not seen the request yet.
+      request_.url = *std::exchange(rewritten_, std::nullopt);
+      for (const std::string& name : update.removed_headers) {
+        request_.headers.RemoveHeader(name);
+      }
+      request_.headers.MergeFrom(update.modified_headers);
+      request_.cors_exempt_headers.MergeFrom(
+          update.modified_cors_exempt_headers);
+      return StartOnTheNetwork();
+    }
+    // Any other redirect is the network's, so its loader is up.
+    CHECK(network_loader_);
+    network_loader_->FollowRedirect(std::move(update), new_url);
+  }
+
+  void SetPriority(net::RequestPriority priority,
+                   int32_t intra_priority_value) override {
+    request_.priority = priority;
+    if (network_loader_) {
+      network_loader_->SetPriority(priority, intra_priority_value);
+    }
+  }
+
+  // network::mojom::URLLoaderClient:
+  void OnReceiveEarlyHints(network::mojom::EarlyHintsPtr hints) override {
+    client_->OnReceiveEarlyHints(std::move(hints));
+  }
+
+  void OnReceiveResponse(
+      network::mojom::URLResponseHeadPtr head,
+      mojo::ScopedDataPipeConsumerHandle body,
+      std::optional<mojo_base::BigBuffer> cached_metadata) override {
+    const AdBlocker* blocker = AdBlocking::Get().blocker();
+    if (blocker != nullptr && IsDocument(request_) && head->headers) {
+      const std::string directives =
+          blocker->CspDirectives(request_.url, PageOf(request_),
+                                 AdBlockRequestType(request_.destination),
+                                 request_.method, checked_.cookie_banners);
+      if (!directives.empty()) {
+        VLOG(1) << "domicile: ad blocking: adding the policy " << directives
+                << " to " << request_.url.possibly_invalid_spec();
+        head->headers->AddHeader("Content-Security-Policy", directives);
+        // Blink reads a document's policy from the parsed headers.
+        head->parsed_headers =
+            network::PopulateParsedHeaders(head->headers.get(), request_.url);
+      }
+    }
+    client_->OnReceiveResponse(std::move(head), std::move(body),
+                               std::move(cached_metadata));
+  }
+
+  void OnReceiveRedirect(const net::RedirectInfo& redirect,
+                         network::mojom::URLResponseHeadPtr head) override {
+    network::ResourceRequest next = request_;
+    next.url = redirect.new_url;
+    next.method = redirect.new_method;
+    // A server's redirect is followed as it is: rewriting it again could
+    // loop with a server that adds the parameters back.
+    if (Decide(next).blocks()) {
+      return Fail(net::ERR_BLOCKED_BY_CLIENT);
+    }
+    request_ = std::move(next);
+    client_->OnReceiveRedirect(redirect, std::move(head));
+  }
+
+  void OnUploadProgress(int64_t current_position,
+                        int64_t total_size,
+                        OnUploadProgressCallback callback) override {
+    client_->OnUploadProgress(current_position, total_size,
+                              std::move(callback));
+  }
+
+  void OnTransferSizeUpdated(int32_t transfer_size_diff) override {
+    client_->OnTransferSizeUpdated(transfer_size_diff);
+  }
+
+  void OnComplete(const network::URLLoaderCompletionStatus& status) override {
+    client_->OnComplete(status);
+    Done();
+  }
+
+ private:
+  ~AdBlockingLoader() override = default;
+
+  // The page `request` is checked for: itself, when it is a frame tree's
+  // navigation.
+  GURL PageOf(const network::ResourceRequest& request) const {
+    return request.destination == network::mojom::RequestDestination::kDocument
+               ? request.url
+               : checked_.page;
+  }
+
+  AdBlocker::Decision Decide(const network::ResourceRequest& request) const {
+    const AdBlocker* blocker = AdBlocking::Get().blocker();
+    // A page's own navigation is the user's to make.
+    if (blocker == nullptr ||
+        request.destination == network::mojom::RequestDestination::kDocument ||
+        !(request.url.SchemeIsHTTPOrHTTPS() || request.url.SchemeIsWSOrWSS())) {
+      return {};
+    }
+    const std::string_view type = AdBlockRequestType(request.destination);
+    AdBlocker::Decision decision = blocker->Decide(
+        request.url, checked_.page, type, request.method,
+        checked_.mode == AdBlockingMode::kStrict, checked_.cookie_banners);
+    if (decision.kind != AdBlocker::Decision::Kind::kAllow) {
+      VLOG(1) << "domicile: ad blocking: "
+              << (decision.kind == AdBlocker::Decision::Kind::kBlock ? "blocked"
+                  : decision.kind == AdBlocker::Decision::Kind::kRedirect
+                      ? "answered with a stand-in"
+                      : "removed parameters from")
+              << " a " << type << " request for "
+              << request.url.possibly_invalid_spec() << " from "
+              << checked_.page.possibly_invalid_spec() << " ("
+              << AdBlockingModeName(checked_.mode)
+              << (checked_.cookie_banners ? ", cookie banners hidden" : "")
+              << ")";
+    }
+    return decision;
+  }
+
+  // CNAME uncloaking, as Brave does it: a request nothing blocked is checked
+  // again under the canonical name its host resolves to, which finds a
+  // tracker a site serves from a subdomain of its own. Only a request the
+  // lists could block (another site's, or any in Strict) that goes straight
+  // to its host by name.
+  void Uncloak() {
+    content::RenderFrameHost* frame = content::RenderFrameHost::FromID(frame_);
+    namespace domains = net::registry_controlled_domains;
+    const bool lists_apply =
+        checked_.mode == AdBlockingMode::kStrict ||
+        !domains::SameDomainOrHost(request_.url, checked_.page,
+                                   domains::INCLUDE_PRIVATE_REGISTRIES);
+    if (frame == nullptr || IsDocument(request_) || !lists_apply ||
+        !request_.url.SchemeIsHTTPOrHTTPS() || request_.url.HostIsIPAddress()) {
+      return StartOnTheNetwork();
+    }
+    anonymization_key_ =
+        frame->GetIsolationInfoForSubresources().network_anonymization_key();
+    frame->GetStoragePartition()->GetNetworkContext()->LookUpProxyForURL(
+        request_.url, anonymization_key_,
+        proxy_lookup_.BindNewPipeAndPassRemote());
+    proxy_lookup_.set_disconnect_handler(base::BindOnce(
+        &AdBlockingLoader::StartOnTheNetwork, base::Unretained(this)));
+  }
+
+  void Resolved(int result,
+                const net::ResolveErrorInfo&,
+                const net::AddressList& addresses,
+                const net::HostResolverEndpointResults&) {
+    resolver_.reset();
+    const std::vector<std::string>& aliases = addresses.dns_aliases();
+    if (result == net::OK && !aliases.empty() &&
+        aliases.front() != request_.url.host()) {
+      GURL::Replacements host;
+      host.SetHostStr(aliases.front());
+      network::ResourceRequest cloaked = request_;
+      cloaked.url = request_.url.ReplaceComponents(host);
+      if (Decide(cloaked).blocks()) {
+        VLOG(1) << "domicile: ad blocking: " << request_.url.host() << " is "
+                << aliases.front() << ", which is blocked";
+        return Fail(net::ERR_BLOCKED_BY_CLIENT);
+      }
+    }
+    StartOnTheNetwork();
+  }
+
+  void StartOnTheNetwork() {
+    network_->CreateLoaderAndStart(network_loader_.BindNewPipeAndPassReceiver(),
+                                   request_id_, options_, request_,
+                                   network_client_.BindNewPipeAndPassRemote(),
+                                   traffic_annotation_);
+    network_client_.set_disconnect_handler(base::BindOnce(
+        &AdBlockingLoader::Fail, base::Unretained(this), net::ERR_ABORTED));
+  }
+
+  // Answers with a `$redirect` rule's stand-in, as Brave's MakeStubResponse
+  // does.
+  void Stub(const GURL& data_url) {
+    std::string mime_type;
+    std::string charset;
+    std::string data;
+    if (!net::DataURL::Parse(data_url, &mime_type, &charset, &data)) {
+      // adblock-rust builds it from the resources, so this is its bug.
+      LOG(ERROR) << "domicile: ad blocking: a $redirect stand-in is no "
+                    "data: URL, so the request is only blocked";
+      return Fail(net::ERR_BLOCKED_BY_CLIENT);
+    }
+    Counted();
+    mojo::ScopedDataPipeProducerHandle producer;
+    mojo::ScopedDataPipeConsumerHandle consumer;
+    if (mojo::CreateDataPipe(std::max<size_t>(data.size(), 1), producer,
+                             consumer) != MOJO_RESULT_OK) {
+      return Fail(net::ERR_INSUFFICIENT_RESOURCES);
+    }
+    auto head = network::mojom::URLResponseHead::New();
+    head->headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+        net::HttpUtil::AssembleRawHeaders(
+            base::StringPrintf("HTTP/1.1 200 OK\n"
+                               "Content-Type: %s\n"
+                               "Access-Control-Allow-Origin: *\n\n",
+                               mime_type.c_str())));
+    head->mime_type = mime_type;
+    head->charset = charset;
+    head->content_length = data.size();
+    client_->OnReceiveResponse(std::move(head), std::move(consumer),
+                               std::nullopt);
+    producer->WriteAllData(base::as_byte_span(data));
+    producer.reset();
+    network::URLLoaderCompletionStatus status(net::OK);
+    status.decoded_body_length = base::ByteSize(data.size());
+    client_->OnComplete(status);
+    Done();
+  }
+
+  // Redirects to `url` before the network sees the request, as Chrome's
+  // webRequest does when an extension redirects one.
+  void RedirectTo(const GURL& url) {
+    constexpr int kStatus = net::HTTP_TEMPORARY_REDIRECT;
+    const net::RedirectInfo redirect = net::RedirectInfo::ComputeRedirectInfo(
+        request_.method, request_.url, request_.site_for_cookies,
+        request_.update_first_party_url_on_redirect
+            ? net::RedirectInfo::FirstPartyURLPolicy::UPDATE_URL_ON_REDIRECT
+            : net::RedirectInfo::FirstPartyURLPolicy::NEVER_CHANGE_URL,
+        request_.referrer_policy, request_.referrer.spec(),
+        request_.request_initiator, kStatus, url,
+        /*referrer_policy_header=*/std::nullopt,
+        /*insecure_scheme_was_upgraded=*/false, /*copy_fragment=*/false,
+        /*is_signed_exchange_fallback_redirect=*/false);
+    std::string raw = base::StringPrintf(
+        "HTTP/1.1 %i Internal Redirect\n"
+        "Location: %s\n"
+        "Non-Authoritative-Reason: Domicile ad blocking\n",
+        kStatus, url.spec().c_str());
+    // A cross-origin fetch's redirect is let through, as webRequest's is.
+    if (request_.request_initiator.has_value() &&
+        (request_.mode == network::mojom::RequestMode::kCors ||
+         request_.mode ==
+             network::mojom::RequestMode::kCorsWithForcedPreflight)) {
+      raw += base::StringPrintf(
+          "Access-Control-Allow-Origin: %s\n"
+          "Access-Control-Allow-Credentials: true\n",
+          request_.request_initiator->Serialize().c_str());
+    }
+    raw += "\n";
+    auto head = network::mojom::URLResponseHead::New();
+    head->headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+        net::HttpUtil::AssembleRawHeaders(raw));
+    head->encoded_data_length = 0;
+    rewritten_ = url;
+    client_->OnReceiveRedirect(redirect, std::move(head));
+  }
+
+  void Fail(int error) {
+    if (error == net::ERR_BLOCKED_BY_CLIENT) {
+      Counted();
+    }
+    client_->OnComplete(network::URLLoaderCompletionStatus(error));
+    Done();
+  }
+
+  // One more blocked on the page, for its shell's count. An Electron app's
+  // page has no shield to count for.
+  void Counted() {
+    content::RenderFrameHost* frame = content::RenderFrameHost::FromID(frame_);
+    if (frame == nullptr) {
+      return;
+    }
+    content::WebContents* contents =
+        content::WebContents::FromRenderFrameHost(frame);
+    if (ElectronPage::SessionOf(*contents)) {
+      return;
+    }
+    PagePrivacy::CreateForWebContents(contents);
+    PagePrivacy::FromWebContents(contents)->CountBlocked();
+  }
+
+  void Done() { delete this; }
+
+  const CheckedIn checked_;
+  const content::GlobalRenderFrameHostId frame_;
+  // For Uncloak's proxy lookup and its host's name, as the frame's own
+  // requests are keyed.
+  net::NetworkAnonymizationKey anonymization_key_;
+  mojo::Receiver<network::mojom::ProxyLookupClient> proxy_lookup_{this};
+  std::unique_ptr<network::SimpleHostResolver> resolver_;
+  mojo::Remote<network::mojom::URLLoaderFactory> network_;
+  const int32_t request_id_;
+  const uint32_t options_;
+  network::ResourceRequest request_;
+  const net::MutableNetworkTrafficAnnotationTag traffic_annotation_;
+  // The URL RedirectTo sent the page to, until the page follows.
+  std::optional<GURL> rewritten_;
+
+  mojo::Receiver<network::mojom::URLLoader> loader_;
+  mojo::Remote<network::mojom::URLLoaderClient> client_;
+  mojo::Remote<network::mojom::URLLoader> network_loader_;
+  mojo::Receiver<network::mojom::URLLoaderClient> network_client_{this};
+};
+
+// Hands each request of one frame that is checked to an AdBlockingLoader,
+// and the rest straight to the network. See ProxyAdBlocking.
 class AdBlockingURLLoaderFactory final
     : public network::SelfDeletingURLLoaderFactory {
  public:
@@ -473,64 +957,20 @@ class AdBlockingURLLoaderFactory final
              const network::ResourceRequest& request,
              mojo::PendingRemote<network::mojom::URLLoaderClient> client,
              const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
-    if (Blocks(request)) {
-      mojo::Remote<network::mojom::URLLoaderClient>(std::move(client))
-          ->OnComplete(
-              network::URLLoaderCompletionStatus(net::ERR_BLOCKED_BY_CLIENT));
+    std::optional<CheckedIn> checked = CheckedInFor(frame_, request);
+    if (!checked) {
+      network_->CreateLoaderAndStart(std::move(loader), request_id, options,
+                                     request, std::move(client),
+                                     traffic_annotation);
       return;
     }
-    network_->CreateLoaderAndStart(std::move(loader), request_id, options,
-                                   request, std::move(client),
-                                   traffic_annotation);
-  }
-
-  // Whether the blocker blocks `request`, in its page's mode, and counts it
-  // for the page if so.
-  bool Blocks(const network::ResourceRequest& request) const {
-    const AdBlocker* blocker = AdBlocking::Get().blocker();
-    // A page's own navigation is the user's to make.
-    if (blocker == nullptr ||
-        request.destination == network::mojom::RequestDestination::kDocument ||
-        !(request.url.SchemeIsHTTPOrHTTPS() || request.url.SchemeIsWSOrWSS())) {
-      return false;
-    }
-    content::RenderFrameHost* frame = content::RenderFrameHost::FromID(frame_);
-    if (frame == nullptr) {
-      return false;
-    }
-    content::WebContents* contents =
-        content::WebContents::FromRenderFrameHost(frame);
-    // An app may take a window over after its frame's loader was made.
-    if (ElectronPage::SessionOf(*contents)) {
-      return false;
-    }
-    // The page is the guest's own top document: a <webview>'s embedder is
-    // the shell, not the site.
-    const GURL& page = contents->GetPrimaryMainFrame()->GetLastCommittedURL();
-    if (!page.SchemeIsHTTPOrHTTPS()) {
-      return false;
-    }
-    // The page's own: its window's, its site's or its profile's.
-    PagePrivacy::CreateForWebContents(contents);
-    PagePrivacy& privacy = *PagePrivacy::FromWebContents(contents);
-    const AdBlockingMode mode = privacy.mode();
-    if (mode == AdBlockingMode::kOff) {
-      return false;
-    }
-    const bool strict = mode == AdBlockingMode::kStrict;
-    const bool cookie_banners =
-        privacy.IsOn(PageProtection::kHideCookieBanners);
-    const std::string_view type = AdBlockRequestType(request.destination);
-    if (!blocker->ShouldBlock(request.url, page, type, request.method, strict,
-                              cookie_banners)) {
-      return false;
-    }
-    privacy.CountBlocked();
-    VLOG(1) << "domicile: ad blocking: blocked a " << type << " request for "
-            << request.url.possibly_invalid_spec() << " from "
-            << page.possibly_invalid_spec() << " (" << AdBlockingModeName(mode)
-            << (cookie_banners ? ", cookie banners hidden" : "") << ")";
-    return true;
+    mojo::PendingRemote<network::mojom::URLLoaderFactory> network;
+    network_->Clone(network.InitWithNewPipeAndPassReceiver());
+    // Owns itself: it goes when the request ends or either side does.
+    (new AdBlockingLoader(*std::move(checked), frame_, std::move(network),
+                          request_id, options, request, std::move(loader),
+                          std::move(client), traffic_annotation))
+        ->Start();
   }
 
   mojo::Remote<network::mojom::URLLoaderFactory> network_;
@@ -593,29 +1033,33 @@ class CosmeticFiltering final
     if (!url.SchemeIsHTTPOrHTTPS()) {
       return;
     }
-    // An app may take a window over after it was attached.
-    if (ElectronPage::SessionOf(GetWebContents())) {
-      return;
-    }
     const AdBlocker* blocker = AdBlocking::Get().blocker();
     if (blocker == nullptr) {
       return;
     }
     // The page's mode: for its main frame, the page about to commit's; for
-    // a frame in it, the committed page's.
-    PagePrivacy::CreateForWebContents(&GetWebContents());
-    const PagePrivacy& privacy =
-        *PagePrivacy::FromWebContents(&GetWebContents());
-    const AdBlockingMode mode = navigation->IsInPrimaryMainFrame()
-                                    ? privacy.ModeFor(url)
-                                    : privacy.mode();
+    // a frame in it, the committed page's. An app may take a window over
+    // after it was attached; its page is in no profile, and hides in
+    // Standard, with no cookie banner lists, when the config asks.
+    AdBlockingMode mode = AdBlockingMode::kOff;
+    bool cookie_banners = false;
+    if (ElectronPage::SessionOf(GetWebContents())) {
+      if (AdBlocking::Get().blocks_electron_apps()) {
+        mode = AdBlockingMode::kStandard;
+      }
+    } else {
+      PagePrivacy::CreateForWebContents(&GetWebContents());
+      const PagePrivacy& privacy =
+          *PagePrivacy::FromWebContents(&GetWebContents());
+      const bool main_frame = navigation->IsInPrimaryMainFrame();
+      mode = main_frame ? privacy.ModeFor(url) : privacy.mode();
+      cookie_banners =
+          main_frame ? privacy.IsOnFor(PageProtection::kHideCookieBanners, url)
+                     : privacy.IsOn(PageProtection::kHideCookieBanners);
+    }
     if (mode == AdBlockingMode::kOff) {
       return;
     }
-    const bool cookie_banners =
-        navigation->IsInPrimaryMainFrame()
-            ? privacy.IsOnFor(PageProtection::kHideCookieBanners, url)
-            : privacy.IsOn(PageProtection::kHideCookieBanners);
     AdBlocker::Cosmetics cosmetics = blocker->CosmeticsFor(url, cookie_banners);
     mojo::PendingAssociatedRemote<mojom::CosmeticFiltersHost> host;
     if (!cosmetics.generichide) {
@@ -658,10 +1102,9 @@ void ProxyAdBlocking(content::RenderFrameHost* frame,
   if (frame == nullptr) {
     return;
   }
-  content::WebContents* contents =
-      content::WebContents::FromRenderFrameHost(frame);
-  // An Electron app's pages are the app's, as in Electron.
-  if (contents == nullptr || ElectronPage::SessionOf(*contents)) {
+  // Every frame of a guest, an Electron app's too: whether its requests are
+  // checked is decided as each starts, by the config of the moment.
+  if (content::WebContents::FromRenderFrameHost(frame) == nullptr) {
     return;
   }
   // Every load of the frame, whatever its page is now: it may navigate to a

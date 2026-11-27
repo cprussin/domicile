@@ -46,6 +46,11 @@
       "additionalProperties": false,
       "description": "Browser profiles: sets of sign-ins, site data and extensions, and the\nsites each opens. See `docs/architecture/BROWSER-PROFILES.md`.",
       "properties": {
+        "block_in_electron_apps": {
+          "default": false,
+          "description": "Also blocks ads and trackers in Electron apps' web pages, in\nStandard, with the lists' cosmetic filters too. Off unless set: an app\nhas no shield to turn blocking off with when it breaks one.",
+          "type": "boolean"
+        },
         "block_lists": {
           "default": [
             "https://easylist.to/easylist/easylist.txt",
@@ -1173,6 +1178,7 @@
     "browser": {
       "$ref": "#/$defs/BrowserConfig",
       "default": {
+        "block_in_electron_apps": false,
         "block_lists": [
           "https://easylist.to/easylist/easylist.txt",
           "https://easylist.to/easylist/easyprivacy.txt",

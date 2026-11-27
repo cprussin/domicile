@@ -97,6 +97,7 @@ fn the_chrome_gets_each_profiles_ad_blocking_and_the_block_lists() {
                 block_rules,
                 cookie_banner_lists,
                 scriptlet_resources,
+                block_in_electron_apps,
                 ..
             } => {
                 let mode = |id: &str| {
@@ -113,6 +114,7 @@ fn the_chrome_gets_each_profiles_ad_blocking_and_the_block_lists() {
                         == domicile_config::DEFAULT_COOKIE_BANNER_LISTS.len()
                     && scriptlet_resources.as_deref()
                         == Some(domicile_config::DEFAULT_SCRIPTLET_RESOURCES)
+                    && !block_in_electron_apps
             }
             _ => false,
         })

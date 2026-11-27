@@ -74,6 +74,7 @@ export const browserProfileSchema = z.strictObject({
  * sites each opens. See `docs/architecture/BROWSER-PROFILES.md`.
  */
 export const browserConfigSchema = z.strictObject({
+  block_in_electron_apps: z.boolean().prefault(false),
   block_lists: z
     .array(z.string())
     .prefault([
@@ -590,6 +591,7 @@ export const configSchema = z.strictObject({
     .transform((value) => value ?? undefined),
   agents: agentsConfigSchema.prefault({ web: false }),
   browser: browserConfigSchema.prefault({
+    block_in_electron_apps: false,
     block_lists: [
       "https://easylist.to/easylist/easylist.txt",
       "https://easylist.to/easylist/easyprivacy.txt",

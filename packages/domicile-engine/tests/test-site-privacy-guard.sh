@@ -108,7 +108,7 @@ protected() { # step view links device
   echo "privacy protections step=$1 view=$2 site=localhost links=$3 device=$4"
 }
 
-TOLD="standard/profile/2 off/window/0 standard/profile/2 off/site/0 off/site/0 standard/profile/2"
+TOLD="standard/profile/3 off/window/0 standard/profile/3 off/site/0 off/site/0 standard/profile/3"
 ADS="1 1 BLBLL LLLLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 $TOLD"
 PROTECTED_TOLD="off/window,on/profile on/profile,on/profile off/site,off/site on/profile,on/profile"
 LANDED="KKK KDK KKK KDK localhost $PROTECTED_TOLD CCC TTT"
@@ -124,12 +124,12 @@ answers set1=set list1=default:localhost:strict set2=set list2=none \
   set4=set list4=none
 expect "every step as set" "$PASS" \
   "$(reads shell-loaded \
-    "$(blocked a1)" "$(read_ 1 a standard profile 2)" \
+    "$(blocked a1)" "$(read_ 1 a standard profile 3)" \
     "$(loaded a2)" "$(read_ 2 a off window 0)" \
-    "$(blocked b1)" "$(read_ 3 b standard profile 2)" \
+    "$(blocked b1)" "$(read_ 3 b standard profile 3)" \
     "$(loaded a3)" "$(read_ 4 a off site 0)" \
     "$(loaded b2)" "$(read_ 4 b off site 0)" \
-    "$(blocked b3)" "$(read_ 5 b standard profile 2)" \
+    "$(blocked b3)" "$(read_ 5 b standard profile 3)" \
     "$(kept a6)" "$(device a6 f1 e1 0.25)" \
     "$(protected 6 a off/window on/profile)" \
     "$(cleaned b7)" "$(device b7 f1 e1 0.25)" \
@@ -145,8 +145,8 @@ expect "every step as set" "$PASS" \
     "privacy later view=b mode=standard for=profile links=off/site" \
     "privacy later view=b mode=standard for=profile links=on/profile")"
 answers
-expect "a shell that never finished" "1 0 BLBLL ????? ????? ????? ????? ????? 127.0.0.1 standard/profile/2 ? ? ? ? ? $NO_LANDED $NO_SETTINGS" \
-  "$(reads shell-loaded "$(blocked a1)" "$(read_ 1 a standard profile 2)")"
+expect "a shell that never finished" "1 0 BLBLL ????? ????? ????? ????? ????? 127.0.0.1 standard/profile/3 ? ? ? ? ? $NO_LANDED $NO_SETTINGS" \
+  "$(reads shell-loaded "$(blocked a1)" "$(read_ 1 a standard profile 3)")"
 expect "an empty log reads nothing" "0 0 ????? ????? ????? ????? ????? ????? ? ? ? ? ? ? ? $NO_LANDED $NO_SETTINGS" "$(reads)"
 
 echo
@@ -155,7 +155,7 @@ expect "every step as set is the pass" "pass" "$(verdict "$PASS")"
 expect "a shell that never ran is a failure" "fail" \
   "$(verdict "0 0 ????? ????? ????? ????? ????? ????? ? ? ? ? ? ? ? $NO_LANDED $NO_SETTINGS")"
 expect "a shell that never finished is a failure" "fail" \
-  "$(verdict "1 0 BLBLL ????? ????? ????? ????? ????? 127.0.0.1 standard/profile/2 ? ? ? ? ? $NO_LANDED $NO_SETTINGS")"
+  "$(verdict "1 0 BLBLL ????? ????? ????? ????? ????? 127.0.0.1 standard/profile/3 ? ? ? ? ? $NO_LANDED $NO_SETTINGS")"
 expect "a window still blocked once off is a failure" "fail" \
   "$(verdict "1 1 BLBLL BLBLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 $TOLD $LANDED $SETTINGS_OK")"
 expect "and names the window's setting" "yes" \
@@ -169,9 +169,9 @@ expect "the site's setting missing a window is a failure" "fail" \
 expect "a site's setting that stays once cleared is a failure" "fail" \
   "$(verdict "1 1 BLBLL LLLLL BLBLL LLLLL LLLLL LLLLL 127.0.0.1 $TOLD $LANDED $SETTINGS_OK")"
 expect "a page blocked right but read back wrong is a failure" "fail" \
-  "$(verdict "1 1 BLBLL LLLLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 standard/profile/2 off/site/0 standard/profile/2 off/site/0 off/site/0 standard/profile/2 $LANDED $SETTINGS_OK")"
+  "$(verdict "1 1 BLBLL LLLLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 standard/profile/3 off/site/0 standard/profile/3 off/site/0 off/site/0 standard/profile/3 $LANDED $SETTINGS_OK")"
 expect "and names the report" "yes" \
-  "$(says "1 1 BLBLL LLLLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 standard/profile/0 off/window/0 standard/profile/2 off/site/0 off/site/0 standard/profile/2 $LANDED $SETTINGS_OK" "SitePrivacyChanged")"
+  "$(says "1 1 BLBLL LLLLL BLBLL LLLLL LLLLL BLBLL 127.0.0.1 standard/profile/0 off/window/0 standard/profile/3 off/site/0 off/site/0 standard/profile/3 $LANDED $SETTINGS_OK" "SitePrivacyChanged")"
 
 expect "a window's tracking kept that never reached its page is a failure" "yes" \
   "$(says "$ADS KDK KDK KKK KDK localhost $PROTECTED_TOLD CCC TTT $SETTINGS_OK" "SetProtectionForWindow")"

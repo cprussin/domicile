@@ -102,6 +102,9 @@ struct BrowserProfiles {
   // resources file: an `https:` address, which may end in `#sha256=` and
   // the file's hash, or an absolute path. None runs none.
   std::optional<std::string> scriptlet_resources;
+  // Whether Electron apps' web pages are blocked in too, in Standard: an
+  // app's page is in no profile, and has no shield.
+  bool block_in_electron_apps = false;
 };
 
 // The profiles of a desk whose compositor sends none: `default` and
@@ -125,7 +128,8 @@ BrowserProfiles DefaultBrowserProfiles();
 //    "block_rules": ["||ads.example^"],
 //    "cookie_banner_lists": [
 //        "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt"],
-//    "scriptlet_resources": "/etc/domicile/scriptlets.json"}
+//    "scriptlet_resources": "/etc/domicile/scriptlets.json",
+//    "block_in_electron_apps": false}
 //
 // Nothing when malformed, or when it contradicts itself as the config refuses
 // to: a default that is no profile or is private, a default private profile

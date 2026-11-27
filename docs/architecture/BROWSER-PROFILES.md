@@ -58,10 +58,11 @@ every page and keep one state (one Bitwarden login).
   (`protection_settings.cc`). `block_ads_and_trackers` is `standard`,
   `strict` or `off`, unset `standard` or `strict` in a private profile: see
   [Ad and tracker blocking](AD-BLOCKING.md).
-- **`block_lists`**, **`block_rules`**, **`cookie_banner_lists`** and
-  **`scriptlet_resources`**: the filter lists every profile that blocks ads
-  uses, the user's own rules on top, the lists cookie banners are hidden
-  with, and the scriptlets the lists run. See
+- **`block_lists`**, **`block_rules`**, **`cookie_banner_lists`**,
+  **`scriptlet_resources`** and **`block_in_electron_apps`**: the filter
+  lists every profile that blocks ads uses, the user's own rules on top, the
+  lists cookie banners are hidden with, the scriptlets the lists run, and
+  whether Electron apps' pages are blocked in too. See
   [Ad and tracker blocking](AD-BLOCKING.md#the-config).
 - **`order`**: the order the compositor sends the profiles in, and so the
   order the shell and Settings list them in: these ids, then the rest by id.
