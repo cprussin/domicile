@@ -14,9 +14,11 @@ overlays Chromium's.
 
 What gnrt would take from Cargo's feature resolution is `FEATURES` here: the
 features each crate is built with in this graph, as Cargo would turn them on
-for adblock with the features we ask of it. A crate's build script is never
-run: the two that have one (flatbuffers, thiserror) only probe for a nightly
-compiler, and Chromium's is not one.
+for adblock with the features we ask of it. An optional dependency is a dep
+when one of those features turns it on. A crate's build script runs only when
+`BUILD_SCRIPTS` names what it writes: flatbuffers' and thiserror's only probe
+for a nightly compiler, and Chromium's is not one; selectors' writes a table
+it includes.
 """
 
 import argparse
@@ -41,17 +43,53 @@ VENDOR = "//third_party/rust/chromium_crates_io/vendor"
 # Chromium's registry (components/domicile/ad_blocking/domains.cc), not the
 # `addr` crate's copy of the public suffix list.
 FEATURES = {
-    "adblock": ["full-regex-handling"],
+    # css-validation parses procedural filters (`:has-text()`), which without
+    # it are left as plain selectors no page matches.
+    "adblock": [
+        "css-validation",
+        "cssparser",
+        "full-regex-handling",
+        "precomputed-hash",
+        "selectors",
+    ],
     "arrayvec": ["default", "std"],
     "flatbuffers": ["default", "std"],
     "idna": ["alloc", "compiled_data", "default", "std"],
     "idna_adapter": ["compiled_data"],
     "percent-encoding": ["alloc", "default", "std"],
-    "rustc-hash": [],
+    # selectors' FxHashMap is std's.
+    "rustc-hash": ["default", "std"],
     "seahash": ["default"],
     "thiserror": [],
     "thiserror-impl": [],
+    "cssparser": [],
+    "cssparser-macros": [],
+    "derive_more": ["add", "add_assign", "default", "std"],
+    "derive_more-impl": ["add", "add_assign", "default"],
+    "dtoa": [],
+    "dtoa-short": [],
+    "new_debug_unreachable": [],
+    "phf": ["default", "macros", "phf_macros", "std"],
+    "phf_codegen": [],
+    "phf_generator": [],
+    "phf_macros": [],
+    "phf_shared": ["default", "std"],
+    "precomputed-hash": [],
+    "rand": ["small_rng"],
+    "rand_core": [],
+    "selectors": [],
+    "servo_arc": ["default", "track_alloc_size"],
 }
+
+# The files a crate's source includes (`include_str!`), by crate, which GN
+# must list. derive_more-impl names its docs by feature, `doc/<feature>.md`.
+INPUTS = {
+    "derive_more": ["README.md"],
+    "derive_more-impl": ["README.md", "doc/add.md", "doc/add_assign.md"],
+}
+
+# The build scripts that run, by crate: what each writes to OUT_DIR.
+BUILD_SCRIPTS = {"selectors": ["ascii_case_insensitive_html_attributes.rs"]}
 
 # Who may depend on each: adblock is for the engine's own code; the rest only
 # for other third-party crates, as gnrt writes it.
@@ -65,13 +103,17 @@ CHROMIUM = {
     "icu_normalizer": "icu_normalizer/v2",
     "icu_properties": "icu_properties/v2",
     "itertools": "itertools/v0_14",
+    "itoa": "itoa/v1",
+    "log": "log/v0_4",
     "memchr": "memchr/v2",
     "proc-macro2": "proc_macro2/v1",
     "quote": "quote/v1",
     "regex": "regex/v1",
     "serde": "serde/v1",
     "serde_json": "serde_json/v1",
+    "siphasher": "siphasher/v1",
     "smallvec": "smallvec/v1",
+    "stable_deref_trait": "stable_deref_trait/v1",
     "syn": "syn/v2",
     "utf8_iter": "utf8_iter/v1",
 }
@@ -166,12 +208,37 @@ def gn_string(value):
     return value.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$")
 
 
-def deps_of(cargo, crate, ours):
-    """The GN labels of a crate's normal, non-optional dependencies."""
-    labels = []
-    for name, spec in sorted(cargo.get("dependencies", {}).items()):
-        if isinstance(spec, dict) and spec.get("optional"):
+def enabled_optional(cargo, features):
+    """The optional dependencies `features` turn on, by their key."""
+    table = cargo.get("features", {})
+    seen, todo, deps = set(), list(features), set()
+    while todo:
+        feature = todo.pop()
+        if feature in seen:
             continue
+        seen.add(feature)
+        for item in table.get(feature, []):
+            name = item.split("/", 1)[0].rstrip("?")
+            if name.startswith("dep:"):
+                deps.add(name[4:])
+            elif name in table:
+                todo.append(name)
+            else:
+                deps.add(name)
+        # A feature named after an optional dependency, Cargo's implicit one.
+        deps.add(feature)
+    return deps
+
+
+def deps_of(cargo, crate, ours, table="dependencies"):
+    """The GN labels of a crate's `table` dependencies: the non-optional ones
+    and those its FEATURES turn on."""
+    enabled = enabled_optional(cargo, FEATURES[crate["name"]])
+    labels = []
+    for key, spec in sorted(cargo.get(table, {}).items()):
+        if isinstance(spec, dict) and spec.get("optional") and key not in enabled:
+            continue
+        name = spec.get("package", key) if isinstance(spec, dict) else key
         if name in ours:
             labels.append("//third_party/rust/%s:lib" % ours[name])
         elif name in CHROMIUM:
@@ -190,9 +257,14 @@ def build_gn(crate, source, ours):
     lib = cargo.get("lib", {})
     root = lib.get("path", "src/lib.rs")
     vendored = "%s/%s" % (VENDOR, crate["dir"])
+    # selectors keeps its library at the crate's root, not in src/.
+    tree = source / "src" if root.startswith("src/") else source
+    skip = ("tests", "benches", "examples")
     sources = sorted(
         "%s/%s" % (vendored, path.relative_to(source).as_posix())
-        for path in (source / "src").rglob("*.rs")
+        for path in tree.rglob("*.rs")
+        if path.relative_to(source).parts[0] not in skip
+        and path.relative_to(source).as_posix() != "build.rs"
     )
     kind = "proc-macro" if lib.get("proc-macro") else "rlib"
     authors = ", ".join(package.get("authors", []))
@@ -203,7 +275,8 @@ def build_gn(crate, source, ours):
     text += '  crate_type = "%s"\n' % kind
     text += '  crate_root = "%s/%s"\n' % (vendored, root)
     text += "  sources = %s\n" % gn_list(sources)
-    text += "  inputs = []\n\n"
+    inputs = ["%s/%s" % (vendored, name) for name in INPUTS.get(crate["name"], [])]
+    text += "  inputs = %s\n\n" % gn_list(inputs)
     text += "  build_native_rust_unit_tests = false\n"
     text += '  edition = "%s"\n' % package.get("edition", "2015")
     text += '  cargo_pkg_authors = "%s"\n' % gn_string(authors)
@@ -217,6 +290,15 @@ def build_gn(crate, source, ours):
     deps = deps_of(cargo, crate, ours)
     if deps:
         text += "  deps = %s\n" % gn_list(deps)
+    outputs = BUILD_SCRIPTS.get(crate["name"])
+    if outputs:
+        build = "%s/%s" % (vendored, package.get("build", "build.rs"))
+        text += '  build_root = "%s"\n' % build
+        text += "  build_sources = %s\n" % gn_list([build])
+        build_deps = deps_of(cargo, crate, ours, "build-dependencies")
+        if build_deps:
+            text += "  build_deps = %s\n" % gn_list(build_deps)
+        text += "  build_script_outputs = %s\n" % gn_list(outputs)
     features = FEATURES[crate["name"]]
     if features:
         text += "  features = %s\n" % gn_list(features)

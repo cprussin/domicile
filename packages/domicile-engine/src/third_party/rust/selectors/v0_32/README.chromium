@@ -1,0 +1,11 @@
+Name: selectors
+URL: https://crates.io/crates/selectors
+Version: 0.32.0
+Revision: 4ba7bdb4040a909bf3d6e326b229602c93014618
+Update Mechanism: Manual (packages/domicile-engine/crates/CRATES)
+License: MPL-2.0
+License File: //third_party/rust/selectors/v0_32/LICENSE
+Shipped: yes
+Security Critical: yes
+
+Description: CSS Selectors matching for Rust

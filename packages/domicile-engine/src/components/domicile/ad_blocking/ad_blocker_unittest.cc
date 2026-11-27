@@ -239,6 +239,29 @@ TEST_F(AdBlockerTest, HidesTheCookieBannerListsBannersOnlyWhereTheyAreHidden) {
             (std::vector<std::string>{".ad-banner"}));
 }
 
+TEST_F(AdBlockerTest, SendsTheProceduralFiltersASiteNamesAsTheirJson) {
+  Build({"news.example##div:has-text(a procedural ad)\n"
+         "other.example##.theirs:has-text(ad)\n"},
+        {"news.example##.x:style(color: red)\n"},
+        {"news.example##.consent:has-text(cookies)\n"});
+  const AdBlocker::Cosmetics cosmetics = CosmeticsFor("https://news.example/");
+  EXPECT_EQ(cosmetics.procedural_filters,
+            (std::vector<std::string>{
+                R"({"selector":[{"type":"css-selector","arg":".consent"},)"
+                R"({"type":"has-text","arg":"cookies"}]})",
+                R"({"selector":[{"type":"css-selector","arg":".x"}],)"
+                R"("action":{"type":"style","arg":"color: red"}})",
+                R"({"selector":[{"type":"css-selector","arg":"div"},)"
+                R"({"type":"has-text","arg":"a procedural ad"}]})"}));
+  // CSS can't say them, so they are no plain selector to hide.
+  EXPECT_TRUE(cosmetics.hide_selectors.empty());
+  EXPECT_EQ(CosmeticsFor("https://news.example/", kCookieBannersShown)
+                .procedural_filters.size(),
+            2u);
+  EXPECT_TRUE(
+      CosmeticsFor("https://third.example/").procedural_filters.empty());
+}
+
 TEST_F(AdBlockerTest, RunsTheScriptletsASitesRulesName) {
   Build({"news.example##+js(mark, 1)\n"}, {"other.example##+js(mark, 2)"});
   const std::string script = CosmeticsFor("https://news.example/").script;

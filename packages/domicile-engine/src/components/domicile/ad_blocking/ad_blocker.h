@@ -80,6 +80,10 @@ class AdBlocker {
     // The scriptlets the page's `##+js(...)` rules run, as one script for
     // its main world before its own: empty when none do.
     std::string script;
+    // Its procedural filters (`:has-text()`, `:upward()`, `:style()`,
+    // `:remove()`), each as adblock-rust's JSON for content_cosmetic.ts. In
+    // order, without repeats.
+    std::vector<std::string> procedural_filters;
   };
 
   // One of adblock-rust's resources, as its resources file holds it: a

@@ -382,10 +382,12 @@ AdBlocker::Cosmetics AdBlocker::CosmeticsFor(const GURL& page,
   }
   std::set<std::string> hide;
   std::set<std::string> exceptions;
+  std::set<std::string> procedural;
   const auto add = [&](const ad_blocking::FilterEngine& engine) {
     const ad_blocking::Cosmetics found = engine.cosmetics(Str(page.spec()));
     AddAll(hide, found.hide_selectors);
     AddAll(exceptions, found.exceptions);
+    AddAll(procedural, found.procedural_actions);
     cosmetics.generichide = cosmetics.generichide || found.generichide;
     // Each engine's on its own: one's may define what it runs, and two
     // engines running the same scriptlet run it twice, as two rules would.
@@ -398,6 +400,7 @@ AdBlocker::Cosmetics AdBlocker::CosmeticsFor(const GURL& page,
   }
   cosmetics.hide_selectors.assign(hide.begin(), hide.end());
   cosmetics.exceptions.assign(exceptions.begin(), exceptions.end());
+  cosmetics.procedural_filters.assign(procedural.begin(), procedural.end());
   return cosmetics;
 }
 
