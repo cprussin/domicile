@@ -199,7 +199,8 @@
                                                      DOMString scope);
 
   // The page's other protections, each a shield turns on and off by itself:
-  // "hideDeviceDetails" and "removeTrackingFromLinks", each "on" or "off".
+  // "hideDeviceDetails", "removeTrackingFromLinks" and "hideCookieBanners",
+  // each "on" or "off".
   // All are "off" while `blockAdsAndTrackers` is "off". Empty when
   // `privacySite` is. `domicile-site-privacy-change` signals a change.
   record<DOMString, DOMString> privacyProtections();

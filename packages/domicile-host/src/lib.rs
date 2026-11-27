@@ -87,6 +87,18 @@ pub enum HostError {
 /// A window's size limit on neither axis, as xdg-shell spells it.
 const NO_LIMIT: (f64, f64) = (0.0, 0.0);
 
+/// What the browser blocks with, as [`HostMessage::BrowserProfiles`]
+/// carries it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BrowserFilters {
+    /// The filter lists ads and trackers are blocked with.
+    pub block_lists: Vec<String>,
+    /// Filter rules of the user's own, on top of `block_lists`.
+    pub block_rules: Vec<String>,
+    /// The filter lists cookie banners are hidden with.
+    pub cookie_banner_lists: Vec<String>,
+}
+
 /// A client window, whether or not the chrome has placed it.
 #[derive(Debug, Clone)]
 pub struct App {
@@ -578,16 +590,16 @@ impl Host {
         default_profile: String,
         default_private_profile: String,
         sites: BTreeMap<String, String>,
-        block_lists: Vec<String>,
-        block_rules: Vec<String>,
+        filters: BrowserFilters,
     ) {
         self.browser_profiles = Some(HostMessage::BrowserProfiles {
             profiles,
             default_profile,
             default_private_profile,
             sites,
-            block_lists,
-            block_rules,
+            block_lists: filters.block_lists,
+            block_rules: filters.block_rules,
+            cookie_banner_lists: filters.cookie_banner_lists,
         });
     }
 

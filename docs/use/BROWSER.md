@@ -183,6 +183,8 @@ Every profile keeps these from the sites you visit, unless you turn one off:
 - **Remove tracking from links.** A link from one site to another loses what
   tells the next site where you clicked it (`fbclid`, `gclid` and the like),
   and with Strict ad blocking its campaign tags (`utm_`) too.
+- **Hide cookie banners.** The pop-ups that ask you to accept cookies are
+  hidden, without accepting anything.
 - **Block cookies from other sites.** A page's ads, buttons and embeds from
   other sites can't keep cookies that follow you from site to site. Sign-ins
   that open in their own window still work.
@@ -243,14 +245,16 @@ or **Remove** undoes one.
 `protections` takes `block_ads_and_trackers`, which is `"standard"`,
 `"strict"` or `"off"`, and `block_third_party_cookies`,
 `global_privacy_control`, `hide_local_ip_address`,
-`remove_tracking_from_links` and `hide_device_details`, each `true` unless
-set.
+`remove_tracking_from_links`, `hide_device_details` and
+`hide_cookie_banners`, each `true` unless set.
 
 `browser.block_lists` replaces the lists: each is an `https:` address or a
 file's absolute path, in the syntax uBlock Origin and Adblock Plus read.
 `browser.block_rules` adds rules of your own in the same syntax, in every
 profile that blocks ads: a rule that starts with `@@` lets something load that
-a list blocks.
+a list blocks. `browser.cookie_banner_lists` replaces the lists cookie banners
+are hidden with, the EasyList Cookie List and uBlock Origin's cookie notices
+unless set.
 
 <!-- /tabs -->
 

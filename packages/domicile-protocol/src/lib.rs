@@ -116,6 +116,8 @@ pub struct BrowserProtections {
     pub remove_tracking_from_links: bool,
     /// Farbles what pages read of the device.
     pub hide_device_details: bool,
+    /// Hides cookie banners with the `cookie_banner_lists`.
+    pub hide_cookie_banners: bool,
     /// How its pages block ads and trackers.
     pub block_ads_and_trackers: AdBlocking,
 }
@@ -1237,6 +1239,9 @@ pub enum HostMessage {
         block_lists: Vec<String>,
         /// Filter rules of the user's own, on top of `block_lists`.
         block_rules: Vec<String>,
+        /// The filter lists cookie banners are hidden with, as
+        /// `block_lists`.
+        cookie_banner_lists: Vec<String>,
     },
 
     /// The config's `spellcheck`: whether the browser checks spelling in

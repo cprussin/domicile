@@ -33,7 +33,7 @@ PagePrivacy::PagePrivacy(content::WebContents* contents)
   watched_.Add(kProfileAdBlockingPref, base::BindRepeating(&PagePrivacy::Changed,
                                                  base::Unretained(this)));
   for (const char* pref : {kSiteProtectionsPref, kHideDeviceDetailsPref,
-                           kRemoveLinkTrackingPref}) {
+                           kRemoveLinkTrackingPref, kHideCookieBannersPref}) {
     watched_.Add(pref, base::BindRepeating(&PagePrivacy::Changed,
                                            base::Unretained(this)));
   }

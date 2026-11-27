@@ -2392,6 +2392,8 @@ PageProtection ProtectionOf(mojom::WebViewProtection protection) {
       return PageProtection::kHideDeviceDetails;
     case mojom::WebViewProtection::kRemoveTrackingFromLinks:
       return PageProtection::kRemoveTrackingFromLinks;
+    case mojom::WebViewProtection::kHideCookieBanners:
+      return PageProtection::kHideCookieBanners;
   }
 }
 
@@ -2401,6 +2403,8 @@ mojom::WebViewProtection WireProtectionOf(PageProtection protection) {
       return mojom::WebViewProtection::kHideDeviceDetails;
     case PageProtection::kRemoveTrackingFromLinks:
       return mojom::WebViewProtection::kRemoveTrackingFromLinks;
+    case PageProtection::kHideCookieBanners:
+      return mojom::WebViewProtection::kHideCookieBanners;
   }
 }
 
