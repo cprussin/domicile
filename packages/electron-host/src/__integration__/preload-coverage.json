@@ -32,7 +32,5 @@
   "webFrame.isWordMisspelled unsupported",
   "webFrame.setIsolatedWorldInfo unsupported",
   "webFrame.setSpellCheckProvider unsupported",
-  "webFrame.setZoomFactor unsupported",
-  "webFrame.setZoomLevel unsupported",
   "webUtils.getPathForFile unsupported"
 ]

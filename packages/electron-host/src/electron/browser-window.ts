@@ -52,6 +52,7 @@ import {
   framePreloadsOf,
   sessionPartition,
 } from "./session";
+import { allFromWire, allToWire, fromWire, toWire } from "./wire-values";
 
 type PageControl = ReturnType<typeof createPageControl>;
 type PageSaves = ReturnType<typeof createPageSaves>;
@@ -1027,7 +1028,8 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
 
     /**
      * Sends `args` on `channel` to the page's `ipcRenderer`. They travel as
-     * JSON, so what JSON can't carry doesn't arrive.
+     * JSON with bytes beside it (wire-values.ts), so the rest of what JSON
+     * can't carry doesn't arrive.
      */
     readonly send = (channel: string, ...args: unknown[]) => {
       this.owner.assertAlive();
@@ -1036,7 +1038,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
         return;
       }
       toEngine({
-        args: JSON.parse(JSON.stringify(args)),
+        args: allToWire(args),
         channel,
         type: "ipc_send",
         window: this.owner.id,
@@ -1058,7 +1060,7 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
       }
       toEngine({
         channel,
-        message: JSON.parse(JSON.stringify([message]))[0],
+        message: toWire(message),
         ports: ports.give(this.owner.id, transfer),
         type: "ipc_post",
         window: this.owner.id,
@@ -1491,20 +1493,28 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           break;
         }
         case "ipc_message": {
-          ipc.receive(this.webContents, event.channel, event.args);
+          ipc.receive(this.webContents, event.channel, allFromWire(event.args));
           break;
         }
         case "ipc_invoke": {
           this.#answer(
             event.invoke,
-            ipc.invoke(this.webContents, event.channel, event.args),
+            ipc.invoke(
+              this.webContents,
+              event.channel,
+              allFromWire(event.args),
+            ),
           );
           break;
         }
         case "ipc_send_sync": {
           this.#answer(
             event.invoke,
-            ipc.sendSync(this.webContents, event.channel, event.args),
+            ipc.sendSync(
+              this.webContents,
+              event.channel,
+              allFromWire(event.args),
+            ),
           );
           break;
         }
@@ -1512,13 +1522,13 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           ipc.post(
             this.webContents,
             event.channel,
-            event.message,
+            fromWire(event.message),
             ports.take(this.id, event.ports),
           );
           break;
         }
         case "port_message": {
-          ports.message(this.id, event.port, event.data);
+          ports.message(this.id, event.port, fromWire(event.data));
           break;
         }
         case "port_closed": {
@@ -1721,7 +1731,11 @@ export const createBrowserWindow = <Menu extends EventEmitter>(
           toEngine(
             settled.match<EngineRequest>({
               Err: (error) => ({ error, invoke, type: "ipc_reply" }),
-              Ok: ({ result }) => ({ invoke, result, type: "ipc_reply" }),
+              Ok: ({ result }) => ({
+                invoke,
+                result: toWire(result),
+                type: "ipc_reply",
+              }),
             }),
           );
         })
