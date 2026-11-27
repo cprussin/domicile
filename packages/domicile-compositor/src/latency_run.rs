@@ -244,6 +244,14 @@ impl DomicileCompositor {
             "latency: {} commit(s) passed over for coming too soon to be the key's answer",
             report.answered_too_soon
         );
+        // Rounds answered by a commit that came too soon to count on its own,
+        // credited because the pixel changed after it with no commit since.
+        // Always logged.
+        tracing::info!(
+            target: "domicile::engine::spike",
+            "latency: {} round(s) answered by a commit that came sooner than expected",
+            report.answered_soon
+        );
         // Rounds the client answered with more than one frame. `commit to
         // pixel` is timed from the first, so a high count means some of the
         // client's own redraw is counted as ours. Always logged.

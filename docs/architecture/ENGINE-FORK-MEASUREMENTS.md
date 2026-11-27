@@ -168,7 +168,10 @@ client that ignores keys) found both:
 
 - **A pixel that changes before the client commits is discarded.** It came from
   an earlier frame. Counted as `round(s) whose pixel moved before the client
-  answered`.
+  answered`. A commit sooner than an eighth of a frame after the key is passed
+  over, but if the pixel then changes with no commit since, that commit drew it
+  and is the answer: kitty 0.51 answers an Enter in about 2 ms. Counted as
+  `round(s) answered by a commit that came sooner than expected`.
 - **A commit more than eight display frames after the key is discarded.** The
   worst real `key to commit` over 60 rounds was 44.11 ms (2.6 frames), so the
   cutoff leaves three times that. Counted as `round(s) whose commit came too

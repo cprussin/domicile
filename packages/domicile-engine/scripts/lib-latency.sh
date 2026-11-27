@@ -111,6 +111,17 @@ latency_soon() {
     sed -n 's/.*latency: \([0-9]*\) commit(s).*/\1/p'
 }
 
+# Rounds answered by a commit passed over as too soon, because the probe pixel
+# changed after it with no commit since. Empty when not reported.
+#
+# Not a fault: they are measured like any other round.
+latency_answered_soon() {
+  local log="$1"
+  grep -a "round(s) answered by a commit that came sooner than expected" "$log" 2>/dev/null |
+    tail -1 |
+    sed -n 's/.*latency: \([0-9]*\) round(s).*/\1/p'
+}
+
 # Rounds whose key the compositor never delivered. Empty when not reported.
 #
 # Read separately from `abandoned` (client did not answer): without it, a run

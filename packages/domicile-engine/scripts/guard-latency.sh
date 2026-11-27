@@ -188,10 +188,8 @@ if [ "$NEGATIVE" = "1" ]; then
   CLIENT_CMD='while :; do printf .; sleep 0.2; done'
   echo "negative control: a client that answers no keys"
 else
-  # `stty -echo`: the flip is the only thing a key redraws. Echoing Enter
-  # moved the cursor in a frame of its own, often too soon to count as the
-  # answer; since kitty 0.51 that frame sometimes carries the flip too, and
-  # the round is then dropped as moved before the answer.
+  # `stty -echo`: the flip is the only thing a key redraws, so the one
+  # commit after a key is its answer.
   CLIENT_CMD='stty -echo; a=1B3A5F; b=5F1B3A; c=$a; while read -r _; do
       if [ "$c" = "$a" ]; then c=$b; else c=$a; fi
       printf "\033]11;#%s\007" "$c"
@@ -238,6 +236,7 @@ ABANDONED="$(latency_abandoned "$COMP_LOG")"
 MOVED="$(latency_moved "$COMP_LOG")"
 LATE="$(latency_late "$COMP_LOG")"
 SOON="$(latency_soon "$COMP_LOG")"
+ANSWERED_SOON="$(latency_answered_soon "$COMP_LOG")"
 UNDELIVERED="$(latency_undelivered "$COMP_LOG")"
 REDREW="$(latency_redrew "$COMP_LOG")"
 echo "ended: $ENDED; display frame ${FRAME:-none} ms; floor ${FLOOR:-none} ms;"
@@ -245,6 +244,7 @@ echo "commit to pixel ${OURS:-none} ms; commit to present ${PRESENT:-none} ms;"
 echo "key to commit ${THEIRS:-none} ms; key to pixel ${WHOLE:-none} ms;"
 echo "abandoned ${ABANDONED:-none}; moved before the answer ${MOVED:-none};"
 echo "answered too late ${LATE:-none}; passed over too soon ${SOON:-none};"
+echo "answered by a commit passed over as too soon ${ANSWERED_SOON:-none};"
 echo "undelivered ${UNDELIVERED:-none};"
 echo "drew again while polling ${REDREW:-none}"
 
@@ -320,8 +320,9 @@ if [ "${LATE:-0}" -gt 0 ]; then
   exit 1
 fi
 
-# A commit too soon after the key (`SOON`) is not a failure: it was already in
-# flight, and the round keeps waiting. See `MIN_WAIT_FRAME_SHARE`.
+# A commit too soon after the key (`SOON`) is not a failure: the round keeps
+# waiting, and if the pixel changes with no commit since, that commit was the
+# answer (`ANSWERED_SOON`). See `MIN_WAIT_FRAME_SHARE`.
 
 # An undelivered key is a compositor failure, and would leave the median over
 # fewer rounds.

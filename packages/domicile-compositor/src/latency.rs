@@ -20,8 +20,10 @@
 //! Rules that tie a round to its keystroke:
 //!
 //! - The probe point is watched while waiting for the commit. A change there
-//!   came from an earlier frame, so the round is dropped
-//!   ([`Report::moved_before_commit`]).
+//!   with no commit since the key came from an earlier frame, so the round is
+//!   dropped ([`Report::moved_before_commit`]). A change after a commit that
+//!   was skipped as too soon came from that commit, which is then the answer
+//!   ([`Report::answered_soon`]).
 //! - A commit later than [`MAX_WAIT_FRAMES`] frames after the key is dropped
 //!   ([`Report::answered_too_late`]). One sooner than
 //!   `frame / `[`MIN_WAIT_FRAME_SHARE`] is skipped and the round keeps waiting
@@ -157,6 +159,14 @@ pub struct Report {
     /// Rounds dropped because the commit came more than [`MAX_WAIT_FRAMES`]
     /// after the key: a self-redrawing client's unrelated commit.
     pub answered_too_late: usize,
+    /// Rounds whose answer was a commit skipped as too soon: the probe point
+    /// changed after it, with no commit since.
+    ///
+    /// A client that answers within `frame / `[`MIN_WAIT_FRAME_SHARE`] (kitty
+    /// 0.51 often does, in about 2 ms) would otherwise lose every such round
+    /// to `moved_before_commit`. Included in the spreads; counted so a run
+    /// shows how many of its answers came this way.
+    pub answered_soon: usize,
     /// Commits skipped because they came less than
     /// `frame / `[`MIN_WAIT_FRAME_SHARE`] after the key.
     ///
@@ -229,7 +239,14 @@ enum Phase {
     Ready,
     /// A key was pressed. Waiting for the client to commit while watching the
     /// probe point: a change now came from a frame before the key.
-    Pressed { at: Instant, before: u32 },
+    ///
+    /// `soon` is the last commit skipped as too soon. If the probe point
+    /// changes before another commit, that commit drew it.
+    Pressed {
+        at: Instant,
+        before: u32,
+        soon: Option<Instant>,
+    },
     /// The client committed; polling for the color to reach the screen.
     Polling {
         keyed: Instant,
@@ -400,6 +417,7 @@ pub struct Latency {
     moved_before_commit: usize,
     answered_too_late: usize,
     answered_too_soon: usize,
+    answered_soon: usize,
     redrew_while_polling: usize,
     undelivered: usize,
 }
@@ -434,6 +452,7 @@ impl Latency {
             moved_before_commit: 0,
             answered_too_late: 0,
             answered_too_soon: 0,
+            answered_soon: 0,
             redrew_while_polling: 0,
             undelivered: 0,
         }
@@ -469,6 +488,7 @@ impl Latency {
                     // `Ready` is only entered from a completed floor, which has
                     // answered with a stable color.
                     before: self.last.expect("a completed floor has answered"),
+                    soon: None,
                 };
                 Step::Press
             }
@@ -534,12 +554,24 @@ impl Latency {
             }
             // A sample outside a round means nothing.
             Phase::Ready | Phase::Done(_) => {}
-            // The screen changed before the client answered, so the change
-            // came from an earlier frame. Drop the round instead of timing it
-            // from the next commit.
-            Phase::Pressed { before, .. } => {
+            Phase::Pressed { at, before, soon } => {
                 if argb != before {
-                    self.moved_before_commit += 1;
+                    match soon {
+                        // The only commit since the key drew it, however soon
+                        // it came: nothing else could have.
+                        Some(committed) => {
+                            self.answered_soon += 1;
+                            self.key_to_commit
+                                .push(committed.saturating_duration_since(at));
+                            self.commit_to_pixel
+                                .push(now.saturating_duration_since(committed));
+                            self.key_to_pixel.push(now.saturating_duration_since(at));
+                        }
+                        // No commit since the key, so the change came from an
+                        // earlier frame. Drop the round instead of timing it
+                        // from the next commit.
+                        None => self.moved_before_commit += 1,
+                    }
                     self.end_round();
                 }
             }
@@ -577,7 +609,7 @@ impl Latency {
     /// handles a self-repainting screen ([`Ended::NeverSettled`]).
     pub fn committed(&mut self, now: Instant) {
         match self.phase {
-            Phase::Pressed { at, before } => {
+            Phase::Pressed { at, before, .. } => {
                 let waited = now.saturating_duration_since(at);
                 // Checked when the commit arrives, not at a deadline. Otherwise
                 // the late commit would land in the next round looking like
@@ -594,6 +626,11 @@ impl Latency {
                     // early, and a client that draws both in one frame shows no
                     // change.
                     self.answered_too_soon += 1;
+                    self.phase = Phase::Pressed {
+                        at,
+                        before,
+                        soon: Some(now),
+                    };
                 } else {
                     self.key_to_commit.push(waited);
                     self.phase = Phase::Polling {
@@ -703,6 +740,7 @@ impl Latency {
             moved_before_commit: self.moved_before_commit,
             answered_too_late: self.answered_too_late,
             answered_too_soon: self.answered_too_soon,
+            answered_soon: self.answered_soon,
             redrew_while_polling: self.redrew_while_polling,
             undelivered: self.undelivered,
             ended,
@@ -1227,6 +1265,35 @@ mod tests {
             report.answered_too_soon, 1,
             "a stray passed over is counted, not quietly missing from the run"
         );
+    }
+
+    #[test]
+    fn a_commit_sooner_than_expected_is_the_answer_when_the_pixel_follows_it() {
+        let mut driver = Driver::new(1, 3, 10);
+        driver.reach_first_press(ms(17));
+        assert_eq!(driver.tick(ms(0)), Step::Press);
+        let keyed = driver.now;
+
+        // kitty 0.51 answers an Enter in about 2 ms, under the 2.08 ms bound.
+        driver.now += Duration::from_micros(1_900);
+        driver.latency.committed(driver.now);
+        assert_eq!(driver.tick(ms(0)), Step::Sample);
+        driver.color = 0xFF44_4444;
+        driver.answer(ms(33));
+
+        let report = driver.latency.report().unwrap();
+        assert_eq!(
+            report.moved_before_commit, 0,
+            "a commit came after the key, so the change is not an earlier frame's"
+        );
+        assert_eq!(report.answered_soon, 1);
+        assert_eq!(report.answered_too_soon, 1);
+        assert_eq!(
+            report.key_to_commit.unwrap().median,
+            Duration::from_micros(1_900)
+        );
+        assert_eq!(report.commit_to_pixel.unwrap().median, ms(33));
+        assert_eq!(report.key_to_pixel.unwrap().median, driver.now - keyed);
     }
 
     #[test]
