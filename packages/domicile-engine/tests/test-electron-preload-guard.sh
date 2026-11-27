@@ -58,49 +58,55 @@ says() { # $1 MEASURED, $2 what the sentence must contain
 }
 
 # MEASURED is "<ready> <preloaded> <isolated> <invoked> <synced> <delivered>
-# <ported> <unpreloaded> <shaped>".
+# <ported> <unpreloaded> <shaped> <bytes>".
 echo "the claim — a preload and its IPC"
 expect "a preload that ran first, stayed apart and carried IPC both ways is the pass" \
-  "pass" "$(verdict "1 1 1 1 1 1 1 1 1")"
-expect "no hello is a failure" "fail" "$(verdict "0 0 0 0 0 0 0 0 0")"
+  "pass" "$(verdict "1 1 1 1 1 1 1 1 1 1")"
+expect "no hello is a failure" "fail" "$(verdict "0 0 0 0 0 0 0 0 0 0")"
 expect "and points at the socket's guard" "yes" \
-  "$(says "0 0 0 0 0 0 0 0 0" "guard-electron-socket.sh")"
+  "$(says "0 0 0 0 0 0 0 0 0 0" "guard-electron-socket.sh")"
 expect "a page that never heard of its preload is a failure" "fail" \
-  "$(verdict "1 0 0 0 0 0 0 1 1")"
+  "$(verdict "1 0 0 0 0 0 0 1 1 1")"
 expect "and names where the preload runs" "yes" \
-  "$(says "1 0 0 0 0 0 0 1 1" "RunAtDocumentStart")"
+  "$(says "1 0 0 0 0 0 0 1 1 1" "RunAtDocumentStart")"
 expect "a page that saw into the preload's world is a failure" "fail" \
-  "$(verdict "1 1 0 1 1 1 1 1 1")"
+  "$(verdict "1 1 0 1 1 1 1 1 1 1")"
 expect "and names the isolated world" "yes" \
-  "$(says "1 1 0 1 1 1 1 1 1" "isolated world")"
+  "$(says "1 1 0 1 1 1 1 1 1 1" "isolated world")"
 expect "an invoke that never came back is a failure" "fail" \
-  "$(verdict "1 1 1 0 1 1 1 1 1")"
-expect "and names where answers go" "yes" "$(says "1 1 1 0 1 1 1 1 1" "Answered")"
+  "$(verdict "1 1 1 0 1 1 1 1 1 1")"
+expect "and names where answers go" "yes" "$(says "1 1 1 0 1 1 1 1 1 1" "Answered")"
 expect "a sendSync that never returned is a failure" "fail" \
-  "$(verdict "1 1 1 1 0 1 1 1 1")"
-expect "and names the sync call" "yes" "$(says "1 1 1 1 0 1 1 1 1" "SendSync")"
+  "$(verdict "1 1 1 1 0 1 1 1 1 1")"
+expect "and names the sync call" "yes" "$(says "1 1 1 1 0 1 1 1 1 1" "SendSync")"
 expect "an app's send that never arrived is a failure" "fail" \
-  "$(verdict "1 1 1 1 1 0 1 1 1")"
-expect "and names delivery" "yes" "$(says "1 1 1 1 1 0 1 1 1" "Deliver")"
+  "$(verdict "1 1 1 1 1 0 1 1 1 1")"
+expect "and names delivery" "yes" "$(says "1 1 1 1 1 0 1 1 1 1" "Deliver")"
 expect "a port that carried nothing is a failure" "fail" \
-  "$(verdict "1 1 1 1 1 1 0 1 1")"
-expect "and names the relay" "yes" "$(says "1 1 1 1 1 1 0 1 1" "relay")"
+  "$(verdict "1 1 1 1 1 1 0 1 1 1")"
+expect "and names the relay" "yes" "$(says "1 1 1 1 1 1 0 1 1 1" "relay")"
 
 echo
 echo "the control — a window without a preload"
 expect "a window without a preload that got one is a failure" "fail" \
-  "$(verdict "1 1 1 1 1 1 1 0 1")"
+  "$(verdict "1 1 1 1 1 1 1 0 1 1")"
 expect "and says only the app's own window gets it" "yes" \
-  "$(says "1 1 1 1 1 1 1 0 1" "only for its own window")"
+  "$(says "1 1 1 1 1 1 1 0 1 1" "only for its own window")"
 echo
 echo "the rest of Electron's preload"
 expect "a preload without Electron's webFrame or arguments is a failure" "fail" \
-  "$(verdict "1 1 1 1 1 1 1 1 0")"
-expect "and names webFrame" "yes" "$(says "1 1 1 1 1 1 1 1 0" "webFrame")"
+  "$(verdict "1 1 1 1 1 1 1 1 0 1")"
+expect "and names webFrame" "yes" "$(says "1 1 1 1 1 1 1 1 0 1" "webFrame")"
 expect "and names the window's arguments" "yes" \
-  "$(says "1 1 1 1 1 1 1 1 0" "\"arguments\"")"
-expect "the old eight measurements no longer pass" "fail" \
-  "$(verdict "1 1 1 1 1 1 1 1")"
+  "$(says "1 1 1 1 1 1 1 1 0 1" "\"arguments\"")"
+echo
+echo "bytes across IPC"
+expect "bytes that crossed as JSON alone are a failure" "fail" \
+  "$(verdict "1 1 1 1 1 1 1 1 1 0")"
+expect "and names the wire's bytes" "yes" \
+  "$(says "1 1 1 1 1 1 1 1 1 0" "toWire")"
+expect "the old nine measurements no longer pass" "fail" \
+  "$(verdict "1 1 1 1 1 1 1 1 1")"
 expect "an empty measurement is a failure" "fail" "$(verdict "")"
 
 [ "$FAILED" -eq 0 ] && echo "all ok"

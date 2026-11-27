@@ -471,7 +471,12 @@ The host carries out the webContents members that act on the page with
   `invoke`/`handle`, `postMessage` with ports, and `sendSync`. `sendSync`
   blocks only the calling page, on a sync Mojo call that the browser process
   answers when the host replies. Arguments travel as JSON, not structured
-  clones, so a `Map` or bytes do not survive the trip.
+  clones, so a `Map` does not survive the trip. Bytes do: an `ArrayBuffer`,
+  a typed array or a `Buffer` goes as an object of one key,
+  `$domicileBytes`, holding them in base64, and arrives as a `Buffer` in
+  the app and a `Uint8Array` in the page, as Electron gives them. VS Code's
+  IPC is nothing but bytes
+  ([`wire-values.ts`](../../packages/electron-host/src/electron/wire-values.ts)).
 - **Message ports:** each port the main process holds an end of is a relay.
   The preload's world keeps the page-side end of a pipe and forwards what
   arrives on it over the socket as `port_message`; the host's `port_post`
