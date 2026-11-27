@@ -62,6 +62,23 @@ describe(createPagePorts, () => {
     ]);
   });
 
+  it("carries bytes to a page beside the JSON", () => {
+    const { ports, sent } = pagePorts();
+    const { port1, port2 } = new MessageChannelMain();
+
+    ports.give(2, [port2]);
+    port1.postMessage({ bytes: Buffer.from([1, 2, 255]) });
+
+    expect(sent).toEqual([
+      {
+        data: { bytes: { $domicileBytes: "AQL/" } },
+        port: "m1",
+        type: "port_post",
+        window: 2,
+      },
+    ]);
+  });
+
   it("gives a port to a page once", () => {
     const { ports } = pagePorts();
     const { port2 } = new MessageChannelMain();

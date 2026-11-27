@@ -426,7 +426,9 @@ The host carries out the webContents members that act on the page with
   before the page's own scripts, with a sandboxed Electron page's `electron`
   module bound in: `contextBridge`, `ipcRenderer`, `webFrame` (the main
   frame, its own `top`, with `frameToken`, `insertCSS`, `insertText`, the
-  zoom and pinch zoom's limits), `crashReporter`, and `webUtils` and `nativeImage`, whose calls
+  zoom and pinch zoom's limits; a zoom the app sets is kept, not applied,
+  as the shell zooms pages, which VS Code's preload does before anything
+  else), `crashReporter`, and `webUtils` and `nativeImage`, whose calls
   say they don't work yet. Its `process` has `isMainFrame`, `contextId`, and
   `versions.electron` and `resourcesPath` from the app's `hello`; Electron's
   own calls on it, such as `getCPUUsage`, say they don't work yet. Its
@@ -471,7 +473,12 @@ The host carries out the webContents members that act on the page with
   `invoke`/`handle`, `postMessage` with ports, and `sendSync`. `sendSync`
   blocks only the calling page, on a sync Mojo call that the browser process
   answers when the host replies. Arguments travel as JSON, not structured
-  clones, so a `Map` or bytes do not survive the trip.
+  clones, so a `Map` does not survive the trip. Bytes do: an `ArrayBuffer`,
+  a typed array or a `Buffer` goes as an object of one key,
+  `$domicileBytes`, holding them in base64, and arrives as a `Buffer` in
+  the app and a `Uint8Array` in the page, as Electron gives them. VS Code's
+  IPC is nothing but bytes
+  ([`wire-values.ts`](../../packages/electron-host/src/electron/wire-values.ts)).
 - **Message ports:** each port the main process holds an end of is a relay.
   The preload's world keeps the page-side end of a pipe and forwards what
   arrives on it over the socket as `port_message`; the host's `port_post`
@@ -488,7 +495,9 @@ The host carries out the webContents members that act on the page with
 - **`protocol.handle`** (and the older `register*Protocol`) sends a session's
   requests for a scheme to the app: `handle_protocol` names the session and
   scheme, the engine sends each request as `protocol_request`, and the app
-  answers with a whole body, a file the engine reads, or a stream of pieces
+  answers with a whole body, a file the engine reads (typed from its name
+  when the app gives no `Content-Type`, as a module script needs one), or a
+  stream of pieces
   ([`electron_app.h`](../../packages/domicile-engine/src/components/domicile/browser/electron_app.h),
   [`domicile_electron_loader.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_electron_loader.h)).
   A window opens a URL in a scheme its session handles; content keeps other

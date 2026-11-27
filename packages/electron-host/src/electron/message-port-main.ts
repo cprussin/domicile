@@ -3,6 +3,7 @@
 // "Message ports" in docs/architecture/ELECTRON-APPS.md.
 
 import { EventEmitter } from "node:events";
+import { toWire } from "./wire-values";
 
 /** What the host asks the engine for a port shared with a page. */
 export type PortRequest =
@@ -197,7 +198,7 @@ export const createPagePorts = (send: (request: PortRequest) => void) => {
           send(
             request.type === "post"
               ? {
-                  data: asJson(request.data),
+                  data: toWire(request.data),
                   port: request.port,
                   type: "port_post",
                   window,
@@ -280,7 +281,3 @@ const control = (port: MessagePortMain) => {
     return found;
   }
 };
-
-/** `data` as it arrives after a trip through JSON. */
-const asJson = (data: unknown): unknown =>
-  JSON.parse(JSON.stringify([data]))[0];

@@ -119,6 +119,45 @@ constexpr char kBootstrap[] = R"JS(
   // An error in a listener or the preload reaches the console, as an uncaught
   // one, and stops nothing else.
   const report = (error) => queueMicrotask(() => { throw error; });
+  // IPC's values as the browser carries them: JSON, with each run of bytes
+  // (an ArrayBuffer, a typed array, a Buffer) as one key, BYTES, holding it
+  // in base64, so that bytes arrive as a Uint8Array as Electron's structured
+  // clone gives them. VS Code's whole IPC is bytes.
+  const BYTES = '$domicileBytes';
+  const toBase64 = (bytes) => {
+    let binary = '';
+    for (let at = 0; at < bytes.length; at += 0x8000) {
+      binary += String.fromCharCode.apply(
+          null, bytes.subarray(at, at + 0x8000));
+    }
+    return btoa(binary);
+  };
+  const fromBase64 = (text) => {
+    const binary = atob(text);
+    const bytes = new Uint8Array(binary.length);
+    for (let at = 0; at < binary.length; at++) {
+      bytes[at] = binary.charCodeAt(at);
+    }
+    return bytes;
+  };
+  const toWire = (value) => JSON.stringify(value, function (key, each) {
+    const raw = this[key];
+    if (raw instanceof ArrayBuffer) {
+      return { [BYTES]: toBase64(new Uint8Array(raw)) };
+    } else if (ArrayBuffer.isView(raw)) {
+      return {
+        [BYTES]: toBase64(
+            new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength)),
+      };
+    } else {
+      return each;
+    }
+  });
+  const fromWire = (json) => JSON.parse(json, (key, each) =>
+      each !== null && typeof each === 'object' && !Array.isArray(each) &&
+          typeof each[BYTES] === 'string' && Object.keys(each).length === 1
+          ? fromBase64(each[BYTES])
+          : each);
   // Tells the app's webContents what its preload threw, as preload-error.
   const preloadFailed = (error) => {
     if (error instanceof Error) {
@@ -210,7 +249,7 @@ constexpr char kBootstrap[] = R"JS(
   const relay = (name, port) => {
     ports.set(name, port);
     port.onmessage = (event) => {
-      native.portPost(name, JSON.stringify(event.data) ?? 'null');
+      native.portPost(name, toWire(event.data) ?? 'null');
     };
     port.addEventListener('close', () => {
       if (ports.get(name) === port) {
@@ -221,11 +260,11 @@ constexpr char kBootstrap[] = R"JS(
   };
   const ipcRenderer = emitter({
     send(channel, ...args) {
-      native.send(String(channel), JSON.stringify(args));
+      native.send(String(channel), toWire(args));
     },
     invoke(channel, ...args) {
       const key = String(channel);
-      const json = JSON.stringify(args);
+      const json = toWire(args);
       return new Promise((resolve, reject) => {
         const id = nextInvoke++;
         answers.set(id, { channel: key, resolve, reject });
@@ -233,7 +272,7 @@ constexpr char kBootstrap[] = R"JS(
       });
     },
     sendSync(channel, ...args) {
-      return JSON.parse(native.sendSync(String(channel), JSON.stringify(args)));
+      return fromWire(native.sendSync(String(channel), toWire(args)));
     },
     postMessage(channel, message, transfer = []) {
       const names = [];
@@ -248,7 +287,7 @@ constexpr char kBootstrap[] = R"JS(
         relay(name, port);
         names.push(name);
       }
-      native.post(String(channel), JSON.stringify(message) ?? 'null', names);
+      native.post(String(channel), toWire(message) ?? 'null', names);
     },
     sendToHost: unsupported('ipcRenderer.sendToHost'),
   });
@@ -266,6 +305,8 @@ constexpr char kBootstrap[] = R"JS(
   // Electron's webFrame for this frame, the window's main frame: the only
   // frame a preload runs in on Domicile, so it is its own top.
   const inserted = new Map();
+  // The zoom factor the app set with webFrame, if it set one.
+  let keptZoom;
   const webFrame = {
     routingId: facts.routingId,
     frameToken: facts.frameToken,
@@ -290,9 +331,23 @@ constexpr char kBootstrap[] = R"JS(
       native.removeInsertedCSS(String(key), user);
     },
     // The page's zoom, which Chromium folds into its devicePixelRatio over
-    // the screen's own scale.
+    // the screen's own scale, or the one the app last set: the shell zooms
+    // pages, so the app's zoom is kept, not applied, as its webContents'
+    // is in electron-host.
     getZoomFactor() {
-      return globalThis.devicePixelRatio / native.deviceScale();
+      return keptZoom ?? globalThis.devicePixelRatio / native.deviceScale();
+    },
+    setZoomFactor(factor) {
+      if (typeof factor !== 'number' || !(factor > 0)) {
+        throw new TypeError('webFrame.setZoomFactor takes a number above 0');
+      }
+      keptZoom = factor;
+    },
+    setZoomLevel(level) {
+      if (typeof level !== 'number' || !Number.isFinite(level)) {
+        throw new TypeError('webFrame.setZoomLevel takes a finite number');
+      }
+      keptZoom = Math.pow(1.2, level);
     },
     getZoomLevel() {
       // Chromium's zoom levels: each one is 1.2 times the last.
@@ -309,8 +364,6 @@ constexpr char kBootstrap[] = R"JS(
       globalThis.document.execCommand('insertText', false, String(text));
     },
     getIsolatedWorlds: unsupported('webFrame.getIsolatedWorlds'),
-    setZoomFactor: unsupported('webFrame.setZoomFactor'),
-    setZoomLevel: unsupported('webFrame.setZoomLevel'),
     // Pinch zoom's limits, as scales of the page, as Electron's are.
     setVisualZoomLevelLimits(minimumLevel, maximumLevel) {
       const least = Number(minimumLevel);
@@ -434,7 +487,7 @@ constexpr char kBootstrap[] = R"JS(
     },
     deliver(channel, json) {
       emit(channel, { sender: ipcRenderer, senderId: 0, ports: [] },
-           JSON.parse(json));
+           fromWire(json));
     },
     deliverPost(channel, json, joined) {
       const names = joined === '' ? [] : joined.split(',');
@@ -444,10 +497,10 @@ constexpr char kBootstrap[] = R"JS(
         return pipe.port2;
       });
       emit(channel, { sender: ipcRenderer, senderId: 0, ports: given },
-           [JSON.parse(json)]);
+           [fromWire(json)]);
     },
     toPort(name, json) {
-      ports.get(name)?.postMessage(JSON.parse(json));
+      ports.get(name)?.postMessage(fromWire(json));
     },
     closePort(name) {
       const port = ports.get(name);
@@ -461,7 +514,7 @@ constexpr char kBootstrap[] = R"JS(
       if (!waiting) return;
       answers.delete(id);
       if (ok) {
-        waiting.resolve(JSON.parse(answer));
+        waiting.resolve(fromWire(answer));
       } else {
         waiting.reject(new Error(
           `Error invoking remote method '${waiting.channel}': ${answer}`));

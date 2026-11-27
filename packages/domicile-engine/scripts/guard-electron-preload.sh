@@ -27,9 +27,12 @@
 #                top, by frameToken; insertCSS and removeInsertedCSS),
 #                webUtils and crashReporter, process.isMainFrame, the
 #                hello's Electron and resources in process,
-#                process.argv has the window's additionalArguments, and
+#                process.argv has the window's additionalArguments,
+#                webFrame keeps the zoom the app sets, and
 #                process is an EventEmitter that says loaded,
 #                document-start and document-end
+#   bytes        a Uint8Array the preload sent reached the app as bytes, and
+#                bytes the app sent reached the preload as a Uint8Array
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -189,7 +192,7 @@ try:
     connection.connect(path)
 except OSError as failure:
     print("no socket: %s" % failure, flush=True)
-    print("measured: 0 0 0 0 0 0 0 0 0", flush=True)
+    print("measured: 0 0 0 0 0 0 0 0 0 0", flush=True)
     sys.exit(0)
 reader = connection.makefile("r", encoding="utf-8")
 
@@ -223,11 +226,17 @@ posted = hear_until(lambda e: e.get("type") == "ipc_post" and
 theirs = (posted or {}).get("ports") or [""]
 send({"type": "port_post", "window": 1, "port": theirs[0], "data": 5})
 from_theirs = hear_until(on_port(theirs[0]))
+# Bytes both ways, as VS Code's IPC is: the preload's arrive as base64 beside
+# the JSON, and the app's go back the same way, to arrive as a Uint8Array.
+bytes_sent = hear_until(message(1, "bytes"))
+send({"type": "ipc_send", "window": 1, "channel": "bytes-back",
+      "args": [{"$domicileBytes": "AQL/"}]})
+bytes_back = hear_until(message(1, "bytes-checked"))
 send({"type": "open_window", "window": 2, "url": page})
 control = hear_until(lambda e: e.get("type") == "title_changed" and
                      e.get("window") == 2 and e.get("title") == "no preload")
 
-print("measured: %d %d %d %d %d %d %d %d %d" % (
+print("measured: %d %d %d %d %d %d %d %d %d %d" % (
     ready is not None and ready["type"] == "ready",
     said is not None,
     seen == {"require": "undefined", "secret": "undefined", "kept": True,
@@ -243,29 +252,33 @@ print("measured: %d %d %d %d %d %d %d %d %d" % (
         "argv": True, "crash": "kept", "electron": "45.2.1",
         "mainFrame": True, "resources": "/opt/guard/resources",
         "routingId": True, "token": True,
-        "top": True, "webUtils": "function", "zoom": 1,
+        "top": True, "webUtils": "function", "zoom": 1, "zoomKept": True,
         "heard": ["loaded", "document-start", "document-end"],
-        "styled": True, "unstyled": True}]), flush=True)
+        "styled": True, "unstyled": True}],
+    bytes_sent is not None and
+    bytes_sent.get("args") == [{"$domicileBytes": "AQL/"}] and
+    bytes_back is not None and bytes_back.get("args") == ["1,2,255"]),
+    flush=True)
 PY
 
 MEASURED="$(sed -n 's/^measured: //p' "$APP_LOG")"
 echo
 echo "measured: $MEASURED"
-echo "  (ready preloaded isolated invoked synced delivered ported unpreloaded shaped)"
+echo "  (ready preloaded isolated invoked synced delivered ported unpreloaded shaped bytes)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-electron-preload-guard.sh`
 # runs this block directly. MEASURED is "<ready> <preloaded> <isolated>
-# <invoked> <synced> <delivered> <ported> <unpreloaded> <shaped>".
+# <invoked> <synced> <delivered> <ported> <unpreloaded> <shaped> <bytes>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"1 1 1 1 1 1 1 1 1")
+"1 1 1 1 1 1 1 1 1 1")
   PASSED="an Electron window's preload ran before its page in its own world, \
 its exposed API reached the app with send, invoke and sendSync, the app's \
 send reached the page, ports carried messages both ways, a window \
-without a preload had none, and the preload had Electron's webFrame, \
+without a preload had none, the preload had Electron's webFrame, \
 webUtils, crashReporter, the window's additionalArguments and process's \
-document events"
+document events, and bytes crossed both ways"
   ;;
 "0 "*)
   FAILURE="the Electron socket did not take the app's hello -- \
@@ -310,10 +323,11 @@ log has what it heard"
 loaded: ElectronPage must send Preload only for its own window, and only \
 when the app gave one"
   ;;
-"1 1 1 1 1 1 1 1 0")
+"1 1 1 1 1 1 1 1 0 "*)
   FAILURE="the preload's electron module is not shaped as Electron's: \
 webFrame (its frameToken, top, insertCSS and removeInsertedCSS, \
-getZoomFactor), webUtils, crashReporter or process.isMainFrame in the \
+getZoomFactor, and setZoomLevel and setZoomFactor keeping the app's zoom), \
+webUtils, crashReporter or process.isMainFrame in the \
 bootstrap in electron_preload.cc, process.versions.electron or \
 process.resourcesPath without the hello's (ElectronHello, ElectronPage, \
 Preload's app), process.argv without the window's \
@@ -322,6 +336,12 @@ process not saying loaded, document-start and document-end (the bootstrap's \
 emitter, ElectronPreload::RunAtDocumentEnd from RunScriptsAtDocumentEnd in \
 patch 0218) -- \
 the app's log has what the preload saw"
+  ;;
+"1 1 1 1 1 1 1 1 1 0")
+  FAILURE="BYTES DID NOT CROSS IPC AS BYTES: the bootstrap's toWire and \
+fromWire in electron_preload.cc must carry each ArrayBuffer and typed array \
+as one \$domicileBytes key of base64, and give the app's back as a \
+Uint8Array -- VS Code's IPC is nothing but bytes, and stalls without them"
   ;;
 *)
   FAILURE="there is no measurement here this guard can place ($MEASURED)"

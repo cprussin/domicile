@@ -43,6 +43,14 @@ const shaped = {
     webFrame.top.frameToken === webFrame.frameToken,
   webUtils: typeof webUtils.getPathForFile,
   zoom: webFrame.getZoomFactor(),
+  // The shell zooms pages, so a zoom the app sets is kept, not applied, as
+  // VS Code's preload sets one before anything else.
+  zoomKept: (() => {
+    webFrame.setZoomLevel(1);
+    const kept = Math.abs(webFrame.getZoomFactor() - 1.2) < 1e-9;
+    webFrame.setZoomFactor(1);
+    return kept;
+  })(),
 };
 
 contextBridge.exposeInMainWorld("guard", {
@@ -67,3 +75,13 @@ ipcRenderer.on("port", (event) => {
 const { port1, port2 } = new MessageChannel();
 port1.onmessage = (message) => port1.postMessage(message.data * 10);
 ipcRenderer.postMessage("mine", "a port", [port2]);
+
+// Bytes both ways, as VS Code's IPC is all bytes: the app's come back as a
+// Uint8Array, which the preload names by its values.
+ipcRenderer.on("bytes-back", (_event, value) => {
+  ipcRenderer.send(
+    "bytes-checked",
+    value instanceof Uint8Array ? value.join(",") : typeof value,
+  );
+});
+ipcRenderer.send("bytes", new Uint8Array([1, 2, 255]));
