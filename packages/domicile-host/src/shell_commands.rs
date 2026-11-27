@@ -48,14 +48,27 @@ struct Page {
     bindings: Vec<ShellBinding>,
     /// It runs commands on a window they name.
     on_a_window: bool,
+    /// It completes commands.
+    completes: bool,
 }
 
-/// A command a page hears: its words, its number, and the window it acts on,
-/// if not the user's focus.
-pub(crate) type Heard = (Vec<String>, u64, Option<String>);
+/// A command a page hears: its words, its number, and what to do with them.
+pub(crate) type Heard = (Vec<String>, u64, Sent);
+
+/// What a page does with the words it hears.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Sent {
+    /// Run them, on this window if given, else on the user's focus.
+    Run(Option<String>),
+    /// Answer with what can follow them.
+    Complete,
+}
 
 /// Why a command on a window fails when no page runs one.
 const NO_PAGE_AIMS: &str = "the shell runs no command on a given window, only on the user's focus";
+
+/// Why a completion fails when no page completes.
+const NO_PAGE_COMPLETES: &str = "the shell completes no command";
 
 /// A sent command no page has run yet.
 struct Waiting {
@@ -84,12 +97,12 @@ impl ShellCommands {
     /// Calls `hear` with each command and its number until the [`Listener`]
     /// drops. `commands` describes what the page runs meanwhile, and
     /// `bindings` the keys and gestures that run them. With `on_a_window`, it
-    /// hears commands on a window too.
+    /// hears commands on a window too, and with `completes`, completions.
     pub(crate) fn listen(
         &self,
         commands: Vec<ShellCommandHelp>,
         bindings: Vec<ShellBinding>,
-        on_a_window: bool,
+        (on_a_window, completes): (bool, bool),
         hear: Hear<Heard>,
     ) -> Listener {
         let mut shared = self.shared.lock().unwrap();
@@ -102,6 +115,7 @@ impl ShellCommands {
                 commands,
                 bindings,
                 on_a_window,
+                completes,
             },
         );
         let stopping = Arc::clone(&self.shared);
@@ -111,10 +125,11 @@ impl ShellCommands {
     }
 
     /// Sends `command` to every page listening, and calls `done` once one ran
-    /// it, every one refused it, or none answered in time. A command on
-    /// `window` goes only to pages that run one, and fails at once when none
-    /// does. Returns false, and never calls `done`, when no page listens.
-    pub(crate) fn send(&self, command: &[String], window: Option<String>, done: Done) -> bool {
+    /// it, every one refused it, or none answered in time. A command on a
+    /// window goes only to pages that run one, and a completion only to pages
+    /// that complete; either fails at once when no such page listens. Returns
+    /// false, and never calls `done`, when no page listens.
+    pub(crate) fn send(&self, command: &[String], sending: Sent, done: Done) -> bool {
         let (sent, hearing) = {
             let mut shared = self.shared.lock().unwrap();
             if shared.pages.is_empty() {
@@ -123,12 +138,20 @@ impl ShellCommands {
             let hearing: Vec<_> = shared
                 .pages
                 .values()
-                .filter(|page| window.is_none() || page.on_a_window)
+                .filter(|page| match &sending {
+                    Sent::Run(None) => true,
+                    Sent::Run(Some(_)) => page.on_a_window,
+                    Sent::Complete => page.completes,
+                })
                 .map(|page| Arc::clone(&page.hear))
                 .collect();
             if hearing.is_empty() {
                 drop(shared);
-                done(Err(NO_PAGE_AIMS.to_string()));
+                done(Err(match sending {
+                    Sent::Run(_) => NO_PAGE_AIMS,
+                    Sent::Complete => NO_PAGE_COMPLETES,
+                }
+                .to_string()));
                 return true;
             }
             let sent = shared.next_sent;
@@ -146,7 +169,7 @@ impl ShellCommands {
         // Outside the lock, since hearing takes its connection's lock, which a
         // page starting to listen holds while it takes this one.
         for hear in &hearing {
-            hear(&(command.to_vec(), sent, window.clone()));
+            hear(&(command.to_vec(), sent, sending.clone()));
         }
         let expiring = self.clone();
         std::thread::spawn(move || {

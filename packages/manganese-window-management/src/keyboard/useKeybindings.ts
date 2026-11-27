@@ -9,7 +9,12 @@ import { useEffect, useEffectEvent, useRef } from "react";
 import type { WindowAction } from "../window-state";
 import { WindowActionKind } from "../window-state";
 
-import { COMMAND_HELP, parseCommand, parseWindowCommand } from "./command";
+import {
+  COMMAND_HELP,
+  completeCommand,
+  parseCommand,
+  parseWindowCommand,
+} from "./command";
 import type { Query } from "./query";
 import { parseQuery, QUERY_HELP } from "./query";
 
@@ -121,6 +126,7 @@ export const useKeybindings = ({
     const bound = bindKeys(domicile, keybindings, {
       commands: HELP,
       onCommand,
+      onComplete: completeCommand,
       onModeChanged: modeChanged,
       onWindowCommand,
       reportRefusal: (why) => {

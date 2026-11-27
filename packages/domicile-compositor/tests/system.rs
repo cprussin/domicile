@@ -176,6 +176,7 @@ fn a_locked_desk_runs_nothing_but_reads_the_kernel() {
             commands: Vec::new(),
             bindings: Vec::new(),
             on_a_window: false,
+            completes: false,
         },
     );
     assert_eq!(reply(&mut chrome, 3), SystemReply::Started);
@@ -220,6 +221,7 @@ fn a_command_sent_on_the_socket_reaches_every_page_listening() {
                 commands: Vec::new(),
                 bindings: Vec::new(),
                 on_a_window: false,
+                completes: false,
             },
         );
         assert_eq!(reply(page, 7), SystemReply::Started);

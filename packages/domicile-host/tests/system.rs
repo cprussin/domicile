@@ -832,6 +832,7 @@ mod shell_commands {
             commands,
             bindings: Vec::new(),
             on_a_window: false,
+            completes: false,
         }
     }
 
@@ -950,6 +951,7 @@ mod shell_commands {
                 commands: Vec::new(),
                 bindings: vec![lock.clone()],
                 on_a_window: false,
+                completes: false,
             },
         );
         reply(&page_heard, 7);
@@ -1014,6 +1016,7 @@ mod shell_commands {
                 commands: Vec::new(),
                 bindings: Vec::new(),
                 on_a_window: true,
+                completes: false,
             },
         );
         reply(&aiming_heard, 7);
@@ -1058,6 +1061,81 @@ mod shell_commands {
                 error.message,
                 "the shell runs no command on a given window, only on the user's focus"
             ),
+            other => panic!("expected a failure, got {other:?}"),
+        }
+        assert!(page_heard.try_recv().is_err());
+    }
+
+    #[test]
+    fn a_completion_goes_only_to_pages_that_complete_and_brings_back_their_words() {
+        // A page that doesn't complete would run the words as a command.
+        let commands = commands();
+        let home = std::env::temp_dir();
+        let ((plain, plain_heard), (completing, completing_heard)) = two_pages(&commands);
+        let (sender, sender_heard) = system_in(&home);
+        let sender = sender.sharing_shell_commands(commands.clone());
+        plain.handle(7, listening(Vec::new()));
+        reply(&plain_heard, 7);
+        completing.handle(
+            7,
+            SystemRequest::ShellCommands {
+                commands: Vec::new(),
+                bindings: Vec::new(),
+                on_a_window: false,
+                completes: true,
+            },
+        );
+        reply(&completing_heard, 7);
+
+        sender.handle(
+            1,
+            SystemRequest::CompleteShell {
+                command: vec!["workspace".into()],
+            },
+        );
+
+        let sent = match next(&completing_heard) {
+            HostMessage::SystemEvent {
+                event: SystemEvent::CompleteShellCommand { command, sent },
+                ..
+            } if command == ["workspace"] => sent,
+            other => panic!("expected a completion of workspace, heard {other:?}"),
+        };
+        assert!(plain_heard.try_recv().is_err());
+        completing.handle(
+            8,
+            SystemRequest::AnswerShellCommand {
+                sent,
+                refused: None,
+                output: Some(r#"["mail","code"]"#.into()),
+            },
+        );
+        assert_eq!(
+            reply(&sender_heard, 1),
+            SystemReply::Sent {
+                output: Some(r#"["mail","code"]"#.into())
+            }
+        );
+    }
+
+    #[test]
+    fn a_completion_no_page_answers_says_so() {
+        let commands = commands();
+        let ((page, page_heard), (sender, sender_heard)) = two_pages(&commands);
+        page.handle(7, listening(Vec::new()));
+        reply(&page_heard, 7);
+
+        sender.handle(
+            1,
+            SystemRequest::CompleteShell {
+                command: vec!["workspace".into()],
+            },
+        );
+
+        match reply(&sender_heard, 1) {
+            SystemReply::Failed { error } => {
+                assert_eq!(error.message, "the shell completes no command")
+            }
             other => panic!("expected a failure, got {other:?}"),
         }
         assert!(page_heard.try_recv().is_err());
@@ -2161,6 +2239,7 @@ mod apps {
                 commands: Vec::new(),
                 bindings: Vec::new(),
                 on_a_window: false,
+                completes: false,
             },
             SystemRequest::SendShell {
                 command: vec!["focus".into(), "right".into()],

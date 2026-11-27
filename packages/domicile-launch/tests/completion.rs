@@ -68,6 +68,10 @@ fn completed(before: &[&str], current: &str) -> Completion {
             agents: &agents,
             profiles: &|| vec![("work".to_string(), "Work".to_string())],
             shell_commands: &shell_commands,
+            shell_values: &|typed| match typed {
+                [said] if said == "workspace" => vec!["mail".to_string(), "code".to_string()],
+                _ => panic!("the shell was asked to complete {typed:?}"),
+            },
             programs: &|start| {
                 ["kitty", "kill"]
                     .into_iter()
@@ -226,6 +230,18 @@ fn send_shell_fills_a_window_placeholder_with_window_ids() {
     assert_eq!(
         values(completed(&["send-shell", "move", "window", "a1"], "")),
         ["to"]
+    );
+}
+
+#[test]
+fn send_shell_asks_the_shell_for_placeholders_only_it_knows() {
+    assert_eq!(
+        values(completed(&["send-shell", "workspace"], "")),
+        ["mail", "code"]
+    );
+    assert_eq!(
+        values(completed(&["send-shell", "workspace"], "m")),
+        ["mail"]
     );
 }
 

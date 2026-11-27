@@ -16,7 +16,7 @@
 // docs/architecture/KEYBINDINGS.md.
 
 import type { Result } from "@cprussin/option-result";
-import { Err } from "@cprussin/option-result";
+import { Err, Ok } from "@cprussin/option-result";
 
 import type { Gestures } from "./desktop/gestures";
 import type { Keyboard } from "./desktop/keyboard";
@@ -69,6 +69,13 @@ export type KeyHandlers = {
     args: readonly string[],
     window: string,
   ) => Result<CommandRan, string>;
+  /**
+   * The words that can follow `args` in a command, for `domicile
+   * completions` to offer: values only the shell knows, such as its
+   * workspace names after `workspace`. Without it, the page never hears
+   * words to complete.
+   */
+  onComplete?: (args: readonly string[]) => readonly string[];
   /** The binding mode changed. */
   onModeChanged: (mode: string) => void;
   /** The page cannot hear `domicile send-shell`. Logs by default. */
@@ -114,6 +121,7 @@ export const bindKeys = (
   {
     commands: help,
     onCommand,
+    onComplete,
     onModeChanged,
     onWindowCommand,
     report = reportToConsole,
@@ -227,8 +235,7 @@ export const bindKeys = (
     domicile.shell,
     help,
     describedBindings(bindings),
-    onCommand,
-    onWindowCommand,
+    { onCommand, onComplete, onWindowCommand },
     report,
   );
   return {
@@ -352,16 +359,29 @@ const hearCommands = (
   shell: Pick<ShellNamespace, "commands" | "answer">,
   help: readonly ShellCommandHelp[],
   bound: readonly ShellBinding[],
-  onCommand: (args: readonly string[]) => Result<CommandRan, string>,
-  onWindowCommand: KeyHandlers["onWindowCommand"],
+  {
+    onCommand,
+    onComplete,
+    onWindowCommand,
+  }: {
+    onCommand: KeyHandlers["onCommand"];
+    onComplete: KeyHandlers["onComplete"];
+    onWindowCommand: KeyHandlers["onWindowCommand"];
+  },
   report: (error: SystemError) => void,
 ): { stop: () => void } => {
   const state: {
     stopped: boolean;
     listening: Listening<ShellCommand> | undefined;
   } = { listening: undefined, stopped: false };
-  const run = ({ window, words }: ShellCommand): Result<CommandRan, string> => {
-    if (window === undefined) {
+  const run = ({
+    complete,
+    window,
+    words,
+  }: ShellCommand): Result<CommandRan, string> => {
+    if (complete) {
+      return completed(words, onComplete);
+    } else if (window === undefined) {
       return onCommand(words);
     } else if (onWindowCommand === undefined) {
       // The compositor sends one only to a page that asked; run on the
@@ -380,7 +400,12 @@ const hearCommands = (
       .catch(reportToConsole);
   };
   shell
-    .commands(help, bound, onWindowCommand !== undefined)
+    .commands(
+      help,
+      bound,
+      onWindowCommand !== undefined,
+      onComplete !== undefined,
+    )
     .then((result) => {
       result.match({
         Err: report,
@@ -402,6 +427,16 @@ const hearCommands = (
     },
   };
 };
+
+/** The words that can follow `words`, as `domicile completions` reads them. */
+const completed = (
+  words: readonly string[],
+  onComplete: KeyHandlers["onComplete"],
+): Result<CommandRan, string> =>
+  // The compositor sends words to complete only to a page that asked.
+  onComplete === undefined
+    ? Err("this shell completes no command")
+    : Ok({ output: JSON.stringify(onComplete(words)) });
 
 /** Call `each` with every item `items` brings, until it closes. */
 const eachOf = async <T>(

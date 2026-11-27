@@ -24,6 +24,12 @@ export type ShellCommand = {
    * for commands on a window hears one.
    */
   readonly window: string | undefined;
+  /**
+   * The page answers with the words that can follow `words`, as a JSON list
+   * in its output, and runs nothing. Only a page that completes commands
+   * hears one.
+   */
+  readonly complete: boolean;
 };
 
 /** One key or gesture a shell binds, as `domicile list-bindings` prints it. */
