@@ -4,12 +4,14 @@
 #ifndef COMPONENTS_DOMICILE_BROWSER_PAGE_PRIVACY_H_
 #define COMPONENTS_DOMICILE_BROWSER_PAGE_PRIVACY_H_
 
+#include <map>
 #include <optional>
 #include <string>
 
 #include "base/functional/callback.h"
 #include "base/timer/timer.h"
 #include "components/domicile/browser/browser_profiles.h"
+#include "components/domicile/browser/site_privacy.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -21,11 +23,12 @@ namespace domicile {
 
 // How one page blocks ads and trackers, for a shell's shield: its profile's
 // mode, changed for its site (site_privacy.h) or for its window, and how many
-// of its requests were blocked. A window's mode lasts as long as its page's
-// WebContents, which is its browser window's. See
+// of its requests were blocked; and each of its other protections
+// (PageProtection), changed the same ways. A window's settings last as long
+// as its page's WebContents, which is its browser window's. See
 // docs/architecture/AD-BLOCKING.md.
-//
-// Where a page's mode comes from.
+
+// Where a page's mode, or one of its protections, comes from.
 enum class AdBlockingSetFor {
   kProfile,
   kSite,
@@ -61,6 +64,19 @@ class PagePrivacy : public content::WebContentsObserver,
   // Sets the mode for the window, or none for its site's or profile's.
   void SetForWindow(std::optional<AdBlockingMode> mode);
 
+  // Whether `protection` is on for the committed page: off wherever its mode
+  // is Off, else its window's, else its site's, else its profile's.
+  bool IsOn(PageProtection protection) const;
+  // As IsOn, for a page at `page` in this window: for a navigation before it
+  // commits.
+  bool IsOnFor(PageProtection protection, const GURL& page) const;
+  // Where IsOn's answer comes from, the mode aside.
+  AdBlockingSetFor SetFor(PageProtection protection) const;
+
+  // Sets `protection` on or off for the window, or none for its site's or
+  // profile's.
+  void SetForWindow(PageProtection protection, std::optional<bool> on);
+
   // Runs `changed` when anything above changes: at once for a mode, whoever
   // set it, or a new page, and at most every quarter second for the count.
   // One listener, the page's guest; another replaces it.
@@ -78,6 +94,7 @@ class PagePrivacy : public content::WebContentsObserver,
 
   PrefChangeRegistrar watched_;
   std::optional<AdBlockingMode> window_;
+  std::map<PageProtection, bool> window_protections_;
   int blocked_ = 0;
   base::RepeatingClosure changed_;
   base::OneShotTimer count_report_;

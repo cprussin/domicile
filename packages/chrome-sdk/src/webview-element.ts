@@ -431,9 +431,10 @@ export const WEBVIEW_SITE_PERMISSIONS_CHANGE_EVENT =
 /**
  * Fired when {@link HTMLWebViewElement.privacySite},
  * {@link HTMLWebViewElement.blockAdsAndTrackers},
- * {@link HTMLWebViewElement.blockAdsAndTrackersSetFor} or
- * {@link HTMLWebViewElement.blockedCount} changed: the page moved, its mode
- * changed, or more of its requests were blocked (at most every quarter
+ * {@link HTMLWebViewElement.blockAdsAndTrackersSetFor},
+ * {@link HTMLWebViewElement.blockedCount} or
+ * {@link HTMLWebViewElement.privacyProtections} changed: the page moved, its
+ * mode or a protection changed, or more of its requests were blocked (at most every quarter
  * second). Carries no payload. Bubbles.
  */
 export const WEBVIEW_SITE_PRIVACY_CHANGE_EVENT = "domicile-site-privacy-change";
@@ -460,6 +461,21 @@ export const WEBVIEW_AD_BLOCKING_SET_FOR = [
 /** One of {@link WEBVIEW_AD_BLOCKING_SET_FOR}. */
 export type WebViewAdBlockingSetFor =
   (typeof WEBVIEW_AD_BLOCKING_SET_FOR)[number];
+
+/**
+ * The protections a shield turns on and off one by one, beside ad blocking:
+ * whether pages read the device's details a little off, and whether links to
+ * other sites lose their click ids. Each is off while the page's ad blocking
+ * is `off`.
+ */
+export const WEBVIEW_PRIVACY_PROTECTIONS = [
+  "hideDeviceDetails",
+  "removeTrackingFromLinks",
+] as const;
+
+/** One of {@link WEBVIEW_PRIVACY_PROTECTIONS}. */
+export type WebViewPrivacyProtection =
+  (typeof WEBVIEW_PRIVACY_PROTECTIONS)[number];
 
 /**
  * The permissions a site can ask for and a shell can set.
@@ -1037,6 +1053,31 @@ declare global {
      */
     setBlockAdsAndTrackers(
       mode: WebViewAdBlocking | null,
+      scope: "site" | "window",
+    ): void;
+    /**
+     * Each of the page's {@link WEBVIEW_PRIVACY_PROTECTIONS}, `"on"` or
+     * `"off"`; all `"off"` while {@link HTMLWebViewElement.blockAdsAndTrackers}
+     * is `"off"`. Empty when {@link HTMLWebViewElement.privacySite} is.
+     * Changes fire {@link WEBVIEW_SITE_PRIVACY_CHANGE_EVENT}. External data:
+     * parse it at the boundary.
+     */
+    privacyProtections(): Record<string, string>;
+    /**
+     * Where each of {@link HTMLWebViewElement.privacyProtections} comes from,
+     * one of {@link WEBVIEW_AD_BLOCKING_SET_FOR}. External data.
+     */
+    privacyProtectionsSetFor(): Record<string, string>;
+    /**
+     * As {@link HTMLWebViewElement.setBlockAdsAndTrackers}, for one of
+     * {@link WEBVIEW_PRIVACY_PROTECTIONS}: on, off, or `null` for the site's
+     * or the profile's. Throws a `TypeError` for an unknown protection or
+     * scope, and an `InvalidStateError` when
+     * {@link HTMLWebViewElement.privacySite} is empty.
+     */
+    setPrivacyProtection(
+      protection: WebViewPrivacyProtection,
+      on: boolean | null,
       scope: "site" | "window",
     ): void;
     /**

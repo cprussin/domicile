@@ -20,6 +20,7 @@
 #include "components/domicile/browser/browser_profiles.h"
 #include "components/domicile/browser/extension_settings.h"
 #include "components/domicile/browser/shell_source.h"
+#include "components/domicile/browser/site_privacy.h"
 #include "components/domicile/mojom/browser_windows.mojom-shared.h"
 #include "components/domicile/mojom/web_view_guest.mojom-shared.h"
 #include "url/gurl.h"
@@ -74,12 +75,16 @@ namespace domicile {
 //
 //   {"type":"site_privacy","version":1}
 //   -> {"type":"site_privacy","sites":[{"profile":"work",
-//       "site":"nytimes.com","block_ads_and_trackers":"off"}]}
+//       "site":"nytimes.com","block_ads_and_trackers":"off",
+//       "protections":{"hide_device_details":false}}]}
+//   (`null` "block_ads_and_trackers" for a site with only protections of its
+//   own)
 //   -> {"type":"refused","why":"..."}
 //
 //   {"type":"set_site_privacy","version":1,"profile":"work",
-//    "site":"nytimes.com","block_ads_and_trackers":"strict"}
-//   (`null` for "block_ads_and_trackers" goes back to the profile's)
+//    "site":"nytimes.com","block_ads_and_trackers":"strict",
+//    "protections":{"hide_device_details":null}}
+//   (either key, or both; `null` goes back to the profile's)
 //   -> {"type":"set"}
 //   -> {"type":"refused","why":"..."}
 //
@@ -311,11 +316,27 @@ using SetSitePermission =
                            mojom::WebViewPermission permission,
                            mojom::WebViewPermissionSetting setting)>;
 
-// One site's own ad-blocking mode in one profile (site_privacy.h).
+// What one site changed in one profile (site_privacy.h).
 struct StoredSitePrivacy {
   std::string profile;
   std::string site;
-  AdBlockingMode block_ads_and_trackers;
+  SitePrivacySettings settings;
+};
+
+// What `set_site_privacy` changes for one site: each set value, none going
+// back to the profile's.
+struct SitePrivacyChange {
+  SitePrivacyChange();
+  SitePrivacyChange(const SitePrivacyChange&);
+  SitePrivacyChange& operator=(const SitePrivacyChange&);
+  ~SitePrivacyChange();
+
+  friend bool operator==(const SitePrivacyChange&,
+                         const SitePrivacyChange&) = default;
+
+  // Unset: left as it is.
+  std::optional<std::optional<AdBlockingMode>> block_ads_and_trackers;
+  std::vector<std::pair<PageProtection, std::optional<bool>>> protections;
 };
 
 // Runs once with every profile's sites with their own mode, or nothing if
@@ -327,12 +348,12 @@ using SitePrivacyFound =
 // possibly after returning.
 using ListSitePrivacy = base::FunctionRef<void(SitePrivacyFound found)>;
 
-// Carries out `set_site_privacy`: sets `site`'s mode in `profile`, or with
-// none goes back to the profile's, or says why not.
+// Carries out `set_site_privacy`: changes `site` in `profile`, or says why
+// not.
 using SetSitePrivacy = base::FunctionRef<base::expected<void, std::string>(
     const std::string& profile,
     const std::string& site,
-    std::optional<AdBlockingMode> mode)>;
+    const SitePrivacyChange& change)>;
 
 // Runs once with the id of the extension `load_unpacked` loaded, or the
 // reason it did not load.

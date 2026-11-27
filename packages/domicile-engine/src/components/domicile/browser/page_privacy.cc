@@ -32,6 +32,11 @@ PagePrivacy::PagePrivacy(content::WebContents* contents)
                                                base::Unretained(this)));
   watched_.Add(kProfileAdBlockingPref, base::BindRepeating(&PagePrivacy::Changed,
                                                  base::Unretained(this)));
+  for (const char* pref : {kSiteProtectionsPref, kHideDeviceDetailsPref,
+                           kRemoveLinkTrackingPref}) {
+    watched_.Add(pref, base::BindRepeating(&PagePrivacy::Changed,
+                                           base::Unretained(this)));
+  }
 }
 
 PagePrivacy::~PagePrivacy() = default;
@@ -73,6 +78,52 @@ AdBlockingSetFor PagePrivacy::set_for() const {
     return AdBlockingSetFor::kSite;
   }
   return AdBlockingSetFor::kProfile;
+}
+
+bool PagePrivacy::IsOn(PageProtection protection) const {
+  return IsOnFor(protection,
+                 GetWebContents().GetPrimaryMainFrame()->GetLastCommittedURL());
+}
+
+bool PagePrivacy::IsOnFor(PageProtection protection, const GURL& page) const {
+  // Protections off for the page are all off, whatever each one says.
+  if (ModeFor(page) == AdBlockingMode::kOff) {
+    return false;
+  }
+  if (const auto own = window_protections_.find(protection);
+      own != window_protections_.end()) {
+    return own->second;
+  }
+  const std::string page_site = PrivacySiteOf(page);
+  if (!page_site.empty()) {
+    if (const std::optional<bool> on =
+            SiteProtection(prefs(), page_site, protection)) {
+      return *on;
+    }
+  }
+  return ProfileProtection(prefs(), protection);
+}
+
+AdBlockingSetFor PagePrivacy::SetFor(PageProtection protection) const {
+  if (window_protections_.contains(protection)) {
+    return AdBlockingSetFor::kWindow;
+  }
+  const std::string page_site = site();
+  if (!page_site.empty() &&
+      SiteProtection(prefs(), page_site, protection).has_value()) {
+    return AdBlockingSetFor::kSite;
+  }
+  return AdBlockingSetFor::kProfile;
+}
+
+void PagePrivacy::SetForWindow(PageProtection protection,
+                               std::optional<bool> on) {
+  if (on.has_value()) {
+    window_protections_[protection] = *on;
+  } else {
+    window_protections_.erase(protection);
+  }
+  Changed();
 }
 
 void PagePrivacy::CountBlocked() {

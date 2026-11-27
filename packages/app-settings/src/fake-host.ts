@@ -14,6 +14,7 @@ import type {
   SettingsHost,
   SiteData,
   SitePrivacy,
+  SiteProtection,
   SiteSettings,
   Target,
   WebAgents,
@@ -258,20 +259,37 @@ export const fakeHost = (state: FakeHostState) => {
       return Promise.resolve();
     },
     setSitePrivacy: (change) => {
-      const others = (state.sitePrivacy ?? []).filter(
-        (kept) => kept.profile !== change.profile || kept.site !== change.site,
+      const kept = (state.sitePrivacy ?? []).find(
+        (site) => site.profile === change.profile && site.site === change.site,
       );
+      const others = (state.sitePrivacy ?? []).filter((site) => site !== kept);
+      const protections: SitePrivacy["protections"] = {
+        ...kept?.protections,
+      };
+      for (const [protection, on] of Object.entries(
+        change.protections ?? {},
+      ) as [SiteProtection, boolean | null][]) {
+        if (on === null) {
+          delete protections[protection];
+        } else {
+          protections[protection] = on;
+        }
+      }
+      const changed: SitePrivacy = {
+        block_ads_and_trackers:
+          change.block_ads_and_trackers === undefined
+            ? (kept?.block_ads_and_trackers ?? null)
+            : change.block_ads_and_trackers,
+        profile: change.profile,
+        protections,
+        site: change.site,
+      };
+      // As the engine: a site with nothing of its own isn't kept.
       state.sitePrivacy =
-        change.block_ads_and_trackers === null
+        changed.block_ads_and_trackers === null &&
+        Object.keys(protections).length === 0
           ? others
-          : [
-              ...others,
-              {
-                block_ads_and_trackers: change.block_ads_and_trackers,
-                profile: change.profile,
-                site: change.site,
-              },
-            ];
+          : [...others, changed];
       return Promise.resolve();
     },
     signOutWebAgent: (client) => {

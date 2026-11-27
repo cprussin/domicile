@@ -1044,6 +1044,20 @@ or its window:
   profile's. It applies from the next request, so reload the page to see it.
   A private profile's sites are kept until its last page closes.
 
+Each protection beside it works the same way, by name
+(`WEBVIEW_PRIVACY_PROTECTIONS`): `hideDeviceDetails` and
+`removeTrackingFromLinks`, the profile's `hide_device_details` and
+`remove_tracking_from_links`.
+
+- `view.privacyProtections()`: each protection's name and `on` or `off`. Every
+  protection is `off` where the mode is `off`.
+- `view.privacyProtectionsSetFor()`: where each came from, `profile`, `site` or
+  `window`, the mode aside.
+- `view.setPrivacyProtection(name, on, scope)` turns one on (`true`) or off
+  (`false`) for the site or the window, as `setBlockAdsAndTrackers` does, and
+  `null` goes back to the site's or the profile's. It applies from the next
+  load.
+
 `domicile-site-privacy-change` signals a change to any of them, the count at
 most every quarter second.
 

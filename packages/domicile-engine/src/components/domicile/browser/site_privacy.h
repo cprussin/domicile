@@ -29,6 +29,11 @@ namespace domicile {
 //
 // A page's, which a window may change too, is PagePrivacy's
 // (page_privacy.h).
+//
+// Each protection beside ad blocking (PageProtection) is on or off the same
+// way: the profile's, as the config has it, else a site's, in
+// `domicile.privacy.sites`, else a window's. All are off where the page's ad
+// blocking is Off, which a shield shows as protections off.
 
 inline constexpr char kProfileAdBlockingPref[] = "domicile.ad_blocking.profile";
 inline constexpr char kSiteAdBlockingPref[] = "domicile.ad_blocking.sites";
@@ -40,6 +45,21 @@ inline constexpr char kRemoveLinkTrackingPref[] =
 // as the config has it. Off too wherever the page's ad blocking is Off.
 inline constexpr char kHideDeviceDetailsPref[] =
     "domicile.device_details.hide";
+
+// A site's protections, by PageProtectionName, each true or false: a
+// dictionary of dictionaries, by PrivacySiteOf.
+inline constexpr char kSiteProtectionsPref[] = "domicile.privacy.sites";
+
+// The protections a shield turns on and off one by one, beside ad blocking.
+enum class PageProtection {
+  kHideDeviceDetails,
+  kRemoveTrackingFromLinks,
+};
+
+inline constexpr PageProtection kPageProtections[] = {
+    PageProtection::kHideDeviceDetails,
+    PageProtection::kRemoveTrackingFromLinks,
+};
 
 // The prefs above, on every profile.
 void RegisterSitePrivacyPrefs(PrefRegistrySimple* registry);
@@ -66,8 +86,41 @@ void SetSiteAdBlocking(PrefService& prefs,
                        std::string_view site,
                        std::optional<AdBlockingMode> mode);
 
-// Every site with its own mode, by site.
-std::vector<std::pair<std::string, AdBlockingMode>> SitesWithOwnAdBlocking(
+// What the config and the prefs call each protection (its config key, such
+// as `hide_device_details`), and back.
+std::string_view PageProtectionName(PageProtection protection);
+std::optional<PageProtection> PageProtectionNamed(std::string_view name);
+
+// Whether the profile has `protection` on, as the config has it.
+bool ProfileProtection(const PrefService& prefs, PageProtection protection);
+
+// Whether `site` has `protection` on or off of its own, or none for the
+// profile's. Setting none removes it.
+std::optional<bool> SiteProtection(const PrefService& prefs,
+                                   std::string_view site,
+                                   PageProtection protection);
+void SetSiteProtection(PrefService& prefs,
+                       std::string_view site,
+                       PageProtection protection,
+                       std::optional<bool> on);
+
+// What one site changed from its profile's.
+struct SitePrivacySettings {
+  SitePrivacySettings();
+  SitePrivacySettings(const SitePrivacySettings&);
+  SitePrivacySettings& operator=(const SitePrivacySettings&);
+  ~SitePrivacySettings();
+
+  friend bool operator==(const SitePrivacySettings&,
+                         const SitePrivacySettings&) = default;
+
+  std::optional<AdBlockingMode> block_ads_and_trackers;
+  // In kPageProtections order, those the site has of its own.
+  std::vector<std::pair<PageProtection, bool>> protections;
+};
+
+// Every site with a mode or a protection of its own, by site.
+std::vector<std::pair<std::string, SitePrivacySettings>> SitesWithOwnPrivacy(
     const PrefService& prefs);
 
 }  // namespace domicile

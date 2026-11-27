@@ -214,8 +214,9 @@ there.
 Open **Settings**, then **Privacy**. **Website protections** has a choice of
 Standard, Strict or Off for ads and trackers, and a switch for each of the
 rest, for the profile you choose.
-**Sites you changed** lists the sites you turned protections off for, or set
-to Strict, from the shield. **Turn back on** or **Remove** undoes one.
+**Sites you changed** lists the sites you turned protections off for, set
+to Strict, or turned one protection off for, from the shield. **Turn back on**
+or **Remove** undoes one.
 
 <!-- tab: Config file -->
 

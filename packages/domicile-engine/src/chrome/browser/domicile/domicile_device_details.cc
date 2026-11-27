@@ -17,7 +17,6 @@
 #include "components/domicile/browser/site_privacy.h"
 #include "components/domicile/mojom/device_details.mojom.h"
 #include "components/prefs/pref_service.h"
-#include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -91,10 +90,6 @@ class DeviceDetailsHiding final
       return;
     }
     content::BrowserContext& context = *contents.GetBrowserContext();
-    if (!user_prefs::UserPrefs::Get(&context)->GetBoolean(
-            kHideDeviceDetailsPref)) {
-      return;
-    }
     // The page's top site: a frame in it is seen as its page is, so one
     // site's frame in two others' pages can't tell them apart from it.
     const GURL& page =
@@ -105,13 +100,11 @@ class DeviceDetailsHiding final
     if (site.empty()) {
       return;
     }
+    // The profile's, the site's or the window's, and off with all of the
+    // page's protections.
     PagePrivacy::CreateForWebContents(&contents);
-    const PagePrivacy& privacy = *PagePrivacy::FromWebContents(&contents);
-    const AdBlockingMode mode = navigation->IsInPrimaryMainFrame()
-                                    ? privacy.ModeFor(page)
-                                    : privacy.mode();
-    // Protections off for the site or the window are all off.
-    if (mode == AdBlockingMode::kOff) {
+    if (!PagePrivacy::FromWebContents(&contents)->IsOnFor(
+            PageProtection::kHideDeviceDetails, page)) {
       return;
     }
     VLOG(1) << "domicile: device details: hidden from "

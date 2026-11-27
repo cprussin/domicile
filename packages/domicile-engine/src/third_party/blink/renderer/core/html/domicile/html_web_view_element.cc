@@ -1533,6 +1533,28 @@ std::optional<domicile::mojom::blink::WebViewAdBlocking> AdBlockingNamed(
   return std::nullopt;
 }
 
+// What a shell calls each protection.
+String ProtectionName(domicile::mojom::blink::WebViewProtection protection) {
+  switch (protection) {
+    case domicile::mojom::blink::WebViewProtection::kHideDeviceDetails:
+      return "hideDeviceDetails";
+    case domicile::mojom::blink::WebViewProtection::kRemoveTrackingFromLinks:
+      return "removeTrackingFromLinks";
+  }
+}
+
+std::optional<domicile::mojom::blink::WebViewProtection> ProtectionNamed(
+    const String& name) {
+  for (const auto protection :
+       {domicile::mojom::blink::WebViewProtection::kHideDeviceDetails,
+        domicile::mojom::blink::WebViewProtection::kRemoveTrackingFromLinks}) {
+    if (ProtectionName(protection) == name) {
+      return protection;
+    }
+  }
+  return std::nullopt;
+}
+
 }  // namespace
 
 void HTMLWebViewElement::SitePrivacyChanged(
@@ -1542,11 +1564,21 @@ void HTMLWebViewElement::SitePrivacyChanged(
     block_ads_and_trackers_ = AdBlockingName(privacy->block_ads_and_trackers);
     block_ads_and_trackers_set_for_ = SetForName(privacy->set_for);
     blocked_count_ = privacy->blocked;
+    privacy_protections_.clear();
+    privacy_protections_set_for_.clear();
+    for (const auto& protection : privacy->protections) {
+      const String name = ProtectionName(protection->protection);
+      privacy_protections_.emplace_back(name, protection->on ? "on" : "off");
+      privacy_protections_set_for_.emplace_back(
+          name, SetForName(protection->set_for));
+    }
   } else {
     privacy_site_ = g_empty_string;
     block_ads_and_trackers_ = g_empty_string;
     block_ads_and_trackers_set_for_ = g_empty_string;
     blocked_count_ = 0;
+    privacy_protections_.clear();
+    privacy_protections_set_for_.clear();
   }
 
   DispatchEvent(*Event::CreateBubble(AtomicString(kSitePrivacyChangeEvent)));
@@ -1583,6 +1615,38 @@ void HTMLWebViewElement::setBlockAdsAndTrackers(
     guest_->SetAdBlockingForSite(named);
   } else {
     guest_->SetAdBlockingForWindow(named);
+  }
+}
+
+// As setBlockAdsAndTrackers: the browser reports the result.
+void HTMLWebViewElement::setPrivacyProtection(const String& protection,
+                                              std::optional<bool> on,
+                                              const String& scope,
+                                              ExceptionState& exception_state) {
+  const std::optional<domicile::mojom::blink::WebViewProtection> named =
+      ProtectionNamed(protection);
+  if (!named.has_value()) {
+    exception_state.ThrowTypeError(
+        "A protection must be \"hideDeviceDetails\" or "
+        "\"removeTrackingFromLinks\".");
+    return;
+  }
+  if (scope != "site" && scope != "window") {
+    exception_state.ThrowTypeError("It must be for \"site\" or \"window\".");
+    return;
+  }
+  // Only a guest reports a site, so a guest exists past this.
+  if (privacy_site_.empty()) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "This page is not a website, which has no protections.");
+    return;
+  }
+  CHECK(guest_.is_bound());
+  if (scope == "site") {
+    guest_->SetProtectionForSite(*named, on);
+  } else {
+    guest_->SetProtectionForWindow(*named, on);
   }
 }
 

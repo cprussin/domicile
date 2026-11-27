@@ -21,7 +21,7 @@ use domicile_launch::recent_log::Said;
 use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
-use domicile_launch::site_privacy::{SitePrivacy, SitePrivacyChange};
+use domicile_launch::site_privacy::{SitePrivacy, SitePrivacyChange, SiteProtection};
 use domicile_protocol::{
     AdaptiveSync, ChromeMessage, ConfigKey, ConfigOverride, DeskRect, DeskShot, DesktopStatus,
     DisplayChange, DisplayHdr, DisplayInfo, DisplayTransform, EmulatedInput, InputConnection,
@@ -1038,7 +1038,8 @@ fn nytimes_off_in(profile: &str) -> SitePrivacy {
     SitePrivacy {
         profile: profile.to_string(),
         site: "nytimes.com".to_string(),
-        block_ads_and_trackers: AdBlocking::Off,
+        block_ads_and_trackers: Some(AdBlocking::Off),
+        protections: BTreeMap::new(),
     }
 }
 
@@ -1077,10 +1078,40 @@ fn a_desktop_told_to_clear_a_sites_ad_blocking_tells_the_engine() {
         Some(SitePrivacyChange {
             profile: "work".to_string(),
             site: "nytimes.com".to_string(),
-            block_ads_and_trackers: None,
+            block_ads_and_trackers: Some(None),
+            protections: BTreeMap::new(),
         })
     );
     assert_eq!(answered, Response::Stored);
+}
+
+#[test]
+fn a_desktop_told_to_change_a_sites_protections_tells_the_engine() {
+    let told = RefCell::new(None);
+    reply_to(
+        "{\"type\":\"set_site_privacy\",\"change\":{\"profile\":\"work\",\"site\":\"zoom.us\",\"protections\":{\"hide_device_details\":false,\"remove_tracking_from_links\":null}}}",
+        &Desktop {
+            set_site_privacy: &|change| {
+                told.replace(Some(change.clone()));
+                Ok(())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    // Its ad blocking left out, so left as it is.
+    assert_eq!(
+        told.take(),
+        Some(SitePrivacyChange {
+            profile: "work".to_string(),
+            site: "zoom.us".to_string(),
+            block_ads_and_trackers: None,
+            protections: BTreeMap::from([
+                (SiteProtection::HideDeviceDetails, Some(false)),
+                (SiteProtection::RemoveTrackingFromLinks, None),
+            ]),
+        })
+    );
 }
 
 #[test]

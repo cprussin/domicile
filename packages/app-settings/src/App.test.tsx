@@ -631,19 +631,40 @@ describe(App, () => {
           {
             block_ads_and_trackers: "off",
             profile: "personal",
+            protections: {},
             site: "secure.chase.com",
           },
           {
             block_ads_and_trackers: "strict",
             profile: "personal",
+            protections: {},
             site: "news.example",
           },
-          { block_ads_and_trackers: "off", profile: "work", site: "espn.com" },
+          {
+            block_ads_and_trackers: null,
+            profile: "personal",
+            protections: {
+              hide_device_details: false,
+              remove_tracking_from_links: true,
+            },
+            site: "zoom.us",
+          },
+          {
+            block_ads_and_trackers: "off",
+            profile: "work",
+            protections: {},
+            site: "espn.com",
+          },
         ],
       });
       const sites = await profileCard("Sites you changed");
       expect(sites.getByText("Protections off")).toBeInTheDocument();
       expect(sites.getByText("Ads and trackers: Strict")).toBeInTheDocument();
+      expect(
+        sites.getByText(
+          "Device details not hidden · Tracking removed from links",
+        ),
+      ).toBeInTheDocument();
       expect(sites.queryByText("espn.com")).toBeNull();
 
       await user.click(
@@ -651,14 +672,21 @@ describe(App, () => {
           name: "Turn protections back on for secure.chase.com",
         }),
       );
+      await user.click(sites.getByRole("button", { name: "Remove zoom.us" }));
       await waitFor(() => {
         expect(host.state.sitePrivacy).toEqual([
           {
             block_ads_and_trackers: "strict",
             profile: "personal",
+            protections: {},
             site: "news.example",
           },
-          { block_ads_and_trackers: "off", profile: "work", site: "espn.com" },
+          {
+            block_ads_and_trackers: "off",
+            profile: "work",
+            protections: {},
+            site: "espn.com",
+          },
         ]);
       });
       await choose(user, "Profile", "Work");
