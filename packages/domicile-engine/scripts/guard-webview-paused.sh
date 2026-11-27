@@ -5,8 +5,8 @@
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-paused.sh /build/chromium/src
 #
-# Headless and software-composited like the other <webview> guards. It counts
-# the shell's frames, so it needs no pixels and no client.
+# Headless and software-composited like the other <webview> guards. It reads
+# the engine's log, so it needs no pixels and no client.
 #
 # Why: a page paused on `alert()`, `confirm()` or `prompt()` draws nothing
 # until answered. A <webview> embeds its page with the default deadline
@@ -18,18 +18,33 @@
 #
 # The shell (guard-webview-paused.js) plays a slide and a shrink on the window
 # while its page runs, then makes the page open a `confirm()`, never answers,
-# and plays both again. Asserted:
+# and plays both again. The shell's renderer logs each new surface its
+# <webview> embeds, and whether it waits for the page to draw it (patch 0295,
+# `--vmodule=remote_frame=1`). Each wait is what held the shell, so the guard
+# counts those, not frames: a frame count moves with the machine's load.
+# Asserted:
 #
 #   the shell page ran            or nothing was set up
 #   the page loaded               a window was opened and navigated
+#   every animation played        all four are in the log
 #   the page paused               its confirm() reached the shell and never
 #                                 returned
-#   every animation played        all four counts are in the log
-#   paused keeps pace             each paused animation drew at least
-#                                 MIN_PERCENT of the frames its running one did
+#   the log shows waits           an embed before the dialog waited: the first
+#                                 one, and the 1px narrowing that opens the
+#                                 dialog, change what the page draws
+#   nothing paused waited         no embed while the page was paused waited
+#                                 for it
 #
-# The running animations are the control, in the same run and under the same
-# load: they show what the shell draws when nothing waits.
+# A transform holds the frame's rect and scale while it animates (patches
+# 0233, 0281), so a slide or shrink often embeds no new surface at all; that
+# passes too, as nothing waits. The embeds at once are printed, not required.
+#
+# The log's order is safe for these counts. The shell's renderer writes an
+# embed's line itself, before anything it then says reaches the log through
+# the browser: the narrowing's wait comes before "dialog-claimed", which the
+# narrowing caused, and every paused embed before "played paused-shrink".
+#
+# The frame counts are printed, for a person reading a slow run.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -61,9 +76,6 @@ WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
 # Each animation's length.
 ANIMATION_MS="${ANIMATION_MS:-2000}"
-# The share of the running animation's frames a paused one must draw. Waiting
-# out the deadline drew about 30%; a paused page that holds nothing, about 90%.
-MIN_PERCENT="${MIN_PERCENT:-60}"
 
 STARTED=()
 cleanup() {
@@ -120,7 +132,7 @@ rm -f "$ENGINE_LOG"
   --domicile-shell-module="guard-webview-paused.js" \
   --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
-  --enable-logging=stderr --log-level=0 \
+  --enable-logging=stderr --log-level=0 --vmodule=remote_frame=1 \
   --domicile-broker-socket="$BROKER" >"$ENGINE_LOG" 2>&1 &
 STARTED+=($!)
 
@@ -134,15 +146,26 @@ saw() { # $1 pattern
 }
 
 # Each animation's frame count, 0 for one that never played, in the order
-# running-slide running-shrink paused-slide paused-shrink.
+# running-slide running-shrink paused-slide paused-shrink; then the embeds
+# that waited before the dialog, and those that waited and that did not while
+# the page was paused, from "dialog-claimed" to "played paused-shrink".
 READ="$(awk '
   match($0, /GUARD played [a-z]+-[a-z]+ frames=[0-9]+/) {
     split(substr($0, RSTART + 13, RLENGTH - 13), parts, / frames=/)
     frames[parts[1]] = parts[2]
+    if (parts[1] == "paused-shrink") ended = 1
+  }
+  /GUARD dialog-claimed/ { paused = 1 }
+  /a <webview> embeds its page.s new surface and waits/ {
+    if (!paused) before += 1
+    else if (!ended) waited += 1
+  }
+  /a <webview> embeds its page.s new surface at once/ {
+    if (paused && !ended) at_once += 1
   }
   END {
-    printf "%d %d %d %d\n", frames["running-slide"], frames["running-shrink"],
-      frames["paused-slide"], frames["paused-shrink"]
+    printf "%d %d %d %d %d %d %d\n", frames["running-slide"], frames["running-shrink"],
+      frames["paused-slide"], frames["paused-shrink"], before, waited, at_once
   }' "$ENGINE_LOG" 2>/dev/null)"
 
 SAW_SHELL=$(saw "GUARD shell-loaded")
@@ -154,14 +177,17 @@ SAW_PAUSED=$( (grep -qF "GUARD dialog-claimed" "$ENGINE_LOG" &&
 MEASURED="$SAW_SHELL $SAW_PAGE $SAW_PAUSED $READ"
 echo
 echo "measured: $MEASURED"
-echo "  (shell page paused, then frames: running-slide running-shrink paused-slide paused-shrink)"
+echo "  (shell page paused, then frames: running-slide running-shrink paused-slide paused-shrink,"
+echo "   then embeds: waited before the dialog, waited while paused, at once while paused)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-webview-paused-guard.sh`
 # runs this block directly. MEASURED is "<shell> <page> <paused> <running-slide>
-# <running-shrink> <paused-slide> <paused-shrink>"; MIN_PERCENT is the bar.
+# <running-shrink> <paused-slide> <paused-shrink> <waits-before> <paused-waits>
+# <paused-at-once>".
 FAILURE=""
 PASSED=""
-read -r M_SHELL M_PAGE M_PAUSED RUN_SLIDE RUN_SHRINK PAUSED_SLIDE PAUSED_SHRINK <<<"$MEASURED"
+read -r M_SHELL M_PAGE M_PAUSED RUN_SLIDE RUN_SHRINK PAUSED_SLIDE PAUSED_SHRINK \
+  WAITS_BEFORE PAUSED_WAITS PAUSED_AT_ONCE <<<"$MEASURED"
 if [ "$M_SHELL" != "1" ]; then
   FAILURE="the shell page never ran, so nothing here was set up: the module \
 did not load, or it threw, and the engine log has its console"
@@ -177,22 +203,22 @@ domicile-dialog after the resize, or it returned, so the paused counts would \
 measure a running page"
 elif [ "$PAUSED_SLIDE" -eq 0 ] || [ "$PAUSED_SHRINK" -eq 0 ]; then
   FAILURE="the paused page's animations never finished"
-elif [ $((PAUSED_SLIDE * 100)) -lt $((RUN_SLIDE * MIN_PERCENT)) ]; then
-  FAILURE="a window sliding with its page paused drew $PAUSED_SLIDE frames \
-against $RUN_SLIDE running, under $MIN_PERCENT%: the shell waits for the \
-paused page each time the part of it on screen changes. A <webview> must \
-raster its whole page (RemoteFrameView::ComputeCompositingRect), so a slide \
-changes no compositor_viewport"
-elif [ $((PAUSED_SHRINK * 100)) -lt $((RUN_SHRINK * MIN_PERCENT)) ]; then
-  FAILURE="a window shrinking with its page paused drew $PAUSED_SHRINK frames \
-against $RUN_SHRINK running, under $MIN_PERCENT%: the shell waits for the \
-paused page at each new scale. A <webview> must embed a change of scale \
-alone (raster scale, size in the local root) with deadline 0 \
-(RemoteFrame::SynchronizeVisualProperties)"
+elif [ "$WAITS_BEFORE" -eq 0 ]; then
+  FAILURE="no embed before the dialog waited for the page, though the first \
+one and the 1px narrowing change what it draws. The log this guard counts is \
+missing: --vmodule=remote_frame=1 did not reach the shell's renderer, or \
+RemoteFrame::SynchronizeVisualProperties no longer logs (patch 0295), so no \
+wait below would show"
+elif [ "$PAUSED_WAITS" -ne 0 ]; then
+  FAILURE="the shell waited for the paused page $PAUSED_WAITS times while its \
+window slid and shrank, each for the whole deadline. A <webview> must raster \
+its whole page (RemoteFrameView::ComputeCompositingRect), so a slide changes \
+no compositor_viewport, and embed a change of scale alone (raster scale, \
+size in the local root) at once (RemoteFrame::SynchronizeVisualProperties)"
 else
-  PASSED="a window whose page is paused on a dialog slid and shrank at the \
-pace of one whose page runs ($PAUSED_SLIDE/$RUN_SLIDE and \
-$PAUSED_SHRINK/$RUN_SHRINK frames)"
+  PASSED="a window whose page is paused on a dialog slid and shrank without \
+the shell waiting for the page ($PAUSED_AT_ONCE embeds at once, none waited; \
+$PAUSED_SLIDE/$RUN_SLIDE and $PAUSED_SHRINK/$RUN_SHRINK frames)"
 fi
 
 if [ -n "$PASSED" ]; then

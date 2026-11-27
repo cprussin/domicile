@@ -169,9 +169,16 @@ FIRST_ANSWER="$(open_mail "$SITE/mail?n=1" "$FOCUS")"
 echo "the engine answered mail 1 (reuse=$FOCUS): $FIRST_ANSWER"
 wait_for_line "$TRIES" "loaded mail n=1" "$HTTP_LOG"
 # The shell lists the window after the page loads, not before: read its id
-# only once it is listed.
-wait_for_line "$TRIES" "GUARD list mail=1 " "$ENGINE_LOG"
-MAIL_ID="$(sed -n 's/.*GUARD list mail=[0-9]* chat=[0-9]* mail-id=\([0-9][0-9]*\) .*/\1/p' "$ENGINE_LOG" | head -1)"
+# only once it is listed. The read waits for the id itself, not the line's
+# start: the engine may be partway through writing the line, and a reader
+# then sees only its first part (a write across a page boundary of the log).
+MAIL_ID=""
+for _ in $(seq 1 "$TRIES"); do
+  MAIL_ID="$(sed -n 's/.*GUARD list mail=[1-9][0-9]* chat=[0-9]* mail-id=\([0-9][0-9]*\) .*/\1/p' "$ENGINE_LOG" | head -1)"
+  [ -n "$MAIL_ID" ] && break
+  grep -qF "Received signal" "$ENGINE_LOG" 2>/dev/null && break
+  sleep 0.25
+done
 wait_for_line "$TRIES" "attached browser window ${MAIL_ID:-none} to a <webview>" "$ENGINE_LOG"
 SECOND_ANSWER="$(open_mail "$SITE/mail?n=2" "$FOCUS")"
 echo "the engine answered mail 2 (reuse=$FOCUS): $SECOND_ANSWER"

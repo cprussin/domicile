@@ -5,14 +5,20 @@ guard-webview-hidden-theme.sh shows a page that is yellow in a light color
 scheme and blue in a dark one.
 
 - Waits until the page is drawn yellow.
-- Hides the <webview>'s box, turns the desk dark by creating `--turn` (the
-  claim) or leaves the page to turn itself (the control), waits `--hidden`
-  seconds, and shows the box again.
-- Reads the page's center pixel in the first screenshot after the show, then
-  for `--after` seconds until it is blue.
+- Hides the <webview>'s box and waits for the page to say it is hidden.
+- The claim turns the desk dark by creating `--turn` and waits for the engine
+  to say the hidden page drew its new colors. The control waits for the page
+  to say it turned itself dark.
+- Shows the box again, reads the page's center pixel in the first screenshot
+  after the show, then reads it until it is blue.
+
+Each wait is for the line that says the step happened, however long a busy
+machine takes, up to `--tries` half seconds: a fixed sleep would let load
+decide the order of the steps.
 
 Prints `first=<scheme> settled=<scheme>`, each `light`, `dark` or
-`other(<r>,<g>,<b>)`, or `first=never` if the page never drew.
+`other(<r>,<g>,<b>)`; `first=never` if the page never drew; or
+`first=<step>-never` if a wait ran out, naming the step.
 """
 
 import argparse
@@ -26,6 +32,14 @@ import zlib
 from guard_webview_devtools import command, connect, shell_target
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+# What the page logs while it is hidden (guard-webview-hidden-theme-server.py).
+HIDDEN = "GUARD while hidden: dark=false"
+# What the control's page logs once it has turned itself dark.
+TURNED = "GUARD turned itself dark while hidden"
+# What patch 0285 logs when a hidden page's frame in its new colors ends its
+# capture.
+DRAWN = "a hidden page drew its new colors (1), its capture ends"
 
 
 def theme_of(png):
@@ -88,14 +102,22 @@ class Shell:
         self.ask("Runtime.evaluate", {"expression": expression})
 
 
+def logged(path, line, tries):
+    """Whether `line` reaches the log at `path` within `tries` half seconds."""
+    for _ in range(tries):
+        if line in pathlib.Path(path).read_text(errors="replace"):
+            return True
+        time.sleep(0.5)
+    return False
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--turn", required=True)
     parser.add_argument("--mode", choices=("claim", "control"), required=True)
+    parser.add_argument("--engine-log", required=True)
     parser.add_argument("--tries", type=int, default=60)
-    parser.add_argument("--hidden", type=float, default=5.0)
-    parser.add_argument("--after", type=float, default=5.0)
     args = parser.parse_args()
 
     shell = Shell(args.port)
@@ -111,16 +133,24 @@ def main():
             return 0
 
         shell.run("guardHide()")
-        time.sleep(0.5)
+        if not logged(args.engine_log, HIDDEN, args.tries):
+            print("first=hidden-never")
+            return 0
         if args.mode == "claim":
             pathlib.Path(args.turn).touch()
-        time.sleep(args.hidden)
+            if not logged(args.engine_log, DRAWN, args.tries):
+                print("first=drawn-never")
+                return 0
+        elif not logged(args.engine_log, TURNED, args.tries):
+            print("first=turned-never")
+            return 0
         shell.run("guardShow()")
         first = shell.theme()
 
         settled = first
-        until = time.monotonic() + args.after
-        while settled != "dark" and time.monotonic() < until:
+        for _ in range(args.tries * 5):
+            if settled == "dark":
+                break
             time.sleep(0.1)
             settled = shell.theme()
         print("first=%s settled=%s" % (first, settled))

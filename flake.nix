@@ -2800,6 +2800,18 @@
               MimeType=x-scheme-handler/fixture;
               EOF
             '';
+            # Each of alice's processes, one a line: its pid, its program,
+            # its proportional memory in KiB and its command line. A process
+            # that exits while this reads it is left out.
+            processes = pkgs.writeShellScript "processes" ''
+              for pid in $(${pkgs.procps}/bin/pgrep -u alice); do
+                exe=$(readlink "/proc/$pid/exe") || continue
+                pss=$(${pkgs.gawk}/bin/awk '/^Pss:/ { print $2 }' "/proc/$pid/smaps_rollup" 2>/dev/null) || continue
+                [ -n "$pss" ] || continue
+                args=$(tr '\0\t\n' '   ' <"/proc/$pid/cmdline" 2>/dev/null) || continue
+                printf '%s\t%s\t%s\t%s\n' "$pid" "$exe" "$pss" "$args"
+              done
+            '';
           in
           pkgs.testers.runNixOSTest {
             name = "electron-app-on-a-tty";
@@ -2843,6 +2855,7 @@
             testScript = ''
               import datetime as dt
               import os
+              import re
               from PIL import Image
 
               WAIT = dt.timedelta(seconds=300)
@@ -2868,14 +2881,91 @@
                   )
 
 
-              def pss_kib():
-                  """Every one of alice's processes' proportional memory, in KiB."""
-                  return int(machine.succeed(
-                      "for pid in $(pgrep -u alice); do "
-                      # A process can exit between pgrep and grep, and then
-                      # grep exits 2, which pipefail would make the test's.
-                      "grep -s '^Pss:' /proc/$pid/smaps_rollup || true; done "
-                      "| awk '{ total += $2 } END { print total }'").strip())
+              ENGINE = "${domicileEngine}/"
+              # Each process's command line, by pid, as `processes` last read it.
+              COMMANDS = {}
+
+
+              def processes():
+                  """pid: (what it is, proportional memory in KiB, the engine's
+                  own process that isn't a page's)."""
+                  found = {}
+                  for line in machine.succeed("${processes}").splitlines():
+                      pid, exe, pss, args = line.split("\t", 3)
+                      typed = re.search(r"--type=(\S+)", args)
+                      kind = typed.group(1) if typed else "main"
+                      if exe.startswith(ENGINE):
+                          name = f"engine {kind}"
+                      elif "electron-host/src/main.ts" in args:
+                          name = "electron-host"
+                      else:
+                          name = os.path.basename(exe) + ("" if kind == "main" else f" {kind}")
+                      found[int(pid)] = (name, int(pss), exe.startswith(ENGINE) and kind != "renderer")
+                      COMMANDS[int(pid)] = args
+                  assert any(name.startswith("engine ") for name, _, _ in found.values()), (
+                      f"no process runs {ENGINE}: {sorted(set(n for n, _, _ in found.values()))}")
+                  return found
+
+
+              def cost(before, after, on_the_engine):
+                  """What starting the app cost, in KiB, and each process's part.
+
+                  Every process that started counts whole. On the engine, so
+                  do the engine's own processes (its browser, GPU and service
+                  processes, not its pages), by what they grew or gave up as
+                  they exited: they hold the app's windows. On its own
+                  Electron the app has nothing of the engine's, so none of
+                  the engine's processes count there, even one that starts,
+                  such as a spare page. The desk's other processes, such as
+                  the compositor, the shell's pages and the daemons, hold the
+                  desk rather than the app and change for reasons of their
+                  own, so neither side counts them.
+                  """
+                  parts = []
+                  for pid, (name, pss, engine_own) in after.items():
+                      if not on_the_engine and name.startswith("engine "):
+                          continue
+                      if pid not in before:
+                          parts.append((f"{name} {pid} (started)", pss))
+                      elif on_the_engine and engine_own:
+                          parts.append((f"{name} {pid} (grew)", pss - before[pid][1]))
+                  for pid, (name, pss, engine_own) in before.items():
+                      if on_the_engine and pid not in after and engine_own:
+                          parts.append((f"{name} {pid} (exited)", -pss))
+                  parts.sort(key=lambda part: -part[1])
+                  return sum(kib for _, kib in parts), parts
+
+
+              # Switches every engine process gets, which say nothing about
+              # which page a renderer holds.
+              COMMON = {"--type", "--enable-features", "--disable-features",
+                        "--field-trial-handle", "--variations-seed-version",
+                        "--shared-files", "--metrics-shmem-handle", "--lang",
+                        "--num-raster-threads", "--enable-main-frame-before-activation",
+                        "--change-stack-guard-on-fork", "--crashpad-handler-pid",
+                        "--enable-crash-reporter", "--trace-process-track-uuid",
+                        "--time-ticks-at-unix-epoch", "--launch-time-ticks",
+                        "--seatbelt-client", "--ozone-platform", "--user-data-dir",
+                        "--force-device-scale-factor", "--log-file", "--enable-logging",
+                        "--v", "--vmodule"}
+
+
+              def engine_renderers(before, after):
+                  """The engine renderers that started, each with the switches
+                  that set it apart, so a failure says which pages they are."""
+                  lines = []
+                  for pid, (name, pss, _) in sorted(after.items()):
+                      if pid in before or name != "engine renderer":
+                          continue
+                      switches = [word[:80] for word in COMMANDS.get(pid, "").split()
+                                  if word.startswith("--") and word.split("=")[0] not in COMMON]
+                      lines.append(f"{pid} ({pss // 1024} MiB): {' '.join(switches) or 'no other switches'}")
+                  return "; ".join(lines) or "none"
+
+
+              def measured(side, kib, parts):
+                  return f"{kib // 1024} MiB {side}: " + ", ".join(
+                      f"{name} {part // 1024} MiB" for name, part in parts)
 
 
               def the_desk_is_up():
@@ -2890,7 +2980,7 @@
 
 
               def a_link_starts_the_app_on_the_engine():
-                  before = pss_kib()
+                  before = processes()
                   machine.succeed(in_the_desk("domicile open fixture://hello") + " >/tmp/open.log 2>&1 &")
                   retry(lambda _: blue_share("on-the-engine") > 0.1, timeout=WAIT)
                   machine.succeed("pgrep -u alice -f 'electron-host/src/main.ts'")
@@ -2906,14 +2996,23 @@
                       timeout=60,
                   )
                   machine.sleep(15)
-                  return pss_kib() - before
+                  after = processes()
+                  host = {pid for pid in set(after) - set(before) if after[pid][0] == "electron-host"}
+                  assert host, "electron-host was not running when measured"
+                  windows = machine.execute(in_the_desk("domicile list-windows --json") + " 2>&1")[1]
+                  print(f"windows with the app on the engine: {windows}", flush=True)
+                  return (*cost(before, after, on_the_engine=True), host,
+                          engine_renderers(before, after))
 
 
-              def the_same_app_on_its_own_electron():
+              def the_same_app_on_its_own_electron(host):
                   machine.succeed("pkill -u alice -f 'electron-host/src/main.ts'")
                   retry(lambda _: blue_share("closed") < 0.01, timeout=WAIT)
-                  machine.sleep(10)
-                  before = pss_kib()
+                  # The host is gone, so it is not left to count here. The
+                  # engine's processes don't count on this side, so what the
+                  # engine gives back as the app closes doesn't either.
+                  retry(lambda _: not host & set(processes()), timeout=WAIT)
+                  before = processes()
                   # The desk names its socket to the apps it starts, not in
                   # its own environment, so name it as they get it.
                   machine.succeed(
@@ -2924,17 +3023,21 @@
                   )
                   retry(lambda _: blue_share("on-electron") > 0.1, timeout=WAIT)
                   machine.sleep(15)
-                  return pss_kib() - before
+                  after = processes()
+                  return (*cost(before, after, on_the_engine=False), engine_renderers(before, after))
 
 
               machine.wait_for_unit("multi-user.target")
               try:
                   the_desk_is_up()
-                  on_the_engine = a_link_starts_the_app_on_the_engine()
-                  on_electron = the_same_app_on_its_own_electron()
-                  print(f"memory: {on_the_engine // 1024} MiB on the engine, "
-                        f"{on_electron // 1024} MiB on its own Electron")
-                  assert on_the_engine < on_electron, "the app cost more on the engine"
+                  on_the_engine, engine_parts, host, engine_pages = a_link_starts_the_app_on_the_engine()
+                  on_electron, electron_parts, uncounted_pages = the_same_app_on_its_own_electron(host)
+                  memory = (measured("on the engine", on_the_engine, engine_parts) + "; "
+                            + measured("on its own Electron", on_electron, electron_parts)
+                            + f". Engine renderers that started with the app on the engine: {engine_pages}"
+                            + f". Engine renderers that started with it on Electron, not counted: {uncounted_pages}")
+                  print(f"memory: {memory}", flush=True)
+                  assert on_the_engine < on_electron, f"the app cost more on the engine: {memory}"
               except Exception:
                   machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
                   for command in [

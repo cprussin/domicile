@@ -10,7 +10,8 @@ time it was shown.
 
 - WebContentsImpl::HandleColorRelatedStateChanges: a hidden page takes a
   hidden capture once its new colors are sent, until its first frame after
-  them or 4 s. The page stays `hidden` to its scripts.
+  them, however long a busy page takes. The page stays `hidden` to its
+  scripts.
 - RenderWidgetHostViewChildFrame::CanBecomeVisible: an inner WebContents'
   main frame being captured paints when its <webview> is not rendered. A
   frame its own page hides stays hidden.
@@ -19,9 +20,9 @@ time it was shown.
 guard-webview-hidden-theme.sh checks it.
 ---
  content/browser/renderer_host/render_widget_host_view_child_frame.cc | 20 ++++++++++++++++++--
- content/browser/web_contents/web_contents_impl.cc                    | 75 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ content/browser/web_contents/web_contents_impl.cc                    | 52 ++++++++++++++++++++++++++++++++++++++++++++++++++++
  third_party/blink/renderer/platform/widget/widget_base.cc            |  4 ++++
- 3 files changed, 97 insertions(+), 2 deletions(-)
+ 3 files changed, 74 insertions(+), 2 deletions(-)
 
 diff --git a/content/browser/renderer_host/render_widget_host_view_child_frame.cc b/content/browser/renderer_host/render_widget_host_view_child_frame.cc
 index 2349597..887503a 100644
@@ -70,18 +71,13 @@ index 2349597..887503a 100644
    RenderWidgetHostViewBase* parent_view = GetParentViewInput();
    if (!parent_view || !parent_view->IsRenderWidgetHostViewChildFrame()) {
 diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
-index c37c7f9..0a55b20 100644
+index c37c7f9..8797d33 100644
 --- a/content/browser/web_contents/web_contents_impl.cc
 +++ b/content/browser/web_contents/web_contents_impl.cc
-@@ -726,6 +726,72 @@ HostZoomMapImpl* HostZoomMapForRenderFrameHost(const RenderFrameHost* rfh) {
+@@ -726,6 +726,49 @@ HostZoomMapImpl* HostZoomMapForRenderFrameHost(const RenderFrameHost* rfh) {
        HostZoomMap::Get(rfh->GetSiteInstance()));
  }
  
-+// Domicile's engine fork: the longest a hidden page paints for its new colors.
-+// A page that has not drawn them by then stays hidden, and draws them when it
-+// is shown.
-+constexpr base::TimeDelta kDomicileNewColorsDeadline = base::Seconds(4);
-+
 +// Domicile's engine fork: a hidden page draws one frame in its new colors.
 +//
 +// A hidden page draws nothing, so the frame its embedder shows when it is
@@ -91,7 +87,9 @@ index c37c7f9..0a55b20 100644
 +// A hidden capture makes the page paint without telling it that it is shown,
 +// and RenderWidgetHostViewChildFrame::CanBecomeVisible lets that reach a
 +// <webview> its embedder does not render. The capture ends with the first
-+// frame after the new colors, or at kDomicileNewColorsDeadline.
++// frame after the new colors, however long a busy page takes to draw it. A
++// renderer that goes away first ends it too: InsertVisualStateCallback answers
++// `false` then.
 +//
 +// Posted after the colors are sent, so it runs after every WebContents has
 +// sent its own: an outer WebContents sends its inner ones their preferences.
@@ -113,40 +111,20 @@ index c37c7f9..0a55b20 100644
 +  }
 +  VLOG(1) << "domicile: hidden page " << contents
 +          << " paints its new colors";
-+  auto capture = base::MakeRefCounted<
-+      base::RefCountedData<base::ScopedClosureRunner>>(
++  contents->GetPrimaryMainFrame()->InsertVisualStateCallback(base::BindOnce(
++      [](base::ScopedClosureRunner capture, bool drew) {
++        VLOG(1) << "domicile: a hidden page drew its new colors (" << drew
++                << "), its capture ends";
++      },
 +      contents->IncrementCapturerCount(gfx::Size(), /*stay_hidden=*/true,
 +                                       /*stay_awake=*/false,
-+                                       /*is_activity=*/false));
-+  contents->GetPrimaryMainFrame()->InsertVisualStateCallback(base::BindOnce(
-+      [](scoped_refptr<base::RefCountedData<base::ScopedClosureRunner>>
-+             capture,
-+         bool drew) {
-+        VLOG(1) << "domicile: a hidden page drew its new colors (" << drew
-+                << "), its capture "
-+                << (capture->data ? "ends" : "had ended");
-+        capture->data.RunAndReset();
-+      },
-+      capture));
-+  GetUIThreadTaskRunner({})->PostDelayedTask(
-+      FROM_HERE,
-+      base::BindOnce(
-+          [](scoped_refptr<base::RefCountedData<base::ScopedClosureRunner>>
-+                 capture) {
-+            if (capture->data) {
-+              VLOG(1) << "domicile: a hidden page did not draw its new "
-+                         "colors within the deadline; its capture ends";
-+            }
-+            capture->data.RunAndReset();
-+          },
-+          capture),
-+      kDomicileNewColorsDeadline);
++                                       /*is_activity=*/false)));
 +}
 +
  }  // namespace
  
  // This is a small helper class created while a JavaScript dialog is showing
-@@ -13034,6 +13100,15 @@ void WebContentsImpl::HandleColorRelatedStateChanges() {
+@@ -13034,6 +13077,15 @@ void WebContentsImpl::HandleColorRelatedStateChanges() {
        }
      });
    }

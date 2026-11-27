@@ -81,9 +81,12 @@ PAGE_Y=$(((HEIGHT - STRIP_HEIGHT) / 2))
 UNTITLED_X=575
 UNTITLED_Y=300
 
-# Chrome shows a tooltip 500 ms after the pointer stops. The reading starts
-# once the move's script returns, after the move, so it only undercounts.
-AT_LEAST_MS=300
+# Chrome shows a tooltip 500 ms after the pointer stops: `kTooltipDelay` in
+# web_view_guest.cc. WebViewGuest measures the wait itself, from the page
+# naming the title to the report, and logs it. A clock read here would also
+# count the mouse script's own time to return, which under load was most of a
+# second.
+AT_LEAST_MS=500
 
 FOR_SECONDS="${FOR_SECONDS:-90}"
 
@@ -152,7 +155,7 @@ rm -f "$ENGINE_LOG"
   --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --window-size="$WIDTH,$HEIGHT" \
-  --enable-logging=stderr --log-level=0 \
+  --enable-logging=stderr --log-level=0 --vmodule=web_view_guest=1 \
   --domicile-broker-socket="$BROKER" >"$ENGINE_LOG" 2>&1 &
 STARTED+=($!)
 
@@ -195,7 +198,6 @@ else
     --port "$DEBUG_PORT" --x "$PAGE_X" --y "$((STRIP_HEIGHT + PAGE_Y))" \
     >>"$CLICK_LOG" 2>&1 ||
     echo "the move onto the frame could not be driven; see $CLICK_LOG" >&2
-  MOVED_AT="$(date +%s%3N)"
   wait_for_line "$TRIES" "$TOOLTIP_LINE" "$ENGINE_LOG" ||
     echo "the shell never heard of the frame's title" >&2
 fi
@@ -213,9 +215,9 @@ SAW_ELEMENT=$(saw "GUARD tooltip text=[the frame element]")
 SAW_DELAYED=0
 DELAY_MS=""
 if [ "$SAW_TOOLTIP" = "1" ] && [ "$NEGATIVE" != "1" ]; then
-  SHOWN_AT="$(grep -F "$TOOLTIP_LINE" "$ENGINE_LOG" | head -1 | sed -n 's/.* at=\([0-9]*\).*/\1/p')"
-  DELAY_MS=$((SHOWN_AT - MOVED_AT))
-  [ "$DELAY_MS" -ge "$AT_LEAST_MS" ] && SAW_DELAYED=1
+  DELAY_MS="$(grep -aF 'domicile: a <webview> reports the tooltip "in a frame"' "$ENGINE_LOG" |
+    head -1 | sed -n 's/.*, \([0-9]*\) ms after the page named it.*/\1/p')"
+  [ -n "$DELAY_MS" ] && [ "$DELAY_MS" -ge "$AT_LEAST_MS" ] && SAW_DELAYED=1
 fi
 
 echo
