@@ -1,4 +1,5 @@
-// The downloads panel holding 30 finished downloads.
+// The downloads panel holding 30 finished downloads and one still going, which
+// clearing leaves.
 
 import { Downloads } from "@domicile-desktop/manganese-bar-module-downloads";
 import { DomicileProvider } from "@domicile-desktop/react/domicile-provider";
@@ -9,15 +10,26 @@ import { Bar } from "../Bar";
 
 const HOST = new FakeDomicileHost();
 HOST.set({
-  downloads: Array.from({ length: 30 }, (_, index) => ({
-    id: index.toString(),
-    page: "https://example.com/",
-    path: `/home/user/Downloads/report-${(index + 1).toString().padStart(2, "0")}.pdf`,
-    receivedBytes: 1_000_000,
-    state: "complete",
-    totalBytes: 1_000_000,
-    window: "",
-  })),
+  downloads: [
+    ...Array.from({ length: 30 }, (_, index) => ({
+      id: index.toString(),
+      page: "https://example.com/",
+      path: `/home/user/Downloads/report-${(index + 1).toString().padStart(2, "0")}.pdf`,
+      receivedBytes: 1_000_000,
+      state: "complete" as const,
+      totalBytes: 1_000_000,
+      window: "",
+    })),
+    {
+      id: "going",
+      page: "https://example.com/",
+      path: "/home/user/Downloads/backup.zip",
+      receivedBytes: 250_000,
+      state: "in-progress",
+      totalBytes: 1_000_000,
+      window: "",
+    },
+  ],
 });
 
 export const DownloadsScene = () => (

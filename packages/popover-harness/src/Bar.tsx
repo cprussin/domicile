@@ -13,7 +13,9 @@ const holdKeyboard = () => () => undefined;
 export const Bar = ({ children }: { children: ReactNode }) => (
   <BarContext value={BAR}>
     <PanelKeyboardContext value={holdKeyboard}>
-      <div className={barStyles}>{children}</div>
+      <div className={barStyles} data-crowd-bar="">
+        {children}
+      </div>
     </PanelKeyboardContext>
   </BarContext>
 );

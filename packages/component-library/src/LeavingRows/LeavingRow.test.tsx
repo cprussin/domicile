@@ -130,7 +130,17 @@ describe(LeavingRow, () => {
 
       const { transition, translate } = globalThis.getComputedStyle(first());
       expect(translate).toBe("0 calc(-1 * 44px)");
-      expect(transition).toBe(springTransition("translate", "snappy"));
+      expect(transition).toBe(
+        `${springTransition("translate", "snappy")}, ${springTransition("block-size", "smooth")}`,
+      );
+    });
+
+    it("grows from no height as it arrives, on the smooth spring, so the rows below move down", () => {
+      rows({ arriving: true });
+
+      const style = globalThis.getComputedStyle(first());
+      expect(style.transition).toBe(springTransition("block-size", "smooth"));
+      expect(style.getPropertyValue("interpolate-size")).toBe("allow-keywords");
     });
 
     it("drops its rise at once, as the rows it rose over go", () => {

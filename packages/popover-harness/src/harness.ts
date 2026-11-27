@@ -1,6 +1,6 @@
 // Opens each crowded bar popover from the built Storybook, in Chromium through
 // Playwright, on a small screen. Fails a popover that runs off the screen,
-// whose last row can't be scrolled into view, that scrolls sideways, whose
+// covers the bar or stands taller than {@link SCREEN_SHARE} of the screen, whose last row can't be scrolled into view, that scrolls sideways, whose
 // buttons are too narrow for their labels, whose drawer's height jumps as it
 // opens or shuts, or that moves when put in another state and back. See the
 // package README.
@@ -21,8 +21,17 @@ const SCREEN = { height: 600, width: 1024 };
 /** The desk: the laptop beside a 2560x1440 monitor. */
 const DESK = { height: 1440, width: SCREEN.width + 2560 };
 
+/** The most of the screen's height a panel may take. */
+const SCREEN_SHARE = 0.6;
+
 /** Longer than any panel takes to open. */
 const SETTLE_TIMEOUT_MS = 10_000;
+
+/** Longer than a row takes to arrive. */
+const ARRIVE_MS = 1500;
+
+/** Longer than every row takes to leave a panel and its height to follow. */
+const SHRINK_MS = 4000;
 
 /** Longer than a drawer takes to open or shut. */
 const DRAWER_MS = 1500;
@@ -105,20 +114,32 @@ const checked = async (
   const panel = page.locator("[role=dialog][data-open]").last();
   const problems = [
     ...offScreen("the panel", await boxOf(panel)),
+    ...tooTall(await boxOf(panel)),
+    ...coversBar(
+      await boxOf(panel),
+      await boxOf(page.locator("[data-crowd-bar]")),
+    ),
     ...(crowd.drawer === undefined
       ? []
       : await drawerProblems(panel, crowd.drawer)),
     ...(crowd.toggle === undefined
       ? []
       : await toggleProblems(page, panel, crowd.toggle)),
+    ...(crowd.arrive === undefined
+      ? []
+      : await arriveProblems(page, panel, crowd.arrive)),
     ...(await lastRowProblems(page, panel, crowd.last)),
     ...(await sidewaysProblems(panel)),
     ...(await squeezedButtons(panel)),
+    // Last: it empties the panel.
+    ...(crowd.shrink === undefined
+      ? []
+      : await shrinkProblems(panel, crowd.shrink)),
   ];
   await page.close();
   if (problems.length === 0) {
     said(
-      `PASS: ${crowd.id}: fits a ${describe(SCREEN)} screen beside a taller one, and scrolls${crowd.drawer === undefined ? "" : `; its ${crowd.drawer} drawer grows and shrinks`}${crowd.toggle === undefined ? "" : "; it holds still when toggled"}`,
+      `PASS: ${crowd.id}: fits ${percent(SCREEN_SHARE)} of a ${describe(SCREEN)} screen beside a taller one, and scrolls${crowd.drawer === undefined ? "" : `; its ${crowd.drawer} drawer grows and shrinks`}${crowd.toggle === undefined ? "" : "; it holds still when toggled"}${crowd.arrive === undefined ? "" : "; a row arriving moves the rows below smoothly"}${crowd.shrink === undefined ? "" : `; it shrinks when pressing ${crowd.shrink}`}`,
     );
     return true;
   } else {
@@ -225,6 +246,23 @@ const offScreen = (what: string, box: Box): string[] => [
 ];
 
 /**
+ * Whether the panel at `box` stands taller than {@link SCREEN_SHARE} of the
+ * screen. A pixel over is rounding.
+ */
+const tooTall = (box: Box): string[] =>
+  box.height > SCREEN.height * SCREEN_SHARE + 1
+    ? [
+        `the panel is ${px(box.height)} high, over ${percent(SCREEN_SHARE)} of the screen's ${px(SCREEN.height)}`,
+      ]
+    : [];
+
+/** Whether the panel at `panel` covers the bar at `bar`, below it. */
+const coversBar = (panel: Box, bar: Box): string[] =>
+  panel.y < bar.y + bar.height
+    ? [`the panel covers ${px(bar.y + bar.height - panel.y)} of the bar`]
+    : [];
+
+/**
  * Why the row holding `text` is out of reach: scrolled to, it must be on the
  * screen and inside `panel`.
  */
@@ -319,6 +357,142 @@ const drawerProblems = async (
   }
 };
 
+/**
+ * Why the row holding `text` in `panel` doesn't move down smoothly as a row
+ * arrives above it: it must pass through places between where it was and
+ * where it ends, never moving more than half the way in one frame.
+ */
+const arriveProblems = async (
+  page: Page,
+  panel: Locator,
+  text: string,
+): Promise<string[]> => {
+  const places = await panel
+    .getByText(text, { exact: true })
+    .evaluate(async (row, lengthMs) => {
+      const frame = () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            resolve();
+          });
+        });
+      const places = [row.getBoundingClientRect().y];
+      window.dispatchEvent(new Event("crowd:arrive"));
+      const start = performance.now();
+      while (performance.now() - start < lengthMs) {
+        await frame();
+        places.push(row.getBoundingClientRect().y);
+      }
+      return places;
+    }, ARRIVE_MS);
+  await settled(page);
+  const first = places[0] ?? 0;
+  const last = places.at(-1) ?? 0;
+  const steepest = Math.max(
+    ...places.slice(1).map((place, index) => place - (places[index] ?? 0)),
+  );
+  if (last - first <= 1) {
+    return [`a row arriving above "${text}" did not move it down`];
+  } else if (steepest > (last - first) / 2) {
+    return [
+      `a row arriving above "${text}" moves it ${px(steepest)} in one frame, from ${px(first)} to ${px(last)}`,
+    ];
+  } else {
+    return [];
+  }
+};
+
+/**
+ * Why `panel` doesn't follow its rows as pressing `name` takes them out: its
+ * height must shrink, never by more than half the way in one frame, and it
+ * must never scroll sideways as they go.
+ */
+const shrinkProblems = async (
+  panel: Locator,
+  name: string,
+): Promise<string[]> => {
+  const { heights, sideways } = await panel.evaluate(
+    async (root, { lengthMs, name }) => {
+      const button = [...root.querySelectorAll("button")].find(
+        (found) => found.innerText.trim() === name,
+      );
+      if (button === undefined) {
+        throw new Error(`popover-harness: no ${name} button in the panel`);
+      }
+      const heights: number[] = [root.getBoundingClientRect().height];
+      // Observed after the popover's own observer, as each frame is drawn: what
+      // it shows, with any easing the popover started.
+      const observer = new ResizeObserver(() => {
+        heights.push(root.getBoundingClientRect().height);
+      });
+      // The most each part held past its width, by its tag.
+      const sideways = new Map<Element, number>();
+      const frame = () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            resolve();
+          });
+        });
+      observer.observe(root);
+      button.click();
+      const start = performance.now();
+      while (performance.now() - start < lengthMs) {
+        await frame();
+        for (const element of [root, ...root.querySelectorAll("*")]) {
+          const over = element.scrollWidth - element.clientWidth;
+          if (
+            ["auto", "scroll"].includes(getComputedStyle(element).overflowX) &&
+            over > (sideways.get(element) ?? 0)
+          ) {
+            sideways.set(element, over);
+          }
+        }
+      }
+      observer.disconnect();
+      return {
+        heights,
+        sideways: [...sideways].map(
+          ([element, over]) =>
+            `<${element.tagName.toLowerCase()}> holds up to ${over.toString()}px more than its width`,
+        ),
+      };
+    },
+    { lengthMs: SHRINK_MS, name },
+  );
+  const first = heights[0] ?? 0;
+  const last = heights.at(-1) ?? 0;
+  const steepest = Math.max(
+    ...heights.slice(1).map((height, index) => (heights[index] ?? 0) - height),
+  );
+  return [
+    ...sideways.map(
+      (problem) => `pressing ${name} scrolls the panel sideways: ${problem}`,
+    ),
+    ...heightProblems(name, first, last, steepest),
+  ];
+};
+
+/**
+ * Why a panel's height going from `first` to `last`, by at most `steepest` in
+ * a frame, after pressing `name`, is no shrink.
+ */
+const heightProblems = (
+  name: string,
+  first: number,
+  last: number,
+  steepest: number,
+): string[] => {
+  if (first - last <= 1) {
+    return [`pressing ${name} did not shrink the panel from ${px(first)}`];
+  } else if (steepest > (first - last) / 2) {
+    return [
+      `pressing ${name} drops the panel's height ${px(steepest)} in one frame, from ${px(first)} to ${px(last)}`,
+    ];
+  } else {
+    return [];
+  }
+};
+
 /** Whether any of `heights` is clearly between nothing and `full`. */
 const passesBetween = (heights: readonly number[], full: number) =>
   heights.some((height) => height > 1 && height < full - 1);
@@ -354,6 +528,8 @@ const heightsAfterPressing = (
     },
     { drawer, lengthMs: DRAWER_MS },
   );
+
+const percent = (share: number) => `${Math.round(share * 100).toString()}%`;
 
 const px = (value: number) => `${Math.round(value).toString()}px`;
 

@@ -1,5 +1,11 @@
 import { Popover as BasePopover } from "@base-ui/react/popover";
-import type { ReactElement, ReactNode, RefCallback, RefObject } from "react";
+import type {
+  CSSProperties,
+  ReactElement,
+  ReactNode,
+  RefCallback,
+  RefObject,
+} from "react";
 import {
   createContext,
   useCallback,
@@ -9,6 +15,7 @@ import {
 } from "react";
 import { css, cva } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
+import { useEasedHeight } from "../_control/ease-height";
 import { useStableRef } from "../_control/useStableRef";
 import type { ExtendProps } from "../extend-props";
 import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
@@ -99,7 +106,8 @@ type Props = ExtendProps<
  *
  * Stays inside its `PopupBoundary`, else on the `<Screen>` region of the
  * trigger that opened it, so it never spans two windows or two monitors. It
- * grows no taller than the room there, and its body scrolls the rest.
+ * grows no taller than the room there, nor than {@link SCREEN_SHARE} of a
+ * screen, and its body scrolls the rest.
  * Triggers elsewhere open it through a `handle` from `createHandle()`, as
  * `Popover.Trigger`.
  *
@@ -131,6 +139,7 @@ const PopoverComponent = ({
   const ownActions = useRef<BasePopover.Root.Actions | null>(null);
   const actions = actionsRef ?? ownActions;
   const [popupRef, setPopupRef] = useStableRef<HTMLDivElement>();
+  const attachPopup = useEasedHeight(setPopupRef);
   const [triggerRef, setTriggerRef] = useStableRef<HTMLElement>();
   const { attach, boundary } = usePopupBoundary(spansWindows);
   const attachTrigger = useCallback<RefCallback<HTMLElement>>(
@@ -184,6 +193,7 @@ const PopoverComponent = ({
           }}
           side={side}
           sideOffset={tone === "overPhoto" ? 6 : 8}
+          style={screenCap(boundary)}
         >
           <BasePopover.Popup
             className={popupStyles}
@@ -214,7 +224,7 @@ const PopoverComponent = ({
             onPointerLeave={() => {
               onHoverChange?.(false);
             }}
-            ref={setPopupRef}
+            ref={attachPopup}
           >
             <CloseOnFocusOut
               actions={actions}
@@ -247,6 +257,26 @@ export const Popover = Object.assign(PopoverComponent, {
   Close: BasePopover.Close,
   Trigger: BasePopover.Trigger,
 });
+
+/** The most of its screen's height a panel takes. */
+const SCREEN_SHARE = 0.6;
+
+/**
+ * Caps the panel at {@link SCREEN_SHARE} of `boundary`'s height when it is a
+ * `<Screen>` region. A tall panel there would otherwise reach the screen's far
+ * edge, and its first measure, before base-ui knows the room, flips it over
+ * its trigger.
+ */
+const screenCap = (
+  boundary: ReturnType<typeof usePopupBoundary>["boundary"],
+): CSSProperties | undefined =>
+  boundary instanceof Element
+    ? ({
+        "--screen-cap": `${String(
+          Math.floor(boundary.getBoundingClientRect().height * SCREEN_SHARE),
+        )}px`,
+      } as CSSProperties)
+    : undefined;
 
 const positionerStyles = css({
   outlineStyle: "none",
@@ -304,8 +334,10 @@ const popupStyles = flex({
   color: "foreground",
   direction: "column",
   // `--available-height` and `--available-width` are the room its
-  // `PopupBoundary` or screen leaves it. The body scrolls past the height.
-  maxBlockSize: "var(--available-height)",
+  // `PopupBoundary` or screen leaves it, and `--screen-cap` its share of a
+  // screen. The body scrolls past the height.
+  maxBlockSize:
+    "min(var(--available-height), var(--screen-cap, var(--available-height)))",
   maxInlineSize: "min({spacing.88}, 90vw, var(--available-width))",
   opacity: 1,
   outlineStyle: "none",

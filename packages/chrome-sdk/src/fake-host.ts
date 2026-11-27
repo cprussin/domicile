@@ -252,6 +252,15 @@ export class FakeDomicileHost {
             calls.push([name, id]);
             this.discardBrowser(id);
           };
+        } else if (name === "clearDownloads") {
+          return () => {
+            calls.push([name]);
+            this.set({
+              downloads: (state.downloads ?? []).filter(
+                (download) => download.state === "in-progress",
+              ),
+            });
+          };
         } else if (
           name === "addEventListener" ||
           name === "removeEventListener" ||

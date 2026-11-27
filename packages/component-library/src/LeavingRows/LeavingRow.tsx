@@ -67,6 +67,12 @@ export const LeavingRow = ({
 // Rising has a transition only while it rises: dropping the rise as the rows
 // it rose over go must not animate.
 const rowStyles = css({
+  // Grows from no height, moving the rows below down rather than jumping them.
+  // `@starting-style`, as its body's slide: the row mounts in the list, not in
+  // a portal.
+  "&[data-arriving]": {
+    _starting: { blockSize: 0 },
+  },
   // Out of sight by now. Its collapse lasts as long as the rise over it, and
   // its end says the rise has ended, even with no rows below to rise.
   "&[data-closing]": {
@@ -75,10 +81,26 @@ const rowStyles = css({
     transition: "scale {durations.springs.snappy} {easings.springs.snappy}",
   },
   "&[data-rising]": {
-    transition: "translate {durations.springs.snappy} {easings.springs.snappy}",
+    // main-thread animation: an arriving row's growth, as below.
+    transition:
+      "translate {durations.springs.snappy} {easings.springs.snappy}, block-size {durations.springs.smooth} {easings.springs.smooth}",
     translate: "0 calc(-1 * var(--rise))",
   },
+  blockSize: "auto",
+  // In a column of flex items, so its growth isn't held to its content's
+  // height, nor a crowded list squeezing it.
+  flexShrink: 0,
+  interpolateSize: "allow-keywords",
+  minBlockSize: 0,
   minInlineSize: 0,
+  // Its body's slide and its growth stay inside it, or a scrolled list would
+  // scroll sideways or spill over the rows below. The margin keeps a focus
+  // ring.
+  overflow: "clip",
+  overflowClipMargin: "{spacing.1}",
+  // main-thread animation: grows once as it arrives, moving the rows below.
+  // A transform would leave the list's height, and the panel's, jumping.
+  transition: "block-size {durations.springs.smooth} {easings.springs.smooth}",
 });
 
 const bodyStyles = cva({

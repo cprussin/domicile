@@ -9,10 +9,12 @@ import { TrayScene } from "./scenes/tray";
 
 export const CROWDS: readonly Crowd[] = [
   {
+    arrive: "Message 40",
     id: "notifications",
     last: "Message 1",
     presses: ["Notifications"],
     Scene: NotificationsScene,
+    shrink: "Clear all",
     toggle: { off: ["Resume"], on: ["Pause", "For 1 hour"] },
   },
   {
@@ -24,8 +26,9 @@ export const CROWDS: readonly Crowd[] = [
   {
     id: "downloads",
     last: "report-01.pdf",
-    presses: ["Downloads"],
+    presses: ["Downloading 1 file, 25%"],
     Scene: DownloadsScene,
+    shrink: "Clear all",
   },
   {
     drawer: "Details",

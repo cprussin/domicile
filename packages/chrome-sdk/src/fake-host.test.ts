@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-
+import type { DomicileDownloadState } from "./domicile-host";
 import { FakeDomicileHost } from "./fake-host";
 
 describe("FakeDomicileHost", () => {
@@ -85,6 +85,36 @@ describe("FakeDomicileHost", () => {
     expect(fake.host.idle).toBe(true);
     expect(fake.host.focusedWindow).toBe("term");
     expect(heard).toStrictEqual(["idle", "focus"]);
+  });
+
+  it("clears every download not in progress, as the engine does", () => {
+    const fake = new FakeDomicileHost();
+    const download = (id: string, state: DomicileDownloadState) => ({
+      id,
+      page: "https://example.com/",
+      path: `/tmp/${id}`,
+      receivedBytes: 0,
+      state,
+      totalBytes: 1,
+      window: "",
+    });
+    fake.set({
+      downloads: [
+        download("done", "complete"),
+        download("going", "in-progress"),
+        download("broke", "failed"),
+      ],
+    });
+    const heard: string[] = [];
+    fake.host.addEventListener("downloadschanged", () => {
+      heard.push("downloads");
+    });
+
+    fake.host.clearDownloads();
+
+    expect(fake.host.downloads?.map(({ id }) => id)).toStrictEqual(["going"]);
+    expect(heard).toStrictEqual(["downloads"]);
+    expect(fake.calls).toStrictEqual([["clearDownloads"]]);
   });
 
   it("records every call a shell makes", () => {

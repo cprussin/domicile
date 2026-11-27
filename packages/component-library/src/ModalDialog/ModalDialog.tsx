@@ -9,6 +9,7 @@ import type {
 import { createContext, Fragment, useContext, useState } from "react";
 import { css, cva } from "../../styled-system/css";
 import { center, flex, hstack } from "../../styled-system/patterns";
+import { useEasedHeight } from "../_control/ease-height";
 import { Button } from "../Button/Button";
 import type { ExtendProps } from "../extend-props";
 import { useScreenRegion } from "../Screen/DisplayProvider";
@@ -113,6 +114,7 @@ const ModalDialogComponent = ({
   const contextOrigin = useContext(DialogOrigin);
   const origin = ownOrigin ?? contextOrigin;
   const springFrom = useSpringFrom(origin);
+  const attachPopup = useEasedHeight(springFrom);
   return (
     <BaseDialog.Root {...rootProps}>
       {trigger !== undefined && <BaseDialog.Trigger render={trigger} />}
@@ -145,7 +147,7 @@ const ModalDialogComponent = ({
               data-surface={surface}
               finalFocus={returnFocus}
               onKeyDown={moveFooterFocus}
-              ref={springFrom}
+              ref={attachPopup}
             >
               {title !== undefined && titleHidden && (
                 <BaseDialog.Title className={hiddenTitleStyles}>

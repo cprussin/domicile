@@ -15,6 +15,17 @@ export type Crowd = {
    * following it.
    */
   drawer?: string | undefined;
+  /**
+   * A button in the open panel that takes rows out of it, such as "Clear all".
+   * The harness presses it, and fails when the panel's height jumps rather
+   * than shrinking.
+   */
+  shrink?: string | undefined;
+  /**
+   * Text in a row that a row arriving above it, as the scene adds one on the
+   * window's `crowd:arrive` event, must move down smoothly rather than jump.
+   */
+  arrive?: string | undefined;
   /** Text in the panel's last row, which must scroll into view. */
   last: string;
   /**

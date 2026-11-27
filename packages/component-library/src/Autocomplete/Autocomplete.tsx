@@ -5,6 +5,7 @@ import { css, cva, cx } from "../../styled-system/css";
 import type { ControlVariant } from "../../styled-system/recipes";
 import { control } from "../../styled-system/recipes";
 import { controlSizingStyle } from "../_control/controlSizingStyle";
+import { useEasedHeight } from "../_control/ease-height";
 import { focusControlOnMouseDown } from "../_control/focus";
 import { PrefixIconStack } from "../_control/PrefixIconStack";
 import { wrapperBase } from "../_control/wrapperBase";
@@ -98,6 +99,7 @@ export const Autocomplete = <V,>({
   const { attach, boundary } = usePopupBoundary(false);
   const actions = useRef<BaseAutocomplete.Root.Actions | null>(null);
   const heard = useClosedWithScene(actions, {});
+  const easeList = useEasedHeight<HTMLDivElement>();
   return (
     <BaseAutocomplete.Root<Suggestion<V>>
       actionsRef={actions}
@@ -148,7 +150,7 @@ export const Autocomplete = <V,>({
           side="bottom"
           sideOffset={6}
         >
-          <BaseAutocomplete.Popup className={popupStyles}>
+          <BaseAutocomplete.Popup className={popupStyles} ref={easeList}>
             <BaseAutocomplete.Empty className={emptyStyles}>
               {emptyMessage}
             </BaseAutocomplete.Empty>

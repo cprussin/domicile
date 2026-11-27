@@ -47,7 +47,7 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 - Element no longer says it is open in another window after you log out and quickly in again.
 - Tabs and windows you can't see turn with the theme, so they no longer flash the old theme the first time you show them.
 - Pausing or resuming notifications no longer moves the notifications panel's title.
-- Bar panels such as notifications, agents, downloads, quick settings and the tray menu stay on their screen and scroll when they hold more than fits, even on a small screen beside a taller one.
+- Bar panels such as notifications, agents, downloads, quick settings and the tray menu stay on their screen, below the bar, and take at most 60% of its height, scrolling the rest, even on a small screen beside a taller one. Panels and dialogs grow and shrink smoothly as what's in them changes, such as when a notification arrives or you clear them, and clearing downloads no longer scrolls the panel sideways.
 - Moving the pointer into an embedded frame, such as an artifact on claude.ai, no longer shows the frame's label far away from the pointer.
 - Workspace switches stay smooth with busy pages open: a sliding page no longer redraws on every frame of the slide.
 - Switching tabs or windows with the keyboard no longer moves the pointer off the top bar.
