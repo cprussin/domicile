@@ -37,6 +37,13 @@ a tree holding both teaches both.
 in `turbo test`. The one exemption is a spelling that is somebody
 else's API — `nix-store --realise` is Nix's flag, not a word.
 
+## No flaky tests
+
+A test that can fail and then pass on the same code is a broken test. Never
+rerun a failed test, guard or CI run unchanged, and never accept a flaky one:
+find whether the code or the test is wrong and fix it. See
+[TESTING.md](/docs/guidelines/TESTING.md#a-test-that-fails-is-never-rerun-unchanged).
+
 ## Change the engine when the engine is the right place
 
 Fix a problem in the layer that owns it, even when that layer is the engine.
@@ -138,7 +145,7 @@ every TS file you write or modify.
 
 | Doc | Covers |
 |---|---|
-| [/docs/guidelines/TESTING.md](/docs/guidelines/TESTING.md) | **TDD is mandatory.** Failing test first, then the minimum production code to make it pass. Parsimonious coverage, unit over integration, dependency injection over mocking, never widen exports for tests, warnings are failures. |
+| [/docs/guidelines/TESTING.md](/docs/guidelines/TESTING.md) | **TDD is mandatory.** Failing test first, then the minimum production code to make it pass. Parsimonious coverage, unit over integration, dependency injection over mocking, never widen exports for tests, warnings are failures, a failed test is never rerun unchanged. |
 | [/docs/guidelines/ERRORS.md](/docs/guidelines/ERRORS.md) | **Code offensively** (PR-blocker): no defensive guards, no catch-and-swallow, no silent fallbacks; throw or return a `Result`. Promise error handling (never `void promise()`). |
 | [/docs/guidelines/CONTROL_FLOW.md](/docs/guidelines/CONTROL_FLOW.md) | `undefined` over `null`, explicit `undefined` checks, curly braces always, explicit control flow, ternaries, no unnecessary `let`, `switch` over `if`/`else if`. |
 | [/docs/guidelines/FUNCTIONS.md](/docs/guidelines/FUNCTIONS.md) | Functional/immutable/declarative defaults, arrow syntax, docstrings, manual loops over generators. |

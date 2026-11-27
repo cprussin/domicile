@@ -182,6 +182,22 @@ Fix the cause; don't suppress a warning to make the suite "clean," and don't
 add filters. If the cause is genuinely in a dependency you can't reach,
 escalate rather than silence it.
 
+## A test that fails is never rerun unchanged
+
+**Flaky tests are not accepted.** A failed test, check, guard or CI run is not retried on the same code. A test
+that can fail and then pass on identical code is invalid: it tells you nothing
+either way.
+
+- A failure is a bug in the code or in the test. Find which, fix it, and the
+  fix's commit reruns the suite.
+- "Flaky", "load-sensitive" or "timing" is a bug to fix, not a reason to
+  rerun. That includes a real timing bug in the code under test.
+- Don't add retries, longer waits or skips to make a test pass. Make it wait
+  on the event it checks for.
+- A run whose tests never started (GitHub created no jobs, a runner died
+  before the job's steps) has no test result, so starting it again is not a
+  retry.
+
 ## Package-specific guidance
 
 Library choice and what to cover for a given kind of unit (component test
