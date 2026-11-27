@@ -229,8 +229,8 @@ scrolling under a banner. The lists answer those with scriptlets,
 Origin's, called with the rule's arguments in the page's own world before
 any of its scripts.
 
-- **Where they come from.** uBlock Origin's scriptlets are GPL-3.0, so they
-  are not in the engine. `.github/scripts/scriptlet-resources.sh` clones
+- **Where they come from.** uBlock Origin's scriptlets and stand-ins are
+  GPL-3.0, so they are not in the engine. `.github/scripts/scriptlet-resources.sh` clones
   uBlock Origin at a pinned version and commit, and
   `scriptlet-resources.ts` writes each function of `builtinScriptlets` as an
   adblock-rust resource, leaving out those that need a trusted list
@@ -260,10 +260,12 @@ any of its scripts.
   scriptlets just after.
 
 The same file holds the stand-ins `$redirect` rules answer with ([What is
-checked](#what-is-checked)): each engine gets every resource of a type
-adblock-rust serves, not only scriptlets. CI's release carries uBlock Origin's
-scriptlets only, so until it carries their redirect resources too, a
-`$redirect` rule only blocks.
+checked](#what-is-checked)): `scriptlet-resources.ts` also writes each file
+of uBlock Origin's `src/web_accessible_resources` that its
+`redirect-resources.js` names, with its aliases and its type by its
+extension, leaving out those that need a trusted list or parameters
+(`click2load.html`). Each engine gets every resource of a type adblock-rust
+serves (`AdBlocker::ScriptletsIn`).
 
 Only a site's own `##+js` rules run, as in uBlock Origin; `#@#+js(...)`
 lifts one on a site. A page whose mode is off, or a frame the browser sends

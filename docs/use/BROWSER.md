@@ -261,7 +261,7 @@ a list blocks. `browser.cookie_banner_lists` replaces the lists cookie banners
 are hidden with, the EasyList Cookie List and uBlock Origin's cookie notices
 unless set. `browser.scriptlet_resources` names the scripts the lists run in
 a page to undo what hiding can't, such as a page that won't scroll under its
-cookie banner: uBlock Origin's unless set, and `null` runs none.
+cookie banner, and the harmless files the lists answer a blocked script or image with: uBlock Origin's unless set, and `null` runs none.
 `browser.block_in_electron_apps`, `false` unless set, blocks in Electron apps'
 web pages too, in Standard; an app has no shield to turn it off with when it
 breaks something.

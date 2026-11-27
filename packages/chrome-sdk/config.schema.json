@@ -140,8 +140,8 @@
           "type": "object"
         },
         "scriptlet_resources": {
-          "default": "https://github.com/cprussin/domicile-builds/releases/download/ublock-origin-scriptlets-1.77.2/scriptlets.json#sha256=4835b89416f27eea136e571fe23d38f76be26e6bc36d11bd58cf89910035ad6e",
-          "description": "The scriptlets the lists' `##+js(...)` rules run in a page, as\nadblock-rust's resources file: an `https:` address, which the engine\nfetches and keeps up to date, or an absolute path. An address may end\nin `#sha256=` and the file's SHA-256, in hex, so a file that is not\nthat one is left out. uBlock Origin's scriptlets, as Domicile's CI\nbuilds and publishes them, unless set; `null` runs none.",
+          "default": "https://github.com/cprussin/domicile-builds/releases/download/ublock-origin-resources-1.77.2/resources.json#sha256=6bd4dd8a5068ab41d2c79caa4b364ce7063cccab92a854d7c97c9a568effc7b8",
+          "description": "The scriptlets the lists' `##+js(...)` rules run in a page, and the\nstand-ins their `$redirect` rules answer a request with, as\nadblock-rust's resources file: an `https:` address, which the engine\nfetches and keeps up to date, or an absolute path. An address may end\nin `#sha256=` and the file's SHA-256, in hex, so a file that is not\nthat one is left out. uBlock Origin's, as Domicile's CI builds and\npublishes them, unless set; `null` runs none, and `$redirect` rules\nonly block.",
           "type": ["string", "null"]
         },
         "sites": {
@@ -1224,7 +1224,7 @@
             }
           }
         },
-        "scriptlet_resources": "https://github.com/cprussin/domicile-builds/releases/download/ublock-origin-scriptlets-1.77.2/scriptlets.json#sha256=4835b89416f27eea136e571fe23d38f76be26e6bc36d11bd58cf89910035ad6e",
+        "scriptlet_resources": "https://github.com/cprussin/domicile-builds/releases/download/ublock-origin-resources-1.77.2/resources.json#sha256=6bd4dd8a5068ab41d2c79caa4b364ce7063cccab92a854d7c97c9a568effc7b8",
         "sites": {}
       }
     },
