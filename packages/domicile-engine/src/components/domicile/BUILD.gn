@@ -438,17 +438,15 @@ source_set("command_protocol") {
     ":common",
     ":extension_settings",
     ":shell_source",
+    # What a site changed, which `site_privacy` lists.
+    ":site_privacy",
     "//base",
     "//components/domicile/mojom",
     "//url",
   ]
 
-  # The names of site permissions and their settings, and of ad-blocking
-  # modes.
-  deps = [
-    ":site_permissions",
-    ":site_privacy",
-  ]
+  # The names of site permissions and their settings.
+  deps = [ ":site_permissions" ]
 }
 
 # Waits for the shell window's first page before `load_shell` loads into it.
@@ -1508,16 +1506,14 @@ source_set("page_privacy") {
 
   public_deps = [
     ":browser_profiles",
+    ":site_privacy",
     "//base",
     "//components/prefs",
     "//content/public/browser",
     "//url",
   ]
 
-  deps = [
-    ":site_privacy",
-    "//components/user_prefs",
-  ]
+  deps = [ "//components/user_prefs" ]
 }
 
 # How a profile checks spelling: the config's `spellcheck`, in Chrome's prefs.

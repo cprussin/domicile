@@ -911,6 +911,10 @@ class WebViewGuest : public mojom::WebViewGuest,
       std::optional<mojom::WebViewAdBlocking> mode) override;
   void SetAdBlockingForWindow(
       std::optional<mojom::WebViewAdBlocking> mode) override;
+  void SetProtectionForSite(mojom::WebViewProtection protection,
+                            std::optional<bool> on) override;
+  void SetProtectionForWindow(mojom::WebViewProtection protection,
+                              std::optional<bool> on) override;
 
   // The profile's camera and microphone preference, through MediaAccess.
   void ListMediaDevices(ListMediaDevicesCallback callback) override;

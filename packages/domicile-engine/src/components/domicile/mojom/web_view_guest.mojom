@@ -237,6 +237,21 @@ enum WebViewAdBlockingSetFor {
   kWindow,
 };
 
+// The protections a shield turns on and off one by one, beside ad blocking.
+// domicile::PageProtection's.
+enum WebViewProtection {
+  kHideDeviceDetails,
+  kRemoveTrackingFromLinks,
+};
+
+// Whether one protection is on for the page, and where that comes from. Off
+// wherever the page's ad blocking is off, whatever `set_for` says.
+struct WebViewPageProtection {
+  WebViewProtection protection;
+  bool on;
+  WebViewAdBlockingSetFor set_for;
+};
+
 // How the page blocks ads and trackers, for a shield in the address bar.
 struct WebViewSitePrivacy {
   // The site a setting is kept for: the page's registrable domain, or its
@@ -246,6 +261,8 @@ struct WebViewSitePrivacy {
   WebViewAdBlockingSetFor set_for;
   // Requests blocked since the page was committed.
   int32 blocked;
+  // Each WebViewProtection, in its order.
+  array<WebViewPageProtection> protections;
 };
 
 // The kind of dialog a page in a <webview> opened with `alert()`, `confirm()`
@@ -1092,6 +1109,11 @@ interface WebViewGuest {
   // As SetAdBlockingForSite, for this guest's pages only, until it closes.
   // Over the site's. Null goes back to the site's or the profile's.
   SetAdBlockingForWindow(WebViewAdBlocking? mode);
+
+  // As SetAdBlockingForSite and SetAdBlockingForWindow, for one protection:
+  // on, off, or null for the site's or the profile's.
+  SetProtectionForSite(WebViewProtection protection, bool? on);
+  SetProtectionForWindow(WebViewProtection protection, bool? on);
 
   // The cameras and microphones, ranked by the profile's preference. The
   // preference is the profile's, not the site's, so every guest lists the

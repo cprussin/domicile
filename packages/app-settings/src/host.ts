@@ -94,22 +94,43 @@ export type SiteSettings = z.infer<typeof siteSettingsSchema>;
 
 const AD_BLOCKING_MODES = ["standard", "strict", "off"] as const;
 
+/**
+ * The protections a site turns on or off of its own, beside its ad blocking,
+ * each by the config key it overrides.
+ */
+export const SITE_PROTECTIONS = [
+  "hide_device_details",
+  "remove_tracking_from_links",
+] as const;
+
+/** One of {@link SITE_PROTECTIONS}. */
+export type SiteProtection = (typeof SITE_PROTECTIONS)[number];
+
 const sitePrivacySchema = z.object({
-  block_ads_and_trackers: z.enum(AD_BLOCKING_MODES),
+  block_ads_and_trackers: z.enum(AD_BLOCKING_MODES).nullable(),
   profile: z.string(),
+  protections: z
+    .partialRecord(z.enum(SITE_PROTECTIONS), z.boolean())
+    .prefault({}),
   site: z.string(),
 });
 
 /**
- * A site with its own ad blocking in a browser profile, as the shield in a
- * browser window keeps it. See `docs/architecture/AD-BLOCKING.md`.
+ * A site with its own ad blocking or protections in a browser profile, as the
+ * shield in a browser window keeps them: `block_ads_and_trackers` is `null`
+ * for a site with only protections of its own. See
+ * `docs/architecture/AD-BLOCKING.md`.
  */
 export type SitePrivacy = z.infer<typeof sitePrivacySchema>;
 
-/** A change to one site's ad blocking; `null` goes back to the profile's. */
+/**
+ * A change to one site. What it leaves out stays as it is; `null` goes back
+ * to the profile's.
+ */
 export type SitePrivacyChange = {
-  block_ads_and_trackers: SitePrivacy["block_ads_and_trackers"] | null;
+  block_ads_and_trackers?: SitePrivacy["block_ads_and_trackers"];
   profile: string;
+  protections?: Partial<Record<SiteProtection, boolean | null>>;
   site: string;
 };
 

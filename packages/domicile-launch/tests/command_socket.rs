@@ -32,7 +32,7 @@ use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
-use domicile_launch::site_privacy::SitePrivacy;
+use domicile_launch::site_privacy::{SitePrivacy, SiteProtection};
 
 /// Reply timeout: long enough for a loaded machine, short enough for a fast
 /// suite.
@@ -214,7 +214,7 @@ fn the_engine_is_asked_for_the_sites_ad_blocking_and_lists_them() {
     let (_scratch, path) = scratch();
     let heard = an_engine(
         &path,
-        Some("{\"type\":\"site_privacy\",\"sites\":[{\"profile\":\"work\",\"site\":\"nytimes.com\",\"block_ads_and_trackers\":\"off\"}]}\n"),
+        Some("{\"type\":\"site_privacy\",\"sites\":[{\"profile\":\"work\",\"site\":\"nytimes.com\",\"block_ads_and_trackers\":\"off\",\"protections\":{\"hide_device_details\":false}}]}\n"),
     );
 
     assert_eq!(
@@ -222,7 +222,8 @@ fn the_engine_is_asked_for_the_sites_ad_blocking_and_lists_them() {
         vec![SitePrivacy {
             profile: "work".to_string(),
             site: "nytimes.com".to_string(),
-            block_ads_and_trackers: AdBlocking::Off,
+            block_ads_and_trackers: Some(AdBlocking::Off),
+            protections: BTreeMap::from([(SiteProtection::HideDeviceDetails, false)]),
         }]
     );
     assert_eq!(

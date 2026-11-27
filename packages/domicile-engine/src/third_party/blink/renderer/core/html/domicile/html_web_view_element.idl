@@ -198,6 +198,22 @@
   [RaisesException] undefined setBlockAdsAndTrackers(DOMString? mode,
                                                      DOMString scope);
 
+  // The page's other protections, each a shield turns on and off by itself:
+  // "hideDeviceDetails" and "removeTrackingFromLinks", each "on" or "off".
+  // All are "off" while `blockAdsAndTrackers` is "off". Empty when
+  // `privacySite` is. `domicile-site-privacy-change` signals a change.
+  record<DOMString, DOMString> privacyProtections();
+  // Where each of those comes from: "profile", "site" or "window".
+  record<DOMString, DOMString> privacyProtectionsSetFor();
+
+  // As setBlockAdsAndTrackers, for one of privacyProtections(): `on` true or
+  // false, or null to go back to the site's or the profile's. Throws
+  // TypeError for an unknown protection or scope, and InvalidStateError when
+  // `privacySite` is empty.
+  [RaisesException] undefined setPrivacyProtection(DOMString protection,
+                                                   boolean? on,
+                                                   DOMString scope);
+
   // The cameras and microphones, each most preferred first: a page that names
   // no device gets the first. The preference is the profile's, not the
   // site's. Rejects with InvalidStateError before the element has a page.

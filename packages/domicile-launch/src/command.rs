@@ -21,9 +21,9 @@
 //! {"type":"set"}   |   {"type":"refused","why":"…"}
 //!
 //! {"type":"site_privacy","version":1}
-//! {"type":"site_privacy","sites":[{"profile":"work","site":"nytimes.com","block_ads_and_trackers":"off"}]}
+//! {"type":"site_privacy","sites":[{"profile":"work","site":"nytimes.com","block_ads_and_trackers":"off","protections":{"hide_device_details":false}}]}
 //!
-//! {"type":"set_site_privacy","version":1,"profile":"work","site":"nytimes.com","block_ads_and_trackers":null}
+//! {"type":"set_site_privacy","version":1,"profile":"work","site":"nytimes.com","block_ads_and_trackers":null,"protections":{"hide_device_details":null}}
 //! {"type":"set"}   |   {"type":"refused","why":"…"}
 //!
 //! {"type":"load_unpacked","version":1,"directory":"/home/me/src/my-extension"}
@@ -87,6 +87,7 @@
 //! (`packages/domicile-engine/engine-release.nix`). Nothing shares code
 //! between the two, so the tests here assert the exact bytes.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use domicile_config::AdBlocking;
@@ -100,7 +101,7 @@ use crate::media_devices::{MediaDevices, MediaKind};
 use crate::shell_path::{Shell, ShellFiles};
 use crate::site_data::SiteData;
 use crate::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
-use crate::site_privacy::{SitePrivacy, SitePrivacyChange};
+use crate::site_privacy::{SitePrivacy, SitePrivacyChange, SiteProtection};
 
 /// The protocol version the supervisor sends and the engine checks.
 ///
@@ -263,6 +264,11 @@ pub fn set_site_permission_line(site: &SitePermission) -> String {
     })
 }
 
+/// Whether a change leaves every protection as it is.
+fn no_protections(protections: &&BTreeMap<SiteProtection, Option<bool>>) -> bool {
+    protections.is_empty()
+}
+
 /// The request for every browser profile's sites with their own ad blocking.
 pub fn site_privacy_line() -> String {
     line(&Command::SitePrivacy { version: VERSION })
@@ -276,6 +282,7 @@ pub fn set_site_privacy_line(change: &SitePrivacyChange) -> String {
         profile: &change.profile,
         site: &change.site,
         block_ads_and_trackers: change.block_ads_and_trackers,
+        protections: &change.protections,
     })
 }
 
@@ -511,9 +518,12 @@ enum Command<'a> {
         version: u32,
         profile: &'a str,
         site: &'a str,
-        // Sent as `null` to go back to the profile's: the engine refuses a
-        // request without it.
-        block_ads_and_trackers: Option<AdBlocking>,
+        // Left out to leave it, `null` to go back to the profile's. The
+        // engine refuses a request with neither this nor `protections`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        block_ads_and_trackers: Option<Option<AdBlocking>>,
+        #[serde(skip_serializing_if = "no_protections")]
+        protections: &'a BTreeMap<SiteProtection, Option<bool>>,
     },
     LoadUnpacked {
         version: u32,

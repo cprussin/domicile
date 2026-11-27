@@ -37,13 +37,77 @@ TEST_F(SitePrivacyTest, ASiteKeepsItsOwnModeUntilItIsRemoved) {
 }
 
 TEST_F(SitePrivacyTest, ListsEachSiteWithItsOwnModeBySite) {
-  EXPECT_TRUE(SitesWithOwnAdBlocking(prefs_).empty());
+  EXPECT_TRUE(SitesWithOwnPrivacy(prefs_).empty());
   SetSiteAdBlocking(prefs_, "nytimes.com", AdBlockingMode::kOff);
   SetSiteAdBlocking(prefs_, "chase.com", AdBlockingMode::kStrict);
-  const std::vector<std::pair<std::string, AdBlockingMode>> expected = {
-      {"chase.com", AdBlockingMode::kStrict},
-      {"nytimes.com", AdBlockingMode::kOff}};
-  EXPECT_EQ(SitesWithOwnAdBlocking(prefs_), expected);
+  const std::vector<std::pair<std::string, SitePrivacySettings>> sites =
+      SitesWithOwnPrivacy(prefs_);
+  ASSERT_EQ(sites.size(), 2u);
+  EXPECT_EQ(sites[0].first, "chase.com");
+  EXPECT_EQ(sites[0].second.block_ads_and_trackers, AdBlockingMode::kStrict);
+  EXPECT_TRUE(sites[0].second.protections.empty());
+  EXPECT_EQ(sites[1].first, "nytimes.com");
+  EXPECT_EQ(sites[1].second.block_ads_and_trackers, AdBlockingMode::kOff);
+}
+
+TEST_F(SitePrivacyTest, AProfileHasEachProtectionAsTheConfigSays) {
+  EXPECT_TRUE(ProfileProtection(prefs_, PageProtection::kHideDeviceDetails));
+  EXPECT_TRUE(
+      ProfileProtection(prefs_, PageProtection::kRemoveTrackingFromLinks));
+  prefs_.SetBoolean(kHideDeviceDetailsPref, false);
+  EXPECT_FALSE(ProfileProtection(prefs_, PageProtection::kHideDeviceDetails));
+  EXPECT_TRUE(
+      ProfileProtection(prefs_, PageProtection::kRemoveTrackingFromLinks));
+}
+
+TEST_F(SitePrivacyTest, ASiteKeepsEachProtectionOfItsOwnUntilRemoved) {
+  constexpr PageProtection kDetails = PageProtection::kHideDeviceDetails;
+  constexpr PageProtection kLinks = PageProtection::kRemoveTrackingFromLinks;
+  EXPECT_EQ(SiteProtection(prefs_, "example.com", kDetails), std::nullopt);
+  SetSiteProtection(prefs_, "example.com", kDetails, false);
+  EXPECT_EQ(SiteProtection(prefs_, "example.com", kDetails), false);
+  EXPECT_EQ(SiteProtection(prefs_, "example.com", kLinks), std::nullopt);
+  EXPECT_EQ(SiteProtection(prefs_, "example.org", kDetails), std::nullopt);
+  SetSiteProtection(prefs_, "example.com", kLinks, true);
+  EXPECT_EQ(SiteProtection(prefs_, "example.com", kLinks), true);
+
+  SetSiteProtection(prefs_, "example.com", kDetails, std::nullopt);
+  EXPECT_EQ(SiteProtection(prefs_, "example.com", kDetails), std::nullopt);
+  SetSiteProtection(prefs_, "example.com", kLinks, std::nullopt);
+  // Nothing of its own left: not kept, so not listed.
+  EXPECT_TRUE(prefs_.GetDict(kSiteProtectionsPref).empty());
+  EXPECT_TRUE(SitesWithOwnPrivacy(prefs_).empty());
+}
+
+TEST_F(SitePrivacyTest, ListsASitesProtectionsBesideItsMode) {
+  SetSiteProtection(prefs_, "example.com",
+                    PageProtection::kRemoveTrackingFromLinks, false);
+  SetSiteProtection(prefs_, "example.com", PageProtection::kHideDeviceDetails,
+                    false);
+  SetSiteAdBlocking(prefs_, "example.com", AdBlockingMode::kStrict);
+  SetSiteProtection(prefs_, "zoom.us", PageProtection::kHideDeviceDetails,
+                    false);
+  const std::vector<std::pair<std::string, SitePrivacySettings>> sites =
+      SitesWithOwnPrivacy(prefs_);
+  ASSERT_EQ(sites.size(), 2u);
+  EXPECT_EQ(sites[0].first, "example.com");
+  EXPECT_EQ(sites[0].second.block_ads_and_trackers, AdBlockingMode::kStrict);
+  // In kPageProtections order, not the order they were set in.
+  const std::vector<std::pair<PageProtection, bool>> both = {
+      {PageProtection::kHideDeviceDetails, false},
+      {PageProtection::kRemoveTrackingFromLinks, false}};
+  EXPECT_EQ(sites[0].second.protections, both);
+  EXPECT_EQ(sites[1].first, "zoom.us");
+  EXPECT_EQ(sites[1].second.block_ads_and_trackers, std::nullopt);
+}
+
+TEST_F(SitePrivacyTest, EachProtectionIsNamedAsTheConfigNamesIt) {
+  for (const PageProtection protection : kPageProtections) {
+    EXPECT_EQ(PageProtectionNamed(PageProtectionName(protection)), protection);
+  }
+  EXPECT_EQ(PageProtectionName(PageProtection::kHideDeviceDetails),
+            "hide_device_details");
+  EXPECT_EQ(PageProtectionNamed("block_third_party_cookies"), std::nullopt);
 }
 
 TEST_F(SitePrivacyTest, APagesSiteIsItsRegistrableDomain) {
