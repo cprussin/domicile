@@ -320,19 +320,49 @@ every() {
   rm -rf "$KEEP_LOGS"; mkdir -p "$KEEP_LOGS"
   # A skip does not stop the run, so a machine with no tree reports every
   # check that did not run.
-  serial "${FIRST[@]}" &&
-    { together "${TOGETHER[@]}"; ! stop; } &&
-    serial guard-css-and-resize &&
-    run guard-latency "$0" guard-latency &&
-    serial guard-shortcuts-inhibitor-chord
+  TOOK="$(mktemp)"
+  stage first serial "${FIRST[@]}" &&
+    { stage together together "${TOGETHER[@]}"; ! stop; } &&
+    stage last last
+  how_long
+  rm -f "$TOOK"
   report_end
+}
+
+# The checks after the rest: latency runs as none, so it is not `serial`.
+last() {
+  serial guard-css-and-resize &&
+    timed guard-latency run guard-latency "$0" guard-latency &&
+    serial guard-shortcuts-inhibitor-chord
+}
+
+# Runs a stage's command and writes down how long it took.
+stage() { # name, command...
+  local name="$1"; shift
+  timed "stage: $name" "$@"
+}
+
+# Runs a command and writes down how long it took, under `name`.
+timed() { # name, command...
+  local name="$1" start="$EPOCHSECONDS" status; shift
+  "$@"
+  status=$?
+  echo "$((EPOCHSECONDS - start)) $name" >>"$TOOK"
+  return "$status"
+}
+
+# Prints each stage and check that ran, slowest first.
+how_long() {
+  echo
+  echo "== how long the checks took =="
+  sort -rn "$TOOK" | awk '{ s = $1; $1 = ""; printf "  %6ss %s\n", s, substr($0, 2) }'
 }
 
 # Runs checks one at a time as noise, stopping at the first failure.
 serial() { # names...
   local name
   for name in "$@"; do
-    run "$name" noisy "$name"
+    timed "$name" run "$name" noisy "$name"
     stop && return 1
   done
   return 0
@@ -347,7 +377,7 @@ together() { # names...
       wait -n
       running=$((running - 1))
     fi
-    ( noisy "$name" >"$dir/$name" 2>&1; echo $? >"$dir/$name.status" ) &
+    ( timed "$name" noisy "$name" >"$dir/$name" 2>&1; echo $? >"$dir/$name.status" ) &
     running=$((running + 1))
   done
   wait
