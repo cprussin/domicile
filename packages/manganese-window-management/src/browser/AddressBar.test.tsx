@@ -24,6 +24,7 @@ const BAR = {
   onOpenPrivacySettings: () => undefined,
   onReload: () => undefined,
   onSetAdBlocking: () => undefined,
+  onSetPrivacyProtection: () => undefined,
   onSetSitePermission: () => undefined,
   onShowAllHistory: () => undefined,
   onStop: () => undefined,
@@ -303,6 +304,7 @@ describe("AddressBar", () => {
     const PRIVACY = {
       blocked: 23,
       mode: "standard",
+      protections: {},
       setFor: "profile",
       site: "nytimes.com",
     } as const;

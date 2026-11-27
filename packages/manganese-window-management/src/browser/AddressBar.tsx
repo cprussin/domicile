@@ -18,6 +18,7 @@ import type {
   WebViewAdBlocking,
   WebViewPermission,
   WebViewPermissionSetting,
+  WebViewPrivacyProtection,
 } from "@domicile-desktop/sdk/webview-element";
 import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ClockCounterClockwise";
 import { DetectiveIcon } from "@phosphor-icons/react/dist/ssr/Detective";
@@ -94,6 +95,12 @@ type Props = {
   onReload: () => void;
   /** Sets the page's ad blocking for its site or this window. */
   onSetAdBlocking: (mode: WebViewAdBlocking | null, scope: ShieldScope) => void;
+  /** Turns one of the page's protections on or off for its site or this window. */
+  onSetPrivacyProtection: (
+    protection: WebViewPrivacyProtection,
+    on: boolean | null,
+    scope: ShieldScope,
+  ) => void;
   /** Opens the History app, from Back's and Forward's menus. */
   onShowAllHistory: () => void;
   /** Stores a site permission for the page's site. */
@@ -148,6 +155,7 @@ export const AddressBar = ({
   onOpenPrivacySettings,
   onReload,
   onSetAdBlocking,
+  onSetPrivacyProtection,
   onSetSitePermission,
   onShowAllHistory,
   onStop,
@@ -265,6 +273,7 @@ export const AddressBar = ({
               onOpenSettings={onOpenPrivacySettings}
               onReload={onReload}
               onSet={onSetAdBlocking}
+              onSetProtection={onSetPrivacyProtection}
               privacy={privacy}
             />
           )
