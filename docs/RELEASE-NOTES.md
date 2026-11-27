@@ -53,6 +53,7 @@ Each agent gets its own pointer, keyboard and clipboard, in native and browser w
 
 ### Fixes
 
+- A shell that connects just as the desktop's state changes gets that change. A notification, tray icon, portal dialog, theme or other setting that changed as the shell connected, such as the development-build warning, could be missing until it changed again.
 - The engine no longer loads Chrome's Gemini in Chrome and Contextual Tasks extensions, which started two background processes of about 30 MiB each in every browser profile whenever a page opened.
 - VSCodium's window loads on a fresh start instead of stopping at its splash: a file an Electron app's protocol handler fetches keeps its Content-Type. [Electron apps](architecture/ELECTRON-APPS.md)
 - A window opening while a DevTools client on the debugging port is auto-attached to new pages no longer stops the engine on `Check failed: zoom`.

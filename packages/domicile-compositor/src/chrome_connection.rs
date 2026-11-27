@@ -85,35 +85,59 @@ fn write_responses(
     true
 }
 
-/// Replace a `displays` response with the current desktop.
+/// Replace a state response with the host's state as it is now.
 ///
-/// Responses are built under the `host` lock and written later. If `set_output`
-/// broadcasts a new desktop in between, the stale handshake copy would arrive
-/// last and nothing would correct it.
+/// Responses are built under the `host` lock and written later. A handshake's
+/// state (the desktop, the theme, the tray, the notifications and the rest)
+/// is built before the connection joins the broadcast list. Another
+/// connection's thread, or the config or D-Bus threads, can change that state
+/// and broadcast it in between: the broadcast misses this chrome, which is not
+/// in the list yet, and the handshake copy is stale, so the chrome never hears
+/// of the change. A checked chrome's warning that its engine is a development
+/// build is one such change, which
+/// `a_checked_engine_says_it_is_a_development_build` in `tests/handshake.rs`
+/// waits for.
 ///
-/// Broadcasts are ordered by the outbound queue:
-/// [`crate::DomicileCompositor::set_output`] describes and broadcasts on the
-/// Wayland thread, so a stale `displays` always has a newer one queued behind
-/// it. This function covers the one gap, a response written by another thread.
-/// Every describe must be followed by a broadcast; the startup describe in
-/// `main` is the only exception, and it runs before any connection thread
-/// exists.
+/// Written after the join, a state message read now holds every change up to
+/// here, and every later change is broadcast to this chrome. A broadcast
+/// enumerated before this read can still be written after it, but the change
+/// that made this copy newer is broadcast behind it.
 ///
-/// Other messages pass through unchanged.
+/// Every set must be followed by a broadcast of what it set. The startup sets
+/// in `main` are the exception, and run before the chrome socket is bound, so
+/// every state a handshake carries is held from then on.
+///
+/// Other messages, such as `welcome`, answer this chrome's request and pass
+/// through unchanged.
 fn freshened(hub: &ChromeHub, message: HostMessage) -> HostMessage {
-    if !matches!(message, HostMessage::Displays { .. }) {
-        return message;
-    }
-    let fresh = hub.host.lock().unwrap().describe_desktop();
+    const HELD: &str = "a state a handshake carries is set before any chrome connects";
+    let message = {
+        let host = hub.host.lock().unwrap();
+        match message {
+            HostMessage::Displays { .. } => host.describe_desktop(),
+            HostMessage::Theme { .. } => host.describe_theme(),
+            HostMessage::WindowsTheme { .. } => host.describe_windows_theme(),
+            HostMessage::Appearance(_) => host.describe_appearance(),
+            HostMessage::ForceDark { .. } => host.describe_force_dark(),
+            HostMessage::Keymap { .. } => host.describe_keymap().expect(HELD),
+            HostMessage::ShellConfig { .. } => host.describe_shell_config().expect(HELD),
+            HostMessage::Extensions { .. } => host.describe_extensions().expect(HELD),
+            HostMessage::BrowserProfiles { .. } => host.describe_browser_profiles().expect(HELD),
+            HostMessage::Spellcheck { .. } => host.describe_spellcheck().expect(HELD),
+            HostMessage::Tray { .. } => host.describe_tray().expect(HELD),
+            HostMessage::Notifications { .. } => host.describe_notifications().expect(HELD),
+            HostMessage::PortalRequests { .. } => host.describe_portal_requests().expect(HELD),
+            other => other,
+        }
+    };
     // Logged because a chrome draws no windows until it knows the displays, and
     // only this side can tell that apart from a chrome ignoring the host. The
     // count lets readers, including `guard-shell.sh`, tell an empty desktop
     // from a described one.
-    let HostMessage::Displays { displays } = fresh else {
-        unreachable!("describe_desktop returns Displays and nothing else");
-    };
-    debug!("told the chrome about {} display(s)", displays.len());
-    HostMessage::Displays { displays }
+    if let HostMessage::Displays { displays } = &message {
+        debug!("told the chrome about {} display(s)", displays.len());
+    }
+    message
 }
 
 /// Maximum file search results sent. `matched` still reports the full count.
@@ -1704,9 +1728,8 @@ mod tests {
     }
 
     #[test]
-    fn the_rest_of_a_handshake_answer_is_written_as_it_was_built() {
-        // Only `displays` is refreshed. `welcome` answers this chrome's request
-        // and must not be re-derived.
+    fn a_handshake_answer_that_is_not_state_is_written_as_it_was_built() {
+        // `welcome` answers this chrome's request and must not be re-derived.
         let (request_tx, _requests) = channel::<ClientRequest>();
         let (hub, _outbound) = ChromeHub::new(
             request_tx,
@@ -1723,6 +1746,132 @@ mod tests {
             freshened(&hub, welcome.clone()),
             welcome,
             "a message that is not the desktop passes through untouched"
+        );
+    }
+
+    #[test]
+    fn every_state_in_a_handshake_is_written_as_the_host_holds_it_now() {
+        // Another thread can change any state after the handshake is built and
+        // broadcast it before this chrome joins the broadcast list. Unfixed,
+        // the chrome hears neither. Every state the handshake carries is
+        // changed here, so a state left out of `freshened`, or one read from
+        // the wrong place, shows.
+        let (request_tx, _requests) = channel::<ClientRequest>();
+        let (hub, _outbound) = ChromeHub::new(
+            request_tx,
+            1,
+            OsString::from("wayland-1"),
+            0,
+            Portals::to_nobody(),
+        );
+        let handshake = |hub: &ChromeHub| {
+            let mut ready = false;
+            domicile_host::ipc::apply_chrome_message(
+                &mut hub.host.lock().unwrap(),
+                &mut ready,
+                domicile_protocol::ChromeMessage::Hello {
+                    protocol_version: domicile_protocol::PROTOCOL_VERSION,
+                    checked: false,
+                },
+            )
+        };
+        hold_every_state(&mut hub.host.lock().unwrap(), 1);
+        let built = handshake(&hub);
+
+        let unchanged: Vec<HostMessage> = built
+            .iter()
+            .map(|message| freshened(&hub, message.clone()))
+            .collect();
+        assert_eq!(
+            unchanged, built,
+            "a handshake whose state did not change is written as it was built"
+        );
+
+        hold_every_state(&mut hub.host.lock().unwrap(), 2);
+        let now = handshake(&hub);
+        let changed = built
+            .iter()
+            .zip(&now)
+            .filter(|(then, now)| then != now)
+            .count();
+        assert_eq!(
+            changed,
+            built.len() - 1,
+            "every state but the welcome changed, so the test can see each one"
+        );
+        let written: Vec<HostMessage> = built
+            .into_iter()
+            .map(|message| freshened(&hub, message))
+            .collect();
+        assert_eq!(
+            written, now,
+            "each state written is the one the host holds now, not the one the handshake was built from"
+        );
+    }
+
+    /// Sets every state a handshake carries to values that differ by `which`.
+    fn hold_every_state(host: &mut domicile_host::Host, which: u32) {
+        let named = |what: &str| format!("{what}-{which}");
+        let theme = if which.is_multiple_of(2) {
+            domicile_protocol::Theme::Dark
+        } else {
+            domicile_protocol::Theme::Light
+        };
+        host.describe_displays(vec![window_following("domicile-0", [1280, 800], which)]);
+        host.set_theme(theme);
+        host.set_windows_theme(theme);
+        let appearance = domicile_protocol::Appearance {
+            accent_color: Some(format!("#00000{which}")),
+            ..Default::default()
+        };
+        host.set_appearance(domicile_host::Appearances {
+            dark: appearance.clone(),
+            light: appearance,
+        });
+        host.set_force_dark(vec![named("site")]);
+        host.set_keymap(named("keymap"));
+        host.set_shell_config(Default::default(), named("options"));
+        host.set_extensions(vec![named("extension")], Vec::new(), Default::default());
+        host.set_browser_profiles(
+            Vec::new(),
+            named("profile"),
+            named("private"),
+            Default::default(),
+            Default::default(),
+        );
+        host.set_spellcheck(which.is_multiple_of(2), vec![named("language")]);
+        host.set_tray(vec![domicile_protocol::TrayItem {
+            id: named("item"),
+            title: named("title"),
+            icon: None,
+            bus: named("bus"),
+            menu: None,
+            item_is_menu: false,
+        }]);
+        host.set_notifications(vec![domicile_protocol::Notification {
+            id: which,
+            app_name: String::new(),
+            summary: named("summary"),
+            body: String::new(),
+            icon: None,
+            urgency: domicile_protocol::Urgency::Critical,
+            actions: Vec::new(),
+            clickable: false,
+            timeout_ms: None,
+            time: 0,
+            browser_window: None,
+        }]);
+        host.set_portal_requests(
+            vec![domicile_protocol::PortalRequest {
+                id: which,
+                app_id: named("app"),
+                parent_app_id: None,
+                kind: domicile_protocol::PortalKind::Inhibit(domicile_protocol::Inhibition {
+                    what: Vec::new(),
+                    reason: Some(named("reason")),
+                }),
+            }],
+            Vec::new(),
         );
     }
 
