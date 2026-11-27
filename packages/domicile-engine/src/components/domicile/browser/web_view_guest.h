@@ -1572,6 +1572,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   int pointer_routing_ = 0;
   // Runs out when a new tooltip shows. See ReportTooltip.
   base::OneShotTimer tooltip_delay_;
+  // When the tooltip that waits on `tooltip_delay_` started waiting, so its
+  // report says how long it waited.
+  base::TimeTicks tooltip_waits_since_;
   // Where the pointer last was over the page, in the DIPs of the widget under
   // it, and whether it is over the page now. See PreHandleMouseEvent.
   gfx::Point pointer_;

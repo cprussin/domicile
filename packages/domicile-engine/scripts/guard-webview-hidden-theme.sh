@@ -18,8 +18,14 @@
 # Asserted:
 #
 #   the page drew    yellow, in the light scheme, before it was hidden
+#   hidden           the page said it was hidden before the desk turned
+#   drew hidden      the engine ended the hidden page's capture with its frame
+#                    in the new colors, before the show
 #   first frame      the first frame after the show is blue, the dark scheme
-#   settled          the page is blue within 5 s of the show
+#   settled          the page is blue after the show
+#
+# Each step waits for the line that says the one before it happened, not for
+# a while: on a busy machine the page can take seconds to restyle.
 #
 # Control: NEGATIVE=1 leaves the desk light, and the page turns its own scheme
 # dark while hidden. Nothing paints that, so its first frame after the show
@@ -147,7 +153,8 @@ MEASURED=""
 if wait_for_line "$TRIES" "GUARD shell-loaded" "$ENGINE_LOG"; then
   if DEBUG_PORT="$(devtools_port "$PROFILE" "$TRIES")"; then
     MEASURED="$(python3 "$SCRIPTS/guard-webview-hidden-theme.py" \
-      --port "$DEBUG_PORT" --turn "$TURN" --mode "$MODE" --tries "$((FOR_SECONDS * 2))")"
+      --port "$DEBUG_PORT" --turn "$TURN" --mode "$MODE" \
+      --engine-log "$ENGINE_LOG" --tries "$((FOR_SECONDS * 2))")"
   else
     MEASURED="no-port"
   fi
@@ -194,6 +201,22 @@ first frame was $FIRST, not the stale light one: the first screenshot waits \
 for the page to draw, so the claim's dark first frame says nothing"
   fi
   ;;
+first=hidden-never)
+  FAILURE="the page never said it was hidden after its <webview>'s box was \
+hidden, so nothing it drew after says anything about a hidden page"
+  ;;
+first=drawn-never)
+  FAILURE="the desk turned dark while the page was hidden, and the engine \
+never ended its capture with the page's frame in the new colors: a hidden \
+page did not draw its new colors while hidden \
+(WebContentsImpl::HandleColorRelatedStateChanges, \
+DomicilePaintNewColorsWhileHidden and \
+RenderWidgetHostViewChildFrame::CanBecomeVisible, patch 0285)"
+  ;;
+first=turned-never)
+  FAILURE="the control's page never said it turned itself dark while \
+hidden, so its first frame after the show says nothing"
+  ;;
 no-port)
   FAILURE="the engine never said which debugging port it took"
   ;;
@@ -211,7 +234,7 @@ fi
 annotate_from "guard-webview-hidden-theme: $FAILURE" "$ENGINE_LOG"
 echo "guard-webview-hidden-theme: $FAILURE" >&2
 echo "the steps, in order:" >&2
-grep -E "GUARD (hiding|showing|scheme=|while hidden)|domicile: .*(colors|embedder does not render|widget)|begin frame" "$ENGINE_LOG" >&2
+grep -E "GUARD (hiding|showing|scheme=|while hidden|turned itself)|domicile: .*(colors|embedder does not render|widget)|begin frame" "$ENGINE_LOG" >&2
 echo "the engine's last words:" >&2
 last_words "$ENGINE_LOG" >&2
 exit 1

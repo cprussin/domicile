@@ -72,17 +72,29 @@ expect "a page never drawn dark is a failure" "fail" \
   "$(verdict claim "first=light settled=light")"
 expect "an unknown color first is a failure" "fail" \
   "$(verdict claim "first=other(1,2,3) settled=dark")"
+expect "a hidden page that never drew its new colors is a failure" "fail" \
+  "$(verdict claim "first=drawn-never")"
+expect "and names the capture" "yes" \
+  "$(says claim "first=drawn-never" "never ended its capture")"
 
 echo "the control — a page that turned itself while hidden"
 expect "a light first frame is the pass" "pass" \
   "$(verdict control "first=light settled=dark")"
 expect "a dark first frame is a failure" "fail" \
   "$(verdict control "first=dark settled=dark")"
+expect "a page that never turned itself is a failure" "fail" \
+  "$(verdict control "first=turned-never")"
+expect "and says the page never turned" "yes" \
+  "$(says control "first=turned-never" "never said it turned itself dark")"
 
 echo "either mode — nothing measured"
 for mode in claim control; do
   expect "$mode: a page never drawn is a failure" "fail" \
     "$(verdict "$mode" "first=never")"
+  expect "$mode: a page never hidden is a failure" "fail" \
+    "$(verdict "$mode" "first=hidden-never")"
+  expect "$mode: and says the page never heard it was hidden" "yes" \
+    "$(says "$mode" "first=hidden-never" "never said it was hidden")"
   expect "$mode: no debugging port is a failure" "fail" \
     "$(verdict "$mode" "no-port")"
   expect "$mode: a shell that never ran is a failure" "fail" \

@@ -16,6 +16,7 @@ impl DomicileCompositor {
         if self.first_frame_logged.first(app_id) {
             debug!(app_id, "the engine took this app's first frame");
         }
+        self.latency_frame_taken(app_id);
         // Temporary spike probes. Only the compositor can ask viz what it drew.
         // Results are logged because shell scripts check them.
         //

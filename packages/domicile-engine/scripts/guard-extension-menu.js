@@ -6,9 +6,13 @@
 //
 //   GUARD listening            the desktop was handed to Shell and a listener
 //                              is registered
-//   GUARD installed count=…    an `installedextensionschanged` arrived, and
-//                              how many rows it had. The control's reading
-//                              that its absence is an answer
+//   GUARD installed count=… enabled=… inTray=…
+//                              an `installedextensionschanged` arrived: how
+//                              many rows it had, and the fixture's state. The
+//                              control's reading that its absence is an answer
+//   GUARD tray enabled=… inTray=…
+//                              an `extensionschanged` arrived, and the
+//                              fixture's state
 //   GUARD row enabled=… fromConfig=… icon=… configured=…
 //                              the `?expect=` row, the first time it arrives
 //   GUARD private              the row has no `inPrivate`: private windows
@@ -88,22 +92,27 @@ export const HostShell = (_root, desktop) => {
     check();
   };
 
+  // Each switch waits for its own call to be answered before it reads the
+  // lists: the config's file access reloads the extension as it installs,
+  // and the reload's own unload lists it off.
   const switchOn = () => {
-    host.setExtensionEnabled(expected, true).catch(failed("on"));
-    when(
-      () => rowOf()?.enabled === true && inTray(),
-      () => say("on"),
-    );
+    host.setExtensionEnabled(expected, true).then(() => {
+      when(
+        () => rowOf()?.enabled === true && inTray(),
+        () => say("on"),
+      );
+    }, failed("on"));
   };
   const switchOff = () => {
-    host.setExtensionEnabled(expected, false).catch(failed("off"));
-    when(
-      () => rowOf()?.enabled === false && !inTray(),
-      () => {
-        say("off");
-        switchOn();
-      },
-    );
+    host.setExtensionEnabled(expected, false).then(() => {
+      when(
+        () => rowOf()?.enabled === false && !inTray(),
+        () => {
+          say("off");
+          switchOn();
+        },
+      );
+    }, failed("off"));
   };
   const uninstall = () => {
     host
@@ -126,8 +135,11 @@ export const HostShell = (_root, desktop) => {
 
   let started = false;
   host.addEventListener("installedextensionschanged", () => {
-    say(`installed count=${host.installedExtensions.length}`);
     const row = rowOf();
+    say(
+      `installed count=${host.installedExtensions.length}` +
+        ` enabled=${row?.enabled} inTray=${inTray()}`,
+    );
     if (!started) {
       if (control) {
         started = true;
@@ -148,6 +160,9 @@ export const HostShell = (_root, desktop) => {
     }
     check();
   });
-  host.addEventListener("extensionschanged", check);
+  host.addEventListener("extensionschanged", () => {
+    say(`tray enabled=${rowOf()?.enabled} inTray=${inTray()}`);
+    check();
+  });
   say("listening");
 };

@@ -2580,10 +2580,13 @@ void WebViewGuest::ReportTooltip() {
   // the tooltip appeared, so moving under one tooltip sends nothing.
   if (TooltipNow() == reported_tooltip_) {
     tooltip_delay_.Stop();
+    tooltip_waits_since_ = base::TimeTicks();
   } else if (TooltipNow().empty() || !reported_tooltip_.empty()) {
     tooltip_delay_.Stop();
+    tooltip_waits_since_ = base::TimeTicks();
     SendTooltip();
   } else if (!tooltip_delay_.IsRunning()) {
+    tooltip_waits_since_ = base::TimeTicks::Now();
     // Unretained: the timer is a member, so it never runs after this is gone.
     tooltip_delay_.Start(FROM_HERE, kTooltipDelay,
                          base::BindOnce(&WebViewGuest::SendTooltip,
@@ -2613,6 +2616,16 @@ void WebViewGuest::SendTooltip() {
   // Where the pointer is now, which is where Chrome shows it after its delay.
   const gfx::Point at =
       tooltip.empty() ? gfx::Point() : PointerInPage(*PointerWidget());
+  // Measured here, where the delay is kept: a reading taken outside the
+  // browser also counts the time it took to move the pointer.
+  const base::TimeDelta waited =
+      tooltip_waits_since_.is_null()
+          ? base::TimeDelta()
+          : base::TimeTicks::Now() - tooltip_waits_since_;
+  tooltip_waits_since_ = base::TimeTicks();
+  VLOG(1) << "domicile: a <webview> reports the tooltip \"" << tooltip
+          << "\" at " << at.x() << "," << at.y() << ", "
+          << waited.InMilliseconds() << " ms after the page named it";
   client_->TooltipChanged(tooltip, at.x(), at.y());
 }
 
