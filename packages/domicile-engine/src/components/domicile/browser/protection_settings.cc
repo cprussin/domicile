@@ -39,6 +39,7 @@ void ApplyProtections(PrefService& prefs,
   prefs.SetBoolean(kRemoveLinkTrackingPref,
                    protections.remove_tracking_from_links);
   prefs.SetBoolean(kHideDeviceDetailsPref, protections.hide_device_details);
+  prefs.SetBoolean(kHideCookieBannersPref, protections.hide_cookie_banners);
   SetProfileAdBlocking(prefs, protections.block_ads_and_trackers);
 }
 

@@ -1045,9 +1045,10 @@ or its window:
   A private profile's sites are kept until its last page closes.
 
 Each protection beside it works the same way, by name
-(`WEBVIEW_PRIVACY_PROTECTIONS`): `hideDeviceDetails` and
-`removeTrackingFromLinks`, the profile's `hide_device_details` and
-`remove_tracking_from_links`.
+(`WEBVIEW_PRIVACY_PROTECTIONS`): `hideDeviceDetails`,
+`removeTrackingFromLinks` and `hideCookieBanners`, the profile's
+`hide_device_details`, `remove_tracking_from_links` and
+`hide_cookie_banners`.
 
 - `view.privacyProtections()`: each protection's name and `on` or `off`. Every
   protection is `off` where the mode is `off`.

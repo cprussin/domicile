@@ -2,10 +2,10 @@
 """The pages guard-ad-blocking.sh shows, at two sites.
 
 `/page?as=ID` is the page a browser window in profile ID opens at 127.0.0.1.
-It loads five scripts and logs, to the console the engine writes to its log,
+It loads six scripts and logs, to the console the engine writes to its log,
 which of them ran:
 
-  GUARD ads as=ID third=X first=X mine=X allowed=X ok=X
+  GUARD ads as=ID third=X first=X mine=X allowed=X ok=X consent=X
 
 each X `loaded` or `blocked`:
 
@@ -16,13 +16,16 @@ each X `loaded` or `blocked`:
   allowed  localhost/ads/allowed.js   another site's, which the list names
                                       and makes an exception for
   ok       localhost/ok.js            another site's, which nothing names
+  consent  localhost/consent/banner.js
+                                      another site's, which only a cookie
+                                      banner list names
 
-It also has six elements, which the list hides by their classes and ids or
+It also has seven elements, which the list hides by their classes and ids or
 doesn't, and logs which of them are hidden once its scripts have settled and
-a seventh, added a few seconds after the page loaded, has had a few seconds
+an eighth, added a few seconds after the page loaded, has had a few seconds
 more:
 
-  GUARD hidden as=ID site=X generic=X complex=X late=X kept=X plain=X
+  GUARD hidden as=ID site=X generic=X complex=X late=X kept=X plain=X banner=X
 
 each X `hidden` or `shown`:
 
@@ -34,6 +37,7 @@ each X `hidden` or `shown`:
   kept     .kept           a generic class rule the site makes an exception
                            for (127.0.0.1#@#)
   plain    .plain          nothing names it
+  banner   .cookie-notice  a generic class rule of a cookie banner list's only
 
 Then it follows a link to the other site that carries a click id and a
 campaign parameter, `/landing?as=ID&keep=1&fbclid=f&utm_source=u` at
@@ -77,6 +81,7 @@ PAGE = """<!doctype html>
     <div data-ad="1" id="complex">an ad by its attribute</div>
     <div class="kept" id="kept">an ad the site keeps</div>
     <div class="plain" id="plain">no ad</div>
+    <div class="cookie-notice" id="banner">a cookie banner</div>
     <script>
       const as = new URLSearchParams(location.search).get("as");
       const port = location.port;
@@ -86,6 +91,7 @@ PAGE = """<!doctype html>
         mine: `http://127.0.0.1:${port}/mine/own.js`,
         allowed: `http://localhost:${port}/ads/allowed.js`,
         ok: `http://localhost:${port}/ok.js`,
+        consent: `http://localhost:${port}/consent/banner.js`,
       };
       const ran = {};
       const settled = Object.entries(scripts).map(
@@ -102,7 +108,8 @@ PAGE = """<!doctype html>
         for (const [what, how] of results) ran[what] = how;
         console.log(
           `GUARD ads as=${as} third=${ran.third} first=${ran.first} ` +
-            `mine=${ran.mine} allowed=${ran.allowed} ok=${ran.ok}`,
+            `mine=${ran.mine} allowed=${ran.allowed} ok=${ran.ok} ` +
+            `consent=${ran.consent}`,
         );
       });
       // An ad a page adds after it loaded, as many do, then a look at what
@@ -129,7 +136,8 @@ PAGE = """<!doctype html>
           console.log(
             `GUARD hidden as=${as} site=${how("site")} ` +
               `generic=${how("generic")} complex=${how("complex")} ` +
-              `late=${how("late")} kept=${how("kept")} plain=${how("plain")}`,
+              `late=${how("late")} kept=${how("kept")} plain=${how("plain")} ` +
+              `banner=${how("banner")}`,
           );
           location.href =
             `http://localhost:${port}/landing?as=${as}&keep=1&fbclid=f&` +
@@ -207,6 +215,7 @@ SCRIPTS = {
     "/mine/own.js": "mine",
     "/ads/allowed.js": "allowed",
     "/ok.js": "ok",
+    "/consent/banner.js": "consent",
 }
 
 # A profile id, as the config allows one. Anything else is not logged as-is.

@@ -17,6 +17,7 @@ import {
 const BROWSER: BrowserConfig = {
   block_lists: [],
   block_rules: [],
+  cookie_banner_lists: [],
   default_private_profile: "private",
   default_profile: "personal",
   order: [],

@@ -58,6 +58,9 @@ TEST_F(SitePrivacyTest, AProfileHasEachProtectionAsTheConfigSays) {
   EXPECT_FALSE(ProfileProtection(prefs_, PageProtection::kHideDeviceDetails));
   EXPECT_TRUE(
       ProfileProtection(prefs_, PageProtection::kRemoveTrackingFromLinks));
+  EXPECT_TRUE(ProfileProtection(prefs_, PageProtection::kHideCookieBanners));
+  prefs_.SetBoolean(kHideCookieBannersPref, false);
+  EXPECT_FALSE(ProfileProtection(prefs_, PageProtection::kHideCookieBanners));
 }
 
 TEST_F(SitePrivacyTest, ASiteKeepsEachProtectionOfItsOwnUntilRemoved) {
@@ -107,6 +110,8 @@ TEST_F(SitePrivacyTest, EachProtectionIsNamedAsTheConfigNamesIt) {
   }
   EXPECT_EQ(PageProtectionName(PageProtection::kHideDeviceDetails),
             "hide_device_details");
+  EXPECT_EQ(PageProtectionName(PageProtection::kHideCookieBanners),
+            "hide_cookie_banners");
   EXPECT_EQ(PageProtectionNamed("block_third_party_cookies"), std::nullopt);
 }
 

@@ -45,6 +45,10 @@ inline constexpr char kRemoveLinkTrackingPref[] =
 // as the config has it. Off too wherever the page's ad blocking is Off.
 inline constexpr char kHideDeviceDetailsPref[] =
     "domicile.device_details.hide";
+// Whether pages' cookie banners are hidden, and the scripts that show them
+// blocked, with the cookie banner lists (AdBlocker), as the config has it.
+// Off too wherever the page's ad blocking is Off.
+inline constexpr char kHideCookieBannersPref[] = "domicile.cookie_banners.hide";
 
 // A site's protections, by PageProtectionName, each true or false: a
 // dictionary of dictionaries, by PrivacySiteOf.
@@ -54,11 +58,13 @@ inline constexpr char kSiteProtectionsPref[] = "domicile.privacy.sites";
 enum class PageProtection {
   kHideDeviceDetails,
   kRemoveTrackingFromLinks,
+  kHideCookieBanners,
 };
 
 inline constexpr PageProtection kPageProtections[] = {
     PageProtection::kHideDeviceDetails,
     PageProtection::kRemoveTrackingFromLinks,
+    PageProtection::kHideCookieBanners,
 };
 
 // The prefs above, on every profile.

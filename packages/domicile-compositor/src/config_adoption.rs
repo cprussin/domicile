@@ -74,6 +74,7 @@ pub fn hand_over_the_browser_profiles(host: &mut Host, browser: &BrowserConfig) 
                     hide_local_ip_address: profile.protections.hide_local_ip_address,
                     remove_tracking_from_links: profile.protections.remove_tracking_from_links,
                     hide_device_details: profile.protections.hide_device_details,
+                    hide_cookie_banners: profile.protections.hide_cookie_banners,
                     block_ads_and_trackers: match profile.ad_blocking() {
                         domicile_config::AdBlocking::Standard => {
                             domicile_protocol::AdBlocking::Standard
@@ -89,8 +90,11 @@ pub fn hand_over_the_browser_profiles(host: &mut Host, browser: &BrowserConfig) 
         browser.default_profile.clone(),
         browser.default_private_profile.clone(),
         browser.sites.clone(),
-        browser.block_lists.clone(),
-        browser.block_rules.clone(),
+        domicile_host::BrowserFilters {
+            block_lists: browser.block_lists.clone(),
+            block_rules: browser.block_rules.clone(),
+            cookie_banner_lists: browser.cookie_banner_lists.clone(),
+        },
     );
 }
 

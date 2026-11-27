@@ -26,7 +26,8 @@ std::string_view AdBlockRequestType(network::mojom::RequestDestination);
 // Two engines, as Brave keeps them: one for the lists and one for the user's
 // own rules, so a mode that lets a site's own requests through can still
 // apply the user's rules to them, and a rule of the user's can make an
-// exception to a list's.
+// exception to a list's. A third holds the cookie banner lists, which apply
+// as the lists do, but only to a page that hides cookie banners.
 //
 // Immutable once built. Building is slow (tens of milliseconds for EasyList,
 // EasyPrivacy and uBlock Origin's filters), so it is built on a worker and
@@ -53,10 +54,12 @@ class AdBlocker {
     bool generichide = false;
   };
 
-  // `lists` are filter lists' texts, each valid UTF-8; `rules` the user's own
-  // rules, one per entry.
-  static std::unique_ptr<AdBlocker> Build(const std::vector<std::string>& lists,
-                                          const std::vector<std::string>& rules);
+  // `lists` and `cookie_banner_lists` are filter lists' texts, each valid
+  // UTF-8; `rules` the user's own rules, one per entry.
+  static std::unique_ptr<AdBlocker> Build(
+      const std::vector<std::string>& lists,
+      const std::vector<std::string>& rules,
+      const std::vector<std::string>& cookie_banner_lists);
 
   AdBlocker(const AdBlocker&) = delete;
   AdBlocker& operator=(const AdBlocker&) = delete;
@@ -70,23 +73,28 @@ class AdBlocker {
   // One to the page's own site is blocked when the user's rules name it, a
   // list's `$important` rule does, or `block_first_party` (Strict) is set and
   // a list does. No exception lifts an `$important` rule; the user's
-  // exceptions lift the lists' other rules.
+  // exceptions lift the lists' other rules. With `hide_cookie_banners`, the
+  // cookie banner lists count as lists.
   bool ShouldBlock(const GURL& url,
                    const GURL& page,
                    std::string_view type,
                    std::string_view method,
-                   bool block_first_party) const;
+                   bool block_first_party,
+                   bool hide_cookie_banners) const;
 
-  // What the page at `page` hides. See docs/architecture/AD-BLOCKING.md.
-  Cosmetics CosmeticsFor(const GURL& page) const;
+  // What the page at `page` hides, the cookie banner lists' too with
+  // `hide_cookie_banners`. See docs/architecture/AD-BLOCKING.md.
+  Cosmetics CosmeticsFor(const GURL& page, bool hide_cookie_banners) const;
 
   // The generic rules' selectors for a page's `classes` and `ids`, without
-  // their `.` or `#`, but those in `exceptions` (Cosmetics::exceptions). In
-  // order, without repeats.
+  // their `.` or `#`, but those in `exceptions` (Cosmetics::exceptions), the
+  // cookie banner lists' too with `hide_cookie_banners`. In order, without
+  // repeats.
   std::vector<std::string> HiddenClassIdSelectors(
       const std::vector<std::string>& classes,
       const std::vector<std::string>& ids,
-      const std::vector<std::string>& exceptions) const;
+      const std::vector<std::string>& exceptions,
+      bool hide_cookie_banners) const;
 
  private:
   struct Engines;

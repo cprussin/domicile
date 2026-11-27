@@ -31,11 +31,12 @@ PROTECTIONS = {
     "hide_local_ip_address": True,
     "remove_tracking_from_links": True,
     "hide_device_details": True,
+    "hide_cookie_banners": True,
 }
 
 # Unlike a desk's, no filter lists unless the guard names some, so a guard
 # that is not about blocking fetches none.
-BLOCKING = {"block_lists": [], "block_rules": []}
+BLOCKING = {"block_lists": [], "block_rules": [], "cookie_banner_lists": []}
 
 
 def send(connection, message):

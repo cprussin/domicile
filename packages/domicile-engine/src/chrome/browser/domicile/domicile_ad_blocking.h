@@ -32,10 +32,10 @@ namespace domicile {
 
 class AdBlocker;
 
-// The desk's ad and tracker blocking: the config's filter lists, kept up to
-// date, built into one AdBlocker, which every website's requests are checked
-// against in the mode of the profile its page is in. See
-// docs/architecture/AD-BLOCKING.md.
+// The desk's ad and tracker blocking: the config's filter lists and cookie
+// banner lists, kept up to date, built into one AdBlocker, which every
+// website's requests are checked against in the mode of the profile its page
+// is in. See docs/architecture/AD-BLOCKING.md.
 //
 // - An `https:` list is fetched through the system's network context, with
 //   no profile's cookies, and kept in the user data directory's
@@ -58,10 +58,11 @@ class AdBlocking {
   AdBlocking(const AdBlocking&) = delete;
   AdBlocking& operator=(const AdBlocking&) = delete;
 
-  // The config's `browser.block_lists` and `browser.block_rules`. Reads and
-  // builds again when they changed.
+  // The config's `browser.block_lists`, `browser.block_rules` and
+  // `browser.cookie_banner_lists`. Reads and builds again when they changed.
   void Configure(std::vector<std::string> lists,
-                 std::vector<std::string> rules);
+                 std::vector<std::string> rules,
+                 std::vector<std::string> cookie_banner_lists);
 
   // Runs `ready` once the blocker for the config is up: at once, unless the
   // config's lists are being read and built for the first time.
@@ -88,6 +89,12 @@ class AdBlocking {
     std::map<std::string, base::Time> kept;
   };
 
+  // Every list the config names, the cookie banner lists too: each is read,
+  // fetched and kept alike.
+  std::vector<std::string> AllLists() const;
+  // The texts in hand of `lists`, in their order.
+  std::vector<std::string> TextsOf(const std::vector<std::string>& lists) const;
+
   void Started(int generation, Read read);
   // Builds the blocker from the texts in hand, for `generation`.
   void Rebuild();
@@ -101,6 +108,7 @@ class AdBlocking {
   base::FilePath kept_dir_;
   std::vector<std::string> lists_;
   std::vector<std::string> rules_;
+  std::vector<std::string> cookie_banner_lists_;
   bool configured_ = false;
   // Bumped on each change of the config, so an answer for an older one is
   // dropped.

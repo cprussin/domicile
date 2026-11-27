@@ -1540,6 +1540,8 @@ String ProtectionName(domicile::mojom::blink::WebViewProtection protection) {
       return "hideDeviceDetails";
     case domicile::mojom::blink::WebViewProtection::kRemoveTrackingFromLinks:
       return "removeTrackingFromLinks";
+    case domicile::mojom::blink::WebViewProtection::kHideCookieBanners:
+      return "hideCookieBanners";
   }
 }
 
@@ -1547,7 +1549,8 @@ std::optional<domicile::mojom::blink::WebViewProtection> ProtectionNamed(
     const String& name) {
   for (const auto protection :
        {domicile::mojom::blink::WebViewProtection::kHideDeviceDetails,
-        domicile::mojom::blink::WebViewProtection::kRemoveTrackingFromLinks}) {
+        domicile::mojom::blink::WebViewProtection::kRemoveTrackingFromLinks,
+        domicile::mojom::blink::WebViewProtection::kHideCookieBanners}) {
     if (ProtectionName(protection) == name) {
       return protection;
     }
@@ -1627,8 +1630,8 @@ void HTMLWebViewElement::setPrivacyProtection(const String& protection,
       ProtectionNamed(protection);
   if (!named.has_value()) {
     exception_state.ThrowTypeError(
-        "A protection must be \"hideDeviceDetails\" or "
-        "\"removeTrackingFromLinks\".");
+        "A protection must be \"hideDeviceDetails\", "
+        "\"removeTrackingFromLinks\" or \"hideCookieBanners\".");
     return;
   }
   if (scope != "site" && scope != "window") {

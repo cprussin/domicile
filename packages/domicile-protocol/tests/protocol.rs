@@ -294,6 +294,7 @@ fn browser_profiles_wire_shape_is_pinned() {
                 hide_local_ip_address: true,
                 remove_tracking_from_links: true,
                 hide_device_details: false,
+                hide_cookie_banners: true,
                 block_ads_and_trackers: AdBlocking::Standard,
             },
         }],
@@ -302,6 +303,7 @@ fn browser_profiles_wire_shape_is_pinned() {
         sites: [("github.com/acme".to_string(), "work".to_string())].into(),
         block_lists: vec!["https://easylist.to/easylist/easylist.txt".into()],
         block_rules: vec!["||ads.example^".into()],
+        cookie_banner_lists: vec!["https://secure.fanboy.co.nz/fanboy-cookiemonster.txt".into()],
     })
     .unwrap();
     assert_eq!(
@@ -320,6 +322,7 @@ fn browser_profiles_wire_shape_is_pinned() {
                     "hide_local_ip_address": true,
                     "remove_tracking_from_links": true,
                     "hide_device_details": false,
+                    "hide_cookie_banners": true,
                     "block_ads_and_trackers": "standard",
                 },
             }],
@@ -328,6 +331,7 @@ fn browser_profiles_wire_shape_is_pinned() {
             "sites": { "github.com/acme": "work" },
             "block_lists": ["https://easylist.to/easylist/easylist.txt"],
             "block_rules": ["||ads.example^"],
+            "cookie_banner_lists": ["https://secure.fanboy.co.nz/fanboy-cookiemonster.txt"],
         })
     );
 }

@@ -20,6 +20,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 pub enum SiteProtection {
     HideDeviceDetails,
     RemoveTrackingFromLinks,
+    HideCookieBanners,
 }
 
 /// One site with ad blocking or protections of its own in one browser

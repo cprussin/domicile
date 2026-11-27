@@ -101,6 +101,7 @@ const AD_BLOCKING_MODES = ["standard", "strict", "off"] as const;
 export const SITE_PROTECTIONS = [
   "hide_device_details",
   "remove_tracking_from_links",
+  "hide_cookie_banners",
 ] as const;
 
 /** One of {@link SITE_PROTECTIONS}. */
