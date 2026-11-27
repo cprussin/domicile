@@ -47,134 +47,138 @@ FIRST=(
 
 # Run together: they are headless and share no card, port, broker, profile or
 # log. At most `CHECKS_AT_ONCE` at a time.
+#
+# Slowest first, by the "how long the checks took" list a run ends with, so no
+# long check starts last and holds the stage open alone. A new check goes
+# where its time puts it.
 TOGETHER=(
-  guard-webview-framing
-  guard-agent-devtools-shell
-  guard-agent-input-keeps-focus
-  guard-agent-file-chooser
-  guard-agent-clipboard
-  guard-agent-seat-in-pages
-  guard-shell-local-network
-  guard-webview-notifications
-  guard-notification-server-late
-  guard-notification-window
-  guard-notification-site-icon
-  guard-shell-web-apis
-  guard-display-capture
+  guard-webview-discard
   guard-headless-desk
-  guard-webview-content-script
-  guard-extension-installer
-  guard-extension-in-private
-  guard-extension-reload
-  guard-extension-tray
-  guard-extension-menu
-  guard-extension-commands
-  guard-extension-kept-key
-  guard-extension-page
-  guard-extension-open-popup
-  guard-extension-side-panel
-  guard-webview-keyboard
-  guard-webview-escape
-  guard-webview-browser-page
-  guard-webview-history
-  guard-webview-history-new-window
-  guard-webview-history-menu
-  guard-webview-untrusted-cert
-  guard-webview-find
-  guard-webview-click
-  guard-webview-activate
-  guard-webview-new-window
-  guard-webview-window-open
-  guard-webview-private
-  guard-webview-partition
-  guard-webview-will-navigate
-  guard-webview-app-window
-  guard-app-window-reuse
-  guard-webview-routed-link
-  guard-webview-target-url
-  guard-webview-tooltip
-  guard-webview-fullscreen
-  guard-webview-wake-lock
-  guard-webview-device-request
-  guard-webview-media-devices
-  guard-media-services-at-rest
-  guard-webview-count-matches
-  guard-webview-click-match
-  guard-webview-dialog
-  guard-webview-beforeunload
-  guard-webview-external-app
-  guard-webview-sign-in
-  guard-webview-file-access
-  guard-webview-page-failure
-  guard-webview-resend-form
-  guard-webview-page-picker
-  guard-webview-chrome-sheets
-  guard-webview-sign-in-with
-  guard-webview-video-picture-in-picture
-  guard-webview-print
+  guard-engine-stays-quiet
+  guard-shell-hmr
+  guard-webview-scale-animation
+  guard-one-spare-renderer
+  guard-shell-crash
   guard-webview-context-menu
   guard-webview-spellcheck
-  guard-webview-upload
-  guard-webview-download
-  guard-webview-save-picker
-  guard-webview-tabs
-  guard-webview-active-tab
-  guard-webview-popup-window
-  guard-webview-passkey-extension
-  guard-webview-survives-load-shell
-  guard-webview-hidden
-  guard-webview-moved
-  guard-webview-discard
-  guard-profile-routing
-  guard-browser-protections
-  guard-ad-blocking
-  guard-site-privacy
-  guard-webview-paused
-  guard-animation-main-frames
-  guard-one-spare-renderer
-  guard-webview-scale-animation
   guard-webview-reshown-tiles
   guard-webview-slide-screen-rects
-  guard-webview-hidden-theme
+  guard-extension-page
   guard-webview-crash
-  guard-desktop-geometry
-  guard-windows-state
-  guard-desk-state
-  guard-held-moments
-  guard-asks-promise
-  guard-portal-requests
-  guard-shortcut-chords
-  guard-app-routes-input
-  guard-locked-keys-stay-on-the-page
-  guard-shell-handover
-  guard-shell-script-src
-  guard-shell-crash
-  guard-app-only-in-shell
-  guard-domicile-fetch
-  guard-shell-hmr
-  guard-shell-workers
-  guard-shell-pdf
-  guard-pdf-scaled-text
-  guard-pdf-after-hiding
-  guard-pdf-zoom
+  guard-webview-escape
+  guard-webview-hidden-theme
+  guard-webview-survives-load-shell
+  guard-webview-new-window
+  guard-webview-file-access
+  guard-webview-upload
+  guard-webview-download
+  guard-webview-routed-link
+  guard-webview-save-picker
+  guard-exit-unload
+  guard-webview-page-picker
+  guard-media-services-at-rest
+  guard-notification-site-icon
+  guard-webview-paused
+  guard-webview-keyboard
+  guard-webview-history
+  guard-webview-hidden
+  guard-extension-tray
+  guard-webview-history-menu
+  guard-ad-blocking
+  guard-webview-history-new-window
+  guard-webview-click
+  guard-notification-server-late
+  guard-webview-fullscreen
+  guard-webview-moved
+  guard-agent-seat-in-pages
+  guard-agent-clipboard
+  guard-shell-local-network
+  guard-webview-notifications
+  guard-webview-find
+  guard-site-privacy
+  guard-webview-framing
+  guard-agent-input-keeps-focus
+  guard-shell-web-apis
+  guard-webview-content-script
+  guard-webview-target-url
+  guard-webview-tooltip
+  guard-webview-external-app
+  guard-webview-active-tab
+  guard-profile-routing
   guard-app-module
-  guard-electron-socket
-  guard-electron-window-open
-  guard-electron-preload
-  guard-electron-node
-  guard-electron-protocol
+  guard-extension-installer
+  guard-extension-in-private
+  guard-webview-window-open
+  guard-webview-device-request
+  guard-webview-dialog
+  guard-webview-passkey-extension
+  guard-agent-file-chooser
+  guard-extension-reload
+  guard-webview-browser-page
+  guard-webview-activate
+  guard-webview-popup-window
+  guard-webview-private
+  guard-webview-beforeunload
+  guard-webview-wake-lock
+  guard-webview-sign-in-with
+  guard-webview-print
+  guard-held-moments
+  guard-pdf-after-hiding
+  guard-app-window-reuse
+  guard-webview-sign-in
+  guard-webview-page-failure
+  guard-webview-resend-form
+  guard-animation-main-frames
+  guard-extension-open-popup
+  guard-extension-side-panel
+  guard-webview-untrusted-cert
+  guard-webview-tabs
+  guard-app-routes-input
   guard-electron-menu-bar
+  guard-webview-will-navigate
+  guard-locked-keys-stay-on-the-page
+  guard-extension-menu
+  guard-extension-commands
+  guard-webview-partition
+  guard-webview-video-picture-in-picture
+  guard-shortcut-chords
   guard-electron-window-state
+  guard-webview-app-window
+  guard-windows-state
+  guard-asks-promise
+  guard-electron-window-open
+  guard-electron-node
   guard-electron-message-box
+  guard-notification-window
+  guard-extension-kept-key
+  guard-webview-media-devices
+  guard-webview-count-matches
+  guard-webview-click-match
+  guard-browser-protections
+  guard-shell-handover
+  guard-pdf-scaled-text
+  guard-pdf-zoom
+  guard-electron-socket
+  guard-electron-protocol
+  guard-electron-web-request
+  guard-agent-devtools-shell
+  guard-display-capture
+  guard-webview-chrome-sheets
+  guard-desktop-geometry
+  guard-portal-requests
+  guard-shell-pdf
+  guard-electron-preload
   guard-electron-schemes
   guard-electron-session
   guard-electron-views
-  guard-electron-web-request
+  guard-clean-exit
+  guard-desk-state
+  guard-shell-script-src
+  guard-app-only-in-shell
+  guard-domicile-fetch
+  guard-shell-workers
   guard-video-codecs
   guard-browser-brand
-  guard-engine-stays-quiet
-  guard-clean-exit
-  guard-exit-unload
 )
 
 # Run one at a time, after the rest. Latency measures time, so it runs alone.
