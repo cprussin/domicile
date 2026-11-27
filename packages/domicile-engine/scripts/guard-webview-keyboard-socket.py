@@ -34,7 +34,7 @@ import sys
 # page the keyboard has reached it: a chord claimed before that is matched only
 # once the keyboard arrives.
 ANSWER = [
-    {"type": "shell_config", "keys": {"Tab": 15}},
+    {"type": "shell_config", "keys": {"Tab": [15]}},
     {"type": "idle", "idle": True},
 ]
 

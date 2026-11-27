@@ -3,7 +3,7 @@
 the engine resolves a chord grabbed by name.
 
 It answers `hello` with a `welcome`, describes a keyboard with `l` on evdev
-38 and a window, `viewer`, holding a shortcuts inhibitor, then sends `idle`,
+38 and `XF86AudioPlay` on two keys, a keyboard's and a headset's, and a window, `viewer`, holding a shortcuts inhibitor, then sends `idle`,
 which tells the page both have reached it. It prints every line the browser
 writes.
 """
@@ -16,7 +16,13 @@ import sys
 import time
 
 SEQUENCE = [
-    (0.05, {"type": "shell_config", "keys": {"l": 38, "Return": 28}}),
+    (
+        0.05,
+        {
+            "type": "shell_config",
+            "keys": {"l": [38], "Return": [28], "XF86AudioPlay": [164, 207]},
+        },
+    ),
     (
         0,
         {

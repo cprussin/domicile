@@ -12,12 +12,12 @@ use domicile_config::{Config, Keymap};
 
 use crate::keymap::{Keyboard, UnknownLayout};
 
-/// Every keysym `keymap` can type, mapped to the key it is on.
+/// Every keysym `keymap` can type, mapped to every key it is on, lowest first.
 ///
 /// Compiles the keymap itself because this runs before the compositor state,
 /// which owns the seat's keymap, exists. The same keymap always compiles the
 /// same.
-pub fn keys(keymap: &Keymap) -> Result<BTreeMap<String, u32>, UnknownLayout> {
+pub fn keys(keymap: &Keymap) -> Result<BTreeMap<String, Vec<u32>>, UnknownLayout> {
     Keyboard::compiled(keymap).map(|keyboard| keyboard.keys())
 }
 
@@ -48,8 +48,8 @@ mod tests {
                 .keymaps()[0],
         )
         .expect("the layout compiles");
-        assert_eq!(keys.get("l"), Some(&KEY_P));
-        assert_eq!(keys.get("Escape"), Some(&KEY_ESC));
+        assert_eq!(keys.get("l"), Some(&vec![KEY_P]));
+        assert_eq!(keys.get("Escape"), Some(&vec![KEY_ESC]));
     }
 
     #[test]

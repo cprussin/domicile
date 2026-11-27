@@ -924,10 +924,11 @@ const appearanceSchema = z.looseObject({
   type: z.literal("appearance"),
 });
 
-// Maps each typeable keysym to its evdev key, for resolving shell shortcuts.
-// Sent after the handshake and when the layout changes.
+// Maps each typeable keysym to every evdev key it is on, lowest first, for
+// resolving shell shortcuts. Sent after the handshake and when the layout
+// changes.
 export const shellConfigSchema = z.looseObject({
-  keys: z.record(z.string(), z.number().int().nonnegative()),
+  keys: z.record(z.string(), z.array(z.number().int().nonnegative())),
   /** The config's `shell_options`, as JSON text. */
   options: z.string(),
   type: z.literal("shell_config"),

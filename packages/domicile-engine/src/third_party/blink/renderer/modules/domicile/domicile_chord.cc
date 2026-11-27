@@ -4,7 +4,6 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_chord.h"
 
 #include "third_party/blink/renderer/platform/wtf/text/ascii_ctype.h"
-#include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
 
@@ -85,15 +84,18 @@ std::optional<domicile::mojom::blink::TapModifier> ParseDomicileTap(
   return std::nullopt;
 }
 
-std::optional<DomicilePress> ResolveDomicileChord(
+Vector<DomicilePress> ResolveDomicileChord(
     const DomicileWrittenChord& chord,
-    const HashMap<String, uint32_t>& keys) {
-  const auto key = keys.find(chord.keysym);
-  if (key == keys.end()) {
-    return std::nullopt;
+    const HashMap<String, Vector<uint32_t>>& keys) {
+  Vector<DomicilePress> presses;
+  const auto found = keys.find(chord.keysym);
+  if (found != keys.end()) {
+    for (const uint32_t keycode : found->value) {
+      presses.push_back(DomicilePress{keycode, chord.alt, chord.ctrl,
+                                      chord.shift, chord.meta});
+    }
   }
-  return DomicilePress{key->value, chord.alt, chord.ctrl, chord.shift,
-                       chord.meta};
+  return presses;
 }
 
 }  // namespace blink

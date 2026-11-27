@@ -286,7 +286,7 @@ fn select(chrome: &mut domicile_test_chrome::Chrome, id: u32, keymap: KeymapChoi
 }
 
 /// The keysym-to-key map in the next shell config the chrome is told.
-fn keys(chrome: &mut domicile_test_chrome::Chrome) -> std::collections::BTreeMap<String, u32> {
+fn keys(chrome: &mut domicile_test_chrome::Chrome) -> std::collections::BTreeMap<String, Vec<u32>> {
     let told = chrome
         .wait_for(|message| matches!(message, HostMessage::ShellConfig { .. }))
         .expect("the shell config is told");

@@ -55,6 +55,7 @@ Each agent gets its own pointer, keyboard and clipboard, in native and browser w
 ### Fixes
 
 - A window that draws in shared memory no longer tears or shows its popups a frame apart from its content after the engine stalls for half a second. The desktop reused a copy of the window's frame that the engine was still drawing.
+- A keybinding fires from every key that types its keysym, not only the lowest one, so `XF86AudioPlay` also answers a headset's play button, such as AirPods'. [Keybindings](architecture/KEYBINDINGS.md)
 - A shell that connects just as the desktop's state changes gets that change. A notification, tray icon, portal dialog, theme or other setting that changed as the shell connected, such as the development-build warning, could be missing until it changed again.
 - The engine no longer loads Chrome's Gemini in Chrome and Contextual Tasks extensions, which started two background processes of about 30 MiB each in every browser profile whenever a page opened.
 - VSCodium's window loads on a fresh start instead of stopping at its splash: a file an Electron app's protocol handler fetches keeps its Content-Type. [Electron apps](architecture/ELECTRON-APPS.md)

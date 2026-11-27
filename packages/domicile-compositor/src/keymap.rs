@@ -66,23 +66,27 @@ impl Keyboard {
 }
 
 impl Keyboard {
-    /// Maps each keysym name this keyboard can type to its evdev key. The shell
-    /// resolves its keybindings against this.
+    /// Maps each keysym name this keyboard can type to every evdev key it is
+    /// on, lowest first. The shell resolves its keybindings against this, and a
+    /// binding fires from each of them: a headset's play button is not the
+    /// keyboard's.
     ///
-    /// Each keysym maps to the lowest key with it on any level of the first
-    /// layout. Lowest key, not lowest level, because xkb numbers the main block
-    /// first, and `us` also puts `parenleft` and `less` unshifted on keys most
-    /// boards lack. Modifiers come from the chord, not from the level.
-    pub fn keys(&self) -> BTreeMap<String, u32> {
-        let mut keys = BTreeMap::new();
+    /// Keys with the keysym on any level of the first layout count. Lowest
+    /// first, not lowest level, because xkb numbers the main block first, and
+    /// `us` also puts `parenleft` and `less` unshifted on keys most boards
+    /// lack. Modifiers come from the chord, not from the level.
+    pub fn keys(&self) -> BTreeMap<String, Vec<u32>> {
+        let mut keys: BTreeMap<String, Vec<u32>> = BTreeMap::new();
         let all = self.keymap.min_keycode().raw()..=self.keymap.max_keycode().raw();
         for key in all.map(xkb::Keycode::new) {
             for level in 0..self.keymap.num_levels_for_key(key, 0) {
                 for &keysym in self.keymap.key_get_syms_by_level(key, 0, level) {
                     // xkb keycodes are evdev codes plus 8. The chrome uses
                     // evdev, as `ChromeMessage::Key` does.
-                    keys.entry(xkb::keysym_get_name(keysym))
-                        .or_insert(key.raw() - 8);
+                    let on = keys.entry(xkb::keysym_get_name(keysym)).or_default();
+                    if on.last() != Some(&(key.raw() - 8)) {
+                        on.push(key.raw() - 8);
+                    }
                 }
             }
         }
@@ -91,11 +95,11 @@ impl Keyboard {
 }
 
 impl Keyboard {
-    /// Whether typing the keysym named `name` takes Shift on the key
+    /// Whether typing the keysym named `name` takes Shift on the lowest key
     /// [`Keyboard::keys`] maps it to. `None` when that key has it on neither
     /// of its first two levels, or no key has it.
     pub fn shifted(&self, name: &str) -> Option<bool> {
-        let key = xkb::Keycode::new(self.keys().get(name)? + 8);
+        let key = xkb::Keycode::new(self.keys().get(name)?[0] + 8);
         let keysym = xkb::keysym_from_name(name, xkb::KEYSYM_NO_FLAGS);
         (0..self.keymap.num_levels_for_key(key, 0).min(2))
             .find(|level| {
@@ -237,14 +241,16 @@ mod tests {
     const KEY_ENTER: u32 = 28;
     const KEY_L: u32 = 38;
     const KEY_COMMA: u32 = 51;
+    const KEY_PLAYPAUSE: u32 = 164;
+    const KEY_PLAY: u32 = 207;
 
-    /// The key for `keysym` on the keyboard `config` names.
+    /// The lowest key for `keysym` on the keyboard `config` names.
     fn key_for(config: &Keymap, keysym: &str) -> Option<u32> {
         Keyboard::compiled(config)
             .expect("the layout exists")
             .keys()
             .get(keysym)
-            .copied()
+            .map(|keys| keys[0])
     }
 
     #[test]
@@ -263,12 +269,29 @@ mod tests {
     }
 
     #[test]
-    fn the_lowest_key_wins_whatever_level_it_is_on() {
+    fn the_lowest_key_comes_first_whatever_level_it_is_on() {
         // `us` also has `parenleft` on a keypad key and `less` beside the left
         // Shift, both unshifted and both rare. The lowest key is in the main
         // block.
         assert_eq!(key_for(&Keymap::default(), "parenleft"), Some(KEY_9));
         assert_eq!(key_for(&Keymap::default(), "less"), Some(KEY_COMMA));
+    }
+
+    #[test]
+    fn a_keysym_on_several_keys_lists_every_one_lowest_first() {
+        // A headset's play button is `KEY_PLAY`, or `KEY_PLAYCD`, which
+        // Chromium reads as `KEY_PLAY`. A keyboard's is `KEY_PLAYPAUSE`.
+        let keys = Keyboard::compiled(&Keymap::default())
+            .expect("the layout exists")
+            .keys();
+        let play = keys.get("XF86AudioPlay").expect("us types XF86AudioPlay");
+        assert_eq!(play.first(), Some(&KEY_PLAYPAUSE));
+        assert!(play.contains(&KEY_PLAY), "{play:?} misses KEY_PLAY");
+        assert!(play.is_sorted(), "{play:?} is not lowest first");
+        assert!(
+            play.windows(2).all(|pair| pair[0] != pair[1]),
+            "{play:?} lists a key twice"
+        );
     }
 
     #[test]

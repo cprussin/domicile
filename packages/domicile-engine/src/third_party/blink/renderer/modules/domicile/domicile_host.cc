@@ -996,7 +996,7 @@ void DomicileHost::grabShortcut(ScriptState*,
   // A keyboard already heard can say now that the keysym is on no key. One
   // not heard yet says so when it arrives, as a warning: the page has long
   // since returned.
-  if (keys_ && !ResolveDomicileChord(*chord, *keys_)) {
+  if (keys_ && ResolveDomicileChord(*chord, *keys_).empty()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotFoundError,
         "chord \"" + written + "\": \"" + chord->keysym +
@@ -1013,8 +1013,8 @@ void DomicileHost::grabShortcut(ScriptState*,
       return;
     }
   }
-  chords_.push_back(GrabbedChord{written, *chord, std::nullopt, /*holds=*/1,
-                                 while_inhibited});
+  chords_.push_back(GrabbedChord{written, *chord, Vector<DomicilePress>(),
+                                 /*holds=*/1, while_inhibited});
   if (!key_listener_) {
     key_listener_ = MakeGarbageCollected<PageHeard>(BindRepeating(
         &DomicileHost::PageKeyDown, WrapWeakPersistent(this)));
@@ -1058,10 +1058,10 @@ void DomicileHost::ungrabShortcut(ScriptState*,
       if (--chords_[i].holds > 0) {
         return;
       }
-      const std::optional<DomicilePress> press = chords_[i].press;
+      const Vector<DomicilePress> presses = std::move(chords_[i].presses);
       chords_.EraseAt(i);
-      if (press) {
-        UngrabUnclaimed(*press);
+      for (const DomicilePress& press : presses) {
+        UngrabUnclaimed(press);
       }
       return;
     }
@@ -1123,32 +1123,35 @@ void DomicileHost::UngrabUnclaimed(const DomicilePress& press) {
   }
 }
 
-// A chord whose key moved is grabbed on its new key, and the old one is given
-// back once no chord is on it.
+// A chord is grabbed on every key its keysym is on: a headset's play button
+// is not the keyboard's. A key it moved onto is grabbed, and one it moved off
+// is given back once no chord is on it.
 void DomicileHost::ResolveChords() {
   if (!keys_ || !channel_.is_bound()) {
     return;
   }
   Vector<DomicilePress> moved_off;
   for (GrabbedChord& grabbed : chords_) {
-    const std::optional<DomicilePress> press =
-        ResolveDomicileChord(grabbed.chord, *keys_);
-    if (!press) {
-      if (window_) {
-        window_->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-            mojom::blink::ConsoleMessageSource::kJavaScript,
-            mojom::blink::ConsoleMessageLevel::kWarning,
-            "domicile: chord \"" + grabbed.written + "\": \"" +
-                grabbed.chord.keysym + "\" is on no key of this keyboard"));
+    Vector<DomicilePress> presses = ResolveDomicileChord(grabbed.chord, *keys_);
+    if (presses.empty() && window_) {
+      window_->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+          mojom::blink::ConsoleMessageSource::kJavaScript,
+          mojom::blink::ConsoleMessageLevel::kWarning,
+          "domicile: chord \"" + grabbed.written + "\": \"" +
+              grabbed.chord.keysym + "\" is on no key of this keyboard"));
+    }
+    for (const DomicilePress& press : presses) {
+      if (!grabbed.presses.Contains(press)) {
+        channel_->GrabShortcut(domicile::mojom::blink::Shortcut::New(
+            press.keycode, press.alt, press.ctrl, press.shift, press.meta));
       }
-    } else if (press != grabbed.press) {
-      channel_->GrabShortcut(domicile::mojom::blink::Shortcut::New(
-          press->keycode, press->alt, press->ctrl, press->shift, press->meta));
     }
-    if (grabbed.press && press != grabbed.press) {
-      moved_off.push_back(*grabbed.press);
+    for (const DomicilePress& press : grabbed.presses) {
+      if (!presses.Contains(press)) {
+        moved_off.push_back(press);
+      }
     }
-    grabbed.press = press;
+    grabbed.presses = std::move(presses);
   }
   for (const DomicilePress& press : moved_off) {
     UngrabUnclaimed(press);
@@ -1199,7 +1202,7 @@ void DomicileHost::RegrabTap(domicile::mojom::blink::TapModifier modifier) {
 
 bool DomicileHost::StaysWhileInhibited(const DomicilePress& press) const {
   for (const GrabbedChord& grabbed : chords_) {
-    if (grabbed.press == press) {
+    if (grabbed.presses.Contains(press)) {
       return grabbed.while_inhibited;
     }
   }
@@ -1208,7 +1211,7 @@ bool DomicileHost::StaysWhileInhibited(const DomicilePress& press) const {
 
 String DomicileHost::ChordFor(const DomicilePress& press) const {
   for (const GrabbedChord& grabbed : chords_) {
-    if (grabbed.press == press) {
+    if (grabbed.presses.Contains(press)) {
       return grabbed.written;
     }
   }
@@ -2457,16 +2460,26 @@ void DomicileHost::ShellConfig(const String& config) {
       DispatchEvent(
           *Event::Create(domicile_event_names::Shelloptionschanged()));
     }
-    // The keys, for the chords grabbed by name. A line without them leaves
-    // the last keyboard heard in place: the browser forwards only what
-    // parsed.
+    // The keys, for the chords grabbed by name: every key each keysym is
+    // on. A line without them leaves the last keyboard heard in place: the
+    // browser forwards only what parsed.
     if (JSONObject* keys = parsed->GetJSONObject("keys")) {
-      HashMap<String, uint32_t> read;
+      HashMap<String, Vector<uint32_t>> read;
       for (wtf_size_t at = 0; at < keys->size(); ++at) {
         const JSONObject::Entry entry = keys->at(at);
-        int keycode = 0;
-        if (entry.second->AsInteger(&keycode) && keycode > 0) {
-          read.Set(entry.first, static_cast<uint32_t>(keycode));
+        JSONArray* on = JSONArray::Cast(entry.second);
+        if (!on) {
+          continue;
+        }
+        Vector<uint32_t> keycodes;
+        for (wtf_size_t key = 0; key < on->size(); ++key) {
+          int keycode = 0;
+          if (on->at(key)->AsInteger(&keycode) && keycode > 0) {
+            keycodes.push_back(static_cast<uint32_t>(keycode));
+          }
+        }
+        if (!keycodes.empty()) {
+          read.Set(entry.first, std::move(keycodes));
         }
       }
       keys_ = std::move(read);

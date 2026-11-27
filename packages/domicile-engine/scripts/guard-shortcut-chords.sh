@@ -11,8 +11,9 @@
 # WHY THIS EXISTS. A shell used to resolve its own chords against the keymap
 # `shell_config` carried, and to answer a press on its own page apart from one
 # in a `<webview>`. The engine does both now. The stand-in describes a keyboard
-# with `l` on evdev 38; the page grabs a chord written wrong, one the keyboard
-# cannot type and Meta+Shift+l, and presses keys on itself. A press in a
+# with `l` on evdev 38 and XF86AudioPlay on two keys; the page grabs a chord
+# written wrong, one the keyboard cannot type, Meta+Shift+l and XF86AudioPlay,
+# and presses keys on itself. A press in a
 # `<webview>` is guard-webview-keyboard.sh's. See
 # docs/architecture/KEYBINDINGS.md.
 set -u
@@ -104,14 +105,14 @@ sleep 1
 # The closing quote is Chromium's and keeps each match on the message: see
 # guard-windows-state.sh.
 CHORDS=$(grep -oE '"GUARD chords [^"]*"' "$ENGINE_LOG" | head -1)
-WANTED='"GUARD chords bad=SyntaxError missing=NotFoundError page=taken,taken,free heard=Meta+Shift+l,Meta+Return released=Meta+Shift+l inhibited=free,taken ungrabbed=taken,free"'
+WANTED='"GUARD chords bad=SyntaxError missing=NotFoundError page=taken,taken,free heard=Meta+Shift+l,Meta+Return,XF86AudioPlay,XF86AudioPlay released=Meta+Shift+l,Meta+Return,XF86AudioPlay,XF86AudioPlay inhibited=free,taken ungrabbed=taken,free media=taken,taken"'
 
 if [ -z "$CHORDS" ]; then
   FAILURE="the page never said how its chords went, so the module did not run or threw"
 elif [ "$CHORDS" = "$WANTED" ]; then
   FAILURE=""
 else
-  FAILURE="the page's chords went $CHORDS where $WANTED was owed: a chord written wrong is a SyntaxError, one the keyboard cannot type a NotFoundError, a grabbed chord pressed on the page is taken from it (a repeat too) and fires once, letting go of one of its modifiers releases it once, a window holding a shortcuts inhibitor gets a grabbed chord while it has the keyboard, and a chord grabbed twice is the page's again only once both grabs are given back with ungrabShortcut"
+  FAILURE="the page's chords went $CHORDS where $WANTED was owed: a chord written wrong is a SyntaxError, one the keyboard cannot type a NotFoundError, a grabbed chord pressed on the page is taken from it (a repeat too) and fires once, letting go of one of its modifiers releases it once, a window holding a shortcuts inhibitor gets a grabbed chord while it has the keyboard, a chord grabbed twice is the page's again only once both grabs are given back with ungrabShortcut, a keysym on two keys fires from each, and a key let go without Meta releases the Meta+Return still held"
 fi
 
 echo "page: $CHORDS"
