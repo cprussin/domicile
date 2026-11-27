@@ -174,6 +174,11 @@ export const domicilePreset = definePreset({
         transitionDelay: "0s !important",
         transitionDuration: "{durations.fastest} !important",
       },
+    // `easeHeight`: a panel easing to a height its content fits hides its
+    // scrollbars on the way, as its parts scroll only while it is shorter.
+    "[data-easing-height], [data-easing-height] *": {
+      scrollbarWidth: "none",
+    },
     "html[data-reduced-motion]::view-transition-group(*), html[data-reduced-motion]::view-transition-old(*), html[data-reduced-motion]::view-transition-new(*)":
       {
         animationDuration: "{durations.fastest} !important",

@@ -2,8 +2,8 @@
 // Playwright, on a small screen. Fails a popover that runs off the screen,
 // covers the bar or stands taller than {@link SCREEN_SHARE} of the screen, whose last row can't be scrolled into view, that scrolls sideways, whose
 // buttons are too narrow for their labels, whose drawer's height jumps as it
-// opens or shuts, or that moves when put in another state and back. See the
-// package README.
+// opens or shuts, that moves when put in another state and back, or that shows
+// a scrollbar while growing to a height that fits. See the package README.
 //
 //   bun src/harness.ts [--chromium <path>] [<crowd>...]
 
@@ -81,9 +81,9 @@ const launched = async (
   executablePath: string | undefined,
 ): Promise<Browser> => {
   if (executablePath !== undefined) {
-    return chromium.launch({ executablePath });
+    return chromium.launch({ executablePath, ignoreDefaultArgs: SHOWN });
   } else if (await Bun.file(chromium.executablePath()).exists()) {
-    return chromium.launch();
+    return chromium.launch({ ignoreDefaultArgs: SHOWN });
   } else {
     said(
       "SKIP: no Chromium for Playwright; run `node_modules/.bin/playwright install --with-deps chromium` in packages/popover-harness, or set DOMICILE_POPOVER_CHROMIUM",
@@ -91,6 +91,9 @@ const launched = async (
     process.exit(77);
   }
 };
+
+/** Playwright's flag hiding scrollbars, left out so the harness sees them. */
+const SHOWN = ["--hide-scrollbars"];
 
 /** The story drawing `crowd`, alone in its frame. */
 const storyUrl = (storybook: URL, crowd: Crowd): string => {
@@ -131,6 +134,9 @@ const checked = async (
     ...(await lastRowProblems(page, panel, crowd.last)),
     ...(await sidewaysProblems(panel)),
     ...(await squeezedButtons(panel)),
+    ...(crowd.grow === undefined
+      ? []
+      : await growProblems(page, panel, crowd.grow)),
     // Last: it empties the panel.
     ...(crowd.shrink === undefined
       ? []
@@ -139,7 +145,7 @@ const checked = async (
   await page.close();
   if (problems.length === 0) {
     said(
-      `PASS: ${crowd.id}: fits ${percent(SCREEN_SHARE)} of a ${describe(SCREEN)} screen beside a taller one, and scrolls${crowd.drawer === undefined ? "" : `; its ${crowd.drawer} drawer grows and shrinks`}${crowd.toggle === undefined ? "" : "; it holds still when toggled"}${crowd.arrive === undefined ? "" : "; a row arriving moves the rows below smoothly"}${crowd.shrink === undefined ? "" : `; it shrinks when pressing ${crowd.shrink}`}`,
+      `PASS: ${crowd.id}: fits ${percent(SCREEN_SHARE)} of a ${describe(SCREEN)} screen beside a taller one, and scrolls${crowd.drawer === undefined ? "" : `; its ${crowd.drawer} drawer grows and shrinks`}${crowd.toggle === undefined ? "" : "; it holds still when toggled"}${crowd.arrive === undefined ? "" : "; a row arriving moves the rows below smoothly"}${crowd.shrink === undefined ? "" : `; it shrinks when pressing ${crowd.shrink}`}${crowd.grow === undefined ? "" : `; it grows without a scrollbar when pressing ${crowd.grow.join(", ")}`}`,
     );
     return true;
   } else {
@@ -469,6 +475,78 @@ const shrinkProblems = async (
       (problem) => `pressing ${name} scrolls the panel sideways: ${problem}`,
     ),
     ...heightProblems(name, first, last, steepest),
+  ];
+};
+
+/**
+ * Why `panel` shows a scrollbar as pressing `names`, in turn, grows it to a
+ * height that fits: no part of it may show one on any frame of the last
+ * press, when none shows once it has grown.
+ */
+const growProblems = async (
+  page: Page,
+  panel: Locator,
+  names: readonly string[],
+): Promise<string[]> => {
+  await pressed(page, names.slice(0, -1));
+  const name = names.at(-1) ?? "";
+  const { heights, rest, scrollbars } = await panel.evaluate(
+    async (root, { lengthMs, name }) => {
+      const button = [...root.querySelectorAll("button")].find(
+        (found) => found.getAttribute("aria-label") === name,
+      );
+      if (button === undefined) {
+        throw new Error(`popover-harness: no ${name} button in the panel`);
+      }
+      const frame = () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            resolve();
+          });
+        });
+      // Each part's scrollbar, by its width: an inline size its content box
+      // and borders leave unexplained.
+      const shown = () =>
+        [root, ...root.querySelectorAll("*")].flatMap((element) => {
+          const style = getComputedStyle(element);
+          const bar =
+            (element as HTMLElement).offsetWidth -
+            element.clientWidth -
+            Number.parseFloat(style.borderInlineStartWidth) -
+            Number.parseFloat(style.borderInlineEndWidth);
+          return bar > 0.5 ? [`<${element.tagName.toLowerCase()}>`] : [];
+        });
+      const heights: number[] = [root.getBoundingClientRect().height];
+      const scrollbars = new Set<string>();
+      button.click();
+      const start = performance.now();
+      while (performance.now() - start < lengthMs) {
+        await frame();
+        heights.push(root.getBoundingClientRect().height);
+        for (const part of shown()) {
+          scrollbars.add(part);
+        }
+      }
+      return { heights, rest: shown(), scrollbars: [...scrollbars] };
+    },
+    { lengthMs: SHRINK_MS, name },
+  );
+  await settled(page);
+  const first = heights[0] ?? 0;
+  const last = heights.at(-1) ?? 0;
+  return [
+    ...(last - first <= 1
+      ? [`pressing ${name} did not grow the panel from ${px(first)}`]
+      : []),
+    ...(rest.length === 0
+      ? []
+      : [
+          `pressing ${name} grows the panel past fitting: ${rest.join(", ")} scrolls`,
+        ]),
+    ...scrollbars.map(
+      (part) =>
+        `pressing ${name} shows a scrollbar on ${part} as the panel grows to a height that fits`,
+    ),
   ];
 };
 

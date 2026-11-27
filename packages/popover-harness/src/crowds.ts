@@ -32,6 +32,7 @@ export const CROWDS: readonly Crowd[] = [
   },
   {
     drawer: "Details",
+    grow: ["Back", "Bluetooth details"],
     id: "quick-settings",
     last: "Network 40",
     presses: ["Quick settings", "Wi-Fi details"],

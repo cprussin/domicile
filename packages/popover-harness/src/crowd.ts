@@ -26,6 +26,12 @@ export type Crowd = {
    * window's `crowd:arrive` event, must move down smoothly rather than jump.
    */
   arrive?: string | undefined;
+  /**
+   * Buttons pressed, in turn, in the open panel, the last growing it to a
+   * height that fits, such as a short page of details. The harness fails a
+   * scrollbar showing on any frame as it grows.
+   */
+  grow?: readonly string[] | undefined;
   /** Text in the panel's last row, which must scroll into view. */
   last: string;
   /**

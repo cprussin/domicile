@@ -17,7 +17,9 @@ Chromium through Playwright, and fails on any that runs off the screen.
   and back, such as paused, and fails when the panel or a heading in it moves.
   A crowd with a `shrink` button has it pressed, such as Clear all, and fails
   when the panel's height jumps rather than shrinking, or it scrolls sideways
-  as rows leave.
+  as rows leave. A crowd with `grow` buttons has them pressed, the
+  last growing the panel to a height that fits, such as a short page of
+  details, and fails when any part of it shows a scrollbar on the way.
 - **`viewport-units.test.ts`** fails any popover's content sized in `vh` or
   `vw`, which measure the whole desk, not the panel's screen.
 
@@ -25,8 +27,9 @@ Chromium through Playwright, and fails on any that runs off the screen.
 
 Write a scene in `src/scenes/` that draws a bar item under `Bar` with more
 rows than fit, and add it to `CROWDS` in `src/crowds.ts` with the buttons that
-open it, its last row's text, any `toggle` that must not move it and any
-`shrink` button that takes rows out.
+open it, its last row's text, any `toggle` that must not move it, any
+`shrink` button that takes rows out and any `grow` buttons that grow it to a
+height that fits.
 
 ## Running
 

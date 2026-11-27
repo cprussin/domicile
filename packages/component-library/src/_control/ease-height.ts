@@ -5,12 +5,19 @@ import { token } from "../../styled-system/tokens";
 /** Height properties whose transition in a popup's content moves its edge. */
 const HEIGHTS = new Set(["block-size", "height", "max-block-size"]);
 
+/** `overflow-y` values that scroll. */
+const SCROLLS = new Set(["auto", "scroll"]);
+
 /**
  * Eases `popup`'s height to its content's whenever that grows or shrinks, such
  * as when rows are cleared, rather than letting it jump: open on the smooth
  * spring, shut on the snappy one, as a `ListRow` drawer does. Content that
  * eases its own height, such as that drawer, already moves the edge smoothly,
  * so it is left to. A change while easing is eased to once it ends.
+ *
+ * Its scrollbars hide while it eases, as `data-easing-height`, unless its
+ * content overflows once eased: a part that fits at rest would otherwise
+ * scroll while the panel is shorter than it on the way.
  *
  * Returns the function that stops it.
  */
@@ -27,10 +34,15 @@ export const easeHeight = (popup: HTMLElement): (() => void) => {
         popup.closest("[data-reduced-motion]") === null &&
         !easesOwnHeight(popup)
       ) {
+        // Read before easing starts, which lays it out at `from`.
+        if (!overflows(popup)) {
+          popup.dataset.easingHeight = "";
+        }
         const animation = eased(popup, from, height);
         state.animation = animation;
         const done = () => {
           state.animation = undefined;
+          delete popup.dataset.easingHeight;
         };
         animation.finished.then(done, done);
       }
@@ -59,6 +71,14 @@ const eased = (popup: HTMLElement, from: number, to: number): Animation => {
     },
   );
 };
+
+/** Whether some part of `popup` scrolls what it holds, as laid out now. */
+const overflows = (popup: HTMLElement) =>
+  [popup, ...popup.querySelectorAll("*")].some(
+    (element) =>
+      element.scrollHeight > element.clientHeight &&
+      SCROLLS.has(getComputedStyle(element).overflowY),
+  );
 
 /** Whether something in `popup` is easing its own height. */
 const easesOwnHeight = (popup: HTMLElement) =>
