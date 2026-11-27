@@ -17,6 +17,14 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct UploadId(u64);
 
+#[cfg(test)]
+impl UploadId {
+    /// An id no [`Uploads`] handed out.
+    pub fn for_tests(id: u64) -> Self {
+        UploadId(id)
+    }
+}
+
 /// A buffer's size and DRM fourcc.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Shape {

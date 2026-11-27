@@ -58,9 +58,10 @@ every page and keep one state (one Bitwarden login).
   (`protection_settings.cc`). `block_ads_and_trackers` is `standard`,
   `strict` or `off`, unset `standard` or `strict` in a private profile: see
   [Ad and tracker blocking](AD-BLOCKING.md).
-- **`block_lists`**, **`block_rules`** and **`cookie_banner_lists`**: the
-  filter lists every profile that blocks ads uses, the user's own rules on
-  top, and the lists cookie banners are hidden with. See
+- **`block_lists`**, **`block_rules`**, **`cookie_banner_lists`** and
+  **`scriptlet_resources`**: the filter lists every profile that blocks ads
+  uses, the user's own rules on top, the lists cookie banners are hidden
+  with, and the scriptlets the lists run. See
   [Ad and tracker blocking](AD-BLOCKING.md#the-config).
 - **`order`**: the order the compositor sends the profiles in, and so the
   order the shell and Settings list them in: these ids, then the rest by id.

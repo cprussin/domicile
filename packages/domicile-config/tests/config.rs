@@ -1032,6 +1032,61 @@ fn a_cookie_banner_list_is_an_https_address_or_an_absolute_path() {
     }
 }
 
+#[test]
+fn scriptlets_are_ublock_origins_pinned_by_their_hash() {
+    let browser = Config::parse(&browser_config("")).unwrap().browser;
+    let resources = browser.scriptlet_resources.unwrap();
+    let (address, pin) = resources.split_once("#sha256=").unwrap();
+    assert!(
+        address.starts_with(
+            "https://github.com/cprussin/domicile-builds/releases/download/ublock-origin-scriptlets-"
+        ),
+        "{address}"
+    );
+    assert_eq!(pin.len(), 64);
+}
+
+#[test]
+fn the_config_names_its_own_scriptlets_or_none() {
+    for resources in [
+        "/etc/domicile/scriptlets.json",
+        "https://example.com/scriptlets.json",
+        "https://example.com/scriptlets.json#sha256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    ] {
+        let browser = Config::parse(&browser_config(&format!(
+            r#", "scriptlet_resources": {resources:?}"#
+        )))
+        .unwrap()
+        .browser;
+        assert_eq!(browser.scriptlet_resources.as_deref(), Some(resources));
+    }
+    let none = Config::parse(&browser_config(r#", "scriptlet_resources": null"#))
+        .unwrap()
+        .browser;
+    assert_eq!(none.scriptlet_resources, None);
+}
+
+#[test]
+fn scriptlets_are_an_https_address_with_a_whole_pin_or_an_absolute_path() {
+    for resources in [
+        "http://example.com/scriptlets.json",
+        "scriptlets.json",
+        "",
+        "https://example.com/scriptlets.json#sha256=abc",
+        "https://example.com/scriptlets.json#md5=0123456789abcdef0123456789abcdef",
+        "/etc/scriptlets.json#sha256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    ] {
+        let err = Config::parse(&browser_config(&format!(
+            r#", "scriptlet_resources": {resources:?}"#
+        )))
+        .unwrap_err();
+        assert!(
+            matches!(err, ConfigError::Validation(_)),
+            "{resources:?}: got {err:?}"
+        );
+    }
+}
+
 // ---- electron -------------------------------------------------------------
 
 #[test]

@@ -1242,6 +1242,11 @@ pub enum HostMessage {
         /// The filter lists cookie banners are hidden with, as
         /// `block_lists`.
         cookie_banner_lists: Vec<String>,
+        /// The scriptlets the lists' `##+js(...)` rules run, as
+        /// adblock-rust's resources file: an `https:` address, which may
+        /// end in `#sha256=` and the file's hash, or an absolute path.
+        /// `None` runs none.
+        scriptlet_resources: Option<String>,
     },
 
     /// The config's `spellcheck`: whether the browser checks spelling in

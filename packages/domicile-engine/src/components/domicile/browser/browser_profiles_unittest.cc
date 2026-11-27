@@ -36,7 +36,8 @@ constexpr char kProtections[] =
 constexpr char kBlocking[] =
     R"("block_lists":["https://easylist.to/easylist/easylist.txt"],)"
     R"("block_rules":["||ads.example^"],)"
-    R"("cookie_banner_lists":["/etc/domicile/cookies.txt"],)";
+    R"("cookie_banner_lists":["/etc/domicile/cookies.txt"],)"
+    R"("scriptlet_resources":"/etc/domicile/scriptlets.json",)";
 
 // A message with these sites and a Personal, Work and Private profile. Work
 // lets third-party cookies through and blocks no ads.
@@ -132,6 +133,29 @@ TEST(BrowserProfilesTest, AMessageReadsTheBlockListsAndRules) {
   EXPECT_EQ(read->block_rules, std::vector<std::string>{"||ads.example^"});
   EXPECT_EQ(read->cookie_banner_lists,
             std::vector<std::string>{"/etc/domicile/cookies.txt"});
+  EXPECT_EQ(read->scriptlet_resources, "/etc/domicile/scriptlets.json");
+}
+
+TEST(BrowserProfilesTest, AMessageMayRunNoScriptlets) {
+  std::string message = Message("{}");
+  const std::string resources =
+      R"("scriptlet_resources":"/etc/domicile/scriptlets.json")";
+  message.replace(message.find(resources), resources.size(),
+                  R"("scriptlet_resources":null)");
+
+  std::optional<BrowserProfiles> read = ParseBrowserProfiles(Dict(message));
+
+  ASSERT_TRUE(read.has_value());
+  EXPECT_EQ(read->scriptlet_resources, std::nullopt);
+}
+
+TEST(BrowserProfilesTest, AMessageWithoutScriptletResourcesIsRefused) {
+  std::string message = Message("{}");
+  const std::string resources =
+      R"("scriptlet_resources":"/etc/domicile/scriptlets.json",)";
+  message.erase(message.find(resources), resources.size());
+
+  EXPECT_FALSE(ParseBrowserProfiles(Dict(message)));
 }
 
 TEST(BrowserProfilesTest, AMessageWithoutCookieBannerListsIsRefused) {

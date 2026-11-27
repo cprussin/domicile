@@ -18,6 +18,11 @@ does; the engine has neither limit.
 - **`browser.cookie_banner_lists`**: the lists cookie banners are hidden
   with, the same way. Unset: the EasyList Cookie List and uBlock Origin's
   cookie notices (`DEFAULT_COOKIE_BANNER_LISTS`). `[]` hides none.
+- **`browser.scriptlet_resources`**: the scriptlets the lists' `##+js(...)`
+  rules run, as adblock-rust's resources file: an `https:` address, which
+  may end in `#sha256=` and the file's hash, or an absolute path. Unset:
+  uBlock Origin's, as CI builds them (`DEFAULT_SCRIPTLET_RESOURCES`, see
+  [Scriptlets](#scriptlets)). `null` runs none.
 - **A profile's `protections.block_ads_and_trackers`**: `standard`, `strict`
   or `off`. Unset: `standard`, or `strict` in a private profile.
 
@@ -177,7 +182,52 @@ lifts only the cookie list's rules, as one in EasyList lifts only EasyList's.
 
 Hiding a banner answers nothing, so a page that waits for consent before it
 sets its trackers' cookies never sets them. A page that locks its scrolling
-under the banner stays locked until scriptlets land (below).
+under the banner is unlocked by the cookie list's scriptlets, which run only
+where the protection is on.
+
+## Scriptlets
+
+Some ads and banners can't be hidden by a selector or blocked by an address:
+a page that refuses to show itself until its ad script ran, or locks its
+scrolling under a banner. The lists answer those with scriptlets,
+`example.com##+js(set-constant, adsLoaded, true)`: a small script of uBlock
+Origin's, called with the rule's arguments in the page's own world before
+any of its scripts.
+
+- **Where they come from.** uBlock Origin's scriptlets are GPL-3.0, so they
+  are not in the engine. `.github/scripts/scriptlet-resources.sh` clones
+  uBlock Origin at a pinned version and commit, and
+  `scriptlet-resources.ts` writes each function of `builtinScriptlets` as an
+  adblock-rust resource, leaving out those that need a trusted list
+  (`requiresTrust`, which Domicile has none of). Those uBlock Origin runs in
+  its isolated world, such as `remove-class` and `set-cookie`, run in the
+  page's world, as Brave runs them. CI (`.github/workflows/scriptlets.yml`) publishes it once per
+  version as a release in `cprussin/domicile-builds`, apart from Domicile's
+  code, and checks a pull request's pin against what it builds, or against
+  the release once it is there.
+- **How the engine gets them.** `browser.scriptlet_resources` names the
+  file, by default that release pinned by its sha256. `AdBlocking` fetches
+  and keeps it as it does a list, and drops a fetched or kept copy whose
+  hash is not the pin, so it runs nothing but what CI built.
+  `AdBlocker::ScriptletsIn` reads it and each engine, the lists', the
+  user's rules' and the cookie lists', gets the scriptlets
+  (`use_scriptlets`).
+- **How a page runs them.** `CosmeticsFor` asks each engine for the site's
+  `injected_script`, adblock-rust's calls of the scriptlets the site's rules
+  name, each wrapped in a `try`, with what they depend on. The Hide that
+  carries the page's cosmetic filters carries it too, and the renderer's
+  `CosmeticFilters` executes it in the main world at document start
+  (`RunScriptsAtDocumentStart`, patch 0297), before the page's first script
+  and before extensions' `document_start` scripts, in a function that
+  defines the `scriptletGlobals` uBlock Origin's scriptlets read, empty as
+  Brave's is. Blink runs no script while it tells a frame's observers the
+  document element exists, so the stylesheet goes in there and the
+  scriptlets just after.
+
+Only a site's own `##+js` rules run, as in uBlock Origin; `#@#+js(...)`
+lifts one on a site. A page whose mode is off, or a frame the browser sends
+no Hide to, runs none. `--vmodule=domicile_ad_blocking=1` logs the scriptlets
+a page runs with its cosmetic filters.
 
 ## Device details
 
@@ -211,8 +261,7 @@ Not yet: workers (their `hardwareConcurrency` and `OffscreenCanvas`), WebGL's
 readings, an `AudioContext` played rather than rendered offline, and fonts and
 the screen's size.
 
-Not yet: procedural filters (`:has-text()`, `:upward()`) and scriptlets
-(`##+js()`), which need a script in the page's world.
+Not yet: procedural filters (`:has-text()`, `:upward()`).
 
 ## Key decisions
 
@@ -236,6 +285,10 @@ Not yet: procedural filters (`:has-text()`, `:upward()`) and scriptlets
 - **The same hiding in Standard and Strict.** The lists' cosmetic rules
   rarely break a site the way blocking its own scripts does, so Strict only
   blocks more.
+- **uBlock Origin's scriptlets built in CI and fetched, not bundled.** They
+  are GPL-3.0 and the engine is MIT, and they change with the lists; a
+  release of their own, pinned by hash, keeps them apart and lets a fix
+  reach people without an engine release.
 - **Standard by default, strict in private**, as the mockup settled: strict's
   breakage is a site's own scripts, which a person in a private window is
   likelier to accept.
@@ -254,6 +307,7 @@ Not yet: procedural filters (`:has-text()`, `:upward()`) and scriptlets
 - [x] cosmetic filters: what the lists hide by a page's elements
 - [x] tracking taken out of links to other sites
 - [x] cookie banners hidden with their own lists, a protection of their own
-- [ ] scriptlets and procedural filters, `$removeparam`
+- [x] scriptlets, uBlock Origin's, built in CI and pinned by hash
+- [ ] procedural filters, `$removeparam`
 - [x] fingerprinting protection: canvas, audio and processor count farbled
 - [ ] farbling in workers, WebGL, fonts and the screen

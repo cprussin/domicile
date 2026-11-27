@@ -464,13 +464,14 @@ impl DomicileCompositor {
         }
     }
 
-    /// Wakes the loop when the soonest superseded hold expires, unless a wake
-    /// is armed.
+    /// Wakes the loop when the soonest superseded hold is due to be taken back
+    /// or reported, unless a wake is armed.
     ///
     /// Viz may keep a buffer and send nothing, so the engine's fd alone would
-    /// never apply the deadline. Taking it back lets a single-buffered client
-    /// draw; tearing once and logging it is better than freezing it. A wake
-    /// can come after its hold was released, and then only re-arms.
+    /// never apply the deadline. Taking a client's buffer back lets a
+    /// single-buffered client draw; tearing once and logging it is better
+    /// than freezing it. A wake can come after its hold was released, and
+    /// then only re-arms.
     pub fn arm_the_hold_deadline(&mut self) {
         if self.hold_deadline.is_some() {
             return;

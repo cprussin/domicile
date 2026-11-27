@@ -749,7 +749,7 @@ TEST_F(ControlChannelTest, TheBrowserProfilesReachTheBrowserWithThePage) {
       "\"hide_cookie_banners\":true}}],"
       "\"default_profile\":\"work\",\"default_private_profile\":\"work\","
       "\"block_lists\":[],\"block_rules\":[],\"cookie_banner_lists\":[],"
-      "\"sites\":{}}\n"
+      "\"scriptlet_resources\":null,\"sites\":{}}\n"
       "{\"type\":\"browser_profiles\",\"profiles\":[{\"id\":\"default\","
       "\"name\":\"Personal\",\"color\":\"#0d9488\",\"private\":false,"
       "\"protections\":{\"block_ads_and_trackers\":\"standard\","
@@ -774,7 +774,7 @@ TEST_F(ControlChannelTest, TheBrowserProfilesReachTheBrowserWithThePage) {
       "\"hide_cookie_banners\":true}}],"
       "\"default_profile\":\"default\",\"default_private_profile\":"
       "\"private\",\"block_lists\":[],\"block_rules\":[],"
-      "\"cookie_banner_lists\":[],"
+      "\"cookie_banner_lists\":[],\"scriptlet_resources\":null,"
       "\"sites\":{\"github.com/acme\":\"work\"}}\n");
 
   const auto [page, profiles] = heard.Take();

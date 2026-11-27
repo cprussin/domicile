@@ -51,6 +51,8 @@ source_set("unit_tests") {
   sources = [ "ad_blocker_unittest.cc" ]
   deps = [
     ":ad_blocking",
+    "//base",
+    "//testing/gmock",
     "//testing/gtest",
     "//url",
   ]

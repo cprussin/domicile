@@ -115,6 +115,15 @@ export type BrowserConfig = {
    */
   profiles?: Record<string, BrowserProfile>;
   /**
+   * The scriptlets the lists' `##+js(...)` rules run in a page, as
+   * adblock-rust's resources file: an `https:` address, which the engine
+   * fetches and keeps up to date, or an absolute path. An address may end
+   * in `#sha256=` and the file's SHA-256, in hex, so a file that is not
+   * that one is left out. uBlock Origin's scriptlets, as Domicile's CI
+   * builds and publishes them, unless set; `null` runs none.
+   */
+  scriptlet_resources?: string | null;
+  /**
    * The profile each site opens in, by site: a host, `*.host` for it and
    * its subdomains, or a host and path such as `github.com/acme` for the
    * addresses under it. The most specific match wins. A site is never in

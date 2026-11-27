@@ -8,6 +8,7 @@ use std::collections::HashSet;
 
 use adblock::lists::{FilterSet, ParseOptions, RuleTypes};
 use adblock::request::Request;
+use adblock::resources::{MimeType, Resource, ResourceType};
 use adblock::url_parser::{set_domain_resolver, ResolvesDomain};
 use adblock::Engine;
 
@@ -34,6 +35,20 @@ mod ffi {
         exceptions: Vec<String>,
         /// A `$generichide` exception matched: no generic rule applies.
         generichide: bool,
+        /// The scriptlets the page's `##+js(...)` rules run, with those they
+        /// need, as one script: empty when none do.
+        injected_script: String,
+    }
+
+    /// One of adblock-rust's resources, as its resources file holds it.
+    struct Scriptlet {
+        name: String,
+        aliases: Vec<String>,
+        /// Its MIME type, `application/javascript` or `fn/javascript`.
+        kind: String,
+        /// Its text, in base64.
+        content: String,
+        dependencies: Vec<String>,
     }
 
     unsafe extern "C++" {
@@ -57,6 +72,9 @@ mod ffi {
         /// The engine for every list added. Slow: a few hundred milliseconds
         /// for EasyList and EasyPrivacy.
         fn build(builder: Box<FilterSetBuilder>) -> Box<FilterEngine>;
+        /// Gives the engine `scriptlets` for its `##+js(...)` rules to run,
+        /// in place of any it had.
+        fn use_scriptlets(self: &mut FilterEngine, scriptlets: &Vec<Scriptlet>);
 
         /// Checks a request for `url`, at host `hostname`, of adblock-rust's
         /// type `request_type`, from the page at `page_hostname`.
@@ -122,6 +140,17 @@ fn build(builder: Box<FilterSetBuilder>) -> Box<FilterEngine> {
 }
 
 impl FilterEngine {
+    fn use_scriptlets(&mut self, scriptlets: &Vec<ffi::Scriptlet>) {
+        self.0.use_resources(scriptlets.iter().map(|scriptlet| Resource {
+            name: scriptlet.name.clone(),
+            aliases: scriptlet.aliases.clone(),
+            kind: ResourceType::Mime(MimeType::from(scriptlet.kind.as_str())),
+            content: scriptlet.content.clone(),
+            dependencies: scriptlet.dependencies.clone(),
+            permission: Default::default(),
+        }));
+    }
+
     fn check(
         &self,
         url: &str,
@@ -148,7 +177,12 @@ impl FilterEngine {
         // In order, so a page gets the same stylesheet each time.
         hide_selectors.sort_unstable();
         exceptions.sort_unstable();
-        ffi::Cosmetics { hide_selectors, exceptions, generichide: resources.generichide }
+        ffi::Cosmetics {
+            hide_selectors,
+            exceptions,
+            generichide: resources.generichide,
+            injected_script: resources.injected_script,
+        }
     }
 
     fn hidden_class_id_selectors(

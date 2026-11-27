@@ -508,6 +508,7 @@ const browserProfilesSchema = z.looseObject({
       }),
     }),
   ),
+  scriptlet_resources: z.string().nullable(),
   sites: z.record(z.string(), z.string()),
   type: z.literal("browser_profiles"),
 });
