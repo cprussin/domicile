@@ -32,10 +32,10 @@ namespace domicile {
 
 class AdBlocker;
 
-// The desk's ad and tracker blocking: the config's filter lists and cookie
-// banner lists, kept up to date, built into one AdBlocker, which every
-// website's requests are checked against in the mode of the profile its page
-// is in. See docs/architecture/AD-BLOCKING.md.
+// The desk's ad and tracker blocking: the config's filter lists, cookie
+// banner lists and scriptlets, kept up to date, built into one AdBlocker,
+// which every website's requests are checked against in the mode of the
+// profile its page is in. See docs/architecture/AD-BLOCKING.md.
 //
 // - An `https:` list is fetched through the system's network context, with
 //   no profile's cookies, and kept in the user data directory's
@@ -45,6 +45,9 @@ class AdBlocker;
 // - A path is read at each change of the config.
 // - A list that cannot be read, or is not UTF-8 text, is left out, and an
 //   error names it.
+// - The scriptlets are read and fetched as a list is. Pinned by an
+//   address's `#sha256=`, a file that is not that one is neither used nor
+//   kept, and the one kept is not fetched again.
 //
 // Requests that start while the config's lists are first read and built wait
 // for it, so a page restored at start is blocked like the rest. A rebuild
@@ -58,11 +61,13 @@ class AdBlocking {
   AdBlocking(const AdBlocking&) = delete;
   AdBlocking& operator=(const AdBlocking&) = delete;
 
-  // The config's `browser.block_lists`, `browser.block_rules` and
-  // `browser.cookie_banner_lists`. Reads and builds again when they changed.
+  // The config's `browser.block_lists`, `browser.block_rules`,
+  // `browser.cookie_banner_lists` and `browser.scriptlet_resources`. Reads
+  // and builds again when they changed.
   void Configure(std::vector<std::string> lists,
                  std::vector<std::string> rules,
-                 std::vector<std::string> cookie_banner_lists);
+                 std::vector<std::string> cookie_banner_lists,
+                 std::optional<std::string> scriptlet_resources);
 
   // Runs `ready` once the blocker for the config is up: at once, unless the
   // config's lists are being read and built for the first time.
@@ -89,9 +94,11 @@ class AdBlocking {
     std::map<std::string, base::Time> kept;
   };
 
-  // Every list the config names, the cookie banner lists too: each is read,
-  // fetched and kept alike.
+  // Every list the config names, the cookie banner lists and the scriptlet
+  // resources' address too: each is read, fetched and kept alike.
   std::vector<std::string> AllLists() const;
+  // Whether `list` is one the config names.
+  bool Names(const std::string& list) const;
   // The texts in hand of `lists`, in their order.
   std::vector<std::string> TextsOf(const std::vector<std::string>& lists) const;
 
@@ -109,6 +116,10 @@ class AdBlocking {
   std::vector<std::string> lists_;
   std::vector<std::string> rules_;
   std::vector<std::string> cookie_banner_lists_;
+  // `browser.scriptlet_resources` without its `#sha256=` pin, and the pin,
+  // lowercase, if it has one.
+  std::optional<std::string> scriptlets_;
+  std::optional<std::string> scriptlets_pin_;
   bool configured_ = false;
   // Bumped on each change of the config, so an answer for an older one is
   // dropped.

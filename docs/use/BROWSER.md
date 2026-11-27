@@ -259,7 +259,9 @@ file's absolute path, in the syntax uBlock Origin and Adblock Plus read.
 profile that blocks ads: a rule that starts with `@@` lets something load that
 a list blocks. `browser.cookie_banner_lists` replaces the lists cookie banners
 are hidden with, the EasyList Cookie List and uBlock Origin's cookie notices
-unless set.
+unless set. `browser.scriptlet_resources` names the scripts the lists run in
+a page to undo what hiding can't, such as a page that won't scroll under its
+cookie banner: uBlock Origin's unless set, and `null` runs none.
 
 <!-- /tabs -->
 

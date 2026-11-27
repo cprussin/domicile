@@ -206,9 +206,12 @@ std::optional<BrowserProfiles> ParseBrowserProfiles(
   const base::ListValue* block_rules = message.FindList("block_rules");
   const base::ListValue* cookie_banner_lists =
       message.FindList("cookie_banner_lists");
+  // A string, or null for none.
+  const base::Value* scriptlet_resources = message.Find("scriptlet_resources");
   if (list == nullptr || fallback == nullptr || fallback_private == nullptr ||
       sites == nullptr || block_lists == nullptr || block_rules == nullptr ||
-      cookie_banner_lists == nullptr) {
+      cookie_banner_lists == nullptr || scriptlet_resources == nullptr ||
+      !(scriptlet_resources->is_string() || scriptlet_resources->is_none())) {
     return std::nullopt;
   }
   BrowserProfiles profiles;
@@ -235,6 +238,9 @@ std::optional<BrowserProfiles> ParseBrowserProfiles(
   profiles.block_lists = *std::move(lists);
   profiles.block_rules = *std::move(rules);
   profiles.cookie_banner_lists = *std::move(cookie_lists);
+  if (scriptlet_resources->is_string()) {
+    profiles.scriptlet_resources = scriptlet_resources->GetString();
+  }
   profiles.default_profile = *fallback;
   profiles.default_private_profile = *fallback_private;
   if (!Consistent(profiles)) {

@@ -907,7 +907,19 @@ pub struct BrowserConfig {
     /// `block_lists`. The EasyList Cookie List and uBlock Origin's cookie
     /// notices unless set; `[]` hides none.
     pub cookie_banner_lists: Vec<String>,
+    /// The scriptlets the lists' `##+js(...)` rules run in a page, as
+    /// adblock-rust's resources file: an `https:` address, which the engine
+    /// fetches and keeps up to date, or an absolute path. An address may end
+    /// in `#sha256=` and the file's SHA-256, in hex, so a file that is not
+    /// that one is left out. uBlock Origin's scriptlets, as Domicile's CI
+    /// builds and publishes them, unless set; `null` runs none.
+    pub scriptlet_resources: Option<String>,
 }
+
+/// The file [`BrowserConfig::scriptlet_resources`] names unless set: uBlock
+/// Origin's scriptlets at the version `.github/scripts/scriptlet-resources.sh`
+/// builds and publishes, by its SHA-256, which that script checks.
+pub const DEFAULT_SCRIPTLET_RESOURCES: &str = "https://github.com/cprussin/domicile-builds/releases/download/ublock-origin-scriptlets-1.77.2/scriptlets.json#sha256=4835b89416f27eea136e571fe23d38f76be26e6bc36d11bd58cf89910035ad6e";
 
 /// The lists [`BrowserConfig::cookie_banner_lists`] names unless set.
 pub const DEFAULT_COOKIE_BANNER_LISTS: [&str; 2] = [
@@ -949,6 +961,7 @@ impl Default for BrowserConfig {
             block_lists: DEFAULT_BLOCK_LISTS.map(String::from).to_vec(),
             block_rules: Vec::new(),
             cookie_banner_lists: DEFAULT_COOKIE_BANNER_LISTS.map(String::from).to_vec(),
+            scriptlet_resources: Some(DEFAULT_SCRIPTLET_RESOURCES.to_string()),
         }
     }
 }
@@ -1059,6 +1072,21 @@ fn is_block_list(list: &str) -> bool {
         || std::path::Path::new(list).is_absolute()
 }
 
+/// Whether `resources` can name a scriptlet resources file: as a block list,
+/// with an address's `#sha256=` pin, if any, a whole SHA-256 in hex.
+fn is_scriptlet_resources(resources: &str) -> bool {
+    match resources.split_once('#') {
+        Some((address, pin)) => {
+            address.starts_with("https://")
+                && is_block_list(address)
+                && pin.strip_prefix("sha256=").is_some_and(|hash| {
+                    hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit())
+                })
+        }
+        None => is_block_list(resources),
+    }
+}
+
 /// Whether `id` can name a profile's directory.
 fn is_profile_id(id: &str) -> bool {
     !id.is_empty()
@@ -1136,6 +1164,16 @@ impl BrowserConfig {
             return invalid(format!(
                 "browser.cookie_banner_lists {list:?} is not an `https:` address or an absolute \
                  path"
+            ));
+        }
+        if let Some(resources) = self
+            .scriptlet_resources
+            .as_deref()
+            .filter(|resources| !is_scriptlet_resources(resources))
+        {
+            return invalid(format!(
+                "browser.scriptlet_resources {resources:?} is not an `https:` address, which \
+                 may end in `#sha256=` and 64 hex digits, or an absolute path"
             ));
         }
         match profile(&self.default_profile) {

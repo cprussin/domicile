@@ -330,6 +330,7 @@ fn the_browser_profiles_ride_with_the_handshake() {
             block_lists: vec!["https://easylist.to/easylist/easylist.txt".into()],
             block_rules: vec!["||ads.example^".into()],
             cookie_banner_lists: vec!["/etc/domicile/cookies.txt".into()],
+            scriptlet_resources: Some("/etc/domicile/scriptlets.json".into()),
         },
     );
 
@@ -347,6 +348,7 @@ fn the_browser_profiles_ride_with_the_handshake() {
             block_lists: vec!["https://easylist.to/easylist/easylist.txt".into()],
             block_rules: vec!["||ads.example^".into()],
             cookie_banner_lists: vec!["/etc/domicile/cookies.txt".into()],
+            scriptlet_resources: Some("/etc/domicile/scriptlets.json".into()),
         }),
         "{out:?}"
     );

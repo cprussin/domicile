@@ -12,11 +12,12 @@ module domicile.mojom;
 
 // The renderer's end, in every frame.
 interface CosmeticFilters {
-  // Hide `selectors` in the document about to commit, from its first style.
-  // With `host`, also ask it about the document's classes and ids as they
-  // appear: none when a `$generichide` exception keeps the generic rules
-  // off the page.
-  Hide(array<string> selectors,
+  // Hide `selectors` in the document about to commit, from its first style,
+  // and run `script`, its `##+js(...)` rules' scriptlets, in its main world
+  // before any of its own. With `host`, also ask it about the document's
+  // classes and ids as they appear: none when a `$generichide` exception
+  // keeps the generic rules off the page.
+  Hide(array<string> selectors, string script,
        pending_associated_remote<CosmeticFiltersHost>? host);
 };
 

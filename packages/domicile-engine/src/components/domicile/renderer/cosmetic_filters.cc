@@ -16,6 +16,7 @@
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_element.h"
 #include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_script_source.h"
 
 namespace domicile {
 
@@ -43,8 +44,23 @@ void CosmeticFilters::Attach(content::RenderFrame* frame) {
   new CosmeticFilters(frame);
 }
 
+// static
+bool CosmeticFilters::RunAtDocumentStart(content::RenderFrame* frame) {
+  CosmeticFilters* self = Get(frame);
+  if (!self || self->pending_script_.empty()) {
+    return true;
+  }
+  std::string script = std::move(self->pending_script_);
+  self->pending_script_.clear();
+  // A scriptlet is a page script, and may end the frame, this with it.
+  base::WeakPtr<CosmeticFilters> alive = self->weak_factory_.GetWeakPtr();
+  self->Run(script);
+  return !!alive;
+}
+
 CosmeticFilters::CosmeticFilters(content::RenderFrame* frame)
-    : content::RenderFrameObserver(frame) {
+    : content::RenderFrameObserver(frame),
+      content::RenderFrameObserverTracker<CosmeticFilters>(frame) {
   frame->GetAssociatedInterfaceRegistry()
       ->AddInterface<mojom::CosmeticFilters>(base::BindRepeating(
           &CosmeticFilters::Bind, weak_factory_.GetWeakPtr()));
@@ -61,9 +77,11 @@ void CosmeticFilters::Bind(
 
 void CosmeticFilters::Hide(
     const std::vector<std::string>& selectors,
+    const std::string& script,
     mojo::PendingAssociatedRemote<mojom::CosmeticFiltersHost> host) {
   Next next;
   next.selectors = selectors;
+  next.script = script;
   next.host = std::move(host);
   next_ = std::move(next);
 }
@@ -74,12 +92,14 @@ void CosmeticFilters::ReadyToCommitNavigation(
   // sent nothing for (a page in a mode that hides nothing) hides nothing.
   ++document_;
   pending_.clear();
+  pending_script_.clear();
   host_.reset();
   asked_.clear();
   again_.Stop();
   gathers_left_ = 0;
   if (next_.has_value()) {
     pending_ = std::move(next_->selectors);
+    pending_script_ = std::move(next_->script);
     if (next_->host.is_valid()) {
       host_.Bind(std::move(next_->host));
     }
@@ -88,6 +108,8 @@ void CosmeticFilters::ReadyToCommitNavigation(
 }
 
 void CosmeticFilters::DidCreateDocumentElement() {
+  // Blink runs no script here: the scriptlets wait for RunAtDocumentStart,
+  // which comes next.
   if (!pending_.empty()) {
     Insert(pending_);
     pending_.clear();
@@ -127,6 +149,17 @@ void CosmeticFilters::Insert(const std::vector<std::string>& selectors) {
   // A user stylesheet, which beats the page's own `!important` rules.
   render_frame()->GetWebFrame()->GetDocument().InsertStyleSheet(
       blink::WebString::FromUtf8(sheet), nullptr, blink::WebCssOrigin::kUser);
+}
+
+void CosmeticFilters::Run(const std::string& script) {
+  // In a function of its own, so what the scriptlets define stays theirs.
+  // A scriptlet that throws stops only itself: adblock-rust wraps each.
+  // uBlock Origin's read `scriptletGlobals`, which it defines around them
+  // with the options its logger sets; none here, as Brave runs them.
+  render_frame()->GetWebFrame()->ExecuteScript(
+      blink::WebScriptSource(blink::WebString::FromUtf8(
+          "(function() {\nconst scriptletGlobals = {};\n" + script +
+          "\n})();")));
 }
 
 void CosmeticFilters::Gather() {
