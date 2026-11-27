@@ -477,6 +477,7 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
                 commands: Vec::new(),
                 bindings: Vec::new(),
                 on_a_window: false,
+                completes: false,
             },
         }
     );
@@ -493,6 +494,7 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
                 }],
                 bindings: Vec::new(),
                 on_a_window: false,
+                completes: false,
             },
         }
     );
@@ -552,6 +554,7 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
                     action: "send-shell lock".into(),
                 }],
                 on_a_window: false,
+                completes: false,
             },
         }
     );
@@ -598,6 +601,7 @@ fn a_shell_command_can_act_on_a_window_it_names() {
                 commands: Vec::new(),
                 bindings: Vec::new(),
                 on_a_window: true,
+                completes: false,
             },
         }
     );
@@ -611,6 +615,47 @@ fn a_shell_command_can_act_on_a_window_it_names() {
             },
         }),
         r#"{"type":"system_event","id":12,"event":{"kind":"shell_command","command":["kill"],"sent":5,"window":"app-3"}}"#
+    );
+}
+
+/// A page that completes commands hears the words typed so far, and answers
+/// with the words that can come next as a JSON list.
+#[test]
+fn a_page_that_completes_commands_hears_the_words_typed() {
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":1,"request":{"call":"complete_shell","command":["workspace"]}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 1,
+            request: SystemRequest::CompleteShell {
+                command: vec!["workspace".into()],
+            },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":12,"request":{"call":"shell_commands","completes":true}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 12,
+            request: SystemRequest::ShellCommands {
+                commands: Vec::new(),
+                bindings: Vec::new(),
+                on_a_window: false,
+                completes: true,
+            },
+        }
+    );
+    assert_eq!(
+        host(&HostMessage::SystemEvent {
+            id: 12,
+            event: SystemEvent::CompleteShellCommand {
+                command: vec!["workspace".into()],
+                sent: 6,
+            },
+        }),
+        r#"{"type":"system_event","id":12,"event":{"kind":"complete_shell_command","command":["workspace"],"sent":6}}"#
     );
 }
 

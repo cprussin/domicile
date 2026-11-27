@@ -48,10 +48,10 @@ use domicile_launch::components::{
     perfetto as perfetto_path, version_file, Components,
 };
 use domicile_launch::compositor_socket::{
-    act_on_window, agents, config_overrides, configure_display, displays, emulate, forget_agent,
-    idle_time, inputs, launch, lock, monitors, open_link, power_displays, screen_record,
-    screenshot, send_shell, set_log_levels, shell_bindings, shell_commands, shoot_desk, status,
-    stop_agent, theme, windows,
+    act_on_window, agents, complete_shell, config_overrides, configure_display, displays, emulate,
+    forget_agent, idle_time, inputs, launch, lock, monitors, open_link, power_displays,
+    screen_record, screenshot, send_shell, set_log_levels, shell_bindings, shell_commands,
+    shoot_desk, status, stop_agent, theme, windows,
 };
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
@@ -1290,6 +1290,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         | Response::Windows { .. }
         | Response::Status { .. }
         | Response::ShellCommands { .. }
+        | Response::ShellValues { .. }
         | Response::ShellBindings { .. }
         | Response::Inputs { .. }
         | Response::IdleTime { .. }
@@ -1704,6 +1705,12 @@ fn completed(words: &[String], current: &str) -> Completion {
             },
             shell_commands: &|| match asked(Request::ShellCommands) {
                 Some(Response::ShellCommands { commands }) => commands,
+                _ => Vec::new(),
+            },
+            shell_values: &|typed| match asked(Request::CompleteShell {
+                command: typed.to_vec(),
+            }) {
+                Some(Response::ShellValues { values }) => values,
                 _ => Vec::new(),
             },
             programs: &programs_on_path,
@@ -2803,6 +2810,10 @@ fn answer_a_command(
                     status: &|| status(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string()),
                     shell_commands: &|| {
                         shell_commands(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
+                    },
+                    complete_shell: &|typed| {
+                        complete_shell(chrome, typed, Some(ANSWER_WITHIN))
+                            .map_err(|why| why.to_string())
                     },
                     shell_bindings: &|| {
                         shell_bindings(chrome, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())

@@ -274,6 +274,19 @@ export const parseCommand = (
   }
 };
 
+/**
+ * The words that can follow `args`, for `domicile completions`: the
+ * workspace names after `workspace` and `move container to workspace`.
+ */
+export const completeCommand = (args: readonly string[]): readonly string[] =>
+  TAKES_A_WORKSPACE.has(args.join(" ")) ? WORKSPACES : [];
+
+/** The commands whose next word is a workspace's name. */
+const TAKES_A_WORKSPACE: ReadonlySet<string> = new Set([
+  "workspace",
+  "move container to workspace",
+]);
+
 /** Parse `keymap next` or `keymap <name>`; a name may hold spaces. */
 const parseKeymap = (words: readonly string[]): Result<Action, string> => {
   const name = words.join(" ");

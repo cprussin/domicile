@@ -2747,7 +2747,9 @@ pub enum SystemRequest {
     /// `domicile list-shell-commands`, and `bindings` the keys and gestures
     /// that run them, for `domicile list-bindings`, while it listens.
     /// `on_a_window` says it runs commands on a window they name; a page
-    /// without it never hears one.
+    /// without it never hears one. `completes` says it also completes
+    /// commands: it hears a [`SystemEvent::CompleteShellCommand`] per
+    /// [`SystemRequest::CompleteShell`].
     ShellCommands {
         #[serde(default)]
         commands: Vec<ShellCommandHelp>,
@@ -2755,6 +2757,8 @@ pub enum SystemRequest {
         bindings: Vec<ShellBinding>,
         #[serde(default)]
         on_a_window: bool,
+        #[serde(default)]
+        completes: bool,
     },
     /// Send `command` to every page listening with
     /// [`SystemRequest::ShellCommands`], as a `send-shell` keybinding would
@@ -2773,6 +2777,12 @@ pub enum SystemRequest {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<u32>,
     },
+    /// Ask the pages that complete commands what can follow `command`, the
+    /// words typed so far, for values only the shell knows, such as its
+    /// workspace names. Answered with [`SystemReply::Sent`] whose `output` is
+    /// a JSON list of words, from the first page that answers.
+    /// `domicile completions --complete` sends this.
+    CompleteShell { command: Vec<String> },
     /// Open links of `schemes` for the desktop: report each one
     /// [`SystemRequest::OpenLink`] hands over. `domicile open`, and so
     /// `xdg-open` and applications' links, and the Email portal hand them
@@ -3144,6 +3154,11 @@ pub enum SystemEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         window: Option<String>,
     },
+    /// Words typed so far, sent with [`SystemRequest::CompleteShell`],
+    /// numbered `sent` for [`SystemRequest::AnswerShellCommand`]. The page
+    /// answers with the words that can follow as a JSON list in `output`,
+    /// and runs nothing.
+    CompleteShellCommand { command: Vec<String>, sent: u64 },
     /// A link handed over with [`SystemRequest::OpenLink`], for the page to
     /// open. `app_id` is the asking application's desktop file id, when
     /// known.
