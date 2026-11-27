@@ -6,17 +6,21 @@
 //!
 //! A hold that a newer submission replaced has a deadline, timed from the
 //! replacement. Past it a client's buffer is released anyway and the caller
-//! logs an error, so a missing release cannot stop a client forever. The newest hold
-//! for a surface has no deadline: viz keeps it because it is the frame on
-//! screen, for as long as the client is idle.
+//! logs an error, so a missing release cannot stop a client forever. The
+//! newest hold for a surface has no deadline: viz keeps it because it is the
+//! frame on screen, for as long as the client is idle.
 //!
 //! Only a client's own buffer is taken back, since only its client waits on
 //! it. The compositor's copy of an shm frame stays with viz past the deadline
 //! and is reported once instead: [`crate::uploads`] allocates another copy
 //! when every one is out, so taking it back frees nothing, and copying the
 //! next frame into it while viz still shows it tears the window. A viz
-//! stalled past the deadline does just that. A copy viz leaks stays out for
-//! good, one buffer for each leak, and is logged when it overstays.
+//! stalled past the deadline does just that.
+//!
+//! The cost is memory while viz is stuck. A stalled viz leaves out a copy for
+//! each frame the window commits meanwhile, which come back when viz catches
+//! up. A copy viz leaks stays out until its window closes or the engine is
+//! lost. Each one is logged when it overstays.
 //!
 //! A client that renders in place into a single dmabuf is not covered: its
 //! only hold is its newest, so it is never taken back. Shm frames are copied
@@ -27,8 +31,8 @@ use std::time::{Duration, Instant};
 
 use crate::engine::{BufferId, SurfaceId};
 
-/// How long viz may keep a superseded buffer before the compositor takes it
-/// back.
+/// How long viz may keep a superseded buffer before the compositor takes a
+/// client's back, or reports its own copy of an shm frame.
 ///
 /// Tens of frames at 60Hz, so a slow machine under load does not trip it.
 pub const HOLD_DEADLINE: Duration = Duration::from_millis(500);
