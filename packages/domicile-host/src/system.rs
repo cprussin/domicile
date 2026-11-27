@@ -52,7 +52,7 @@ use crate::keymaps::Keymaps;
 use crate::links::Links;
 use crate::lock_screen_readouts::is_a_readout;
 use crate::priority;
-use crate::shell_commands::{Heard, ShellCommands};
+use crate::shell_commands::{Heard, Sent, ShellCommands};
 use crate::unlock_refusals::UnlockRefusals;
 use crate::white_point::{white_point, WhitePoint, NEUTRAL, WARMEST};
 use crate::window_requests::WindowRequests;
@@ -379,6 +379,7 @@ pub fn reach(request: &SystemRequest) -> Reach {
         | SystemRequest::ScreenRecord
         | SystemRequest::PreviewWindow { .. }
         | SystemRequest::SendShell { .. }
+        | SystemRequest::CompleteShell { .. }
         | SystemRequest::OpenLink { .. }
         | SystemRequest::VirtualMonitor { .. }
         | SystemRequest::Agent { .. }
@@ -417,6 +418,7 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::IdleHolds
         | SystemRequest::UnlockRefusals
         | SystemRequest::SendShell { .. }
+        | SystemRequest::CompleteShell { .. }
         | SystemRequest::SetWindowStates { .. }
         | SystemRequest::SetColorTemperature { .. }
         | SystemRequest::SleepDisplays { .. }
@@ -474,6 +476,7 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         | SystemRequest::ShellCommands { .. }
         | SystemRequest::AnswerShellCommand { .. }
         | SystemRequest::SendShell { .. }
+        | SystemRequest::CompleteShell { .. }
         | SystemRequest::ClaimLinks { .. }
         | SystemRequest::OpenLink { .. }
         | SystemRequest::IdleAfter { .. }
@@ -1036,13 +1039,14 @@ impl System {
                 commands,
                 bindings,
                 on_a_window,
+                completes,
             } => self.starting(id, |system| {
                 let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
                 let listener = system.shell_commands.listen(
                     commands,
                     bindings,
-                    on_a_window,
-                    Arc::new(move |(command, sent, window): &Heard| {
+                    (on_a_window, completes),
+                    Arc::new(move |(command, sent, sending): &Heard| {
                         let Some(running) = running.upgrade() else {
                             return;
                         };
@@ -1050,12 +1054,18 @@ impl System {
                         // or after `Unwatch` ends it.
                         let running = running.lock().unwrap();
                         if matches!(running.get(&id), Some(Running::Listening(_))) {
+                            let (command, sent) = (command.clone(), *sent);
                             tell(HostMessage::SystemEvent {
                                 id,
-                                event: SystemEvent::ShellCommand {
-                                    command: command.clone(),
-                                    sent: *sent,
-                                    window: window.clone(),
+                                event: match sending {
+                                    Sent::Run(window) => SystemEvent::ShellCommand {
+                                        command,
+                                        sent,
+                                        window: window.clone(),
+                                    },
+                                    Sent::Complete => {
+                                        SystemEvent::CompleteShellCommand { command, sent }
+                                    }
                                 },
                             });
                         }
@@ -1137,34 +1147,9 @@ impl System {
             // The compositor checked `agent` holds `window`.
             SystemRequest::SendShell {
                 command, window, ..
-            } => {
-                let tell = self.tell.clone();
-                let sent = self.shell_commands.send(
-                    &command,
-                    window,
-                    Box::new(move |outcome| {
-                        let reply = match outcome {
-                            Ok(output) => SystemReply::Sent { output },
-                            Err(message) => failed(SystemError {
-                                kind: SystemErrorKind::Other,
-                                message,
-                            }),
-                        };
-                        tell(HostMessage::SystemReply { id, reply });
-                    }),
-                );
-                if !sent {
-                    (self.tell)(HostMessage::SystemReply {
-                        id,
-                        reply: failed(SystemError {
-                            kind: SystemErrorKind::Other,
-                            message: "no page of this desktop listens for commands; a shell \
-                                      hears them through bindKeys"
-                                .into(),
-                        }),
-                    });
-                }
-                Handled::Done
+            } => self.send_shell(id, &command, Sent::Run(window)),
+            SystemRequest::CompleteShell { command } => {
+                self.send_shell(id, &command, Sent::Complete)
             }
             SystemRequest::SetWindowStates { app_id, states } => {
                 let reply = match &self.set_window_states {
@@ -1442,6 +1427,38 @@ impl System {
             },
         };
         (self.tell)(HostMessage::SystemReply { id, reply });
+        Handled::Done
+    }
+
+    /// Send `command` to the pages listening for shell commands, to run or
+    /// to complete as `sending` says, and reply under `id` with how it ended.
+    fn send_shell(&self, id: u32, command: &[String], sending: Sent) -> Handled {
+        let tell = self.tell.clone();
+        let sent = self.shell_commands.send(
+            command,
+            sending,
+            Box::new(move |outcome| {
+                let reply = match outcome {
+                    Ok(output) => SystemReply::Sent { output },
+                    Err(message) => failed(SystemError {
+                        kind: SystemErrorKind::Other,
+                        message,
+                    }),
+                };
+                tell(HostMessage::SystemReply { id, reply });
+            }),
+        );
+        if !sent {
+            (self.tell)(HostMessage::SystemReply {
+                id,
+                reply: failed(SystemError {
+                    kind: SystemErrorKind::Other,
+                    message: "no page of this desktop listens for commands; a shell \
+                              hears them through bindKeys"
+                        .into(),
+                }),
+            });
+        }
         Handled::Done
     }
 

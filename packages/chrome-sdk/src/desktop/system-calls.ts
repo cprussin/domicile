@@ -132,13 +132,15 @@ export type System = {
    * `domicile list-shell-commands`, and `bindings` the keys that run them, for
    * `domicile list-bindings`. With `onAWindow`, the page hears commands on a
    * window too, such as an agent's on a window it holds, and must run each
-   * on its `window` rather than the user's focus. Allowed while the desktop
-   * is locked.
+   * on its `window` rather than the user's focus. With `completes`, it also
+   * hears words to complete for `domicile completions`, and answers each
+   * with the words that can follow. Allowed while the desktop is locked.
    */
   shellCommands: (
     commands: readonly ShellCommandHelp[],
     bindings: readonly ShellBinding[],
     onAWindow?: boolean,
+    completes?: boolean,
   ) => Promise<Result<Listening<ShellCommand>, SystemError>>;
   /**
    * Open links of `schemes`, such as `mailto`, for the desktop: hear each one
@@ -476,20 +478,19 @@ export const system = (host: SystemHost): System => {
         },
         (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
       ),
-    shellCommands: (commands, bindings, onAWindow = false) =>
+    shellCommands: (commands, bindings, onAWindow = false, completes = false) =>
       listening(
         calls,
         {
           bindings,
           call: "shell_commands",
           commands,
-          // Left out for a page that runs commands only on the user's focus.
+          // Left out for a page that runs commands only on the user's focus,
+          // and for one that completes none.
           ...(onAWindow ? { on_a_window: true } : {}),
+          ...(completes ? { completes: true } : {}),
         },
-        (event) =>
-          event.kind === "shell_command"
-            ? { sent: event.sent, window: event.window, words: event.command }
-            : unexpected(event),
+        readShellCommand,
       ),
     sleepDisplays: (display) =>
       oneShot(
@@ -1025,6 +1026,31 @@ const resizeEdgeOf = (
       return ResizeEdge.BottomLeft;
     case "bottom_right":
       return ResizeEdge.BottomRight;
+  }
+};
+
+/** A command `domicile send-shell` sent, or words to complete. */
+const readShellCommand = (event: Event): ShellCommand => {
+  switch (event.kind) {
+    case "shell_command": {
+      return {
+        complete: false,
+        sent: event.sent,
+        window: event.window,
+        words: event.command,
+      };
+    }
+    case "complete_shell_command": {
+      return {
+        complete: true,
+        sent: event.sent,
+        window: undefined,
+        words: event.command,
+      };
+    }
+    default: {
+      return unexpected(event);
+    }
   }
 };
 

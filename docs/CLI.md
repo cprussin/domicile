@@ -855,8 +855,10 @@ and names, browser profiles and programs on `PATH`.
 usage `list-shell-commands` prints, so any shell's commands complete:
 
 - `a|b` offers each word, `[...]` may be skipped.
-- `<window>` offers window ids and `<display>` display names. Any other
-  `<placeholder>` offers nothing.
+- `<window>` offers window ids and `<display>` display names.
+- Any other `<placeholder>` offers what the shell answers for the words
+  typed, such as manganese's workspace names after `workspace`. A shell
+  answers through `bindKeys`' `onComplete`.
 
 `domicile completions --complete=<word> [<word>...]` is what the scripts run:
 what can go in place of `<word>` after the words before it. The first line is

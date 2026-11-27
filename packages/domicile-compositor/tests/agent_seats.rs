@@ -329,6 +329,7 @@ fn an_agents_shell_command_acts_on_a_window_it_holds() {
                 commands: Vec::new(),
                 bindings: Vec::new(),
                 on_a_window: true,
+                completes: false,
             },
         })
         .expect("the chrome socket takes a request");
@@ -406,6 +407,7 @@ fn an_agents_shell_command_naming_no_window_acts_on_its_own_focus() {
                 commands: Vec::new(),
                 bindings: Vec::new(),
                 on_a_window: true,
+                completes: false,
             },
         })
         .expect("the chrome socket takes a request");
