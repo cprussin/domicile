@@ -23,8 +23,8 @@
 //! {"id":4,"type":"set_site_permission","site":{…}}
 //!   {"id":4,"type":"stored"}
 //! {"id":4,"type":"site_privacy"}
-//!   {"id":4,"type":"site_privacy","sites":[{"profile":"work","site":"nytimes.com","block_ads_and_trackers":"off"}]}
-//! {"id":4,"type":"set_site_privacy","change":{"profile":"work","site":"nytimes.com","block_ads_and_trackers":null}}
+//!   {"id":4,"type":"site_privacy","sites":[{"profile":"work","site":"nytimes.com","block_ads_and_trackers":"off","protections":{"hide_device_details":false}}]}
+//! {"id":4,"type":"set_site_privacy","change":{"profile":"work","site":"nytimes.com","block_ads_and_trackers":null,"protections":{"hide_device_details":null}}}
 //!   {"id":4,"type":"stored"}
 //! {"id":5,"type":"load_unpacked","directory":"~/src/my-extension"}
 //!   {"id":5,"type":"loaded_unpacked","extension":"…"}

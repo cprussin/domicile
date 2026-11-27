@@ -68,6 +68,16 @@
 #   off:     S                         the control: its two exports agree,
 #                                      so the others' differences are the
 #                                      farbling's
+#
+# The cookie banner list, a second file, names `/consent/*` and hides
+# `.cookie-notice`, and a fourth profile, `banners`, is on standard with
+# cookie banners shown. As each profile's consent script, then its banner:
+#
+#   default: B H                       the cookie banner list blocks and hides
+#   strict:  B H                       the same
+#   off:     L S                       the control: nothing is blocked
+#   banners: L S                       the protection off: the cookie banner
+#                                      list alone is left out
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -93,6 +103,7 @@ BROKER="${BROKER:-/tmp/domicile-ad-blocking-broker}"
 CONTROL="${CONTROL:-/tmp/domicile-ad-blocking-control}"
 PROFILE="${PROFILE:-/tmp/domicile-ad-blocking-profile}"
 LIST="${LIST:-/tmp/domicile-ad-blocking-list.txt}"
+COOKIES="${COOKIES:-/tmp/domicile-ad-blocking-cookies.txt}"
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-ad-blocking-engine.log}"
 SOCKET_LOG="${SOCKET_LOG:-/tmp/domicile-ad-blocking-socket.log}"
 HTTP_LOG="${HTTP_LOG:-/tmp/domicile-ad-blocking-http.log}"
@@ -108,7 +119,7 @@ cleanup() {
     kill "${STARTED[@]}" 2>/dev/null
   fi
   remove_profile "$PROFILE"
-  rm -f "$LIST"
+  rm -f "$LIST" "$COOKIES"
 }
 trap cleanup EXIT
 
@@ -137,6 +148,8 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
 printf '%s\n' '! a list for guard-ad-blocking.sh' '/ads/*' '@@/ads/allowed.js' \
   '127.0.0.1##.site-promo' '##.ad-banner' '##div[data-ad]' '##.late-ad' \
   '##.kept' '127.0.0.1#@#.kept' >"$LIST"
+printf '%s\n' '! a cookie banner list for guard-ad-blocking.sh' '/consent/*' \
+  '##.cookie-notice' >"$COOKIES"
 
 # 2. The pages, on their own server like every <webview> guard's: `crux`
 #    reaches no arbitrary host.
@@ -152,7 +165,7 @@ PORT="$(served_port "$HTTP_LOG")" || {
   exit 1
 }
 
-# 3. The compositor's end, with the profiles, the list and the rule.
+# 3. The compositor's end, with the profiles, the lists and the rule.
 PROFILES="{\"profiles\": [\
 {\"id\": \"default\", \"name\": \"Default\", \"color\": \"#0d9488\", \
 \"private\": false, \"extensions\": null}, \
@@ -162,10 +175,14 @@ PROFILES="{\"profiles\": [\
 {\"id\": \"off\", \"name\": \"Off\", \"color\": \"#d97706\", \
 \"private\": false, \"extensions\": null, \
 \"protections\": {\"block_ads_and_trackers\": \"off\"}}, \
+{\"id\": \"banners\", \"name\": \"Banners\", \"color\": \"#16a34a\", \
+\"private\": false, \"extensions\": null, \
+\"protections\": {\"hide_cookie_banners\": false}}, \
 {\"id\": \"private\", \"name\": \"Private\", \"color\": \"#a78bfa\", \
 \"private\": true, \"extensions\": null}], \
 \"default_profile\": \"default\", \"default_private_profile\": \"private\", \
-\"sites\": {}, \"block_lists\": [\"$LIST\"], \"block_rules\": [\"/mine/*\"]}"
+\"sites\": {}, \"block_lists\": [\"$LIST\"], \"block_rules\": [\"/mine/*\"], \
+\"cookie_banner_lists\": [\"$COOKIES\"]}"
 rm -f "$SOCKET_LOG"
 python3 "$SCRIPTS/guard-extension-installer-compositor.py" \
   --socket "$CONTROL" --browser-profiles "$PROFILES" >"$SOCKET_LOG" 2>&1 &
@@ -186,7 +203,7 @@ rm -f "$ENGINE_LOG"
   --ozone-platform=headless \
   --disable-gpu \
   --window-size="$WIDTH,$HEIGHT" \
-  --app="domicile://shell/?profiles=default,strict,off&page=$PAGE" \
+  --app="domicile://shell/?profiles=default,strict,off,banners&page=$PAGE" \
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-browser-protections.js" \
   --domicile-control-socket="$CONTROL" \
@@ -196,12 +213,12 @@ rm -f "$ENGINE_LOG"
   --domicile-broker-socket="$BROKER" >"$ENGINE_LOG" 2>&1 &
 STARTED+=($!)
 
-# 5. Wait for the three pages to say which scripts ran, a few seconds later
+# 5. Wait for the four pages to say which scripts ran, a few seconds later
 #    what they hide, and then what reached the page their link leads to and
 #    what it read of the device.
 TRIES=$((FOR_SECONDS * 4))
 for _ in $(seq 1 "$TRIES"); do
-  [ "$(grep -c "GUARD device as=" "$ENGINE_LOG" 2>/dev/null)" -ge 3 ] && break
+  [ "$(grep -c "GUARD device as=" "$ENGINE_LOG" 2>/dev/null)" -ge 4 ] && break
   sleep 0.25
 done
 
@@ -215,7 +232,9 @@ done
 # canvas's export, its pixels and the rendered audio Changed from off's or
 # are True to it, whether the processor count is Kept between 2 and off's (X
 # if not), and whether a second export is the Same (V if it varies); and for
-# off whether its two exports agree (S or V).
+# off whether its two exports agree (S or V); then, after a `|`, for default,
+# strict, off and banners, whether its consent script was Blocked or Loaded
+# and its cookie banner Hidden or Shown (? for no report).
 READ="$(awk '
   /GUARD shell-loaded/ { shell = 1 }
   match($0, /GUARD ads as=[a-z0-9-]+( [a-z]+=[a-z]+)+/) {
@@ -293,6 +312,12 @@ READ="$(awk '
         (cores >= 2 || cores == device["off" SUBSEP "cores"] + 0) ? "K" : "X") \
       (device[as SUBSEP "canvas"] == device[as SUBSEP "canvas_again"] ? "S" : "V")
   }
+  function banners(as,   script, banner) {
+    script = ran[as SUBSEP "consent"]
+    banner = hid[as SUBSEP "banner"]
+    return (script == "blocked" ? "B" : script == "loaded" ? "L" : "?") \
+      (banner == "hidden" ? "H" : banner == "shown" ? "S" : "?")
+  }
   function truthful() {
     if (!read["off"]) return "?"
     return device["off" SUBSEP "canvas"] == device["off" SUBSEP "canvas_again"] ? "S" : "V"
@@ -300,20 +325,23 @@ READ="$(awk '
   END {
     leaked = 0
     for (k in served) if (ran[k] == "blocked") leaked += served[k]
-    printf "%d %s %s %s %d %s %s %s %s %s %s %s %s %s\n", shell,
+    printf "%d %s %s %s %d %s %s %s %s %s %s %s %s %s | %s %s %s %s\n", shell,
       letters("default"), letters("strict"), letters("off"), leaked,
       shown("default"), shown("strict"), shown("off"), reached("default"),
       reached("strict"), reached("off"), farbled("default"), farbled("strict"),
-      truthful()
+      truthful(), banners("default"), banners("strict"), banners("off"),
+      banners("banners")
   }' "$ENGINE_LOG" "$HTTP_LOG" 2>/dev/null)"
 
-MEASURED="$READ"
+MEASURED="${READ% | *}"
+BANNERS="${READ##* | }"
 echo
-echo "measured: $MEASURED"
+echo "measured: $MEASURED | $BANNERS"
 echo "  (shell default strict off leaked, each profile as third first mine allowed ok;"
 echo "   then default strict off, each as site generic complex late kept plain;"
 echo "   then default strict off, each as keep fbclid utm_source;"
-echo "   then default strict as canvas image audio cores again, and off as again)"
+echo "   then default strict as canvas image audio cores again, and off as again;"
+echo "   then default strict off banners, each as consent banner)"
 
 # Which end to blame. `packages/domicile-engine/tests/test-ad-blocking-guard.sh`
 # runs the reading and this block directly.
@@ -321,14 +349,41 @@ FAILURE=""
 PASSED=""
 case "$MEASURED" in
 "1 BLBLL BBBLL LLLLL 0 HHHHSS HHHHSS SSSSSS KDK KDD KKK CCCKS CCCKS S")
-  PASSED="a profile's ad blocking reached its pages: default blocked another \
+  case "$BANNERS" in
+  "BH BH LS LS")
+    PASSED="a profile's ad blocking reached its pages: default blocked another \
 site's listed script and not the page's own, strict blocked both, the user's \
 rule blocked in either and the list's exception loaded; both hid what the \
 list names by its elements, a late one too, and not the site's exception; a \
 link to another site lost its click id, and in strict its campaign parameter; \
 the page it led to read its canvas, audio and processor count a little off, \
-the same way twice; off loaded, showed, kept and told everything, and no \
-blocked script reached the server"
+the same way twice; the cookie banner list blocked its script and hid its \
+banner in both, and not with cookie banners shown; off loaded, showed, kept \
+and told everything, and no blocked script reached the server"
+    ;;
+  *"?"*)
+    FAILURE="a page never said whether its consent script ran or its cookie \
+banner was hidden ($BANNERS): openBrowserWindow opened no window in the \
+banners profile, or the page's report lost its consent or banner field"
+    ;;
+  "L"* | "BS"* | ??" L"* | ??" BS"*)
+    FAILURE="THE COOKIE BANNER LIST DID NOT REACH A PAGE THAT HIDES COOKIE \
+BANNERS ($BANNERS): cookie_banner_lists never reached AdBlocking::Configure, \
+its engine is left out of ShouldBlock or CosmeticsFor and \
+HiddenClassIdSelectors, or the page's kHideCookieBanners is read off \
+(PagePrivacy::IsOn)"
+    ;;
+  ??" "??" "??" "[!L]? | ??" "??" "??" "?[!S])
+    FAILURE="the cookie banner list blocked or hid with cookie banners shown \
+($BANNERS): the protection is not passed (hide_cookie_banners in \
+ShouldBlock, CosmeticsFor or the CosmeticFiltersHost), or the profile's \
+protections never set kHideCookieBannersPref (ApplyProtections)"
+    ;;
+  *)
+    FAILURE="off, with blocking off, blocked or hid what only the cookie \
+banner list names ($BANNERS), so the mode does not turn it off as the rest"
+    ;;
+  esac
   ;;
 "0 "*)
   FAILURE="the shell page never ran, so nothing here was set up: the module \

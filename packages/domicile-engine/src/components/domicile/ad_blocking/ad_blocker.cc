@@ -99,19 +99,23 @@ std::string_view AdBlockRequestType(RequestDestination destination) {
 struct AdBlocker::Engines {
   rust::Box<ad_blocking::FilterEngine> lists;
   rust::Box<ad_blocking::FilterEngine> rules;
+  rust::Box<ad_blocking::FilterEngine> cookie_banners;
 };
 
 // static
 std::unique_ptr<AdBlocker> AdBlocker::Build(
     const std::vector<std::string>& lists,
-    const std::vector<std::string>& rules) {
+    const std::vector<std::string>& rules,
+    const std::vector<std::string>& cookie_banner_lists) {
   std::string own;
   for (const std::string& rule : rules) {
     own += rule;
     own += '\n';
   }
   return base::WrapUnique(new AdBlocker(std::make_unique<Engines>(
-      Engines{.lists = EngineOf(lists), .rules = EngineOf({own})})));
+      Engines{.lists = EngineOf(lists),
+              .rules = EngineOf({own}),
+              .cookie_banners = EngineOf(cookie_banner_lists)})));
 }
 
 AdBlocker::Cosmetics::Cosmetics() = default;
@@ -128,7 +132,8 @@ bool AdBlocker::ShouldBlock(const GURL& url,
                             const GURL& page,
                             std::string_view type,
                             std::string_view method,
-                            bool block_first_party) const {
+                            bool block_first_party,
+                            bool hide_cookie_banners) const {
   const bool third_party =
       !net::registry_controlled_domains::SameDomainOrHost(
           url, page,
@@ -139,7 +144,12 @@ bool AdBlocker::ShouldBlock(const GURL& url,
   };
   const ad_blocking::Verdict mine = check(*engines_->rules);
   const ad_blocking::Verdict listed = check(*engines_->lists);
-  if (mine.important || listed.important) {
+  // Each list engine's exceptions are its own: one names what its own rules
+  // went too far on.
+  const ad_blocking::Verdict cookies = hide_cookie_banners
+                                           ? check(*engines_->cookie_banners)
+                                           : ad_blocking::Verdict{};
+  if (mine.important || listed.important || cookies.important) {
     return true;
   }
   if (mine.exception) {
@@ -148,43 +158,53 @@ bool AdBlocker::ShouldBlock(const GURL& url,
   if (mine.matched) {
     return true;
   }
-  return listed.matched && !listed.exception &&
+  return ((listed.matched && !listed.exception) ||
+          (cookies.matched && !cookies.exception)) &&
          (third_party || block_first_party);
 }
 
-AdBlocker::Cosmetics AdBlocker::CosmeticsFor(const GURL& page) const {
+AdBlocker::Cosmetics AdBlocker::CosmeticsFor(const GURL& page,
+                                             bool hide_cookie_banners) const {
   Cosmetics cosmetics;
   if (!page.SchemeIsHTTPOrHTTPS()) {
     return cosmetics;
   }
-  const ad_blocking::Cosmetics mine = engines_->rules->cosmetics(
-      Str(page.spec()));
-  const ad_blocking::Cosmetics listed = engines_->lists->cosmetics(
-      Str(page.spec()));
   std::set<std::string> hide;
-  AddAll(hide, mine.hide_selectors);
-  AddAll(hide, listed.hide_selectors);
   std::set<std::string> exceptions;
-  AddAll(exceptions, mine.exceptions);
-  AddAll(exceptions, listed.exceptions);
+  const auto add = [&](const ad_blocking::FilterEngine& engine) {
+    const ad_blocking::Cosmetics found = engine.cosmetics(Str(page.spec()));
+    AddAll(hide, found.hide_selectors);
+    AddAll(exceptions, found.exceptions);
+    cosmetics.generichide = cosmetics.generichide || found.generichide;
+  };
+  add(*engines_->rules);
+  add(*engines_->lists);
+  if (hide_cookie_banners) {
+    add(*engines_->cookie_banners);
+  }
   cosmetics.hide_selectors.assign(hide.begin(), hide.end());
   cosmetics.exceptions.assign(exceptions.begin(), exceptions.end());
-  cosmetics.generichide = mine.generichide || listed.generichide;
   return cosmetics;
 }
 
 std::vector<std::string> AdBlocker::HiddenClassIdSelectors(
     const std::vector<std::string>& classes,
     const std::vector<std::string>& ids,
-    const std::vector<std::string>& exceptions) const {
+    const std::vector<std::string>& exceptions,
+    bool hide_cookie_banners) const {
   const rust::Vec<rust::String> rust_classes = RustStrings(classes);
   const rust::Vec<rust::String> rust_ids = RustStrings(ids);
   const rust::Vec<rust::String> rust_exceptions = RustStrings(exceptions);
   std::set<std::string> selectors;
-  AddAll(selectors, engines_->rules->hidden_class_id_selectors(
-                        rust_classes, rust_ids, rust_exceptions));
-  AddAll(selectors, engines_->lists->hidden_class_id_selectors(
-                        rust_classes, rust_ids, rust_exceptions));
+  const auto add = [&](const ad_blocking::FilterEngine& engine) {
+    AddAll(selectors, engine.hidden_class_id_selectors(rust_classes, rust_ids,
+                                                       rust_exceptions));
+  };
+  add(*engines_->rules);
+  add(*engines_->lists);
+  if (hide_cookie_banners) {
+    add(*engines_->cookie_banners);
+  }
   return std::vector<std::string>(selectors.begin(), selectors.end());
 }
 

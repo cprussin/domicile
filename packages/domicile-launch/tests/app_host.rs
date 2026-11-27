@@ -212,7 +212,7 @@ fn the_sites_ad_blocking_is_the_desktops() {
         json!({
             "id": 6,
             "type": "site_privacy",
-            "sites": [{"profile": "work", "site": "nytimes.com", "block_ads_and_trackers": "off"}],
+            "sites": [{"profile": "work", "site": "nytimes.com", "block_ads_and_trackers": "off", "protections": {}}],
         })
     );
 }
@@ -230,7 +230,8 @@ fn a_sites_ad_blocking_is_set_on_the_desktop() {
             change: SitePrivacyChange {
                 profile: "work".to_string(),
                 site: "nytimes.com".to_string(),
-                block_ads_and_trackers: None,
+                block_ads_and_trackers: Some(None),
+                protections: BTreeMap::new(),
             }
         })
     );
@@ -828,7 +829,8 @@ impl Fake {
                             sites: vec![SitePrivacy {
                                 profile: "work".to_string(),
                                 site: "nytimes.com".to_string(),
-                                block_ads_and_trackers: AdBlocking::Off,
+                                block_ads_and_trackers: Some(AdBlocking::Off),
+                                protections: BTreeMap::new(),
                             }],
                         },
                         Request::SetSitePrivacy { .. } => Response::Stored,

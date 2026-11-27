@@ -167,7 +167,8 @@ void BrowserProfileRegistry::Configure(Profile& shell,
   }
   InstallExtensions();
   Protect();
-  AdBlocking::Get().Configure(config_.block_lists, config_.block_rules);
+  AdBlocking::Get().Configure(config_.block_lists, config_.block_rules,
+                              config_.cookie_banner_lists);
   if (profiles_ != before) {
     for (Observer& observer : observers_) {
       observer.OnBrowserProfilesChanged();
@@ -471,6 +472,8 @@ void BrowserProfileRegistry::ProtectOne(Profile& profile,
           << (protections.remove_tracking_from_links ? "removed" : "kept")
           << ", device details "
           << (protections.hide_device_details ? "hidden" : "shown")
+          << ", cookie banners "
+          << (protections.hide_cookie_banners ? "hidden" : "shown")
           << (profile.HasPrimaryOTRProfile() ? ", and its off-the-record one"
                                              : "")
           << ".";

@@ -359,6 +359,12 @@ void AnswerCommand(std::string_view line,
        "\" and \"", kBrowserWindows, "\""})));
 }
 
+SitePrivacyChange::SitePrivacyChange() = default;
+SitePrivacyChange::SitePrivacyChange(const SitePrivacyChange&) = default;
+SitePrivacyChange& SitePrivacyChange::operator=(const SitePrivacyChange&) =
+    default;
+SitePrivacyChange::~SitePrivacyChange() = default;
+
 namespace {
 
 void AnswerLoadShell(const base::DictValue& request,
@@ -679,11 +685,20 @@ std::string SitePrivacyLine(
   }
   base::ListValue sites;
   for (const StoredSitePrivacy& site : *list) {
+    base::DictValue protections;
+    for (const auto& [protection, on] : site.settings.protections) {
+      protections.Set(PageProtectionName(protection), on);
+    }
+    base::Value mode;
+    if (site.settings.block_ads_and_trackers.has_value()) {
+      mode = base::Value(
+          AdBlockingModeName(*site.settings.block_ads_and_trackers));
+    }
     sites.Append(base::DictValue()
                      .Set("profile", site.profile)
                      .Set("site", site.site)
-                     .Set("block_ads_and_trackers",
-                          AdBlockingModeName(site.block_ads_and_trackers)));
+                     .Set("block_ads_and_trackers", std::move(mode))
+                     .Set("protections", std::move(protections)));
   }
   base::DictValue reply;
   reply.Set("type", kSitePrivacy);
@@ -696,27 +711,53 @@ std::string AnswerSetSitePrivacy(const base::DictValue& request,
   const std::string* profile = request.FindString("profile");
   const std::string* site = request.FindString("site");
   const base::Value* mode_value = request.Find("block_ads_and_trackers");
-  if (profile == nullptr || site == nullptr || mode_value == nullptr ||
-      !(mode_value->is_none() || mode_value->is_string())) {
+  const base::Value* protections_value = request.Find("protections");
+  if (profile == nullptr || site == nullptr ||
+      (mode_value == nullptr && protections_value == nullptr) ||
+      (mode_value != nullptr &&
+       !(mode_value->is_none() || mode_value->is_string())) ||
+      (protections_value != nullptr && !protections_value->is_dict())) {
     return RefusedCommand(
-        "set_site_privacy needs a \"profile\", a \"site\" and its "
-        "\"block_ads_and_trackers\", or null for the profile's");
+        "set_site_privacy needs a \"profile\", a \"site\", and its "
+        "\"block_ads_and_trackers\" or its \"protections\" by name, each "
+        "null for the profile's");
   }
   if (site->empty()) {
     return RefusedCommand("set_site_privacy needs a site, not \"\"");
   }
-  std::optional<AdBlockingMode> mode;
-  if (mode_value->is_string()) {
-    mode = AdBlockingModeNamed(mode_value->GetString());
-    if (!mode) {
-      return RefusedCommand(base::StrCat(
-          {"\"", mode_value->GetString(),
-           "\" is not a way to block ads and trackers; it is \"standard\", "
-           "\"strict\" or \"off\""}));
+  SitePrivacyChange change;
+  if (mode_value != nullptr) {
+    std::optional<AdBlockingMode> mode;
+    if (mode_value->is_string()) {
+      mode = AdBlockingModeNamed(mode_value->GetString());
+      if (!mode) {
+        return RefusedCommand(base::StrCat(
+            {"\"", mode_value->GetString(),
+             "\" is not a way to block ads and trackers; it is \"standard\", "
+             "\"strict\" or \"off\""}));
+      }
+    }
+    change.block_ads_and_trackers = mode;
+  }
+  if (protections_value != nullptr) {
+    for (const auto [name, on] : protections_value->GetDict()) {
+      const std::optional<PageProtection> protection =
+          PageProtectionNamed(name);
+      if (!protection) {
+        return RefusedCommand(base::StrCat(
+            {"\"", name, "\" is not a protection a site can change"}));
+      }
+      if (!(on.is_none() || on.is_bool())) {
+        return RefusedCommand(
+            base::StrCat({"protection \"", name, "\" is true, false or null"}));
+      }
+      change.protections.emplace_back(
+          *protection,
+          on.is_bool() ? std::optional<bool>(on.GetBool()) : std::nullopt);
     }
   }
   const base::expected<void, std::string> set =
-      set_site_privacy(*profile, *site, mode);
+      set_site_privacy(*profile, *site, change);
   if (!set.has_value()) {
     return RefusedCommand(set.error());
   }

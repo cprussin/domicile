@@ -41,6 +41,11 @@ const PROTECTIONS = [
     label: "Hide your device's details",
   },
   {
+    hint: "Hides the pop-ups that ask you to accept cookies, without accepting them.",
+    key: "hide_cookie_banners",
+    label: "Hide cookie banners",
+  },
+  {
     hint: "Stops the sites a page embeds from following you from site to site.",
     key: "block_third_party_cookies",
     label: "Block cookies from other sites",

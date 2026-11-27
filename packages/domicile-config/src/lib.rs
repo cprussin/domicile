@@ -902,7 +902,18 @@ pub struct BrowserConfig {
     /// Rules of your own, in the same syntax, which apply on top of
     /// `block_lists`.
     pub block_rules: Vec<String>,
+    /// The filter lists cookie banners and consent pop-ups are hidden with,
+    /// where [`Protections::hide_cookie_banners`] is on: each as in
+    /// `block_lists`. The EasyList Cookie List and uBlock Origin's cookie
+    /// notices unless set; `[]` hides none.
+    pub cookie_banner_lists: Vec<String>,
 }
+
+/// The lists [`BrowserConfig::cookie_banner_lists`] names unless set.
+pub const DEFAULT_COOKIE_BANNER_LISTS: [&str; 2] = [
+    "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt",
+    "https://ublockorigin.github.io/uAssets/filters/annoyances-cookies.txt",
+];
 
 /// The lists [`BrowserConfig::block_lists`] names unless set.
 pub const DEFAULT_BLOCK_LISTS: [&str; 3] = [
@@ -937,6 +948,7 @@ impl Default for BrowserConfig {
             sites: BTreeMap::new(),
             block_lists: DEFAULT_BLOCK_LISTS.map(String::from).to_vec(),
             block_rules: Vec::new(),
+            cookie_banner_lists: DEFAULT_COOKIE_BANNER_LISTS.map(String::from).to_vec(),
         }
     }
 }
@@ -987,6 +999,11 @@ pub struct Protections {
     /// as Brave's farbling does, so they can't recognize the device by
     /// them. Not on a site or in a window whose ad blocking is off.
     pub hide_device_details: bool,
+    /// Hides cookie banners and consent pop-ups, with
+    /// [`BrowserConfig::cookie_banner_lists`], and blocks the scripts that
+    /// show them. A page that asks first may then keep only the cookies it
+    /// needs, or none. Not on a site or in a window whose ad blocking is off.
+    pub hide_cookie_banners: bool,
     /// How the profile's pages block ads and trackers, with
     /// [`BrowserConfig::block_lists`]. Unset: `standard`, or `strict` in a
     /// private profile.
@@ -1028,6 +1045,7 @@ impl Default for Protections {
             hide_local_ip_address: true,
             remove_tracking_from_links: true,
             hide_device_details: true,
+            hide_cookie_banners: true,
             block_ads_and_trackers: None,
         }
     }
@@ -1108,6 +1126,16 @@ impl BrowserConfig {
         if let Some(list) = self.block_lists.iter().find(|list| !is_block_list(list)) {
             return invalid(format!(
                 "browser.block_lists {list:?} is not an `https:` address or an absolute path"
+            ));
+        }
+        if let Some(list) = self
+            .cookie_banner_lists
+            .iter()
+            .find(|list| !is_block_list(list))
+        {
+            return invalid(format!(
+                "browser.cookie_banner_lists {list:?} is not an `https:` address or an absolute \
+                 path"
             ));
         }
         match profile(&self.default_profile) {

@@ -75,13 +75,15 @@ std::optional<BrowserProfile> ParseProfile(const base::Value& value) {
       protections->FindBool("remove_tracking_from_links");
   const std::optional<bool> hide_device_details =
       protections->FindBool("hide_device_details");
+  const std::optional<bool> hide_cookie_banners =
+      protections->FindBool("hide_cookie_banners");
   const std::optional<AdBlockingMode> block_ads_and_trackers =
       AdBlockingModeOf(protections->FindString("block_ads_and_trackers"));
   if (!block_third_party_cookies.has_value() ||
       !global_privacy_control.has_value() ||
       !hide_local_ip_address.has_value() ||
       !remove_tracking_from_links.has_value() ||
-      !hide_device_details.has_value() ||
+      !hide_device_details.has_value() || !hide_cookie_banners.has_value() ||
       !block_ads_and_trackers.has_value()) {
     return std::nullopt;
   }
@@ -96,6 +98,7 @@ std::optional<BrowserProfile> ParseProfile(const base::Value& value) {
           .hide_local_ip_address = *hide_local_ip_address,
           .remove_tracking_from_links = *remove_tracking_from_links,
           .hide_device_details = *hide_device_details,
+          .hide_cookie_banners = *hide_cookie_banners,
           .block_ads_and_trackers = *block_ads_and_trackers,
       }};
   const base::Value* extensions = dict->Find("extensions");
@@ -201,8 +204,11 @@ std::optional<BrowserProfiles> ParseBrowserProfiles(
   const base::DictValue* sites = message.FindDict("sites");
   const base::ListValue* block_lists = message.FindList("block_lists");
   const base::ListValue* block_rules = message.FindList("block_rules");
+  const base::ListValue* cookie_banner_lists =
+      message.FindList("cookie_banner_lists");
   if (list == nullptr || fallback == nullptr || fallback_private == nullptr ||
-      sites == nullptr || block_lists == nullptr || block_rules == nullptr) {
+      sites == nullptr || block_lists == nullptr || block_rules == nullptr ||
+      cookie_banner_lists == nullptr) {
     return std::nullopt;
   }
   BrowserProfiles profiles;
@@ -221,11 +227,14 @@ std::optional<BrowserProfiles> ParseBrowserProfiles(
   }
   std::optional<std::vector<std::string>> lists = Strings(*block_lists);
   std::optional<std::vector<std::string>> rules = Strings(*block_rules);
-  if (!lists.has_value() || !rules.has_value()) {
+  std::optional<std::vector<std::string>> cookie_lists =
+      Strings(*cookie_banner_lists);
+  if (!lists.has_value() || !rules.has_value() || !cookie_lists.has_value()) {
     return std::nullopt;
   }
   profiles.block_lists = *std::move(lists);
   profiles.block_rules = *std::move(rules);
+  profiles.cookie_banner_lists = *std::move(cookie_lists);
   profiles.default_profile = *fallback;
   profiles.default_private_profile = *fallback_private;
   if (!Consistent(profiles)) {

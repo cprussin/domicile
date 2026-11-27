@@ -22,7 +22,7 @@ use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::shell_path::{Shell, ShellFiles};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
-use domicile_launch::site_privacy::{SitePrivacy, SitePrivacyChange};
+use domicile_launch::site_privacy::{SitePrivacy, SitePrivacyChange, SiteProtection};
 
 #[test]
 fn a_load_shell_names_the_version_it_is_written_in() {
@@ -177,7 +177,8 @@ fn a_sites_ad_blocking_is_set_by_profile_and_site() {
         set_site_privacy_line(&SitePrivacyChange {
             profile: "work".to_string(),
             site: "nytimes.com".to_string(),
-            block_ads_and_trackers: Some(AdBlocking::Strict),
+            block_ads_and_trackers: Some(Some(AdBlocking::Strict)),
+            protections: BTreeMap::new(),
         }),
         "{\"type\":\"set_site_privacy\",\"version\":1,\"profile\":\"work\",\"site\":\"nytimes.com\",\"block_ads_and_trackers\":\"strict\"}\n"
     );
@@ -185,29 +186,54 @@ fn a_sites_ad_blocking_is_set_by_profile_and_site() {
 
 #[test]
 fn a_sites_ad_blocking_goes_back_to_the_profiles_with_null() {
-    // The engine refuses a request without the field, so none is sent as
-    // `null`, not left out.
+    // Sent as `null`, which the engine tells from a field left out.
     assert_eq!(
         set_site_privacy_line(&SitePrivacyChange {
             profile: "work".to_string(),
             site: "nytimes.com".to_string(),
-            block_ads_and_trackers: None,
+            block_ads_and_trackers: Some(None),
+            protections: BTreeMap::new(),
         }),
         "{\"type\":\"set_site_privacy\",\"version\":1,\"profile\":\"work\",\"site\":\"nytimes.com\",\"block_ads_and_trackers\":null}\n"
     );
 }
 
 #[test]
+fn a_sites_protections_are_set_by_name_leaving_its_ad_blocking() {
+    assert_eq!(
+        set_site_privacy_line(&SitePrivacyChange {
+            profile: "work".to_string(),
+            site: "zoom.us".to_string(),
+            block_ads_and_trackers: None,
+            protections: BTreeMap::from([
+                (SiteProtection::HideDeviceDetails, Some(false)),
+                (SiteProtection::RemoveTrackingFromLinks, None),
+            ]),
+        }),
+        "{\"type\":\"set_site_privacy\",\"version\":1,\"profile\":\"work\",\"site\":\"zoom.us\",\"protections\":{\"hide_device_details\":false,\"remove_tracking_from_links\":null}}\n"
+    );
+}
+
+#[test]
 fn the_sites_ad_blocking_is_read_from_the_engines_answer() {
     assert_eq!(
-        reply("{\"type\":\"site_privacy\",\"sites\":[{\"profile\":\"work\",\"site\":\"nytimes.com\",\"block_ads_and_trackers\":\"off\"}]}")
+        reply("{\"type\":\"site_privacy\",\"sites\":[{\"profile\":\"work\",\"site\":\"nytimes.com\",\"block_ads_and_trackers\":\"off\",\"protections\":{}},{\"profile\":\"work\",\"site\":\"zoom.us\",\"block_ads_and_trackers\":null,\"protections\":{\"hide_device_details\":false}}]}")
             .expect("a reply"),
         Reply::SitePrivacy {
-            sites: vec![SitePrivacy {
-                profile: "work".to_string(),
-                site: "nytimes.com".to_string(),
-                block_ads_and_trackers: AdBlocking::Off,
-            }]
+            sites: vec![
+                SitePrivacy {
+                    profile: "work".to_string(),
+                    site: "nytimes.com".to_string(),
+                    block_ads_and_trackers: Some(AdBlocking::Off),
+                    protections: BTreeMap::new(),
+                },
+                SitePrivacy {
+                    profile: "work".to_string(),
+                    site: "zoom.us".to_string(),
+                    block_ads_and_trackers: None,
+                    protections: BTreeMap::from([(SiteProtection::HideDeviceDetails, false)]),
+                },
+            ]
         }
     );
 }

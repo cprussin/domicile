@@ -29,12 +29,14 @@ constexpr char kProtections[] =
     R"("protections":{"block_ads_and_trackers":"standard",)"
     R"("block_third_party_cookies":true,)"
     R"("global_privacy_control":true,"hide_local_ip_address":true,)"
-    R"("remove_tracking_from_links":true,"hide_device_details":true})";
+    R"("remove_tracking_from_links":true,"hide_device_details":true,)"
+    R"("hide_cookie_banners":true})";
 
 // The block lists and rules every message carries.
 constexpr char kBlocking[] =
     R"("block_lists":["https://easylist.to/easylist/easylist.txt"],)"
-    R"("block_rules":["||ads.example^"],)";
+    R"("block_rules":["||ads.example^"],)"
+    R"("cookie_banner_lists":["/etc/domicile/cookies.txt"],)";
 
 // A message with these sites and a Personal, Work and Private profile. Work
 // lets third-party cookies through and blocks no ads.
@@ -48,7 +50,8 @@ std::string Message(const std::string& sites) {
          R"("protections":{"block_ads_and_trackers":"off",)"
          R"("block_third_party_cookies":false,)"
          R"("global_privacy_control":true,"hide_local_ip_address":true,)"
-         R"("remove_tracking_from_links":true,"hide_device_details":true}},)"
+         R"("remove_tracking_from_links":true,"hide_device_details":true,)"
+         R"("hide_cookie_banners":false}},)"
          R"({"id":"incognito","name":"Private","color":"#a78bfa",)"
          R"("private":true,"extensions":null,)" +
          kProtections +
@@ -112,10 +115,11 @@ TEST(BrowserProfilesTest, EachProfileReadsItsOwnProtections) {
 
   ASSERT_TRUE(read.has_value());
   EXPECT_EQ(read->Find("personal")->protections, BrowserProtections{});
-  EXPECT_EQ(read->Find("work")->protections,
-            (BrowserProtections{
-                .block_third_party_cookies = false,
-                .block_ads_and_trackers = AdBlockingMode::kOff}));
+  EXPECT_EQ(
+      read->Find("work")->protections,
+      (BrowserProtections{.block_third_party_cookies = false,
+                          .hide_cookie_banners = false,
+                          .block_ads_and_trackers = AdBlockingMode::kOff}));
 }
 
 TEST(BrowserProfilesTest, AMessageReadsTheBlockListsAndRules) {
@@ -126,6 +130,17 @@ TEST(BrowserProfilesTest, AMessageReadsTheBlockListsAndRules) {
   EXPECT_EQ(read->block_lists, std::vector<std::string>{
                                    "https://easylist.to/easylist/easylist.txt"});
   EXPECT_EQ(read->block_rules, std::vector<std::string>{"||ads.example^"});
+  EXPECT_EQ(read->cookie_banner_lists,
+            std::vector<std::string>{"/etc/domicile/cookies.txt"});
+}
+
+TEST(BrowserProfilesTest, AMessageWithoutCookieBannerListsIsRefused) {
+  std::string message = Message("{}");
+  const std::string lists =
+      R"("cookie_banner_lists":["/etc/domicile/cookies.txt"],)";
+  message.erase(message.find(lists), lists.size());
+
+  EXPECT_FALSE(ParseBrowserProfiles(Dict(message)));
 }
 
 TEST(BrowserProfilesTest, AnAdBlockingModeTheEngineDoesNotKnowIsRefused) {
@@ -140,7 +155,7 @@ TEST(BrowserProfilesTest, AnAdBlockingModeTheEngineDoesNotKnowIsRefused) {
 TEST(BrowserProfilesTest, AProfileMissingAProtectionIsRefused) {
   // Personal's protections, the first in the message, lose their last.
   std::string message = Message("{}");
-  const std::string last = R"(,"hide_device_details":true})";
+  const std::string last = R"(,"hide_cookie_banners":true})";
   message.replace(message.find(last), last.size(), "}");
 
   EXPECT_FALSE(ParseBrowserProfiles(Dict(message)));

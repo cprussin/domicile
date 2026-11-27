@@ -315,6 +315,7 @@ fn the_browser_profiles_ride_with_the_handshake() {
             hide_local_ip_address: true,
             remove_tracking_from_links: false,
             hide_device_details: true,
+            hide_cookie_banners: false,
             block_ads_and_trackers: AdBlocking::Strict,
         },
     }];
@@ -325,8 +326,11 @@ fn the_browser_profiles_ride_with_the_handshake() {
         "work".into(),
         "private".into(),
         sites.clone(),
-        vec!["https://easylist.to/easylist/easylist.txt".into()],
-        vec!["||ads.example^".into()],
+        domicile_host::BrowserFilters {
+            block_lists: vec!["https://easylist.to/easylist/easylist.txt".into()],
+            block_rules: vec!["||ads.example^".into()],
+            cookie_banner_lists: vec!["/etc/domicile/cookies.txt".into()],
+        },
     );
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
@@ -342,6 +346,7 @@ fn the_browser_profiles_ride_with_the_handshake() {
             sites,
             block_lists: vec!["https://easylist.to/easylist/easylist.txt".into()],
             block_rules: vec!["||ads.example^".into()],
+            cookie_banner_lists: vec!["/etc/domicile/cookies.txt".into()],
         }),
         "{out:?}"
     );

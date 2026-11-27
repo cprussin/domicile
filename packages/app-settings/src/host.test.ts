@@ -234,9 +234,16 @@ describe(spawnedHost, () => {
           profile: "work",
           site: "nytimes.com",
         },
+        {
+          block_ads_and_trackers: null,
+          profile: "work",
+          protections: { hide_device_details: false },
+          site: "zoom.us",
+        },
       ] as const;
       processes[0]?.answer({ id: 1, sites, type: "site_privacy" });
-      expect(await asked).toEqual([...sites]);
+      // An engine before protections names none: none of its own.
+      expect(await asked).toEqual([{ ...sites[0], protections: {} }, sites[1]]);
 
       const change = {
         block_ads_and_trackers: null,

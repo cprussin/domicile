@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -907,6 +908,15 @@ std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
       content::WebContents::Create(params);
 
   guest_contents_ = contents.get();
+  // Chrome's zoom modes, for chrome.tabs.setZoomSettings. The PDF viewer
+  // zooms its own page in manual mode. Before SetDelegate: from then on
+  // NavigationStateChanged reports the zoom, and a page can change state
+  // before `created` returns: a DevTools client auto-attached to new pages
+  // attaches in it, and attaching to a page on its initial empty document
+  // calls DidAccessInitialMainDocument, a URL change.
+  zoom::ZoomController::CreateForWebContents(guest_contents_);
+  zoom_observation_.Observe(
+      zoom::ZoomController::FromWebContents(guest_contents_));
   contents->SetUserData(
       kGuestUserDataKey,
       std::make_unique<GuestLink>(weak_factory_.GetWeakPtr()));
@@ -922,12 +932,6 @@ std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
   settings_observation_.Observe(
       permissions::PermissionsClient::Get()->GetSettingsMap(context));
   download_manager_observation_.Observe(context->GetDownloadManager());
-
-  // Chrome's zoom modes, for chrome.tabs.setZoomSettings. The PDF viewer
-  // zooms its own page in manual mode.
-  zoom::ZoomController::CreateForWebContents(guest_contents_);
-  zoom_observation_.Observe(
-      zoom::ZoomController::FromWebContents(guest_contents_));
 
   // The shield's: the page's ad blocking and its count.
   PagePrivacy::CreateForWebContents(guest_contents_);
@@ -2382,6 +2386,36 @@ mojom::WebViewAdBlocking WireModeOf(AdBlockingMode mode) {
   }
 }
 
+PageProtection ProtectionOf(mojom::WebViewProtection protection) {
+  switch (protection) {
+    case mojom::WebViewProtection::kHideDeviceDetails:
+      return PageProtection::kHideDeviceDetails;
+    case mojom::WebViewProtection::kRemoveTrackingFromLinks:
+      return PageProtection::kRemoveTrackingFromLinks;
+    case mojom::WebViewProtection::kHideCookieBanners:
+      return PageProtection::kHideCookieBanners;
+  }
+}
+
+mojom::WebViewProtection WireProtectionOf(PageProtection protection) {
+  switch (protection) {
+    case PageProtection::kHideDeviceDetails:
+      return mojom::WebViewProtection::kHideDeviceDetails;
+    case PageProtection::kRemoveTrackingFromLinks:
+      return mojom::WebViewProtection::kRemoveTrackingFromLinks;
+    case PageProtection::kHideCookieBanners:
+      return mojom::WebViewProtection::kHideCookieBanners;
+  }
+}
+
+// On, off or the site's or profile's, in a log line.
+std::string_view OnOffName(std::optional<bool> on, std::string_view otherwise) {
+  if (!on.has_value()) {
+    return otherwise;
+  }
+  return *on ? "on" : "off";
+}
+
 mojom::WebViewAdBlockingSetFor WireSetForOf(AdBlockingSetFor set_for) {
   switch (set_for) {
     case AdBlockingSetFor::kProfile:
@@ -2421,6 +2455,34 @@ void WebViewGuest::SetAdBlockingForWindow(
           << (mode.has_value() ? AdBlockingModeName(ModeOf(*mode))
                                : "its site's");
   PagePrivacy::FromWebContents(guest_contents_)->SetForWindow(ModeOf(mode));
+}
+
+void WebViewGuest::SetProtectionForSite(mojom::WebViewProtection protection,
+                                        std::optional<bool> on) {
+  CHECK(guest_contents_);
+  const std::string site =
+      PagePrivacy::FromWebContents(guest_contents_)->site();
+  // The shell sends what it last saw, and the page may have navigated since.
+  if (site.empty()) {
+    LOG(WARNING) << "domicile: the shell set a protection for a page with no "
+                    "site; it is dropped.";
+    return;
+  }
+  const PageProtection own = ProtectionOf(protection);
+  VLOG(1) << "domicile: " << PageProtectionName(own) << " for " << site
+          << " is now " << OnOffName(on, "the profile's");
+  SetSiteProtection(
+      *user_prefs::UserPrefs::Get(guest_contents_->GetBrowserContext()), site,
+      own, on);
+}
+
+void WebViewGuest::SetProtectionForWindow(mojom::WebViewProtection protection,
+                                          std::optional<bool> on) {
+  CHECK(guest_contents_);
+  const PageProtection own = ProtectionOf(protection);
+  VLOG(1) << "domicile: " << PageProtectionName(own) << " in browser window "
+          << window_id_ << " is now " << OnOffName(on, "its site's");
+  PagePrivacy::FromWebContents(guest_contents_)->SetForWindow(own, on);
 }
 
 void WebViewGuest::ListMediaDevices(ListMediaDevicesCallback callback) {
@@ -3097,10 +3159,16 @@ void WebViewGuest::ReportSitePrivacy() {
   std::string site = privacy.site();
   mojom::WebViewSitePrivacyPtr now;
   if (!site.empty()) {
-    now = mojom::WebViewSitePrivacy::New(std::move(site),
-                                         WireModeOf(privacy.mode()),
-                                         WireSetForOf(privacy.set_for()),
-                                         privacy.blocked());
+    std::vector<mojom::WebViewPageProtectionPtr> protections;
+    for (const PageProtection protection : kPageProtections) {
+      protections.push_back(mojom::WebViewPageProtection::New(
+          WireProtectionOf(protection), privacy.IsOn(protection),
+          WireSetForOf(privacy.SetFor(protection))));
+    }
+    now = mojom::WebViewSitePrivacy::New(
+        std::move(site), WireModeOf(privacy.mode()),
+        WireSetForOf(privacy.set_for()), privacy.blocked(),
+        std::move(protections));
   }
   if (now.Equals(reported_site_privacy_)) {
     return;

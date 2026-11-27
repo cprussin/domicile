@@ -93,6 +93,13 @@ export type BrowserConfig = {
    * `block_lists`.
    */
   block_rules?: string[];
+  /**
+   * The filter lists cookie banners and consent pop-ups are hidden with,
+   * where [`Protections::hide_cookie_banners`] is on: each as in
+   * `block_lists`. The EasyList Cookie List and uBlock Origin's cookie
+   * notices unless set; `[]` hides none.
+   */
+  cookie_banner_lists?: string[];
   /** The profile a new private window opens in. Private. */
   default_private_profile?: string;
   /** The profile a site opens in when `sites` names none. Not private. */
@@ -580,6 +587,13 @@ export type Protections = {
    * `Sec-GPC: 1` header and `navigator.globalPrivacyControl`.
    */
   global_privacy_control?: boolean;
+  /**
+   * Hides cookie banners and consent pop-ups, with
+   * [`BrowserConfig::cookie_banner_lists`], and blocks the scripts that
+   * show them. A page that asks first may then keep only the cookies it
+   * needs, or none. Not on a site or in a window whose ad blocking is off.
+   */
+  hide_cookie_banners?: boolean;
   /**
    * Shows sites the device's canvas drawing, audio and processor count a
    * little off, the same way for a site until the desktop starts again,

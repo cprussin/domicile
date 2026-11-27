@@ -95,6 +95,7 @@ fn the_chrome_gets_each_profiles_ad_blocking_and_the_block_lists() {
                 profiles,
                 block_lists,
                 block_rules,
+                cookie_banner_lists,
                 ..
             } => {
                 let mode = |id: &str| {
@@ -107,6 +108,8 @@ fn the_chrome_gets_each_profiles_ad_blocking_and_the_block_lists() {
                     && mode("private") == Some(AdBlocking::Strict)
                     && block_lists.len() == domicile_config::DEFAULT_BLOCK_LISTS.len()
                     && block_rules == &["||ads.example^"]
+                    && cookie_banner_lists.len()
+                        == domicile_config::DEFAULT_COOKIE_BANNER_LISTS.len()
             }
             _ => false,
         })
