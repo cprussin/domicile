@@ -308,6 +308,18 @@ pointer_wait() { # word
   exit 1
 }
 
+# Moves the user's pointer to a point on the nested sway's output, without
+# clicking. An agent's pointer and keys are refused in the window the user's
+# pointer is over.
+hover() { # x, y
+  engine_alive "hover $1 $2"
+  [ -p "$SCENE_TMP/pointer.in" ] || pointer_start
+  local size="${OUTPUT_MODE%@*}"
+  echo "move $1 $2 ${size/x/ }" >&7
+  pointer_wait done
+  sleep 0.3
+}
+
 # Clicks the left button at a point on the nested sway's output.
 #
 # `wlrctl pointer` adds a pointer to the seat and removes it as it exits, so
