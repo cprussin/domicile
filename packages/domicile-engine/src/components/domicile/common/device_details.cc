@@ -3,8 +3,10 @@
 
 #include "components/domicile/common/device_details.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <vector>
 
 namespace domicile {
 
@@ -16,8 +18,9 @@ constexpr uint64_t kConcurrency = 0x636f6e6375727265;
 constexpr uint64_t kAudio = 0x617564696f617564;
 constexpr uint64_t kPixels = 0x706978656c706978;
 
-// How many pixels FarblePixels changes: enough that a picture's hash is
-// never the true one's, few enough that nobody could see them.
+// How many visible pixels FarblePixels changes (all of them when there are
+// fewer): enough that a picture's hash is never the true one's, few enough
+// that nobody could see them.
 constexpr int kFlips = 8;
 
 constexpr size_t kBytesPerPixel = 4;
@@ -62,18 +65,55 @@ float FarbledAudioFactor(uint64_t seed) {
 
 void FarblePixels(uint64_t seed, base::span<uint8_t> pixels) {
   const size_t count = pixels.size() / kBytesPerPixel;
-  if (count == 0) {
+  size_t visible = 0;
+  for (size_t pixel = 0; pixel < count; ++pixel) {
+    if (pixels[pixel * kBytesPerPixel + 3] != 0) {
+      ++visible;
+    }
+  }
+  // A pixel with nothing to see keeps its nothing.
+  if (visible == 0) {
     return;
   }
   const uint64_t hash = Hash(Mix(seed ^ kPixels), pixels);
-  for (int flip = 0; flip < kFlips; ++flip) {
-    const uint64_t pick = Mix(hash + static_cast<uint64_t>(flip));
-    const size_t pixel = static_cast<size_t>(pick % count) * kBytesPerPixel;
-    // A pixel with nothing to see keeps its nothing.
-    if (pixels[pixel + 3] == 0) {
+
+  // Which visible pixels change, counted among the visible ones only, so a
+  // picture that is mostly see-through changes as surely as a full one, and
+  // each a different one, so no two flips undo each other.
+  struct Flip {
+    size_t rank;
+    size_t channel;
+  };
+  std::vector<Flip> flips;
+  const size_t wanted = std::min(static_cast<size_t>(kFlips), visible);
+  for (uint64_t draw = 0; flips.size() < wanted; ++draw) {
+    const uint64_t pick = Mix(hash + draw);
+    // Few visible pixels: each of them, so this never has to keep drawing.
+    const size_t rank =
+        visible <= static_cast<size_t>(kFlips)
+            ? flips.size()
+            : static_cast<size_t>(pick % visible);
+    if (std::any_of(flips.begin(), flips.end(),
+                    [rank](const Flip& flip) { return flip.rank == rank; })) {
       continue;
     }
-    pixels[pixel + static_cast<size_t>((pick >> 32) % 3)] ^= 1;
+    flips.push_back({rank, static_cast<size_t>((pick >> 32) % 3)});
+  }
+  std::sort(flips.begin(), flips.end(),
+            [](const Flip& a, const Flip& b) { return a.rank < b.rank; });
+
+  auto next = flips.begin();
+  size_t rank = 0;
+  for (size_t pixel = 0; pixel < count && next != flips.end(); ++pixel) {
+    const size_t at = pixel * kBytesPerPixel;
+    if (pixels[at + 3] == 0) {
+      continue;
+    }
+    if (rank == next->rank) {
+      pixels[at + next->channel] ^= 1;
+      ++next;
+    }
+    ++rank;
   }
 }
 

@@ -3,6 +3,7 @@
 
 #include "components/domicile/common/device_details.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <set>
@@ -68,12 +69,60 @@ TEST(DeviceDetailsTest, APictureChangesALittleAndTheSameEachTime) {
       EXPECT_NE(i % 4, 3u);
     }
   }
-  EXPECT_GT(changed, 0u);
-  EXPECT_LE(changed, 8u);
+  EXPECT_EQ(changed, 8u);
 
   std::vector<uint8_t> other = truth;
   FarblePixels(43, other);
   EXPECT_NE(other, once);
+}
+
+// A picture with something in only every `every`th pixel, the rest clear.
+std::vector<uint8_t> Sparse(size_t pixels, size_t every) {
+  std::vector<uint8_t> bytes(pixels * 4, 0);
+  for (size_t pixel = 0; pixel < pixels; pixel += every) {
+    bytes[pixel * 4] = static_cast<uint8_t>(pixel);
+    bytes[pixel * 4 + 3] = 255;
+  }
+  return bytes;
+}
+
+// The bytes `farbled` differs from `truth` in, each checked to be the lowest
+// bit of a color of a visible pixel.
+size_t ChangedBytes(const std::vector<uint8_t>& truth,
+                    const std::vector<uint8_t>& farbled) {
+  size_t changed = 0;
+  for (size_t i = 0; i < truth.size(); ++i) {
+    if (farbled[i] != truth[i]) {
+      ++changed;
+      EXPECT_EQ(farbled[i] ^ truth[i], 1);
+      EXPECT_NE(i % 4, 3u);
+      EXPECT_NE(truth[i - i % 4 + 3], 0);
+    }
+  }
+  return changed;
+}
+
+TEST(DeviceDetailsTest, AMostlyClearPictureAlwaysChangesByEightPixels) {
+  // About a third drawn, like a fingerprinting canvas: picks that could land
+  // on clear pixels would leave it untouched for some seeds.
+  const std::vector<uint8_t> truth = Sparse(10000, 3);
+  for (uint64_t seed = 0; seed < 1000; ++seed) {
+    std::vector<uint8_t> farbled = truth;
+    FarblePixels(seed, farbled);
+    EXPECT_EQ(ChangedBytes(truth, farbled), 8u) << "seed " << seed;
+  }
+}
+
+TEST(DeviceDetailsTest, AFewVisiblePixelsAllChange) {
+  for (size_t visible = 1; visible <= 9; ++visible) {
+    const std::vector<uint8_t> truth = Sparse(visible * 50, 50);
+    for (uint64_t seed = 0; seed < 100; ++seed) {
+      std::vector<uint8_t> farbled = truth;
+      FarblePixels(seed, farbled);
+      EXPECT_EQ(ChangedBytes(truth, farbled), std::min<size_t>(visible, 8))
+          << visible << " visible, seed " << seed;
+    }
+  }
 }
 
 TEST(DeviceDetailsTest, NothingVisibleStaysAsItIs) {
