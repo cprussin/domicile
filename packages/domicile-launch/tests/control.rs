@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use domicile_host::system::DisplayPower;
 use domicile_launch::command::BrowserWindowLayout;
 use domicile_launch::control::{
-    answer, parse_response, AppReuse, Desktop, IdleTimes, LoadShell, OpenUrl, Response, Screenshot,
-    SendShell, SettingsFiles, Shot,
+    answer, focused_window, parse_response, AppReuse, Desktop, IdleTimes, LoadShell, OpenUrl,
+    Response, Screenshot, SendShell, SettingsFiles, Shot,
 };
 use domicile_launch::extensions::{
     ExtensionSettings, InstalledExtension, SiteAccess, SiteAccessMode,
@@ -613,6 +613,7 @@ fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
         focused: false,
         urgent: false,
         held_by: None,
+        focused_by: None,
         url: None,
         private: false,
         engine_id: Some("3".to_string()),
@@ -1752,6 +1753,7 @@ fn three_windows() -> Result<Vec<ListedWindow>, String> {
         focused: true,
         urgent: false,
         held_by: None,
+        focused_by: None,
         url: None,
         private: false,
         engine_id: None,
@@ -2113,6 +2115,7 @@ fn titled(title: &str) -> ListedWindow {
         focused: false,
         urgent: false,
         held_by: None,
+        focused_by: None,
         url: None,
         private: false,
         engine_id: None,
@@ -2256,5 +2259,109 @@ fn export_logs_that_cannot_be_read_is_refused() {
         Response::Refused {
             why: "cannot read the logs: journalctl is not installed".to_string()
         }
+    );
+}
+
+/// Windows the user's keyboard is in `n1` of, agent 3's in `n2`, which
+/// agent 3 holds.
+fn two_keyboards() -> Vec<ListedWindow> {
+    let window = |id: &str| ListedWindow {
+        id: id.to_string(),
+        kind: WindowKind::Native,
+        ..titled(id)
+    };
+    vec![
+        ListedWindow {
+            focused: true,
+            ..window("n1")
+        },
+        ListedWindow {
+            held_by: Some("agent-3".to_string()),
+            focused_by: Some("agent-3".to_string()),
+            ..window("n2")
+        },
+        window("n3"),
+    ]
+}
+
+#[test]
+fn the_focused_window_is_whoever_drives_its_keyboard() {
+    let windows = two_keyboards();
+    assert_eq!(
+        focused_window(&windows, None).map(|window| &*window.id),
+        Ok("n1")
+    );
+    assert_eq!(
+        focused_window(&windows, Some(3)).map(|window| &*window.id),
+        Ok("n2")
+    );
+    assert!(focused_window(&windows, Some(4)).is_err());
+    assert!(focused_window(&[], None).is_err());
+}
+
+#[test]
+fn closing_with_no_window_closes_the_drivers_focus_and_an_agent_only_its_own() {
+    let closed = RefCell::new(Vec::new());
+    let desktop = Desktop {
+        windows: &|| Ok(two_keyboards()),
+        browser_layouts: &|| Ok(Vec::new()),
+        act_on_window: &|id, act| {
+            closed.borrow_mut().push((id.to_string(), act));
+            Ok(())
+        },
+        ..nothing_dialed()
+    };
+    let close = |line: &str| reply_to(line, &desktop);
+    assert_eq!(
+        close("{\"type\":\"act_on_window\",\"act\":\"close\"}"),
+        Response::Done
+    );
+    assert_eq!(
+        close("{\"type\":\"act_on_window\",\"act\":\"close\",\"agent\":3}"),
+        Response::Done
+    );
+    assert!(matches!(
+        close("{\"type\":\"act_on_window\",\"id\":\"n3\",\"act\":\"close\",\"agent\":3}"),
+        Response::Refused { why } if why.contains("doesn't hold window n3")
+    ));
+    assert_eq!(
+        *closed.borrow(),
+        [
+            ("n1".to_string(), WindowAct::Close),
+            ("n2".to_string(), WindowAct::Close)
+        ]
+    );
+}
+
+#[test]
+fn input_into_a_named_window_focuses_it_first() {
+    let done = RefCell::new(Vec::new());
+    let desktop = Desktop {
+        act_on_window: &|id, act| {
+            done.borrow_mut().push(format!("{act:?} {id}"));
+            Ok(())
+        },
+        emulate: &|input, agent| {
+            done.borrow_mut().push(format!("{input:?} {agent:?}"));
+            Ok(())
+        },
+        ..nothing_dialed()
+    };
+    let text = "[{\"kind\":\"text\",\"text\":\"hi\"}]";
+    let into = |agent: &str| {
+        reply_to(
+            &format!("{{\"type\":\"emulate\",\"input\":{text},\"window\":\"n2\"{agent}}}"),
+            &desktop,
+        )
+    };
+    assert_eq!(into(""), Response::Done);
+    assert_eq!(into(",\"agent\":3"), Response::Done);
+    assert_eq!(
+        *done.borrow(),
+        [
+            "Focus n2".to_string(),
+            "[Text { text: \"hi\" }] None".to_string(),
+            "[Focus { window: \"n2\" }, Text { text: \"hi\" }] Some(3)".to_string(),
+        ]
     );
 }

@@ -741,7 +741,15 @@ impl DomicileCompositor {
                     .map(|held| (held.clone(), seat.id.clone()))
             })
             .collect();
-        self.hub.host.lock().unwrap().describe_agent_holds(holds);
+        let focuses = seats
+            .iter()
+            .filter_map(|seat| Some((seat.focused.clone()?, seat.id.clone())))
+            .collect();
+        self.hub
+            .host
+            .lock()
+            .unwrap()
+            .describe_agent_holds(holds, focuses);
         self.agent_seats.told = seats.clone();
         self.hub.broadcast(HostMessage::Seats { seats });
     }

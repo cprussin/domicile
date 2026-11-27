@@ -38,7 +38,7 @@ const LONGEST: usize = 200;
 /// A browser tool's description, its arguments' JSON schemas and which are
 /// required.
 pub(super) fn described(tool: Browser) -> (&'static str, Value, Vec<&'static str>) {
-    let window = json!({"type": "string", "description": "A browser window's id, from list_windows, or \"shell\" for the shell's own bars, panels and dialogs."});
+    let window = json!({"type": "string", "description": "A browser window's id, from list_windows, or \"shell\" for the shell's own bars, panels and dialogs. Left out, the window your keyboard is in."});
     let element =
         json!({"type": "string", "description": "An element's ref, from browser_snapshot."});
     let view = json!({"type": "string", "description": "One of the window's views, from browser_snapshot or list_windows. Left out, the window's own page."});
@@ -47,7 +47,7 @@ pub(super) fn described(tool: Browser) -> (&'static str, Value, Vec<&'static str
         Browser::Snapshot => (
             "Read a browser window's page, then each view it holds, as accessibility trees: one element a line, with the ref the other browser tools take. An Electron app such as Claude or Slack draws its page in views. Works on hidden windows; private ones are refused.",
             json!({"window": window}),
-            vec!["window"],
+            vec![],
         ),
         Browser::Click => (
             "Click an element of a browser window's page or view by its ref, scrolling it into view first, or at a point `at` of the page, for a canvas or anything else with no ref. The user's pointer and focus stay where they are. Answers what it changed in the window.",
@@ -59,37 +59,37 @@ pub(super) fn described(tool: Browser) -> (&'static str, Value, Vec<&'static str
                 "button": {"type": "string", "enum": ["left", "right", "middle"], "description": "Left out, the left one."},
                 "count": {"type": "integer", "enum": [1, 2], "description": "2 double-clicks. Left out, 1."},
             }),
-            vec!["window"],
+            vec![],
         ),
         Browser::Drag => (
             "Press the left button at point `from` of a browser window's page or view, move to `to` and let go, as on a canvas. The user's pointer and focus stay where they are. Answers what it changed in the window.",
             json!({"window": window, "view": view, "from": at.clone(), "to": at.clone()}),
-            vec!["window", "from", "to"],
+            vec!["from", "to"],
         ),
         Browser::Scroll => (
             "Scroll a browser window's page or view with the wheel at point `at`, by `by`, [right, down], in the same pixels. The user's pointer stays where it is. Answers what it changed in the window.",
             json!({"window": window, "view": view, "at": at.clone(), "by": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "description": "[right, down]; negative goes left or up."}}),
-            vec!["window", "at", "by"],
+            vec!["at", "by"],
         ),
         Browser::Type => (
             "Type text into a browser window's page or view: into the element with ref, focusing it first, or where its focus is. Never into the window the user is typing in. Answers what it changed in the window.",
             json!({"window": window, "ref": element, "view": view, "text": {"type": "string"}}),
-            vec!["window", "text"],
+            vec!["text"],
         ),
         Browser::Key => (
             "Press and release a key in a browser window's page or view. Answers what it changed in the window.",
             json!({"window": window, "view": view, "key": {"type": "string", "enum": KEYS.iter().map(|key| key.0).collect::<Vec<_>>()}}),
-            vec!["window", "key"],
+            vec!["key"],
         ),
         Browser::Navigate => (
             "Load an http or https address in a browser window. Answers what it changed in the window.",
             json!({"window": window, "url": {"type": "string"}}),
-            vec!["window", "url"],
+            vec!["url"],
         ),
         Browser::Screenshot => (
             "Take a WebP of a browser window's page or view as it draws, hidden or not.",
             json!({"window": window, "view": view}),
-            vec!["window"],
+            vec![],
         ),
         Browser::ChooseFiles => (
             "Answer the file chooser your click or key opened in a browser window's page or view, such as an upload button's: give it `paths`, absolute, or `cancel`. The acts say when a page waits on one; the user never sees it. Answers what it changed in the window.",
@@ -99,7 +99,7 @@ pub(super) fn described(tool: Browser) -> (&'static str, Value, Vec<&'static str
                 "paths": {"type": "array", "items": {"type": "string"}, "description": "Absolute paths: files to open, a folder, or where to save, as the chooser asks."},
                 "cancel": {"type": "boolean", "description": "true cancels the chooser instead."},
             }),
-            vec!["window"],
+            vec![],
         ),
     }
 }
@@ -273,8 +273,9 @@ impl<D: FnMut(&[String]) -> io::Result<Ran>> Page<'_, D> {
         let ran = (self.domicile)(
             &std::iter::once("devtools".to_string())
                 .chain(agent)
+                .chain(["--window".to_string(), self.window.clone()])
                 .chain(view)
-                .chain([self.window.clone(), method.to_string(), params.to_string()])
+                .chain([method.to_string(), params.to_string()])
                 .collect::<Vec<_>>(),
         )?;
         if !ran.success {

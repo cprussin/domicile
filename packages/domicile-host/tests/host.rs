@@ -144,6 +144,7 @@ fn every_window_is_listed_native_and_browser_alike() {
                     focused: true,
                     urgent: false,
                     held_by: None,
+                    focused_by: None,
                     url: None,
                     private: false,
                     engine_id: None,
@@ -159,6 +160,7 @@ fn every_window_is_listed_native_and_browser_alike() {
                     focused: false,
                     urgent: false,
                     held_by: None,
+                    focused_by: None,
                     url: Some("https://mail.example/".into()),
                     private: false,
                     engine_id: Some("3".into()),
@@ -174,6 +176,7 @@ fn every_window_is_listed_native_and_browser_alike() {
                     focused: false,
                     urgent: false,
                     held_by: None,
+                    focused_by: None,
                     url: Some("https://example.com/".into()),
                     private: true,
                     engine_id: Some("7".into()),
@@ -220,10 +223,13 @@ fn a_window_an_agent_holds_lists_its_seat() {
             "aU2iO9pE4rT7yW1qZ5xC8vB3nM6lK0jH".to_string(),
         ),
     ]));
-    host.describe_agent_holds(HashMap::from([
-        (held.clone(), "agent-3".to_string()),
-        ("7".to_string(), "agent-4".to_string()),
-    ]));
+    host.describe_agent_holds(
+        HashMap::from([
+            (held.clone(), "agent-3".to_string()),
+            ("7".to_string(), "agent-4".to_string()),
+        ]),
+        HashMap::from([("7".to_string(), "agent-4".to_string())]),
+    );
 
     let HostMessage::WindowList { windows } = host.list_windows() else {
         panic!("list_windows answers with a window list");
@@ -233,6 +239,13 @@ fn a_window_an_agent_holds_lists_its_seat() {
         .map(|window| window.held_by.as_deref())
         .collect();
     assert_eq!(held_by, vec![Some("agent-3"), None, None, Some("agent-4")]);
+    let focused_by: Vec<Option<&str>> = windows
+        .iter()
+        .map(|window| window.focused_by.as_deref())
+        .collect();
+    assert_eq!(focused_by, vec![None, None, None, Some("agent-4")]);
+    assert_eq!(host.focused_by("agent-4"), Some("7"));
+    assert_eq!(host.focused_by("agent-3"), None);
 }
 
 #[test]

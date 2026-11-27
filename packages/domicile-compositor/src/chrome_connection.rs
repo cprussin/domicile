@@ -1282,29 +1282,43 @@ fn answer_an_app(
 
 /// `request`, with the window a shell command acts on named as the shell
 /// knows it: a native window's app id or a browser window's engine id, for
-/// one given by its `list-windows` id. Errs when an agent's command names a
-/// window its seat doesn't hold, so an agent acts only on its own windows.
+/// one given by its `list-windows` id. An agent's command that names none
+/// acts on the window its own keyboard is in, never the user's focus. Errs
+/// when an agent's command names a window its seat doesn't hold, so an agent
+/// acts only on its own windows.
 fn aimed(hub: &ChromeHub, request: SystemRequest) -> Result<SystemRequest, String> {
     let SystemRequest::SendShell {
         command,
-        window: Some(said),
+        window,
         agent,
     } = request
     else {
         return Ok(request);
     };
     let host = hub.host.lock().unwrap();
-    let window = host.window_listed_as(&said).unwrap_or_else(|| said.clone());
-    if let Some(session) = agent {
-        if host.held_by(&window) != Some(format!("agent-{session}").as_str()) {
-            return Err(format!(
-                "your seat doesn't hold window {said}: focus_window it first, or act on it by ref"
-            ));
+    let window = match (window, agent) {
+        (None, None) => None,
+        // An agent's command acts on its own focus, not the user's.
+        (None, Some(session)) => Some(
+            host.focused_by(&format!("agent-{session}"))
+                .ok_or("your seat's keyboard is in no window: name one, or focus_window one first")?
+                .to_string(),
+        ),
+        (Some(said), agent) => {
+            let window = host.window_listed_as(&said).unwrap_or_else(|| said.clone());
+            if let Some(session) = agent {
+                if host.held_by(&window) != Some(format!("agent-{session}").as_str()) {
+                    return Err(format!(
+                        "your seat doesn't hold window {said}: focus_window it first, or act on it by ref"
+                    ));
+                }
+            }
+            Some(window)
         }
-    }
+    };
     Ok(SystemRequest::SendShell {
         command,
-        window: Some(window),
+        window,
         agent,
     })
 }

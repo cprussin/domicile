@@ -6,7 +6,7 @@ import { KeymapChoice } from "@domicile-desktop/sdk/keymap-choice";
 import { Axis, Direction } from "../direction";
 import { Layout } from "../tree/node";
 import type { WindowAction as Action } from "../window-state";
-import { WindowAction } from "../window-state";
+import { WindowAction, windowActedOn } from "../window-state";
 import { COMMAND_HELP, parseCommand, parseWindowCommand } from "./command";
 import { MediaKey } from "./media-key";
 
@@ -235,20 +235,28 @@ describe("COMMAND_HELP", () => {
 });
 
 describe("parseWindowCommand", () => {
-  it("sends the window it names to a workspace, not the focused one", () => {
-    expect(
-      parseWindowCommand(
-        ["move", "container", "to", "workspace", "3"],
-        "app:app-3",
-      ),
-    ).toStrictEqual(Ok(WindowAction.WindowMovedToWorkspace("app:app-3", "3")));
-  });
+  it.each<readonly [string, Action]>([
+    ["move container to workspace 3", WindowAction.WindowSentToWorkspace("3")],
+    ["floating toggle", WindowAction.FloatToggled()],
+    ["fullscreen toggle", WindowAction.FullscreenToggled(false)],
+    ["kill", WindowAction.WindowKilled()],
+    ["move left", WindowAction.WindowStepped(Direction.Left)],
+    ["layout tabbed", WindowAction.LayoutSet(Layout.Tabbed)],
+    ["move scratchpad", WindowAction.WindowSentToScratchpad()],
+  ])(
+    "runs `%s` on the window it names, not the focused one",
+    (command, action) => {
+      expect(parseWindowCommand(command.split(" "), "app:app-3")).toStrictEqual(
+        Ok(windowActedOn("app:app-3", action)),
+      );
+    },
+  );
 
-  it("refuses a command it can't run on a given window", () => {
-    // Run on the focus, it would act on the user's window instead.
-    expect(parseWindowCommand(["focus", "left"], "app:app-3")).toStrictEqual(
+  it("refuses a command that acts on no window", () => {
+    // On a window, it would act on the user's desk instead.
+    expect(parseWindowCommand(["workspace", "2"], "app:app-3")).toStrictEqual(
       Err(
-        "manganese: `focus left` acts on the focus; on a given window it runs only `move container to workspace <name>`",
+        "manganese: `workspace 2` acts on no window, so it runs only on the focus",
       ),
     );
   });

@@ -161,7 +161,7 @@ about a sixth of a second holding it, and let go there. Points are as
 
 Scroll where the pointer is, in logical pixels: positive is right and down.
 
-## `domicile key [--agent <session>] <chord>`
+## `domicile key [--agent <session>] [--window <id>] <chord>`
 
 Press the keys of a chord in order, then release them in reverse. Each key is
 an XKB keysym name, such as `Return`, `Tab`, `l` or `F4`, in any case;
@@ -171,13 +171,29 @@ an XKB keysym name, such as `Return`, `Tab`, `l` or `F4`, in any case;
 domicile key ctrl+shift+Tab
 ```
 
-## `domicile type [--agent <session>] <text>`
+## `domicile type [--agent <session>] [--window <id>] <text>`
 
 Type `<text>` on the desk's keyboard, holding Shift where a character needs
 it. A line break presses Return. Refused, typing nothing, when no key types a
 character without AltGr.
 
-## `domicile accessibility <window>`
+`key` and `type` go into the window the keyboard is in. `--window`, by its
+`list-windows` id, focuses that window first, as `focus-window` does: with
+`--agent`, only that agent's keyboard moves, and the agent must hold the
+window.
+
+### A window by its id, or the focus
+
+Every command that acts on a window (`send-shell`, `close-window`,
+`kill-window`, `key`, `type`, `accessibility`, `accessibility-act` and
+`devtools`) takes `--window <id>`, by the id `list-windows` prints. Left out,
+it acts on the window the keyboard is in. Whoever drives the keyboard decides:
+with `--agent <session>`, that is the window the agent's own keyboard is in,
+never the user's, and a window `--window` names must be one the agent holds,
+its pointer or keyboard in it. `list-windows --json` says which seat holds a
+window (`held_by`) and whose keyboard is in it (`focused_by`).
+
+## `domicile accessibility [--agent <session>] [--window <id>]`
 
 Print a native window's [AT-SPI](https://gitlab.gnome.org/GNOME/at-spi2-core)
 accessibility tree, one element a line: its role, name, ref, an editable
@@ -185,7 +201,7 @@ text's text, and whether it is focused, checked, pressed, expanded or
 selected. `domicile mcp` reads native windows with it.
 
 ```
-$ domicile accessibility kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA
+$ domicile accessibility --window kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA
 - frame "notes.txt" [ref=:1.7/org/a11y/atspi/accessible/1]
   - push button "Save" [ref=:1.7/org/a11y/atspi/accessible/12]
   - text [ref=:1.7/org/a11y/atspi/accessible/13] text="hello" focused
@@ -198,26 +214,26 @@ $ domicile accessibility kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA
 - It needs the accessibility bus, which at-spi2-core runs
   (`services.gnome.at-spi2-core.enable` on NixOS).
 
-## `domicile accessibility-act <window> <ref> click|focus|set-text <text>`
+## `domicile accessibility-act [--agent <session>] [--window <id>] <ref> click|focus|set-text <text>`
 
 Click an element of a native window by its ref from `accessibility`, give it
 the keyboard focus, or replace its text. Clicking runs the element's own
 click, press or activate action, so it works on a window the desk hides. A
 ref of another process is refused.
 
-## `domicile devtools [--agent <session>] [--view <view>] <window> <method> [params]`
+## `domicile devtools [--agent <session>] [--window <id>] [--view <view>] <method> [params]`
 
 Send one [DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/)
 method to a browser window's page, with its params as a JSON object, and print
-its result as JSON. `<window>` is an id `list-windows` prints, or `shell` for
-the shell's own page: its bars, panels and dialogs. `--view` sends
+its result as JSON. `--window` takes an id `list-windows` prints, or `shell`
+for the shell's own page: its bars, panels and dialogs. `--view` sends
 it to one of the window's views instead, by the id `list-windows --json`
 lists. `--agent` sends it for that agent session: a press or key it sends
 makes the page copy to and paste from that agent's own clipboard, never the
 user's. `domicile mcp` drives browser windows with it.
 
 ```
-$ domicile devtools Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE DOM.getContentQuads '{"backendNodeId":42}'
+$ domicile devtools --window Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE DOM.getContentQuads '{"backendNodeId":42}'
 {"quads":[[10,20,110,20,110,40,10,40]]}
 ```
 
@@ -324,14 +340,19 @@ domicile send-shell get-tree
 ```
 
 With `--window`, by its `list-windows` id, the command acts on that window
-instead of the user's focus. Only a page that runs commands on a given window
-(`bindKeys`' `onWindowCommand`) hears it; manganese runs `move container to
-workspace <name>` there. With `--agent` too, which needs `--window`, it is
-refused unless agent `<session>`'s seat holds the window: its pointer or
-keyboard is in it.
+instead of the focus. Only a page that runs commands on a given window
+(`bindKeys`' `onWindowCommand`) hears it; manganese runs every command that
+acts on a window there, such as `move container to workspace <name>`,
+`floating toggle` or `kill`, and refuses the ones that act on the desk.
+
+With `--agent`, the command acts on the agent's window, never the user's:
+the one `--window` names, which the agent must hold, or else the one the
+agent's keyboard is in. So an agent's command always names a window, and one
+that acts on the desk, such as `workspace 2`, is refused.
 
 ```sh
-domicile send-shell --agent 3 --window <id> move container to workspace 2
+domicile send-shell --agent 3 move container to workspace 2
+domicile send-shell --window <id> floating toggle
 ```
 
 ## `domicile list-shell-commands [--json]`
@@ -467,7 +488,8 @@ Xy7pQ2mN8vB4cZ1kL6tR9wF3hD5sJ0gE  browser  mail   -     1280x720  Inbox (focused
 
 `--json` prints a JSON array instead, for scripts, with `kind`, `title`,
 `app`, `pid`, `size`, `focused`, `urgent`, `held_by` (the agent seat holding
-it, absent when it is the user's), `url` (a browser window's address,
+it, absent when it is the user's), `focused_by` (the agent seat whose
+keyboard is in it, absent when none's is), `url` (a browser window's address,
 `null` for a native window), `private`, `engine_id` (a browser window's
 id in the engine, `null` for a native window) and `views` per window.
 `views` lists the views a browser window holds and shows, bottom first: an
@@ -514,19 +536,22 @@ With `--agent`, give the window agent `<session>`'s own keyboard instead, a
 native or a browser window, by the id `list-windows` prints. The user's focus
 stays, and nothing is raised.
 
-## `domicile close-window <id>`
+## `domicile close-window [--agent <session>] [--window <id>]`
 
-Ask the native window `id` to close, as its close button does. The app may
-ask first, for example about unsaved work.
+Ask a native window to close, as its close button does: the one the keyboard
+is in, or the one `--window` names. The app may ask first, for example about
+unsaved work.
 
-## `domicile kill-window <id>`
+## `domicile kill-window [--agent <session>] [--window <id>]`
 
-Kill the process of the native window `id` with `SIGKILL`, for an app that no
+Kill the process of a native window with `SIGKILL`, chosen as `close-window`
+chooses it, for an app that no
 longer answers. Every window of that process goes with it, and for an X11 app
 that is `xwayland-satellite` and every X11 window.
 
 `focus-window` without `--agent`, `close-window` and `kill-window` take only
-native windows. The shell shows and closes browser windows.
+native windows. The shell shows and closes browser windows:
+`send-shell --window <id> kill` closes one.
 
 ## `domicile exec [--agent <session>] <program> [<arg>...]`
 
@@ -706,32 +731,33 @@ Each tool runs a verb and answers what it printed, or its error:
 | Tool | Runs |
 |---|---|
 | `list_windows`, `list_displays`, `list_inputs`, `status`, `list_shell_commands`, `list_bindings` | that verb with `--json` |
-| `send_shell` | `send-shell <words>...`; given `window`, `focus-window --agent` on it, then `send-shell --agent --window <window> <words>...` |
+| `send_shell` | `send-shell --agent <words>...`, on the window the agent's keyboard is in; given `window`, `focus-window --agent` on it, then `send-shell --agent --window <window> <words>...` |
 | `exec` | `exec <argv>...` |
 | `open` | `open [--app] [--profile <id>] <target>` |
-| `focus_window`, `close_window` | that verb with the window's id |
+| `focus_window` | `focus-window --agent <window>` |
+| `close_window` | `close-window --agent`, on the window the agent's keyboard is in; given `window`, `focus-window --agent` on it, then `close-window --agent --window <window>` |
 | `theme` | `theme [light\|dark\|toggle]` |
 | `screenshot` | `screenshot --fit 1280 [--area <area>] <file>`, answered as the PNG; `area` zooms into part of the last screenshot |
 | `click`, `move_pointer` | `pointer`, with the point scaled from the last screenshot's pixels to the desk's |
 | `drag` | `drag`, with both points scaled the same way |
 | `scroll` | `pointer`, then `scroll` |
-| `key`, `type_text` | `key <chord>`, `type <text>` |
-| `browser_snapshot` | `devtools <window> Accessibility.getFullAXTree`, then the same for each view the window holds, answered as an outline of the page and each view, one element a line with its ref. A view's refs are `<view>:<element>` |
+| `key`, `type_text` | `key [--window <window>] <chord>`, `type [--window <window>] <text>` |
+| `browser_snapshot` | `devtools --window <window> Accessibility.getFullAXTree`, then the same for each view the window holds, answered as an outline of the page and each view, one element a line with its ref. A view's refs are `<view>:<element>` |
 | `browser_click` | `devtools` scrolling the element into view, finding its box, and clicking its middle; or, given `at`, pressing at that point of the page, in `browser_screenshot`'s pixels, with `button` and `count`. Then `focus-window --agent` on the window, unless it clicked in a view, so `key` and `type_text` type there; when the window can't have the agent's keyboard, the answer says why |
 | `browser_drag` | `devtools` pressing at `from`, moving to `to` in steps, and letting go |
 | `browser_scroll` | `devtools` turning the wheel at `at` by `by` |
 | `browser_type` | `devtools` focusing the element, if given a ref, then `Input.insertText` |
 | `browser_key` | `devtools` pressing and releasing Enter, Tab, Escape, an arrow or another named key |
-| `browser_navigate` | `devtools <window> Page.navigate` |
-| `browser_screenshot` | `devtools [--view <view>] <window> Page.captureScreenshot`, answered as a WebP |
-| `browser_choose_files` | `devtools [--view <view>] <window> Domicile.chooseFiles` with `paths` or `cancel`: answers the file chooser the agent's press or key opened, which never reaches the shell. `browser_click`, `browser_drag` and `browser_key` ask `Domicile.fileChooser` after and say when the page waits on one |
-| `app_snapshot` | `accessibility <window>` |
-| `app_click`, `app_focus`, `app_set_text` | `accessibility-act <window> <ref> click\|focus\|set-text <text>` |
+| `browser_navigate` | `devtools --window <window> Page.navigate` |
+| `browser_screenshot` | `devtools --window <window> [--view <view>] Page.captureScreenshot`, answered as a WebP |
+| `browser_choose_files` | `devtools --window <window> [--view <view>] Domicile.chooseFiles` with `paths` or `cancel`: answers the file chooser the agent's press or key opened, which never reaches the shell. `browser_click`, `browser_drag` and `browser_key` ask `Domicile.fileChooser` after and say when the page waits on one |
+| `app_snapshot` | `accessibility --window <window>` |
+| `app_click`, `app_focus`, `app_set_text` | `accessibility-act --window <window> <ref> click\|focus\|set-text <text>` |
 | `ask_to_use_desktop` | nothing: asks the user again, after they stopped the agent or turned it away |
 | `stop_using_desktop` | nothing: ends the agent's session, as **Stop** does, so its next call asks again |
 | `batch` | each of up to 20 `steps`, `{tool, arguments}`, in order, up to the first that fails; then reads each window they acted on once |
 
-The browser and app tools work on a window the desk hides and need no screenshot, so prefer them for browser windows and for native apps that support accessibility. The browser tools reach the shell's own bars, panels and dialogs as window `shell`, with the entire desktop. `initialize`'s instructions tell the agent so. Each browser and app act answers what it changed in the window since the agent last read it, or all of it, read a quarter second after. A `batch` waits that quarter second once, after its last step, and answers what changed in each window its steps acted on. An Electron app such as Claude or Slack draws its page in views: `browser_click` acts in the view its ref names, and `browser_type`, `browser_key`, `browser_screenshot`, `browser_drag`, `browser_scroll` and a `browser_click` at a point take a `view`. Points are for what has no ref, such as a canvas. Tools the lock refuses are refused while the desktop is locked.
+Every tool that acts on a window takes `window`, by its `list_windows` id. Left out, it acts on the window the agent's own keyboard is in, never the user's; an agent shared only some windows names one. The browser and app tools work on a window the desk hides and need no screenshot, so prefer them for browser windows and for native apps that support accessibility. The browser tools reach the shell's own bars, panels and dialogs as window `shell`, with the entire desktop. `initialize`'s instructions tell the agent so. Each browser and app act answers what it changed in the window since the agent last read it, or all of it, read a quarter second after. A `batch` waits that quarter second once, after its last step, and answers what changed in each window its steps acted on. An Electron app such as Claude or Slack draws its page in views: `browser_click` acts in the view its ref names, and `browser_type`, `browser_key`, `browser_screenshot`, `browser_drag`, `browser_scroll` and a `browser_click` at a point take a `view`. Points are for what has no ref, such as a canvas. Tools the lock refuses are refused while the desktop is locked.
 
 ### Over HTTP
 

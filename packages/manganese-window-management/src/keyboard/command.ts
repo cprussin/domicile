@@ -21,7 +21,12 @@ import type { ShellCommandHelp } from "@domicile-desktop/sdk/shell-command";
 import { Axis, Direction } from "../direction";
 import { Layout } from "../tree/node";
 import type { WindowAction as Action } from "../window-state";
-import { WindowAction, WindowActionKind, WORKSPACES } from "../window-state";
+import {
+  ON_A_WINDOW,
+  WindowAction,
+  WORKSPACES,
+  windowActedOn,
+} from "../window-state";
 import { MediaKey } from "./media-key";
 
 /** Sway's direction words. */
@@ -316,19 +321,20 @@ const virtualMonitorUsage = (args: readonly string[]): Result<Action, string> =>
   );
 
 /**
- * Parse the words of a `send-shell --window` command into an action on window
- * `id`, not the focus. Only `move container to workspace <name>` runs on a
- * given window; any other command acts on the focus, so it is refused.
+ * Parse the words of a command on window `id`, as `send-shell --window` and
+ * an agent send it, into that command run on `id` rather than the focus. A
+ * command that acts on no window, such as `workspace 2` or `lock`, is
+ * refused: on a window it would act on the user's desk instead.
  */
 export const parseWindowCommand = (
   args: readonly string[],
   id: string,
 ): Result<Action, string> =>
   parseCommand(args).andThen((action) =>
-    action.kind === WindowActionKind.WindowSentToWorkspace
-      ? Ok(WindowAction.WindowMovedToWorkspace(id, action.name))
+    ON_A_WINDOW.has(action.kind)
+      ? Ok(windowActedOn(id, action))
       : Err(
-          `manganese: \`${args.join(" ")}\` acts on the focus; on a given window it runs only \`move container to workspace <name>\``,
+          `manganese: \`${args.join(" ")}\` acts on no window, so it runs only on the focus`,
         ),
   );
 

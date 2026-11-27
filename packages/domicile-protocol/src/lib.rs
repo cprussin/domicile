@@ -3534,6 +3534,10 @@ pub struct ListedWindow {
     /// absent when it is the user's. See [`HostMessage::Seats`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub held_by: Option<String>,
+    /// The agent seat whose keyboard is in it (`agent-<session>`): the
+    /// window that agent's commands act on when they name none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focused_by: Option<String>,
     /// A browser window's address, or the one it is opening.
     pub url: Option<String>,
     /// A browser window in the off-the-record profile.

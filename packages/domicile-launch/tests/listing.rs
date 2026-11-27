@@ -80,6 +80,7 @@ fn windows_print_as_one_table_whoever_draws_them() {
         focused: true,
         urgent: false,
         held_by: None,
+        focused_by: None,
         url: None,
         private: false,
         engine_id: None,
@@ -93,6 +94,7 @@ fn windows_print_as_one_table_whoever_draws_them() {
         focused: false,
         urgent: true,
         held_by: Some("agent-3".to_string()),
+        focused_by: None,
         ..editor.clone()
     };
     let mail = ListedWindow {
@@ -105,6 +107,7 @@ fn windows_print_as_one_table_whoever_draws_them() {
         focused: false,
         urgent: false,
         held_by: None,
+        focused_by: None,
         url: Some("https://mail.example/".to_string()),
         private: true,
         engine_id: Some("3".to_string()),
@@ -365,6 +368,7 @@ fn on_a_terminal_states_are_colored_and_detail_dimmed() {
         focused: true,
         urgent: false,
         held_by: None,
+        focused_by: None,
         private: false,
         url: None,
         engine_id: None,

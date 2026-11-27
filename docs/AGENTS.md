@@ -62,13 +62,16 @@ it, as `domicile pointer --agent <session>` and the like:
   agent types in copies to and pastes from the agent's, never the user's,
   and the clipboard history leaves them out. They go when the session ends.
 
-`send_shell` acts on the user's focus, so it is refused until the user has left
-this computer's keyboard, pointer and touch alone for 30 seconds
-(`local_seconds` of [`domicile idle-time`](CLI.md#domicile-idle-time---json)).
-Given a `window`, it runs at once on that window instead: the agent's keyboard
-takes it, as `focus_window` does, so a window the user is in is refused, and
-the compositor sends the shell only a command on a window the agent's seat
-holds. Manganese runs `move container to workspace <name>` that way.
+Every tool that acts on a window (`send_shell`, `close_window`, `key`,
+`type_text`, and the `browser_` and `app_` tools) takes a `window`, by its
+`list_windows` id. Left out, it acts on the window the agent's own keyboard is
+in, never the user's. Given one, the agent's keyboard takes it first, as
+`focus_window` does, so a window the user is in is refused.
+`send_shell` runs a shell command on that window at once: the compositor sends
+the shell only a command on a window the agent's seat holds, and Manganese runs
+its window commands, such as `move container to workspace <name>` or
+`floating toggle`, that way. A command that acts on the desk rather than a
+window, such as `workspace 2`, is refused.
 The `browser_` and `app_` tools act by ref and run any time. The `browser_`
 tools reach a browser window through DevTools on its own page, which gives
 that page focus of its own: the user's focus stays where it is, and typed

@@ -501,6 +501,7 @@ export enum WindowActionKind {
   TerminalOpened,
   VirtualMonitorAdded,
   VirtualMonitorRemoved,
+  WindowActedOn,
   WindowBarPressed,
   WindowClosed,
   WindowDropped,
@@ -1283,9 +1284,31 @@ export const WindowAction = {
   }),
 };
 
-export type WindowAction = ReturnType<
-  (typeof WindowAction)[keyof typeof WindowAction]
->;
+export type WindowAction =
+  | ReturnType<(typeof WindowAction)[keyof typeof WindowAction]>
+  | WindowActedOn;
+
+/**
+ * A command on the focused window, {@link ON_A_WINDOW}, run on window `id`
+ * instead, as `send-shell --window` or an agent asks. The user's screens,
+ * workspaces and focus stay as they were. Outside {@link WindowAction}, as it
+ * holds one.
+ */
+export type WindowActedOn = {
+  readonly action: WindowAction;
+  readonly id: string;
+  readonly kind: WindowActionKind.WindowActedOn;
+};
+
+/** {@link WindowActedOn}. */
+export const windowActedOn = (
+  id: string,
+  action: WindowAction,
+): WindowActedOn => ({
+  action,
+  id,
+  kind: WindowActionKind.WindowActedOn,
+});
 
 export const reduceWindows = (
   state: WindowState,
@@ -1332,6 +1355,24 @@ const SHUT_IN_OVERVIEW: ReadonlySet<WindowActionKind> = new Set([
   WindowActionKind.WindowStepped,
   WindowActionKind.WorkspaceSelected,
   WindowActionKind.WorkspaceStepped,
+]);
+
+/**
+ * The commands that act on the focused window, which can run on any window
+ * instead: {@link WindowActedOn}.
+ */
+export const ON_A_WINDOW: ReadonlySet<WindowActionKind> = new Set([
+  WindowActionKind.ContainerSplit,
+  WindowActionKind.FloatToggled,
+  WindowActionKind.FullscreenToggled,
+  WindowActionKind.LayoutSet,
+  WindowActionKind.SplitToggled,
+  WindowActionKind.TabSubgrouped,
+  WindowActionKind.WindowGrown,
+  WindowActionKind.WindowKilled,
+  WindowActionKind.WindowSentToScratchpad,
+  WindowActionKind.WindowSentToWorkspace,
+  WindowActionKind.WindowStepped,
 ]);
 
 // The overview's aim lasts only while it is open and its workspace has a
@@ -1801,6 +1842,12 @@ const reduceAction = (
     case WindowActionKind.WindowMovedToWorkspace: {
       return moveToWorkspace(state, action.id, action.name);
     }
+    case WindowActionKind.WindowActedOn: {
+      return ON_A_WINDOW.has(action.action.kind) &&
+        !isShutInOverview(state, action.action)
+        ? actedOn(state, action.id, action.action)
+        : state;
+    }
     case WindowActionKind.WindowResized: {
       return onWorkspaceWith(state, action.id, (workspace) =>
         floatSized(workspace, action.id, action.box),
@@ -1938,6 +1985,57 @@ const stepWindow = (state: WindowState, direction: Direction): WindowState => {
       (workspace) => pushedOnBy(workspace, leaving.node, direction),
     );
   }
+};
+
+/**
+ * `state` as a command on window `id` finds it: `id` focused on its own
+ * workspace, alone, with that workspace shown. `undefined` for a window on
+ * no workspace.
+ */
+export const aimedAt = (
+  state: WindowState,
+  id: string,
+): WindowState | undefined =>
+  workspaceHolding(state, id) === undefined
+    ? undefined
+    : reachWindow(state, id, picked);
+
+// Runs `action`, a command on the focused window, on window `id` as if it had
+// the keyboard, then puts back what the user sees: each screen's workspace,
+// the focused screen, and each workspace's focus where its window is still
+// there.
+const actedOn = (
+  state: WindowState,
+  id: string,
+  action: WindowAction,
+): WindowState => {
+  const aimed = aimedAt(state, id);
+  if (aimed === undefined) {
+    return state;
+  }
+  const acted = reduceAction(aimed, action);
+  const focusedBefore = new Map(
+    state.workspaces.map((workspace) => [workspace.name, focusedOn(workspace)]),
+  );
+  return {
+    ...acted,
+    focused: state.focused,
+    overviewAim: state.overviewAim,
+    screens: acted.screens.map((screen) => {
+      const was = state.screens.find(({ name }) => name === screen.name);
+      return was === undefined || was.current === screen.current
+        ? screen
+        : { ...screen, current: was.current };
+    }),
+    workspaces: acted.workspaces.map((workspace) => {
+      const was = focusedBefore.get(workspace.name);
+      return was === undefined ||
+        was === focusedOn(workspace) ||
+        !holds(workspace, was)
+        ? workspace
+        : reached(workspace, was);
+    }),
+  };
 };
 
 // A window an agent holds opens without taking the user's focus: the window

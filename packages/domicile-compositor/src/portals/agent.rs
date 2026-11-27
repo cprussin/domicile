@@ -550,6 +550,7 @@ mod tests {
             focused: false,
             urgent: false,
             held_by: None,
+            focused_by: None,
             url: None,
             private,
             engine_id: None,

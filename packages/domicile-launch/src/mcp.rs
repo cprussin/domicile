@@ -263,9 +263,9 @@ const INSTRUCTIONS: &str = "Read and act on windows as text first: list_windows,
     other pointer tools use your own pointer and keyboard, which never move theirs, in \
     native and browser windows alike, so they reach a canvas or anything else a tree \
     can't. They are refused in a window the user is in, and over the shell, which you \
-    act on by ref. send_shell acts on the user's focus, so it \
-    waits until they step away, unless you give it a window of your own, such as one you \
-    opened: then it acts on that window, to move it to another workspace say, at once. Call stop_using_desktop as soon as you are done with \
+    act on by ref. A tool that acts on a window acts on the one your own keyboard is in \
+    when you name none, never the user's: send_shell too, to move a window of yours to \
+    another workspace say. Call stop_using_desktop as soon as you are done with \
     the desktop. Before you wait on anything else, such as an approval, a background \
     job or the user, call stop_using_desktop too: asking again later is quick, and a \
     remembered agent is not asked at all. An agent that calls nothing for two minutes \
@@ -404,10 +404,10 @@ fn listed_tools() -> Vec<Value> {
 fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
     let window_id =
         json!({"id": {"type": "string", "description": "The window's id, from list_windows."}});
+    let yours = json!({"type": "string", "description": "A window's id, from list_windows. Left out, the window your keyboard is in."});
     let coordinate = json!({"type": "number", "description": "In the last screenshot's pixels."});
     let point = json!({"type": "array", "items": coordinate, "minItems": 2, "maxItems": 2});
-    let native =
-        json!({"type": "string", "description": "A native window's id, from list_windows."});
+    let native = json!({"type": "string", "description": "A native window's id, from list_windows. Left out, the window your keyboard is in."});
     let app_element =
         json!({"type": "string", "description": "An element's ref, from app_snapshot."});
     match tool {
@@ -442,10 +442,10 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec![],
         ),
         Tool::SendShell => (
-            "Run a shell command, as a keybinding does, and answer what it printed. list_shell_commands lists them. Without a window it acts on the user's focus, so it waits until they step away. With a window, it takes that window with your own keyboard, as focus_window does, and acts on it at once: refused in a window the user is in, and for a command the shell doesn't run on a given window.",
+            "Run a shell command, as a keybinding does, on a window of yours, and answer what it printed. list_shell_commands lists them. It acts on the window your keyboard is in, or on the one you name, which it takes with your keyboard first, as focus_window does. Never on the user's focus: refused in a window the user is in, and for a command the shell runs on no window, such as one that changes the user's workspace.",
             json!({
-                "words": {"type": "array", "items": {"type": "string"}, "description": "The command and its arguments, such as [\"focus\", \"left\"] or [\"move\", \"container\", \"to\", \"workspace\", \"3\"]."},
-                "window": {"type": "string", "description": "The id of the window to act on, from list_windows, rather than the user's focus."}
+                "words": {"type": "array", "items": {"type": "string"}, "description": "The command and its arguments, such as [\"floating\", \"toggle\"] or [\"move\", \"container\", \"to\", \"workspace\", \"3\"]."},
+                "window": yours.clone()
             }),
             vec!["words"],
         ),
@@ -468,7 +468,11 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             window_id,
             vec!["id"],
         ),
-        Tool::WindowAct(_) => ("Ask a window to close.", window_id, vec!["id"]),
+        Tool::WindowAct(_) => (
+            "Ask a window of yours to close: the one your keyboard is in, or the one you name, which it takes with your keyboard first, as focus_window does. Refused in a window the user is in.",
+            json!({"window": yours.clone()}),
+            vec![],
+        ),
         Tool::Theme => (
             "Set the theme to light or dark, or toggle it. With no change, answer the current theme.",
             json!({"change": {"type": "string", "enum": ["light", "dark", "toggle"]}}),
@@ -505,35 +509,35 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec!["x", "y", "dx", "dy"],
         ),
         Tool::Key => (
-            "Press a chord of XKB keysym names, such as ctrl+l or Return, with your own keyboard, in the window you last clicked or focused. The shell's own bindings are the user's: use send_shell.",
-            json!({"chord": {"type": "string"}}),
+            "Press a chord of XKB keysym names, such as ctrl+l or Return, with your own keyboard, in the window you name, which it takes with your keyboard first, or the one you last clicked or focused. The shell's own bindings are the user's: use send_shell.",
+            json!({"chord": {"type": "string"}, "window": yours.clone()}),
             vec!["chord"],
         ),
         Tool::TypeText => (
-            "Type text with your own keyboard, into the window you last clicked or focused. In a window with a tree, browser_type or app_set_text instead.",
-            json!({"text": {"type": "string"}}),
+            "Type text with your own keyboard, into the window you name, which it takes with your keyboard first, or the one you last clicked or focused. In a window with a tree, browser_type or app_set_text instead.",
+            json!({"text": {"type": "string"}, "window": yours}),
             vec!["text"],
         ),
         Tool::Browser(browser) => browser::described(browser),
         Tool::AppSnapshot => (
             "Read a native window's accessibility tree: one element a line, with the ref the other app tools take. Needs an app that supports accessibility; works on hidden windows.",
             json!({"window": native}),
-            vec!["window"],
+            vec![],
         ),
         Tool::AppAct("click") => (
             "Click an element of a native window by its ref, running its own click or press action. Answers what it changed in the window.",
             json!({"window": native, "ref": app_element}),
-            vec!["window", "ref"],
+            vec!["ref"],
         ),
         Tool::AppAct("focus") => (
             "Give an element of a native window the keyboard focus, by its ref. Answers what it changed in the window.",
             json!({"window": native, "ref": app_element}),
-            vec!["window", "ref"],
+            vec!["ref"],
         ),
         Tool::AppAct(_) => (
             "Replace the text of an editable element of a native window, by its ref. Answers what it changed in the window.",
             json!({"window": native, "ref": app_element, "text": {"type": "string"}}),
-            vec!["window", "ref", "text"],
+            vec!["ref", "text"],
         ),
         Tool::AskToUse => (
             "Ask the user again to let you use the desktop, after they stopped you or turned you away. Only when the user asks you to: it shows them a dialog.",
@@ -599,6 +603,15 @@ fn guarded(
     }
     // Read once per call: a change the user makes applies from the next.
     let reach = (grant.reach)();
+    let focused;
+    let arguments = match your_focus(tool, arguments, grant.session, &reach, domicile)? {
+        Ok(None) => arguments,
+        Ok(Some(filled)) => {
+            focused = filled;
+            &focused
+        }
+        Err(why) => return Ok(said(false, why)),
+    };
     if let AgentReach::Windows { windows } = &reach {
         if let Err(why) = within(tool, arguments, windows, &name) {
             return Ok(said(false, why));
@@ -627,6 +640,42 @@ fn guarded(
         (grant.did)(&what_it_did(tool, arguments, &session.titles));
     }
     Ok(answered)
+}
+
+/// `arguments` with the window seat `seat`'s keyboard is in, for a tool that
+/// reads or drives a window by ref and names none, or `None` when they need
+/// no window, or why there is none. An agent the user shared only some
+/// windows with has no keyboard, so it names one.
+fn your_focus(
+    tool: Tool,
+    arguments: &Map<String, Value>,
+    seat: u32,
+    reach: &AgentReach,
+    domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
+) -> io::Result<Result<Option<Map<String, Value>>, String>> {
+    if !matches!(tool, Tool::Browser(_) | Tool::AppSnapshot | Tool::AppAct(_))
+        || arguments.contains_key("window")
+    {
+        return Ok(Ok(None));
+    }
+    if let AgentReach::Windows { .. } = reach {
+        return Ok(Err(
+            "Name the window: the user shared only some windows with you, and list_windows lists them."
+                .to_string(),
+        ));
+    }
+    let ran = domicile(&["list-windows".to_string(), "--json".to_string()])?;
+    if !ran.success {
+        return Ok(Err(ran.stderr));
+    }
+    let windows: Vec<domicile_protocol::ListedWindow> = serde_json::from_str(&ran.stdout)?;
+    Ok(
+        crate::control::focused_window(&windows, Some(seat)).map(|window| {
+            let mut filled = arguments.clone();
+            filled.insert("window".to_string(), Value::String(window.id.clone()));
+            Some(filled)
+        }),
+    )
 }
 
 /// The most steps a batch takes.
@@ -819,7 +868,7 @@ fn within(
 ) -> Result<(), String> {
     let window = match tool {
         Tool::Listing("list-windows") => return Ok(()),
-        Tool::WindowAct("close-window") => arguments.get("id"),
+        Tool::WindowAct("close-window") => arguments.get("window"),
         Tool::Browser(_) | Tool::AppSnapshot | Tool::AppAct(_) => arguments.get("window"),
         _ => {
             return Err(format!(
@@ -897,7 +946,7 @@ fn what_it_did(
         Tool::Exec => "Started a program".to_string(),
         Tool::Open => "Opened something".to_string(),
         Tool::WindowAct("focus-window") => format!("Focused {}", window("id")),
-        Tool::WindowAct(_) => format!("Closed {}", window("id")),
+        Tool::WindowAct(_) => format!("Closed {}", window("window")),
         Tool::Theme => "Changed the theme".to_string(),
         Tool::Screenshot => "Took a screenshot".to_string(),
         Tool::Click => "Clicked".to_string(),
@@ -930,66 +979,24 @@ fn what_it_did(
     }
 }
 
-/// How long the user must leave this computer's own keyboard and pointer
-/// before an agent may move them. Shorter would let an agent take the pointer
-/// while the user reads.
-const AWAY: u64 = 30;
-
-/// Whether `tool` with `arguments` moves the pointer, keyboard focus or
-/// windows the user is using. A shell command acts on the user's focus,
-/// unless it names a window. The pointer and keys go to the agent's own seat
-/// instead: see [`on_its_own_seat`].
-fn moves_the_users_hands(tool: Tool, arguments: &Map<String, Value>) -> bool {
-    matches!(tool, Tool::SendShell) && !arguments.contains_key("window")
-}
-
 /// Whether `tool` with `arguments` points or types with the agent's own
 /// pointer and keyboard, which never move the user's (`--agent`), starts a
-/// program whose windows that seat holds, or sends a shell command on a
-/// window that seat holds.
-fn on_its_own_seat(tool: Tool, arguments: &Map<String, Value>) -> bool {
-    (matches!(tool, Tool::SendShell) && arguments.contains_key("window"))
-        || matches!(
-            tool,
-            Tool::Exec
-                | Tool::Open
-                | Tool::Click
-                | Tool::MovePointer
-                | Tool::Drag
-                | Tool::Scroll
-                | Tool::Key
-                | Tool::TypeText
-                | Tool::WindowAct("focus-window")
-        )
-}
-
-/// Why an agent may not move the user's pointer or focus now, or `None` once
-/// the user has been away from this computer for [`AWAY`] seconds.
-fn in_use(domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>) -> io::Result<Option<String>> {
-    let ran = domicile(&["idle-time".to_string(), "--json".to_string()])?;
-    if !ran.success {
-        return Ok(Some(ran.stderr));
-    }
-    let local_seconds = serde_json::from_str::<Value>(&ran.stdout)?["local_seconds"]
-        .as_u64()
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "domicile idle-time printed no local_seconds: {}",
-                    ran.stdout
-                ),
-            )
-        })?;
-    Ok((local_seconds < AWAY).then(|| {
-        format!(
-            "The user is using this computer, and shell commands act on their keyboard \
-             focus and windows. Use the browser_ and app_ tools by ref, or your own \
-             pointer and keys (click, key, type_text), which don't move theirs, or try \
-             again once the user has left the keyboard and mouse alone for {AWAY} \
-             seconds."
-        )
-    }))
+/// program whose windows that seat holds, or acts on a window that seat
+/// holds: a shell command, or closing one.
+fn on_its_own_seat(tool: Tool) -> bool {
+    matches!(
+        tool,
+        Tool::SendShell
+            | Tool::Exec
+            | Tool::Open
+            | Tool::Click
+            | Tool::MovePointer
+            | Tool::Drag
+            | Tool::Scroll
+            | Tool::Key
+            | Tool::TypeText
+            | Tool::WindowAct(_)
+    )
 }
 
 /// `tools/call`'s result for `tool` with `arguments`. An act on a window
@@ -1017,14 +1024,9 @@ fn called(
         Ok(runs) => runs,
         Err(why) => return Ok(said(false, why)),
     };
-    if on_its_own_seat(tool, arguments) {
+    if on_its_own_seat(tool) {
         for run in &mut runs {
             run.splice(1..1, ["--agent".to_string(), seat.to_string()]);
-        }
-    }
-    if moves_the_users_hands(tool, arguments) {
-        if let Some(why) = in_use(domicile)? {
-            return Ok(said(false, why));
         }
     }
     // Each run in turn, up to the first that fails.
@@ -1095,7 +1097,11 @@ fn app_read_again(
     domicile: &mut impl FnMut(&[String]) -> io::Result<Ran>,
     read: &mut HashMap<String, String>,
 ) -> io::Result<String> {
-    let ran = domicile(&["accessibility".to_string(), window.to_string()])?;
+    let ran = domicile(&[
+        "accessibility".to_string(),
+        "--window".to_string(),
+        window.to_string(),
+    ])?;
     if !ran.success {
         return Ok(format!("It could not be read again: {}", ran.stderr));
     }
@@ -1128,15 +1134,7 @@ fn commands(
                 .map(|word| word.as_str().map(str::to_string))
                 .collect::<Option<Vec<_>>>()
                 .ok_or("send_shell's words are strings")?;
-            match string(arguments, "window")? {
-                None => Ok(vec![[words(&["send-shell"]), said].concat()]),
-                // The seat takes the window first: the compositor sends only
-                // a command on a window the seat holds.
-                Some(window) => Ok(vec![
-                    words(&["focus-window", &window]),
-                    [words(&["send-shell", "--window", &window]), said].concat(),
-                ]),
-            }
+            Ok(taking(arguments, [words(&["send-shell"]), said].concat())?)
         }
         Tool::Exec => {
             let argv = arguments
@@ -1170,10 +1168,11 @@ fn commands(
             ]
             .concat()])
         }
-        Tool::WindowAct(verb) => {
-            let id = string(arguments, "id")?.ok_or("this tool takes a window id")?;
-            Ok(vec![vec![verb.to_string(), id]])
+        Tool::WindowAct("focus-window") => {
+            let id = string(arguments, "id")?.ok_or("focus_window takes a window id")?;
+            Ok(vec![words(&["focus-window", &id])])
         }
+        Tool::WindowAct(verb) => taking(arguments, words(&[verb])),
         Tool::Theme => Ok(vec![[
             words(&["theme"]),
             string(arguments, "change")?.into_iter().collect(),
@@ -1211,17 +1210,22 @@ fn commands(
             let by = across_the_desk(view, number(arguments, "dx")?, number(arguments, "dy")?)?;
             Ok(vec![words(&["pointer", &at]), words(&["scroll", &by])])
         }
+        // The seat's keyboard takes a named window as it presses.
         Tool::Key => {
             let chord = string(arguments, "chord")?.ok_or("key takes a chord")?;
-            Ok(vec![vec!["key".to_string(), chord]])
+            Ok(vec![
+                [words(&["key"]), aimed(arguments)?, vec![chord]].concat()
+            ])
         }
         Tool::TypeText => {
             let text = string(arguments, "text")?.ok_or("type_text takes text")?;
-            Ok(vec![vec!["type".to_string(), text]])
+            Ok(vec![
+                [words(&["type"]), aimed(arguments)?, vec![text]].concat()
+            ])
         }
         Tool::AppSnapshot => {
             let window = string(arguments, "window")?.ok_or("app_snapshot takes a window id")?;
-            Ok(vec![vec!["accessibility".to_string(), window]])
+            Ok(vec![words(&["accessibility", "--window", &window])])
         }
         Tool::AppAct(act) => {
             let window = string(arguments, "window")?.ok_or("this tool takes a window id")?;
@@ -1231,8 +1235,8 @@ fn commands(
                 _ => Vec::new(),
             };
             Ok(vec![[
-                words(&["accessibility-act"]),
-                vec![window, element, act.to_string()],
+                words(&["accessibility-act", "--window", &window]),
+                vec![element, act.to_string()],
                 text,
             ]
             .concat()])
@@ -1241,6 +1245,29 @@ fn commands(
             unreachable!("guarded answers ask_to_use_desktop, stop_using_desktop and batch itself")
         }
     }
+}
+
+/// `--window` and the window `arguments` name, or nothing for the window the
+/// seat's keyboard is in.
+fn aimed(arguments: &Map<String, Value>) -> Result<Vec<String>, String> {
+    Ok(match string(arguments, "window")? {
+        Some(window) => vec!["--window".to_string(), window],
+        None => Vec::new(),
+    })
+}
+
+/// `run` aimed as [`aimed`] aims it, after the seat takes the window it names
+/// with its keyboard: the compositor and the launcher act only on a window the
+/// seat holds.
+fn taking(arguments: &Map<String, Value>, run: Vec<String>) -> Result<Vec<Vec<String>>, String> {
+    let (verb, rest) = run.split_first().expect("a run names its verb");
+    Ok(match string(arguments, "window")? {
+        None => vec![run],
+        Some(window) => vec![
+            vec!["focus-window".to_string(), window.clone()],
+            [vec![verb.clone()], aimed(arguments)?, rest.to_vec()].concat(),
+        ],
+    })
 }
 
 /// `x`, `y` in the last screenshot's pixels as `x,y` in the desk's, as

@@ -94,10 +94,13 @@ Manganese-only commands:
   than `default`.
 - `domicile send-shell <command>` runs a command from a terminal:
   `domicile send-shell workspace 2`.
-- `domicile send-shell --window <id> move container to workspace <name>`
-  sends that window, not the focused one, and leaves the focus where it is.
-  It is the only command that runs on a given window; agents use it on their
-  own windows.
+- `domicile send-shell --window <id> <command>` runs a command that acts on
+  the window on that window instead of the focused one, and leaves the focus,
+  the shown workspaces and the overview as they were: `move container to
+  workspace <name>`, `move scratchpad`, `move <way>`, `split h/v`, `layout
+  …`, `group`, `floating toggle`, `fullscreen toggle`, `resize grow <way>` and
+  `kill`. A command that acts on the desk, such as `workspace 2`, is refused
+  on a window. An agent's command runs on the agent's window.
 - Two queries answer from a terminal with JSON, for scripts:
   `domicile send-shell get-workspaces` lists each workspace with its screen,
   whether it shows, whether it has the keyboard, and its windows;

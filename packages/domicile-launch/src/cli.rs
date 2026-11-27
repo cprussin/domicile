@@ -184,17 +184,10 @@ pub enum CliError {
     )]
     NothingToSend,
     #[error(
-        "send-shell --agent acts on a window the agent's seat holds, so it \
-         takes --window and the window's id, as list-windows prints it:\n\n    \
-         domicile send-shell --agent 3 --window <id> move container to workspace 2\n"
+        "{verb} --window takes a window's id, as list-windows prints it:\n\n    \
+         domicile {verb} --window kD3mQ7nW1zT5yB8vC2xF6hJ9pL4sR0gA\n"
     )]
-    AgentSendsToAWindow,
-    #[error(
-        "send-shell --window takes a window's id, as list-windows prints it, \
-         then the command:\n\n    \
-         domicile send-shell --window <id> move container to workspace 2\n"
-    )]
-    NoWindowToSendTo,
+    NoWindowGiven { verb: String },
     #[error(
         "disable-while-typing takes on, off or toggle, or nothing to print \
          the setting, and was given {said}."
@@ -421,12 +414,18 @@ pub enum Invocation {
     /// list each line of stdin as what it did, until either side ends it;
     /// see [`crate::agent_lending`].
     Agent { name: String },
-    /// Print native window `window`'s accessibility tree; see
+    /// Print native window `window`'s accessibility tree, or that of the
+    /// window agent session `agent`'s keyboard is in, or the user's; see
     /// [`crate::accessibility`].
-    Accessibility { window: String },
-    /// Act on an element of native window `window`'s accessibility tree.
+    Accessibility {
+        window: Option<String>,
+        agent: Option<u32>,
+    },
+    /// Act on an element of native window `window`'s accessibility tree, or
+    /// of the focused window as [`Invocation::Accessibility`] finds it.
     AccessibilityAct {
-        window: String,
+        window: Option<String>,
+        agent: Option<u32>,
         element: String,
         act: Act,
     },
@@ -658,15 +657,11 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
             },
             Verb::Sending => {
                 let agent = agent_flag(&mut args)?;
-                let window = match args.next_if(|said| said == WINDOW) {
-                    None => None,
-                    Some(_) => Some(args.next().ok_or(CliError::NoWindowToSendTo)?),
-                };
+                let window = window_flag(&mut args, &first)?;
                 let command: Vec<String> = args.collect();
-                match (command.is_empty(), agent, &window) {
-                    (true, _, _) => Err(CliError::NothingToSend),
-                    (false, Some(_), None) => Err(CliError::AgentSendsToAWindow),
-                    (false, _, _) => Ok(Invocation::Ask {
+                match command.is_empty() {
+                    true => Err(CliError::NothingToSend),
+                    false => Ok(Invocation::Ask {
                         request: Request::SendShell {
                             command,
                             window,
@@ -804,26 +799,37 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 }),
                 (Some(extra), _) => Err(CliError::Extra { verb: first, extra }),
             },
-            Verb::Acting(act) => match (
-                matches!(act, WindowAct::Focus)
-                    .then(|| agent_flag(&mut args))
-                    .transpose()?
-                    .flatten(),
-                args.next(),
-                args.next(),
-            ) {
-                (_, None, _) => Err(CliError::NoWindow { verb: first }),
-                (Some(agent), Some(window), None) => {
-                    emulated(vec![EmulatedInput::Focus { window }], Some(agent))
+            // Focusing names the window it focuses; it is no act on the
+            // focused one.
+            Verb::Acting(WindowAct::Focus) => {
+                match (agent_flag(&mut args)?, args.next(), args.next()) {
+                    (_, None, _) => Err(CliError::NoWindow { verb: first }),
+                    (Some(agent), Some(window), None) => {
+                        emulated(vec![EmulatedInput::Focus { window }], Some(agent), None)
+                    }
+                    (None, Some(id), None) => Ok(Invocation::Ask {
+                        request: Request::ActOnWindow {
+                            id: Some(id),
+                            act: WindowAct::Focus,
+                            agent: None,
+                        },
+                    }),
+                    (_, Some(id), Some(extra)) => Err(CliError::Extra {
+                        verb: format!("{first} {id}"),
+                        extra,
+                    }),
                 }
-                (None, Some(id), None) => Ok(Invocation::Ask {
-                    request: Request::ActOnWindow { id, act },
-                }),
-                (_, Some(id), Some(extra)) => Err(CliError::Extra {
-                    verb: format!("{first} {id}"),
-                    extra,
-                }),
-            },
+            }
+            Verb::Acting(act) => {
+                let agent = agent_flag(&mut args)?;
+                let id = window_flag(&mut args, &first)?;
+                match args.next() {
+                    None => Ok(Invocation::Ask {
+                        request: Request::ActOnWindow { id, act, agent },
+                    }),
+                    Some(extra) => Err(CliError::Extra { verb: first, extra }),
+                }
+            }
             Verb::Configuring => {
                 let display = args.next().ok_or(CliError::NoDisplayToConfigure)?;
                 let change = display_change(args)?;
@@ -856,6 +862,7 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 emulated(
                     [vec![EmulatedInput::PointTo { x, y }], then].concat(),
                     agent,
+                    None,
                 )
             }
             Verb::Dragging => {
@@ -863,7 +870,7 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 let said: Vec<String> = args.collect();
                 match said.as_slice() {
                     [from, to] => match (pair(from), pair(to)) {
-                        (Some(from), Some(to)) => emulated(drag(from, to), agent),
+                        (Some(from), Some(to)) => emulated(drag(from, to), agent, None),
                         _ => Err(CliError::NotADrag {
                             said: said.join(" "),
                         }),
@@ -878,28 +885,39 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
             }
             Verb::Scrolling => match (agent_flag(&mut args)?, args.next(), args.next()) {
                 (agent, Some(said), None) => match pair(&said) {
-                    Some((dx, dy)) => emulated(vec![EmulatedInput::Scroll { dx, dy }], agent),
+                    Some((dx, dy)) => emulated(vec![EmulatedInput::Scroll { dx, dy }], agent, None),
                     None => Err(CliError::NotADistance { said }),
                 },
                 (_, said, _) => Err(one(&first, "distance", said)),
             },
-            Verb::Keying => match (agent_flag(&mut args)?, args.next(), args.next()) {
-                (agent, Some(chord), None) => emulated(chord_input(&chord), agent),
-                (_, said, _) => Err(one(&first, "chord", said)),
-            },
-            Verb::Typing => match (agent_flag(&mut args)?, args.next(), args.next()) {
-                (agent, Some(text), None) => emulated(vec![EmulatedInput::Text { text }], agent),
-                (_, said, _) => Err(one(&first, "text, quoted", said)),
-            },
+            Verb::Keying => {
+                let agent = agent_flag(&mut args)?;
+                let window = window_flag(&mut args, &first)?;
+                match (args.next(), args.next()) {
+                    (Some(chord), None) => emulated(chord_input(&chord), agent, window),
+                    (said, _) => Err(one(&first, "chord", said)),
+                }
+            }
+            Verb::Typing => {
+                let agent = agent_flag(&mut args)?;
+                let window = window_flag(&mut args, &first)?;
+                match (args.next(), args.next()) {
+                    (Some(text), None) => {
+                        emulated(vec![EmulatedInput::Text { text }], agent, window)
+                    }
+                    (said, _) => Err(one(&first, "text, quoted", said)),
+                }
+            }
             Verb::DevTooling => {
                 let mut args = args.peekable();
                 let agent = agent_flag(&mut args)?;
+                let window = window_flag(&mut args, &first)?;
                 let view = match args.next_if(|said| said == "--view") {
                     Some(_) => Some(args.next().ok_or(CliError::NotDevTools)?),
                     None => None,
                 };
-                match (args.next(), args.next(), args.next(), args.next()) {
-                    (Some(window), Some(method), params, None) => {
+                match (args.next(), args.next(), args.next()) {
+                    (Some(method), params, None) => {
                         let params = match params {
                             None => serde_json::json!({}),
                             Some(params) => match serde_json::from_str(&params) {
@@ -917,18 +935,24 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                             },
                         })
                     }
-                    (_, _, _, Some(extra)) => Err(CliError::Extra { extra, verb: first }),
+                    (_, _, Some(extra)) => Err(CliError::Extra { extra, verb: first }),
                     _ => Err(CliError::NotDevTools),
                 }
             }
-            Verb::Reading => match (args.next(), args.next()) {
-                (Some(window), None) => Ok(Invocation::Accessibility { window }),
-                (said, _) => Err(one(&first, "window id", said)),
-            },
+            Verb::Reading => {
+                let mut args = args.peekable();
+                let agent = agent_flag(&mut args)?;
+                let window = window_flag(&mut args, &first)?;
+                match args.next() {
+                    None => Ok(Invocation::Accessibility { window, agent }),
+                    Some(extra) => Err(CliError::Extra { extra, verb: first }),
+                }
+            }
             Verb::Accessing => {
-                let (Some(window), Some(element), Some(act)) =
-                    (args.next(), args.next(), args.next())
-                else {
+                let mut args = args.peekable();
+                let agent = agent_flag(&mut args)?;
+                let window = window_flag(&mut args, &first)?;
+                let (Some(element), Some(act)) = (args.next(), args.next()) else {
                     return Err(CliError::NotAnAct);
                 };
                 let act = match (act.as_str(), args.next()) {
@@ -940,6 +964,7 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 match args.next() {
                     None => Ok(Invocation::AccessibilityAct {
                         window,
+                        agent,
                         element,
                         act,
                     }),
@@ -1276,18 +1301,42 @@ enum Verb {
 ///
 /// Every [`Request`] variant needs a verb here, or nobody can send it.
 /// Asks the running desktop to send `input`, to agent session `agent`'s
-/// own seat when given.
-fn emulated(input: Vec<EmulatedInput>, agent: Option<u32>) -> Result<Invocation, CliError> {
+/// own seat when given, in window `window` when given.
+fn emulated(
+    input: Vec<EmulatedInput>,
+    agent: Option<u32>,
+    window: Option<String>,
+) -> Result<Invocation, CliError> {
     Ok(Invocation::Ask {
-        request: Request::Emulate { input, agent },
+        request: Request::Emulate {
+            input,
+            agent,
+            window,
+        },
     })
 }
 
 /// The flag that sends emulated input to an agent session's own seat.
 const AGENT: &str = "--agent";
 
-/// The flag that aims a shell command at a window.
+/// The flag that aims a command at a window, rather than the focused one.
 const WINDOW: &str = "--window";
+
+/// The window `--window` names, if it leads `args`, for `verb`.
+fn window_flag(
+    args: &mut std::iter::Peekable<impl Iterator<Item = String>>,
+    verb: &str,
+) -> Result<Option<String>, CliError> {
+    match args.next_if(|said| said == WINDOW) {
+        None => Ok(None),
+        Some(_) => args
+            .next()
+            .map(Some)
+            .ok_or_else(|| CliError::NoWindowGiven {
+                verb: verb.to_string(),
+            }),
+    }
+}
 
 /// The agent session `--agent` names, if it leads `args`.
 fn agent_flag(

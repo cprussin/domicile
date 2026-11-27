@@ -918,8 +918,8 @@ bindKeys(
   within a second. A page that cannot listen calls `report`, which logs by
   default.
 - `onWindowCommand(args, window)` runs a command on a given window rather than
-  the user's focus: `send-shell --window`, and an agent's `send_shell` on a
-  window it holds. `window` is an app id or a browser window's engine id, as
+  the user's focus: `send-shell --window`, and every agent's `send_shell`,
+  on the agent's own window. `window` is an app id or a browser window's engine id, as
   seats name windows. Run only what makes sense on that window, and `Err` the
   rest. Without it, the page never hears such a command.
 - `commands` describes what `onCommand` runs: `domicile list-shell-commands`

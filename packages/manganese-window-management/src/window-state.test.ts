@@ -20,6 +20,7 @@ import {
   screenOfApp,
   shutIdsOf,
   WindowAction,
+  windowActedOn,
   windowNamed,
   workspaceHere,
   workspaceNamed,
@@ -3150,6 +3151,54 @@ describe("the overview", () => {
 
     expect(
       reduce(before, WindowAction.WindowMovedToWorkspace(APP("kitty"), "1")),
+    ).toBe(before);
+  });
+});
+
+describe("a command on a named window", () => {
+  it("floats the window it names, keeping the user's focus", () => {
+    const state = reduce(
+      desktop("editor", "kitty"),
+      WindowAction.WindowSelected(APP("editor")),
+      windowActedOn(APP("kitty"), WindowAction.FloatToggled()),
+    );
+
+    expect(
+      workspaceHere(state).floats.flatMap(({ root }) => windowsIn(root)),
+    ).toStrictEqual([APP("kitty")]);
+    expect(activeIdOf(state)).toBe(APP("editor"));
+  });
+
+  it("acts on a window on a hidden workspace without showing it", () => {
+    // kitty on 1, foot on 3, which the user is on.
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.WorkspaceSelected("3"),
+      WindowAction.AppAppeared("foot", "foot"),
+      windowActedOn(APP("kitty"), WindowAction.WindowSentToWorkspace("5")),
+    );
+
+    expect(windowsOn(workspaceNamed(state, "5"))).toStrictEqual([APP("kitty")]);
+    expect(currentHere(state)).toBe("3");
+    expect(activeIdOf(state)).toBe(APP("foot"));
+  });
+
+  it("does nothing for a window on no workspace", () => {
+    const before = desktop("editor");
+
+    expect(
+      reduce(before, windowActedOn(APP("gone"), WindowAction.FloatToggled())),
+    ).toBe(before);
+  });
+
+  it("runs only a command on the focused window", () => {
+    const before = desktop("editor", "kitty");
+
+    expect(
+      reduce(
+        before,
+        windowActedOn(APP("kitty"), WindowAction.WorkspaceSelected("2")),
+      ),
     ).toBe(before);
   });
 });

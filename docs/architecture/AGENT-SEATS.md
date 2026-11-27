@@ -176,13 +176,16 @@ domicile.seats.giveBack(windowId);
 - `click`, `move_pointer`, `drag`, `scroll`, `key`, `type_text` and
   `focus_window` use the agent's seat. The 30-second wait remains only for X11
   windows.
-- `send_shell` with a `window` acts on that window, for a window the agent's
-  seat holds, and doesn't wait. `SystemRequest::SendShell` names the window
-  and the agent session; the compositor checks the seat holds it and names it
-  as the shell knows it, and only a page listening `on_a_window` hears it.
-- `send_shell` without one stays on the user's seat behind the wait: shell commands act on
-  the user's focus.
-- `list_windows` adds `heldBy`.
+- Every tool that acts on a window takes an optional `window`; left out, it
+  is the window the agent's seat keyboard is in (`focused_by` in
+  `list-windows --json`), never the user's focus. The CLI does the same:
+  `--agent` with no `--window` acts on the agent's focus.
+- `send_shell` always acts on a window the agent's seat holds, and doesn't
+  wait. `SystemRequest::SendShell` names the agent session and maybe the
+  window; the compositor fills in the seat's focus when it names none, checks
+  the seat holds it, and names it as the shell knows it. Only a page
+  listening `on_a_window` hears it, so an agent can't run a desk command.
+- `list_windows` adds `heldBy` and `focusedBy`.
 
 ## Key decisions
 

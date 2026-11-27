@@ -201,7 +201,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "send-shell",
         group: Group::Shell,
-        takes: "<word>...",
+        takes: "[--window <id>] <word>...",
         summary: "Run a shell command, as a key does",
         forms: &[],
         about: &[
@@ -354,28 +354,30 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "close-window",
         group: Group::Windows,
-        takes: "<id>",
+        takes: "[--window <id>]",
         summary: "Ask a window to close",
         forms: &[],
         about: &[
-            "Asks native window `<id>` to close, as its close button does. The app \
-             may ask first, for example about unsaved work.",
+            "Asks a native window to close, as its close button does: the one the \
+             keyboard is in, or the one `--window` names. The app may ask first, for example \
+             about unsaved work.",
         ],
-        sections: &[],
+        sections: &[ON_A_WINDOW],
         examples: &[],
         see_also: &["list-windows", "kill-window"],
     },
     Command {
         name: "kill-window",
         group: Group::Windows,
-        takes: "<id>",
+        takes: "[--window <id>]",
         summary: "Kill a window's process",
         forms: &[],
         about: &[
-            "Kills the process of native window `<id>` with `SIGKILL`, for an app \
-             that no longer answers. Every window of that process goes with it.",
+            "Kills the process of a native window with `SIGKILL`, for an app that no \
+             longer answers: the one the keyboard is in, or the one `--window` \
+             names. Every window of that process goes with it.",
         ],
-        sections: &[],
+        sections: &[ON_A_WINDOW],
         examples: &[],
         see_also: &["list-windows", "close-window"],
     },
@@ -572,7 +574,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "key",
         group: Group::Input,
-        takes: "<chord>",
+        takes: "[--window <id>] <chord>",
         summary: "Press a chord such as ctrl+shift+Tab",
         forms: &[],
         about: &[
@@ -580,21 +582,21 @@ pub const COMMANDS: &[Command] = &[
              Each key is an XKB keysym name in any case; `ctrl`, `shift`, `alt` \
              and `super` name the left modifiers.",
         ],
-        sections: &[AGENT],
+        sections: &[ON_A_WINDOW],
         examples: &["domicile key ctrl+shift+Tab"],
         see_also: &["type"],
     },
     Command {
         name: "type",
         group: Group::Input,
-        takes: "<text>",
+        takes: "[--window <id>] <text>",
         summary: "Type text",
         forms: &[],
         about: &[
             "Types `<text>` on the desk's keyboard, holding Shift where a character \
              needs it. A line break presses Return.",
         ],
-        sections: &[AGENT],
+        sections: &[ON_A_WINDOW],
         examples: &["domicile type 'hello, world'"],
         see_also: &["key"],
     },
@@ -967,44 +969,45 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "accessibility",
         group: Group::Agents,
-        takes: "<window>",
+        takes: "[--window <id>]",
         summary: "Print a window's accessibility tree",
         forms: &[],
         about: &[
             "Prints a native window's accessibility tree, one element a line with \
-             its ref. Needs the accessibility bus, which at-spi2-core runs.",
+             its ref: the window the keyboard is in, or the one `--window` names. \
+             Needs the accessibility bus, which at-spi2-core runs.",
         ],
-        sections: &[],
+        sections: &[ON_A_WINDOW],
         examples: &[],
         see_also: &["accessibility-act", "list-windows"],
     },
     Command {
         name: "accessibility-act",
         group: Group::Agents,
-        takes: "<window> <ref> <act>",
+        takes: "<ref> <act>",
         summary: "Act on a window's element",
-        forms: &["accessibility-act <window> <ref> click|focus|set-text <text>"],
+        forms: &["accessibility-act <ref> click|focus|set-text <text>"],
         about: &[
             "Clicks an element of a native window by its ref from `accessibility`, \
              gives it the keyboard focus, or replaces its text.",
         ],
-        sections: &[],
+        sections: &[ON_A_WINDOW],
         examples: &[],
         see_also: &["accessibility"],
     },
     Command {
         name: "devtools",
         group: Group::Agents,
-        takes: "<window> <method> [params]",
+        takes: "<method> [params]",
         summary: "Send a DevTools Protocol method",
         forms: &[
-            "devtools [--view <view>] <window> <method> [params]",
-            "devtools --agent <session> <window> <method> [params]",
+            "devtools [--window <id>] [--view <view>] <method> [params]",
+            "devtools --agent <session> [--window <id>] <method> [params]",
         ],
         about: &[
             "Sends a DevTools Protocol method, with its params as a JSON object, to \
-             a browser window's page, or `shell` for the shell's page, and prints \
-             its result. Only the methods an agent needs to read and drive a page \
+             a browser window's page, or `--window shell` for the shell's page, \
+             and prints its result. Only the methods an agent needs to read and drive a page \
              go through.",
         ],
         sections: &[Section {
@@ -1016,12 +1019,17 @@ pub const COMMANDS: &[Command] = &[
                      use that agent's own clipboard",
                 ),
                 (
+                    "--window <id>",
+                    "Send it to that window, by its `list-windows` id, or `shell`. Left \
+                     out, the window the keyboard is in: with `--agent`, that agent's own",
+                ),
+                (
                     "--view <view>",
                     "Send it to one of the window's views, by its `list-windows --json` id",
                 ),
             ],
         }],
-        examples: &["domicile devtools shell Accessibility.getFullAXTree"],
+        examples: &["domicile devtools --window shell Accessibility.getFullAXTree"],
         see_also: &["list-windows", "mcp"],
     },
     // Config and help
@@ -1075,18 +1083,36 @@ const AGENT: Section = Section {
     )],
 };
 
+const ON_A_WINDOW: Section = Section {
+    title: "Options",
+    entries: &[
+        (
+            "--agent <session>",
+            "Use that agent session's own pointer and keyboard, as `agent` prints it, not the \
+             user's. Reaches native and browser windows the user isn't in, but not the shell",
+        ),
+        (
+            "--window <id>",
+            "Act on that window, as `list-windows` prints it. Left out, the window the keyboard \
+             is in: with `--agent`, the one that agent's keyboard is in. With `--agent`, the \
+             agent must hold the window",
+        ),
+    ],
+};
+
 const SEND_SHELL: Section = Section {
     title: "Options",
     entries: &[
         (
-            "--window <id>",
-            "Act on that window, as `list-windows` prints it, not the user's focus. Only a shell \
-             that runs commands on a given window hears it",
+            "--agent <session>",
+            "Send it for that agent session, as `agent` prints it. The command then acts on the \
+             agent's window, never the user's",
         ),
         (
-            "--agent <session>",
-            "Send it for that agent session, as `agent` prints it: refused unless its seat holds \
-             the window. Needs `--window`",
+            "--window <id>",
+            "Act on that window, as `list-windows` prints it, not the focus. Left out, the window \
+             the keyboard is in: with `--agent`, the one that agent's keyboard is in. Only a shell \
+             that runs commands on a given window hears a command with a window",
         ),
     ],
 };

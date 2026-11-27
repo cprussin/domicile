@@ -176,6 +176,14 @@ export const useWindows = (
           closedIdsOf(drawn.current, killedIdsOf(drawn.current)),
         );
       }
+      // A kill on a named window closes it, not the focus.
+      if (
+        action.kind === WindowActionKind.WindowActedOn &&
+        action.action.kind === WindowActionKind.WindowKilled &&
+        !isShutInOverview(drawn.current, action.action)
+      ) {
+        closeWindows(domicile, closedIdsOf(drawn.current, [action.id]));
+      }
       if (action.kind === WindowActionKind.GroupClosed) {
         closeWindows(
           domicile,

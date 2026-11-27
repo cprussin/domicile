@@ -257,9 +257,17 @@ pub enum Request {
     /// Lock the desktop. The compositor owns the lock, so this works with
     /// any shell that draws a lock screen.
     Lock,
-    /// Focus, close or kill the native window `id`, as `domicile
-    /// list-windows` prints it.
-    ActOnWindow { id: String, act: WindowAct },
+    /// Focus, close or kill the window `id`, as `domicile list-windows`
+    /// prints it, or the window agent session `agent`'s keyboard is in, or
+    /// the user's when neither is given. With `agent`, only a window its seat
+    /// holds.
+    ActOnWindow {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        act: WindowAct,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent: Option<u32>,
+    },
     /// Write a PNG of the desk, or of its `area`, to `file`, its longer
     /// side at most `fit` pixels. See `domicile screenshot --fit`.
     ShootDesk {
@@ -268,19 +276,25 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         area: Option<DeskRect>,
     },
-    /// Send `input` to the desk, or to agent session `agent`'s own seat.
-    /// See `domicile pointer`, `key` and `type`.
+    /// Send `input` to the desk, or to agent session `agent`'s own seat,
+    /// focusing `window` with that keyboard first when given. See `domicile
+    /// pointer`, `key` and `type`.
     Emulate {
         input: Vec<EmulatedInput>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        window: Option<String>,
     },
     /// Send DevTools Protocol `method` with `params` to browser window
     /// `window`, as `domicile list-windows` prints it, or to its view
-    /// `view`, for agent session `agent` when given. See `domicile devtools`.
+    /// `view`, for agent session `agent` when given. Without `window`, to
+    /// the window `agent`'s keyboard is in, or the user's. See `domicile
+    /// devtools`.
     #[serde(rename = "devtools")]
     DevTools {
-        window: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        window: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<u32>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1261,17 +1275,25 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(()) => Response::Done,
             Err(why) => Response::Refused { why },
         }),
-        Ok(Request::ActOnWindow { id, act }) => to_line(&match (desktop.act_on_window)(&id, act) {
-            Ok(()) => Response::Done,
-            Err(why) => Response::Refused { why },
-        }),
+        Ok(Request::ActOnWindow { id, act, agent }) => {
+            to_line(&match aimed_window(desktop, id.as_deref(), agent)
+                .and_then(|window| (desktop.act_on_window)(&window, act))
+            {
+                Ok(()) => Response::Done,
+                Err(why) => Response::Refused { why },
+            })
+        }
         Ok(Request::ShootDesk { file, fit, area }) => {
             to_line(&match (desktop.shoot_desk)(&file, fit, area) {
                 Ok(shot) => Response::DeskShot { shot },
                 Err(why) => Response::Refused { why },
             })
         }
-        Ok(Request::Emulate { input, agent }) => to_line(&match (desktop.emulate)(&input, agent) {
+        Ok(Request::Emulate {
+            input,
+            agent,
+            window,
+        }) => to_line(&match emulated_in(desktop, input, agent, window) {
             Ok(()) => Response::Done,
             Err(why) => Response::Refused { why },
         }),
@@ -1281,12 +1303,17 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             view,
             method,
             params,
-        }) => to_line(
-            &match driven(desktop, &window, agent, view.as_deref(), &method, &params) {
-                Ok(result) => Response::DevTools { result },
-                Err(why) => Response::Refused { why },
-            },
-        ),
+        }) => to_line(&match driven(
+            desktop,
+            window.as_deref(),
+            agent,
+            view.as_deref(),
+            &method,
+            &params,
+        ) {
+            Ok(result) => Response::DevTools { result },
+            Err(why) => Response::Refused { why },
+        }),
         Ok(Request::ConfigureDisplay { display, change }) => {
             to_line(&match (desktop.configure_display)(&display, &change) {
                 Ok(()) => Response::Done,
@@ -1397,6 +1424,83 @@ fn opened(
     })
 }
 
+/// The window agent session `agent`'s keyboard is in, or the user's
+/// keyboard when `agent` is `None`: the window a command that names none acts
+/// on. Browser windows' focus is the engine's, as [`Request::Windows`] answers
+/// it.
+pub fn focused_window(
+    windows: &[ListedWindow],
+    agent: Option<u32>,
+) -> Result<&ListedWindow, String> {
+    match agent {
+        None => windows
+            .iter()
+            .find(|window| window.focused)
+            .ok_or_else(|| "no window has the keyboard: name one".to_string()),
+        Some(session) => {
+            let seat = format!("agent-{session}");
+            windows
+                .iter()
+                .find(|window| window.focused_by.as_deref() == Some(seat.as_str()))
+                .ok_or_else(|| {
+                    "your seat's keyboard is in no window: name one, or focus one first".to_string()
+                })
+        }
+    }
+}
+
+/// The window `said` names, or the focused one as [`focused_window`] finds
+/// it. With `agent`, only a window that agent's seat holds, so an agent acts
+/// on its own windows.
+fn aimed_window(
+    desktop: &Desktop,
+    said: Option<&str>,
+    agent: Option<u32>,
+) -> Result<String, String> {
+    // The compositor says when there is no such window.
+    if let (Some(said), None) = (said, agent) {
+        return Ok(said.to_string());
+    }
+    let windows = laid_out_windows(desktop)?;
+    let window = match said {
+        None => focused_window(&windows, agent)?,
+        Some(said) => windows
+            .iter()
+            .find(|window| window.id == said)
+            .ok_or_else(|| format!("there is no window {said}; list-windows lists them"))?,
+    };
+    if let Some(session) = agent {
+        if window.held_by.as_deref() != Some(format!("agent-{session}").as_str()) {
+            return Err(format!(
+                "your seat doesn't hold window {}: focus it first",
+                window.id
+            ));
+        }
+    }
+    Ok(window.id.clone())
+}
+
+/// Sends `input` as [`Request::Emulate`] asks: into `window` when given,
+/// which agent session `agent`'s keyboard focuses first, or the user's.
+fn emulated_in(
+    desktop: &Desktop,
+    input: Vec<EmulatedInput>,
+    agent: Option<u32>,
+    window: Option<String>,
+) -> Result<(), String> {
+    match (window, agent) {
+        (None, agent) => (desktop.emulate)(&input, agent),
+        (Some(window), Some(session)) => (desktop.emulate)(
+            &[vec![EmulatedInput::Focus { window }], input].concat(),
+            Some(session),
+        ),
+        (Some(window), None) => {
+            (desktop.act_on_window)(&window, WindowAct::Focus)?;
+            (desktop.emulate)(&input, None)
+        }
+    }
+}
+
 /// The compositor's windows, each browser window with the engine's focus
 /// and size for it. The shell's focused page has the user's keyboard only
 /// while no native window has it.
@@ -1498,7 +1602,7 @@ pub const SHELL_WINDOW: &str = "shell";
 /// neither native nor private.
 fn driven(
     desktop: &Desktop,
-    window: &str,
+    window: Option<&str>,
     agent: Option<u32>,
     view: Option<&str>,
     method: &str,
@@ -1507,6 +1611,13 @@ fn driven(
     if (desktop.status)()?.locked {
         return Err("the desktop is locked".to_string());
     }
+    let window = match window {
+        Some(window) => window.to_string(),
+        None => focused_window(&laid_out_windows(desktop)?, agent)?
+            .id
+            .clone(),
+    };
+    let window = window.as_str();
     // Not a window list-windows lists: the engine answers it with the shell's
     // own page.
     if window == SHELL_WINDOW {

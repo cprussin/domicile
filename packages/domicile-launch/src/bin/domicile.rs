@@ -55,7 +55,7 @@ use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
 use domicile_launch::config_watch;
 use domicile_launch::control::{
-    answer, AgentLetIn, Desktop as ControlDesktop, Request, Response, SettingsFiles,
+    answer, focused_window, AgentLetIn, Desktop as ControlDesktop, Request, Response, SettingsFiles,
 };
 use domicile_launch::control_socket::{
     address, advertised, ask, hold, listen, serve_one, take, Control, Lenders,
@@ -303,8 +303,8 @@ fn run() -> Result<ExitCode, String> {
         Invocation::Mcp { http: Some(http) } => agents_served_over_http(http),
         Invocation::McpRelay { relay } => agents_served_through_relay(relay),
         Invocation::Agent { name } => admitted(name),
-        Invocation::Accessibility { window } => {
-            let (pid, title) = native_window(&window)?;
+        Invocation::Accessibility { window, agent } => {
+            let (pid, title) = native_window(window.as_deref(), agent)?;
             let mut bus = AtSpi::connected()?;
             let root = accessibility::window(&mut bus, pid, &title)?;
             print!("{}", accessibility::outline(&mut bus, &root)?);
@@ -312,10 +312,11 @@ fn run() -> Result<ExitCode, String> {
         }
         Invocation::AccessibilityAct {
             window,
+            agent,
             element,
             act,
         } => {
-            let (pid, _) = native_window(&window)?;
+            let (pid, _) = native_window(window.as_deref(), agent)?;
             let element = Element::named(&element).ok_or_else(|| {
                 format!("{element} is not an element's ref, as accessibility prints them")
             })?;
@@ -1295,7 +1296,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
 /// binary.
 /// The process and title of native window `id`, as `list-windows` lists it,
 /// while the desktop is unlocked.
-fn native_window(id: &str) -> Result<(u32, String), String> {
+fn native_window(id: Option<&str>, agent: Option<u32>) -> Result<(u32, String), String> {
     let socket =
         advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
     let asked =
@@ -1310,10 +1311,14 @@ fn native_window(id: &str) -> Result<(u32, String), String> {
     let Response::Windows { windows } = asked(Request::Windows)? else {
         return Err("the desktop did not answer with its windows".to_string());
     };
-    let window = windows
-        .into_iter()
-        .find(|window| window.id == id)
-        .ok_or_else(|| format!("there is no window {id}; list-windows lists them"))?;
+    let window = match id {
+        Some(id) => windows
+            .into_iter()
+            .find(|window| window.id == id)
+            .ok_or_else(|| format!("there is no window {id}; list-windows lists them"))?,
+        None => focused_window(&windows, agent)?.clone(),
+    };
+    let id = window.id.clone();
     match (window.kind, window.pid) {
         (WindowKind::Native, Some(pid)) => Ok((
             u32::try_from(pid).map_err(|_| format!("window {id} has process id {pid}"))?,
