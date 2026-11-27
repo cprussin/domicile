@@ -6,8 +6,13 @@ import { KeymapChoice } from "@domicile-desktop/sdk/keymap-choice";
 import { Axis, Direction } from "../direction";
 import { Layout } from "../tree/node";
 import type { WindowAction as Action } from "../window-state";
-import { WindowAction, windowActedOn } from "../window-state";
-import { COMMAND_HELP, parseCommand, parseWindowCommand } from "./command";
+import { WindowAction, WORKSPACES, windowActedOn } from "../window-state";
+import {
+  COMMAND_HELP,
+  completeCommand,
+  parseCommand,
+  parseWindowCommand,
+} from "./command";
 import { MediaKey } from "./media-key";
 
 /** Parse a command as written after `send-shell`. */
@@ -265,5 +270,18 @@ describe("parseWindowCommand", () => {
     expect(parseWindowCommand(["teleport"], "app:app-3")).toStrictEqual(
       Err("manganese: no command `teleport`"),
     );
+  });
+});
+
+describe("completeCommand", () => {
+  it.each([["workspace"], ["move container to workspace"]])(
+    "offers every workspace after `%s`",
+    (typed) => {
+      expect(completeCommand(typed.split(" "))).toStrictEqual(WORKSPACES);
+    },
+  );
+
+  it("offers nothing after words that take no workspace", () => {
+    expect(completeCommand(["keymap"])).toStrictEqual([]);
   });
 });

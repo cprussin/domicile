@@ -929,6 +929,9 @@ bindKeys(
   `[...]` optional, `<name>` a value. Call a window id `<window>` and a
   display `<display>` to have them completed.
   [`domicile completions`](CLI.md#domicile-completions-bashzshfishnushellelvishpowershell)
+- `onComplete(args)` returns the words that can follow `args`, for any other
+  placeholder: manganese returns its workspace names for `workspace`.
+  Without it, the page never hears words to complete.
 - It returns `{ setMode, unbind }`. `setMode` keeps one mode across a desktop
   of several pages.
 - Command meanings are yours. Describe them in `commands`, and in your README,

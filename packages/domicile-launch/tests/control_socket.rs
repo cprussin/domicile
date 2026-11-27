@@ -179,6 +179,9 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                     shell_commands: &|| {
                         panic!("a question about this desktop reaches no compositor")
                     },
+                    complete_shell: &|_| {
+                        panic!("a question about this desktop reaches no compositor")
+                    },
                     shell_bindings: &|| {
                         panic!("a question about this desktop reaches no compositor")
                     },

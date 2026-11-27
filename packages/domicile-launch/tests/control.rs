@@ -662,6 +662,21 @@ fn a_desktop_asked_its_displays_or_windows_asks_the_compositor() {
             commands: vec![lock]
         }
     );
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"complete_shell\",\"command\":[\"workspace\"]}",
+            &Desktop {
+                complete_shell: &|typed| {
+                    assert_eq!(typed, ["workspace"]);
+                    Ok(vec!["mail".to_string()])
+                },
+                ..nothing_dialed()
+            },
+        ),
+        Response::ShellValues {
+            values: vec!["mail".to_string()]
+        }
+    );
     let binding = ShellBinding {
         mode: "default".to_string(),
         chord: "Meta+l".to_string(),
@@ -1633,6 +1648,7 @@ fn nothing_dialed() -> Desktop<'static> {
         browser_layouts: &|| panic!("only windows lists the browser windows' layouts"),
         status: &|| panic!("only status asks how the desktop is"),
         shell_commands: &|| panic!("only shell_commands lists the shell's commands"),
+        complete_shell: &|_| panic!("only complete_shell asks the shell to complete"),
         shell_bindings: &|| panic!("only shell_bindings lists the shell's bindings"),
         inputs: &|| panic!("only inputs lists the input devices"),
         idle_time: &|| panic!("only idle_time asks how long nobody has been here"),

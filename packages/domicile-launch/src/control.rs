@@ -222,6 +222,9 @@ pub enum Request {
     /// Report the commands the shell runs for [`Request::SendShell`], as its
     /// pages described them.
     ShellCommands,
+    /// Report what the shell says can follow `command`, the `send-shell`
+    /// words typed so far. See `SystemRequest::CompleteShell`.
+    CompleteShell { command: Vec<String> },
     /// Report the keys and gestures the shell binds, in each binding mode.
     ShellBindings,
     /// Report the keyboards, pointers and touch devices the engine reads.
@@ -539,6 +542,9 @@ pub enum Response {
 
     /// Answers `shell_commands`.
     ShellCommands { commands: Vec<ShellCommandHelp> },
+
+    /// Answers `complete_shell`.
+    ShellValues { values: Vec<String> },
 
     /// Answers `shell_bindings`.
     ShellBindings { bindings: Vec<ShellBinding> },
@@ -877,6 +883,12 @@ pub type AskStatus<'a> = &'a dyn Fn() -> Result<DesktopStatus, String>;
 /// tests.
 pub type ListShellCommands<'a> = &'a dyn Fn() -> Result<Vec<ShellCommandHelp>, String>;
 
+/// Asks the shell what can follow the `send-shell` words typed.
+///
+/// [`crate::compositor_socket::complete_shell`] in a desktop; a closure in
+/// tests.
+pub type CompleteShell<'a> = &'a dyn Fn(&[String]) -> Result<Vec<String>, String>;
+
 /// Asks the compositor which keys and gestures the shell binds.
 ///
 /// [`crate::compositor_socket::shell_bindings`] in a desktop; a closure in
@@ -977,6 +989,7 @@ pub struct Desktop<'a> {
     pub browser_layouts: ListBrowserLayouts<'a>,
     pub status: AskStatus<'a>,
     pub shell_commands: ListShellCommands<'a>,
+    pub complete_shell: CompleteShell<'a>,
     pub shell_bindings: ListShellBindings<'a>,
     pub inputs: ListInputs<'a>,
     pub idle_time: AskIdleTime<'a>,
@@ -1275,6 +1288,12 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(commands) => Response::ShellCommands { commands },
             Err(why) => Response::Refused { why },
         }),
+        Ok(Request::CompleteShell { command }) => {
+            to_line(&match (desktop.complete_shell)(&command) {
+                Ok(values) => Response::ShellValues { values },
+                Err(why) => Response::Refused { why },
+            })
+        }
         Ok(Request::ShellBindings) => to_line(&match (desktop.shell_bindings)() {
             Ok(bindings) => Response::ShellBindings { bindings },
             Err(why) => Response::Refused { why },

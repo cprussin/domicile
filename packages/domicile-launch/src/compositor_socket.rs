@@ -476,6 +476,28 @@ pub fn shell_commands(
     }
 }
 
+/// Asks the shell pages at `socket` what can follow `command`, the
+/// `send-shell` words typed so far.
+pub fn complete_shell(
+    socket: &Path,
+    command: &[String],
+    patience: Option<Duration>,
+) -> Result<Vec<String>, CompositorError> {
+    let request = SystemRequest::CompleteShell {
+        command: command.to_vec(),
+    };
+    let answer = called(socket, request, patience)?;
+    match answer.reply {
+        SystemReply::Sent {
+            output: Some(output),
+        } => serde_json::from_str(&output).map_err(|_| CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said: output,
+        }),
+        reply => Err(not_done(socket, reply, answer.said)),
+    }
+}
+
 /// Asks the compositor at `socket` which input devices the engine reads.
 pub fn inputs(
     socket: &Path,

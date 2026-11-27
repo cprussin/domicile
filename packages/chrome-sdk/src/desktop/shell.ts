@@ -54,8 +54,8 @@ export const shell = (
   );
   return {
     answer: (sent, ran) => calls.answerShellCommand(sent, ran),
-    commands: (help, bindings, onAWindow) =>
-      calls.shellCommands(help, bindings, onAWindow),
+    commands: (help, bindings, onAWindow, completes) =>
+      calls.shellCommands(help, bindings, onAWindow, completes),
     links: (schemes) => calls.claimLinks(schemes),
     on: on<ShellListeners>({
       optionschange: (listener) =>

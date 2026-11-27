@@ -100,6 +100,9 @@ pub struct Sources<'a> {
     /// Browser profiles, as `(id, name)`.
     pub profiles: &'a dyn Fn() -> Vec<(String, String)>,
     pub shell_commands: &'a dyn Fn() -> Vec<ShellCommandHelp>,
+    /// What the shell says can follow the `send-shell` words typed, for
+    /// placeholders only it knows, such as `<name>` in `workspace <name>`.
+    pub shell_values: &'a dyn Fn(&[String]) -> Vec<String>,
     /// Programs on `PATH` whose names start with the word.
     pub programs: &'a dyn Fn(&str) -> Vec<String>,
 }
@@ -733,15 +736,26 @@ fn shell_words(before: &[String], sources: &Sources) -> Vec<(String, String)> {
             words.push((word, about.to_string()));
         }
     };
+    // Asked at most once, however many usages leave the shell a placeholder.
+    let mut asked = false;
     for command in &commands {
         for next in next_words(&command.usage, before) {
             match next {
                 Word::Literal(word) => add(word, &command.description),
-                Word::Placeholder(name) => {
-                    for (value, about) in placeholder(&name, sources) {
-                        add(value, &about);
+                Word::Placeholder(name) => match placeholder(&name, sources) {
+                    Some(values) => {
+                        for (value, about) in values {
+                            add(value, &about);
+                        }
                     }
-                }
+                    None if !asked => {
+                        asked = true;
+                        for value in (sources.shell_values)(before) {
+                            add(value, &command.description);
+                        }
+                    }
+                    None => {}
+                },
             }
         }
     }
@@ -749,12 +763,12 @@ fn shell_words(before: &[String], sources: &Sources) -> Vec<(String, String)> {
 }
 
 /// The values Domicile knows for a placeholder a shell's usage names, such
-/// as `<window>`.
-fn placeholder(name: &str, sources: &Sources) -> Vec<(String, String)> {
+/// as `<window>`, or `None` for one only the shell knows.
+fn placeholder(name: &str, sources: &Sources) -> Option<Vec<(String, String)>> {
     match name {
-        "window" => windows(sources),
-        "display" | "output" => displays(sources),
-        _ => Vec::new(),
+        "window" => Some(windows(sources)),
+        "display" | "output" => Some(displays(sources)),
+        _ => None,
     }
 }
 
