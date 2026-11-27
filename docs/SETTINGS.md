@@ -1,7 +1,8 @@
 # Settings
 
 Every desktop has a Settings app. `domicile-settings`, or **Settings** in the
-launcher, opens it in an app window. It is an app module
+launcher, opens it in an app window. `domicile-settings <page>` opens it on a
+page, by its name in kebab case: `privacy`, `site-data`, `troubleshooting`. It is an app module
 ([APP-MODULES.md](architecture/APP-MODULES.md)), not an extension, so it is
 not in the Extensions page or any extension list.
 
@@ -176,7 +177,7 @@ Settings page ─ spawn, stdio ─▶ domicile-app-host ─ DOMICILE_SOCK ─▶
 | Site data | The engine's `site_data` and `clear_site_data` commands. They read and remove the shell profile's data through Chrome's `BrowsingDataModel`, as `chrome://settings/content/all` does. |
 | Camera and microphone | The engine's `media_devices` and `set_media_device` commands. They read and write Chrome's device ranking in the shell profile's prefs, which Chrome uses for a site that names no device. |
 | HDR per monitor | The host's `monitors` asks the compositor `which_monitors`: each lit monitor's names (output name, connector, and its EDID name with either maker spelling) and HDR state. A profile monitor whose `display` names a plugged-in monitor that can't show HDR says "Not supported" in place of its switch. A monitor that isn't plugged in keeps its switch. |
-| Opening it | `domicile-settings` runs `domicile open --app` on `settings.js`. |
+| Opening it | `domicile-settings` runs `domicile open --app` on `settings.js`, and `domicile-settings privacy` on `settings.js#privacy`. The app opens on the page its address's fragment names, and turns to the one a later `hashchange` names. |
 
 ## Key decisions
 

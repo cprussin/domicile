@@ -90,8 +90,14 @@ pub enum Request {
     },
     /// Run the app module `module` under `root` in an app window. The client
     /// resolves both ([`crate::app_entry`]). See
-    /// `docs/architecture/APP-MODULES.md`.
-    RunApp { root: PathBuf, module: PathBuf },
+    /// `docs/architecture/APP-MODULES.md`. With `fragment`, the window opens
+    /// at `#<fragment>`, which the app reads as `location.hash`.
+    RunApp {
+        root: PathBuf,
+        module: PathBuf,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fragment: Option<String>,
+    },
     /// Start `command` as the compositor starts an app from the launcher,
     /// with the desktop's environment, in its own scope. `domicile open`
     /// asks this for the handler it picks, so a link the engine opens starts
@@ -617,10 +623,10 @@ pub type OpenUrl<'a> =
 /// [`crate::command_socket::open_app`] in a desktop; a closure in tests.
 pub type OpenApp<'a> = &'a dyn Fn(&str, Option<&str>, AppReuse, Option<&str>) -> Result<(), String>;
 
-/// Tells the engine to run an app module.
+/// Tells the engine to run an app module, at a fragment if one is named.
 ///
 /// [`crate::command_socket::run_app`] in a desktop; a closure in tests.
-pub type RunApp<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
+pub type RunApp<'a> = &'a dyn Fn(&Path, &Path, Option<&str>) -> Result<(), String>;
 
 /// Tells the compositor to start a program as an app, for an agent session
 /// if one is named.
@@ -1094,10 +1100,16 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
                 Err(why) => Response::Refused { why },
             },
         ),
-        Ok(Request::RunApp { root, module }) => to_line(&match (desktop.run_app)(&root, &module) {
-            Ok(()) => Response::Opened,
-            Err(why) => Response::Refused { why },
-        }),
+        Ok(Request::RunApp {
+            root,
+            module,
+            fragment,
+        }) => to_line(
+            &match (desktop.run_app)(&root, &module, fragment.as_deref()) {
+                Ok(()) => Response::Opened,
+                Err(why) => Response::Refused { why },
+            },
+        ),
         Ok(Request::Launch { command, agent }) => {
             to_line(&match (desktop.launch)(&command, agent) {
                 Ok(()) => Response::Opened,

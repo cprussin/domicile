@@ -209,7 +209,7 @@ off. It asks how long:
 
 Either way the page reloads. Turn the switch back on to block again. The shield
 is outlined while protections are off. You can also pick Strict for one site
-there.
+there. **Privacy settings** at its foot opens Settings on the Privacy page.
 
 If only one thing breaks a site, such as a sign-in that needs a link's
 tracking, turn just that one off instead: **Hide cookie banners**, **Remove

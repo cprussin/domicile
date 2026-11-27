@@ -3,7 +3,7 @@ import {
   Toaster,
 } from "@domicile-desktop/component-library/Toaster";
 import type { ComponentType, ReactNode } from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { css } from "../styled-system/css";
 import { grid, vstack } from "../styled-system/patterns";
@@ -21,7 +21,7 @@ import type {
 } from "./host";
 import { Notice } from "./Notice";
 import { Page } from "./Page";
-import { PAGES, PageId } from "./pages";
+import { PAGES, PageId, pageNamed } from "./pages";
 import { AgentsPage } from "./pages/AgentsPage";
 import { AppearancePage } from "./pages/AppearancePage";
 import { CodePage } from "./pages/CodePage";
@@ -58,7 +58,23 @@ type Props = {
 /** The Settings page: the sidebar and the page it picks. */
 export const App = ({ extensions, host }: Props) => {
   const [toasts] = useState(createToastManager);
-  const [page, setPage] = useState(PageId.Appearance);
+  // On the page its address names, as `domicile-settings privacy` opens it,
+  // and on another when the address changes to name it.
+  const [page, setPage] = useState(
+    () => pageNamed(location.hash) ?? PageId.Appearance,
+  );
+  useEffect(() => {
+    const follow = () => {
+      const named = pageNamed(location.hash);
+      if (named !== undefined) {
+        setPage(named);
+      }
+    };
+    addEventListener("hashchange", follow);
+    return () => {
+      removeEventListener("hashchange", follow);
+    };
+  }, []);
   const { failure, files, write } = useSettingsFiles(host);
   const overrides = useConfigOverrides(host);
   const unreachable: unknown = failure ?? overrides.failure;

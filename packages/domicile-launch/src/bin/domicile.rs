@@ -258,15 +258,15 @@ fn run() -> Result<ExitCode, String> {
         } => {
             let here = typed_in()?;
             match app_opening(&target, &here).map_err(|why| why.to_string())? {
-                AppOpening::Module(_) if id.is_some() => Err(format!(
+                AppOpening::Module { .. } if id.is_some() => Err(format!(
                     "--id is for a site; {target} is an app module, which opens \
                      a window of its own each time"
                 )),
-                AppOpening::Module(_) if profile.is_some() => Err(format!(
+                AppOpening::Module { .. } if profile.is_some() => Err(format!(
                     "--profile is for a site; {target} is an app module, whose \
                      page is its app's, in no browser profile"
                 )),
-                AppOpening::Module(entry) => ran_app(&entry, &here),
+                AppOpening::Module { entry, fragment } => ran_app(&entry, fragment, &here),
                 AppOpening::Address(url) => asked(&Request::OpenApp {
                     url,
                     id,
@@ -687,12 +687,14 @@ fn places() -> Places {
     }
 }
 
-/// Runs the app module `entry`, relative to `here`, in an app window.
-fn ran_app(entry: &str, here: &Path) -> Result<ExitCode, String> {
+/// Runs the app module `entry`, relative to `here`, in an app window, at
+/// `#<fragment>` when there is one.
+fn ran_app(entry: &str, fragment: Option<String>, here: &Path) -> Result<ExitCode, String> {
     let app = app_entry(Path::new(entry), here)?;
     asked(&Request::RunApp {
         root: app.root,
         module: app.module,
+        fragment,
     })
 }
 
@@ -2636,8 +2638,9 @@ fn answer_a_command(
                         open_app(engine, url, id, reuse, profile, ANSWER_WITHIN)
                             .map_err(|why| why.to_string())
                     },
-                    run_app: &|root, module| {
-                        run_app(engine, root, module, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    run_app: &|root, module, fragment| {
+                        run_app(engine, root, module, fragment, ANSWER_WITHIN)
+                            .map_err(|why| why.to_string())
                     },
                     launch: &|command, agent| {
                         launch(chrome, command, agent, Some(ANSWER_WITHIN + ANSWER_WITHIN))

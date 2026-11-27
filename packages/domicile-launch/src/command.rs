@@ -201,11 +201,13 @@ pub fn load_shell_line(shell: &Shell) -> String {
 }
 
 /// The request to serve the app module `module` under `root` and open an app
-/// window on it. See `docs/architecture/APP-MODULES.md`.
-pub fn run_app_line(root: &Path, module: &Path) -> String {
+/// window on it, at `#<fragment>` when there is one. See
+/// `docs/architecture/APP-MODULES.md`.
+pub fn run_app_line(root: &Path, module: &Path, fragment: Option<&str>) -> String {
     line(&Command::RunApp {
         module,
         root,
+        fragment,
         version: VERSION,
     })
 }
@@ -481,6 +483,9 @@ enum Command<'a> {
         version: u32,
         root: &'a Path,
         module: &'a Path,
+        // Left out when none, so the line is the one every engine reads.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fragment: Option<&'a str>,
     },
     OpenUrl {
         version: u32,

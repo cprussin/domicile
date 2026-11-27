@@ -58,6 +58,7 @@ struct Told {
   bool ran = false;
   base::FilePath app_root;
   std::string app_module;
+  std::optional<std::string> app_fragment;
   bool opened = false;
   std::string url;
   std::optional<AppLaunch> app;
@@ -192,12 +193,13 @@ std::string Answer(std::string_view line,
       std::move(loaded).Run(base::unexpected(kNoShellWindow));
     }
   };
-  auto run_app = [told, has_window](const base::FilePath& root,
-                                    const std::string& module,
-                                    WindowOpened opened) {
+  auto run_app = [told, has_window](
+                     const base::FilePath& root, const std::string& module,
+                     std::optional<std::string> fragment, WindowOpened opened) {
     told->ran = true;
     told->app_root = root;
     told->app_module = module;
+    told->app_fragment = std::move(fragment);
     if (told->hold_open) {
       told->held_open = std::move(opened);
       return;
@@ -596,6 +598,28 @@ TEST(CommandProtocolTest, RunsTheAppARequestNames) {
   EXPECT_TRUE(told.ran);
   EXPECT_EQ(told.app_root, base::FilePath("/opt/notes"));
   EXPECT_EQ(told.app_module, "notes.js");
+  EXPECT_EQ(told.app_fragment, std::nullopt);
+}
+
+// `domicile open --app notes.js#today`: the app opens on its own page.
+TEST(CommandProtocolTest, RunsTheAppAtTheFragmentARequestNames) {
+  Told told;
+  EXPECT_EQ(
+      TypeOf(Answer(R"({"type":"run_app","version":1,"root":"/opt/notes",)"
+                    R"("module":"notes.js","fragment":"today"})",
+                    &told)),
+      "opened");
+  EXPECT_EQ(told.app_fragment, "today");
+}
+
+TEST(CommandProtocolTest, RefusesAnAppFragmentThatIsNotText) {
+  Told told;
+  EXPECT_EQ(
+      TypeOf(Answer(R"({"type":"run_app","version":1,"root":"/opt/notes",)"
+                    R"("module":"notes.js","fragment":7})",
+                    &told)),
+      "refused");
+  EXPECT_FALSE(told.ran);
 }
 
 TEST(CommandProtocolTest, RefusesAnAppWithoutAnAbsoluteRootAndAModule) {

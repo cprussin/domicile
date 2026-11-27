@@ -56,8 +56,16 @@ fn a_load_shell_from_a_dev_server_says_so() {
 #[test]
 fn a_run_app_names_the_apps_root_and_module() {
     assert_eq!(
-        run_app_line(Path::new("/opt/notes"), Path::new("notes.js")),
+        run_app_line(Path::new("/opt/notes"), Path::new("notes.js"), None),
         "{\"type\":\"run_app\",\"version\":1,\"root\":\"/opt/notes\",\"module\":\"notes.js\"}\n"
+    );
+}
+
+#[test]
+fn a_run_app_at_a_fragment_names_it() {
+    assert_eq!(
+        run_app_line(Path::new("/opt/notes"), Path::new("notes.js"), Some("today")),
+        "{\"type\":\"run_app\",\"version\":1,\"root\":\"/opt/notes\",\"module\":\"notes.js\",\"fragment\":\"today\"}\n"
     );
 }
 

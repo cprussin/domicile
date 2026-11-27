@@ -28,12 +28,12 @@ fn shell_config(message: &HostMessage) -> bool {
     matches!(message, HostMessage::ShellConfig { .. })
 }
 
-/// The key `keysym` is on, from a `shell_config`.
+/// The lowest key `keysym` is on, from a `shell_config`.
 fn key(message: &HostMessage, keysym: &str) -> Option<u32> {
     let HostMessage::ShellConfig { keys, .. } = message else {
         unreachable!("the wait matched on the variant");
     };
-    keys.get(keysym).copied()
+    keys.get(keysym).map(|keys| keys[0])
 }
 
 #[test]

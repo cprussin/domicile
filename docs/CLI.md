@@ -86,7 +86,9 @@ window ([LAUNCHER.md](LAUNCHER.md#opening-files)).
   name is an error.
 - `domicile open --app <url|module>` opens a site or an app module as an
   app: its own window, without an address bar
-  ([WEB-APPS.md](architecture/WEB-APPS.md)).
+  ([WEB-APPS.md](architecture/WEB-APPS.md)). `<module>#<fragment>` opens an
+  app module's window at that fragment, which the app reads as
+  `location.hash`, unless a file has that whole name.
   - `--id <id>` makes a site's window app `<id>`'s.
   - `--profile <id>` opens a new window in that browser profile rather than
     its site's.

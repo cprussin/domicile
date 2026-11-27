@@ -126,6 +126,9 @@ domicile open --app ./dist/notes.js
 
 - The module's directory is the app: every file under it is served, and
   nothing outside it is.
+- `domicile open --app ./dist/notes.js#today` opens it at `#today`, as
+  `location.hash`, for a launcher entry or a link that opens one of its
+  pages.
 - Its storage (`localStorage`, IndexedDB) is its own, kept by that directory.
 - Several windows of one app share it. Coordinate them with
   `BroadcastChannel`.

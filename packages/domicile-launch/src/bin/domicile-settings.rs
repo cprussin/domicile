@@ -1,5 +1,7 @@
 //! Opens the Settings app in an app window of the running desktop: `domicile
-//! open --app` with the app's entry module. See `docs/SETTINGS.md`.
+//! open --app` with the app's entry module. `domicile-settings <page>` opens
+//! it on that page, such as `privacy`, as the module's `#<page>`. See
+//! `docs/SETTINGS.md`.
 
 #![allow(
     clippy::print_stderr,
@@ -31,11 +33,18 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    // The app reads the page from its address, and opens on its first page
+    // when it names none it has.
+    let mut target = module.into_os_string();
+    if let Some(page) = std::env::args_os().nth(1) {
+        target.push("#");
+        target.push(page);
+    }
     let domicile = binary.with_file_name("domicile");
     let why = Command::new(&domicile)
         .arg("open")
         .arg("--app")
-        .arg(module)
+        .arg(target)
         .exec();
     eprintln!(
         "domicile-settings: could not run {}: {why}",

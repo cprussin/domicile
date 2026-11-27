@@ -429,7 +429,7 @@ fn the_keyboard_and_the_shell_s_options_ride_with_the_handshake() {
     let mut session = Session::new();
     session.host_mut().set_keymap(KEYMAP.into());
     session.host_mut().set_shell_config(
-        [("Return".to_string(), 28)].into(),
+        [("Return".to_string(), vec![28])].into(),
         "{\"gaps\":4}".to_string(),
     );
 
@@ -445,7 +445,7 @@ fn the_keyboard_and_the_shell_s_options_ride_with_the_handshake() {
     assert_eq!(
         out.get(keymap_at + 1),
         Some(&HostMessage::ShellConfig {
-            keys: [("Return".to_string(), 28)].into(),
+            keys: [("Return".to_string(), vec![28])].into(),
             options: "{\"gaps\":4}".to_string(),
         })
     );

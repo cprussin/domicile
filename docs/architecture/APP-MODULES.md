@@ -59,6 +59,12 @@ With React, `mount(App)` from `@domicile-desktop/react/mount` is a `main`;
 
 - Every `run-app` opens an app window (`isApp`), as `open-app` does. Its
   visits stay out of the history.
+- `run_app`'s optional `fragment` opens the window at
+  `domicile://app-<id>/#<fragment>`: `domicile open --app notes.js#today`.
+  It is the app's to read, as `location.hash`, so a launcher entry or another
+  app can open it on one of its pages; Settings opens on the page it names
+  ([SETTINGS.md](/docs/SETTINGS.md)). An engine older than it opens the app
+  at its root.
 - Instances of one app share its origin. They coordinate with
   `BroadcastChannel` or Web Locks.
 - The window's guest is pinned to its app at creation. A guest shows a

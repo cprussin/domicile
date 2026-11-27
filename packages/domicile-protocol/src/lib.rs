@@ -1404,16 +1404,18 @@ pub enum HostMessage {
     /// connect. The shell works out which are new.
     Notifications { items: Vec<Notification> },
 
-    /// What the config says to the shell: the evdev key for each keysym name
-    /// the keyboard can type, and the values of the shell's options.
+    /// What the config says to the shell: every evdev key each keysym name the
+    /// keyboard can type is on, lowest first, and the values of the shell's
+    /// options.
     ///
     /// Shells bind chords by keysym, but presses arrive as keys, and only the
-    /// compositor has the keymap. See the SDK's `bindKeys`. `options` is the
+    /// compositor has the keymap. A chord fires from every key its keysym is
+    /// on. See the SDK's `bindKeys`. `options` is the
     /// config's `shell_options` as JSON text, which the compositor does not
     /// read; see the SDK's `watchShellOptions`. Sent on connect and when a
     /// reload changes either.
     ShellConfig {
-        keys: BTreeMap<String, u32>,
+        keys: BTreeMap<String, Vec<u32>>,
         options: String,
     },
 

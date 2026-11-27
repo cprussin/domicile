@@ -203,12 +203,12 @@ pub fn cursor_shape(icon: CursorIcon) -> CursorShape {
 }
 
 impl DomicileCompositor {
-    /// The evdev key that types `keysym`, from the keysym table the shell's
-    /// keybindings resolve against.
+    /// The lowest evdev key that types `keysym`, from the keysym table the
+    /// shell's keybindings resolve against.
     pub fn keycode_of(&self, keysym: u32) -> Option<u32> {
         let name = smithay::input::keyboard::xkb::keysym_get_name(keysym.into());
         match self.hub.host.lock().unwrap().describe_shell_config() {
-            Some(HostMessage::ShellConfig { keys, .. }) => keys.get(&name).copied(),
+            Some(HostMessage::ShellConfig { keys, .. }) => keys.get(&name).map(|keys| keys[0]),
             _ => None,
         }
     }

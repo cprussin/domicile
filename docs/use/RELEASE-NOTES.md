@@ -9,7 +9,7 @@ _Unreleased_
 
 ### Ads and trackers blocked
 
-Browser windows now block ads and the trackers that follow you from site to site, with the same lists uBlock Origin uses, built into the browser, so pages load faster and nothing has to be installed. The empty boxes ads leave, and the ads a site serves itself that the lists name, are hidden too, and so are the pop-ups asking you to accept cookies, without accepting anything. The fixes uBlock Origin runs in a page come too, so a site that won't show itself or scroll until its ads or cookie banner ran works anyway. Links from one site to another lose the click ids that tell the next site where you came from, and sites read your graphics, audio and processor details slightly off, so they can't recognize you by them. Standard blocks what other sites put on a page; Strict also blocks a site's own, and private windows use it. Each profile also blocks cookies from other sites, asks sites not to sell or share your data, and hides your local network address from video calls. All of it is on by default. When a site doesn't work, the shield at the end of the address field shows what was blocked and turns protections off for this window only, or always on that site, all of them or just the one in the way. Choose how much each profile blocks, and undo what you changed for a site, in Settings, under Privacy.
+Browser windows now block ads and the trackers that follow you from site to site, with the same lists uBlock Origin uses, built into the browser, so pages load faster and nothing has to be installed. The empty boxes ads leave, and the ads a site serves itself that the lists name, are hidden too, and so are the pop-ups asking you to accept cookies, without accepting anything. The fixes uBlock Origin runs in a page come too, so a site that won't show itself or scroll until its ads or cookie banner ran works anyway. Links from one site to another lose the click ids that tell the next site where you came from, and sites read your graphics, audio and processor details slightly off, so they can't recognize you by them. Standard blocks what other sites put on a page; Strict also blocks a site's own, and private windows use it. Each profile also blocks cookies from other sites, asks sites not to sell or share your data, and hides your local network address from video calls. All of it is on by default. When a site doesn't work, the shield at the end of the address field shows what was blocked and turns protections off for this window only, or always on that site, all of them or just the one in the way. Choose how much each profile blocks, and undo what you changed for a site, in Settings, under Privacy, which the shield's Privacy settings opens.
 
 [Privacy](BROWSER.md#privacy)
 
@@ -42,6 +42,7 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 
 ### Fixes
 
+- A headset's play button, such as squeezing an AirPod, now plays and pauses, as the keyboard's play/pause key does.
 - The clipboard history's Remove button has a trash icon, so it reads as a button, as Forget does on saved Wi-Fi networks. [Clipboard](CLIPBOARD.md)
 - A Wi-Fi network's sign-in page, as at a hotel or an airport, now opens even when the network is slow to answer at first.
 - Switching tabs no longer slides the new tab past the edge of its group.

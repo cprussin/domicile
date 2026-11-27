@@ -331,7 +331,10 @@ mod as_an_app {
 
         assert_eq!(
             app_opening("app.js", here),
-            Ok(AppOpening::Module("app.js".into()))
+            Ok(AppOpening::Module {
+                entry: "app.js".into(),
+                fragment: None
+            })
         );
         assert_eq!(
             app_opening("page.html", here),
@@ -341,6 +344,43 @@ mod as_an_app {
             app_opening("site", here),
             Ok(AppOpening::Address(address("site")))
         );
+    }
+
+    #[test]
+    fn a_module_opens_at_a_fragment_after_its_name() {
+        let home = written(&[("app.js", ""), ("odd#name.js", ""), ("page.html", "")]);
+        let here = home.path();
+
+        assert_eq!(
+            app_opening("app.js#privacy", here),
+            Ok(AppOpening::Module {
+                entry: "app.js".into(),
+                fragment: Some("privacy".into())
+            })
+        );
+        assert_eq!(
+            app_opening("app.js#", here),
+            Ok(AppOpening::Module {
+                entry: "app.js".into(),
+                fragment: Some(String::new())
+            })
+        );
+        // A file whose whole name has a `#` is that file.
+        assert_eq!(
+            app_opening("odd#name.js", here),
+            Ok(AppOpening::Module {
+                entry: "odd#name.js".into(),
+                fragment: None
+            })
+        );
+        assert!(matches!(
+            app_opening("page.html#top", here),
+            Err(OpenError::NoModule { .. })
+        ));
+        assert!(matches!(
+            app_opening("gone.js#privacy", here),
+            Err(OpenError::NoModule { .. })
+        ));
     }
 
     #[test]

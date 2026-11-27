@@ -251,6 +251,7 @@ void LoadShellIntoTheShellWindow(const base::FilePath& root,
 // docs/architecture/APP-MODULES.md.
 void RunAppOnceTheShellHasAPage(const base::FilePath& root,
                                 const std::string& module,
+                                std::optional<std::string> fragment,
                                 WindowOpened opened,
                                 bool has_a_page) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -259,19 +260,26 @@ void RunAppOnceTheShellHasAPage(const base::FilePath& root,
     return;
   }
   const std::string host = AppRoots::Get().Add(root, module);
+  GURL url(base::StrCat({kDomicileScheme, "://", host, "/"}));
+  if (fragment.has_value()) {
+    GURL::Replacements at;
+    at.SetRefStr(*fragment);
+    url = url.ReplaceComponents(at);
+  }
   LOG(INFO) << "domicile: running the app " << module << " out of " << root
-            << " at " << kDomicileScheme << "://" << host << "/";
-  std::move(opened).Run(OpenAppModuleWindow(
-      GURL(base::StrCat({kDomicileScheme, "://", host, "/"})), host));
+            << " at " << url.possibly_invalid_spec();
+  std::move(opened).Run(OpenAppModuleWindow(url, host));
 }
 
 // Runs the app module once the shell window shows a page, which owns the app
 // window.
 void RunAppInAnAppWindow(const base::FilePath& root,
                          const std::string& module,
+                         std::optional<std::string> fragment,
                          WindowOpened opened) {
   WhenTheShellWindowCanTakeIt(base::BindOnce(&RunAppOnceTheShellHasAPage, root,
-                                             module, std::move(opened)));
+                                             module, std::move(fragment),
+                                             std::move(opened)));
 }
 
 // Opens a browser window at `url`, as for a page's target="_blank", for

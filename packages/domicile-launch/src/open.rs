@@ -72,8 +72,13 @@ pub enum OpenError {
 /// What `domicile open --app` does with a target.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppOpening {
-    /// Run the app module at this path in an app window.
-    Module(String),
+    /// Run the app module at `entry` in an app window, at `fragment` when
+    /// there is one: `domicile://app-<id>/#<fragment>`, which the app reads
+    /// as `location.hash`.
+    Module {
+        entry: String,
+        fragment: Option<String>,
+    },
     /// Open this address in an app window.
     Address(String),
 }
@@ -85,23 +90,51 @@ pub enum AppOpening {
 ///   (`.html`, `.htm`), which opens in an app window as other addresses do.
 ///   So does a folder.
 /// - A missing file is an error, not an app window that shows nothing.
+/// - A module's path may end in `#<fragment>`, as an address does, when no
+///   file has that whole name: the app window opens at that fragment, so
+///   `settings.js#privacy` can open on a page of the app.
 pub fn app_opening(target: &str, here: &Path) -> Result<AppOpening, OpenError> {
     if has_scheme(target) {
         return Ok(AppOpening::Address(target.to_string()));
     }
     let path = here.join(target);
-    let found = std::fs::metadata(&path).map_err(|why| OpenError::NoModule {
-        target: target.to_string(),
-        why: why.to_string(),
-    })?;
-    let page = path
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("html") || ext.eq_ignore_ascii_case("htm"));
-    if found.is_file() && !page {
-        Ok(AppOpening::Module(target.to_string()))
+    let found = match std::fs::metadata(&path) {
+        Ok(found) => found,
+        Err(why) => {
+            return match target.split_once('#') {
+                Some((entry, fragment)) if !entry.is_empty() && is_module(&here.join(entry)) => {
+                    Ok(AppOpening::Module {
+                        entry: entry.to_string(),
+                        fragment: Some(fragment.to_string()),
+                    })
+                }
+                _ => Err(OpenError::NoModule {
+                    target: target.to_string(),
+                    why: why.to_string(),
+                }),
+            };
+        }
+    };
+    if found.is_file() && !is_page(&path) {
+        Ok(AppOpening::Module {
+            entry: target.to_string(),
+            fragment: None,
+        })
     } else {
         Ok(AppOpening::Address(url_for(target, here)))
     }
+}
+
+/// Whether `path` is a web page, which opens in an app window as an address
+/// does, not as a module.
+fn is_page(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("html") || ext.eq_ignore_ascii_case("htm"))
+}
+
+/// Whether `path` is a file that runs as an app module.
+fn is_module(path: &Path) -> bool {
+    path.is_file() && !is_page(path)
 }
 
 /// What opening `target`, relative to `here`, does on the desk at `places`.

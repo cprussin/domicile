@@ -445,7 +445,18 @@ void AnswerRunApp(const base::DictValue& request,
         base::StrCat({"\"", *root, "\" is not an absolute path"})));
     return;
   }
-  run_app(app_root, *module,
+  // Optional, so a supervisor older than it is still understood.
+  std::optional<std::string> fragment;
+  if (const base::Value* named = request.Find("fragment")) {
+    if (!named->is_string()) {
+      std::move(reply).Run(RefusedCommand(
+          "run_app's \"fragment\" is text, what the window's address has "
+          "after its #"));
+      return;
+    }
+    fragment = named->GetString();
+  }
+  run_app(app_root, *module, std::move(fragment),
           base::BindOnce(
               &AnswerOpened,
               std::string("this engine has no shell page to open an app in"),

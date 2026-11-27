@@ -272,8 +272,12 @@ fn a_desktop_told_to_run_an_app_tells_the_engine() {
     let answered = reply_to(
         "{\"type\":\"run_app\",\"root\":\"/opt/notes\",\"module\":\"notes.js\"}",
         &Desktop {
-            run_app: &|root, module| {
-                *told.borrow_mut() = Some((root.to_path_buf(), module.to_path_buf()));
+            run_app: &|root, module, fragment| {
+                *told.borrow_mut() = Some((
+                    root.to_path_buf(),
+                    module.to_path_buf(),
+                    fragment.map(str::to_string),
+                ));
                 Ok(())
             },
             ..nothing_dialed()
@@ -282,8 +286,26 @@ fn a_desktop_told_to_run_an_app_tells_the_engine() {
 
     assert_eq!(
         told.take(),
-        Some((PathBuf::from("/opt/notes"), PathBuf::from("notes.js")))
+        Some((PathBuf::from("/opt/notes"), PathBuf::from("notes.js"), None))
     );
+    assert_eq!(answered, Response::Opened);
+}
+
+#[test]
+fn a_desktop_told_to_run_an_app_at_a_fragment_passes_it_on() {
+    let told = RefCell::new(None);
+    let answered = reply_to(
+        "{\"type\":\"run_app\",\"root\":\"/opt/notes\",\"module\":\"notes.js\",\"fragment\":\"today\"}",
+        &Desktop {
+            run_app: &|_, _, fragment| {
+                *told.borrow_mut() = Some(fragment.map(str::to_string));
+                Ok(())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(told.take(), Some(Some("today".to_string())));
     assert_eq!(answered, Response::Opened);
 }
 
@@ -1656,7 +1678,7 @@ fn nothing_dialed() -> Desktop<'static> {
         shell: Box::leak(Box::new(served_from("/shell.js"))),
         open: &|_, _, _| panic!("only open_url opens a browser window"),
         open_app: &|_, _, _, _| panic!("only open_app opens an app window"),
-        run_app: &|_, _| panic!("only run_app runs an app module"),
+        run_app: &|_, _, _| panic!("only run_app runs an app module"),
         launch: &|_, _| panic!("only launch starts a program"),
         open_link: &|_| panic!("only open_link hands over a link"),
         permissions: &|| panic!("only site_permissions lists site permissions"),
