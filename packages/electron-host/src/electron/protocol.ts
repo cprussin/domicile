@@ -323,6 +323,11 @@ const respond = async (
     send({ error: whyFailed(error), request, type: "protocol_response" });
     return;
   }
+  // Before the body: Bun drops the Content-Type it gives a file's or a
+  // Blob's response, as `fetch` of a `file:` URL answers, once `body` is
+  // read. VS Code answers its pages' scripts so, and a module script with no
+  // Content-Type fails strict MIME checking.
+  const headers = headerPairs(response.headers);
   if (response.type === "error") {
     send({
       error: `the ${scheme}: handler answered with a network error`,
@@ -332,14 +337,14 @@ const respond = async (
   } else if (response.body === null) {
     send({
       body: "",
-      headers: headerPairs(response.headers),
+      headers,
       request,
       status: response.status,
       type: "protocol_response",
     });
   } else {
     send({
-      headers: headerPairs(response.headers),
+      headers,
       request,
       status: response.status,
       stream: true,
