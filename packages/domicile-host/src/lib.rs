@@ -18,7 +18,6 @@ use domicile_protocol::{
 
 pub mod app_names;
 pub mod autostart;
-pub mod base64;
 pub mod bells;
 pub mod cast_grants;
 pub mod clipboard;
@@ -66,6 +65,7 @@ pub mod theme_turnover;
 pub mod thumbnail;
 pub mod tray;
 pub mod unlock_refusals;
+pub mod uri;
 pub mod usb_names;
 pub mod user_dirs;
 pub mod wallpaper;

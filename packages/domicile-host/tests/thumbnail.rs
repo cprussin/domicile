@@ -1,7 +1,8 @@
 //! Clipboard image thumbnails: small enough to send with every history row,
 //! and still the copied picture.
 
-use domicile_host::base64::decoded;
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use domicile_host::screenshot::{encode, Shot};
 use domicile_host::thumbnail::{thumbnail, LONGEST_SIDE};
 
@@ -23,11 +24,12 @@ fn halves(width: u32, height: u32) -> Vec<u8> {
 
 /// The size and RGBA pixels of a thumbnail's PNG.
 fn decoded_png(url: &str) -> (u32, u32, Vec<u8>) {
-    let png = decoded(
-        url.strip_prefix("data:image/png;base64,")
-            .expect("a thumbnail is a PNG data URL"),
-    )
-    .expect("a thumbnail's data URL is base64");
+    let png = STANDARD
+        .decode(
+            url.strip_prefix("data:image/png;base64,")
+                .expect("a thumbnail is a PNG data URL"),
+        )
+        .expect("a thumbnail's data URL is base64");
     let mut reader = png::Decoder::new(std::io::Cursor::new(png))
         .read_info()
         .expect("a thumbnail is a PNG");

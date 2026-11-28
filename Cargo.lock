@@ -477,6 +477,7 @@ dependencies = [
 name = "domicile-compositor"
 version = "0.0.0"
 dependencies = [
+ "base64",
  "domicile-config",
  "domicile-host",
  "domicile-launch",
@@ -524,11 +525,13 @@ dependencies = [
 name = "domicile-host"
 version = "0.0.0"
 dependencies = [
+ "base64",
  "domicile-protocol",
  "domicile-scene",
  "globset",
  "libc",
  "notify",
+ "percent-encoding",
  "png",
  "serde",
  "serde_json",
@@ -541,6 +544,7 @@ dependencies = [
 name = "domicile-launch"
 version = "0.0.0"
 dependencies = [
+ "base64",
  "domicile-config",
  "domicile-host",
  "domicile-protocol",

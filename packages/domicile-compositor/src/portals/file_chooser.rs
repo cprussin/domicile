@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use domicile_host::file_filters::{extensions, MimeTypes};
+use domicile_host::uri::file_uri;
 use domicile_protocol::{
     FileChoice, FileChoiceOption, FileChooserAnswer, FileChooserDialog, FileChooserMode,
     FileFilter, PortalAnswer, PortalKind,
@@ -303,21 +304,6 @@ impl Asked {
 /// A portal byte-string path or name, without its trailing NUL.
 fn byte_string(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes.strip_suffix(b"\0").unwrap_or(bytes)).into_owned()
-}
-
-/// `path` as a `file://` URI, percent-encoding all but RFC 3986's unreserved
-/// characters and `/`.
-fn file_uri(path: &str) -> String {
-    let encoded: String = path
-        .bytes()
-        .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => {
-                char::from(byte).to_string()
-            }
-            _ => format!("%{byte:02X}"),
-        })
-        .collect();
-    format!("file://{encoded}")
 }
 
 /// `value` owned, for a reply. Fails only for a file descriptor, which no

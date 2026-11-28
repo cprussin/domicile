@@ -220,6 +220,13 @@
         "@domicile-desktop/check-runner": "workspace:*",
       },
     },
+    "packages/duplication": {
+      "name": "@domicile-desktop/duplication",
+      "version": "0.0.1",
+      "devDependencies": {
+        "@domicile-desktop/check-runner": "workspace:*",
+      },
+    },
     "packages/e2e-harness": {
       "name": "@domicile-desktop/e2e-harness",
       "version": "0.1.0",
@@ -1638,6 +1645,8 @@
     "@domicile-desktop/dev-shell": ["@domicile-desktop/dev-shell@workspace:packages/dev-shell"],
 
     "@domicile-desktop/distro": ["@domicile-desktop/distro@workspace:packages/distro"],
+
+    "@domicile-desktop/duplication": ["@domicile-desktop/duplication@workspace:packages/duplication"],
 
     "@domicile-desktop/e2e-harness": ["@domicile-desktop/e2e-harness@workspace:packages/e2e-harness"],
 

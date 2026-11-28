@@ -2,6 +2,8 @@
 //! `xdg-email` hands to `domicile open`. Chromium runs `xdg-email`, not
 //! `xdg-open`, for a page's `mailto:` link.
 
+use domicile_host::uri::{percent_encoded, UNRESERVED};
+
 /// Why an `xdg-email` command line has no `mailto:` link.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum EmailError {
@@ -30,7 +32,11 @@ pub fn link_for(args: &[String]) -> Result<String, EmailError> {
                     .ok_or_else(|| EmailError::MissingValue(word.clone()))?;
                 match word.as_str() {
                     "--attach" => return Err(EmailError::Attachment(value.clone())),
-                    _ => fields.push(format!("{}={}", &word[2..], escaped(value))),
+                    _ => fields.push(format!(
+                        "{}={}",
+                        &word[2..],
+                        percent_encoded(value, UNRESERVED)
+                    )),
                 }
             }
             option if option.starts_with('-') => {
@@ -56,17 +62,4 @@ pub fn link_for(args: &[String]) -> Result<String, EmailError> {
 fn is_mailto(word: &str) -> bool {
     word.get(..7)
         .is_some_and(|scheme| scheme.eq_ignore_ascii_case("mailto:"))
-}
-
-/// Percent-encodes every byte of `value` except unreserved ones (RFC 3986).
-fn escaped(value: &str) -> String {
-    value
-        .bytes()
-        .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
-                (byte as char).to_string()
-            }
-            _ => format!("%{byte:02X}"),
-        })
-        .collect()
 }

@@ -6,6 +6,8 @@ use std::path::Path;
 use std::sync::mpsc::{channel, Receiver};
 use std::time::{Duration, Instant};
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use domicile_host::priority;
 use domicile_host::system::{locked_out, reach, refused_to_an_app, Handled, Reach, System};
 use domicile_protocol::{
@@ -64,7 +66,7 @@ fn run_out(heard: &Receiver<HostMessage>, id: u32) -> (String, String, SystemEnd
                 id: from,
                 event: SystemEvent::Output { stream, data },
             } if from == id => {
-                let bytes = domicile_host::base64::decoded(&data).expect("base64");
+                let bytes = STANDARD.decode(&data).expect("base64");
                 match stream {
                     Stream::Stdout => out.extend(bytes),
                     Stream::Stderr => err.extend(bytes),
@@ -485,7 +487,7 @@ mod processes {
         else {
             panic!("expected the pid");
         };
-        let pid = String::from_utf8(domicile_host::base64::decoded(&data).unwrap()).unwrap();
+        let pid = String::from_utf8(STANDARD.decode(&data).unwrap()).unwrap();
         let proc = Path::new("/proc").join(pid.trim());
         drop(system);
 

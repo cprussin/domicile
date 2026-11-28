@@ -14,6 +14,8 @@ use std::os::unix::fs::FileExt as _;
 use std::os::unix::net::UnixStream;
 use std::process::Stdio;
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use domicile_protocol::{ChromeMessage, CursorImage, HostMessage};
 use domicile_test_client::{BUBBLE_GROWN, POPUP_COLOR};
 use wayland_client::protocol::{
@@ -430,7 +432,7 @@ fn a_cursor_session_follows_the_pointer_over_its_monitor() {
         size: (2, 2),
         hotspot: (1, 1),
         scale: 1.0,
-        bgra: domicile_host::base64::encoded(&[10, 20, 30, 255].repeat(4)),
+        bgra: STANDARD.encode([10, 20, 30, 255].repeat(4)),
     };
     chrome
         .say(&ChromeMessage::DeskCursor { image: Some(image) })

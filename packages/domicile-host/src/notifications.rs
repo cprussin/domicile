@@ -34,8 +34,8 @@ pub const INLINE_REPLY_ACTION: &str = "inline-reply";
 /// dropped from page notifications only.
 const BROWSER_SETTINGS_ACTION: &str = "settings";
 
-/// The longest side of a picture sent. Images are drawn small and raw pixels
-/// are encoded uncompressed (see [`crate::png`]), so large ones are shrunk.
+/// The longest side of a picture sent. Images are drawn small, so large ones
+/// are shrunk.
 const LARGEST_SIDE: i32 = 128;
 
 /// The biggest picture file read. Every change sends every picture to every

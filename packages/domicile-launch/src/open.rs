@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 
 use domicile_host::mime_apps::{default_handler, Handler};
 use domicile_host::shared_mime_info::{aliases, content_type, supertypes};
+use domicile_host::uri::percent_decoded;
 
 use crate::address::{has_scheme, url_for};
 
@@ -299,31 +300,5 @@ fn file_path(url: &str) -> PathBuf {
         Some(authority) => authority.find('/').map_or("/", |at| &authority[at..]),
         None => rest,
     };
-    PathBuf::from(OsString::from_vec(decoded(path)))
-}
-
-/// `text`'s bytes with each `%XX` replaced by its byte. A `%` not followed by
-/// two hex digits stays as it is.
-fn decoded(text: &str) -> Vec<u8> {
-    let bytes = text.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut at = 0;
-    while at < bytes.len() {
-        let hex = bytes
-            .get(at + 1..at + 3)
-            .filter(|pair| pair.iter().all(u8::is_ascii_hexdigit))
-            .and_then(|pair| std::str::from_utf8(pair).ok())
-            .and_then(|pair| u8::from_str_radix(pair, 16).ok());
-        match (bytes[at], hex) {
-            (b'%', Some(byte)) => {
-                out.push(byte);
-                at += 3;
-            }
-            (byte, _) => {
-                out.push(byte);
-                at += 1;
-            }
-        }
-    }
-    out
+    PathBuf::from(OsString::from_vec(percent_decoded(path)))
 }

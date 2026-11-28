@@ -98,6 +98,8 @@
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use domicile_config::Config;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -683,27 +685,7 @@ fn icon_data_url(path: &Path, host: &Host) -> Option<String> {
         _ => return None,
     };
     let bytes = (host.read_bytes)(path).ok()?;
-    Some(format!("data:{mime};base64,{}", base64(&bytes)))
-}
-
-/// Standard base64, with padding.
-fn base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let triple = chunk.iter().enumerate().fold(0_u32, |acc, (at, byte)| {
-            acc | u32::from(*byte) << (16 - 8 * at)
-        });
-        for at in 0..4 {
-            if at <= chunk.len() {
-                let index = (triple >> (18 - 6 * at)) & 0x3f;
-                encoded.push(char::from(ALPHABET[index as usize]));
-            } else {
-                encoded.push('=');
-            }
-        }
-    }
-    encoded
+    Some(format!("data:{mime};base64,{}", STANDARD.encode(&bytes)))
 }
 
 fn read(path: &Path, host: &Host) -> Result<String, String> {

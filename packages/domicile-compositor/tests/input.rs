@@ -7,6 +7,8 @@
 
 mod running;
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use domicile_protocol::{
     AppCursorImage, ChromeMessage, CursorShape, HostMessage, PointerConstraint, SurfaceRect,
 };
@@ -573,7 +575,7 @@ fn drawn_cursor(
 
 /// A cursor PNG's width, height and first pixel.
 fn pixels_of(png: &str) -> (u32, u32, [u8; 4]) {
-    let bytes = domicile_host::base64::decoded(png).expect("the PNG is base64");
+    let bytes = STANDARD.decode(png).expect("the PNG is base64");
     let mut reader = png::Decoder::new(std::io::Cursor::new(bytes))
         .read_info()
         .expect("the image is a PNG");

@@ -18,7 +18,7 @@ use zbus::proxy::CacheProperties;
 use zbus::{OwnedObjectPath, OwnedVariant};
 
 use super::queue::{ask, Queue};
-use super::uri::file_uri;
+use domicile_host::uri::file_uri;
 
 /// AccountsService's bus name.
 const ACCOUNTS: &str = "org.freedesktop.Accounts";

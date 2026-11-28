@@ -14,6 +14,8 @@ domicile-host = { path = "../domicile-host" }
 domicile-protocol = { path = "../domicile-protocol" }
 # The relay's wire, which `domicile mcp --relay` dials.
 domicile-relay = { path = "../domicile-relay" }
+# Images in MCP results and `data:` URLs; base64url in OAuth and ACME.
+base64.workspace = true
 ed25519-dalek = { version = "3", default-features = false }
 libc.workspace = true
 notify.workspace = true

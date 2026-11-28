@@ -16,12 +16,13 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
+use domicile_host::uri::{percent_encoded, UNRESERVED};
 use domicile_protocol::{LogLevel, Subsystem};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-
-use super::base64;
 
 /// A request's query or form fields.
 pub(super) type Params = HashMap<String, String>;
@@ -635,24 +636,11 @@ fn redirectable(uri: &str) -> bool {
 fn with_query(uri: &str, fields: &[(&str, &str)]) -> String {
     let joined = fields
         .iter()
-        .map(|(name, value)| format!("{name}={}", escaped(value)))
+        .map(|(name, value)| format!("{name}={}", percent_encoded(value, UNRESERVED)))
         .collect::<Vec<_>>()
         .join("&");
     let separator = if uri.contains('?') { '&' } else { '?' };
     format!("{uri}{separator}{joined}")
-}
-
-/// `value` percent-encoded for a query.
-fn escaped(value: &str) -> String {
-    value
-        .bytes()
-        .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
-                char::from(byte).to_string()
-            }
-            _ => format!("%{byte:02X}"),
-        })
-        .collect()
 }
 
 /// Where `uri` goes, for the user to check: `claude.ai` for
@@ -678,10 +666,7 @@ fn hashed(token: &str) -> String {
 }
 
 pub(super) fn base64url(bytes: &[u8]) -> String {
-    base64(bytes)
-        .trim_end_matches('=')
-        .replace('+', "-")
-        .replace('/', "_")
+    URL_SAFE_NO_PAD.encode(bytes)
 }
 
 #[cfg(test)]

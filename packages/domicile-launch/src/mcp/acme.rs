@@ -322,6 +322,8 @@ fn body(answer: Answer) -> Result<Value, String> {
 mod tests {
     use std::collections::HashMap;
 
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use base64::Engine;
     use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED};
 
     use super::*;
@@ -354,20 +356,7 @@ mod tests {
     }
 
     fn unbase64url(text: &str) -> Vec<u8> {
-        const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-        let mut bits = 0u32;
-        let mut count = 0;
-        let mut out = Vec::new();
-        for byte in text.bytes() {
-            let value = ALPHABET.iter().position(|letter| *letter == byte).unwrap() as u32;
-            bits = bits << 6 | value;
-            count += 6;
-            if count >= 8 {
-                count -= 8;
-                out.push((bits >> count) as u8);
-            }
-        }
-        out
+        URL_SAFE_NO_PAD.decode(text).expect("base64url")
     }
 
     impl Authority {

@@ -3,6 +3,8 @@
 
 use std::time::Instant;
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use smithay::reexports::{
     calloop::timer::{TimeoutAction, Timer},
     wayland_server::{
@@ -138,11 +140,9 @@ impl DomicileCompositor {
         let sprite = match image {
             None => casting::Sprite::hidden(),
             Some(image) => {
-                let sprite = domicile_host::base64::decoded(&image.bgra)
-                    .ok()
-                    .and_then(|bgra| {
-                        casting::Sprite::from_bgra(image.size, image.hotspot, image.scale, bgra)
-                    });
+                let sprite = STANDARD.decode(&image.bgra).ok().and_then(|bgra| {
+                    casting::Sprite::from_bgra(image.size, image.hotspot, image.scale, bgra)
+                });
                 let Some(sprite) = sprite else {
                     warn!(size = ?image.size, "the engine's pointer did not decode");
                     return;

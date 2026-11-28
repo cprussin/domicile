@@ -8,6 +8,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use domicile_launch::mcp::{
     serve_http, Agent, Answer, Grant, Ran, Said, Web, IDLE_MS, LET_GO_AFTER,
 };
@@ -268,17 +270,7 @@ impl Desk {
 }
 
 fn base64url(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    let mut out = String::new();
-    for chunk in bytes.chunks(3) {
-        let word = chunk.iter().enumerate().fold(0u32, |word, (at, byte)| {
-            word | u32::from(*byte) << (16 - 8 * at)
-        });
-        for at in 0..=chunk.len() {
-            out.push(char::from(ALPHABET[(word >> (18 - 6 * at) & 63) as usize]));
-        }
-    }
-    out
+    URL_SAFE_NO_PAD.encode(bytes)
 }
 
 fn escaped(text: &str) -> String {

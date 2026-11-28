@@ -73,7 +73,6 @@ mod session;
 mod settings;
 #[cfg(test)]
 pub(crate) mod socket_pair;
-mod uri;
 mod usb;
 mod wallpaper;
 

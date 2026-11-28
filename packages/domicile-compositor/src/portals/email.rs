@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use zbus::{OwnedObjectPath, OwnedVariant};
 
-use super::uri::percent_encoded;
+use domicile_host::uri::{percent_encoded, ADDRESS};
 
 /// Opens a `mailto:` URL, asked for by the application with this desktop
 /// file id, with the desk's mail client. `Err` names why none opened.
@@ -83,7 +83,7 @@ fn mailto(mut options: HashMap<String, OwnedVariant>) -> String {
 
 /// `text` percent-encoded for a `mailto:` URL, where `@` may stay.
 fn encoded(text: &str) -> String {
-    percent_encoded(text, b"@")
+    percent_encoded(text, ADDRESS)
 }
 
 #[cfg(test)]

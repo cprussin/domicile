@@ -10,6 +10,7 @@ use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt as _;
 use std::path::PathBuf;
 
+use domicile_host::uri::percent_decoded;
 use zbus::export::ordered_stream::OrderedStreamExt;
 use zbus::message::Type;
 use zbus::{OwnedObjectPath, OwnedVariant, Variant};
@@ -82,32 +83,6 @@ fn first_folder(results: &HashMap<String, OwnedVariant>) -> Result<PathBuf, Stri
         .ok_or("the file chooser answered without a folder")?;
     uri.strip_prefix("file://")
         .filter(|path| path.starts_with('/'))
-        .map(unescaped)
+        .map(|path| PathBuf::from(OsString::from_vec(percent_decoded(path))))
         .ok_or_else(|| format!("{uri} is not a local folder"))
-}
-
-/// `path` with each `%XX` replaced by its byte.
-fn unescaped(path: &str) -> PathBuf {
-    let bytes = path.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut at = 0;
-    while at < bytes.len() {
-        let byte = match (bytes[at], bytes.get(at + 1..at + 3)) {
-            (b'%', Some(hex)) => std::str::from_utf8(hex)
-                .ok()
-                .and_then(|hex| u8::from_str_radix(hex, 16).ok()),
-            _ => None,
-        };
-        match byte {
-            Some(byte) => {
-                out.push(byte);
-                at += 3;
-            }
-            None => {
-                out.push(bytes[at]);
-                at += 1;
-            }
-        }
-    }
-    PathBuf::from(OsString::from_vec(out))
 }

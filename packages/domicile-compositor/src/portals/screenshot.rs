@@ -27,8 +27,8 @@ use zbus::object_server::ObjectServer;
 use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
 use super::queue::{ask, ask_unbidden, Queue};
-use super::uri::file_uri;
 use crate::casting::{Casting, Desk};
+use domicile_host::uri::file_uri;
 
 /// Takes a frame of the whole desk, or says why it cannot.
 pub type Shoot =
@@ -677,6 +677,9 @@ fn owned(value: Variant) -> OwnedVariant {
 
 #[cfg(test)]
 mod tests {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
+
     use super::*;
     use std::collections::HashMap as Map;
     use std::sync::mpsc::{channel, Receiver};
@@ -1023,7 +1026,7 @@ mod tests {
         let base64 = frame
             .strip_prefix("data:image/png;base64,")
             .expect("a PNG data URL");
-        png_of(domicile_host::base64::decoded(base64).expect("base64"))
+        png_of(STANDARD.decode(base64).expect("base64"))
     }
 
     #[test]

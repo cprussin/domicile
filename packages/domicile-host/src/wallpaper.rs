@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 
 use domicile_protocol::{PortalWallpaper, WallpaperTarget};
 
+use crate::uri::strictly_percent_decoded;
+
 /// The record of what is set, in the store's directory.
 const RECORD: &str = "wallpaper.json";
 
@@ -95,7 +97,8 @@ pub fn local_path(uri: &str) -> Option<PathBuf> {
     if !path.starts_with('/') {
         return None;
     }
-    percent_decoded(path).map(PathBuf::from)
+    let bytes = strictly_percent_decoded(path)?;
+    String::from_utf8(bytes).ok().map(PathBuf::from)
 }
 
 /// The prefix a copy for `target` is named with.
@@ -113,25 +116,6 @@ fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let partial = path.with_extension("json.partial");
     fs::write(&partial, bytes)?;
     fs::rename(partial, path)
-}
-
-/// `text` with its `%XX` escapes decoded, or `None` when one is malformed or
-/// the result is not UTF-8.
-fn percent_decoded(text: &str) -> Option<String> {
-    let bytes = text.as_bytes();
-    let mut decoded = Vec::with_capacity(bytes.len());
-    let mut at = 0;
-    while at < bytes.len() {
-        if bytes[at] == b'%' {
-            let hex = std::str::from_utf8(bytes.get(at + 1..at + 3)?).ok()?;
-            decoded.push(u8::from_str_radix(hex, 16).ok()?);
-            at += 3;
-        } else {
-            decoded.push(bytes[at]);
-            at += 1;
-        }
-    }
-    String::from_utf8(decoded).ok()
 }
 
 #[cfg(test)]

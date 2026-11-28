@@ -7,6 +7,8 @@
 
 use std::path::Path;
 
+use domicile_host::uri::{percent_encoded, PATH};
+
 /// Returns `target` if it is a URL, or else a `file://` URL for it relative to
 /// `here`.
 ///
@@ -15,7 +17,10 @@ use std::path::Path;
 pub fn url_for(target: &str, here: &Path) -> String {
     match has_scheme(target) {
         true => target.to_string(),
-        false => format!("file://{}", escaped(&here.join(target).to_string_lossy())),
+        false => format!(
+            "file://{}",
+            percent_encoded(&here.join(target).to_string_lossy(), PATH)
+        ),
     }
 }
 
@@ -31,16 +36,4 @@ pub(crate) fn has_scheme(word: &str) -> bool {
         }
         None => false,
     }
-}
-
-/// Percent-encodes every byte of `path` except unreserved ones and `/`.
-fn escaped(path: &str) -> String {
-    path.bytes()
-        .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => {
-                (byte as char).to_string()
-            }
-            _ => format!("%{byte:02X}"),
-        })
-        .collect()
 }

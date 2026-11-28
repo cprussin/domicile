@@ -21,8 +21,8 @@ use zbus::object_server::ObjectServer;
 use zbus::{OwnedFd, OwnedObjectPath, OwnedVariant, Variant};
 
 use super::queue::{ask, Queue};
-use super::uri::file_uri;
 use crate::reply::reply;
+use domicile_host::uri::file_uri;
 
 /// The `Print` backend object.
 pub struct Print {

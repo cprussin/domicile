@@ -36,6 +36,8 @@ path = "src/bin/domicile-test-screencast.rs"
 [dependencies]
 domicile-config = { path = "../domicile-config" }
 domicile-host = { path = "../domicile-host" }
+# Cursor sprites and screenshots on the JSON wire.
+base64.workspace = true
 domicile-protocol = { path = "../domicile-protocol" }
 domicile-scene = { path = "../domicile-scene" }
 domicile-launch = { path = "../domicile-launch" }

@@ -23,6 +23,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use domicile_host::uri::percent_decoded;
 use serde_json::{json, Value};
 use tiny_http::{Header, Method, Request, Response, Server};
 
@@ -571,31 +572,14 @@ fn form(encoded: &str) -> Params {
         .filter(|field| !field.is_empty())
         .map(|field| {
             let (name, value) = field.split_once('=').unwrap_or((field, ""));
-            (decoded(name), decoded(value))
+            (form_decoded(name), form_decoded(value))
         })
         .collect()
 }
 
-fn decoded(text: &str) -> String {
-    let bytes = text.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut at = 0;
-    while at < bytes.len() {
-        let escaped = bytes
-            .get(at + 1..at + 3)
-            .and_then(|hex| std::str::from_utf8(hex).ok())
-            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
-        match (bytes[at], escaped) {
-            (b'+', _) => out.push(b' '),
-            (b'%', Some(byte)) => {
-                out.push(byte);
-                at += 2;
-            }
-            (byte, _) => out.push(byte),
-        }
-        at += 1;
-    }
-    String::from_utf8_lossy(&out).into_owned()
+/// `text` as an HTML form encodes it: `+` for a space, then `%XX` escapes.
+fn form_decoded(text: &str) -> String {
+    String::from_utf8_lossy(&percent_decoded(&text.replace('+', " "))).into_owned()
 }
 
 #[cfg(test)]

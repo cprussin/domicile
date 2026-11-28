@@ -61,8 +61,12 @@ zbus = { version = "6.5", default-features = false, features = [
     "service",
 ] }
 libc = "0.2"
-# Encodes screenshots (see `domicile_host::screenshot`).
+# Encodes screenshots and icons (see `domicile_host::screenshot`).
 png = "0.18"
+# Bytes on the JSON wire, `data:` URLs and the MCP server's tokens.
+base64 = "0.23"
+# File URIs, `mailto:` links and OAuth queries (see `domicile_host::uri`).
+percent-encoding = "2.3"
 # The config's JSON Schema, from which the SDK's config types are generated.
 schemars = "1"
 # Parses JavaScript shells to find their imports (see

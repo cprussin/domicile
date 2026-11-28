@@ -9,6 +9,8 @@
 
 use std::cell::RefCell;
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use smithay::input::pointer::CursorImageSurfaceData;
 use smithay::reexports::wayland_server::protocol::{wl_shm, wl_surface::WlSurface};
 use smithay::wayland::compositor::{get_role, with_states, BufferAssignment, SurfaceAttributes};
@@ -166,7 +168,7 @@ fn png_of(
         .write_header()
         .and_then(|mut writer| writer.write_image_data(&rgba))
         .ok()?;
-    Some(domicile_host::base64::encoded(&png))
+    Some(STANDARD.encode(&png))
 }
 
 /// A premultiplied little-endian ARGB pixel as straight RGBA.
@@ -186,7 +188,7 @@ fn rgba_of([b, g, r, a]: [u8; 4], opaque: bool) -> [u8; 4] {
 mod tests {
     use smithay::reexports::wayland_server::protocol::wl_shm;
 
-    use super::{png_of, rgba_of};
+    use super::{png_of, rgba_of, Engine, STANDARD};
 
     #[test]
     fn a_premultiplied_pixel_is_made_straight() {
@@ -203,7 +205,7 @@ mod tests {
         pool.extend([255, 0, 0, 255, 0, 0, 0, 0, 9, 9, 9, 9]);
         let png =
             png_of(&pool, 8, 2, 2, 12, wl_shm::Format::Argb8888).expect("a 32-bit buffer reads");
-        let bytes = domicile_host::base64::decoded(&png).unwrap();
+        let bytes = STANDARD.decode(&png).unwrap();
         let mut reader = png::Decoder::new(std::io::Cursor::new(bytes))
             .read_info()
             .unwrap();

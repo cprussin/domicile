@@ -42,7 +42,6 @@ use notify::{EventKindMask, RecursiveMode, Watcher};
 use zbus::export::ordered_stream::OrderedStreamExt;
 use zbus::{Connection, DBusError, MessageStream, Signature, Structure};
 
-use crate::base64::{decoded, encoded};
 use crate::bells::Bells;
 use crate::dbus_json::{self, NotABody};
 use crate::fanout::Listener;
@@ -57,6 +56,8 @@ use crate::unlock_refusals::UnlockRefusals;
 use crate::white_point::{white_point, WhitePoint, NEUTRAL, WARMEST};
 use crate::window_requests::WindowRequests;
 use crate::AppId;
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 
 /// How much of a process's output one event carries at most.
 const CHUNK: usize = 64 * 1024;
@@ -725,11 +726,12 @@ impl System {
                 length,
             } => self.on_a_thread(id, move |home| {
                 read_range(&home.join(path), offset, length).map(|bytes| SystemReply::Read {
-                    data: encoded(&bytes),
+                    data: STANDARD.encode(&bytes),
                 })
             }),
             SystemRequest::WriteFile { path, data, atomic } => self.on_a_thread(id, move |home| {
-                let bytes = decoded(&data)
+                let bytes = STANDARD
+                    .decode(&data)
                     .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
                 let path = home.join(path);
                 match atomic {
@@ -952,7 +954,7 @@ impl System {
             SystemRequest::Stdin { data } => match self.running.lock().unwrap().get(&id) {
                 Some(Running::Process {
                     stdin: Some(stdin), ..
-                }) => match decoded(&data) {
+                }) => match STANDARD.decode(&data) {
                     // The writer stops only after the process closed its end,
                     // and then nobody is reading.
                     Ok(bytes) => {
@@ -1807,7 +1809,7 @@ fn reader(
                 id,
                 event: SystemEvent::Output {
                     stream,
-                    data: encoded(&buffer[..read]),
+                    data: STANDARD.encode(&buffer[..read]),
                 },
             });
         }

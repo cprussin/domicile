@@ -10,6 +10,8 @@ use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, Instant};
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use domicile_protocol::{
     ChromeMessage, HostMessage, Stream, SystemErrorKind, SystemEvent, SystemReply, SystemRequest,
 };
@@ -65,8 +67,7 @@ fn first_line(chrome: &mut domicile_test_chrome::Chrome, id: u32) -> String {
     else {
         unreachable!("the wait matched on this variant")
     };
-    let text =
-        String::from_utf8(domicile_host::base64::decoded(&data).expect("base64")).expect("utf-8");
+    let text = String::from_utf8(STANDARD.decode(&data).expect("base64")).expect("utf-8");
     text.lines().next().expect("a line").to_string()
 }
 

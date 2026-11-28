@@ -23,6 +23,8 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use browser::Browser;
 pub use http::{serve_http, Web, IDLE_MS};
 pub use oauth::{sign_out, signed_in, Answer, Asks, Said, SignedIn, ASK_MS, SIGNED_IN_FILE};
@@ -1401,7 +1403,7 @@ fn screenshot(
     let png = std::fs::read(&file)?;
     Ok(json!({
         "content": [
-            {"type": "image", "data": base64(&png), "mimeType": "image/png"},
+            {"type": "image", "data": STANDARD.encode(&png), "mimeType": "image/png"},
             {"type": "text", "text": format!("{}x{} pixels; the pointer tools take points in them.", shot.width, shot.height)},
         ],
         "isError": false,
@@ -1411,24 +1413,4 @@ fn screenshot(
 /// A tool result of text.
 fn said(success: bool, text: String) -> Value {
     json!({"content": [{"type": "text", "text": text}], "isError": !success})
-}
-
-/// Standard base64, with padding.
-fn base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    bytes
-        .chunks(3)
-        .flat_map(|chunk| {
-            let word = chunk.iter().enumerate().fold(0u32, |word, (at, byte)| {
-                word | u32::from(*byte) << (16 - 8 * at)
-            });
-            (0..4).map(move |at| {
-                if at <= chunk.len() {
-                    char::from(ALPHABET[(word >> (18 - 6 * at) & 63) as usize])
-                } else {
-                    '='
-                }
-            })
-        })
-        .collect()
 }
