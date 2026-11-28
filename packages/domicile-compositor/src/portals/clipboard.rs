@@ -203,7 +203,7 @@ mod tests {
     use crate::portals::fixture::{
         call, next, options, path, served, starting, Results, Served, SESSION,
     };
-    use crate::portals::restore::Tokens;
+    use domicile_portal::restore::Tokens;
 
     const CLIPBOARD: &str = "org.freedesktop.impl.portal.Clipboard";
     const TEXT: &str = "text/plain;charset=utf-8";

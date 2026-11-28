@@ -1,0 +1,20 @@
+[package]
+name = "domicile-portal-background"
+description = "The Background portal: lets an application run in the background or start with the desk, and tells the frontend which applications are running."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+domicile-host = { path = "../domicile-host" }
+tracing = "0.1"
+zbus.workspace = true
+
+[dev-dependencies]
+domicile-portal = { path = "../domicile-portal", features = ["testing"] }
+tempfile.workspace = true
+zbus = { workspace = true, features = ["p2p"] }
+
+[lints]
+workspace = true

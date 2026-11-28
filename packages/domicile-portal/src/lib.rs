@@ -9,6 +9,8 @@
 pub mod queue;
 pub mod reply;
 pub mod request;
+pub mod restore;
+pub mod session;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 

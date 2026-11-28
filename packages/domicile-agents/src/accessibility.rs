@@ -1,8 +1,8 @@
 //! AT-SPI's `IsEnabled`, on the session bus: whether apps build
 //! accessibility trees. Qt, Firefox and others expose nothing until it is
-//! on. See [`super::agent::Accessibility`].
+//! on. See [`crate::Accessibility`].
 
-use super::agent::Accessibility;
+use crate::Accessibility;
 
 const BUS: &str = "org.a11y.Bus";
 const PATH: &str = "/org/a11y/bus";

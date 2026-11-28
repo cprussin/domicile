@@ -21,9 +21,9 @@ use tracing::{debug, warn};
 use zbus::object_server::{ObjectServer, SignalEmitter};
 use zbus::{ObjectPath, OwnedObjectPath, OwnedVariant, Variant};
 
-use super::session;
 use super::OBJECT_PATH;
 use domicile_portal::queue::{ask, ask_unbidden, Queue};
+use domicile_portal::session;
 
 /// The `org.freedesktop.impl.portal.GlobalShortcuts` version implemented.
 const INTERFACE_VERSION: u32 = 2;
@@ -447,8 +447,8 @@ mod tests {
     use zbus::{Connection, MessageStream};
 
     use crate::notifications::NotificationServer;
-    use crate::portals::restore::Tokens;
     use crate::portals::{Backends, Portals};
+    use domicile_portal::restore::Tokens;
     use domicile_portal::testing::connected;
 
     const INTERFACE: &str = "org.freedesktop.impl.portal.GlobalShortcuts";
@@ -501,12 +501,12 @@ mod tests {
             queue: Arc::clone(&backends.queue),
             portals: Portals {
                 links: domicile_host::links::Links::default(),
-                agents: crate::portals::agent::Door::new(
+                agents: domicile_agents::Door::new(
                     Arc::clone(&backends.queue),
                     None,
                     Arc::new(|| 0),
-                    crate::portals::agent::PATIENCE,
-                    crate::portals::agent::Accessibility {
+                    domicile_agents::PATIENCE,
+                    domicile_agents::Accessibility {
                         enabled: Box::new(|| true),
                         enable: Box::new(|_| {}),
                     },

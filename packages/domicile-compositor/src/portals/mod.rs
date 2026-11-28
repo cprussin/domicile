@@ -44,9 +44,6 @@ use crate::eis::barriers::Zone;
 use crate::eis::{Captured, Eis};
 use crate::notifications::NotificationServer;
 
-mod accessibility;
-pub mod agent;
-mod background;
 mod clipboard;
 #[cfg(test)]
 mod fixture;
@@ -56,18 +53,17 @@ mod input_capture;
 mod notification;
 mod recording;
 mod remote_desktop;
-mod restore;
 mod screencast;
 mod screenshot;
-mod session;
 
-use background::{Background, RunningApps};
 pub use clipboard::Selection;
 use clipboard::{Clipboard, Transfers};
 use domicile_portal::queue::Queue;
+use domicile_portal::restore::Tokens;
 use domicile_portal_access::Access;
 use domicile_portal_account::{Account, LookUp};
 use domicile_portal_app_chooser::AppChooser;
+use domicile_portal_background::{Background, RunningApps};
 use domicile_portal_dynamic_launcher::DynamicLauncher;
 use domicile_portal_email::{Email, Open};
 use domicile_portal_file_chooser::FileChooser;
@@ -82,7 +78,6 @@ use input_capture::{InputCapture, Inputs, Zones};
 use notification::Notification;
 use recording::Recordings;
 use remote_desktop::{RemoteDesktop, Remotes};
-use restore::Tokens;
 use screencast::ScreenCast;
 use screenshot::{Screenshot, Shoot, Shots};
 
@@ -121,7 +116,7 @@ pub struct Portals {
     shell_dialog: screenshot::ShellDialog,
     /// `None` in unit tests that cast nothing.
     recordings: Option<Recordings>,
-    agents: Arc<agent::Door>,
+    agents: Arc<domicile_agents::Door>,
     /// The pages that open links, which the Email portal hands `mailto:`
     /// links to before the desk's mail client.
     links: Links,
@@ -180,12 +175,12 @@ impl Portals {
         .0;
         Portals {
             links: Links::default(),
-            agents: agent::Door::new(
+            agents: domicile_agents::Door::new(
                 backends.queue.clone(),
                 None,
                 recording::system_clock(),
-                agent::PATIENCE,
-                agent::Accessibility {
+                domicile_agents::PATIENCE,
+                domicile_agents::Accessibility {
                     enabled: Box::new(|| true),
                     enable: Box::new(|_| {}),
                 },
@@ -344,8 +339,8 @@ impl Portals {
         recording::for_the_shell(&self.backends.queue, recordings)
     }
 
-    /// The agents the desk lets in. See [`agent::Door`].
-    pub fn agents(&self) -> &Arc<agent::Door> {
+    /// The agents the desk lets in. See [`domicile_agents::Door`].
+    pub fn agents(&self) -> &Arc<domicile_agents::Door> {
         &self.agents
     }
 
@@ -521,7 +516,7 @@ pub fn serve(
     let environment = activation_environment(ours, in_a_window);
     let (mut backends, changes) = Backends::new(
         notifications,
-        Tokens::load(restore::path(
+        Tokens::load(domicile_portal::restore::path(
             std::env::var_os("XDG_STATE_HOME").map(PathBuf::from),
             std::env::var_os("HOME").map(PathBuf::from),
         )),
@@ -560,15 +555,15 @@ pub fn serve(
     let links = Links::default();
     let portals = Portals {
         links: links.clone(),
-        agents: agent::Door::new(
+        agents: domicile_agents::Door::new(
             backends.queue.clone(),
-            agent::path(
+            domicile_agents::path(
                 std::env::var_os("XDG_STATE_HOME").map(PathBuf::from),
                 std::env::var_os("HOME").map(PathBuf::from),
             ),
             recording::system_clock(),
-            agent::PATIENCE,
-            accessibility::on_the_session_bus(),
+            domicile_agents::PATIENCE,
+            domicile_agents::accessibility::on_the_session_bus(),
         ),
         backends: backends.clone(),
         shots: shots.clone(),
@@ -718,14 +713,17 @@ fn heard(connection: &zbus::Connection, backends: &Backends, told: Told) -> zbus
             lockdown,
         ),
         Told::RunningApps => {
-            background::changed(&zbus::block_on(
+            domicile_portal_background::changed(&zbus::block_on(
                 connection
                     .object_server()
                     .interface::<_, Background>(OBJECT_PATH),
             )?);
             Ok(())
         }
-        Told::End(handle) => zbus::block_on(session::end(connection.object_server(), &handle)),
+        Told::End(handle) => zbus::block_on(domicile_portal::session::end(
+            connection.object_server(),
+            &handle,
+        )),
         Told::SelectionChanged { mime_types, owner } => {
             for session in backends.remotes.sharing_sessions() {
                 let is_owner = owner.as_ref() == Some(&session);

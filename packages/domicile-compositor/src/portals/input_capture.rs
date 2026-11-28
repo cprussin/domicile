@@ -14,10 +14,11 @@ use zbus::fdo;
 use zbus::object_server::ObjectServer;
 use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
-use super::{session, Backends, Told};
+use super::{Backends, Told};
 use crate::eis::barriers::{placed, Barrier, Zone};
 use crate::eis::{self, Capabilities};
 use domicile_portal::queue::{ask, Listed};
+use domicile_portal::session;
 
 /// The `org.freedesktop.impl.portal.InputCapture` version implemented.
 const INTERFACE_VERSION: u32 = 1;
@@ -374,7 +375,7 @@ mod tests {
     use crate::portals::fixture::{
         call, next, options, path, reply, served, Results, Served, APP, SESSION,
     };
-    use crate::portals::restore::Tokens;
+    use domicile_portal::restore::Tokens;
 
     const INPUT_CAPTURE: &str = "org.freedesktop.impl.portal.InputCapture";
 

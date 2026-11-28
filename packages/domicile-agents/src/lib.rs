@@ -14,6 +14,8 @@
 //! Domicile's own, not a portal's: no application asks over D-Bus. See
 //! `docs/AGENTS.md`.
 
+pub mod accessibility;
+
 use std::collections::HashSet;
 use std::fs;
 use std::io;

@@ -12,11 +12,11 @@ use zbus::ObjectPath;
 
 use super::clipboard::Selection;
 use super::global_shortcuts::Shortcuts;
-use super::restore::Tokens;
 use super::{export, heard, Backends, Starting, OBJECT_PATH};
 use crate::client_requests::ClientRequest;
 use crate::eis::recorded::in_the_background;
 use crate::notifications::NotificationServer;
+use domicile_portal::restore::Tokens;
 use domicile_portal::testing::connected;
 use domicile_portal_settings::Appearance;
 
