@@ -184,11 +184,22 @@ echo
 echo "measured: $MEASURED"
 echo "  (shell default-gpc default-sec-gpc default-cookie work-gpc work-sec-gpc work-cookie)"
 
+# A window asked for before the engine knew its profile opens in the default
+# one (ContextFor), so work would measure default's protections. The shell
+# waits for the profiles; this says so if it ever stops.
+FELL_BACK=0
+grep -qF "which the desk does not have" "$ENGINE_LOG" 2>/dev/null && FELL_BACK=1
+
 # Which end to blame. `packages/domicile-engine/tests/test-browser-protections-guard.sh`
 # runs the reading and this block directly.
 FAILURE=""
 PASSED=""
-case "$MEASURED" in
+if [ "${FELL_BACK:-0}" = 1 ]; then
+  FAILURE="a window opened before the engine knew its profile, so it opened \
+in the default profile and measured that one's protections: the shell did not \
+wait for browserprofileschanged"
+fi
+[ -n "$FAILURE" ] || case "$MEASURED" in
 "1 true 1 blocked false 0 kept")
   PASSED="a profile's protections reached its pages: the default profile \
 asked sites not to sell or share its data, on the page and on the wire, and \
@@ -200,8 +211,8 @@ did not load, or it threw, and the engine log has its console"
   ;;
 "1 none "* | *" none")
   FAILURE="a page or its frame never reported: openBrowserWindow opened no \
-window in a profile, or the list never reached the shell, or the frame from \
-localhost never loaded"
+window in a profile, or the list never reached the shell (no \
+\`GUARD profiles-known\`), or the frame from localhost never loaded"
   ;;
 "1 false "*)
   FAILURE="THE DEFAULT PROFILE'S PAGE DID NOT ASK FOR PRIVACY: \

@@ -69,9 +69,10 @@ reads() { # lines...
   )
 }
 
-verdict() { # $1 MEASURED
+verdict() { # $1 MEASURED, $2 FELL_BACK
   (
     MEASURED="$1"
+    FELL_BACK="${2:-0}"
     eval "$BLOCK"
     if [ -n "$PASSED" ]; then
       echo "pass"
@@ -83,9 +84,10 @@ verdict() { # $1 MEASURED
   )
 }
 
-says() { # $1 MEASURED, $2 what the sentence must contain
+says() { # $1 MEASURED, $2 what the sentence must contain, $3 FELL_BACK
   case "$(
     MEASURED="$1"
+    FELL_BACK="${3:-0}"
     eval "$BLOCK"
     echo "$FAILURE"
   )" in
@@ -135,6 +137,13 @@ expect "work blocking the cookie is a failure" "fail" \
   "$(verdict "1 true 1 blocked false 0 blocked")"
 expect "and says the claim then proves nothing" "yes" \
   "$(says "1 true 1 blocked false 0 blocked" "proves nothing")"
+
+expect "a window that fell back to the default profile is a failure" "fail" \
+  "$(verdict "1 true 1 blocked true 1 blocked" 1)"
+expect "and says the shell did not wait, not that work leaked" "yes" \
+  "$(says "1 true 1 blocked true 1 blocked" "did not wait" 1)"
+expect "even when the numbers would pass" "fail" \
+  "$(verdict "1 true 1 blocked false 0 kept" 1)"
 
 echo
 if [ "$FAILED" -eq 0 ]; then

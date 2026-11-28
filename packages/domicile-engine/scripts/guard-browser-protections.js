@@ -60,16 +60,29 @@ export const HostShell = (_root, desktop) => {
     document.body.append(view);
   };
 
-  // The first list is empty, so this opens the windows; later ones hold them.
+  // Opens the windows once the first window list has come (it is empty) and
+  // the desk's profiles name every one the guard asked for. A window asked for
+  // in a profile the engine has not heard of yet opens in the default profile
+  // (ContextFor), which a guard would read as that profile's protections
+  // leaking.
+  let listed = false;
   let opened = false;
+  const open = () => {
+    const known = new Set((host.browserProfiles ?? []).map(({ id }) => id));
+    if (opened || !listed || !profiles.every((id) => known.has(id))) {
+      return;
+    }
+    opened = true;
+    say(`profiles-known ${[...known].join(",")}`);
+    for (const profile of profiles) {
+      host.openBrowserWindow(`${page}?as=${profile}`, undefined, profile);
+    }
+  };
+  host.addEventListener("browserprofileschanged", open);
   const drawn = new Set();
   host.addEventListener("browserwindowschanged", () => {
-    if (!opened) {
-      opened = true;
-      for (const profile of profiles) {
-        host.openBrowserWindow(`${page}?as=${profile}`, undefined, profile);
-      }
-    }
+    listed = true;
+    open();
     for (const window of host.browserWindows ?? []) {
       if (!drawn.has(window.id)) {
         drawn.add(window.id);
@@ -77,6 +90,7 @@ export const HostShell = (_root, desktop) => {
       }
     }
   });
+  open();
 
   say("shell-loaded");
 };
