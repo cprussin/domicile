@@ -35,7 +35,7 @@
   "private": true,
   "scripts": {
     "build:vite": "vite build",
-    "prepare": "panda codegen --log-level silent",
+    "prepare": "panda codegen --log-level silent && panda cssgen --log-level silent",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test"
   },

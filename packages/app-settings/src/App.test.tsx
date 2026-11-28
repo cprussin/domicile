@@ -1,6 +1,7 @@
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 import type { Options } from "@domicile-desktop/sdk/options";
 import { defineOptions, option } from "@domicile-desktop/sdk/options";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import {
   act,
   fireEvent,
@@ -1044,6 +1045,33 @@ describe(App, () => {
       }
       await renderApp("Extensions", { profiles: off });
       expect((await ublock()).getByText("Not on in any profile")).toBeVisible();
+    });
+
+    describe("laid out", () => {
+      loadEmittedStylesheet(
+        document,
+        new URL("../styled-system/styles.css", import.meta.url),
+      );
+
+      it("spaces an extension's lines apart, with no rule between them", async () => {
+        await renderApp("Extensions", { profiles: PROFILES });
+        // The extension's lines, under its name.
+        const body = (
+          await screen.findByRole("group", { name: "uBlock Origin Lite" })
+        ).lastElementChild;
+        if (body === null) {
+          throw new Error("uBlock Origin Lite has no lines");
+        } else {
+          const style = (element: Element) =>
+            globalThis.getComputedStyle(element);
+          expect(style(body).getPropertyValue("gap")).toBe("0.75rem");
+          const lines = [...body.children];
+          expect(lines).toHaveLength(4);
+          for (const line of lines) {
+            expect(style(line).getPropertyValue("border-block-start")).toBe("");
+          }
+        }
+      });
     });
 
     it("opens the Profiles page to choose where an extension is on", async () => {

@@ -60,6 +60,7 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 - The agents panel's Take over button stays on one line next to a long window title.
 - On a computer with no sound server running, the desktop checks for one less and less often, rather than every five seconds, so it uses less CPU while you aren't doing anything.
 - Forget on saved Wi-Fi networks no longer sits against the edge of its tile.
+- Each extension on the Extensions page in Settings has room between its profiles, site access and file access, with no lines between them.
 
 ## 1.3.0
 

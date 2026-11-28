@@ -502,7 +502,7 @@ const ExtensionRow = ({
             />
           )}
           {settings.file_access !== undefined && (
-            <SettingRow title="Allow on local files">
+            <SettingRow divided={false} title="Allow on local files">
               <Switch
                 checked={settings.file_access}
                 disabled={locked("file_access")}
@@ -516,6 +516,7 @@ const ExtensionRow = ({
           )}
           {settings.user_scripts !== undefined && (
             <SettingRow
+              divided={false}
               hint="Lets it run scripts you add to it"
               title="Allow user scripts"
             >
@@ -596,7 +597,7 @@ const SiteAccessSetting = ({
   const specific = Array.isArray(value) || picking;
   return (
     <>
-      <SettingRow title="Site access">
+      <SettingRow divided={false} title="Site access">
         <Select
           aria-label="Site access"
           disabled={disabled}
@@ -689,10 +690,12 @@ const groupStyles = flex({ direction: "column", gap: 2 });
 
 const headStyles = flex({ align: "center", gap: 3 });
 
-// Under the name, past the icon.
+// Under the name, past the icon. Its lines are spaced apart, not ruled: the
+// rules part one extension from the next.
 const bodyStyles = flex({
   _empty: { display: "none" },
   direction: "column",
+  gap: 3,
   paddingInlineStart: 12,
 });
 
@@ -719,14 +722,9 @@ const actionsStyles = flex({
   align: "center",
   gap: 2,
   justify: "flex-end",
-  paddingBlockStart: 2,
 });
 
-const sitesStyles = flex({
-  direction: "column",
-  gap: 2,
-  paddingBlockEnd: 3,
-});
+const sitesStyles = flex({ direction: "column", gap: 2 });
 
 const chipsStyles = flex({
   gap: 2,

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { css } from "../styled-system/css";
+import { css, cva } from "../styled-system/css";
 import { flex } from "../styled-system/patterns";
 import type { ConfigPath } from "./config-document";
 import { Changed } from "./temporary-changes";
@@ -15,11 +15,22 @@ type Props = {
    * change differs from it.
    */
   path?: ConfigPath | undefined;
+  /**
+   * Whether a rule parts it from the row above. Without one it has no
+   * padding of its own, for a list that spaces its rows apart.
+   */
+  divided?: boolean | undefined;
 };
 
 /** One setting: its name and hint beside its control. */
-export const SettingRow = ({ children, hint, path, title }: Props) => (
-  <div className={rowStyles}>
+export const SettingRow = ({
+  children,
+  divided = true,
+  hint,
+  path,
+  title,
+}: Props) => (
+  <div className={rowStyles({ divided })}>
     <div className={textStyles}>
       <span className={titleStyles}>{title}</span>
       {hint !== undefined && <span className={hintStyles}>{hint}</span>}
@@ -29,15 +40,24 @@ export const SettingRow = ({ children, hint, path, title }: Props) => (
   </div>
 );
 
-const rowStyles = flex({
-  "&:first-of-type": { borderBlockStart: "none", paddingBlockStart: 0 },
-  "&:last-of-type": { paddingBlockEnd: 0 },
-  alignItems: "center",
-  borderBlockStart: "1px solid {colors.border}",
-  gap: 6,
-  justify: "space-between",
-  paddingBlock: 3.5,
-  wrap: "wrap",
+const rowStyles = cva({
+  base: flex.raw({
+    align: "center",
+    gap: 6,
+    justify: "space-between",
+    wrap: "wrap",
+  }),
+  variants: {
+    divided: {
+      false: {},
+      true: {
+        "&:first-of-type": { borderBlockStart: "none", paddingBlockStart: 0 },
+        "&:last-of-type": { paddingBlockEnd: 0 },
+        borderBlockStart: "1px solid {colors.border}",
+        paddingBlock: 3.5,
+      },
+    },
+  },
 });
 
 const textStyles = flex({
