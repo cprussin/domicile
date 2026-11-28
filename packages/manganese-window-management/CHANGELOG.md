@@ -1,5 +1,101 @@
 # @domicile-desktop/manganese-window-management
 
+## 2.1.0
+
+### Minor Changes
+
+- 9511236: Move windows on springs: opening, closing, tab contents, restacking, the scratchpad, workspace switches and picture-in-picture. A workspace switch turned back midway reverses from where it is, a tab switch slides the revealed tab in from its side, and a moving tab's ring and shadow fade as a layer of their own.
+- d85cc61: The overview opens and closes on a spring and follows a four-finger pinch, turning back if the fingers do. Its tiles size by a scale transform, and card swaps and workspace rings slide on a spring. Add `useOverviewPinch` and a `progress` prop on `OverviewBackdrop`.
+- 1fce39d: `domicile exec --agent <session>` and `domicile open --agent <session>` start a program whose windows open held by the agent's seat, without an activation token. The MCP server's `exec` and `open` use them. Manganese opens a window an agent holds without taking the user's focus.
+- 1fce39d: Manganese shows what agents are using: a violet ring and the agent's name around each window it uses, its own named pointer, a "You're using this window" banner with Give back on a window the user took, and the windows it uses in the agent pill with Take over. The component library adds the `agent` and `onAgent` colors.
+- e3ccef6: The shield in the address bar has a switch for each protection beside ad blocking: Hide cookie banners, Remove tracking from links and Hide your device's details. Turning one off asks how long, this window only or always on the site, and reloads the page, as turning them all off does.
+- 2a2328a: A shell command that acts on a window takes `--window <id>` after its first word (`domicile send-shell move --window <id> right`) and runs on that window, not the user's focus, and an agent's `send_shell` takes one for a window its seat holds, so an agent can move its own window to another workspace. A shell marks such commands `window: true` in `bindKeys`' `commands`, and `onCommand` gets the window as its second argument.
+- 3cc9d3d: Shader effects in manganese: workspace switches blur windows along their slide, the overview throws the wallpaper out of focus, glass dialogs such as the launcher are frosted, and the theme wipe comes in behind a soft edge. They are on by default, off under reduced motion, and switched with `shell_options.effects.windows`. Each effect takes `--device-pixel-ratio`, which the shell sets on `<html>`, so it measures in CSS pixels. Add `WINDOW_EFFECTS` and the `_slideBlur` and `_depthOfField` conditions.
+- c18b1a0: An agent seat's pointer and keyboard reach browser windows at desk positions. The compositor sends each step to the browser as `agent_input`, which hit tests the desk point to the page under it, refuses the shell's own page, carries drags between pages, and answers `agent_input_reached`. The user's own press or key in a browser window an agent holds takes it. Manganese draws an agent's ring, name and pointer on browser windows too, and its agent pill lists the browser windows an agent uses.
+- 6f8fea2: Taking a window from an agent says so plainly. The window's ring turns amber and its tag reads "Paused", a banner slides down under its title bar with Give back and Hide, the agent's pointer turns gray there, and the agent pill turns amber. Rings fade in and out. Adds the `agentPaused` color token.
+- 06fcd97: Every command and MCP tool that acts on a window takes the window's id, and acts on the driver's focus without one: an agent's own focus for an agent. `close-window`, `kill-window`, `accessibility`, `accessibility-act` and `devtools` take it as `--window <id>`, and `close_window` takes `window`. Manganese runs any window command on a named window.
+- aecbd9d: `domicile completions` asks the shell for placeholders only it knows: `bindKeys` takes `onComplete(args)`, which returns the words that can follow. Manganese completes its workspace names after `workspace` and `move container to workspace`.
+- 8c99222: Browser windows have a shield at the end of the address field. It shows how many ads and trackers were blocked on the page and turns protections off for this window only or always on the site, then reloads.
+- 20b26f3: Send a window flying into its workspace's chip in the bar, grow a client's dialog out of the window it is for, and land a dropped window on a spring. The window model remembers the window each client window is a dialog for (`opener`), and the workspace switcher marks each chip with `WORKSPACE_CHIP`.
+- bfc6e43: A browser window's context menu draws extensions' items above Inspect. Manganese keeps its browser keys (`BROWSER_KEYS`), such as Ctrl+F and Ctrl+R, from extensions.
+- 68fe399: `domicile open --agent <session> <url>` opens a new browser window held by the agent's seat, listed with `agent` so the shell opens it without the user's focus; the engine's `open_url` answers with the window's id. Manganese opens a window an agent holds in a group of its own beside the user's. `domicile list-windows` gives browser windows `focused` and `size` from the engine's new `browser_windows` command.
+- bf012f0: Right-clicking an extension's action in the tray opens the items the extension adds to its menu. `manganese-window-management` exports `AppMenuEntries` from `./browser/AppMenuBar`.
+
+### Patch Changes
+
+- 8b27261: `domicile open --app <module>#<fragment>` opens an app module's window at that fragment, which the app reads as `location.hash`, and `domicile-settings <page>` opens Settings on that page. The shield's Privacy settings opens Settings on the Privacy page.
+- 6dd0c95: The SDK has `@domicile-desktop/sdk/sysfs` (`SysfsDesktop`, `sysfsEntries`, `sysfsLine`, `anyOf`) for reading `/sys`, and `@domicile-desktop/sdk/streams` (`eachOf`) for following a stream to its end. `system-audio`, `system-battery` and `system-bluetooth` no longer export their own `SysfsDesktop` from `./hardware`; take it from `@domicile-desktop/sdk/sysfs`.
+- 72d3e73: The focus glow and the selection tint share one `BoxOverlay` that follows their box of windows.
+- d3dcb84: A browser window an agent works in runs as shown on a hidden workspace, a screenshot of it is refused at once rather than timing out, the MCP server hints agents to work on a workspace the user isn't on, its batch results read a line a step, and manganese's workspace switcher dots workspaces an agent is working on.
+- 5701ee7: `useNamedIcons` in `@domicile-desktop/manganese-host/useNamedIcons` reads icons by name from a desktop's icon lookup. The tray's menu icons and the windows' icons use it.
+- 04cf220: A tab switch's slide is clipped to the revealed tab's frame, so it no longer draws past its tab group's edge.
+- 7ef68c9: A window an agent holds no longer takes the user's keyboard when it asks for focus, such as a page the agent drives focusing a field.
+- cf81dad: Closing a window fades it and shrinks it a little. A closing tab's contents close the same way, about the window's middle, instead of shrinking into the tab.
+- 9c59e57: A workspace switch turned back, and every scratchpad stow, slide forwards on their spring from where the window is instead of playing the opposite slide backwards, which started in the spring's still tail. `turnedBack` in `springs` gives the offset.
+- cb357cb: `domicile.pointer.warp(x, y, onlyOver, unlessOver)` moves the pointer only while it is over one of the `onlyOver` boxes and not over `unlessOver`; the engine checks. `onlyOver` is required. Manganese passes every other shown window's frame, so switching tabs or moving focus with the pointer over the top bar no longer warps it.
+- Updated dependencies [0034f1d]
+- Updated dependencies [55d3d53]
+- Updated dependencies [343876f]
+- Updated dependencies [e8f1f41]
+- Updated dependencies [8ab0523]
+- Updated dependencies [db55f37]
+- Updated dependencies [6dd0c95]
+- Updated dependencies [1fce39d]
+- Updated dependencies [90e1c93]
+- Updated dependencies [50b429c]
+- Updated dependencies [0966517]
+- Updated dependencies [bd6ceb4]
+- Updated dependencies [fc566f5]
+- Updated dependencies [e33f628]
+- Updated dependencies [bf4e447]
+- Updated dependencies [88a71a0]
+- Updated dependencies [082ddd7]
+- Updated dependencies [79d8d48]
+- Updated dependencies [525150c]
+- Updated dependencies [c76af17]
+- Updated dependencies [02e8509]
+- Updated dependencies [cc64389]
+- Updated dependencies [962d6ae]
+- Updated dependencies [78733ca]
+- Updated dependencies [b9abd20]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [089b085]
+- Updated dependencies [a64fb76]
+- Updated dependencies [c0d8052]
+- Updated dependencies [2a2328a]
+- Updated dependencies [fb2d9c3]
+- Updated dependencies [6f8fea2]
+- Updated dependencies [e8f1f41]
+- Updated dependencies [6dd0c95]
+- Updated dependencies [3cc9d3d]
+- Updated dependencies [34f4903]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [96b06ae]
+- Updated dependencies [4d479d1]
+- Updated dependencies [5701ee7]
+- Updated dependencies [aecbd9d]
+- Updated dependencies [1726356]
+- Updated dependencies [0bf1cdc]
+- Updated dependencies [83d6c24]
+- Updated dependencies [24f66a6]
+- Updated dependencies [4809bee]
+- Updated dependencies [786360e]
+- Updated dependencies [dc1279f]
+- Updated dependencies [7839ab1]
+- Updated dependencies [68fe399]
+- Updated dependencies [9c59e57]
+- Updated dependencies [90e1c93]
+- Updated dependencies [395b9ed]
+- Updated dependencies [cb357cb]
+- Updated dependencies [3cc9d3d]
+  - @domicile-desktop/component-library@3.0.0
+  - @domicile-desktop/sdk@4.0.0
+  - @domicile-desktop/manganese-bar@1.2.0
+  - @domicile-desktop/manganese-page-requests@1.3.1
+  - @domicile-desktop/manganese-host@2.1.0
+  - @domicile-desktop/manganese-address@1.1.1
+  - @domicile-desktop/system-apps@1.3.1
+
 ## 2.0.0
 
 ### Major Changes

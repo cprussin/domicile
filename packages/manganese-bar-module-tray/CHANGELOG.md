@@ -1,5 +1,97 @@
 # @domicile-desktop/manganese-bar-module-tray
 
+## 1.3.0
+
+### Minor Changes
+
+- e8f1f41: Extensions are switched on per profile. The Settings app's Extensions page has no switch: it shows the profiles each extension is on in, with **Choose profiles**, shows its settings while it is off, and asks which profiles a folder just loaded goes on in. The tray's menu switches an extension the config lists by a temporary change of the profile's list, until the desktop restarts. The Profiles page does the same on a read-only config, and on one it writes changes the file's list in one click; either way it shows "Changed from your config" with Reset. The SDK drops `extensions.setEnabled`; `browser.setExtensionEnabled` switches through the config where the config sets it, and `browser.changedExtensions` and `browser.resetExtension` show and end those changes.
+- bf012f0: Right-clicking an extension's action in the tray opens the items the extension adds to its menu. `manganese-window-management` exports `AppMenuEntries` from `./browser/AppMenuBar`.
+
+### Patch Changes
+
+- 5701ee7: `useNamedIcons` in `@domicile-desktop/manganese-host/useNamedIcons` reads icons by name from a desktop's icon lookup. The tray's menu icons and the windows' icons use it.
+- 0bf1cdc: Right-clicking an extension's row in the tray's menu opens its action menu, and an action menu holding one submenu shows that submenu's items. `Popover`'s body leaves room for a `PanelFooter` action, so it no longer scrolls sideways.
+- Updated dependencies [9511236]
+- Updated dependencies [0034f1d]
+- Updated dependencies [d85cc61]
+- Updated dependencies [55d3d53]
+- Updated dependencies [343876f]
+- Updated dependencies [e8f1f41]
+- Updated dependencies [8ab0523]
+- Updated dependencies [8b27261]
+- Updated dependencies [db55f37]
+- Updated dependencies [1fce39d]
+- Updated dependencies [6dd0c95]
+- Updated dependencies [1fce39d]
+- Updated dependencies [90e1c93]
+- Updated dependencies [50b429c]
+- Updated dependencies [0966517]
+- Updated dependencies [bd6ceb4]
+- Updated dependencies [fc566f5]
+- Updated dependencies [e33f628]
+- Updated dependencies [bf4e447]
+- Updated dependencies [88a71a0]
+- Updated dependencies [082ddd7]
+- Updated dependencies [72d3e73]
+- Updated dependencies [d3dcb84]
+- Updated dependencies [79d8d48]
+- Updated dependencies [525150c]
+- Updated dependencies [c76af17]
+- Updated dependencies [02e8509]
+- Updated dependencies [cc64389]
+- Updated dependencies [e3ccef6]
+- Updated dependencies [962d6ae]
+- Updated dependencies [78733ca]
+- Updated dependencies [b9abd20]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [089b085]
+- Updated dependencies [a64fb76]
+- Updated dependencies [c0d8052]
+- Updated dependencies [2a2328a]
+- Updated dependencies [3cc9d3d]
+- Updated dependencies [fb2d9c3]
+- Updated dependencies [c18b1a0]
+- Updated dependencies [6f8fea2]
+- Updated dependencies [e8f1f41]
+- Updated dependencies [6dd0c95]
+- Updated dependencies [3cc9d3d]
+- Updated dependencies [34f4903]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [96b06ae]
+- Updated dependencies [4d479d1]
+- Updated dependencies [5701ee7]
+- Updated dependencies [04cf220]
+- Updated dependencies [7ef68c9]
+- Updated dependencies [06fcd97]
+- Updated dependencies [aecbd9d]
+- Updated dependencies [1726356]
+- Updated dependencies [8c99222]
+- Updated dependencies [0bf1cdc]
+- Updated dependencies [20b26f3]
+- Updated dependencies [83d6c24]
+- Updated dependencies [24f66a6]
+- Updated dependencies [4809bee]
+- Updated dependencies [786360e]
+- Updated dependencies [cf81dad]
+- Updated dependencies [dc1279f]
+- Updated dependencies [7839ab1]
+- Updated dependencies [bfc6e43]
+- Updated dependencies [68fe399]
+- Updated dependencies [9c59e57]
+- Updated dependencies [90e1c93]
+- Updated dependencies [395b9ed]
+- Updated dependencies [bf012f0]
+- Updated dependencies [cb357cb]
+- Updated dependencies [3cc9d3d]
+  - @domicile-desktop/manganese-window-management@2.1.0
+  - @domicile-desktop/component-library@3.0.0
+  - @domicile-desktop/sdk@4.0.0
+  - @domicile-desktop/manganese-bar@1.2.0
+  - @domicile-desktop/manganese-page-requests@1.3.1
+  - @domicile-desktop/manganese-host@2.1.0
+  - @domicile-desktop/react@0.3.0
+  - @domicile-desktop/system-apps@1.3.1
+
 ## 1.2.0
 
 ### Minor Changes

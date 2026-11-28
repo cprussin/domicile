@@ -1,5 +1,144 @@
 # @domicile-desktop/manganese
 
+## 1.4.0
+
+### Minor Changes
+
+- d85cc61: The overview opens and closes on a spring and follows a four-finger pinch, turning back if the fingers do. Its tiles size by a scale transform, and card swaps and workspace rings slide on a spring. Add `useOverviewPinch` and a `progress` prop on `OverviewBackdrop`.
+- 02e8509: Build with Panda CSS 2.
+- 2a2328a: A shell command that acts on a window takes `--window <id>` after its first word (`domicile send-shell move --window <id> right`) and runs on that window, not the user's focus, and an agent's `send_shell` takes one for a window its seat holds, so an agent can move its own window to another workspace. A shell marks such commands `window: true` in `bindKeys`' `commands`, and `onCommand` gets the window as its second argument.
+- 3cc9d3d: Shader effects in manganese: workspace switches blur windows along their slide, the overview throws the wallpaper out of focus, glass dialogs such as the launcher are frosted, and the theme wipe comes in behind a soft edge. They are on by default, off under reduced motion, and switched with `shell_options.effects.windows`. Each effect takes `--device-pixel-ratio`, which the shell sets on `<html>`, so it measures in CSS pixels. Add `WINDOW_EFFECTS` and the `_slideBlur` and `_depthOfField` conditions.
+- 06fcd97: Every command and MCP tool that acts on a window takes the window's id, and acts on the driver's focus without one: an agent's own focus for an agent. `close-window`, `kill-window`, `accessibility`, `accessibility-act` and `devtools` take it as `--window <id>`, and `close_window` takes `window`. Manganese runs any window command on a named window.
+
+### Patch Changes
+
+- 9511236: Move windows on springs: opening, closing, tab contents, restacking, the scratchpad, workspace switches and picture-in-picture. A workspace switch turned back midway reverses from where it is, a tab switch slides the revealed tab in from its side, and a moving tab's ring and shadow fade as a layer of their own.
+- d3dcb84: A browser window an agent works in runs as shown on a hidden workspace, a screenshot of it is refused at once rather than timing out, the MCP server hints agents to work on a workspace the user isn't on, its batch results read a line a step, and manganese's workspace switcher dots workspaces an agent is working on.
+- e5bdc59: A captive portal check gives each try 15 seconds, so a name lookup can wait out a dead nameserver, and manganese repeats a check that got no answer, backing off to a minute, instead of giving up on the network.
+- fb2d9c3: Move the shell's surfaces onto the `springs.*` tokens:
+  
+  - `Popover` grows from its trigger, and `ModalDialog` takes an `origin` (or a `DialogOrigin` around it) to spring from and back into. Portal dialogs and the file picker spring from the window that asked, and the launcher from the bar button that opened it.
+  - `SlideOver`, `Toaster` and `LevelToast` move on springs; a swiped toast leaves at the speed it was let go.
+  - What is in a `ListRow` drawer fades and slides into place on springs.
+  - Menus, `Select` lists and tooltips fade in rising 2px off their anchor.
+  - The region picker's corners snap out on a spring when let go, and the recording toolbar springs in.
+  - The lock's clock and field, page dialogs and the workspace switcher's highlight move on springs.
+- 20b26f3: Send a window flying into its workspace's chip in the bar, grow a client's dialog out of the window it is for, and land a dropped window on a spring. The window model remembers the window each client window is a dialog for (`opener`), and the workspace switcher marks each chip with `WORKSPACE_CHIP`.
+- cf81dad: Closing a window fades it and shrinks it a little. A closing tab's contents close the same way, about the window's middle, instead of shrinking into the tab.
+- bfc6e43: A browser window's context menu draws extensions' items above Inspect. Manganese keeps its browser keys (`BROWSER_KEYS`), such as Ctrl+F and Ctrl+R, from extensions.
+- Updated dependencies [9511236]
+- Updated dependencies [0034f1d]
+- Updated dependencies [d85cc61]
+- Updated dependencies [55d3d53]
+- Updated dependencies [343876f]
+- Updated dependencies [e8f1f41]
+- Updated dependencies [8ab0523]
+- Updated dependencies [8b27261]
+- Updated dependencies [3ff14b3]
+- Updated dependencies [db55f37]
+- Updated dependencies [1fce39d]
+- Updated dependencies [6dd0c95]
+- Updated dependencies [1fce39d]
+- Updated dependencies [90e1c93]
+- Updated dependencies [50b429c]
+- Updated dependencies [0966517]
+- Updated dependencies [bd6ceb4]
+- Updated dependencies [fc566f5]
+- Updated dependencies [e33f628]
+- Updated dependencies [bf4e447]
+- Updated dependencies [88a71a0]
+- Updated dependencies [082ddd7]
+- Updated dependencies [72d3e73]
+- Updated dependencies [d3dcb84]
+- Updated dependencies [79d8d48]
+- Updated dependencies [525150c]
+- Updated dependencies [c76af17]
+- Updated dependencies [02e8509]
+- Updated dependencies [cc64389]
+- Updated dependencies [e3ccef6]
+- Updated dependencies [962d6ae]
+- Updated dependencies [78733ca]
+- Updated dependencies [b9abd20]
+- Updated dependencies [e5bdc59]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [089b085]
+- Updated dependencies [a64fb76]
+- Updated dependencies [c0d8052]
+- Updated dependencies [2a2328a]
+- Updated dependencies [3cc9d3d]
+- Updated dependencies [fb2d9c3]
+- Updated dependencies [c18b1a0]
+- Updated dependencies [6f8fea2]
+- Updated dependencies [e8f1f41]
+- Updated dependencies [6dd0c95]
+- Updated dependencies [3cc9d3d]
+- Updated dependencies [34f4903]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [96b06ae]
+- Updated dependencies [4d479d1]
+- Updated dependencies [5701ee7]
+- Updated dependencies [04cf220]
+- Updated dependencies [7ef68c9]
+- Updated dependencies [06fcd97]
+- Updated dependencies [aecbd9d]
+- Updated dependencies [1726356]
+- Updated dependencies [8c99222]
+- Updated dependencies [0bf1cdc]
+- Updated dependencies [cce865a]
+- Updated dependencies [20b26f3]
+- Updated dependencies [83d6c24]
+- Updated dependencies [24f66a6]
+- Updated dependencies [4809bee]
+- Updated dependencies [786360e]
+- Updated dependencies [b92e007]
+- Updated dependencies [cf81dad]
+- Updated dependencies [dc1279f]
+- Updated dependencies [7839ab1]
+- Updated dependencies [bfc6e43]
+- Updated dependencies [68fe399]
+- Updated dependencies [9c59e57]
+- Updated dependencies [90e1c93]
+- Updated dependencies [395b9ed]
+- Updated dependencies [bf012f0]
+- Updated dependencies [cb357cb]
+- Updated dependencies [3cc9d3d]
+  - @domicile-desktop/manganese-window-management@2.1.0
+  - @domicile-desktop/component-library@3.0.0
+  - @domicile-desktop/sdk@4.0.0
+  - @domicile-desktop/manganese-bar-module-tray@1.3.0
+  - @domicile-desktop/manganese-bar-module-sharing@1.3.0
+  - @domicile-desktop/system-audio@2.0.0
+  - @domicile-desktop/manganese-bar-module-idle-inhibitor@1.1.4
+  - @domicile-desktop/manganese-bar-module-keymap@0.1.4
+  - @domicile-desktop/manganese-lock@1.0.5
+  - @domicile-desktop/manganese-notifications@2.1.1
+  - @domicile-desktop/manganese-clipboard@1.2.1
+  - @domicile-desktop/manganese-launcher@1.3.0
+  - @domicile-desktop/manganese-bar-module-downloads@0.1.4
+  - @domicile-desktop/manganese-bar@1.2.0
+  - @domicile-desktop/manganese-bar-module-bluetooth@1.1.4
+  - @domicile-desktop/manganese-bar-module-brightness@2.0.4
+  - @domicile-desktop/manganese-bar-module-cast@0.1.4
+  - @domicile-desktop/manganese-bar-module-google-messages@1.0.4
+  - @domicile-desktop/manganese-bar-module-network@1.2.1
+  - @domicile-desktop/manganese-bar-module-volume@2.0.4
+  - @domicile-desktop/manganese-bar-module-launcher-button@1.1.2
+  - @domicile-desktop/manganese-bar-module-notifications@2.0.2
+  - @domicile-desktop/manganese-bar-module-workspace-switcher@1.2.2
+  - @domicile-desktop/manganese-quick-settings@1.0.4
+  - @domicile-desktop/manganese-page-requests@1.3.1
+  - @domicile-desktop/manganese-host@2.1.0
+  - @domicile-desktop/react@0.3.0
+  - @domicile-desktop/manganese-bar-module-gmail@2.1.1
+  - @domicile-desktop/manganese-wallpaper@1.2.1
+  - @domicile-desktop/manganese-bar-module-battery@1.1.4
+  - @domicile-desktop/manganese-bar-module-clock@1.0.5
+  - @domicile-desktop/manganese-bar-module-theme-switch@1.1.4
+  - @domicile-desktop/manganese-inbox-gmail@0.2.1
+  - @domicile-desktop/system-apps@1.3.1
+  - @domicile-desktop/system-backlight@1.1.4
+  - @domicile-desktop/manganese-inbox-google-messages@0.2.1
+
 ## 1.3.0
 
 ### Minor Changes

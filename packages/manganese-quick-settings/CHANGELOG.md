@@ -1,5 +1,49 @@
 # @domicile-desktop/manganese-quick-settings
 
+## 1.0.4
+
+### Patch Changes
+
+- e33f628: The bar's buttons share one `barButton` Panda pattern, from `@domicile-desktop/manganese-bar/panda-preset`. A package whose CSS a shell emits can take its Panda config from `packagePandaConfig` in `@domicile-desktop/component-library/panda-package-config`.
+- Updated dependencies [0034f1d]
+- Updated dependencies [8ab0523]
+- Updated dependencies [db55f37]
+- Updated dependencies [6dd0c95]
+- Updated dependencies [1fce39d]
+- Updated dependencies [50b429c]
+- Updated dependencies [0966517]
+- Updated dependencies [e33f628]
+- Updated dependencies [bf4e447]
+- Updated dependencies [88a71a0]
+- Updated dependencies [525150c]
+- Updated dependencies [02e8509]
+- Updated dependencies [cc64389]
+- Updated dependencies [b9abd20]
+- Updated dependencies [e5bdc59]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [a64fb76]
+- Updated dependencies [fb2d9c3]
+- Updated dependencies [6f8fea2]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [96b06ae]
+- Updated dependencies [4d479d1]
+- Updated dependencies [0bf1cdc]
+- Updated dependencies [4809bee]
+- Updated dependencies [dc1279f]
+- Updated dependencies [68fe399]
+- Updated dependencies [9c59e57]
+- Updated dependencies [3cc9d3d]
+  - @domicile-desktop/component-library@3.0.0
+  - @domicile-desktop/manganese-bar-module-idle-inhibitor@1.1.4
+  - @domicile-desktop/manganese-bar@1.2.0
+  - @domicile-desktop/manganese-bar-module-bluetooth@1.1.4
+  - @domicile-desktop/manganese-bar-module-brightness@2.0.4
+  - @domicile-desktop/manganese-bar-module-network@1.2.1
+  - @domicile-desktop/manganese-bar-module-volume@2.0.4
+  - @domicile-desktop/react@0.3.0
+  - @domicile-desktop/manganese-bar-module-battery@1.1.4
+  - @domicile-desktop/manganese-bar-module-theme-switch@1.1.4
+
 ## 1.0.3
 
 ### Patch Changes

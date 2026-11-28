@@ -1,5 +1,78 @@
 # @domicile-desktop/manganese-notifications
 
+## 2.1.1
+
+### Patch Changes
+
+- 6dd0c95: The SDK has `@domicile-desktop/sdk/sysfs` (`SysfsDesktop`, `sysfsEntries`, `sysfsLine`, `anyOf`) for reading `/sys`, and `@domicile-desktop/sdk/streams` (`eachOf`) for following a stream to its end. `system-audio`, `system-battery` and `system-bluetooth` no longer export their own `SysfsDesktop` from `./hardware`; take it from `@domicile-desktop/sdk/sysfs`.
+- 0966517: A cleared notification or removed download slides out, then the rows below rise over its place on a spring, all by transform instead of animating the list's height.
+  
+  - `useLeavingRows` gives each row its `motion` for `LeavingRow`, and `onLeft` drops a row at once. `RowMotion` takes `rise`, `onSlid` and `onClosed` in place of `onLeft`, and `Row.leaving` is a `Leaving` in place of the row's order.
+- bf4e447: Pausing notifications moves nothing in the drawer: its header keeps the "Paused until …" line's room while not paused.
+  
+  - `PanelHeader` takes `reserveStatus`, which keeps the status's line while there is none.
+- b9abd20: Popovers grow no taller than the room on their screen and scroll the rest, so bar panels with many rows stay on a small screen.
+- Updated dependencies [0034f1d]
+- Updated dependencies [55d3d53]
+- Updated dependencies [343876f]
+- Updated dependencies [e8f1f41]
+- Updated dependencies [8ab0523]
+- Updated dependencies [db55f37]
+- Updated dependencies [6dd0c95]
+- Updated dependencies [1fce39d]
+- Updated dependencies [90e1c93]
+- Updated dependencies [50b429c]
+- Updated dependencies [0966517]
+- Updated dependencies [bd6ceb4]
+- Updated dependencies [fc566f5]
+- Updated dependencies [e33f628]
+- Updated dependencies [bf4e447]
+- Updated dependencies [88a71a0]
+- Updated dependencies [082ddd7]
+- Updated dependencies [79d8d48]
+- Updated dependencies [525150c]
+- Updated dependencies [c76af17]
+- Updated dependencies [02e8509]
+- Updated dependencies [cc64389]
+- Updated dependencies [962d6ae]
+- Updated dependencies [78733ca]
+- Updated dependencies [b9abd20]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [089b085]
+- Updated dependencies [a64fb76]
+- Updated dependencies [c0d8052]
+- Updated dependencies [2a2328a]
+- Updated dependencies [fb2d9c3]
+- Updated dependencies [6f8fea2]
+- Updated dependencies [e8f1f41]
+- Updated dependencies [6dd0c95]
+- Updated dependencies [3cc9d3d]
+- Updated dependencies [34f4903]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [96b06ae]
+- Updated dependencies [4d479d1]
+- Updated dependencies [5701ee7]
+- Updated dependencies [aecbd9d]
+- Updated dependencies [1726356]
+- Updated dependencies [0bf1cdc]
+- Updated dependencies [83d6c24]
+- Updated dependencies [24f66a6]
+- Updated dependencies [4809bee]
+- Updated dependencies [786360e]
+- Updated dependencies [dc1279f]
+- Updated dependencies [7839ab1]
+- Updated dependencies [68fe399]
+- Updated dependencies [9c59e57]
+- Updated dependencies [90e1c93]
+- Updated dependencies [395b9ed]
+- Updated dependencies [cb357cb]
+- Updated dependencies [3cc9d3d]
+  - @domicile-desktop/component-library@3.0.0
+  - @domicile-desktop/sdk@4.0.0
+  - @domicile-desktop/manganese-bar@1.2.0
+  - @domicile-desktop/manganese-host@2.1.0
+  - @domicile-desktop/react@0.3.0
+
 ## 2.1.0
 
 ### Minor Changes

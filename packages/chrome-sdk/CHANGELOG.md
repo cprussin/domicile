@@ -1,5 +1,60 @@
 # @domicile-desktop/sdk
 
+## 4.0.0
+
+### Major Changes
+
+- e8f1f41: Extensions are switched on per profile. The Settings app's Extensions page has no switch: it shows the profiles each extension is on in, with **Choose profiles**, shows its settings while it is off, and asks which profiles a folder just loaded goes on in. The tray's menu switches an extension the config lists by a temporary change of the profile's list, until the desktop restarts. The Profiles page does the same on a read-only config, and on one it writes changes the file's list in one click; either way it shows "Changed from your config" with Reset. The SDK drops `extensions.setEnabled`; `browser.setExtensionEnabled` switches through the config where the config sets it, and `browser.changedExtensions` and `browser.resetExtension` show and end those changes.
+- cb357cb: `domicile.pointer.warp(x, y, onlyOver, unlessOver)` moves the pointer only while it is over one of the `onlyOver` boxes and not over `unlessOver`; the engine checks. `onlyOver` is required. Manganese passes every other shown window's frame, so switching tabs or moving focus with the pointer over the top bar no longer warps it.
+
+### Minor Changes
+
+- 55d3d53: Each protection beside a page's ad blocking, hiding device details and removing tracking from links, turns on or off for the page's site or its window with a `<webview>`'s `setPrivacyProtection(name, on, "site" | "window")`, and reads back with `privacyProtections()` and `privacyProtectionsSetFor()`; every protection is off where ad blocking is. The engine's `site_privacy` lists a site's protections beside its mode and `set_site_privacy` takes `protections`, and Settings' Sites you changed lists and clears them.
+- 343876f: The engine blocks ads and trackers in every website's page, with adblock-rust and the config's `browser.block_lists` (EasyList, EasyPrivacy and uBlock Origin's filters unless set) plus the user's `browser.block_rules`. Each profile's `protections.block_ads_and_trackers` is `standard`, which blocks other sites' ads and trackers, `strict`, which blocks a site's own too and is a private profile's default, or `off`. Settings › Privacy chooses it per profile.
+- 6dd0c95: The SDK has `@domicile-desktop/sdk/sysfs` (`SysfsDesktop`, `sysfsEntries`, `sysfsLine`, `anyOf`) for reading `/sys`, and `@domicile-desktop/sdk/streams` (`eachOf`) for following a stream to its end. `system-audio`, `system-battery` and `system-bluetooth` no longer export their own `SysfsDesktop` from `./hardware`; take it from `@domicile-desktop/sdk/sysfs`.
+- 90e1c93: A window says where it came from: `launchedFrom` names where the launch it answered started, as `launch(argv, from)` named it, and a browser window's `opener` is the window whose page opened it. A closed window's last frame stays while its `<app>` is in the page, up to 10 seconds.
+- bd6ceb4: The engine hides the device's details from pages, as Brave farbles them: a
+  canvas's exported pixels, what an `OfflineAudioContext` renders and
+  `navigator.hardwareConcurrency` come out a little off, the same way for one
+  site all session and differently for each site and each start. Off reads the
+  truth. Each profile's new `protections.hide_device_details`, on unless set
+  `false`, turns it off, and Settings › Privacy has its switch, "Hide your
+  device's details".
+- fc566f5: The engine hides cookie banners and blocks the scripts that show them, with the config's new `browser.cookie_banner_lists` (the EasyList Cookie List and uBlock Origin's cookie notices unless set), in each profile whose new `protections.hide_cookie_banners` is on, which it is unless set. A shield turns it on or off for a site or a window as `hideCookieBanners`, and Settings › Privacy has a switch for it.
+- 082ddd7: The engine runs the scriptlets filter lists name with `##+js(...)`, in the page's own world before any of its scripts, from the config's new `browser.scriptlet_resources`: uBlock Origin's scriptlets unless set, built and published by CI and pinned by their sha256, and `null` runs none.
+- 79d8d48: `idle.ignore_pointer_motion` blanks and locks whether or not the pointer moves: its motion holds off neither timeout and lights no dark screen. Keys, touches, clicks and scrolling still do. For a mouse that reports motion by itself. The engine says whether each input was a key, a touch, pointer motion or another use of the pointer, and reports the rest however much the pointer moves.
+- c76af17: The engine takes the tracking out of a link from one site to another: in
+  Standard, click ids such as `fbclid`, `gclid` and `msclkid` (Brave's list);
+  in Strict, the `utm_` campaign parameters too. Off keeps everything. Each
+  profile's new `protections.remove_tracking_from_links`, on unless set
+  `false`, turns it off, and Settings › Privacy has its switch.
+- 962d6ae: The engine acts on the lists' `$redirect`, `$removeparam` and `$csp` rules, blocks a server's redirect to a blocked address, finds a tracker behind a CNAME by its canonical name, as Brave does, and keeps each list as long as its `! Expires:` says. The config's new `browser.block_in_electron_apps` blocks in Electron apps' pages too, in Standard. Carried from #2662 by lillecarl.
+- 78733ca: The default `browser.scriptlet_resources` is now uBlock Origin's scriptlets and the stand-ins its `$redirect` rules answer a blocked script, image or frame with, built and published by CI as `ublock-origin-resources-1.77.2` and pinned by their sha256.
+- c0d8052: A `<webview>` reports how its page blocks ads and trackers and how many of its requests were blocked (`privacySite`, `blockAdsAndTrackers`, `blockAdsAndTrackersSetFor`, `blockedCount`, `domicile-site-privacy-change`), and `setBlockAdsAndTrackers(mode, "site" | "window")` changes it for the page's site, kept in its profile, or for its window until it closes.
+- 2a2328a: A shell command that acts on a window takes `--window <id>` after its first word (`domicile send-shell move --window <id> right`) and runs on that window, not the user's focus, and an agent's `send_shell` takes one for a window its seat holds, so an agent can move its own window to another workspace. A shell marks such commands `window: true` in `bindKeys`' `commands`, and `onCommand` gets the window as its second argument.
+- e8f1f41: A shell makes temporary changes to the config with `domicile.config` (`setOverride`, `resetOverrides`, `overrides`), over the engine's new `changeConfig` and `configoverrides`. Each change says what the file has under it (`written`). An extension's site and file access are set in every browser profile, and one the user installs starts off in every profile, for the shell to ask where it goes on.
+- 6dd0c95: `@domicile-desktop/sdk/system-message` exports the schemas of the compositor's answers to system calls (`systemReplySchema`, `systemEventSchema`, `systemEndSchema`). The e2e harness takes them from there instead of keeping its own copy, which had fallen behind: it now reads `real_path`, a cast's `preview` frame, `sent` output and the `agents` reply.
+- 34f4903: A shell lists and runs extensions' commands and menu items: `extensions.commands`, `on("commandPressed")` and `runCommand()` for `chrome.commands`, `extensions.menu()` and `runMenuItem()` for the items an extension adds to its action's menu, and `extensionItems` and `runExtensionItem()` on a page's context menu event.
+- aecbd9d: `domicile completions` asks the shell for placeholders only it knows: `bindKeys` takes `onComplete(args)`, which returns the words that can follow. Manganese completes its workspace names after `workspace` and `move container to workspace`.
+- 1726356: `domicile.effects.register(name, { sksl, outset })` registers a shader effect for `domicile-shader()`, resolving with the effect, which says how many numbers it takes, or with the compiler's error. `effects.on("lost")` names an effect a GPU hang dropped.
+- 83d6c24: `@domicile-desktop/sdk/desktop/dbus-properties`: `allProperties` reads a D-Bus object's properties with `Properties.GetAll` and parses them, and `variant` reads a `v` as its value. The network and Bluetooth packages use them in place of their own copies.
+- 24f66a6: Domicile's D-Bus names are under `com.domicile_desktop`: Miracast is `com.domicile_desktop.Miracast1` (was `net.domicile.Miracast1`) and the screen-cast picker is `com.domicile_desktop.ScreenCast` (was `org.domicile.ScreenCast`).
+- 4809bee: Shells see agents' seats: `domicile.seats` lists each agent seat (name, pointer, focused window, held and taken windows) and takes a window from an agent or gives it back, and each window's `heldBy` names the agent seat holding it. `useSeats()` follows the list in React. A window the user takes from an agent stays theirs until given back.
+- 786360e: Browser windows no `<webview>` shows, or whose `<webview>` is not rendered, have their pages unloaded while the computer is short of memory, much as Chrome unloads tabs, and load again when they are shown. Shells get `isDiscarded` on a window, `browser.discard(id)` to unload one by hand, and `browser.on("memoryShort", …)` to decide themselves which go.
+- 7839ab1: Shells can ask where the pointer is: `domicile.pointer.position()` resolves to the pointer's place in the shell page's CSS pixels, or `undefined` when it is off the desk. The answer is right over a browser window's page too.
+- 68fe399: `domicile open --agent <session> <url>` opens a new browser window held by the agent's seat, listed with `agent` so the shell opens it without the user's focus; the engine's `open_url` answers with the window's id. Manganese opens a window an agent holds in a group of its own beside the user's. `domicile list-windows` gives browser windows `focused` and `size` from the engine's new `browser_windows` command.
+- 90e1c93: `domicile.effects.register` takes `mesh` and `vertex`, `images` by URL, and `outset: "screen"`. The registered effect's `update(element, arrays)` sets its array uniforms for an element.
+
+### Patch Changes
+
+- c8a08d4: - `Popover`, `ModalDialog` and `Autocomplete` lists ease to their content's height instead of jumping.
+  - A `LeavingRow` grows from no height as it arrives, moving the rows below smoothly, and sliding in or out no longer scrolls its list sideways.
+  - `FakeDomicileHost` clears downloads not in progress on `clearDownloads()`, as the engine does.
+- 089b085: Each browser profile has `protections`, all on unless the config turns one off: it blocks third-party cookies, sends Global Privacy Control, and hides the local IP address from WebRTC. Settings › Privacy switches them per profile.
+- 3cc9d3d: Export `@domicile-desktop/sdk/desktop/effects`, for the `Effects` and `ShaderEffect` types.
+- 96b06ae: The desktop's error log no longer fills with a shell's ResizeObserver loops and `[object Object]`, and Electron apps follow logind on the system bus. `easeHeight` starts easing as a popup's content changes, before layout, rather than resizing it while a ResizeObserver answers; the SDK's `logger` writes objects as JSON and errors as their stacks; electron-host waits on the bus with `GetId`, which the system bus's policy allows, not `Peer.Ping`.
+- 395b9ed: `@domicile-desktop/sdk/desktop/effects` exports the shader effect types: `ShaderEffect`, `ShaderEffectMesh`, `RegisteredEffect` and `Effects`.
+
 ## 3.0.0
 
 ### Major Changes
