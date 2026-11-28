@@ -2,6 +2,7 @@
 // signal, kept current. See docs/SHELL-SYSTEM-ACCESS.md.
 
 import { Err, Ok, Result } from "@cprussin/option-result";
+import { variant } from "@domicile-desktop/sdk/desktop/dbus-properties";
 import type { DbusSignal, SystemError } from "@domicile-desktop/sdk/system";
 import { Bus } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
@@ -10,8 +11,8 @@ import type { Reading } from "./follow";
 import { followBus } from "./follow";
 import type { Network, NetworkDesktop } from "./network-state";
 import { Connectivity, Link } from "./network-state";
+import { propertiesOn } from "./properties";
 import { strengthOfDbm } from "./signal-strength";
-import { variant } from "./variant";
 
 const SERVICE = "fi.w1.wpa_supplicant1";
 const ROOT = "/fi/w1/wpa_supplicant1";
@@ -155,23 +156,7 @@ const linkOf = async (
   );
 
 /** `Properties.GetAll` on one of wpa_supplicant's objects, parsed. */
-const properties = async <T extends NonNullable<unknown>>(
-  domicile: NetworkDesktop,
-  path: string,
-  interfaceName: string,
-  schema: z.ZodType<T>,
-): Promise<Result<T, SystemError>> =>
-  (
-    await domicile.dbus.call({
-      body: [interfaceName],
-      bus: Bus.System,
-      destination: SERVICE,
-      interface: "org.freedesktop.DBus.Properties",
-      member: "GetAll",
-      path,
-      signature: "s",
-    })
-  ).map(({ body }) => z.tuple([schema]).parse(body)[0]);
+const properties = propertiesOn(SERVICE);
 
 const rootSchema = z.object({ Interfaces: variant(z.array(z.string())) });
 

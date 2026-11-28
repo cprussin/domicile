@@ -3,15 +3,14 @@
 
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
+import { variant } from "@domicile-desktop/sdk/desktop/dbus-properties";
 import type { DbusSignal, SystemError } from "@domicile-desktop/sdk/system";
 import { Bus } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
-
 import { followBus } from "./follow";
 import type { Network, NetworkDesktop } from "./network-state";
 import { Connectivity, Link } from "./network-state";
 import { strengthOfDbm } from "./signal-strength";
-import { variant } from "./variant";
 
 const SERVICE = "net.connman.iwd";
 const STATION = "net.connman.iwd.Station";

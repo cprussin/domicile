@@ -4,6 +4,7 @@
 
 import type { Option } from "@cprussin/option-result";
 import { None, Ok, Result, Some } from "@cprussin/option-result";
+import { variant } from "@domicile-desktop/sdk/desktop/dbus-properties";
 import type {
   DbusCall,
   DbusSignal,
@@ -15,7 +16,7 @@ import { z } from "zod";
 import type { Reading } from "./follow";
 import { followBus } from "./follow";
 import type { NetworkDesktop } from "./network-state";
-import { variant } from "./variant";
+import { propertiesOn } from "./properties";
 import type {
   Ip,
   SavedWifi,
@@ -502,23 +503,7 @@ const call = (
   });
 
 /** `Properties.GetAll` on one of NetworkManager's objects, parsed. */
-const properties = async <T extends NonNullable<unknown>>(
-  domicile: NetworkDesktop,
-  path: string,
-  interfaceName: string,
-  schema: z.ZodType<T>,
-): Promise<Result<T, SystemError>> =>
-  (
-    await domicile.dbus.call({
-      body: [interfaceName],
-      bus: Bus.System,
-      destination: SERVICE,
-      interface: "org.freedesktop.DBus.Properties",
-      member: "GetAll",
-      path,
-      signature: "s",
-    })
-  ).map(({ body }) => z.tuple([schema]).parse(body)[0]);
+const properties = propertiesOn(SERVICE);
 
 /** An SSID's bytes, as text. */
 const ssid = z

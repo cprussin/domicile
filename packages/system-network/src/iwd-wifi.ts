@@ -3,6 +3,7 @@
 
 import type { Option, Result } from "@cprussin/option-result";
 import { Err, None, Ok, Some } from "@cprussin/option-result";
+import { variant } from "@domicile-desktop/sdk/desktop/dbus-properties";
 import type {
   DbusCall,
   DbusSignal,
@@ -10,11 +11,9 @@ import type {
 } from "@domicile-desktop/sdk/system";
 import { Bus, SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
-
 import { followBus } from "./follow";
 import type { NetworkDesktop } from "./network-state";
 import { strengthOfDbm } from "./signal-strength";
-import { variant } from "./variant";
 import type {
   SavedWifi,
   Wifi,

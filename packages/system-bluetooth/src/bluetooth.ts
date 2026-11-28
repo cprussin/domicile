@@ -4,6 +4,7 @@
 import type { Result } from "@cprussin/option-result";
 import { Err } from "@cprussin/option-result";
 import type { Dbus } from "@domicile-desktop/sdk/desktop/dbus";
+import { variant } from "@domicile-desktop/sdk/desktop/dbus-properties";
 import type {
   DbusSignal,
   Listened,
@@ -303,10 +304,6 @@ const bluetoothOf = (objects: ManagedObjects): Bluetooth => {
     }),
   };
 };
-
-/** A `v`, as `domicile_host::dbus_json` writes it, read as its value. */
-const variant = <T>(value: z.ZodType<T>) =>
-  z.object({ value }).transform(({ value: held }) => held);
 
 const managedObjectsSchema = z.tuple([
   z.record(

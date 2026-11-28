@@ -82,6 +82,10 @@
       "types": "./dist/desktop/dbus.d.ts",
       "default": "./dist/desktop/dbus.js"
     },
+    "./desktop/dbus-properties": {
+      "types": "./dist/desktop/dbus-properties.d.ts",
+      "default": "./dist/desktop/dbus-properties.js"
+    },
     "./desktop/desktop": {
       "types": "./dist/desktop/desktop.d.ts",
       "default": "./dist/desktop/desktop.js"
