@@ -1340,32 +1340,6 @@ mod tests {
     ///   commit to pixel  over 58
     ///   1 abandoned by the client, 1 whose commit came too soon
     /// ```
-    /// Each round's events are kept, timed from its key, so a figure out of
-    /// range shows where the frame waited.
-    #[test]
-    fn a_round_keeps_its_timeline() {
-        let mut driver = Driver::new(1, 3, 10);
-        driver.reach_first_press(ms(17));
-        assert_eq!(driver.tick(ms(0)), Step::Press);
-        let keyed = driver.now;
-
-        driver.now += Duration::from_micros(820);
-        driver.latency.committed(driver.now);
-        driver.tick(ms(0));
-        driver.answer(ms(1));
-
-        driver.now = keyed + ms(18);
-        driver.latency.committed(driver.now);
-        driver.tick(ms(0));
-        driver.color = 0xFF44_4444;
-        driver.answer(ms(17));
-
-        let report = driver.latency.report().unwrap();
-        assert_eq!(report.timelines, vec![String::from(
-                "0.82 commit, 0.82 ask, 1.82 answer unchanged, 18.00 commit, 18.00 ask, 35.00 answer changed"
-            )]);
-    }
-
     #[test]
     fn a_commit_that_arrives_with_the_key_is_passed_over_for_its_answer() {
         let mut driver = Driver::new(1, 3, 10);
@@ -1396,6 +1370,14 @@ mod tests {
         );
         assert_eq!(report.commit_to_pixel.unwrap().median, ms(17));
         assert_eq!(report.abandoned, 0);
+        // Each round's events, timed from its key, so a figure out of range
+        // shows where the frame waited.
+        assert_eq!(
+            report.timelines,
+            vec![String::from(
+                "0.82 commit, 0.82 ask, 1.82 answer unchanged, 18.00 commit, 18.00 ask, 35.00 answer changed"
+            )]
+        );
         assert_eq!(
             report.answered_too_soon, 1,
             "a stray passed over is counted, not quietly missing from the run"
