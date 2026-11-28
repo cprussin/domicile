@@ -77,6 +77,12 @@ it does to a client. It asks the browser instead:
 - Keys go to the page the agent last clicked or focused, as evdev codes
   through the desk's keyboard layout: a key down, the character it types,
   and a key up.
+- A page an agent's keyboard is in runs as shown wherever the shell puts its
+  window, `display: none` on a workspace nobody is looking at included: it
+  draws, runs its frames and timers, and is `visible` to its scripts, until
+  the keyboard leaves. Each `devtools` call does the same for its page until
+  it answers. A page nobody draws presents no frame, so a screenshot of it is
+  refused at once; taking one is not built.
 - A drag that starts from an agent's press is carried page to page by the
   browser, never as a platform drag that would move the user's pointer
   (patch 0277).
@@ -198,6 +204,9 @@ domicile.seats.giveBack(windowId);
 - **The browser routes an agent's input in browser windows**, because only
   it knows what is under a desk point inside the shell's surface. The
   compositor still owns the seat, and the browser answers each step.
+- **A window an agent works in stays shown**, because agents are most
+  useful on a workspace the user isn't watching, and a hidden page stalls.
+  The browser keeps it shown, so no shell has to draw it somewhere.
 - **An agent's file chooser skips the shell**, because the agent can't use a
   picker drawn in the user's shell, and the picker would interrupt the user.
 - **The shell draws agent cursors**, because there is one hardware cursor

@@ -92,6 +92,7 @@ TOGETHER=(
   guard-webview-fullscreen
   guard-webview-moved
   guard-agent-seat-in-pages
+  guard-agent-hidden-window
   guard-agent-clipboard
   guard-shell-local-network
   guard-webview-notifications

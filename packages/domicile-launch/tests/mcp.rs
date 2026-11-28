@@ -724,7 +724,10 @@ fn a_batch_runs_its_steps_in_order_and_reads_the_window_once_at_the_end() {
     );
     assert_eq!(methods.last(), Some(&"Accessibility.getFullAXTree"));
     assert!(methods.contains(&"Input.insertText"));
-    let text = texts(&replies[0]);
+    // One text, since a client runs a result's texts together.
+    let content = replies[0]["result"]["content"].as_array().unwrap();
+    assert_eq!(content.len(), 1, "{content:?}");
+    let text = content[0]["text"].as_str().unwrap();
     assert!(
         text.starts_with("1. clicked element 12\n2. typed\n3. pressed Enter\nIn w1: "),
         "{text}"

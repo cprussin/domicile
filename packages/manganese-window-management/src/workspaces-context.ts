@@ -6,6 +6,8 @@ import { createContext } from "react";
 import type { WindowState } from "./window-state";
 
 export type Workspaces = {
+  /** The workspaces an agent is working on, by name. */
+  agents: readonly string[];
   /** The workspace each screen shows, by screen name. */
   current: Readonly<Record<string, string>>;
   /** The screen with keyboard focus. */

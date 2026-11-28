@@ -18,6 +18,8 @@ export type MeasureChip = (
 ) => () => void;
 
 type Props = {
+  /** The workspaces an agent is working on, which get a dot. */
+  agents: readonly string[];
   /** The workspace this screen shows. */
   current: string;
   /** Whether this screen has keyboard focus, which decides `current`'s fill. */
@@ -37,6 +39,9 @@ type Props = {
  * stands out over a bright wallpaper; one visible on another screen gets a
  * white outline; the rest are slightly dimmed and light up under the pointer.
  *
+ * A workspace an agent is working on, seen or not, gets a dot in the agents'
+ * violet at its corner.
+ *
  * The white chip slides between workspaces. It is a black copy of the row on
  * white, clipped to the chip, so each number turns black as the chip passes
  * under it.
@@ -46,6 +51,7 @@ type Props = {
  * color and font.
  */
 export const Workspaces = ({
+  agents,
   current,
   focused,
   measureChip = offsetPlace,
@@ -70,6 +76,12 @@ export const Workspaces = ({
           // `aria-current` marks the visible workspace. `disabled` would be
           // wrong: a press on it switches back via `workspaceAutoBackAndForth`.
           aria-current={name === current ? "true" : undefined}
+          // The number, and what the dot says.
+          aria-label={
+            agents.includes(name)
+              ? `${name}, an agent is working here`
+              : undefined
+          }
           className={cx(
             chipStyles,
             workspaceStyles({ shown: shownAs(name === current, focused) }),
@@ -91,6 +103,7 @@ export const Workspaces = ({
           type="button"
         >
           <span className={labelStyles}>{name}</span>
+          {agents.includes(name) && <AgentDot />}
         </button>
       ))}
       {place !== undefined && (
@@ -109,6 +122,7 @@ export const Workspaces = ({
           {workspaces.map((name) => (
             <span className={chipStyles} data-label={name} key={name}>
               <span className={labelStyles}>{name}</span>
+              {agents.includes(name) && <AgentDot />}
             </span>
           ))}
         </div>
@@ -116,6 +130,11 @@ export const Workspaces = ({
     </nav>
   );
 };
+
+/** The dot on a workspace an agent is working on. */
+const AgentDot = () => (
+  <span aria-hidden="true" className={agentDotStyles} data-agent="" />
+);
 
 /**
  * `MeasureChip` from offsets, whenever the row resizes. Starts with the
@@ -167,6 +186,8 @@ const chipStyles = css({
   minInlineSize: 6,
   paddingBlock: 0,
   paddingInline: 2,
+  // For the agent's dot.
+  position: "relative",
   textAlign: "center",
 });
 
@@ -175,6 +196,21 @@ const labelStyles = css({
   // Center vertically. Trimming the line box to cap height and baseline
   // leaves only the glyph, so the digit sits centered rather than high.
   textBox: "trim-both cap alphabetic",
+});
+
+// In the chip's top end corner, inside it so the highlight's rounded clip
+// keeps it whole, ringed in the bar's photo color so it reads over a bright
+// wallpaper and over the white highlight alike.
+const agentDotStyles = css({
+  backgroundColor: "agent",
+  blockSize: 1.5,
+  borderRadius: "full",
+  boxShadow: "0 0 0 0.09375rem {colors.onPhoto}",
+  inlineSize: 1.5,
+  insetBlockStart: 0.5,
+  insetInlineEnd: 0.5,
+  pointerEvents: "none",
+  position: "absolute",
 });
 
 const workspaceStyles = cva({

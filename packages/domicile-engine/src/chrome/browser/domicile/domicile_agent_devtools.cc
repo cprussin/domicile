@@ -15,6 +15,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/memory/scoped_refptr.h"
@@ -33,7 +34,9 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
+#include "content/public/browser/visibility.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace domicile {
 namespace {
@@ -47,6 +50,9 @@ constexpr char kShellWindow[] = "shell";
 constexpr std::string_view kShellKeeps[] = {
     "Page.navigate", "Page.navigateToHistoryEntry", "Page.reload"};
 
+// The DevTools method that takes a page's picture.
+constexpr char kCaptureScreenshot[] = "Page.captureScreenshot";
+
 // The id of the one method a client sends.
 constexpr int kMethodId = 1;
 
@@ -58,9 +64,14 @@ constexpr base::TimeDelta kPatience = base::Seconds(10);
 // detaches and deletes itself.
 class OneMethod : public content::DevToolsAgentHostClient {
  public:
+  // `shown` keeps the page drawn until it answers; see
+  // SendDevToolsToBrowserWindow.
   OneMethod(scoped_refptr<content::DevToolsAgentHost> host,
+            base::ScopedClosureRunner shown,
             DevToolsAnswered answered)
-      : host_(std::move(host)), answered_(std::move(answered)) {}
+      : host_(std::move(host)),
+        shown_(std::move(shown)),
+        answered_(std::move(answered)) {}
 
   OneMethod(const OneMethod&) = delete;
   OneMethod& operator=(const OneMethod&) = delete;
@@ -137,6 +148,7 @@ class OneMethod : public content::DevToolsAgentHostClient {
       return;
     }
     timeout_.Stop();
+    shown_.RunAndReset();
     std::move(answered_).Run(std::move(answer));
     // Not now: the host may be dispatching to this client.
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
@@ -152,6 +164,7 @@ class OneMethod : public content::DevToolsAgentHostClient {
   }
 
   const scoped_refptr<content::DevToolsAgentHost> host_;
+  base::ScopedClosureRunner shown_;
   DevToolsAnswered answered_;
   bool attached_ = false;
   base::OneShotTimer timeout_;
@@ -366,9 +379,30 @@ void SendDevToolsToBrowserWindow(const std::string& window,
       guest->NoteAgentInput(agent);
     }
   }
+  // A page its shell does not draw, as on a workspace nobody is looking at,
+  // presents no frame, and Page.captureScreenshot waits for one until it
+  // times out.
+  if (window != kShellWindow && method == kCaptureScreenshot &&
+      page->GetVisibility() != content::Visibility::VISIBLE) {
+    std::move(answered).Run(base::unexpected(base::StrCat(
+        {"browser window ", window,
+         " is not on screen, so it draws nothing to take a picture of: read "
+         "it with browser_snapshot, or move it where it is seen"})));
+    return;
+  }
+  // A window on a workspace nobody is looking at is hidden, and a hidden page
+  // runs no frames for what an act sets off. Agents drive windows nobody
+  // watches, so the page runs as shown until it answers. The shell's page is
+  // always shown.
+  base::ScopedClosureRunner shown =
+      window == kShellWindow
+          ? base::ScopedClosureRunner()
+          : page->IncrementCapturerCount(
+                /*capture_size=*/gfx::Size(), /*stay_hidden=*/false,
+                /*stay_awake=*/true, /*is_activity=*/false);
   // Owns itself until answered.
   (new OneMethod(content::DevToolsAgentHost::GetOrCreateFor(page),
-                 std::move(answered)))
+                 std::move(shown), std::move(answered)))
       ->Send(method, std::move(params));
 }
 

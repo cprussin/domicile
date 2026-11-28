@@ -267,7 +267,10 @@ const INSTRUCTIONS: &str = "Read and act on windows as text first: list_windows,
     can't. They are refused in a window the user is in, and over the shell, which you \
     act on by ref. A tool that acts on a window acts on the one your own keyboard is in \
     when you name none, never the user's: send_shell too, to move a window of yours to \
-    another workspace say. Call stop_using_desktop as soon as you are done with \
+    another workspace say. Unless the task makes more sense in front of the user, \
+    such as showing them something, work out of their way: move the windows you \
+    open to a workspace they aren't on, where they keep working while unseen. \
+    Call stop_using_desktop as soon as you are done with \
     the desktop. Before you wait on anything else, such as an approval, a background \
     job or the user, call stop_using_desktop too: asking again later is quick, and a \
     remembered agent is not asked at all. An agent that calls nothing for two minutes \
@@ -765,7 +768,25 @@ fn batched(
         content
             .push(json!({"type": "text", "text": format!("In {window}: {}", changes.trim_end())}));
     }
-    Ok(json!({"content": content, "isError": failed}))
+    Ok(json!({"content": one_text_a_line(content), "isError": failed}))
+}
+
+/// `content` with each run of texts made one text, a line each: a client
+/// runs a result's texts together, so "clicked element 12" then "2. typed"
+/// would read "clicked element 122. typed". Images stay between them.
+fn one_text_a_line(content: Vec<Value>) -> Vec<Value> {
+    let mut parts: Vec<Value> = Vec::new();
+    for part in content {
+        let was = parts.last().and_then(|last| last["text"].as_str());
+        match (was, part["text"].as_str()) {
+            (Some(was), Some(text)) => {
+                let text = format!("{was}\n{text}");
+                *parts.last_mut().expect("a text was last") = json!({"type": "text", "text": text});
+            }
+            _ => parts.push(part),
+        }
+    }
+    parts
 }
 
 /// A batch's steps, each a tool and its arguments, or why `arguments` hold

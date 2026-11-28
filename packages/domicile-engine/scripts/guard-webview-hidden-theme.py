@@ -102,10 +102,16 @@ class Shell:
         self.ask("Runtime.evaluate", {"expression": expression})
 
 
-def logged(path, line, tries):
-    """Whether `line` reaches the log at `path` within `tries` half seconds."""
+def times_logged(path, line):
+    """How many times `line` is in the log at `path`."""
+    return pathlib.Path(path).read_text(errors="replace").count(line)
+
+
+def logged(path, line, tries, since=0):
+    """Whether `line` reaches the log at `path` more than `since` times within
+    `tries` half seconds."""
     for _ in range(tries):
-        if line in pathlib.Path(path).read_text(errors="replace"):
+        if times_logged(path, line) > since:
             return True
         time.sleep(0.5)
     return False
@@ -137,8 +143,11 @@ def main():
             print("first=hidden-never")
             return 0
         if args.mode == "claim":
+            # A page hidden at load draws its first colors the same way, so
+            # only a line after the turn says the turn was drawn.
+            drawn_before = times_logged(args.engine_log, DRAWN)
             pathlib.Path(args.turn).touch()
-            if not logged(args.engine_log, DRAWN, args.tries):
+            if not logged(args.engine_log, DRAWN, args.tries, drawn_before):
                 print("first=drawn-never")
                 return 0
         elif not logged(args.engine_log, TURNED, args.tries):
