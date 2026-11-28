@@ -17,14 +17,11 @@ export type WindowProfile = {
 };
 
 /**
- * The browser profile browser window `engineId`'s page is in, with the
- * others; `undefined` until the engine lists both, or for a page in none.
+ * Subscribes to changes of the browser's windows or profiles, for
+ * `useSyncExternalStore`.
  */
-export const useBrowserProfile = (
-  domicile: Pick<Domicile, "browser">,
-  engineId: string,
-): WindowProfile | undefined => {
-  const subscribe = useCallback(
+const useBrowserChanges = (domicile: Pick<Domicile, "browser">) =>
+  useCallback(
     (changed: () => void) => {
       const windows = domicile.browser.on("change", changed);
       const profiles = domicile.browser.on("profilesChange", changed);
@@ -35,6 +32,16 @@ export const useBrowserProfile = (
     },
     [domicile],
   );
+
+/**
+ * The browser profile browser window `engineId`'s page is in, with the
+ * others; `undefined` until the engine lists both, or for a page in none.
+ */
+export const useBrowserProfile = (
+  domicile: Pick<Domicile, "browser">,
+  engineId: string,
+): WindowProfile | undefined => {
+  const subscribe = useBrowserChanges(domicile);
   const profiles = useSyncExternalStore(
     subscribe,
     () => domicile.browser.profiles,
@@ -60,17 +67,7 @@ export const useProfileMark = (
   domicile: Pick<Domicile, "browser">,
   engineId: string | undefined,
 ): string | undefined => {
-  const subscribe = useCallback(
-    (changed: () => void) => {
-      const windows = domicile.browser.on("change", changed);
-      const profiles = domicile.browser.on("profilesChange", changed);
-      return () => {
-        windows();
-        profiles();
-      };
-    },
-    [domicile],
-  );
+  const subscribe = useBrowserChanges(domicile);
   return useSyncExternalStore(subscribe, () => {
     const id =
       engineId === undefined

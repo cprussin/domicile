@@ -346,6 +346,21 @@ export const Stage = memo(
       [motions.drawn, working],
     );
     const tabsShown = motions.tabs.map(({ tab }) => tab);
+    // What every group strip does, whether it heads a window or a tab.
+    const stripActions = {
+      onAim: setAim,
+      onDrop,
+      onGrab: grabbed,
+      onGroupDropOn,
+      onGroupFloat,
+      onGroupFullscreen,
+      onGroupGrab: groupGrabbed,
+      onHover,
+      onMove,
+      onNewTab,
+      onPull: pull,
+      targets,
+    };
     return (
       <main {...tabDrop}>
         <SettleHandoffs>
@@ -557,22 +572,11 @@ export const Stage = memo(
                   key={window.id}
                   motion={motion}
                   on={screenNamed(desk, screen)}
-                  onAim={setAim}
-                  onDrop={onDrop}
-                  onGrab={grabbed}
-                  onGroupDropOn={onGroupDropOn}
-                  onGroupFloat={onGroupFloat}
-                  onGroupFullscreen={onGroupFullscreen}
-                  onGroupGrab={groupGrabbed}
-                  onHover={onHover}
-                  onMove={onMove}
-                  onNewTab={onNewTab}
-                  onPull={pull}
+                  {...stripActions}
                   restack={restack}
                   rewound={shownRewound}
                   seen={seen}
                   strip={placement.strip}
-                  targets={targets}
                   travel={travels.get(window.id)}
                 />
               ) : undefined,
@@ -589,22 +593,11 @@ export const Stage = memo(
                 key={`tab-${tabKeyOf(tab)}`}
                 motion={motion}
                 on={screenNamed(desk, screen)}
-                onAim={setAim}
-                onDrop={onDrop}
-                onGrab={grabbed}
-                onGroupDropOn={onGroupDropOn}
-                onGroupFloat={onGroupFloat}
-                onGroupFullscreen={onGroupFullscreen}
-                onGroupGrab={groupGrabbed}
-                onHover={onHover}
-                onMove={onMove}
-                onNewTab={onNewTab}
-                onPull={pull}
+                {...stripActions}
                 restack={restack}
                 rewound={rewound}
                 seen={overview?.shown.get(screen)}
                 strip={tab.strip}
-                targets={targets}
                 travel={tabTravel(tab)}
               />
             ) : undefined,
