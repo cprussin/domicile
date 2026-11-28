@@ -1,11 +1,10 @@
 import type { Result } from "@cprussin/option-result";
 import { Ok } from "@cprussin/option-result";
 import type { SystemError } from "@domicile-desktop/sdk/system";
+import type { Asked } from "@domicile-desktop/test-support/recorded-requests";
+import { recordedRequests } from "@domicile-desktop/test-support/recorded-requests";
 
 import type { WifiActions } from "./wifi-actions";
-
-/** A request as a test sees it: its name and what it named. */
-export type Asked = [string, ...unknown[]];
 
 /**
  * The Wi-Fi service's requests for tests: each is recorded in `asked` and
@@ -14,11 +13,7 @@ export type Asked = [string, ...unknown[]];
 export const heldWifiActions = (
   answer: (asked: Asked) => Result<"done", SystemError> = () => Ok("done"),
 ) => {
-  const asked: Asked[] = [];
-  const ask = (request: Asked) => {
-    asked.push(request);
-    return Promise.resolve(answer(request));
-  };
+  const { ask, asked } = recordedRequests(answer);
   const actions: WifiActions = {
     connectWifi: (_system, wifi, network, passphrase) =>
       ask(["connect", wifi.device, network.ssid, passphrase]),
@@ -33,3 +28,5 @@ export const heldWifiActions = (
   };
   return { actions, asked };
 };
+
+export type { Asked };

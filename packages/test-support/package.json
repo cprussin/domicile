@@ -25,7 +25,8 @@
     "./emitted-stylesheet": "./src/emitted-stylesheet.ts",
     "./lock-screen-readouts": "./src/lock-screen-readouts.ts",
     "./popup-layout": "./src/popup-layout.ts",
-    "./preload": "./src/preload.ts"
+    "./preload": "./src/preload.ts",
+    "./recorded-requests": "./src/recorded-requests.ts"
   },
   "files": [
     "matchers.d.ts",
