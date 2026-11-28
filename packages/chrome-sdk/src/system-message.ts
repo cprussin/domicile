@@ -1,7 +1,7 @@
 // The compositor's answers to a system call, as a `system` event's `data`
 // carries them. See docs/SHELL-SYSTEM-ACCESS.md. The rest of the
-// compositor's protocol lives in @domicile-desktop/e2e-harness; a page hears
-// only these three.
+// compositor's protocol lives in @domicile-desktop/e2e-harness, which takes
+// these three from here; a page hears only them.
 
 import { z } from "zod";
 
@@ -25,7 +25,7 @@ const systemErrorSchema = z.looseObject({
 const fileTypeSchema = z.enum(["file", "directory", "symlink", "other"]);
 
 // The answer to a `system_request`. Bytes are base64.
-const systemReplySchema = z.looseObject({
+export const systemReplySchema = z.looseObject({
   id: z.number(),
   reply: z.discriminatedUnion("kind", [
     z.looseObject({ data: z.string(), kind: z.literal("read") }),
@@ -78,7 +78,7 @@ const systemReplySchema = z.looseObject({
 // heard, a command `domicile send-shell` sent, an idle warning, or a
 // passphrase the lock did not take, a client's window request, or the
 // keymaps.
-const systemEventSchema = z.looseObject({
+export const systemEventSchema = z.looseObject({
   event: z.discriminatedUnion("kind", [
     z.looseObject({
       data: z.string(),
@@ -173,7 +173,7 @@ const systemEventSchema = z.looseObject({
 });
 
 // The last message for a watch, process or D-Bus match.
-const systemEndSchema = z.looseObject({
+export const systemEndSchema = z.looseObject({
   end: z.discriminatedUnion("kind", [
     z.looseObject({
       code: z.number().nullable(),
