@@ -10,6 +10,7 @@ import { usePermissionRequest } from "@domicile-desktop/manganese-page-requests/
 import { WEBVIEW_FOCUS_REQUEST_EVENT } from "@domicile-desktop/sdk/webview-element";
 import { useEffect, useState } from "react";
 import { css } from "../styled-system/css";
+import { barButton } from "../styled-system/patterns";
 
 import { watchUnread } from "./watch-unread";
 
@@ -167,26 +168,12 @@ const count = (unread: number) => (
 /** The id of `screen`'s button, for opening the panel under it. */
 const triggerId = (screen: string) => `google-messages-${screen}`;
 
-// Rounded square, like the bar's other icon buttons, lit while there are new messages.
-const itemStyles = css({
-  _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
+// Lit while there are new messages.
+const itemStyles = barButton({
   "&[data-unread=true]": {
     backgroundColor: "color-mix(in oklab, white 24%, transparent)",
   },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 7,
-  borderRadius: "lg",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: 7,
-  justifyContent: "center",
-  padding: 0,
   position: "relative",
-  transition: "background-color {durations.fast} {easings.default}",
 });
 
 // The panel is flush, so the request gets its own inset.

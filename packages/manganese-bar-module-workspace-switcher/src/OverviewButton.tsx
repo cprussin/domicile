@@ -1,7 +1,7 @@
 import { AnimatedSquaresIcon } from "@domicile-desktop/component-library/AnimatedSquaresIcon";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 
-import { css } from "../styled-system/css";
+import { barButton } from "../styled-system/patterns";
 
 type Props = {
   /** Opens or closes the overview. */
@@ -32,21 +32,7 @@ export const OverviewButton = ({ onToggle, open }: Props) => (
   />
 );
 
-// Styled like the launcher button, and lit like a bar button whose panel is
-// open.
-const buttonStyles = css({
-  _hover: { backgroundColor: "fillOverPhoto" },
+// Lit like a bar button whose panel is open while the overview is.
+const buttonStyles = barButton({
   "&[aria-pressed=true]": { backgroundColor: "fillOverPhoto" },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 7,
-  borderRadius: "lg",
-  borderStyle: "none",
-  cursor: "pointer",
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: 7,
-  justifyContent: "center",
-  padding: 0,
-  transition: "background-color {durations.fast} {easings.default}",
 });

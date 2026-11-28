@@ -8,6 +8,7 @@
   "description": "A manganese bar item: the button that opens the launcher.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/manganese-bar": "workspace:*",
     "@domicile-desktop/test-support": "workspace:*",
     "@pandacss/preset-panda": "catalog:",
     "@testing-library/react": "catalog:",

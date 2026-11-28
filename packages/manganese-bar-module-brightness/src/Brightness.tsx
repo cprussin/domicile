@@ -12,6 +12,7 @@ import { LightbulbFilamentIcon } from "@phosphor-icons/react/dist/ssr/LightbulbF
 import { SunHorizonIcon } from "@phosphor-icons/react/dist/ssr/SunHorizon";
 import type { WheelEvent } from "react";
 import { css } from "../styled-system/css";
+import { barButton } from "../styled-system/patterns";
 import { BrightnessSlider } from "./BrightnessSlider";
 import type { NightLight } from "./night-light";
 import { useBrightness } from "./useBrightness";
@@ -122,23 +123,8 @@ const NightLightSwitch = ({
 );
 
 // Not the library's `Button`: its ghost variant uses `muted` text, which is
-// unreadable over the wallpaper. This uses the bar's white, like the bell and
-// theme toggle.
-const triggerStyles = css({
-  _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 7,
-  borderRadius: "lg",
-  borderStyle: "none",
-  cursor: "pointer",
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: 7,
-  justifyContent: "center",
-  padding: 0,
-  transition: "background-color {durations.fast} {easings.default}",
-});
+// unreadable over the wallpaper.
+const triggerStyles = barButton();
 
 // The button's box, so the bar's spacing stays the same.
 const unavailableStyles = css({

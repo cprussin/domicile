@@ -13,6 +13,7 @@
   "description": "A manganese bar item: a toggle that keeps the screens from blanking, and a pill naming what keeps them on.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/manganese-bar": "workspace:*",
     "@domicile-desktop/test-support": "workspace:*",
     "@pandacss/preset-panda": "catalog:",
     "@testing-library/react": "catalog:",

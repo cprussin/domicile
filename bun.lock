@@ -391,6 +391,7 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/manganese-bar": "workspace:*",
         "@domicile-desktop/test-support": "workspace:*",
         "@pandacss/preset-panda": "catalog:",
         "@testing-library/react": "catalog:",
@@ -417,6 +418,7 @@
       "devDependencies": {
         "@cprussin/option-result": "catalog:",
         "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/manganese-bar": "workspace:*",
         "@domicile-desktop/test-support": "workspace:*",
         "@pandacss/preset-panda": "catalog:",
         "@testing-library/react": "catalog:",
@@ -545,6 +547,7 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/manganese-bar": "workspace:*",
         "@domicile-desktop/test-support": "workspace:*",
         "@pandacss/preset-panda": "catalog:",
         "@testing-library/react": "catalog:",
@@ -593,6 +596,7 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/manganese-bar": "workspace:*",
         "@domicile-desktop/test-support": "workspace:*",
         "@pandacss/preset-panda": "catalog:",
         "@testing-library/react": "catalog:",

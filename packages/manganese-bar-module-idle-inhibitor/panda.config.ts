@@ -1,19 +1,4 @@
-import { domicilePreset } from "@domicile-desktop/component-library/pandacss-preset";
-import { defineConfig } from "@pandacss/dev";
+import { packagePandaConfig } from "@domicile-desktop/component-library/panda-package-config";
+import { barPreset } from "@domicile-desktop/manganese-bar/panda-preset";
 
-// The shell that renders this package scans its source and emits the CSS. This
-// config generates `styled-system/` for the package's own imports and tests.
-export default defineConfig({
-  exclude: [],
-  hash: true,
-  include: [
-    "./src/**/*.{ts,tsx}",
-    "../../packages/component-library/src/**/*.{ts,tsx}",
-  ],
-  jsxFramework: "react",
-  // Component props such as content are data; styles use Panda functions.
-  jsxStyleProps: "none",
-  outdir: "styled-system",
-  preflight: true,
-  presets: [domicilePreset],
-});
+export default packagePandaConfig(barPreset);

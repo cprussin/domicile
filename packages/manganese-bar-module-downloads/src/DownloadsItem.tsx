@@ -26,6 +26,7 @@ import type { CSSProperties } from "react";
 import { useMemo, useState } from "react";
 
 import { css } from "../styled-system/css";
+import { barButton } from "../styled-system/patterns";
 import { downloadProgress, timeLeft } from "./download-progress";
 import { FileKind, fileKind } from "./file-kind";
 import { ItemPhase, useFinish } from "./useFinish";
@@ -446,29 +447,18 @@ const filledTo = (
 });
 
 // Not the library's `Button`: its ghost variant uses `muted` text, which is
-// unreadable over the wallpaper. Matches the Cast item, widening for the
-// percent. Fixed-width digits so the bar does not shift as it climbs.
-const triggerStyles = css({
-  _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
+// unreadable over the wallpaper.
+// Widens for the percent, with fixed-width digits so the bar does not shift as
+// it climbs.
+const triggerStyles = barButton({
   "&[data-size-unknown] [data-shown] svg": {
     animation: "pulse {durations.pulse} {easings.in-out} infinite",
   },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 7,
-  borderRadius: "lg",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  display: "inline-flex",
-  flexShrink: 0,
   fontSize: "xs",
   fontVariantNumeric: "tabular-nums",
-  justifyContent: "center",
+  inlineSize: "auto",
   minInlineSize: 7,
-  paddingBlock: 0,
   paddingInline: 1.5,
-  transition: "background-color {durations.fast} {easings.default}",
 });
 
 // The download arrow and the check, one over the other, so one gives way to

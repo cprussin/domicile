@@ -1,4 +1,5 @@
 import { domicilePreset } from "@domicile-desktop/component-library/pandacss-preset";
+import { barPreset } from "@domicile-desktop/manganese-bar/panda-preset";
 import { batteryPreset } from "@domicile-desktop/manganese-bar-module-battery/panda-preset";
 import { windowManagementPreset } from "@domicile-desktop/manganese-window-management/panda-preset";
 import { defineConfig } from "@pandacss/dev";
@@ -21,5 +22,5 @@ export default defineConfig({
   jsxStyleProps: "none",
   outdir: "styled-system",
   preflight: true,
-  presets: [domicilePreset, windowManagementPreset, batteryPreset],
+  presets: [domicilePreset, windowManagementPreset, batteryPreset, barPreset],
 });

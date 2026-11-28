@@ -108,6 +108,7 @@
     "./PopupScene": "./src/PopupScene/PopupScene.tsx",
     "./PortalDialogs": "./src/PortalDialogs/PortalDialogs.tsx",
     "./Provider": "./src/Provider/Provider.tsx",
+    "./panda-package-config": "./src/panda-package-config.ts",
     "./pandacss-preset": "./src/pandacss-preset.ts",
     "./QuickTile": "./src/QuickTile/QuickTile.tsx",
     "./QuickToggle": "./src/QuickToggle/QuickToggle.tsx",

@@ -14,7 +14,7 @@ import type {
 import { CastMode } from "@domicile-desktop/sdk/cast";
 import { TelevisionSimpleIcon } from "@phosphor-icons/react/dist/ssr/TelevisionSimple";
 import { useEffect, useState } from "react";
-import { css } from "../styled-system/css";
+import { barButton } from "../styled-system/patterns";
 
 type Props = {
   /** What finds TVs and sends to them. */
@@ -234,20 +234,5 @@ const labelOf = (casts: readonly Running[]): string =>
     : `Casting to ${casts.map((cast) => cast.target.name).join(", ")}`;
 
 // Not the library's `Button`: its ghost variant uses `muted` text, which is
-// unreadable over the wallpaper. Matches the Bluetooth item.
-const triggerStyles = css({
-  _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 7,
-  borderRadius: "lg",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: 7,
-  justifyContent: "center",
-  padding: 0,
-  transition: "background-color {durations.fast} {easings.default}",
-});
+// unreadable over the wallpaper.
+const triggerStyles = barButton();

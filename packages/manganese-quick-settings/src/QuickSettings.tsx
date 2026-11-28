@@ -11,7 +11,7 @@ import type { ComponentType, MouseEvent, WheelEvent } from "react";
 import { useState } from "react";
 
 import { css, cva } from "../styled-system/css";
-import { flex, grid, hstack } from "../styled-system/patterns";
+import { barButton, flex, grid } from "../styled-system/patterns";
 import { DESK_PARTS } from "./desk-parts";
 
 /** A tile or slider with details: `onMore` opens them, absent while locked. */
@@ -177,20 +177,12 @@ const detailOf = (
   }
 };
 
-// The other bar items' hover circle, stretched around several icons. Each icon
-// holds half the gap on either side, so the padding is short by as much.
-const triggerStyles = hstack({
-  _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
-  backgroundColor: "transparent",
-  blockSize: 7,
-  borderRadius: "lg",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  flexShrink: 0,
+// The bar's button, stretched around several icons. Each icon holds half the
+// gap on either side, so the padding is short by as much.
+const triggerStyles = barButton({
   gap: 0,
+  inlineSize: "auto",
   paddingInline: 0.75,
-  transition: "background-color {durations.fast} {easings.default}",
 });
 
 // A popover's usual width, which its network and Bluetooth details fit. The

@@ -17,6 +17,7 @@ import { LinkKind } from "@domicile-desktop/system-network/network";
 import type { Wifi } from "@domicile-desktop/system-network/wifi";
 import { useState } from "react";
 import { cva } from "../styled-system/css";
+import { barButton } from "../styled-system/patterns";
 import { LinkIcon, shownOf } from "./link-shown";
 import { NetworkPanel } from "./NetworkPanel";
 import type { WifiActions } from "./wifi-actions";
@@ -138,23 +139,8 @@ const Item = ({
   );
 };
 
-// Matches the volume item's button.
 const triggerStyles = cva({
-  base: {
-    _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
-    alignItems: "center",
-    backgroundColor: "transparent",
-    blockSize: 7,
-    borderRadius: "lg",
-    borderStyle: "none",
-    cursor: "pointer",
-    display: "inline-flex",
-    flexShrink: 0,
-    inlineSize: 7,
-    justifyContent: "center",
-    padding: 0,
-    transition: "background-color {durations.fast} {easings.default}",
-  },
+  base: barButton.raw(),
   variants: {
     linked: {
       // Dims the icon alone, so the hover background stays as strong.

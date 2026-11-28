@@ -5,7 +5,7 @@ import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import type { NotificationsHandle } from "@domicile-desktop/manganese-notifications/notifications-context";
 import { bellId } from "@domicile-desktop/manganese-notifications/notifications-context";
 
-import { css } from "../styled-system/css";
+import { barButton } from "../styled-system/patterns";
 
 type Props = {
   /** Opens the drawer under this bell. */
@@ -57,21 +57,4 @@ export const NotificationBell = ({ handle, paused, screen, unread }: Props) => {
   );
 };
 
-// Matches the theme toggle: round, borderless, in the bar's white, lit on
-// hover.
-const buttonStyles = css({
-  _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 7,
-  borderRadius: "lg",
-  borderStyle: "none",
-  cursor: "pointer",
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: 7,
-  justifyContent: "center",
-  padding: 0,
-  position: "relative",
-  transition: "background-color {durations.fast} {easings.default}",
-});
+const buttonStyles = barButton({ position: "relative" });

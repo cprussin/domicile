@@ -11,6 +11,7 @@ import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { Audio } from "@domicile-desktop/system-audio/audio";
 import type { SoundControls } from "@domicile-desktop/system-audio/react";
 import { css, cva } from "../styled-system/css";
+import { barButton } from "../styled-system/patterns";
 import { ask } from "./ask";
 import { Level } from "./Level";
 import { Mixer } from "./Mixer";
@@ -138,23 +139,8 @@ const OutputLevel = ({
   );
 };
 
-// Matches the brightness item's button.
 const triggerStyles = cva({
-  base: {
-    _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
-    alignItems: "center",
-    backgroundColor: "transparent",
-    blockSize: 7,
-    borderRadius: "lg",
-    borderStyle: "none",
-    cursor: "pointer",
-    display: "inline-flex",
-    flexShrink: 0,
-    inlineSize: 7,
-    justifyContent: "center",
-    padding: 0,
-    transition: "background-color {durations.fast} {easings.default}",
-  },
+  base: barButton.raw(),
   variants: {
     muted: {
       false: {},

@@ -10,6 +10,7 @@ import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { Bluetooth as Reading } from "@domicile-desktop/system-bluetooth/bluetooth";
 import { cva } from "../styled-system/css";
+import { barButton } from "../styled-system/patterns";
 import { BluetoothPanel } from "./BluetoothPanel";
 import type { BluetoothActions } from "./bluetooth-actions";
 import { BLUETOOTH_ACTIONS } from "./bluetooth-actions";
@@ -159,24 +160,9 @@ const Icon = ({ connected, on }: { connected: boolean; on: boolean }) => (
 );
 
 // Not the library's `Button`: its ghost variant uses `muted` text, which is
-// unreadable over the wallpaper. Matches the volume control.
+// unreadable over the wallpaper.
 const triggerStyles = cva({
-  base: {
-    _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
-    alignItems: "center",
-    backgroundColor: "transparent",
-    blockSize: 7,
-    borderRadius: "lg",
-    borderStyle: "none",
-    color: "inherit",
-    cursor: "pointer",
-    display: "inline-flex",
-    flexShrink: 0,
-    inlineSize: 7,
-    justifyContent: "center",
-    padding: 0,
-    transition: "background-color {durations.fast} {easings.default}",
-  },
+  base: barButton.raw(),
   variants: {
     on: {
       // Dims the icon alone, so the hover background stays as strong.

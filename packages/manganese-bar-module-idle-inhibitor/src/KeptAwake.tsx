@@ -9,7 +9,7 @@ import type { ReactNode } from "react";
 import { useSyncExternalStore } from "react";
 
 import { css } from "../styled-system/css";
-import { center } from "../styled-system/patterns";
+import { barButton } from "../styled-system/patterns";
 import type { IdleInhibitor } from "./idle-inhibitor";
 import { Inhibiting } from "./idle-inhibitor";
 import type { WakeLockedPage } from "./wake-locked-pages";
@@ -144,16 +144,4 @@ const iconStyles = css({
   objectFit: "contain",
 });
 
-// The other bar icons' hover square.
-const triggerStyles = center({
-  _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
-  backgroundColor: "transparent",
-  blockSize: 7,
-  borderRadius: "lg",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  flexShrink: 0,
-  inlineSize: 7,
-  transition: "background-color {durations.fast} {easings.default}",
-});
+const triggerStyles = barButton();
