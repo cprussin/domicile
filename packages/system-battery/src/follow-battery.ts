@@ -1,5 +1,6 @@
 import type { Option } from "@cprussin/option-result";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import { eachOf } from "@domicile-desktop/sdk/streams";
 import type { Listening } from "@domicile-desktop/sdk/system";
 import type { Battery } from "./battery";
 import { watchBattery as watchUPower } from "./battery";
@@ -47,24 +48,13 @@ const follow = (
   onReading: (reading: Option<Battery>) => void,
   fail: (error: unknown) => void,
 ): (() => void) => {
-  each(battery.items, onReading).catch(fail);
+  eachOf(battery.items, onReading).catch(fail);
   battery.ended
     .then((ended) => {
       ended.match({ Err: fail, Ok: () => undefined });
     })
     .catch(fail);
   return battery.stop;
-};
-
-/** Calls `onItem` with each item until `items` closes. */
-const each = async <T>(
-  items: ReadableStream<T>,
-  onItem: (item: T) => void,
-): Promise<void> => {
-  const reader = items.getReader();
-  for (let next = await reader.read(); !next.done; next = await reader.read()) {
-    onItem(next.value);
-  }
 };
 
 const stopNow = (battery: Listening<Option<Battery>>) => {

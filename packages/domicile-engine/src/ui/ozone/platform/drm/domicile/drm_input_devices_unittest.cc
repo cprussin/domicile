@@ -180,6 +180,15 @@ class RecordedReopen {
   base::ScopedFD consumed_;
 };
 
+// Devices taken over the fakes, watched by the reopen as the factory's are.
+struct Held {
+  Held() { reopen.Watch(&devices); }
+
+  RecordedRelease release;
+  RecordedReopen reopen;
+  DrmTakenDevices devices{release.Bind(), reopen.Bind()};
+};
+
 TEST(DrmInputDevicesTest, TheNumberIsTheOneStatReportsForTheNode) {
   // `makedev(13, 64)` is `/dev/input/event0`: input major 13, evdev minors
   // from 64.
@@ -208,10 +217,8 @@ TEST(DrmInputDevicesTest, APathThatCannotBeStattedHasNoNumber) {
 }
 
 TEST(DrmInputDevicesTest, AResumedDeviceIsOpenedAgainWithTheDescriptorLogindSent) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
 
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
@@ -230,10 +237,8 @@ TEST(DrmInputDevicesTest, AResumedDeviceIsOpenedAgainWithTheDescriptorLogindSent
 }
 
 TEST(DrmInputDevicesTest, OnlyAPauseWaitsToBeCompleted) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
 
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
@@ -247,10 +252,8 @@ TEST(DrmInputDevicesTest, OnlyAPauseWaitsToBeCompleted) {
 }
 
 TEST(DrmInputDevicesTest, AForcePauseTakesTheDeviceBackThroughTheFactory) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
 
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
@@ -263,20 +266,16 @@ TEST(DrmInputDevicesTest, AForcePauseTakesTheDeviceBackThroughTheFactory) {
 }
 
 TEST(DrmInputDevicesTest, APauseForADeviceNeverTakenIsStillCompleted) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
 
   // Answered anyway, or the console switch waits for logind's timeout.
   EXPECT_EQ(devices.Pause(kKeyboard, "pause"), PauseAnswer::kCompleteIt);
 }
 
 TEST(DrmInputDevicesTest, ADeviceThatIsGoneIsNotReleasedAfterwards) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
 
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
@@ -291,10 +290,8 @@ TEST(DrmInputDevicesTest, ADeviceThatIsGoneIsNotReleasedAfterwards) {
 }
 
 TEST(DrmInputDevicesTest, AResumeForADeviceNeverTakenReopensNothing) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
 
   // No id or path to reopen under, and the descriptor is not ours.
   EXPECT_FALSE(devices.Resume(kKeyboard, OpenZero()));
@@ -302,10 +299,8 @@ TEST(DrmInputDevicesTest, AResumeForADeviceNeverTakenReopensNothing) {
 }
 
 TEST(DrmInputDevicesTest, AResumeForADeviceStillLiveIsTakenAnyway) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
 
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
@@ -318,10 +313,8 @@ TEST(DrmInputDevicesTest, AResumeForADeviceStillLiveIsTakenAnyway) {
 }
 
 TEST(DrmInputDevicesTest, OnlyAReopenAfterAResumeHasADescriptorWaiting) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
 
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
@@ -335,10 +328,8 @@ TEST(DrmInputDevicesTest, OnlyAReopenAfterAResumeHasADescriptorWaiting) {
 }
 
 TEST(DrmInputDevicesTest, AForcePausedDeviceIsStillOwedBackToLogind) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
 
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
@@ -351,10 +342,8 @@ TEST(DrmInputDevicesTest, AForcePausedDeviceIsStillOwedBackToLogind) {
 }
 
 TEST(DrmInputDevicesTest, ASessionComingBackTakesEveryRevokedDeviceAgain) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
   reopen.Knows(kKeyboardPath, kKeyboard);
   reopen.Knows(kMousePath, kMouse);
   reopen.Knows(kTouchpadPath, kTouchpad);
@@ -388,10 +377,8 @@ TEST(DrmInputDevicesTest, ASessionComingBackTakesEveryRevokedDeviceAgain) {
 }
 
 TEST(DrmInputDevicesTest, ADeviceTakenWhileTheSessionIsNotInFrontIsNotLive) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
   reopen.Knows(kKeyboardPath, kKeyboard);
 
   // `TakeDevice` returns a revoked descriptor to an inactive session. The
@@ -406,10 +393,8 @@ TEST(DrmInputDevicesTest, ADeviceTakenWhileTheSessionIsNotInFrontIsNotLive) {
 }
 
 TEST(DrmInputDevicesTest, AResumeMakesARevokedDeviceLiveAgain) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
 
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
@@ -421,10 +406,8 @@ TEST(DrmInputDevicesTest, AResumeMakesARevokedDeviceLiveAgain) {
 }
 
 TEST(DrmInputDevicesTest, GivingADeviceBackIsWhatLetsItBeTakenAgain) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
 
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
@@ -444,10 +427,8 @@ TEST(DrmInputDevicesTest, GivingADeviceBackIsWhatLetsItBeTakenAgain) {
 }
 
 TEST(DrmInputDevicesTest, ReleasesEveryDeviceItTookInOrder) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
 
   devices.Take(kTouchpad, kTouchpadId, base::FilePath(kTouchpadPath),
                DeviceLiveness::kLive);
@@ -463,10 +444,8 @@ TEST(DrmInputDevicesTest, ReleasesEveryDeviceItTookInOrder) {
 }
 
 TEST(DrmInputDevicesTest, ADeviceThatRefusesTheReleaseDoesNotStrandTheRest) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
 
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
@@ -483,10 +462,8 @@ TEST(DrmInputDevicesTest, ADeviceThatRefusesTheReleaseDoesNotStrandTheRest) {
 }
 
 TEST(DrmInputDevicesTest, ReleasingTwiceReleasesOnce) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
 
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
@@ -501,10 +478,8 @@ TEST(DrmInputDevicesTest, ReleasingTwiceReleasesOnce) {
 // read. Those resumes carry descriptors the release revoked, so reopening on
 // them would replace a live converter with a dead one.
 TEST(DrmInputDevicesTest, AResumeSentBeforeTheDeviceWasGivenBackIsDropped) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
   reopen.Knows(kKeyboardPath, kKeyboard);
 
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
@@ -521,10 +496,8 @@ TEST(DrmInputDevicesTest, AResumeSentBeforeTheDeviceWasGivenBackIsDropped) {
 }
 
 TEST(DrmInputDevicesTest, ADeviceResumedAfterBeingGivenBackIsOwedBackAgain) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
   reopen.Knows(kKeyboardPath, kKeyboard);
 
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
@@ -541,10 +514,8 @@ TEST(DrmInputDevicesTest, ADeviceResumedAfterBeingGivenBackIsOwedBackAgain) {
 }
 
 TEST(DrmInputDevicesTest, AResumeForAGoneDeviceIsStillRefused) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
 
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
@@ -559,10 +530,8 @@ TEST(DrmInputDevicesTest, AResumeForAGoneDeviceIsStillRefused) {
 // the release with "gone" after the re-take. Treating that as an unplug would
 // lose all input after a console switch.
 TEST(DrmInputDevicesTest, AGoneThatEchoesOurOwnReleaseIsNotTheNodeGoingAway) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
   reopen.Knows(kKeyboardPath, kKeyboard);
   reopen.SessionIsActive(false);
 
@@ -582,10 +551,8 @@ TEST(DrmInputDevicesTest, AGoneThatEchoesOurOwnReleaseIsNotTheNodeGoingAway) {
 
 // An echoed "gone" leaves the device held, so `Reclaim` still finds it.
 TEST(DrmInputDevicesTest, ADeviceWhoseGoneWasAnEchoIsStillHeld) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
   reopen.Knows(kKeyboardPath, kKeyboard);
   reopen.SessionIsActive(false);
 
@@ -600,10 +567,8 @@ TEST(DrmInputDevicesTest, ADeviceWhoseGoneWasAnEchoIsStillHeld) {
 
 // Each release expects one echo. A further "gone" is a real unplug.
 TEST(DrmInputDevicesTest, OnlyOneGoneIsAnsweredForEachReleaseAsked) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
   reopen.Knows(kKeyboardPath, kKeyboard);
   reopen.SessionIsActive(false);
 
@@ -621,10 +586,8 @@ TEST(DrmInputDevicesTest, OnlyOneGoneIsAnsweredForEachReleaseAsked) {
 // logind sends a release's "gone" before it answers the release, so the echo
 // is expected from the moment the release is sent.
 TEST(DrmInputDevicesTest, AGoneBeforeTheReleaseIsAnsweredIsStillAnEcho) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
   release.AnswerLater();
 
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
@@ -640,10 +603,8 @@ TEST(DrmInputDevicesTest, AGoneBeforeTheReleaseIsAnsweredIsStillAnEcho) {
 
 // A refused release sends no "gone", so the next one is a real unplug.
 TEST(DrmInputDevicesTest, ARefusedReleaseIsOwedNoGone) {
-  RecordedRelease release;
-  RecordedReopen reopen;
-  DrmTakenDevices devices(release.Bind(), reopen.Bind());
-  reopen.Watch(&devices);
+  Held held;
+  auto& [release, reopen, devices] = held;
   release.AnswerLater();
   release.Refuse(kKeyboard);
 

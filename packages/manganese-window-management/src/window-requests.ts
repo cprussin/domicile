@@ -2,6 +2,7 @@
 // the shell grants. See docs/WRITING-A-SHELL.md.
 
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import { eachOf } from "@domicile-desktop/sdk/streams";
 import type { Listening } from "@domicile-desktop/sdk/system";
 import type { WindowRequest } from "@domicile-desktop/sdk/window-state";
 
@@ -39,16 +40,6 @@ export const hearWindowRequests = (
       state.listening?.stop();
     },
   };
-};
-
-/** Call `each` with every item `items` brings, until it closes. */
-const eachOf = async <T>(
-  items: ReadableStream<T>,
-  each: (item: T) => void,
-): Promise<void> => {
-  for await (const item of items) {
-    each(item);
-  }
 };
 
 const report = (error: unknown): void => {

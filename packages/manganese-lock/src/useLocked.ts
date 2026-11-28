@@ -1,5 +1,6 @@
 import { watchHost } from "@domicile-desktop/manganese-host/watch-host";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import { eachOf } from "@domicile-desktop/sdk/streams";
 import type {
   Listening,
   UnlockRefusal,
@@ -147,14 +148,4 @@ const hearRefusals = (
 const reportToConsole = (error: unknown): void => {
   // biome-ignore lint/suspicious/noConsole: the lock still works and still shows a refusal, only without its reason
   console.error("this page cannot hear why a passphrase was refused", error);
-};
-
-/** Call `each` with every item `items` brings, until it closes. */
-const eachOf = async <T>(
-  items: ReadableStream<T>,
-  each: (item: T) => void,
-): Promise<void> => {
-  for await (const item of items) {
-    each(item);
-  }
 };

@@ -12,6 +12,11 @@
 import { cursorShapeSchema } from "@domicile-desktop/sdk/cursor-shape";
 import { displayTransformSchema } from "@domicile-desktop/sdk/display-transform";
 import { notificationUrgencySchema } from "@domicile-desktop/sdk/notification";
+import {
+  systemEndSchema,
+  systemEventSchema,
+  systemReplySchema,
+} from "@domicile-desktop/sdk/system-message";
 import { themeSchema } from "@domicile-desktop/sdk/theme";
 import { z } from "zod";
 
@@ -933,151 +938,6 @@ export const shellConfigSchema = z.looseObject({
   /** The config's `shell_options`, as JSON text. */
   options: z.string(),
   type: z.literal("shell_config"),
-});
-
-const systemErrorSchema = z.looseObject({
-  kind: z.enum([
-    "not_found",
-    "permission_denied",
-    "already_exists",
-    "not_a_directory",
-    "is_a_directory",
-    "invalid_input",
-    "locked",
-    "dbus",
-    "canceled",
-    "compositor_gone",
-    "other",
-  ]),
-  message: z.string(),
-});
-
-const fileTypeSchema = z.enum(["file", "directory", "symlink", "other"]);
-
-// The answer to a `system_request`. Bytes are base64. See
-// `docs/SHELL-SYSTEM-ACCESS.md`.
-const systemReplySchema = z.looseObject({
-  id: z.number(),
-  reply: z.discriminatedUnion("kind", [
-    z.looseObject({ data: z.string(), kind: z.literal("read") }),
-    z.looseObject({ kind: z.literal("written") }),
-    z.looseObject({ kind: z.literal("created") }),
-    z.looseObject({
-      entries: z.array(
-        z.looseObject({ file_type: fileTypeSchema, name: z.string() }),
-      ),
-      kind: z.literal("entries"),
-    }),
-    z.looseObject({
-      file_type: fileTypeSchema,
-      kind: z.literal("stat"),
-      modified_ms: z.number().nullable(),
-      size: z.number(),
-    }),
-    z.looseObject({
-      body: z.string(),
-      kind: z.literal("returned"),
-      signature: z.string(),
-    }),
-    z.looseObject({ kind: z.literal("started") }),
-    z.looseObject({ kind: z.literal("saved"), path: z.string() }),
-    z.looseObject({ kind: z.literal("copied") }),
-    z.looseObject({ kind: z.literal("sent") }),
-    z.looseObject({ kind: z.literal("set") }),
-    z.looseObject({ kind: z.literal("virtual_monitor"), output: z.string() }),
-    z.looseObject({ error: systemErrorSchema, kind: z.literal("failed") }),
-  ]),
-  type: z.literal("system_reply"),
-});
-
-// Output from a running process, a change a watch saw, a D-Bus signal, a
-// shell command, an idle warning, a passphrase the lock did not take, a
-// client's window request, or the keymaps.
-const systemEventSchema = z.looseObject({
-  event: z.discriminatedUnion("kind", [
-    z.looseObject({
-      data: z.string(),
-      kind: z.literal("output"),
-      stream: z.enum(["stdout", "stderr"]),
-    }),
-    z.looseObject({ kind: z.literal("changed"), path: z.string() }),
-    z.looseObject({
-      body: z.string(),
-      interface: z.string(),
-      kind: z.literal("signal"),
-      member: z.string(),
-      path: z.string(),
-      sender: z.string(),
-      signature: z.string(),
-    }),
-    z.looseObject({
-      command: z.array(z.string()),
-      kind: z.literal("shell_command"),
-      sent: z.number(),
-      window: z.string().optional(),
-    }),
-    z.looseObject({
-      command: z.array(z.string()),
-      kind: z.literal("complete_shell_command"),
-      sent: z.number(),
-    }),
-    z.looseObject({
-      idle: z.boolean(),
-      kind: z.literal("idle"),
-    }),
-    z.looseObject({
-      failures: z.number(),
-      kind: z.literal("unlock_refused"),
-      refusal: z.enum(["wrong_passphrase", "unverifiable", "too_soon"]),
-      retry_in_ms: z.number(),
-    }),
-    z.looseObject({
-      // `null` when the ring named no window.
-      app_id: z.string().nullable(),
-      kind: z.literal("bell"),
-    }),
-    z.looseObject({
-      app_id: z.string(),
-      kind: z.literal("window_request"),
-      request: z.discriminatedUnion("kind", [
-        z.looseObject({ kind: z.literal("maximize") }),
-        z.looseObject({ kind: z.literal("unmaximize") }),
-        z.looseObject({
-          display: z.string().nullable(),
-          kind: z.literal("fullscreen"),
-        }),
-        z.looseObject({ kind: z.literal("unfullscreen") }),
-        z.looseObject({ kind: z.literal("minimize") }),
-      ]),
-    }),
-    z.looseObject({
-      active: z.string(),
-      keymaps: z.array(
-        z.looseObject({
-          description: z.string().optional(),
-          name: z.string(),
-        }),
-      ),
-      kind: z.literal("keymaps"),
-    }),
-  ]),
-  id: z.number(),
-  type: z.literal("system_event"),
-});
-
-// The last message for a watch or process.
-const systemEndSchema = z.looseObject({
-  end: z.discriminatedUnion("kind", [
-    z.looseObject({
-      code: z.number().nullable(),
-      kind: z.literal("exited"),
-      signal: z.number().nullable(),
-    }),
-    z.looseObject({ kind: z.literal("stopped") }),
-    z.looseObject({ error: systemErrorSchema, kind: z.literal("failed") }),
-  ]),
-  id: z.number(),
-  type: z.literal("system_end"),
 });
 
 /**

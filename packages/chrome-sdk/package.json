@@ -242,9 +242,21 @@
       "types": "./dist/shell.d.ts",
       "default": "./dist/shell.js"
     },
+    "./streams": {
+      "types": "./dist/streams.d.ts",
+      "default": "./dist/streams.js"
+    },
+    "./sysfs": {
+      "types": "./dist/sysfs.d.ts",
+      "default": "./dist/sysfs.js"
+    },
     "./system": {
       "types": "./dist/system.d.ts",
       "default": "./dist/system.js"
+    },
+    "./system-message": {
+      "types": "./dist/system-message.d.ts",
+      "default": "./dist/system-message.js"
     },
     "./theme": {
       "types": "./dist/theme.d.ts",
