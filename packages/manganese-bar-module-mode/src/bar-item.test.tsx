@@ -9,6 +9,7 @@ const inMode = (mode: string) =>
   render(
     <WorkspacesContext
       value={{
+        agents: [],
         current: {},
         focused: "left",
         homes: {},
