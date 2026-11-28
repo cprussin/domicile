@@ -24,6 +24,11 @@
 //!   dropped ([`Report::moved_before_commit`]). A change after a commit that
 //!   was skipped as too soon came from that commit, which is then the answer
 //!   ([`Report::answered_soon`]).
+//! - A key is pressed only once every frame the client committed has had
+//!   [`MAX_WAIT_FRAMES`] frames to reach the screen, and the probe point has
+//!   been read since ([`Report::waited_for_a_frame`]). Otherwise a second
+//!   frame for the last key could land after the next key and look like it
+//!   came from before it.
 //! - A commit later than [`MAX_WAIT_FRAMES`] frames after the key is dropped
 //!   ([`Report::answered_too_late`]). One sooner than
 //!   `frame / `[`MIN_WAIT_FRAME_SHARE`] is skipped and the round keeps waiting
@@ -190,6 +195,15 @@ pub struct Report {
     /// from the last commit would understate it, and there is no way to tell
     /// which commit produced the pixel, so the count is reported instead.
     pub redrew_while_polling: usize,
+    /// Keys held back until a frame the client committed had time to reach
+    /// the screen.
+    ///
+    /// Not a fault. Pressing sooner would let that frame change the probe
+    /// point before the key's answer, and the round would be dropped as
+    /// [`Report::moved_before_commit`]. Typically a second frame for the last
+    /// key (see [`Report::redrew_while_polling`]) or a redraw of the client's
+    /// own.
+    pub waited_for_a_frame: usize,
     /// Why the run stopped.
     ///
     /// Separate from `abandoned`: these are probe or screen failures, not the
@@ -419,7 +433,14 @@ pub struct Latency {
     answered_too_soon: usize,
     answered_soon: usize,
     redrew_while_polling: usize,
+    waited_for_a_frame: usize,
     undelivered: usize,
+    /// The latest commit whose frame may not have reached the screen yet.
+    ///
+    /// The next key waits [`MAX_WAIT_FRAMES`] frames after it, then reads the
+    /// probe point again, so that frame cannot look like it came after the
+    /// key.
+    in_flight: Option<Instant>,
 }
 
 impl Latency {
@@ -454,7 +475,9 @@ impl Latency {
             answered_too_soon: 0,
             answered_soon: 0,
             redrew_while_polling: 0,
+            waited_for_a_frame: 0,
             undelivered: 0,
+            in_flight: None,
         }
     }
 
@@ -482,6 +505,19 @@ impl Latency {
             }
             // Rounds are bounded in display frames.
             Phase::Ready if self.frame.is_none() => Step::Wait,
+            // A frame still on its way would change the probe point after the
+            // key. Wait for it, then read the screen it left.
+            Phase::Ready if self.in_flight.is_some() => {
+                let frame = self.frame.expect("checked above");
+                let committed = self.in_flight.expect("checked above");
+                if now.saturating_duration_since(committed) < frame * MAX_WAIT_FRAMES {
+                    Step::Wait
+                } else {
+                    self.in_flight = None;
+                    self.waited_for_a_frame += 1;
+                    Step::Sample
+                }
+            }
             Phase::Ready => {
                 self.phase = Phase::Pressed {
                     at: now,
@@ -619,6 +655,8 @@ impl Latency {
                     .expect("a round starts only once viz has reported its frame");
                 if waited > frame * MAX_WAIT_FRAMES {
                     self.answered_too_late += 1;
+                    // Its frame is still on its way.
+                    self.in_flight = Some(now);
                     self.end_round();
                 } else if waited < frame / MIN_WAIT_FRAME_SHARE {
                     // Skip it and keep the round open: the key's answer is
@@ -643,8 +681,15 @@ impl Latency {
             }
             // A second frame for the same key. Counted only; see
             // `Report::redrew_while_polling`.
-            Phase::Polling { .. } => self.redrew_while_polling += 1,
-            Phase::Floor { .. } | Phase::Ready | Phase::Done(_) => {}
+            // Its frame may land after the round ends, so the next key waits.
+            Phase::Polling { .. } => {
+                self.redrew_while_polling += 1;
+                self.in_flight = Some(now);
+            }
+            // A redraw of the client's own. The floor restarts if the screen
+            // moves, and the next key waits for it.
+            Phase::Floor { .. } | Phase::Ready => self.in_flight = Some(now),
+            Phase::Done(_) => {}
         }
     }
 
@@ -742,6 +787,7 @@ impl Latency {
             answered_too_soon: self.answered_too_soon,
             answered_soon: self.answered_soon,
             redrew_while_polling: self.redrew_while_polling,
+            waited_for_a_frame: self.waited_for_a_frame,
             undelivered: self.undelivered,
             ended,
         })
@@ -1389,6 +1435,62 @@ mod tests {
         );
     }
 
+    /// A second frame still on its way when a round ends would change the
+    /// probe point after the next key, with no commit for that key yet. The
+    /// next key waits for it to land, so that round is measured, not dropped.
+    #[test]
+    fn the_next_key_waits_for_a_frame_still_on_its_way() {
+        let mut driver = Driver::new(2, 3, 8);
+        driver.reach_first_press(ms(17));
+
+        assert_eq!(driver.tick(ms(0)), Step::Press);
+        driver.now += ms(5);
+        driver.latency.committed(driver.now);
+        // A second frame for the same key, not on screen when the first is.
+        driver.now += ms(5);
+        driver.latency.committed(driver.now);
+        driver.color = 0xFF00_FF00;
+        driver.answer(ms(17));
+
+        assert_eq!(
+            driver.tick(ms(0)),
+            Step::Wait,
+            "the second frame has not reached the screen, so no key yet"
+        );
+        // It lands.
+        driver.color = 0xFF00_FF80;
+        assert_eq!(driver.tick(ms(17)), Step::Wait);
+        // Six frames after that commit, the screen is read again.
+        assert_eq!(driver.tick(ms(100)), Step::Sample);
+        driver.answer(ms(17));
+        driver.round(ms(20), ms(17));
+
+        let report = driver.latency.report().unwrap();
+        assert_eq!(report.moved_before_commit, 0);
+        assert_eq!(report.key_to_pixel.unwrap().count, 2);
+        assert_eq!(report.waited_for_a_frame, 1);
+    }
+
+    /// A commit between rounds that the client made on its own is waited for
+    /// the same way.
+    #[test]
+    fn the_next_key_waits_for_a_frame_the_client_drew_on_its_own() {
+        let mut driver = Driver::new(1, 3, 8);
+        driver.reach_first_press(ms(17));
+        driver.now += ms(1);
+        driver.latency.committed(driver.now);
+
+        assert_eq!(driver.tick(ms(0)), Step::Wait);
+        assert_eq!(driver.tick(ms(99)), Step::Wait);
+        assert_eq!(driver.tick(ms(2)), Step::Sample);
+        driver.answer(ms(17));
+        driver.round(ms(20), ms(17));
+
+        let report = driver.latency.report().unwrap();
+        assert_eq!(report.moved_before_commit, 0);
+        assert_eq!(report.waited_for_a_frame, 1);
+    }
+
     /// A run with no redraws reports zero, not nothing, since the count
     /// qualifies `commit to pixel`.
     #[test]
@@ -1575,6 +1677,9 @@ mod tests {
         driver.reach_first_press(ms(17));
         driver.now += ms(500);
         driver.latency.committed(driver.now);
+        // Its frame has long landed; the screen is read once before the key.
+        assert_eq!(driver.tick(ms(500)), Step::Sample);
+        driver.answer(ms(17));
 
         driver.round(ms(5), ms(16));
         let report = driver.latency.report().unwrap();

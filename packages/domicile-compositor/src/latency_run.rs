@@ -284,6 +284,13 @@ impl DomicileCompositor {
             "latency: {} round(s) where the client drew again while polling",
             report.redrew_while_polling
         );
+        // Keys held back for a frame still on its way. Without the wait, such a
+        // frame changes the probe point first and the round is dropped.
+        tracing::info!(
+            target: "domicile::engine::spike",
+            "latency: {} key(s) waited for a frame still on its way",
+            report.waited_for_a_frame
+        );
         // Keys we failed to deliver. Kept separate from client failures so the
         // fault is attributed correctly.
         tracing::info!(
