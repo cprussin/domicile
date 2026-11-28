@@ -140,7 +140,7 @@ agent ── MCP (stdio) ── domicile mcp ── domicile agent <name> ──
   every portal uses, so a shell draws it with its other dialogs and a shell
   that doesn't know it refuses it like any unknown kind. The answer is
   `PortalAnswer::Agent { reach }`; the compositor drops windows the dialog
-  didn't offer (`portals::agent`).
+  didn't offer (`domicile-agents`).
 - **A session is a capturing session.** `CapturingKind::Agent` carries the
   agent's name, its reach and its last five actions, newest first. The shell
   stops it with the stop every session takes. `domicile mcp` reports each
@@ -150,7 +150,7 @@ agent ── MCP (stdio) ── domicile mcp ── domicile agent <name> ──
 - **Only the whole desk is remembered.** A list of windows means nothing in
   the next session, so `PortalAnswer::Agent { remember }` is refused with
   windows. The compositor keeps remembered agents, by name, with when each was
-  last let in, in `$XDG_STATE_HOME/domicile/agents.json` (`portals::agent`).
+  last let in, in `$XDG_STATE_HOME/domicile/agents.json` (`domicile-agents`).
   A file it can't read remembers nobody, so each agent asks again. Since the
   name is the agent's own word, any agent that calls itself a remembered name
   is let in; remembering trusts the agents the user connects, as the rest of

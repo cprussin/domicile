@@ -110,11 +110,15 @@ engine or Smithay:
   Ozone platform to use, where the components are and how to start them. The
   `[[bin]]` only does I/O; all decisions live in tested modules.
 - `domicile-portal`: what the `xdg-desktop-portal` backend's interfaces
-  share: the dialogs waiting on the shell and their `Request` objects.
+  share: the dialogs waiting on the shell, their `Request` and `Session`
+  objects, and the grants a restore token brings back.
 - `domicile-portal-<name>`: one interface each, for those that need nothing
-  of the compositor: `access`, `account`, `app-chooser`, `dynamic-launcher`,
-  `email`, `file-chooser`, `lockdown`, `print`, `settings`, `usb` and
-  `wallpaper`. The compositor's `portals/` serves them on its bus name.
+  of the compositor: `access`, `account`, `app-chooser`, `background`,
+  `dynamic-launcher`, `email`, `file-chooser`, `lockdown`, `print`,
+  `settings`, `usb` and `wallpaper`. The compositor's `portals/` serves them on its bus name.
+- `domicile-agents`: the agents the desk lets in, such as one connected
+  through `domicile mcp`, and the dialog that asks the user first. See
+  [AGENTS.md](../AGENTS.md).
 - `domicile-miracast`: the Miracast service, which D-Bus starts for the
   shell's `Cast` bar item. Its RTSP session and format negotiation are pure
   and tested; NetworkManager, Avahi, the portal and GStreamer are reached at

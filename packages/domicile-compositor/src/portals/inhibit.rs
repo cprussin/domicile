@@ -19,8 +19,8 @@ use tracing::{debug, warn};
 use zbus::object_server::{ObjectServer, SignalEmitter};
 use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
-use super::session;
 use domicile_portal::queue::Queue;
+use domicile_portal::session;
 
 /// The idle flag, which the compositor's idle timer honors.
 const IDLE: u32 = 8;

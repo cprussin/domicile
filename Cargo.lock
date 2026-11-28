@@ -474,10 +474,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "domicile-agents"
+version = "0.0.0"
+dependencies = [
+ "domicile-host",
+ "domicile-portal",
+ "domicile-protocol",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
 name = "domicile-compositor"
 version = "0.0.0"
 dependencies = [
  "base64",
+ "domicile-agents",
  "domicile-config",
  "domicile-host",
  "domicile-launch",
@@ -485,6 +500,7 @@ dependencies = [
  "domicile-portal-access",
  "domicile-portal-account",
  "domicile-portal-app-chooser",
+ "domicile-portal-background",
  "domicile-portal-dynamic-launcher",
  "domicile-portal-email",
  "domicile-portal-file-chooser",
@@ -595,7 +611,11 @@ name = "domicile-portal"
 version = "0.0.0"
 dependencies = [
  "domicile-host",
+ "domicile-portal-settings",
  "domicile-protocol",
+ "libc",
+ "serde_json",
+ "tempfile",
  "tracing",
  "zbus",
 ]
@@ -627,6 +647,17 @@ version = "0.0.0"
 dependencies = [
  "domicile-portal",
  "domicile-protocol",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "domicile-portal-background"
+version = "0.0.0"
+dependencies = [
+ "domicile-host",
+ "domicile-portal",
+ "tempfile",
  "tracing",
  "zbus",
 ]

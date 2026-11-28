@@ -13,10 +13,11 @@ use zbus::fdo;
 use zbus::object_server::ObjectServer;
 use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
-use super::restore::Grant;
-use super::{session, Backends, Told};
+use super::{Backends, Told};
 use crate::eis::{self, Capabilities, Emulated, Emulator};
 use domicile_portal::queue::{ask, Listed};
+use domicile_portal::restore::Grant;
+use domicile_portal::session;
 
 /// The `org.freedesktop.impl.portal.RemoteDesktop` version implemented.
 const INTERFACE_VERSION: u32 = 2;
@@ -583,7 +584,7 @@ mod tests {
     use crate::portals::fixture::{
         call, next, options, path, served, starting, Results, Served, APP, SESSION,
     };
-    use crate::portals::restore::Tokens;
+    use domicile_portal::restore::Tokens;
 
     const REMOTE_DESKTOP: &str = "org.freedesktop.impl.portal.RemoteDesktop";
 

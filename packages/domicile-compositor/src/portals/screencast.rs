@@ -37,12 +37,12 @@ use zbus::object_server::ObjectServer;
 use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
 use super::screenshot::{frozen, Shoot};
-use super::session;
 use crate::casting::{
     self, Candidate, Casting, CursorMode, Event, Heard, Region, Source, StreamId,
 };
 use domicile_portal::queue::{ask, Queue};
 use domicile_portal::reply::{reply, Replier, Reply};
+use domicile_portal::session;
 
 /// The `org.freedesktop.impl.portal.ScreenCast` version implemented.
 const INTERFACE_VERSION: u32 = 5;

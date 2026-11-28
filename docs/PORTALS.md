@@ -80,8 +80,8 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 |---|---|
 | Wire types: `HostMessage::PortalRequests`, `ChromeMessage::AnswerPortalRequest`, `PortalRequest`, `PortalAnswer` | `packages/domicile-protocol` |
 | Queue: pending requests, their apps, answer validation | `packages/domicile-host/src/portals.rs` |
-| D-Bus service: one name, one object, all interfaces; `Session` objects | `packages/domicile-compositor/src/portals/` |
-| What every interface shares: the dialogs waiting on the shell, `Request` objects | `packages/domicile-portal/` |
+| D-Bus service: one name, one object, all interfaces | `packages/domicile-compositor/src/portals/` |
+| What every interface shares: the dialogs waiting on the shell, `Request` and `Session` objects, restore tokens | `packages/domicile-portal/` |
 | Interfaces that need nothing of the compositor, one crate each (`Settings` in `domicile-portal-settings`) | `packages/domicile-portal-<name>/` |
 | `portalrequests` event, `answerPortalRequest()` | `control_channel.mojom`, `modules/domicile/`; new files only, no patch |
 | Request kinds, parsed with Zod | `@domicile-desktop/sdk/portal` |

@@ -31,10 +31,10 @@ use crate::keymap::Keyboard;
 use crate::lock::Asked;
 use crate::locking::say_what_the_lock_refused;
 use crate::peer_process::peer_pid;
-use crate::portals::agent::OpenWindows;
 use crate::scale::output_scale;
 use crate::spawning::{desktop_environment, home_directory, terminal_variable};
 use crate::theme_turnover::chrome_key;
+use domicile_agents::OpenWindows;
 use domicile_config::ConfigKey;
 
 /// A chrome request answered on its own connection thread.

@@ -13,10 +13,16 @@ testing = ["zbus/p2p"]
 [dependencies]
 domicile-host = { path = "../domicile-host" }
 domicile-protocol = { path = "../domicile-protocol" }
+# The restore tokens' file (see `src/restore.rs`), and a random token.
+libc = "0.2"
+serde_json.workspace = true
 tracing = "0.1"
 zbus.workspace = true
 
 [dev-dependencies]
+# A session's tests serve a real interface beside it.
+domicile-portal-settings = { path = "../domicile-portal-settings" }
+tempfile.workspace = true
 zbus = { workspace = true, features = ["p2p"] }
 
 [lints]

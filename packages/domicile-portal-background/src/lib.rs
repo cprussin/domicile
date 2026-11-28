@@ -2,7 +2,7 @@
 //! their autostart entries.
 //!
 //! The frontend asks the user whether an application may run in the
-//! background through [`Access`](super::access::Access), so this backend has
+//! background through `domicile-portal-access`'s `Access`, so this backend has
 //! no dialog of its own. It reports each window's application, tells the user
 //! through a notification when one keeps running without a window, and writes
 //! autostart entries (`domicile_host::autostart`).
