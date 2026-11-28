@@ -15,6 +15,7 @@ import { control } from "../../styled-system/recipes";
 import { controlSizingStyle } from "../_control/controlSizingStyle";
 import { focusControlOnMouseDown } from "../_control/focus";
 import { PrefixIconStack } from "../_control/PrefixIconStack";
+import { roundedPadding } from "../_control/rounded-padding";
 import { useStableRef } from "../_control/useStableRef";
 import { wrapperBase } from "../_control/wrapperBase";
 import type { Size } from "../control-sizes";
@@ -362,39 +363,15 @@ const caretStyles = cva({
   },
 });
 
-// `rounded` adds 1.5 spacing units to the recipe's inline padding
-// (`CONTROL_PADDING_INLINE` in `control-sizes.ts`), as in Input. Values are
-// literals because Panda's static extractor can't read helper results.
-//
-// `cursor: pointer` because a click anywhere opens the popup (see
+// `rounded`'s padding is `roundedPadding`'s. `cursor: pointer` because a click anywhere opens the popup (see
 // `openTriggerOnWrapperClick`).
 const wrapperStyles = cva({
   base: {
     cursor: { _disabled: "not-allowed", base: "pointer" },
   },
-  compoundVariants: [
-    { css: { paddingInline: 3 }, rounded: true, size: "xs" },
-    { css: { paddingInline: 4 }, rounded: true, size: "sm" },
-    { css: { paddingInline: 4.5 }, rounded: true, size: "md" },
-    { css: { paddingInline: 5 }, rounded: true, size: "lg" },
-    { css: { paddingInline: 5.5 }, rounded: true, size: "xl" },
-    { css: { paddingInline: 7 }, rounded: true, size: "2xl" },
-    { css: { paddingInline: 9 }, rounded: true, size: "3xl" },
-    { css: { paddingInline: 11.5 }, rounded: true, size: "4xl" },
-  ],
   variants: {
     rounded: {
       true: { borderRadius: "full" },
-    },
-    size: {
-      "2xl": {},
-      "3xl": {},
-      "4xl": {},
-      lg: {},
-      md: {},
-      sm: {},
-      xl: {},
-      xs: {},
     },
   },
 });
@@ -590,7 +567,8 @@ const wrapperClassOf = (surface: Surface, size: Size, rounded: boolean) => {
       return cx(
         control({ size }),
         wrapperBase,
-        wrapperStyles({ rounded, size }),
+        roundedPadding({ rounded, size }),
+        wrapperStyles({ rounded }),
       );
     case "filled":
       return filledStyles;

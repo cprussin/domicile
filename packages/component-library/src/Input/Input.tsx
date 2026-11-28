@@ -1,13 +1,15 @@
 import { Input as BaseInput } from "@base-ui/react/input";
 import type { ComponentProps, ReactNode, Ref } from "react";
-import { css, cva, cx } from "../../styled-system/css";
+import { cva, cx } from "../../styled-system/css";
 import type { ControlVariant } from "../../styled-system/recipes";
 import { control } from "../../styled-system/recipes";
 import { clearControl } from "../_control/clearControl";
 import { controlSizingStyle } from "../_control/controlSizingStyle";
 import { focusControlOnMouseDown } from "../_control/focus";
 import { PrefixIconStack } from "../_control/PrefixIconStack";
+import { roundedPadding } from "../_control/rounded-padding";
 import { TrailingGroup } from "../_control/TrailingGroup";
+import { textEntryStyles } from "../_control/text-entry";
 import { useControlValue } from "../_control/useControlValue";
 import { useStableRef } from "../_control/useStableRef";
 import { wrapperBase } from "../_control/wrapperBase";
@@ -81,7 +83,8 @@ export const Input = ({
       className={cx(
         control({ size }),
         wrapperBase,
-        wrapperStyles({ flush, rounded, size }),
+        roundedPadding({ rounded, size }),
+        wrapperStyles({ flush, rounded }),
       )}
       data-flush={flush ? "" : undefined}
       onMouseDown={focusControlOnMouseDown}
@@ -90,7 +93,7 @@ export const Input = ({
       <PrefixIconStack prefixIcon={prefixIcon} size={size} />
       <BaseInput
         {...props}
-        className={inputStyles}
+        className={textEntryStyles}
         data-control=""
         onChange={handleChange}
         ref={setInputRef}
@@ -107,39 +110,12 @@ export const Input = ({
   );
 };
 
-const inputStyles = css({
-  "&::placeholder": { color: "muted" },
-  backgroundColor: "transparent",
-  borderStyle: "none",
-  color: "foreground",
-  cursor: { _disabled: "not-allowed", base: "text" },
-  flexGrow: 1,
-  inlineSize: "100%",
-  minInlineSize: 0,
-  outlineStyle: "none",
-  padding: 0,
-  textOverflow: "ellipsis",
-});
-
-// `rounded` adds 1.5 spacing units to the recipe's inline padding
-// (`CONTROL_PADDING_INLINE` in `control-sizes.ts`) so the pill shape doesn't
-// crowd content. Values are literals because Panda's static extractor can't
-// read helper results.
+// `rounded`'s padding is `roundedPadding`'s.
 const wrapperStyles = cva({
   base: {
     // Not in `wrapperBase`, so Select can override it; see `wrapperBase.ts`.
     cursor: "text",
   },
-  compoundVariants: [
-    { css: { paddingInline: 3 }, rounded: true, size: "xs" },
-    { css: { paddingInline: 4 }, rounded: true, size: "sm" },
-    { css: { paddingInline: 4.5 }, rounded: true, size: "md" },
-    { css: { paddingInline: 5 }, rounded: true, size: "lg" },
-    { css: { paddingInline: 5.5 }, rounded: true, size: "xl" },
-    { css: { paddingInline: 7 }, rounded: true, size: "2xl" },
-    { css: { paddingInline: 9 }, rounded: true, size: "3xl" },
-    { css: { paddingInline: 11.5 }, rounded: true, size: "4xl" },
-  ],
   variants: {
     // `wrapperBase` and glass surfaces skip their edges and fills for
     // `[data-flush]`.
@@ -157,16 +133,6 @@ const wrapperStyles = cva({
     },
     rounded: {
       true: { borderRadius: "full" },
-    },
-    size: {
-      "2xl": {},
-      "3xl": {},
-      "4xl": {},
-      lg: {},
-      md: {},
-      sm: {},
-      xl: {},
-      xs: {},
     },
   },
 });

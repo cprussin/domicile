@@ -8,6 +8,8 @@ import { controlSizingStyle } from "../_control/controlSizingStyle";
 import { useEasedHeight } from "../_control/ease-height";
 import { focusControlOnMouseDown } from "../_control/focus";
 import { PrefixIconStack } from "../_control/PrefixIconStack";
+import { roundedPadding } from "../_control/rounded-padding";
+import { textEntryStyles } from "../_control/text-entry";
 import { wrapperBase } from "../_control/wrapperBase";
 import type { ExtendProps } from "../extend-props";
 import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
@@ -122,7 +124,8 @@ export const Autocomplete = <V,>({
         className={cx(
           control({ size }),
           wrapperBase,
-          wrapperStyles({ filled, rounded, size }),
+          roundedPadding({ rounded, size }),
+          wrapperStyles({ filled, rounded }),
         )}
         onMouseDown={focusControlOnMouseDown}
         ref={attach}
@@ -135,7 +138,7 @@ export const Autocomplete = <V,>({
         )}
         <BaseAutocomplete.Input
           {...inputProps}
-          className={inputStyles}
+          className={textEntryStyles}
           data-control=""
         />
         {suffixButtons !== undefined && (
@@ -184,20 +187,6 @@ export const Autocomplete = <V,>({
   );
 };
 
-const inputStyles = css({
-  "&::placeholder": { color: "muted" },
-  backgroundColor: "transparent",
-  borderStyle: "none",
-  color: "foreground",
-  cursor: { _disabled: "not-allowed", base: "text" },
-  flexGrow: 1,
-  inlineSize: "100%",
-  minInlineSize: 0,
-  outlineStyle: "none",
-  padding: 0,
-  textOverflow: "ellipsis",
-});
-
 // Prefix and suffix control rows. They don't shrink and inherit the recipe's
 // per-size gap.
 const affixStyles = css({
@@ -207,24 +196,12 @@ const affixStyles = css({
   gap: "inherit",
 });
 
-// `rounded` adds 1.5 spacing units to the recipe's inline padding
-// (`CONTROL_PADDING_INLINE` in `control-sizes.ts`), as in Input. Values are
-// literals because Panda's static extractor can't read helper results.
+// `rounded`'s padding is `roundedPadding`'s.
 const wrapperStyles = cva({
   base: {
     // Not in `wrapperBase`; see the note at the top of `wrapperBase.ts`.
     cursor: "text",
   },
-  compoundVariants: [
-    { css: { paddingInline: 3 }, rounded: true, size: "xs" },
-    { css: { paddingInline: 4 }, rounded: true, size: "sm" },
-    { css: { paddingInline: 4.5 }, rounded: true, size: "md" },
-    { css: { paddingInline: 5 }, rounded: true, size: "lg" },
-    { css: { paddingInline: 5.5 }, rounded: true, size: "xl" },
-    { css: { paddingInline: 7 }, rounded: true, size: "2xl" },
-    { css: { paddingInline: 9 }, rounded: true, size: "3xl" },
-    { css: { paddingInline: 11.5 }, rounded: true, size: "4xl" },
-  ],
   variants: {
     // `wrapperBase` still draws the hover and focus edges.
     filled: {
@@ -237,16 +214,6 @@ const wrapperStyles = cva({
     },
     rounded: {
       true: { borderRadius: "full" },
-    },
-    size: {
-      "2xl": {},
-      "3xl": {},
-      "4xl": {},
-      lg: {},
-      md: {},
-      sm: {},
-      xl: {},
-      xs: {},
     },
   },
 });
