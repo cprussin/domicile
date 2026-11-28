@@ -1,45 +1,16 @@
-import { useContext, useRef } from "react";
-
 import { css, cva, cx } from "../styled-system/css";
-import type { Rect } from "./rect";
-import type { Restack } from "./restacking";
-import { SlidingScreen } from "./sliding-screen";
-import { useLowered } from "./useLowered";
-import type { Settler } from "./useSettling";
-import { useSettling } from "./useSettling";
-import type { WindowMotion } from "./window-motion";
-import { isMoving } from "./window-motion";
-import {
-  clippedAlong,
-  heldStyles,
-  movingStyles,
-  originOf,
-  placedAt,
-  scaledAbout,
-  settlingStyles,
-  shuffledBy,
-} from "./window-styles";
+import type { BoxOverlayPlacement } from "./BoxOverlay";
+import { BoxOverlay } from "./BoxOverlay";
 
-type Props = {
-  /** The depth of the windows it lights. */
-  depth: number;
-  /**
-   * Whether the focused window is being dragged, so the glow follows the
-   * pointer without easing.
-   */
-  dragging: boolean;
+/**
+ * Its `depth` is that of the windows it lights, and its `rect` the focused
+ * window's frame, or its group's.
+ */
+type Props = BoxOverlayPlacement & {
   /** Whether focus has left the box, so the glow fades out. */
   leaving: boolean;
-  /** The focused window's motion, which the glow plays too. */
-  motion: WindowMotion;
   /** Called when a fade in or out ends. */
   onFaded: () => void;
-  /** The box: the focused window's frame, or its group's. */
-  rect: Rect;
-  /** The focused window's restack shuffle, if any. */
-  restack?: Restack | undefined;
-  /** Eases the glow into a new box with its windows; see `useSettling`. */
-  settler?: Settler | undefined;
   /** The windows inside the box. */
   windows: readonly string[];
 };
@@ -57,53 +28,23 @@ type Props = {
  *   no pointer events.
  */
 export const FocusGlow = ({
-  depth,
-  dragging,
   leaving,
-  motion,
   onFaded,
-  rect,
-  restack,
-  settler,
   windows,
-}: Props) => {
-  const element = useRef<HTMLDivElement>(null);
-  const lowered = useLowered(depth);
-  const sliding = useContext(SlidingScreen);
-  useSettling({
-    dragged: dragging,
-    element,
-    origin: originOf(rect, rect),
-    rect,
-    settler,
-    still: dragging || isMoving(motion),
-  });
-  return (
-    <div
-      className={cx(
-        glowStyles,
-        fadeStyles({ leaving }),
-        movingStyles({ motion }),
-        settlingStyles({ lowered }),
-        dragging && heldStyles,
-      )}
-      data-focus-box={windows.join(" ")}
-      data-leaving={leaving || undefined}
-      onTransitionEnd={(event) => {
-        if (event.propertyName === "opacity") {
-          onFaded();
-        }
-      }}
-      ref={element}
-      style={{
-        ...placedAt(rect, depth),
-        ...clippedAlong(sliding, rect),
-        ...scaledAbout(rect, rect),
-        ...shuffledBy(restack),
-      }}
-    />
-  );
-};
+  ...placement
+}: Props) => (
+  <BoxOverlay
+    {...placement}
+    className={cx(glowStyles, fadeStyles({ leaving }))}
+    data-focus-box={windows.join(" ")}
+    data-leaving={leaving || undefined}
+    onTransitionEnd={(event) => {
+      if (event.propertyName === "opacity") {
+        onFaded();
+      }
+    }}
+  />
+);
 
 /**
  * Rounded like a window's frame.
