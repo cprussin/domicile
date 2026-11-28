@@ -1,10 +1,36 @@
-import type { FrozenDesk, ShotRect } from "@domicile-desktop/sdk/portal";
+import type { BrowserWindow } from "@domicile-desktop/sdk/desktop/browser";
+import type {
+  FrozenDesk,
+  PortalAnswer,
+  ShotRect,
+} from "@domicile-desktop/sdk/portal";
 import { PreviewedWindow } from "@domicile-desktop/sdk/previewed-window";
 import { MonitorIcon } from "@phosphor-icons/react/dist/ssr/Monitor";
 import type { App } from "../useApps/useApps";
 import { PageIcon } from "./PageIcon";
+import type { Presence } from "./presence";
 import type { Choice } from "./SourcePicker";
+import type { ShownWindow } from "./shown-windows";
+import type { DrawPreview } from "./useWindowPreview";
 import { WindowIcon } from "./WindowIcon";
+
+/** What a dialog that picks a screen, window or area of the desk is given. */
+export type SourceDialogProps = {
+  answer: (answer: PortalAnswer) => void;
+  /** Names a window's application by its Wayland app id. */
+  apps: (appId: string) => App;
+  /** The desktop's browser windows, as the engine lists them. */
+  browserWindows: readonly BrowserWindow[];
+  /** A browser window's page icon URL, if its page has one. */
+  pageIcon: (id: string) => string | undefined;
+  /** Whether it is up; see {@link Presence}. */
+  presence: Presence;
+  /** Draws a window that is not on screen. */
+  previewWindow: DrawPreview;
+  screen: string | undefined;
+  /** The windows the shell draws on screen, read once as the dialog opens. */
+  shownWindows: () => readonly ShownWindow[];
+};
 
 /** All of `desk`, sized in its frame's pixels. */
 export const wholeDeskChoice = (desk: FrozenDesk): Choice => ({

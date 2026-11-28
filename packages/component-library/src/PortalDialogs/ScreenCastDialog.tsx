@@ -1,7 +1,5 @@
-import type { BrowserWindow } from "@domicile-desktop/sdk/desktop/browser";
 import type {
   CastSource,
-  PortalAnswer,
   ScreenCastBody,
   ShotRect,
 } from "@domicile-desktop/sdk/portal";
@@ -14,48 +12,31 @@ import { useState } from "react";
 import { css } from "../../styled-system/css";
 import { Button } from "../Button/Button";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
-import type { App } from "../useApps/useApps";
 import { onDesk } from "./on-frame";
 import { usePicking } from "./picking";
-import type { Presence } from "./presence";
 import { RegionPicker } from "./RegionPicker";
 import type { Choice } from "./SourcePicker";
 import { SourcePicker } from "./SourcePicker";
-import type { ShownWindow } from "./shown-windows";
 import { ShownWindowKind, shownArea } from "./shown-windows";
+import type { SourceDialogProps } from "./source-choices";
 import {
   browserChoice,
   screenChoice,
   wholeDeskChoice,
   windowChoice,
 } from "./source-choices";
-import type { DrawPreview } from "./useWindowPreview";
 
-type Props = {
-  answer: (answer: PortalAnswer) => void;
-  /** Names a window's application by its Wayland app id. */
-  apps: (appId: string) => App;
+type Props = SourceDialogProps & {
   /** Who asks, as the dialog names them. */
   asker: string;
   body: ScreenCastBody;
-  /** The desktop's browser windows, as the engine lists them. */
-  browserWindows: readonly BrowserWindow[];
   /** The TV a cast that asked shows the pick on, titling the dialog for it. */
   castTo?: string | undefined;
-  /** Whether it is up; see {@link Presence}. */
-  presence: Presence;
-  screen: string | undefined;
-  /** A browser window's page icon URL, if its page has one. */
-  pageIcon: (id: string) => string | undefined;
-  /** Draws a window that is not on screen. */
-  previewWindow: DrawPreview;
   /**
    * Whether the shell asks, for its own screen recording: the dialog then
    * records rather than shares, and names nobody.
    */
   record?: boolean | undefined;
-  /** The windows the shell draws on screen, read once as the dialog opens. */
-  shownWindows: () => readonly ShownWindow[];
 };
 
 /** Something the dialog offers to share. */
