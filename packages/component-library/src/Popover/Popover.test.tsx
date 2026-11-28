@@ -16,6 +16,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
+import { choose } from "../__test__/choose";
 import { springTransition } from "../__test__/spring-transition";
 import { Button } from "../Button/Button";
 import { Select } from "../Select/Select";
@@ -528,8 +529,7 @@ describe(Popover, () => {
       );
       await user.click(screen.getByRole("button", { name: "Details" }));
 
-      await user.click(screen.getByRole("combobox", { name: "Port" }));
-      await user.click(screen.getByRole("option", { name: "Headphones" }));
+      await choose(user, "Port", "Headphones");
 
       expect(screen.getByRole("combobox", { name: "Port" })).toHaveTextContent(
         "Headphones",

@@ -4,6 +4,7 @@ import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { choose } from "../__test__/choose";
 import { FilePicker } from "./FilePicker";
 import type { FileRequest } from "./file-request";
 import { ChooserMode } from "./file-request";
@@ -116,10 +117,13 @@ const picker = (
 const box = (): HTMLElement =>
   screen.getByRole("combobox", { name: "Filter or go to a path" });
 
-/** The rows' accessible names, once the current directory is listed. */
+/**
+ * The rows' accessible names, once the current directory is listed. A
+ * `Select`'s list can still be closing, so only the file list counts.
+ */
 const rows = async (): Promise<readonly string[]> => {
   await act(() => Promise.resolve());
-  return screen
+  return within(screen.getByRole("listbox", { name: /^Contents of / }))
     .queryAllByRole("option")
     .map((row) => row.getAttribute("aria-label") ?? "");
 };
@@ -375,10 +379,7 @@ describe("FilePicker", () => {
         "Pictures",
         "Scratch",
       ]);
-      await userEvent.click(
-        screen.getByRole("combobox", { name: "File type" }),
-      );
-      await userEvent.click(screen.getByRole("option", { name: "Text" }));
+      await choose(userEvent, "File type", "Text");
       expect(await rows()).toStrictEqual([
         "..",
         "Documents",

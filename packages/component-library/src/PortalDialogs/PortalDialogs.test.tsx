@@ -31,6 +31,7 @@ import {
 import userEvent from "@testing-library/user-event";
 
 import { token } from "../../styled-system/tokens";
+import { choose } from "../__test__/choose";
 import { springTransition } from "../__test__/spring-transition";
 import { Button } from "../Button/Button";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
@@ -1038,12 +1039,8 @@ describe("PortalDialogs", () => {
         }),
       ]);
       await listed();
-      await userEvent.click(
-        screen.getByRole("combobox", { name: "Read only" }),
-      );
-      await userEvent.click(screen.getByRole("option", { name: "Yes" }));
-      await userEvent.click(screen.getByRole("combobox", { name: "Encoding" }));
-      await userEvent.click(screen.getByRole("option", { name: "Latin-1" }));
+      await choose(userEvent, "Read only", "Yes");
+      await choose(userEvent, "Encoding", "Latin-1");
       await userEvent.dblClick(
         screen.getByRole("option", { name: "notes.txt" }),
       );
@@ -1806,15 +1803,12 @@ describe("PortalDialogs", () => {
       render(<PortalDialogs domicile={host.domicile} />);
       host.push([print(1, twoPrinters)]);
 
-      await user.click(screen.getByRole("combobox", { name: "Destination" }));
-      await user.click(screen.getByRole("option", { name: "lab printer" }));
-      await user.click(screen.getByRole("combobox", { name: "Layout" }));
-      await user.click(screen.getByRole("option", { name: "Landscape" }));
+      await choose(user, "Destination", "lab printer");
+      await choose(user, "Layout", "Landscape");
       await user.clear(screen.getByRole("spinbutton", { name: "Copies" }));
       await user.type(screen.getByRole("spinbutton", { name: "Copies" }), "3");
       expect(screen.queryByRole("textbox", { name: "Page range" })).toBeNull();
-      await user.click(screen.getByRole("combobox", { name: "Pages" }));
-      await user.click(screen.getByRole("option", { name: "Custom" }));
+      await choose(user, "Pages", "Custom");
       await user.type(
         screen.getByRole("textbox", { name: "Page range" }),
         "1-2, 5",
@@ -1852,8 +1846,7 @@ describe("PortalDialogs", () => {
       expect(screen.getByRole("button", { name: "Print it" })).toBeDisabled();
       await user.clear(screen.getByRole("spinbutton", { name: "Copies" }));
       await user.type(screen.getByRole("spinbutton", { name: "Copies" }), "1");
-      await user.click(screen.getByRole("combobox", { name: "Pages" }));
-      await user.click(screen.getByRole("option", { name: "Custom" }));
+      await choose(user, "Pages", "Custom");
       expect(screen.getByRole("button", { name: "Print it" })).toBeDisabled();
       await user.type(
         screen.getByRole("textbox", { name: "Page range" }),
@@ -1871,11 +1864,9 @@ describe("PortalDialogs", () => {
       render(<PortalDialogs domicile={host.with(home())} />);
       host.push([print(1, twoPrinters)]);
 
-      await user.click(screen.getByRole("combobox", { name: "Destination" }));
-      await user.click(screen.getByRole("option", { name: "Save to PDF" }));
+      await choose(user, "Destination", "Save to PDF");
       expect(screen.queryByRole("spinbutton", { name: "Copies" })).toBeNull();
-      await user.click(screen.getByRole("combobox", { name: "Pages" }));
-      await user.click(screen.getByRole("option", { name: "Custom" }));
+      await choose(user, "Pages", "Custom");
       await user.type(screen.getByRole("textbox", { name: "Page range" }), "2");
       await user.click(screen.getByRole("button", { name: "Save…" }));
       await listed();
@@ -1908,8 +1899,7 @@ describe("PortalDialogs", () => {
       render(<PortalDialogs domicile={host.with(home())} />);
       host.push([print(1, twoPrinters)]);
 
-      await user.click(screen.getByRole("combobox", { name: "Destination" }));
-      await user.click(screen.getByRole("option", { name: "Save to PDF" }));
+      await choose(user, "Destination", "Save to PDF");
       await user.click(screen.getByRole("button", { name: "Save…" }));
       await listed();
       await user.click(screen.getByRole("button", { name: "Cancel" }));

@@ -3,6 +3,7 @@ import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-st
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
+import { choose } from "../__test__/choose";
 import { startsAt } from "../__test__/starts-at";
 import type { SelectOption } from "./Select";
 import { Select, SURFACES } from "./Select";
@@ -67,7 +68,8 @@ describe(Select, () => {
       const user = userEvent.setup();
       render(<Select aria-label="Font" options={OPTIONS} />);
       await user.click(screen.getByRole("combobox", { name: "Font" }));
-      const popup = screen.getByRole("listbox").parentElement as HTMLElement;
+      const popup = (await screen.findByRole("listbox"))
+        .parentElement as HTMLElement;
       expect(startsAt(popup)).toEqual({
         bottom: "translateY(calc(-1 * 0.125rem))",
         top: "translateY(0.125rem)",
@@ -81,7 +83,7 @@ describe(Select, () => {
       render(<Select aria-label="Font" options={OPTIONS} />);
       await user.click(screen.getByRole("combobox", { name: "Font" }));
       expect(
-        screen.getByRole("option", { name: "Sans-serif" }),
+        await screen.findByRole("option", { name: "Sans-serif" }),
       ).toBeInTheDocument();
       expect(screen.getByRole("option", { name: "Serif" })).toBeInTheDocument();
       expect(
@@ -112,8 +114,7 @@ describe(Select, () => {
         );
       };
       render(<Controlled />);
-      await user.click(screen.getByRole("combobox", { name: "Font" }));
-      await user.click(screen.getByRole("option", { name: "Monospace" }));
+      await choose(user, "Font", "Monospace");
       expect(seen).toBe("mono");
       expect(
         screen.getByRole("combobox", { name: "Font" }).textContent,
@@ -132,8 +133,7 @@ describe(Select, () => {
             surface={surface}
           />,
         );
-        await user.click(screen.getByRole("combobox", { name: "Font" }));
-        await user.click(screen.getByRole("option", { name: "Serif" }));
+        await choose(user, "Font", "Serif");
         expect(
           screen.getByRole("combobox", { name: "Font" }).textContent,
         ).toContain("Serif");
@@ -144,7 +144,7 @@ describe(Select, () => {
       const user = userEvent.setup();
       render(<Select aria-label="Font" options={OPTIONS} />);
       await user.click(screen.getByRole("combobox", { name: "Font" }));
-      const cursive = screen.getByRole("option", { name: "Cursive" });
+      const cursive = await screen.findByRole("option", { name: "Cursive" });
       expect(cursive).toHaveAttribute("data-disabled");
     });
   });
@@ -160,7 +160,7 @@ describe(Select, () => {
       await user.click(screen.getByRole("combobox", { name: "Font" }));
       // The list is portaled out of the panel, so only its own tone counts.
       expect(
-        screen.getByRole("listbox").closest("[data-tone=overPhoto]"),
+        (await screen.findByRole("listbox")).closest("[data-tone=overPhoto]"),
       ).not.toBeNull();
     });
 
@@ -169,7 +169,7 @@ describe(Select, () => {
       render(<Select aria-label="Font" options={OPTIONS} />);
       await user.click(screen.getByRole("combobox", { name: "Font" }));
       expect(
-        screen.getByRole("listbox").closest("[data-tone=overPhoto]"),
+        (await screen.findByRole("listbox")).closest("[data-tone=overPhoto]"),
       ).toBeNull();
     });
   });
