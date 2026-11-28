@@ -10,6 +10,7 @@
 
 #include "base/callback_list.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "components/domicile/browser/desk_pointer.h"
 #include "components/domicile/browser/electron_app.h"
 #include "components/domicile/browser/web_view_partition.h"
@@ -180,6 +181,12 @@ void LoadBrowserWindow(const std::string& id, const GURL& url);
 // Browser window `id`'s page, or null when there is no shell or no such
 // window.
 content::WebContents* BrowserWindowContents(const std::string& id);
+
+// Lists browser window `id` as captured until the returned runner runs, as a
+// capture of its page alone does, so the shell keeps it laid out wherever it
+// is: a page with no layout box draws nothing to take a picture of. Counts
+// nothing when there is no shell or no such window.
+base::ScopedClosureRunner CaptureBrowserWindow(const std::string& id);
 
 // The browser window of the shell's profile whose page `page` is, or is a
 // frame or page within; an Electron app's view names the window holding it.

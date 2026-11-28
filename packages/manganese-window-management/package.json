@@ -67,6 +67,8 @@
     "./tiled/aim": "./src/tiled/aim.ts",
     "./travel": "./src/travel.ts",
     "./tree/path": "./src/tree/path.ts",
+    "./unseen": "./src/unseen.ts",
+    "./useCaptured": "./src/useCaptured.ts",
     "./useClientIcons": "./src/useClientIcons.ts",
     "./useGrabCursor": "./src/useGrabCursor.ts",
     "./usePointerLock": "./src/usePointerLock.ts",

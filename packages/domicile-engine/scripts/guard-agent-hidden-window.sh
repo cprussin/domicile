@@ -14,10 +14,11 @@
 #   shown       the page never went hidden while the agent's keyboard is in
 #               it
 #   typed       the agent's keys a and b reached the field
-#   screenshot  the agent's `devtools` Page.captureScreenshot is refused at
-#               once, saying the window is not on screen: a page nobody draws
-#               presents no frame, and the method would wait for one until it
-#               timed out
+#   screenshot  the agent's `devtools` Page.captureScreenshot answers a PNG:
+#               the engine lists the window as captured while it runs, the
+#               shell draws a captured window though it hides it, and once the
+#               picture is taken the window is listed as uncaptured and hidden
+#               again
 #   let go      once the agent's keyboard leaves (`blur`), the page is hidden
 #
 # Control: NEGATIVE=1 moves the agent's keyboard off the page before the
@@ -215,6 +216,8 @@ since_the_hide() { # $1 pattern
   tail -n +"${HID_AT:-1}" "$ENGINE_LOG" | grep -qF "$1" && echo 1 || echo 0
 }
 
+# Set by the positive run only; the control reads them as not done.
+TYPED_A="" TYPED_B="" SHOT="" HIDDEN_WHILE_HELD=""
 if [ "$NEGATIVE" != "1" ]; then
   # 7. The agent types, and reads the page as an image.
   TYPED_A="$(agent "{\"kind\":\"key\",\"keycode\":$DESK_A,\"pressed\":true}")"
@@ -242,16 +245,26 @@ SAW_HIDE=$(saw "GUARD hidden")
 SAW_PRESS=$(saw "GUARD guest-mousedown")
 SAW_TYPED=$(saw "GUARD guest-input value=ab")
 SAW_LET_GO=$(since_the_hide "guest-visibility state=hidden")
-case "${SHOT:-}" in
-*'"refused"'*'is not on screen'*) SHOT_OK=1 ;;
+# A PNG's base64 starts iVBOR.
+case "$SHOT" in
+*'"data":"iVBOR'*) SHOT_OK=1 ;;
 *) SHOT_OK=0 ;;
 esac
+SAW_CAPTURED=$(saw "GUARD captured shown id=$WINDOW")
+# The control takes no screenshot, so there is no uncapture to wait for.
+if [ "$NEGATIVE" != "1" ]; then
+  for _ in $(seq 1 40); do
+    grep -qF "GUARD captured hidden id=$WINDOW" "$ENGINE_LOG" && break
+    sleep 0.25
+  done
+fi
+SAW_UNCAPTURED=$(saw "GUARD captured hidden id=$WINDOW")
 
 echo "opened: $OPENED, window $WINDOW"
 echo "pressed: $PRESSED"
-echo "typed: ${TYPED_A:-} ${TYPED_B:-}"
-echo "screenshot: ${SHOT:-}"
-echo "shell=$SAW_SHELL page=$SAW_PAGE hide=$SAW_HIDE press=$SAW_PRESS typed=$SAW_TYPED hidden-while-held=${HIDDEN_WHILE_HELD:-} screenshot=$SHOT_OK hidden-at-end=$SAW_LET_GO"
+echo "typed: $TYPED_A $TYPED_B"
+echo "screenshot: ${SHOT:0:200}"
+echo "shell=$SAW_SHELL page=$SAW_PAGE hide=$SAW_HIDE press=$SAW_PRESS typed=$SAW_TYPED hidden-while-held=$HIDDEN_WHILE_HELD screenshot=$SHOT_OK captured=$SAW_CAPTURED uncaptured=$SAW_UNCAPTURED hidden-at-end=$SAW_LET_GO"
 grep -F "guest-visibility" "$ENGINE_LOG" | tail -4
 
 FAILURE=""
@@ -273,13 +286,17 @@ elif [ "$NEGATIVE" = "1" ]; then
 elif [ "$HIDDEN_WHILE_HELD" = "1" ]; then
   FAILURE="THE AGENT'S WINDOW WENT HIDDEN WHILE ITS KEYBOARD WAS IN IT: a window on a workspace nobody watches stops running its page's frames and timers, and the agent's work there stalls"
 elif [ "$SAW_TYPED" != "1" ]; then
-  FAILURE="the agent's keys a and b did not reach the hidden window's field as \"ab\" (answered ${TYPED_A:-} ${TYPED_B:-})"
+  FAILURE="the agent's keys a and b did not reach the hidden window's field as \"ab\" (answered $TYPED_A $TYPED_B)"
+elif [ "$SAW_CAPTURED" != "1" ]; then
+  FAILURE="the engine never listed the hidden window as captured for the agent's screenshot, so no shell draws it for the picture (answered ${SHOT:0:300})"
 elif [ "$SHOT_OK" != "1" ]; then
-  FAILURE="the agent's screenshot of the hidden window was not refused as off screen: ${SHOT:-}"
+  FAILURE="the agent's screenshot of the hidden window answered no PNG: ${SHOT:0:300}"
+elif [ "$SAW_UNCAPTURED" != "1" ]; then
+  FAILURE="the hidden window stayed listed as captured after the agent's screenshot answered, so its shell draws it for nobody"
 elif [ "$SAW_LET_GO" != "1" ]; then
   FAILURE="the hidden window's page stayed shown after the agent's keyboard left it: it runs as shown for nobody"
 else
-  PASSED="an agent's hidden window ran as shown while its keyboard was in it: the keys reached the page, a screenshot was refused as off screen at once, and the page hid once the keyboard left"
+  PASSED="an agent's hidden window ran as shown while its keyboard was in it: the keys reached the page, a screenshot answered a PNG of it, and the page hid once the keyboard left"
 fi
 
 if [ -n "$PASSED" ]; then

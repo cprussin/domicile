@@ -247,9 +247,11 @@ user's and every other partition, like a separate browser profile:
     while it listens, the engine unloads nothing. `ids` are the windows it
     would unload, hidden longest first.
 - **Lay out a hidden window while it `isCaptured`.** A screenshot, a picker's
-  preview or a screen cast of the page alone sets it, and `browser.on("change")`
-  fires. A page with no layout box draws nothing, so the capture would get no
-  frame. Manganese draws a hidden tab under the shown one meanwhile.
+  preview, a screen cast of the page alone or an agent's
+  `Page.captureScreenshot` sets it, and `browser.on("change")` fires. A page
+  with no layout box draws nothing, so the capture would get no frame.
+  Manganese draws a hidden tab under the shown one meanwhile, and a window on
+  a workspace no screen shows under the wallpaper.
 - **`toplevelId`** is the window's identifier on
   `ext-foreign-toplevel-list-v1`, for a capture tool, as a native window's is
   ([WRITING-A-SHELL.md](WRITING-A-SHELL.md#windows)). It is `undefined` until

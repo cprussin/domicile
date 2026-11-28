@@ -27,6 +27,11 @@
 //                                on a workspace nobody is looking at, once
 //                                the user's field took the text "hide".
 //                                guard-agent-hidden-window.sh types it.
+//   GUARD captured shown id=…    once hidden, a browser window the engine
+//                                lists as captured (`isCaptured`) is drawn
+//                                again, as a shell lays out a captured window
+//                                nobody sees, so its page has a frame to take
+//   GUARD captured hidden id=…   its capture ended, and it is hidden again
 //   GUARD shell-asked-for-files mode=…
 //                                a browser window's page asked this shell for
 //                                files (`domicile-file-chooser`), which it
@@ -57,12 +62,33 @@ export const HostShell = (root, desktop) => {
   field.addEventListener("input", () => {
     say(`user-input value=${field.value}`);
     if (field.value === "hide") {
-      for (const view of document.querySelectorAll("webview")) {
-        view.style.display = "none";
-      }
+      hidden = true;
+      showCaptured();
       say("hidden");
     }
   });
+
+  // Whether the user's field hid every browser window. A captured one is
+  // drawn all the same: a page with no layout box draws nothing to capture.
+  let hidden = false;
+  const captured = new Set();
+  const showCaptured = () => {
+    for (const view of document.querySelectorAll("webview")) {
+      const id = view.getAttribute("window");
+      const now = (desktop.browserWindows ?? []).some(
+        (window) => window.id === id && window.isCaptured,
+      );
+      view.style.display = hidden && !now ? "none" : "";
+      if (hidden && now !== captured.has(id)) {
+        if (now) {
+          captured.add(id);
+        } else {
+          captured.delete(id);
+        }
+        say(`captured ${now ? "shown" : "hidden"} id=${id}`);
+      }
+    }
+  };
   root.append(field);
 
   document.addEventListener("domicile-guest-focus", () => {
@@ -98,6 +124,7 @@ export const HostShell = (root, desktop) => {
         say(`window id=${window.id}`);
       }
     }
+    showCaptured();
   });
 
   field.focus();

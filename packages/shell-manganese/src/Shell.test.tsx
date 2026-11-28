@@ -2453,6 +2453,23 @@ describe("Shell", () => {
       expect(browser()).toHaveAttribute("hidden");
     });
 
+    // The same holds for a window on a workspace no screen shows.
+    it("lays out a window on another workspace while the engine captures its page", async () => {
+      const { container } = await renderShell();
+      domicile.engineOpens("https://example.com");
+      press("braceright");
+      motionsPlayOut(container);
+      const browser = () =>
+        container.querySelector("webview[window='1']")?.closest("section");
+      expect(browser()).toHaveAttribute("hidden");
+
+      domicile.engineCaptures("1");
+      expect(browser()).not.toHaveAttribute("hidden");
+
+      domicile.engineCaptures("1", false);
+      expect(browser()).toHaveAttribute("hidden");
+    });
+
     it("keeps a window that is on another workspace mounted and hidden", async () => {
       // Hidden, not unmounted: remounting blanks a portal and reloads a page.
       const { container } = await renderShell();

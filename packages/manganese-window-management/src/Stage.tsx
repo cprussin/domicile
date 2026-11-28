@@ -67,6 +67,7 @@ import { tabKeyOf } from "./tree/frames";
 import { windowsIn } from "./tree/node";
 import type { NodeRef } from "./tree/path";
 import { focusedWindowIn } from "./tree/tiling";
+import type { Unseen } from "./unseen";
 import { useCaptured } from "./useCaptured";
 import { keyOf, useFocusGlows } from "./useFocusGlows";
 import { useTabDrop } from "./useTabDrop";
@@ -170,6 +171,11 @@ type Props = {
   popups: readonly Popup[];
   /** Every screen and what it shows. */
   screens: readonly StageScreen[];
+  /**
+   * The captured windows on hidden workspaces, laid out where nobody sees
+   * them so their pages draw for the capture. See `unseenOf`.
+   */
+  unseen: ReadonlyMap<string, Unseen>;
   /** The windows hidden in the scratchpad. */
   scratchpad: readonly string[];
   /** The open windows shown as closed. See `Shown.shut`. */
@@ -232,6 +238,7 @@ export const Stage = memo(
     scratchpad,
     screens,
     shut,
+    unseen,
     windows,
     workspaceOf,
   }: Props) => {
@@ -277,8 +284,8 @@ export const Stage = memo(
     );
     // Every window, with a hidden workspace's laid out in its overview tile.
     const drawn = useMemo(
-      () => motions.drawn.map((window) => seenIn(window, overview)),
-      [motions.drawn, overview],
+      () => motions.drawn.map((window) => seenIn(window, overview, unseen)),
+      [motions.drawn, overview, unseen],
     );
     const travels = useTravels(motions.drawn, workspaceOf);
     // A tab's parts travel with the windows of its group.
@@ -1853,15 +1860,17 @@ type SeenWindow = DrawnWindow & { seen: Seen | undefined };
 
 /**
  * Window `drawn` as the overview shows it: a shown one through its screen's
- * tile, a hidden workspace's one laid out in its own tile.
+ * tile, a hidden workspace's one laid out in its own tile. Outside the
+ * overview, a captured window on a hidden workspace is laid out `unseen`.
  */
 const seenIn = (
   drawn: DrawnWindow,
   overview: OverviewSight | undefined,
+  unseen: ReadonlyMap<string, Unseen>,
 ): SeenWindow => {
   const hidden =
     drawn.placement === undefined
-      ? overview?.hidden.get(drawn.window.id)
+      ? (overview?.hidden.get(drawn.window.id) ?? unseen.get(drawn.window.id))
       : undefined;
   if (hidden === undefined) {
     return {

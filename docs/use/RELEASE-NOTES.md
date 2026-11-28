@@ -31,6 +31,7 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 
 ### Also new
 
+- Screenshots and screen casts of a browser window on another workspace work, as they already did for a tab behind another, and so do an agent's screenshots of a window you can't see.
 - Closing a window or a tab is a short, quiet fade, and closing one tab of a group looks the same as closing the whole group.
 - Extensions are switched on per profile, each with its own data. Installing one asks which profiles to turn it on in, the tray's menu switches it in the profile you're on, and its site and file access apply in every profile even while it's off. A config you can't write switches until the desktop restarts. [Extensions](BROWSER.md#extensions)
 - Settings changes a config file it can't write, such as home-manager's, until the desktop restarts or the file changes that setting. Each change says "Changed from your config", with Reset. [Configure](CONFIGURE.md)

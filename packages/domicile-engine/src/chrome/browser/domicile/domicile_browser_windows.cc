@@ -2262,6 +2262,12 @@ content::WebContents* BrowserWindowContents(const std::string& id) {
   return guest == nullptr ? nullptr : &guest->contents();
 }
 
+base::ScopedClosureRunner CaptureBrowserWindow(const std::string& id) {
+  DeskWindows* windows = ShellDeskWindows();
+  return windows == nullptr ? base::ScopedClosureRunner()
+                            : windows->Capture(id);
+}
+
 std::string BrowserWindowOfPage(content::WebContents* page) {
   DeskWindows* windows = ShellDeskWindows();
   if (windows == nullptr) {

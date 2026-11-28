@@ -105,6 +105,13 @@ export type Screenful = {
  */
 const COVERED = -2;
 
+/**
+ * The depth a captured window on a hidden workspace is drawn at, under the
+ * wallpaper, so its page draws for the capture where nobody sees it. See
+ * `unseenOf`.
+ */
+export const UNSEEN = -3;
+
 /** The `z-index` all tiled windows share. */
 export const TILED = 0;
 
