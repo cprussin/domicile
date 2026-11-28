@@ -13,8 +13,15 @@ import { Workspaces } from "./Workspaces";
  */
 export const WorkspaceSwitcher = () => {
   const { screen } = useBar();
-  const { current, focused, homes, overviewOpen, select, toggleOverview } =
-    useWorkspaces();
+  const {
+    agents,
+    current,
+    focused,
+    homes,
+    overviewOpen,
+    select,
+    toggleOverview,
+  } = useWorkspaces();
   const workspaces = useMemo(
     () => workspacesOn({ homes }, screen),
     [homes, screen],
@@ -23,6 +30,7 @@ export const WorkspaceSwitcher = () => {
     <div className={rowStyles}>
       <OverviewButton onToggle={toggleOverview} open={overviewOpen} />
       <Workspaces
+        agents={agents}
         current={shownOn(current, screen)}
         focused={focused === screen}
         onSelect={select}

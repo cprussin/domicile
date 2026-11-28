@@ -9,6 +9,9 @@ logs, as console lines the engine writes to its log:
   GUARD guest-field-focus      the field took focus, with focus events: the
                                page has page focus of its own
   GUARD guest-input value=…    the field's value, after each input to it
+  GUARD guest-visibility state=…
+                               document.visibilityState, at load and after
+                               each change
 
 Prints "serving /page on 127.0.0.1:N" once it listens, which served_port reads.
 """
@@ -45,6 +48,11 @@ PAGE = """<!doctype html>
       field.addEventListener("input", () => {
         say(`guest-input value=${field.value}`);
       });
+      const visibility = () => {
+        say(`guest-visibility state=${document.visibilityState}`);
+      };
+      document.addEventListener("visibilitychange", visibility);
+      visibility();
       say("guest-loaded");
     </script>
   </body>

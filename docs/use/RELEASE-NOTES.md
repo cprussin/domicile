@@ -25,7 +25,7 @@ Workspace switches blur as they slide, the overview blurs your wallpaper, and wi
 
 ![Claude opening a page in its own window and searching there with its own pointer while you type in yours, then you taking its window over and giving it back](../media/release-agents.png)
 
-An agent now has its own pointer, keyboard and clipboard, so it can work in any app or browser window while you keep working in yours, without ever taking your typing. A page it opens gets its own window beside yours. A ring shows which windows it's using: click or type in one to take it over, and give it back from the banner. An idle agent leaves after two minutes.
+An agent now has its own pointer, keyboard and clipboard, so it can work in any app or browser window while you keep working in yours, without ever taking your typing. A page it opens gets its own window beside yours. A ring shows which windows it's using: click or type in one to take it over, and give it back from the banner. An idle agent leaves after two minutes. Agents work on a workspace you aren't on unless the task is better done in front of you, and keep working there while you can't see it; a violet dot on a workspace in the bar shows an agent is working there.
 
 [Agents](AGENTS.md)
 
