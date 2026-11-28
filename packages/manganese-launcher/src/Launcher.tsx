@@ -1,18 +1,10 @@
 /// <reference types="@domicile-desktop/manganese-host/domicile-elements" />
 
-import { Input } from "@domicile-desktop/component-library/Input";
-import {
-  highlightIn,
-  pageOf,
-  stepOf,
-  steppedTo,
-} from "@domicile-desktop/component-library/list-walk";
+import { ListFilter } from "@domicile-desktop/component-library/ListFilter";
+import { highlightIn } from "@domicile-desktop/component-library/list-walk";
 import { Marked } from "@domicile-desktop/component-library/Marked";
 import { ModalDialog } from "@domicile-desktop/component-library/ModalDialog";
-import {
-  ResultList,
-  resultId,
-} from "@domicile-desktop/component-library/ResultList";
+import { ResultList } from "@domicile-desktop/component-library/ResultList";
 import { LogoTile, RowTile } from "@domicile-desktop/component-library/RowTile";
 import { Engine } from "@domicile-desktop/manganese-address/search";
 import type { FilePreview } from "@domicile-desktop/sdk/file-preview";
@@ -314,33 +306,22 @@ const Query = ({
   return (
     <div className={panelStyles}>
       <div className={searchStyles}>
-        <Input
-          aria-activedescendant={
-            highlighted === undefined
-              ? undefined
-              : resultId(listId, highlighted)
-          }
-          aria-controls={listId}
-          aria-expanded
+        <ListFilter
           // A placeholder isn't an accessible name, and browser address bars are
           // comboboxes too, so this needs a label.
           aria-label={PROMPT}
           autoFocus
+          count={choices.length}
           flush
+          highlighted={highlighted}
+          listId={listId}
           onChange={(event) => {
             setQuery(event.target.value);
             // Reset, since the old index refers to the previous list.
             setStepped(0);
           }}
           onKeyDown={(event) => {
-            const step = stepOf(event, pageOf(results.current));
-            if (step !== undefined) {
-              // Stop the box from moving the caret.
-              event.preventDefault();
-              // Step from the clamped highlight, since `stepped` may be past the
-              // end of a narrowed list.
-              setStepped(steppedTo(highlighted ?? 0, step, choices.length));
-            } else if (event.key === "Enter" && chosen !== undefined) {
+            if (event.key === "Enter" && chosen !== undefined) {
               // Taken, or the engine forwards it to the window the launch
               // focuses.
               event.preventDefault();
@@ -354,13 +335,12 @@ const Query = ({
               }
             }
           }}
+          onStep={setStepped}
           placeholder={PLACEHOLDER}
           prefixIcon={<MagnifyingGlassIcon size={ICON_SIZE} />}
           ref={box}
-          role="combobox"
+          scroller={results}
           size="lg"
-          // File names would be flagged as misspellings.
-          spellCheck={false}
           // Match count, like a find bar's.
           suffixIcon={
             <span aria-hidden="true" className={countStyles}>

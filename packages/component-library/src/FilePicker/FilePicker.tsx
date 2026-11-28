@@ -40,13 +40,9 @@ import { focusOnAttach } from "../_control/focusOnAttach";
 import { useStableRef } from "../_control/useStableRef";
 import { Button } from "../Button/Button";
 import { Input } from "../Input/Input";
-import {
-  highlightIn,
-  keepInView,
-  pageOf,
-  stepOf,
-  steppedTo,
-} from "../list-walk";
+import { ListFilter } from "../ListFilter/ListFilter";
+import { highlightIn, keepInView, steppedTo } from "../list-walk";
+import { resultId } from "../ResultList/ResultList";
 import { Select } from "../Select/Select";
 import { Clash, clashOf } from "./clash";
 import { FileKind, fileKindOf, kindLabel } from "./file-kind";
@@ -409,13 +405,11 @@ export const FilePicker = ({ ref, request }: Props) => {
               </Button>
             </div>
           </div>
-          <Input
-            aria-activedescendant={
-              highlighted === undefined ? undefined : rowId(listId, highlighted)
-            }
-            aria-controls={listId}
-            aria-expanded
+          <ListFilter
             aria-label={saving ? "Name" : PROMPT}
+            count={rows.length}
+            highlighted={highlighted}
+            listId={listId}
             onChange={(event) => {
               if (saving) {
                 setName(event.target.value);
@@ -432,12 +426,8 @@ export const FilePicker = ({ ref, request }: Props) => {
             }}
             onFocus={saving ? selectStem : undefined}
             onKeyDown={(event) => {
-              const step = stepOf(event, pageOf(results.current));
               const up = parentOf(directory);
-              if (step !== undefined) {
-                event.preventDefault();
-                setStepped(steppedTo(highlighted ?? 0, step, rows.length));
-              } else if (isChord(event, "h")) {
+              if (isChord(event, "h")) {
                 event.preventDefault();
                 setHidden(!hidden);
               } else if (
@@ -473,6 +463,7 @@ export const FilePicker = ({ ref, request }: Props) => {
                 confirm();
               }
             }}
+            onStep={setStepped}
             placeholder={saving ? "Name the file" : "Filter, or type a path"}
             prefixIcon={
               saving ? (
@@ -482,10 +473,8 @@ export const FilePicker = ({ ref, request }: Props) => {
               )
             }
             ref={setBox}
-            role="combobox"
+            scroller={results}
             size={saving ? "lg" : "md"}
-            // File names are not prose.
-            spellCheck={false}
             value={saving ? name : query}
           />
           {newFolder !== undefined && (
@@ -556,7 +545,7 @@ export const FilePicker = ({ ref, request }: Props) => {
                         : undefined
                     }
                     data-tone={toneOf(row)}
-                    id={rowId(listId, at)}
+                    id={resultId(listId, at)}
                     key={`${toneOf(row)}:${row.path}`}
                     onClick={() => {
                       pick(row, at);
@@ -1530,10 +1519,6 @@ const confirmOf = (mode: ChooserMode): string => {
     }
   }
 };
-
-/** A row's id, for `aria-activedescendant`. */
-const rowId = (listId: string, at: number): string =>
-  `${listId}-${at.toString()}`;
 
 /** Ctrl+Enter, or Cmd+Enter: confirms whatever is highlighted. */
 const isConfirmChord = (event: KeyboardEvent): boolean =>

@@ -1,17 +1,9 @@
 import { Button } from "@domicile-desktop/component-library/Button";
 import { EmptyState } from "@domicile-desktop/component-library/EmptyState";
-import { Input } from "@domicile-desktop/component-library/Input";
-import {
-  pageOf,
-  stepOf,
-  steppedTo,
-} from "@domicile-desktop/component-library/list-walk";
+import { ListFilter } from "@domicile-desktop/component-library/ListFilter";
 import { Marked } from "@domicile-desktop/component-library/Marked";
 import { ModalDialog } from "@domicile-desktop/component-library/ModalDialog";
-import {
-  ResultList,
-  resultId,
-} from "@domicile-desktop/component-library/ResultList";
+import { ResultList } from "@domicile-desktop/component-library/ResultList";
 import { RowTile } from "@domicile-desktop/component-library/RowTile";
 import type { ClipboardEntry } from "@domicile-desktop/sdk/desktop/clipboard";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/ssr/ClipboardText";
@@ -156,33 +148,20 @@ const History = ({
   return (
     <div className={panelStyles}>
       <div className={searchStyles}>
-        <Input
-          aria-activedescendant={
-            highlighted === undefined
-              ? undefined
-              : resultId(listId, highlighted)
-          }
-          aria-controls={listId}
-          aria-expanded
+        <ListFilter
           aria-label={PROMPT}
           autoFocus
+          count={shown.length}
           flush
+          highlighted={highlighted}
+          listId={listId}
           onChange={(event) => {
             setQuery(event.target.value);
             // Reset, since the old index refers to the previous list.
             setStepped(0);
           }}
           onKeyDown={(event) => {
-            // No rows to walk: only the current copy, or nothing matches.
-            if (highlighted === undefined) {
-              return;
-            }
-            const step = stepOf(event, pageOf(rows.current));
-            if (step !== undefined) {
-              // Stop the box from moving the caret.
-              event.preventDefault();
-              setStepped(steppedTo(highlighted, step, shown.length));
-            } else if (event.key === "Enter" && lit !== undefined) {
+            if (event.key === "Enter" && lit !== undefined) {
               event.preventDefault();
               pick(lit);
             } else if (removes(event) && lit !== undefined) {
@@ -190,13 +169,11 @@ const History = ({
               onRemove(lit.id);
             }
           }}
+          onStep={setStepped}
           placeholder={PROMPT}
           prefixIcon={<MagnifyingGlassIcon size={ICON_SIZE} />}
-          role="combobox"
+          scroller={rows}
           size="lg"
-          // Copies are often code or addresses, which would be flagged as
-          // misspellings.
-          spellCheck={false}
           suffixIcon={
             <span aria-hidden="true" className={countStyles}>
               {countOf(earlier.length, shown.length, searching)}
