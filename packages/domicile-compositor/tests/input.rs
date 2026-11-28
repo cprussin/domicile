@@ -512,7 +512,7 @@ fn a_pointer_over_a_window_asks_the_chrome_for_that_window_s_cursor() {
 
 /// A cursor a client draws on its own surface reaches the chrome as an image
 /// on `app_cursor`, with its hotspot, and again each time the client redraws
-/// it.
+/// it, however far the pointer has moved over the window since it set it.
 #[test]
 fn a_cursor_a_client_draws_reaches_the_chrome_as_its_image() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
@@ -524,13 +524,22 @@ fn a_cursor_a_client_draws_reaches_the_chrome_as_its_image() {
     let HostMessage::AppAppeared { app_id, .. } = appeared else {
         unreachable!("the wait matched on this variant")
     };
-    drive(&mut chrome, &app_id);
+    let move_to = |x| ChromeMessage::PointerMotion {
+        app_id: app_id.clone(),
+        x,
+        y: x,
+        moved: true,
+    };
+    chrome.say(&move_to(10.0)).expect("the chrome can move");
 
     let first = drawn_cursor(&mut chrome, &app_id, 4);
     assert_eq!(first.hotspot, (1, 2));
     assert_eq!(first.scale, 1);
     assert_eq!(pixels_of(&first.png), (4, 4, [0xc0, 0x40, 0x20, 0xff]));
 
+    // The client set its cursor on enter and not again, so a motion after it
+    // must keep the surface.
+    chrome.say(&move_to(20.0)).expect("the chrome can move");
     chrome
         .say(&ChromeMessage::PointerButton {
             app_id: app_id.clone(),

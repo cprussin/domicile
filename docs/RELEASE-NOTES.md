@@ -63,6 +63,7 @@ Each agent gets its own pointer, keyboard and clipboard, in native and browser w
 - A shell that connects just as the desktop's state changes gets that change. A notification, tray icon, portal dialog, theme or other setting that changed as the shell connected, such as the development-build warning, could be missing until it changed again.
 - The engine no longer loads Chrome's Gemini in Chrome and Contextual Tasks extensions, which started two background processes of about 30 MiB each in every browser profile whenever a page opened.
 - VSCodium's window loads on a fresh start instead of stopping at its splash: a file an Electron app's protocol handler fetches keeps its Content-Type. [Electron apps](architecture/ELECTRON-APPS.md)
+- A cursor an app draws itself, such as a game's or a drawing app's, changes when the app redraws it. It used to keep its first image once the pointer moved over the window.
 - A window opening while a DevTools client on the debugging port is auto-attached to new pages no longer stops the engine on `Check failed: zoom`.
 - An agent's Ctrl+C in a browser page goes to the agent's clipboard, not the user's, and its Ctrl+V pastes its own copy.
 - A `Popover` grows no taller than the room on its screen, and its body scrolls the rest; a child with `min-block-size: 0` shrinks to scroll a part of itself. `Select` and `Autocomplete` lists cap at the room too.

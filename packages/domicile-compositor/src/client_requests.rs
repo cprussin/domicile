@@ -432,8 +432,10 @@ impl DomicileCompositor {
                 );
                 let (surface, (x, y)) = self.input_target(surface, (x, y));
                 self.yield_to_the_person(&surface, false);
+                // `cursor_surface` outlives the motion: a client sets it once,
+                // on enter, and Smithay resets it through `cursor_image` when
+                // the focus moves to another surface.
                 self.pointer_app = Some(app_id);
-                self.cursor_surface = None;
                 self.pointer_surface = Some(surface.clone());
                 self.offer_pointer_constraint();
                 if self.pointer_locked_over(&surface) {
