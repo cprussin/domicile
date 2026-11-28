@@ -130,16 +130,16 @@ export type System = {
    * every command, and answers each with `answerShellCommand`; `send-shell`
    * fails when no page ran it. `commands` describes what this page runs, for
    * `domicile list-shell-commands`, and `bindings` the keys that run them, for
-   * `domicile list-bindings`. With `onAWindow`, the page hears commands on a
-   * window too, such as an agent's on a window it holds, and must run each
-   * on its `window` rather than the user's focus. With `completes`, it also
+   * `domicile list-bindings`. When one of `commands` acts on a window, the
+   * page hears commands on a window too, such as an agent's on a window it
+   * holds, and must run each on its `window` rather than the user's focus.
+   * With `completes`, it also
    * hears words to complete for `domicile completions`, and answers each
    * with the words that can follow. Allowed while the desktop is locked.
    */
   shellCommands: (
     commands: readonly ShellCommandHelp[],
     bindings: readonly ShellBinding[],
-    onAWindow?: boolean,
     completes?: boolean,
   ) => Promise<Result<Listening<ShellCommand>, SystemError>>;
   /**
@@ -478,16 +478,14 @@ export const system = (host: SystemHost): System => {
         },
         (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
       ),
-    shellCommands: (commands, bindings, onAWindow = false, completes = false) =>
+    shellCommands: (commands, bindings, completes = false) =>
       listening(
         calls,
         {
           bindings,
           call: "shell_commands",
           commands,
-          // Left out for a page that runs commands only on the user's focus,
-          // and for one that completes none.
-          ...(onAWindow ? { on_a_window: true } : {}),
+          // Left out for a page that completes none.
           ...(completes ? { completes: true } : {}),
         },
         readShellCommand,

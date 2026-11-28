@@ -8,9 +8,10 @@
 //! [`Sources`], read only when the word being completed needs them.
 
 use crate::commands::{self, COMMANDS};
-use crate::shell_usage::{next_words, Word};
+use crate::shell_usage::{begins, next_words, Word};
 use domicile_protocol::{
-    KnownAgents, ListedDisplay, ListedWindow, LogLevel, ShellCommandHelp, Subsystem,
+    named_window, KnownAgents, ListedDisplay, ListedWindow, LogLevel, ShellCommandHelp, Subsystem,
+    WINDOW_FLAG,
 };
 
 /// A shell `domicile completions` prints a script for.
@@ -235,7 +236,7 @@ fn takes(verb: &str) -> Option<Takes> {
         "dev" | "check-config" => one(&[Value::File]),
         "load-extension" => one(&[Value::Directory]),
         "send-shell" => Takes {
-            flags: AGENT_WINDOW,
+            flags: AGENT,
             args: &[],
             rest: Some(Value::ShellWords),
         },
@@ -683,7 +684,7 @@ fn values(value: Value, before: &[String], current: &str, sources: &Sources) -> 
                 .map(|(word, about)| (word.to_string(), about.to_string()))
                 .collect(),
         ),
-        Value::ShellWords => listed(shell_words(before, sources)),
+        Value::ShellWords => listed(shell_words(before, current, sources)),
         Value::DisplayChanges => display_change(before, current, sources),
     }
 }
@@ -727,8 +728,17 @@ fn hertz(mhz: u32) -> String {
     }
 }
 
-/// The words that can follow `before` in a command the running shell runs.
-fn shell_words(before: &[String], sources: &Sources) -> Vec<(String, String)> {
+/// The words that can follow `before` in a command the running shell runs,
+/// with `--window` for one that acts on a window once `current` begins a flag.
+fn shell_words(before: &[String], current: &str, sources: &Sources) -> Vec<(String, String)> {
+    if before.last().is_some_and(|word| word == WINDOW_FLAG) {
+        return windows(sources);
+    }
+    // `--window` twice: nothing can follow.
+    let Ok((window, before)) = named_window(before) else {
+        return Vec::new();
+    };
+    let before = before.as_slice();
     let commands = (sources.shell_commands)();
     let mut words: Vec<(String, String)> = Vec::new();
     let mut add = |word: String, about: &str| {
@@ -739,6 +749,16 @@ fn shell_words(before: &[String], sources: &Sources) -> Vec<(String, String)> {
     // Asked at most once, however many usages leave the shell a placeholder.
     let mut asked = false;
     for command in &commands {
+        // Once a flag is begun, after the command's first word, as
+        // `list-shell-commands` shows it.
+        if command.window
+            && window.is_none()
+            && current.starts_with('-')
+            && !before.is_empty()
+            && begins(&command.usage, before)
+        {
+            add(WINDOW_FLAG.to_string(), "The window it acts on");
+        }
         for next in next_words(&command.usage, before) {
             match next {
                 Word::Literal(word) => add(word, &command.description),

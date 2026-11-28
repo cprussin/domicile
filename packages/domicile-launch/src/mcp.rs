@@ -29,7 +29,7 @@ use browser::Browser;
 pub use http::{serve_http, Web, IDLE_MS};
 pub use oauth::{sign_out, signed_in, Answer, Asks, Said, SignedIn, ASK_MS, SIGNED_IN_FILE};
 
-use domicile_protocol::{AgentReach, DeskShot};
+use domicile_protocol::{named_window, AgentReach, DeskShot};
 use serde_json::{json, Map, Value};
 
 /// The protocol versions this server speaks, newest first.
@@ -444,10 +444,9 @@ fn described(tool: Tool) -> (&'static str, Value, Vec<&'static str>) {
             vec![],
         ),
         Tool::SendShell => (
-            "Run a shell command, as a keybinding does, on a window of yours, and answer what it printed. list_shell_commands lists them. It acts on the window your keyboard is in, or on the one you name, which it takes with your keyboard first, as focus_window does. Never on the user's focus: refused in a window the user is in, and for a command the shell runs on no window, such as one that changes the user's workspace.",
+            "Run a shell command, as a keybinding does, on a window of yours, and answer what it printed. list_shell_commands lists them; those that act on a window take --window <id> after their first word. It acts on the window your keyboard is in, or on the one --window names, which it takes with your keyboard first, as focus_window does. Never on the user's focus: refused in a window the user is in, and for a command that acts on no window, such as one that changes the user's workspace.",
             json!({
-                "words": {"type": "array", "items": {"type": "string"}, "description": "The command and its arguments, such as [\"floating\", \"toggle\"] or [\"move\", \"container\", \"to\", \"workspace\", \"3\"]."},
-                "window": yours.clone()
+                "words": {"type": "array", "items": {"type": "string"}, "description": "The command and its arguments, such as [\"floating\", \"toggle\"] or [\"move\", \"--window\", \"n1\", \"container\", \"to\", \"workspace\", \"3\"]."}
             }),
             vec!["words"],
         ),
@@ -1136,7 +1135,14 @@ fn commands(
                 .map(|word| word.as_str().map(str::to_string))
                 .collect::<Option<Vec<_>>>()
                 .ok_or("send_shell's words are strings")?;
-            Ok(taking(arguments, [words(&["send-shell"]), said].concat())?)
+            // A window it names is taken with the agent's keyboard first, as
+            // `window` is for the other tools.
+            let (window, _) = named_window(&said)?;
+            let send = [words(&["send-shell"]), said].concat();
+            Ok(match window {
+                None => vec![send],
+                Some(window) => vec![words(&["focus-window", &window]), send],
+            })
         }
         Tool::Exec => {
             let argv = arguments

@@ -2673,8 +2673,8 @@ fn answer_a_command(
                         set_site_privacy(engine, change, ANSWER_WITHIN)
                             .map_err(|why| why.to_string())
                     },
-                    send: &|command, window, agent| {
-                        send_shell(chrome, command, window, agent, Some(SEND_WITHIN))
+                    send: &|command, agent| {
+                        send_shell(chrome, command, agent, Some(SEND_WITHIN))
                             .map_err(|why| why.to_string())
                     },
                     load_unpacked: &|directory| {

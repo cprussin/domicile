@@ -94,8 +94,9 @@ Manganese-only commands:
   than `default`.
 - `domicile send-shell <command>` runs a command from a terminal:
   `domicile send-shell workspace 2`.
-- `domicile send-shell --window <id> <command>` runs a command that acts on
-  the window on that window instead of the focused one, and leaves the focus,
+- A command that acts on the window takes `--window <id>` after its first
+  word, `domicile send-shell move --window <id> right`, and runs on that
+  window instead of the focused one, leaving the focus,
   the shown workspaces and the overview as they were: `move container to
   workspace <name>`, `move scratchpad`, `move <way>`, `split h/v`, `layout
   …`, `group`, `floating toggle`, `fullscreen toggle`, `resize grow <way>` and
