@@ -139,15 +139,105 @@ describe("pointer", () => {
 
   it("asks the engine where the pointer is, and hears it is off the desk", async () => {
     const answering = (at: DOMPointReadOnly | null) => ({
+      addEventListener: () => undefined,
       confinePointer: () => Promise.resolve(false),
       pointerPosition: () => Promise.resolve(at),
+      removeEventListener: () => undefined,
       warpPointer: () => undefined,
+      watchedPointer: null,
+      watchPointer: () => undefined,
     });
 
     expect(
       await pointer(answering(new DOMPointReadOnly(12.5, 40))).position(),
     ).toStrictEqual({ x: 12.5, y: 40 });
     expect(await pointer(answering(null)).position()).toBeUndefined();
+  });
+
+  it("follows the pointer only while something follows it", () => {
+    const fake = new FakeDomicileHost();
+    const heard: unknown[] = [];
+    const stop = desktop(fake.host).pointer.follow((at) => heard.push(at));
+    fake.set({ watchedPointer: new DOMPointReadOnly(3, 4) });
+    fake.set({ watchedPointer: null });
+    stop();
+    stop();
+    fake.set({ watchedPointer: new DOMPointReadOnly(5, 6) });
+
+    expect(heard).toStrictEqual([{ x: 3, y: 4 }, undefined]);
+    expect(fake.calls).toStrictEqual([
+      ["watchPointer", true],
+      ["watchPointer", false],
+    ]);
+  });
+
+  it("tells a later follower the place the engine said, off the desk too", async () => {
+    const fake = new FakeDomicileHost();
+    const first = pointer(fake.host).follow(() => undefined);
+    fake.set({ watchedPointer: null });
+    fake.dispatch("watchedpointerchanged");
+    const heard: unknown[] = [];
+    const second = pointer(fake.host).follow((at) => heard.push(at));
+    await Promise.resolve();
+    first();
+    second();
+
+    expect(heard).toStrictEqual([undefined]);
+  });
+
+  it("watches again after the last follower stopped", () => {
+    const fake = new FakeDomicileHost();
+    pointer(fake.host).follow(() => undefined)();
+    pointer(fake.host).follow(() => undefined)();
+
+    expect(fake.calls).toStrictEqual([
+      ["watchPointer", true],
+      ["watchPointer", false],
+      ["watchPointer", true],
+      ["watchPointer", false],
+    ]);
+  });
+
+  it("counts no follower when the engine refuses the watch", () => {
+    let refuse = true;
+    const host = {
+      addEventListener: () => undefined,
+      confinePointer: () => Promise.resolve(false),
+      pointerPosition: () => Promise.resolve(null),
+      removeEventListener: () => undefined,
+      warpPointer: () => undefined,
+      watchedPointer: null,
+      watchPointer: (watching: boolean) => {
+        if (watching && refuse) {
+          throw new Error("not ready");
+        }
+        watched.push(watching);
+      },
+    };
+    const watched: boolean[] = [];
+    expect(() => pointer(host).follow(() => undefined)).toThrow("not ready");
+    refuse = false;
+    pointer(host).follow(() => undefined);
+
+    expect(watched).toStrictEqual([true]);
+  });
+
+  it("keeps watching until the last follower stops", async () => {
+    const fake = new FakeDomicileHost();
+    const first = pointer(fake.host).follow(() => undefined);
+    fake.set({ watchedPointer: new DOMPointReadOnly(1, 2) });
+    const heard: unknown[] = [];
+    const second = pointer(fake.host).follow((at) => heard.push(at));
+    await Promise.resolve();
+    first();
+
+    expect(heard).toStrictEqual([{ x: 1, y: 2 }]);
+    expect(fake.calls).toStrictEqual([["watchPointer", true]]);
+    second();
+    expect(fake.calls).toStrictEqual([
+      ["watchPointer", true],
+      ["watchPointer", false],
+    ]);
   });
 
   it("hears the keymaps and switches them through the compositor", async () => {

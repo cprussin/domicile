@@ -49,7 +49,7 @@ The engine has two channels to the rest of Domicile:
   `displays`, `keymap`, `extensions`, `force_dark`, `spellcheck`, `tray`, `notifications`, `shell_config`,
   `idle`, `locked`, `system`, `portal_requests`.
 - **Handled in the browser, never sent to the compositor:** `grab_shortcut`,
-  `ungrab_shortcut`, `warp_pointer`, `confine_pointer`, `PointerPosition`, and
+  `ungrab_shortcut`, `warp_pointer`, `confine_pointer`, `PointerPosition`, `WatchPointer`, and
   `ShellRan`/`ShellFailed`, which
   `DomicileShell` sends once the shell's module ran or did not, for
   `load_shell` (below).
@@ -58,7 +58,8 @@ The engine has two channels to the rest of Domicile:
   (`components/domicile/mojom/browser_windows.mojom`),
   `castsinkschanged`, the TVs the browser's Media Router finds
   (`components/domicile/mojom/cast_sinks.mojom`), `downloadschanged`, the
-  desk's downloads (`components/domicile/mojom/downloads.mojom`), and
+  desk's downloads (`components/domicile/mojom/downloads.mojom`),
+  `watchedpointerchanged`, the pointer a page watches (`WatchPointer`), and
   `compositorreplaced` (below).
 
 ### Members with special handling
@@ -160,6 +161,18 @@ The engine has two channels to the rest of Domicile:
     a switch.
   - Logic: `components/domicile/browser/desk_pointer.h`. Tests:
     `ControlChannelTest.WhereThePointerIsComesFromTheBrowser`.
+- **`WatchPointer`**: while the page watches, the browser sends it
+  `PointerMoved` with each move `DeskPointer` hears, and once at the start.
+  - Use: something that follows the pointer, such as the keyboard layout
+    after a switch.
+  - Privacy: only the shell's origin binds the control channel, so no
+    website or app module can watch. The browser sends nothing while the
+    page does not watch, and the watch ends with the page.
+  - Cost: Blink fires at most one `watchedpointerchanged` per frame
+    (`EnqueueUniqueAnimationFrameEvent`), however fast the mouse reports.
+    While watched, each move asks the shell's page for a frame.
+  - Tests: `ControlChannelTest.APageHearsThePointerOnlyWhileItWatches`, and
+    `guard-desk-state.sh` on the real engine.
 - **`confine_pointer`**: holds the pointer inside boxes in the page's
   coordinates, for a game or VM viewer whose `zwp_pointer_constraints_v1`
   confinement the shell took. An empty list lets go, as does the page going

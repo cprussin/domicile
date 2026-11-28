@@ -4,6 +4,9 @@
 //
 //   GUARD listening              the channel is bound
 //   GUARD state <json>           every attribute the stand-in spoke to
+//
+// It also watches the pointer once, stops at the first answer, and reports in
+// `pointerWatch` whether `watchedPointer` reads null after it stopped.
 
 export const HostShell = (_root, desktop) => {
   const host = desktop;
@@ -17,11 +20,25 @@ export const HostShell = (_root, desktop) => {
   host.addEventListener("idlechanged", () => undefined);
   console.log("GUARD listening");
 
+  let pointerWatch = "never answered";
+  host.addEventListener("watchedpointerchanged", () => {
+    if (pointerWatch === "never answered") {
+      host.watchPointer(false);
+      pointerWatch =
+        host.watchedPointer === null
+          ? "answered, then null"
+          : "answered, then still set";
+    } else if (pointerWatch === "answered, then null") {
+      pointerWatch = "answered after it stopped";
+    }
+  });
+  host.watchPointer(true);
+
   // Polled: the stand-in's lines reach the page later on a loaded machine, so a
   // single read after a fixed delay can miss some. The guard judges the latest.
   let logged;
   setInterval(() => {
-    const reading = JSON.stringify(readState(host));
+    const reading = JSON.stringify({ ...readState(host), pointerWatch });
     if (reading !== logged) {
       logged = reading;
       console.log(`GUARD state ${reading}`);

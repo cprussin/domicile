@@ -214,6 +214,7 @@ class MODULES_EXPORT DomicileHost final
   ScriptPromise<IDLNullable<DOMPointReadOnly>> pointerPosition(
       ScriptState*,
       ExceptionState&);
+  void watchPointer(bool watching, ExceptionState&);
   void setAppBounds(ScriptState*,
                     const String& app_id,
                     double x,
@@ -470,6 +471,7 @@ class MODULES_EXPORT DomicileHost final
   const FrozenArray<DomicileInstalledExtension>* installedExtensions() const;
   std::optional<bool> idle() const;
   std::optional<bool> locked() const;
+  DOMPointReadOnly* watchedPointer() const { return watched_pointer_.Get(); }
   std::optional<V8DomicileTheme> theme() const;
   std::optional<V8DomicileTheme> windowsTheme() const;
   std::optional<bool> altKey() const;
@@ -546,6 +548,7 @@ class MODULES_EXPORT DomicileHost final
   void ThemeChanged(domicile::mojom::blink::Theme theme) override;
   void Idle(bool idle) override;
   void Locked(bool locked) override;
+  void PointerMoved(const std::optional<gfx::PointF>& at) override;
   void WindowsThemeChanged(domicile::mojom::blink::Theme theme) override;
   void AppearanceChanged(const String& accent_color,
                          bool high_contrast,
@@ -786,6 +789,8 @@ class MODULES_EXPORT DomicileHost final
   Member<FrozenArray<DomicileInstalledExtension>> installed_extensions_;
   std::optional<bool> idle_;
   std::optional<bool> locked_;
+  bool pointer_watched_ = false;
+  Member<DOMPointReadOnly> watched_pointer_;
   std::optional<V8DomicileTheme> theme_;
   std::optional<V8DomicileTheme> windows_theme_;
   std::optional<bool> alt_key_;

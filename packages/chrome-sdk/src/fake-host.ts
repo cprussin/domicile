@@ -58,6 +58,7 @@ const CHANGED: Readonly<
   shiftKey: "modifierschanged",
   theme: "themechanged",
   tray: "traychanged",
+  watchedPointer: "watchedpointerchanged",
   windows: "windowschanged",
   windowsTheme: "windowsthemechanged",
 };
@@ -89,6 +90,7 @@ const UNDESCRIBED: DomicileState = {
   shiftKey: null,
   theme: null,
   tray: null,
+  watchedPointer: null,
   windows: [],
   windowsTheme: null,
 };

@@ -827,6 +827,7 @@ export type DomicileHostEventMap = {
   installedextensionschanged: Event;
   idlechanged: Event;
   lockedchanged: Event;
+  watchedpointerchanged: Event;
   themechanged: Event;
   windowsthemechanged: Event;
   modifierschanged: Event;
@@ -1084,6 +1085,14 @@ export type DomicileHost = {
    * page cannot see the pointer over. `z` is 0 and `w` is 1.
    */
   pointerPosition(): Promise<DOMPointReadOnly | null>;
+  /**
+   * Follow the pointer: while `watching`, `watchedPointer` says where it is
+   * and `watchedpointerchanged` fires when it moves, at most once per frame.
+   * Nothing comes while this page does not watch, and the watch ends when
+   * the page goes away. Only the shell's page has this host, so no website
+   * or app module can follow the pointer.
+   */
+  watchPointer(watching: boolean): void;
   /**
    * Where the page put an <app>, in the page's CSS pixels. The client draws at
    * the scale of the monitor holding most of that box. Layout still places the
@@ -1603,6 +1612,11 @@ export type DomicileHost = {
   readonly installedExtensions: readonly DomicileInstalledExtension[] | null;
   readonly idle: boolean | null;
   readonly locked: boolean | null;
+  /**
+   * Where the pointer is, in the shell page's CSS pixels, while this page
+   * watches it (`watchPointer`). Null off the desk, and while not watching.
+   */
+  readonly watchedPointer: DOMPointReadOnly | null;
   readonly theme: DomicileTheme | null;
   readonly windowsTheme: DomicileTheme | null;
   /**

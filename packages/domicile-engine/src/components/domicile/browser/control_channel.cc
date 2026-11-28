@@ -788,6 +788,16 @@ void ControlChannel::PointerPosition(PointerPositionCallback answer) {
   std::move(answer).Run(DeskPointer::Get().Now().at);
 }
 
+// Nothing reaches the compositor, for WarpPointer's reason. A page that starts
+// to watch hears where the pointer is at once, so it need not wait for a move.
+void ControlChannel::WatchPointer(bool watching) {
+  pointer_watched_ = watching;
+  if (watching && client_.is_bound()) {
+    told_pointer_ = DeskPointer::Get().Now().at;
+    client_->PointerMoved(told_pointer_);
+  }
+}
+
 // Nothing is sent, for WarpPointer's reason: the compositor does not swap
 // shells. What the page says goes to the `load_shell` waiting on it.
 void ControlChannel::ShellRan(const std::string& serial) {
@@ -1211,6 +1221,12 @@ void ControlChannel::FaultFound(const std::string& what) {
 }
 
 void ControlChannel::DeskPointerMoved(const DeskPointerAt& at) {
+  // Before the compositor's check: the page hears the pointer whether or not
+  // the compositor is connected. Not when only the windows under it changed.
+  if (pointer_watched_ && client_.is_bound() && at.at != told_pointer_) {
+    told_pointer_ = at.at;
+    client_->PointerMoved(at.at);
+  }
   if (!connected_) {
     return;
   }

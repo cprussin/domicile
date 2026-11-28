@@ -23,6 +23,7 @@ WANTED = {
     "ctrlKey": False,
     "idle": True,
     "locked": False,
+    "pointerWatch": "answered, then null",
     "shellOptions": '{"gaps":4}',
     "shiftKey": True,
     "theme": "light",

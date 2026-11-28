@@ -197,6 +197,7 @@ class ControlChannel : public mojom::ControlChannel {
   void ConfinePointer(const std::vector<gfx::RectF>& boxes,
                       ConfinePointerCallback confined) override;
   void PointerPosition(PointerPositionCallback answer) override;
+  void WatchPointer(bool watching) override;
   void CloseApp(const std::string& app_id) override;
   void TakeOver(const std::string& app_id) override;
   void GiveBack(const std::string& app_id) override;
@@ -358,6 +359,10 @@ class ControlChannel : public mojom::ControlChannel {
   DeskFaults::ListenerId faults_;
   // And with the process's DeskPointer.
   DeskPointer::ListenerId pointer_;
+  // Whether the page hears the pointer's moves, and the place it heard last.
+  // See WatchPointer.
+  bool pointer_watched_ = false;
+  std::optional<gfx::PointF> told_pointer_;
   // And with the process's DeskGestures, which forgets this page's grabs with
   // it: a reloaded shell grabs its gestures again.
   DeskGestures::ChannelId gestures_;

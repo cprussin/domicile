@@ -12,8 +12,8 @@ VERDICT="$ROOT/packages/domicile-engine/scripts/guard-desk-state-verdict.py"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-PARTIAL='{"altKey":null,"clipboard":null,"ctrlKey":null,"idle":true,"locked":false,"shellOptions":null,"shiftKey":null,"theme":"light","tray":null,"windowsTheme":"dark"}'
-COMPLETE='{"altKey":true,"clipboard":[{"current":true,"id":7,"image":false,"preview":"hello","thumbnail":""},{"current":false,"id":8,"image":true,"preview":"Image, 3 × 2","thumbnail":"data:image/png;base64,iVBORw0KGgo="}],"ctrlKey":false,"idle":true,"locked":false,"shellOptions":"{\"gaps\":4}","shiftKey":true,"theme":"light","tray":[{"bus":":1.42","id":"nm","itemIsMenu":false,"menu":"/MenuBar","title":"Network"},{"bus":"org.kde.StatusNotifierItem-7-1","id":"sync","itemIsMenu":true,"menu":"","title":"Sync"}],"windowsTheme":"dark"}'
+PARTIAL='{"altKey":null,"clipboard":null,"ctrlKey":null,"idle":true,"locked":false,"pointerWatch":"never answered","shellOptions":null,"shiftKey":null,"theme":"light","tray":null,"windowsTheme":"dark"}'
+COMPLETE='{"altKey":true,"clipboard":[{"current":true,"id":7,"image":false,"preview":"hello","thumbnail":""},{"current":false,"id":8,"image":true,"preview":"Image, 3 × 2","thumbnail":"data:image/png;base64,iVBORw0KGgo="}],"ctrlKey":false,"idle":true,"locked":false,"pointerWatch":"answered, then null","shellOptions":"{\"gaps\":4}","shiftKey":true,"theme":"light","tray":[{"bus":":1.42","id":"nm","itemIsMenu":false,"menu":"/MenuBar","title":"Network"},{"bus":"org.kde.StatusNotifierItem-7-1","id":"sync","itemIsMenu":true,"menu":"","title":"Sync"}],"windowsTheme":"dark"}'
 
 FAILED=0
 expect() { # what, want, got

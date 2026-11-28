@@ -856,6 +856,18 @@ ScriptPromise<IDLNullable<DOMPointReadOnly>> DomicileHost::pointerPosition(
   return promise;
 }
 
+void DomicileHost::watchPointer(bool watching,
+                                ExceptionState& exception_state) {
+  if (!Ready(exception_state)) {
+    return;
+  }
+  pointer_watched_ = watching;
+  if (!watching) {
+    watched_pointer_ = nullptr;
+  }
+  channel_->WatchPointer(watching);
+}
+
 void DomicileHost::setAppBounds(ScriptState*, const String& app_id, double x,
                                 double y, double width, double height,
                                 ExceptionState& exception_state) {
@@ -2470,6 +2482,26 @@ void DomicileHost::Locked(bool locked) {
   DispatchEvent(*Event::Create(domicile_event_names::Lockedchanged()));
 }
 
+// One event per frame however often the pointer moves: a 1000 Hz mouse would
+// otherwise run the page's listener 1000 times a second. The document drops a
+// second event of the same type for the same frame, and the listener reads
+// the latest place. A move that arrives after the page stopped watching, still
+// in the pipe, is dropped.
+void DomicileHost::PointerMoved(const std::optional<gfx::PointF>& at) {
+  if (!pointer_watched_) {
+    return;
+  }
+  watched_pointer_ =
+      at ? DOMPointReadOnly::Create(at->x(), at->y(), 0, 1) : nullptr;
+  Document* document = window_ ? window_->document() : nullptr;
+  if (!document) {
+    return;
+  }
+  Event* event = Event::Create(domicile_event_names::Watchedpointerchanged());
+  event->SetTarget(this);
+  document->EnqueueUniqueAnimationFrameEvent(event);
+}
+
 // Pushed like ThemeChanged. Its keys resolve the chords grabbed by name and
 // do not reach the page; its options do, as the text they came as. See
 // ControlChannelClient::ShellConfig.
@@ -3573,6 +3605,7 @@ void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(notifications_);
   visitor->Trace(extensions_);
   visitor->Trace(installed_extensions_);
+  visitor->Trace(watched_pointer_);
   visitor->Trace(window_);
   visitor->Trace(channel_);
   visitor->Trace(client_receiver_);

@@ -602,6 +602,12 @@ interface ControlChannel {
   // WarpPointer's reason. See DeskPointer.
   PointerPosition() => (gfx.mojom.PointF? at);
 
+  // Hear where the pointer is, by PointerMoved, from now until `watching` is
+  // false or the page goes away. Answered in the browser process for
+  // WarpPointer's reason. Nothing is sent while the page does not watch, so a
+  // page that never asks wakes for none of the pointer's moves.
+  WatchPointer(bool watching);
+
   // The shell's module ran: its `Shell` returned. Or it did not, and `why` is
   // what the page's error screen says. `serial` is the ShellSource serial the
   // document names, so the browser hears only the page it served. Sent once
@@ -884,6 +890,11 @@ interface ControlChannelClient {
   // once more to a chrome that has just connected. A desktop with no passphrase
   // configured sends none of these at all, because it cannot lock.
   Locked(bool locked);
+
+  // Where the pointer is, in the shell page's CSS pixels, or none off the desk:
+  // once when the page starts to watch it, then on each move. Sent only while
+  // the page watches (WatchPointer).
+  PointerMoved(gfx.mojom.PointF? at);
 
   // Which way round the desk's windows are drawn now: ThemeChanged's other
   // half. It arrives once every chrome has called ThemeCaptured -- or the

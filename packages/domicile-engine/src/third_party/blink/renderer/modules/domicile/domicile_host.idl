@@ -174,6 +174,13 @@
   [CallWith=ScriptState, RaisesException] Promise<DOMPointReadOnly?>
       pointerPosition();
 
+  // Follow the pointer: while `watching`, `watchedPointer` says where it is
+  // and `watchedpointerchanged` fires when it moves, at most once per frame.
+  // Nothing comes while this page does not watch, and the watch ends when
+  // the page goes away. Only the shell's page has this host, so no website
+  // or app module can follow the pointer.
+  [RaisesException] undefined watchPointer(boolean watching);
+
   // Where the page put an <app>, in the page's CSS pixels. The client draws at
   // the scale of the monitor holding most of that box. Layout still places the
   // window; this only tells the compositor where it ended up.
@@ -454,6 +461,10 @@
   attribute EventHandler onidlechanged;
   readonly attribute boolean? locked;
   attribute EventHandler onlockedchanged;
+  // Where the pointer is, in the shell page's CSS pixels, while this page
+  // watches it (`watchPointer`). Null off the desk, and while not watching.
+  readonly attribute DOMPointReadOnly? watchedPointer;
+  attribute EventHandler onwatchedpointerchanged;
   readonly attribute DomicileTheme? theme;
   attribute EventHandler onthemechanged;
   readonly attribute DomicileTheme? windowsTheme;

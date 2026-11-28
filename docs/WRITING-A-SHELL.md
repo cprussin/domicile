@@ -815,6 +815,12 @@ coordinates, or `undefined` when it is off the desk. Use it to show something
 at the pointer, such as the new keyboard layout after a switch. The engine
 answers, so it is correct over a browser window's page too.
 
+To keep something at the pointer while it moves, call
+`domicile.pointer.follow(onMove)`. `onMove` gets the place as soon as the
+engine says, then at most once per frame, until you call the function
+`follow` returns. Stop following when you are done: the engine sends the
+shell every move while anything follows.
+
 ### Window scale on several monitors
 
 Call `domicile.windows.setBounds(appId, { x, y, width, height })` with each

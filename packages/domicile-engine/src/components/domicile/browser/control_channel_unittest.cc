@@ -68,6 +68,10 @@ class FakeClient : public mojom::ControlChannelClient {
     heard_.push_back(locked ? "locked true" : "locked false");
     locked_.SetValue();
   }
+  void PointerMoved(const std::optional<gfx::PointF>& at) override {
+    heard_.push_back(at ? "pointer " + at->ToString() : "pointer off");
+    pointer_moved_.SetValue();
+  }
 
   void AppTitled(const std::string&, const std::string&) override {}
   void AppDesktopId(const std::string&, const std::string&) override {}
@@ -258,6 +262,7 @@ class FakeClient : public mojom::ControlChannelClient {
 
   std::vector<std::string> heard_;
   base::test::TestFuture<void> locked_;
+  base::test::TestFuture<void> pointer_moved_;
   base::test::TestFuture<void> replaced_;
 
  private:
@@ -981,6 +986,37 @@ TEST_F(ControlChannelTest, WhereThePointerIsComesFromTheBrowser) {
   base::test::TestFuture<const std::optional<gfx::PointF>&> off;
   control_->PointerPosition(off.GetCallback());
   EXPECT_EQ(off.Get(), std::nullopt);
+}
+
+// A page hears the pointer's moves only while it watches them, and hears where
+// the pointer is as soon as it starts.
+TEST_F(ControlChannelTest, APageHearsThePointerOnlyWhileItWatches) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), kHello);
+  DeskPointer::Get().MovedTo({.at = gfx::PointF(1, 2)});
+  EXPECT_EQ(Heard(), R"({"at":[1.0,2.0],"type":"desk_pointer"})");
+
+  control_->WatchPointer(true);
+  EXPECT_TRUE(client_.pointer_moved_.WaitAndClear());
+  DeskPointer::Get().MovedTo({.at = gfx::PointF(3, 4)});
+  EXPECT_TRUE(client_.pointer_moved_.WaitAndClear());
+  EXPECT_EQ(Heard(), R"({"at":[3.0,4.0],"type":"desk_pointer"})");
+
+  // The moves while it does not watch would arrive before the answer to
+  // watching again, which comes down the same pipe.
+  control_->WatchPointer(false);
+  DeskPointer::Get().MovedTo({.at = gfx::PointF(5, 6)});
+  EXPECT_EQ(Heard(), R"({"at":[5.0,6.0],"type":"desk_pointer"})");
+  DeskPointer::Get().MovedTo({});
+  EXPECT_EQ(Heard(), R"({"type":"desk_pointer"})");
+  control_->WatchPointer(true);
+  EXPECT_TRUE(client_.pointer_moved_.WaitAndClear());
+  control_->WatchPointer(false);
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{"pointer 1,2", "pointer 3,4",
+                                      "pointer off"}));
 }
 
 // A window's ask to lock or confine the pointer reaches the page, `null`

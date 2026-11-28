@@ -46,6 +46,7 @@
   X(installedextensionschanged, Installedextensionschanged)       \
   X(idlechanged, Idlechanged)                                     \
   X(lockedchanged, Lockedchanged)                                 \
+  X(watchedpointerchanged, Watchedpointerchanged)                 \
   X(themechanged, Themechanged)                                   \
   X(windowsthemechanged, Windowsthemechanged)                     \
   X(modifierschanged, Modifierschanged)                           \

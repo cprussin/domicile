@@ -55,6 +55,7 @@ const EVENT_NAMES = [
   "installedextensionschanged",
   "idlechanged",
   "lockedchanged",
+  "watchedpointerchanged",
   "themechanged",
   "windowsthemechanged",
   "modifierschanged",
