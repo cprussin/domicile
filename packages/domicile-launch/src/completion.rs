@@ -845,8 +845,12 @@ fn matching(
     current: &str,
     values: impl IntoIterator<Item = (String, String)>,
 ) -> Vec<(String, String)> {
-    values
+    let mut matched: Vec<_> = values
         .into_iter()
         .filter(|(value, _)| value.starts_with(current))
-        .collect()
+        .collect();
+    // Sorted here, since some shells (zsh with `-V`, nushell) keep the order
+    // given.
+    matched.sort_by(|(a, _), (b, _)| a.cmp(b));
+    matched
 }

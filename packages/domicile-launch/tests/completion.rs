@@ -73,7 +73,7 @@ fn completed(before: &[&str], current: &str) -> Completion {
                 _ => panic!("the shell was asked to complete {typed:?}"),
             },
             programs: &|start| {
-                ["kitty", "kill"]
+                ["kill", "kitty"]
                     .into_iter()
                     .filter(|program| program.starts_with(start))
                     .map(str::to_string)
@@ -156,14 +156,14 @@ fn open_completes_its_flags_their_values_and_then_a_path() {
     assert_eq!(values(completed(&["open", "--profile"], "")), ["work"]);
     assert_eq!(
         values(completed(&["open", "--reuse"], "")),
-        ["new", "focus", "navigate"]
+        ["focus", "navigate", "new"]
     );
     assert_eq!(completed(&["open"], "~/"), Completion::Files);
 }
 
 #[test]
 fn exec_completes_a_program_then_its_files() {
-    assert_eq!(values(completed(&["exec"], "ki")), ["kitty", "kill"]);
+    assert_eq!(values(completed(&["exec"], "ki")), ["kill", "kitty"]);
     assert_eq!(completed(&["exec", "kitty"], ""), Completion::Files);
 }
 
@@ -172,7 +172,7 @@ fn configure_display_completes_changes_and_their_values() {
     assert!(values(completed(&["configure-display", "DP-1"], "")).contains(&"hdr".to_string()));
     assert_eq!(
         values(completed(&["configure-display", "DP-1", "hdr"], "")),
-        ["on", "off"]
+        ["off", "on"]
     );
     assert!(
         !values(completed(&["configure-display", "DP-1", "hdr", "on"], ""))
@@ -192,7 +192,7 @@ fn help_and_completions_complete_what_they_take() {
     assert_eq!(values(completed(&["help"], "list-w")), ["list-windows"]);
     assert_eq!(
         values(completed(&["completions"], "")),
-        CompletionShell::ALL.map(CompletionShell::name)
+        ["bash", "elvish", "fish", "nushell", "powershell", "zsh"]
     );
 }
 
@@ -206,14 +206,14 @@ fn send_shell_completes_the_running_shells_commands() {
         [
             ("focus", "Move focus."),
             ("fullscreen", "Fullscreen the window."),
-            ("workspace", "Go to a workspace."),
             ("move", "Move a window."),
+            ("workspace", "Go to a workspace."),
         ]
         .map(|(word, about)| (word.to_string(), about.to_string()))
     );
     assert_eq!(
         values(completed(&["send-shell", "focus"], "")),
-        ["left", "right", "up", "down", "parent", "child"]
+        ["child", "down", "left", "parent", "right", "up"]
     );
     assert_eq!(
         values(completed(&["send-shell", "fullscreen", "toggle"], "")),
@@ -237,7 +237,7 @@ fn send_shell_fills_a_window_placeholder_with_window_ids() {
 fn send_shell_asks_the_shell_for_placeholders_only_it_knows() {
     assert_eq!(
         values(completed(&["send-shell", "workspace"], "")),
-        ["mail", "code"]
+        ["code", "mail"]
     );
     assert_eq!(
         values(completed(&["send-shell", "workspace"], "m")),
@@ -325,6 +325,6 @@ fn window_acts_take_a_window_flag_and_devtools_also_the_shell() {
     );
     assert_eq!(
         values(completed(&["devtools", "--window"], "")),
-        ["shell", "a1", "b2"]
+        ["a1", "b2", "shell"]
     );
 }
