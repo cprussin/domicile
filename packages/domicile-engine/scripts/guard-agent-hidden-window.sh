@@ -181,6 +181,9 @@ done
 # 4. A browser window, as `domicile open` opens one.
 OPENED="$(said_to "$COMMAND" "{\"type\":\"open_url\",\"version\":1,\"url\":\"$PAGE\"}")"
 wait_for_line "$TRIES" "GUARD guest-loaded" "$ENGINE_LOG"
+# The shell logs the window's id from its own renderer, so the line can come
+# after the page's: wait for it too.
+wait_for_line "$TRIES" "GUARD window id=" "$ENGINE_LOG"
 WINDOW="$(sed -n 's/.*GUARD window id=\([^" ]*\).*/\1/p' "$ENGINE_LOG" | head -1)"
 # Hit testing uses submitted compositor frames, and the page's first frame may
 # lag its load.
