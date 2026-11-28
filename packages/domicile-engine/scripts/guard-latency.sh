@@ -14,16 +14,26 @@
 # the page. See `latency.rs` and
 # docs/architecture/ENGINE-FORK-MEASUREMENTS.md#keystroke-to-pixel.
 #
-# Asserts that `commit to pixel` is within the probe's floor plus one display
-# frame, so the embedding adds no stage of its own. See `latency_allowance`.
+# Asserts that `commit to present`, a client's commit to viz presenting its
+# frame, is within `PRESENT_FRAMES` display frames, so the embedding adds no
+# stage of its own. A stage of its own moves every round by a frame.
 #
-# - The probe is a `CopyOutputRequest` that forces a draw, so each reading is
-#   at least one frame: about one at 60 Hz and two at 120 Hz.
+# - Each round's key is pressed at a different point of the display frame
+#   (`key_phase` in `latency.rs`), so the median covers every phase. A key
+#   pressed at the same point each round reads the same whole number of frames
+#   every round, and which number depends on where the run falls.
+# - The probe still has to see each key's color, or the round is abandoned,
+#   moved or late, and the run fails: the presented frame is the client's
+#   answer, on the page.
+# - `commit to pixel`, timed by the probe, is reported but not asserted. The
+#   probe is a blocking `CopyOutputRequest` and a readback, so it reads 15, 31
+#   or 40 ms on the same code depending on where it lands in the frame.
 # - The display frame is the interval viz reports with each presented frame.
 #   The floor is checked against it, to catch a frame the display is not
 #   running at.
-# - `commit to present`, from viz's presentation feedback, is reported but not
-#   asserted. Nested, it includes the host compositor's own pass.
+# - Nested, `commit to present` includes the host compositor's own pass. Under
+#   `under-wayland.sh`'s headless host that is within the frame; nested in a
+#   desktop session, set `PRESENT_FRAMES` to allow the host's frame too.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -58,6 +68,10 @@ APP_ID="${APP_ID:-app-1}"
 # frames). A deterministic control would need to match the answer by color,
 # as guard-client-window.sh does.
 NEGATIVE="${NEGATIVE:-0}"
+# How many display frames `commit to present` may take. With the keys spread
+# over the frame, a pipeline with no stage of its own presents half a frame
+# after the deadline on average, and one stage more adds a whole frame.
+PRESENT_FRAMES="${PRESENT_FRAMES:-1.5}"
 
 # The engine's Ozone platform.
 #
@@ -365,15 +379,21 @@ if ! latency_within "$FRAME" 2 "$FLOOR"; then
 fi
 
 # The assertion.
-ALLOWED="$(latency_allowance "$FLOOR" "$FRAME")"
-if latency_within "$OURS" 1 "$ALLOWED"; then
-  echo "PASS: a client's frame reaches the page in ${OURS}ms, within the probe's floor and one display frame: ${ALLOWED}ms."
+if [ -z "$PRESENT" ]; then
+  annotate "guard-latency: the run completed with no presentation feedback for" \
+       "the client's frames, so there is no commit-to-present figure to check"
+  grep -aE "latency" "$COMP_LOG" | grep -avF "latency round" | tail -8 | sed 's/^/  /' >&2
+  rounds_timeline
+  exit 1
+fi
+if latency_within "$PRESENT" "$PRESENT_FRAMES" "$FRAME"; then
+  echo "PASS: a client's frame is presented ${PRESENT}ms after its commit, within ${PRESENT_FRAMES} display frames of ${FRAME}ms. $(latency_spread "commit to present" "$COMP_LOG"); commit to pixel $(latency_spread "commit to pixel" "$COMP_LOG"), floor $(latency_spread floor "$COMP_LOG")."
   exit 0
 fi
-annotate "guard-latency: commit to pixel is ${OURS}ms, more than the probe's" \
-     "floor and one display frame of ${FRAME}ms (${ALLOWED}ms) — a client's" \
-     "frame is waiting on a stage of its own somewhere between the commit and" \
-     "the page"
+annotate "guard-latency: commit to present is ${PRESENT}ms, more than" \
+     "${PRESENT_FRAMES} display frames of ${FRAME}ms — a client's frame is" \
+     "waiting on a stage of its own somewhere between the commit and the" \
+     "screen"
 grep -aE "latency" "$COMP_LOG" | grep -avF "latency round" | tail -8 | sed 's/^/  /' >&2
   rounds_timeline
 exit 1
