@@ -54,6 +54,7 @@
 #include "ui/events/ozone/layout/keyboard_layout_engine.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace domicile {
 namespace {
@@ -184,6 +185,10 @@ struct Seat {
   base::WeakPtr<content::WebContents> typing;
   std::string typing_window;
   std::set<uint32_t> keys;
+  // Keeps `typing` drawn and running as a shown page, wherever the shell
+  // puts its window: on a workspace nobody is looking at, its page still
+  // runs its frames, timers and input as the agent works in it.
+  base::ScopedClosureRunner shown;
   // A drag a page it pressed in started: what is dragged, from where, and
   // the widget under its pointer that hears it.
   struct Drag {
@@ -727,6 +732,13 @@ class AgentSeatsInPages : public ui::EventObserver {
       }
     }
     content::DomicileSetAgentPageFocus(page, true);
+    if (seat.typing.get() != page) {
+      VLOG(1) << "domicile: an agent's keyboard is in window " << window
+              << ", whose page is drawn as shown while it is";
+      seat.shown = page->IncrementCapturerCount(
+          /*capture_size=*/gfx::Size(), /*stay_hidden=*/false,
+          /*stay_awake=*/true, /*is_activity=*/false);
+    }
     seat.typing = page->GetWeakPtr();
     seat.typing_window = std::move(window);
   }
@@ -741,6 +753,7 @@ class AgentSeatsInPages : public ui::EventObserver {
     if (content::WebContents* page = seat.typing.get()) {
       content::DomicileSetAgentPageFocus(page, false);
     }
+    seat.shown.RunAndReset();
     seat.typing.reset();
     seat.typing_window.clear();
   }

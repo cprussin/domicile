@@ -63,6 +63,7 @@ import { ShellLinksContext } from "@domicile-desktop/manganese-page-requests/she
 import { useWallpapers } from "@domicile-desktop/manganese-wallpaper/useWallpapers";
 import { Wallpaper } from "@domicile-desktop/manganese-wallpaper/Wallpaper";
 import type { Wallpapers } from "@domicile-desktop/manganese-wallpaper/wallpapers";
+import { workspacesAgentsAreOn } from "@domicile-desktop/manganese-window-management/agent-workspaces";
 import { BROWSER_KEYS } from "@domicile-desktop/manganese-window-management/browser/browser-command";
 import { desktopClientIcons } from "@domicile-desktop/manganese-window-management/client-icons";
 import type { Direction } from "@domicile-desktop/manganese-window-management/direction";
@@ -119,6 +120,7 @@ import type { Workspaces } from "@domicile-desktop/manganese-window-management/w
 import { WorkspacesContext } from "@domicile-desktop/manganese-window-management/workspaces-context";
 import { useAppearance } from "@domicile-desktop/react/appearance";
 import { useDomicile } from "@domicile-desktop/react/domicile-provider";
+import { useSeats } from "@domicile-desktop/react/seats";
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 import { previewFile } from "@domicile-desktop/sdk/file-preview";
 import { DEFAULT_NOTIFICATION_ACTION } from "@domicile-desktop/sdk/notification";
@@ -774,8 +776,15 @@ export const Desktop = ({
       screens.map((shown) => [shown.geometry.name, shown.current]),
     ),
   );
+  const seats = useSeats();
+  // Kept while the same workspaces have agents, though `workspaces` changes
+  // with every window.
+  const agentWorkspaces = useShared(
+    workspacesAgentsAreOn({ workspaces: windows.workspaces }, seats),
+  );
   const shownWorkspaces = useMemo(
     () => ({
+      agents: agentWorkspaces,
       current,
       focused: windows.focused,
       homes: windows.homes,
@@ -790,6 +799,7 @@ export const Desktop = ({
     }),
     [
       act,
+      agentWorkspaces,
       current,
       windows.focused,
       windows.homes,

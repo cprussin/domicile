@@ -18,7 +18,7 @@ Draw your own SkSL shaders over any element, including closing windows: register
 
 ### Agents work beside the user
 
-Each agent gets its own pointer, keyboard and clipboard, in native and browser windows alike, so it never moves the user's pointer, focus or typing. Your shell sees agents' seats and hands windows back and forth with `domicile.seats`. Agents also get shorter, faster answers, run several tools in one call with `batch`, and let go of the desktop after two idle minutes.
+Each agent gets its own pointer, keyboard and clipboard, in native and browser windows alike, so it never moves the user's pointer, focus or typing. Your shell sees agents' seats and hands windows back and forth with `domicile.seats`. Agents also get shorter, faster answers, run several tools in one call with `batch`, and let go of the desktop after two idle minutes. A browser window an agent works in runs as shown, so your shell can hide it on a workspace the user isn't watching.
 
 [Agents](AGENTS.md) · [Writing a shell](WRITING-A-SHELL.md#agents-beside-the-user) · [Agent seats](architecture/AGENT-SEATS.md)
 

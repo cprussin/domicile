@@ -21,13 +21,21 @@ const fakeLayout = () => {
   return { asked, measureChip };
 };
 
+/** No workspace an agent works on. */
+const NO_AGENTS: readonly string[] = [];
+
 /**
  * The switcher with four workspaces and `current` on screen. Includes the
  * tenth to test that a two-digit label still fits.
  */
-const switcher = ({ current = "2", focused = true } = {}) => {
+const switcher = ({
+  agents = NO_AGENTS,
+  current = "2",
+  focused = true,
+} = {}) => {
   const { asked, measureChip } = fakeLayout();
   const props = {
+    agents,
     focused,
     measureChip,
     onSelect: () => undefined,
@@ -131,6 +139,7 @@ describe("Workspaces", () => {
     // desk at once, at the start of the workspace slide this switch begins.
     it("reads no layout while switching", () => {
       const props = {
+        agents: [],
         focused: true,
         onSelect: () => undefined,
         workspaces: ["1", "2"],
@@ -244,5 +253,22 @@ describe("Workspaces", () => {
       expect(chip.className).toContain(css({ blockSize: 6 }));
       expect(chip.className).toContain(css({ minInlineSize: 6 }));
     }
+  });
+
+  it("dots each workspace an agent is working on, and says so", () => {
+    const { workspace } = switcher({ agents: ["3"] });
+
+    expect(
+      workspace("3, an agent is working here").querySelector("[data-agent]"),
+    ).not.toBeNull();
+    expect(workspace("1").querySelector("[data-agent]")).toBeNull();
+  });
+
+  it("dots the workspace under the highlight too", () => {
+    const { highlight } = switcher({ agents: ["2"] });
+
+    expect(
+      highlight().querySelector('[data-label="2"] [data-agent]'),
+    ).not.toBeNull();
   });
 });
