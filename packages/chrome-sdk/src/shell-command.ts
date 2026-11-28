@@ -10,6 +10,11 @@ export type ShellCommandHelp = {
   readonly usage: string;
   /** What it does, in a sentence. */
   readonly description: string;
+  /**
+   * It acts on a window: the focus of whoever sends it, or the one
+   * `--window <id>` names, which `domicile` shows after its first word.
+   */
+  readonly window?: boolean;
 };
 
 /** A command `domicile send-shell` sent, for the page to run and answer. */
@@ -20,8 +25,8 @@ export type ShellCommand = {
   readonly sent: number;
   /**
    * The window it acts on, by app id or a browser window's engine id as seats
-   * name windows, or `undefined` for the user's focus. Only a page listening
-   * for commands on a window hears one.
+   * name windows, or `undefined` for the user's focus. Only a page with a
+   * command that acts on a window hears one.
    */
   readonly window: string | undefined;
   /**

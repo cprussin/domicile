@@ -833,7 +833,6 @@ mod shell_commands {
         SystemRequest::ShellCommands {
             commands,
             bindings: Vec::new(),
-            on_a_window: false,
             completes: false,
         }
     }
@@ -841,15 +840,16 @@ mod shell_commands {
     fn send() -> SystemRequest {
         SystemRequest::SendShell {
             command: focus_right(),
-            window: None,
             agent: None,
         }
     }
 
+    /// `focus right` on `window`, named after its first word.
     fn send_to(window: &str) -> SystemRequest {
         SystemRequest::SendShell {
-            command: focus_right(),
-            window: Some(window.into()),
+            command: ["focus", "--window", window, "right"]
+                .map(String::from)
+                .to_vec(),
             agent: None,
         }
     }
@@ -952,7 +952,6 @@ mod shell_commands {
             SystemRequest::ShellCommands {
                 commands: Vec::new(),
                 bindings: vec![lock.clone()],
-                on_a_window: false,
                 completes: false,
             },
         );
@@ -1014,12 +1013,11 @@ mod shell_commands {
         reply(&plain_heard, 7);
         aiming.handle(
             7,
-            SystemRequest::ShellCommands {
-                commands: Vec::new(),
-                bindings: Vec::new(),
-                on_a_window: true,
-                completes: false,
-            },
+            listening(vec![ShellCommandHelp {
+                usage: "focus left|right".into(),
+                description: "Move focus.".into(),
+                window: true,
+            }]),
         );
         reply(&aiming_heard, 7);
 
@@ -1029,12 +1027,12 @@ mod shell_commands {
             HostMessage::SystemEvent {
                 event:
                     SystemEvent::ShellCommand {
+                        command,
                         sent,
                         window: Some(window),
-                        ..
                     },
                 ..
-            } if window == "app-3" => sent,
+            } if window == "app-3" && command == focus_right() => sent,
             other => panic!("expected focus right on app-3, heard {other:?}"),
         };
         assert!(plain_heard.try_recv().is_err());
@@ -1069,6 +1067,31 @@ mod shell_commands {
     }
 
     #[test]
+    fn a_command_whose_window_flag_names_none_says_so() {
+        let commands = commands();
+        let ((page, page_heard), (sender, sender_heard)) = two_pages(&commands);
+        page.handle(7, listening(Vec::new()));
+        reply(&page_heard, 7);
+
+        sender.handle(
+            1,
+            SystemRequest::SendShell {
+                command: vec!["kill".into(), "--window".into()],
+                agent: None,
+            },
+        );
+
+        match reply(&sender_heard, 1) {
+            SystemReply::Failed { error } => assert_eq!(
+                error.message,
+                "--window takes a window's id from `domicile list-windows`"
+            ),
+            other => panic!("expected a failure, got {other:?}"),
+        }
+        assert!(page_heard.try_recv().is_err());
+    }
+
+    #[test]
     fn a_completion_goes_only_to_pages_that_complete_and_brings_back_their_words() {
         // A page that doesn't complete would run the words as a command.
         let commands = commands();
@@ -1083,7 +1106,6 @@ mod shell_commands {
             SystemRequest::ShellCommands {
                 commands: Vec::new(),
                 bindings: Vec::new(),
-                on_a_window: false,
                 completes: true,
             },
         );
@@ -1195,10 +1217,12 @@ mod shell_commands {
         let focus = ShellCommandHelp {
             usage: "focus left|right|up|down".into(),
             description: "Move focus.".into(),
+            window: true,
         };
         let lock = ShellCommandHelp {
             usage: "lock".into(),
             description: "Lock the desktop.".into(),
+            window: false,
         };
         first.handle(7, listening(vec![focus.clone()]));
         reply(&first_heard, 7);
@@ -2169,7 +2193,6 @@ mod locked {
             },
             SystemRequest::SendShell {
                 command: vec!["focus".into(), "right".into()],
-                window: None,
                 agent: None,
             },
             SystemRequest::OpenLink {
@@ -2240,12 +2263,10 @@ mod apps {
             SystemRequest::ShellCommands {
                 commands: Vec::new(),
                 bindings: Vec::new(),
-                on_a_window: false,
                 completes: false,
             },
             SystemRequest::SendShell {
                 command: vec!["focus".into(), "right".into()],
-                window: None,
                 agent: None,
             },
             SystemRequest::AnswerShellCommand {

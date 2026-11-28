@@ -327,7 +327,7 @@ export const workspaceHolding = (
   state.workspaces.find((workspace) => holds(workspace, id));
 
 /**
- * The window on a workspace that seats and `send-shell --window` name `name`:
+ * The window on a workspace that seats and a command's `--window` name `name`:
  * a client's by its app id, or a browser window's by the engine's id for it.
  * `undefined` when no workspace holds one, as in the scratchpad.
  */
@@ -1290,7 +1290,7 @@ export type WindowAction =
 
 /**
  * A command on the focused window, {@link ON_A_WINDOW}, run on window `id`
- * instead, as `send-shell --window` or an agent asks. The user's screens,
+ * instead, as a command's `--window` or an agent asks. The user's screens,
  * workspaces and focus stay as they were. Outside {@link WindowAction}, as it
  * holds one.
  */

@@ -135,12 +135,14 @@ const COMMANDS: ReadonlyMap<string, Action> = new Map<string, Action>([
 
 /**
  * Every command, for `domicile list-shell-commands`. Matches the tables in
- * this package's docs/KEYS.md; `command.test.ts` checks each parses and none is missing.
+ * this package's docs/KEYS.md; `command.test.ts` checks each parses, none is
+ * missing, and `window` marks exactly those in `ON_A_WINDOW`.
  */
 export const COMMAND_HELP: readonly ShellCommandHelp[] = [
   {
     description: "Close the window, or the `focus parent` selection.",
     usage: "kill",
+    window: true,
   },
   { description: "Move focus.", usage: "focus left|right|up|down" },
   {
@@ -155,10 +157,12 @@ export const COMMAND_HELP: readonly ShellCommandHelp[] = [
     description:
       "Move the window, or the selection, along its tabs, then out of its group.",
     usage: "move left|right|up|down",
+    window: true,
   },
   {
     description: "Hide the window in the scratchpad.",
     usage: "move scratchpad",
+    window: true,
   },
   {
     description:
@@ -168,6 +172,7 @@ export const COMMAND_HELP: readonly ShellCommandHelp[] = [
   {
     description: "Send the window, or the selection, to workspace 1–10.",
     usage: "move container to workspace <name>",
+    window: true,
   },
   {
     description: "Go to workspace 1–10, or back if it is shown.",
@@ -181,27 +186,37 @@ export const COMMAND_HELP: readonly ShellCommandHelp[] = [
     description:
       "Move the window, or the selection, out of its tab group, right or below.",
     usage: "split h|v",
+    window: true,
   },
   {
     description: "The same as `split h` and `split v`.",
     usage: "splith|splitv",
+    window: true,
   },
   {
     description: "Set the container's layout.",
     usage: "layout stacking|tabbed",
+    window: true,
   },
   {
     description: "Switch the container between splits and tabs.",
     usage: "layout toggle split",
+    window: true,
   },
   {
     description: "Fullscreen on this screen, or every screen.",
     usage: "fullscreen toggle [global]",
+    window: true,
   },
-  { description: "Float or tile the window.", usage: "floating toggle" },
+  {
+    description: "Float or tile the window.",
+    usage: "floating toggle",
+    window: true,
+  },
   {
     description: "Grow the window that way.",
     usage: "resize grow left|right|up|down",
+    window: true,
   },
   { description: "Open the config's terminal.", usage: "terminal" },
   { description: "Lock the desktop.", usage: "lock" },
@@ -209,6 +224,7 @@ export const COMMAND_HELP: readonly ShellCommandHelp[] = [
     description:
       "Turn the focused tab into a group of its own, nested in its slot.",
     usage: "group",
+    window: true,
   },
   { description: "Toggle the launcher.", usage: "launcher" },
   {
@@ -334,10 +350,10 @@ const virtualMonitorUsage = (args: readonly string[]): Result<Action, string> =>
   );
 
 /**
- * Parse the words of a command on window `id`, as `send-shell --window` and
- * an agent send it, into that command run on `id` rather than the focus. A
- * command that acts on no window, such as `workspace 2` or `lock`, is
- * refused: on a window it would act on the user's desk instead.
+ * Parse the words of a command on window `id`, as its `--window` or an agent
+ * sends it, into that command run on `id` rather than the focus. A command
+ * that acts on no window, such as `workspace 2` or `lock`, is refused: on a
+ * window it would act on the user's desk instead.
  */
 export const parseWindowCommand = (
   args: readonly string[],

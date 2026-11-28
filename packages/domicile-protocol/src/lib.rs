@@ -2759,18 +2759,16 @@ pub enum SystemRequest {
     ///
     /// `commands` describes what the page runs, for
     /// `domicile list-shell-commands`, and `bindings` the keys and gestures
-    /// that run them, for `domicile list-bindings`, while it listens.
-    /// `on_a_window` says it runs commands on a window they name; a page
-    /// without it never hears one. `completes` says it also completes
-    /// commands: it hears a [`SystemEvent::CompleteShellCommand`] per
+    /// that run them, for `domicile list-bindings`, while it listens. A page
+    /// none of whose commands act on a window never hears a command on one.
+    /// `completes` says it also completes commands: it hears a
+    /// [`SystemEvent::CompleteShellCommand`] per
     /// [`SystemRequest::CompleteShell`].
     ShellCommands {
         #[serde(default)]
         commands: Vec<ShellCommandHelp>,
         #[serde(default)]
         bindings: Vec<ShellBinding>,
-        #[serde(default)]
-        on_a_window: bool,
         #[serde(default)]
         completes: bool,
     },
@@ -2780,14 +2778,14 @@ pub enum SystemRequest {
     /// failure when every page refused it or none answered in time.
     /// `domicile send-shell` sends this.
     ///
-    /// With `window`, by its `list-windows` id or the shell's, the command
-    /// acts on that window rather than the user's focus, and goes only to
-    /// pages listening `on_a_window`. With `agent` too, it is agent session
-    /// `agent`'s, refused unless that agent's seat holds the window.
+    /// `--window <id>` among `command`'s words, by its `list-windows` id or
+    /// the shell's, runs it on that window rather than the user's focus, and
+    /// sends it only to pages with a command that acts on a window (see
+    /// [`named_window`]). With `agent`, it is agent session `agent`'s: refused
+    /// unless that agent's seat holds the window, and on the window its
+    /// keyboard is in when it names none.
     SendShell {
         command: Vec<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        window: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<u32>,
     },
@@ -3499,6 +3497,49 @@ pub struct ShellCommandHelp {
     pub usage: String,
     /// What it does, in a sentence.
     pub description: String,
+    /// It acts on a window: the focus of whoever sends it, or the one
+    /// `--window <id>` names.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub window: bool,
+}
+
+impl ShellCommandHelp {
+    /// Its usage as `domicile` prints it: with `[--window <id>]` after its
+    /// first word when it acts on a window.
+    pub fn shown_usage(&self) -> String {
+        match (self.window, self.usage.split_once(' ')) {
+            (false, _) => self.usage.clone(),
+            (true, None) => format!("{} {WINDOW_FLAG_USAGE}", self.usage),
+            (true, Some((first, rest))) => format!("{first} {WINDOW_FLAG_USAGE} {rest}"),
+        }
+    }
+}
+
+/// The flag that names the window a shell command acts on.
+pub const WINDOW_FLAG: &str = "--window";
+
+const WINDOW_FLAG_USAGE: &str = "[--window <id>]";
+
+/// The window `--window <id>` names among a shell command's `words`, if any,
+/// and the words without it. The flag can be anywhere after `send-shell`,
+/// once.
+pub fn named_window(words: &[String]) -> Result<(Option<String>, Vec<String>), String> {
+    let mut window = None;
+    let mut rest = Vec::with_capacity(words.len());
+    let mut words = words.iter();
+    while let Some(word) = words.next() {
+        if word != WINDOW_FLAG {
+            rest.push(word.clone());
+            continue;
+        }
+        let id = words
+            .next()
+            .ok_or("--window takes a window's id from `domicile list-windows`")?;
+        if window.replace(id.clone()).is_some() {
+            return Err("--window names one window".to_string());
+        }
+    }
+    Ok((window, rest))
 }
 
 /// One key or gesture a shell binds, as `domicile list-bindings` prints it.

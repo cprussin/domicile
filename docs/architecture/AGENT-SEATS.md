@@ -181,10 +181,11 @@ domicile.seats.giveBack(windowId);
   `list-windows --json`), never the user's focus. The CLI does the same:
   `--agent` with no `--window` acts on the agent's focus.
 - `send_shell` always acts on a window the agent's seat holds, and doesn't
-  wait. `SystemRequest::SendShell` names the agent session and maybe the
-  window; the compositor fills in the seat's focus when it names none, checks
-  the seat holds it, and names it as the shell knows it. Only a page
-  listening `on_a_window` hears it, so an agent can't run a desk command.
+  wait. `SystemRequest::SendShell` names the agent session, and its words
+  maybe `--window <id>`; the compositor fills in the seat's focus when they
+  name none, checks the seat holds it, and names it as the shell knows it.
+  Only a page with a command that acts on a window hears it, and the shell
+  refuses it for a desk command.
 - `list_windows` adds `heldBy` and `focusedBy`.
 
 ## Key decisions
