@@ -41,6 +41,20 @@ base64.workspace = true
 domicile-protocol = { path = "../domicile-protocol" }
 domicile-scene = { path = "../domicile-scene" }
 domicile-launch = { path = "../domicile-launch" }
+# The portal backend's interfaces, one crate each, and what they share (see
+# `src/portals/mod.rs`).
+domicile-portal = { path = "../domicile-portal" }
+domicile-portal-access = { path = "../domicile-portal-access" }
+domicile-portal-account = { path = "../domicile-portal-account" }
+domicile-portal-app-chooser = { path = "../domicile-portal-app-chooser" }
+domicile-portal-dynamic-launcher = { path = "../domicile-portal-dynamic-launcher" }
+domicile-portal-email = { path = "../domicile-portal-email" }
+domicile-portal-file-chooser = { path = "../domicile-portal-file-chooser" }
+domicile-portal-lockdown = { path = "../domicile-portal-lockdown" }
+domicile-portal-print = { path = "../domicile-portal-print" }
+domicile-portal-settings = { path = "../domicile-portal-settings" }
+domicile-portal-usb = { path = "../domicile-portal-usb" }
+domicile-portal-wallpaper = { path = "../domicile-portal-wallpaper" }
 # For the test client above. A regular dependency because a `[[bin]]` cannot
 # use dev-dependencies. Adds no crates: Smithay already pulls in
 # `wayland-client` and `wayland-protocols`.
@@ -104,6 +118,8 @@ features = [
 ]
 
 [dev-dependencies]
+# Serves interfaces over a socket pair in tests.
+domicile-portal = { path = "../domicile-portal", features = ["testing"] }
 # `p2p` serves the portal interfaces over a socket pair in tests, without a
 # bus daemon. Adds no crates.
 zbus = { workspace = true, features = ["p2p"] }

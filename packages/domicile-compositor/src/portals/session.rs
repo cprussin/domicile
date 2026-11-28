@@ -81,8 +81,8 @@ mod tests {
 
     use domicile_protocol::Theme;
 
-    use crate::portals::settings::{Appearance, Settings};
-    use crate::portals::socket_pair::connected;
+    use domicile_portal::testing::connected;
+    use domicile_portal_settings::{Appearance, Settings};
 
     const HANDLE: &str = "/org/freedesktop/portal/desktop/session/1_7/s";
 

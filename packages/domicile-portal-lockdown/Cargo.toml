@@ -1,0 +1,17 @@
+[package]
+name = "domicile-portal-lockdown"
+description = "The Lockdown portal: which of the desk's features the config turns off."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+domicile-config = { path = "../domicile-config" }
+zbus.workspace = true
+
+[dev-dependencies]
+zbus = { workspace = true, features = ["p2p"] }
+
+[lints]
+workspace = true

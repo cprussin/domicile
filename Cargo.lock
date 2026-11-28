@@ -481,6 +481,18 @@ dependencies = [
  "domicile-config",
  "domicile-host",
  "domicile-launch",
+ "domicile-portal",
+ "domicile-portal-access",
+ "domicile-portal-account",
+ "domicile-portal-app-chooser",
+ "domicile-portal-dynamic-launcher",
+ "domicile-portal-email",
+ "domicile-portal-file-chooser",
+ "domicile-portal-lockdown",
+ "domicile-portal-print",
+ "domicile-portal-settings",
+ "domicile-portal-usb",
+ "domicile-portal-wallpaper",
  "domicile-protocol",
  "domicile-scene",
  "domicile-test-chrome",
@@ -575,6 +587,133 @@ dependencies = [
  "libc",
  "serde",
  "thiserror",
+ "zbus",
+]
+
+[[package]]
+name = "domicile-portal"
+version = "0.0.0"
+dependencies = [
+ "domicile-host",
+ "domicile-protocol",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "domicile-portal-access"
+version = "0.0.0"
+dependencies = [
+ "domicile-portal",
+ "domicile-protocol",
+ "zbus",
+]
+
+[[package]]
+name = "domicile-portal-account"
+version = "0.0.0"
+dependencies = [
+ "domicile-host",
+ "domicile-portal",
+ "domicile-protocol",
+ "libc",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "domicile-portal-app-chooser"
+version = "0.0.0"
+dependencies = [
+ "domicile-portal",
+ "domicile-protocol",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "domicile-portal-dynamic-launcher"
+version = "0.0.0"
+dependencies = [
+ "domicile-host",
+ "domicile-portal",
+ "domicile-protocol",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "domicile-portal-email"
+version = "0.0.0"
+dependencies = [
+ "domicile-host",
+ "domicile-portal",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "domicile-portal-file-chooser"
+version = "0.0.0"
+dependencies = [
+ "domicile-host",
+ "domicile-portal",
+ "domicile-protocol",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "domicile-portal-lockdown"
+version = "0.0.0"
+dependencies = [
+ "domicile-config",
+ "zbus",
+]
+
+[[package]]
+name = "domicile-portal-print"
+version = "0.0.0"
+dependencies = [
+ "domicile-host",
+ "domicile-portal",
+ "domicile-protocol",
+ "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "domicile-portal-settings"
+version = "0.0.0"
+dependencies = [
+ "domicile-config",
+ "domicile-host",
+ "domicile-protocol",
+ "zbus",
+]
+
+[[package]]
+name = "domicile-portal-usb"
+version = "0.0.0"
+dependencies = [
+ "domicile-host",
+ "domicile-portal",
+ "domicile-protocol",
+ "libc",
+ "tempfile",
+ "zbus",
+]
+
+[[package]]
+name = "domicile-portal-wallpaper"
+version = "0.0.0"
+dependencies = [
+ "domicile-host",
+ "domicile-portal",
+ "domicile-protocol",
+ "tempfile",
+ "tracing",
  "zbus",
 ]
 

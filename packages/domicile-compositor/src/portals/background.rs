@@ -177,7 +177,7 @@ mod tests {
     use std::time::Duration;
     use zbus::export::ordered_stream::OrderedStreamExt;
 
-    use crate::portals::socket_pair::connected_both;
+    use domicile_portal::testing::connected_both;
 
     const PATH: &str = "/org/freedesktop/portal/desktop";
     const INTERFACE: &str = "org.freedesktop.impl.portal.Background";

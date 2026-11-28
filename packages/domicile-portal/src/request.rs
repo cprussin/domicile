@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use super::queue::Queue;
+use crate::queue::Queue;
 
 /// One dialog's `Request` object.
 pub struct Request {

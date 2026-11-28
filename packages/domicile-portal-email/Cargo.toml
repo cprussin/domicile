@@ -1,0 +1,19 @@
+[package]
+name = "domicile-portal-email"
+description = "The Email portal: opens a message to write in the desk's mail client."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+domicile-host = { path = "../domicile-host" }
+tracing = "0.1"
+zbus.workspace = true
+
+[dev-dependencies]
+domicile-portal = { path = "../domicile-portal", features = ["testing"] }
+zbus = { workspace = true, features = ["p2p"] }
+
+[lints]
+workspace = true

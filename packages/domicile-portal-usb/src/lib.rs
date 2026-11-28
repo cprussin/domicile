@@ -15,7 +15,7 @@ use domicile_protocol::{PortalAnswer, PortalKind, UsbDevice, UsbDialog};
 use zbus::object_server::ObjectServer;
 use zbus::{OwnedObjectPath, OwnedVariant};
 
-use super::queue::{ask, Queue};
+use domicile_portal::queue::{ask, Queue};
 
 /// The `org.freedesktop.impl.portal.Usb` version implemented.
 const INTERFACE_VERSION: u32 = 1;
@@ -132,7 +132,7 @@ mod tests {
     use domicile_protocol::PortalRequest;
     use zbus::{ObjectPath, Variant};
 
-    use crate::portals::socket_pair::connected;
+    use domicile_portal::testing::connected;
 
     const PATH: &str = "/org/freedesktop/portal/desktop";
     const INTERFACE: &str = "org.freedesktop.impl.portal.Usb";

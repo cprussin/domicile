@@ -13,10 +13,10 @@ use zbus::fdo;
 use zbus::object_server::ObjectServer;
 use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
-use super::queue::{ask, Listed};
 use super::restore::Grant;
 use super::{session, Backends, Told};
 use crate::eis::{self, Capabilities, Emulated, Emulator};
+use domicile_portal::queue::{ask, Listed};
 
 /// The `org.freedesktop.impl.portal.RemoteDesktop` version implemented.
 const INTERFACE_VERSION: u32 = 2;

@@ -109,6 +109,12 @@ engine or Smithay:
 - `domicile-launch`: the `domicile` binary. Decides which page to serve, which
   Ozone platform to use, where the components are and how to start them. The
   `[[bin]]` only does I/O; all decisions live in tested modules.
+- `domicile-portal`: what the `xdg-desktop-portal` backend's interfaces
+  share: the dialogs waiting on the shell and their `Request` objects.
+- `domicile-portal-<name>`: one interface each, for those that need nothing
+  of the compositor: `access`, `account`, `app-chooser`, `dynamic-launcher`,
+  `email`, `file-chooser`, `lockdown`, `print`, `settings`, `usb` and
+  `wallpaper`. The compositor's `portals/` serves them on its bus name.
 - `domicile-miracast`: the Miracast service, which D-Bus starts for the
   shell's `Cast` bar item. Its RTSP session and format negotiation are pure
   and tested; NetworkManager, Avahi, the portal and GStreamer are reached at
@@ -126,7 +132,9 @@ Outside the default members (needs Smithay and native Wayland; build in
   - `outbound.rs` queues messages to the chrome. The Wayland thread never
     writes to or waits on a chrome socket; a slow chrome would otherwise stall
     input and frame callbacks for every client.
-  - `portals/` is the `xdg-desktop-portal` backend on the session bus:
+  - `portals/` is the `xdg-desktop-portal` backend on the session bus. It
+    serves the `domicile-portal-<name>` crates and the interfaces that still
+    need the compositor's casting, input or notifications:
     `Settings`, so GTK, Qt, Electron and Firefox apps follow the desktop's
     theme; `Notification`, `Inhibit`, `Email` and `Lockdown`; dialogs such as
     `Access` and `AppChooser`, which the shell draws; RemoteDesktop,

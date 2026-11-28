@@ -1,0 +1,19 @@
+[package]
+name = "domicile-portal-access"
+description = "The Access portal: asks the user whether an application may do something."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+domicile-portal = { path = "../domicile-portal" }
+domicile-protocol = { path = "../domicile-protocol" }
+zbus.workspace = true
+
+[dev-dependencies]
+domicile-portal = { path = "../domicile-portal", features = ["testing"] }
+zbus = { workspace = true, features = ["p2p"] }
+
+[lints]
+workspace = true

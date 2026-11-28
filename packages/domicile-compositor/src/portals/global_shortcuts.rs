@@ -21,9 +21,9 @@ use tracing::{debug, warn};
 use zbus::object_server::{ObjectServer, SignalEmitter};
 use zbus::{ObjectPath, OwnedObjectPath, OwnedVariant, Variant};
 
-use super::queue::{ask, ask_unbidden, Queue};
 use super::session;
 use super::OBJECT_PATH;
+use domicile_portal::queue::{ask, ask_unbidden, Queue};
 
 /// The `org.freedesktop.impl.portal.GlobalShortcuts` version implemented.
 const INTERFACE_VERSION: u32 = 2;
@@ -448,8 +448,8 @@ mod tests {
 
     use crate::notifications::NotificationServer;
     use crate::portals::restore::Tokens;
-    use crate::portals::socket_pair::connected;
     use crate::portals::{Backends, Portals};
+    use domicile_portal::testing::connected;
 
     const INTERFACE: &str = "org.freedesktop.impl.portal.GlobalShortcuts";
     const SESSION: &str = "/org/freedesktop/portal/desktop/session/1_7/s";

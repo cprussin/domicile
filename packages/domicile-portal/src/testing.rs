@@ -1,11 +1,22 @@
 //! Two D-Bus connections joined by a socket pair, for testing interfaces
-//! without a bus daemon.
+//! without a bus daemon, and the options a call sends.
 
+use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
 use std::thread;
 
 use zbus::connection::Builder;
-use zbus::Connection;
+use zbus::{Connection, OwnedVariant, Variant};
+
+/// A call's options, or the results of its answer.
+pub type Results = HashMap<String, OwnedVariant>;
+
+/// The options `sent`, as a call carries them.
+pub fn options(sent: Vec<(&str, Variant<'static>)>) -> Results {
+    sent.into_iter()
+        .map(|(name, value)| (name.into(), OwnedVariant::try_from(value).expect("ownable")))
+        .collect()
+}
 
 /// A server, set up by `serve`, and a client connected to it.
 pub fn connected(

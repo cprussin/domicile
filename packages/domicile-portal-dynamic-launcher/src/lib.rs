@@ -19,7 +19,7 @@ use tracing::debug;
 use zbus::object_server::ObjectServer;
 use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
-use super::queue::{ask, Queue};
+use domicile_portal::queue::{ask, Queue};
 
 /// `SupportedLauncherTypes`: applications (`1`) and web apps (`2`).
 const SUPPORTED_LAUNCHER_TYPES: u32 = 1 | 2;
@@ -149,7 +149,7 @@ mod tests {
     use domicile_protocol::PortalRequest;
     use zbus::ObjectPath;
 
-    use crate::portals::socket_pair::connected;
+    use domicile_portal::testing::connected;
 
     const PATH: &str = "/org/freedesktop/portal/desktop";
     const INTERFACE: &str = "org.freedesktop.impl.portal.DynamicLauncher";

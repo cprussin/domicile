@@ -670,7 +670,7 @@ impl Watcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::portals::socket_pair::connected_both;
+    use domicile_portal::testing::connected_both;
     use std::time::Instant;
     use zbus::{ObjectPath, Variant};
 

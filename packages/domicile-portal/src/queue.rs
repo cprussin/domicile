@@ -18,8 +18,8 @@ use tracing::{debug, warn};
 use zbus::object_server::ObjectServer;
 use zbus::OwnedObjectPath;
 
-use super::request::Request;
 use crate::reply::{reply, Replier};
+use crate::request::Request;
 
 /// Who hears the queue change, whether anybody can answer, and which
 /// `<app>` a `parent_window` names.

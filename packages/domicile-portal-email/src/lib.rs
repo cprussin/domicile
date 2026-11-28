@@ -88,8 +88,8 @@ fn encoded(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::super::fixture::options;
     use super::*;
+    use domicile_portal::testing::options;
     use zbus::Variant;
 
     #[test]

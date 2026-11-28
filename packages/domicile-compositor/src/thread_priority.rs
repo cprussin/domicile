@@ -162,8 +162,8 @@ fn threads() -> io::Result<Vec<Tid>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::portals::socket_pair;
     use domicile_host::priority::this_thread;
+    use domicile_portal::testing as socket_pair;
     use std::sync::mpsc::{channel, Sender};
     use std::sync::Mutex;
     use std::thread;

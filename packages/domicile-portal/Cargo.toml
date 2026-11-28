@@ -1,0 +1,23 @@
+[package]
+name = "domicile-portal"
+description = "What every xdg-desktop-portal backend interface shares: the dialogs waiting on the shell, and their Request objects."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+# Serves an interface over a socket pair in another crate's tests.
+testing = ["zbus/p2p"]
+
+[dependencies]
+domicile-host = { path = "../domicile-host" }
+domicile-protocol = { path = "../domicile-protocol" }
+tracing = "0.1"
+zbus.workspace = true
+
+[dev-dependencies]
+zbus = { workspace = true, features = ["p2p"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,21 @@
+[package]
+name = "domicile-portal-dynamic-launcher"
+description = "The DynamicLauncher portal: lets an application add launchers to the desk, if the user agrees."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+domicile-host = { path = "../domicile-host" }
+domicile-portal = { path = "../domicile-portal" }
+domicile-protocol = { path = "../domicile-protocol" }
+tracing = "0.1"
+zbus.workspace = true
+
+[dev-dependencies]
+domicile-portal = { path = "../domicile-portal", features = ["testing"] }
+zbus = { workspace = true, features = ["p2p"] }
+
+[lints]
+workspace = true

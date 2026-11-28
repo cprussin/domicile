@@ -943,7 +943,7 @@
     },
     "ThemeConfig": {
       "additionalProperties": false,
-      "description": "How the desktop is themed.\n\nClients read every field but `mode` through the settings portal; see the\ncompositor's `portals::settings`.",
+      "description": "How the desktop is themed.\n\nClients read every field but `mode` through the settings portal; see\n`domicile-portal-settings`.",
       "properties": {
         "accent_color": {
           "anyOf": [
@@ -1029,7 +1029,7 @@
       "type": "object"
     },
     "ThemeMode": {
-      "description": "Whether the desktop is drawn dark or light.\n\nThere is no \"follow the system\" option: the chrome is the system, so there\nis nothing to follow. Clients follow this value through the settings\nportal; see the compositor's `portals::settings`.",
+      "description": "Whether the desktop is drawn dark or light.\n\nThere is no \"follow the system\" option: the chrome is the system, so there\nis nothing to follow. Clients follow this value through the settings\nportal; see `domicile-portal-settings`.",
       "oneOf": [
         {
           "const": "dark",

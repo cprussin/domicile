@@ -1334,7 +1334,7 @@ impl Host {
                 // stays pure.
                 //
                 // `SetTheme` must also reach clients over D-Bus (see
-                // `domicile_compositor::portals::settings`), so the compositor calls
+                // `domicile_portal_settings`), so the compositor calls
                 // `Host::set_theme` itself and broadcasts the result.
                 //
                 // `Lock` and `Unlock` belong to the seat. Only the compositor's

@@ -20,9 +20,9 @@ use tracing::debug;
 use zbus::object_server::ObjectServer;
 use zbus::{OwnedFd, OwnedObjectPath, OwnedVariant, Variant};
 
-use super::queue::{ask, Queue};
-use crate::reply::reply;
 use domicile_host::uri::file_uri;
+use domicile_portal::queue::{ask, Queue};
+use domicile_portal::reply::reply;
 
 /// The `Print` backend object.
 pub struct Print {
@@ -388,8 +388,8 @@ mod tests {
     use domicile_protocol::{PortalAnswer, PortalKind, PortalRequest, PrintDialog};
     use zbus::{ObjectPath, Variant};
 
-    use super::super::socket_pair;
-    use super::super::OBJECT_PATH;
+    use domicile_portal::testing as socket_pair;
+    use domicile_portal::OBJECT_PATH;
 
     const PRINT: &str = "org.freedesktop.impl.portal.Print";
 

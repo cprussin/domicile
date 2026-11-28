@@ -9,8 +9,8 @@ use tracing::debug;
 use zbus::object_server::ObjectServer;
 use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
-use super::queue::{ask, Queue};
-use super::request::Request;
+use domicile_portal::queue::{ask, Queue};
+use domicile_portal::request::Request;
 
 /// The `AppChooser` backend object.
 pub struct AppChooser {
@@ -157,8 +157,8 @@ fn owned(text: String) -> OwnedVariant {
 
 #[cfg(test)]
 mod tests {
-    use super::super::fixture::options;
     use super::*;
+    use domicile_portal::testing::options;
 
     #[test]
     fn every_option_the_spec_names_is_read() {

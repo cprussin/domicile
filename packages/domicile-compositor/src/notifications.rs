@@ -976,8 +976,8 @@ impl Server {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::portals::socket_pair;
     use domicile_host::portal_notifications::{Action, Priority};
+    use domicile_portal::testing as socket_pair;
     use domicile_protocol::Urgency;
     use zbus::export::ordered_stream::OrderedStreamExt;
     use zbus::Variant;
