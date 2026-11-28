@@ -96,6 +96,8 @@ import { useStageScreens } from "@domicile-desktop/manganese-window-management/s
 import type { Aim } from "@domicile-desktop/manganese-window-management/tiled/aim";
 import { AimKind } from "@domicile-desktop/manganese-window-management/tiled/aim";
 import type { NodeRef } from "@domicile-desktop/manganese-window-management/tree/path";
+import { unseenOf } from "@domicile-desktop/manganese-window-management/unseen";
+import { useCapturedWindows } from "@domicile-desktop/manganese-window-management/useCaptured";
 import { useClientIcons } from "@domicile-desktop/manganese-window-management/useClientIcons";
 import { usePointerLock } from "@domicile-desktop/manganese-window-management/usePointerLock";
 import { usePointerWarp } from "@domicile-desktop/manganese-window-management/usePointerWarp";
@@ -417,6 +419,13 @@ export const Desktop = ({
     () =>
       overviews === undefined ? undefined : sightOf(overviews, overviewPinch),
     [overviewPinch, overviews],
+  );
+  // A screenshot or cast of a window on another workspace needs its page laid
+  // out to draw.
+  const captured = useCapturedWindows(domicile);
+  const unseen = useMemo(
+    () => unseenOf(windows, screens, captured),
+    [captured, screens, windows],
   );
   // With no screen there is no backdrop to end the closing fade.
   useEffect(() => {
@@ -919,6 +928,7 @@ export const Desktop = ({
             scratchpad={windows.scratchpad}
             screens={screens}
             shut={shut}
+            unseen={unseen}
             windows={windows.windows}
             workspaceOf={workspaceOf}
           />

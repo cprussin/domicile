@@ -87,7 +87,7 @@ pub(super) fn described(tool: Browser) -> (&'static str, Value, Vec<&'static str
             vec!["url"],
         ),
         Browser::Screenshot => (
-            "Take a WebP of a browser window's page or view as it draws. Refused for a window that isn't on screen, such as one on another workspace: read it with browser_snapshot.",
+            "Take a WebP of a browser window's page or view as it draws, on screen or not, such as on another workspace.",
             json!({"window": window, "view": view}),
             vec![],
         ),

@@ -34,7 +34,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
-#include "content/public/browser/visibility.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -379,27 +378,28 @@ void SendDevToolsToBrowserWindow(const std::string& window,
       guest->NoteAgentInput(agent);
     }
   }
-  // A page its shell does not draw, as on a workspace nobody is looking at,
-  // presents no frame, and Page.captureScreenshot waits for one until it
-  // times out.
-  if (window != kShellWindow && method == kCaptureScreenshot &&
-      page->GetVisibility() != content::Visibility::VISIBLE) {
-    std::move(answered).Run(base::unexpected(base::StrCat(
-        {"browser window ", window,
-         " is not on screen, so it draws nothing to take a picture of: read "
-         "it with browser_snapshot, or move it where it is seen"})));
-    return;
-  }
   // A window on a workspace nobody is looking at is hidden, and a hidden page
   // runs no frames for what an act sets off. Agents drive windows nobody
   // watches, so the page runs as shown until it answers. The shell's page is
   // always shown.
-  base::ScopedClosureRunner shown =
+  base::ScopedClosureRunner running =
       window == kShellWindow
           ? base::ScopedClosureRunner()
           : page->IncrementCapturerCount(
                 /*capture_size=*/gfx::Size(), /*stay_hidden=*/false,
                 /*stay_awake=*/true, /*is_activity=*/false);
+  // A page its shell does not lay out, as on a workspace nobody is looking
+  // at, presents no frame for Page.captureScreenshot to wait for. A picture
+  // of it lists it as captured until it answers, as the desktop's own
+  // screenshot of a window does, and the shell lays a captured window out
+  // where nobody sees it.
+  base::ScopedClosureRunner shown =
+      window != kShellWindow && method == kCaptureScreenshot
+          ? base::ScopedClosureRunner(base::BindOnce(
+                [](base::ScopedClosureRunner running,
+                   base::ScopedClosureRunner listed) {},
+                std::move(running), CaptureBrowserWindow(window)))
+          : std::move(running);
   // Owns itself until answered.
   (new OneMethod(content::DevToolsAgentHost::GetOrCreateFor(page),
                  std::move(shown), std::move(answered)))

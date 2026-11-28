@@ -81,8 +81,12 @@ it does to a client. It asks the browser instead:
   window, `display: none` on a workspace nobody is looking at included: it
   draws, runs its frames and timers, and is `visible` to its scripts, until
   the keyboard leaves. Each `devtools` call does the same for its page until
-  it answers. A page nobody draws presents no frame, so a screenshot of it is
-  refused at once; taking one is not built.
+  it answers. A page nobody draws presents no frame, so a `devtools`
+  `Page.captureScreenshot` also lists its window as captured (`isCaptured`)
+  until it answers, as the desktop's own screenshot of a window does. A shell
+  lays a captured window out, where nobody sees it if it must, and the picture
+  is the page's next frame. A shell that ignores `isCaptured` leaves the
+  screenshot waiting until it times out.
 - A drag that starts from an agent's press is carried page to page by the
   browser, never as a platform drag that would move the user's pointer
   (patch 0277).
