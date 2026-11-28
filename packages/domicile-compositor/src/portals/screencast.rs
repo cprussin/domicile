@@ -1221,6 +1221,7 @@ fn fresh_token() -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::super::fixture::options;
     use super::*;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::mpsc::{channel, Receiver};
@@ -1406,17 +1407,6 @@ mod tests {
                 }),
             },
         ]
-    }
-
-    fn options(sent: Vec<(&str, Variant<'static>)>) -> HashMap<String, OwnedVariant> {
-        sent.into_iter()
-            .map(|(name, value)| {
-                (
-                    name.to_string(),
-                    OwnedVariant::try_from(value).expect("an ownable value"),
-                )
-            })
-            .collect()
     }
 
     fn path(path: &str) -> ObjectPath<'static> {

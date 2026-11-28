@@ -177,20 +177,9 @@ fn icon(sent: OwnedVariant) -> Option<Icon> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::fixture::options as sent;
     use super::*;
     use std::io::{Seek, Write};
-
-    fn sent(fields: Vec<(&str, Variant<'static>)>) -> HashMap<String, OwnedVariant> {
-        fields
-            .into_iter()
-            .map(|(name, value)| {
-                (
-                    name.to_string(),
-                    OwnedVariant::try_from(value).expect("an ownable value"),
-                )
-            })
-            .collect()
-    }
 
     fn button_sent(
         label: &str,

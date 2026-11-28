@@ -314,18 +314,8 @@ fn owned(value: Variant<'_>) -> OwnedVariant {
 
 #[cfg(test)]
 mod tests {
+    use super::super::fixture::options;
     use super::*;
-
-    fn options(sent: Vec<(&str, Variant<'static>)>) -> HashMap<String, OwnedVariant> {
-        sent.into_iter()
-            .map(|(name, value)| {
-                (
-                    name.to_string(),
-                    OwnedVariant::try_from(value).expect("an ownable value"),
-                )
-            })
-            .collect()
-    }
 
     fn filter(name: &str, patterns: &[(u32, &str)]) -> PortalFilter {
         (

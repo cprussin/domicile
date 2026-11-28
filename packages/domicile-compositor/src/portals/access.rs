@@ -64,19 +64,9 @@ fn dialog(
 
 #[cfg(test)]
 mod tests {
+    use super::super::fixture::options;
     use super::*;
     use zbus::Variant;
-
-    fn options(sent: Vec<(&str, Variant<'static>)>) -> HashMap<String, OwnedVariant> {
-        sent.into_iter()
-            .map(|(name, value)| {
-                (
-                    name.to_string(),
-                    OwnedVariant::try_from(value).expect("an ownable value"),
-                )
-            })
-            .collect()
-    }
 
     #[test]
     fn the_labels_an_application_offers_are_read() {

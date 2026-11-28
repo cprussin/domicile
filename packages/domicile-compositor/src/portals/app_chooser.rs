@@ -157,18 +157,8 @@ fn owned(text: String) -> OwnedVariant {
 
 #[cfg(test)]
 mod tests {
+    use super::super::fixture::options;
     use super::*;
-
-    fn options(sent: Vec<(&str, Variant<'static>)>) -> HashMap<String, OwnedVariant> {
-        sent.into_iter()
-            .map(|(name, value)| {
-                (
-                    name.to_string(),
-                    OwnedVariant::try_from(value).expect("an ownable value"),
-                )
-            })
-            .collect()
-    }
 
     #[test]
     fn every_option_the_spec_names_is_read() {
