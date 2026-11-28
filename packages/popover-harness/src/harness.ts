@@ -170,7 +170,8 @@ const pressed = async (page: Page, names: readonly string[]) => {
 
 /**
  * What in `panel` moves when `toggle` puts it in another state, and then back:
- * the panel and each of its headings must keep their places.
+ * the panel and each of its sections' headings must keep their places. The
+ * panel's own title may slide to make room for a status under it.
  */
 const toggleProblems = async (
   page: Page,
@@ -189,18 +190,21 @@ const toggleProblems = async (
 };
 
 /**
- * Where `panel` and each heading in it are, by name, to the pixel. A heading's
- * width is left out: it stretches to the controls beside it, which may change.
+ * Where `panel` and each section heading in it are, by name, to the pixel. A
+ * heading's width is left out: it stretches to the controls beside it, which
+ * may change.
  */
 const layoutOf = async (panel: Locator): Promise<Map<string, string>> => {
   const headings = await Promise.all(
-    (await panel.getByRole("heading").all()).map(async (heading) => {
-      const { height, x, y } = await boxOf(heading);
-      return [
-        `"${await heading.innerText()}"`,
-        `${px(height)} high at ${px(x)},${px(y)}`,
-      ] as const;
-    }),
+    (await panel.getByRole("heading", { level: 3 }).all()).map(
+      async (heading) => {
+        const { height, x, y } = await boxOf(heading);
+        return [
+          `"${await heading.innerText()}"`,
+          `${px(height)} high at ${px(x)},${px(y)}`,
+        ] as const;
+      },
+    ),
   );
   const { height, width, x, y } = await boxOf(panel);
   return new Map([

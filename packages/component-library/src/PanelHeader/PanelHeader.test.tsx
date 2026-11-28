@@ -29,7 +29,17 @@ describe(PanelHeader, () => {
 
     it("keeps the status's line without one, when asked to", () => {
       render(<PanelHeader reserveStatus title="Notifications" />);
-      expect(screen.getByRole("paragraph")).toBeEmptyDOMElement();
+      expect(
+        screen.getByRole("paragraph", { hidden: true }),
+      ).toBeEmptyDOMElement();
+    });
+
+    it("keeps saying a reserved status while it leaves", () => {
+      const { rerender } = render(
+        <PanelHeader reserveStatus status="Paused" title="Notifications" />,
+      );
+      rerender(<PanelHeader reserveStatus title="Notifications" />);
+      expect(screen.getByText("Paused")).toHaveAttribute("aria-hidden", "true");
     });
 
     it("has no back button with nowhere to go back to", () => {

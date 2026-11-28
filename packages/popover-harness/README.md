@@ -14,7 +14,7 @@ Chromium through Playwright, and fails on any that runs off the screen.
   is too narrow for its label. A crowd with a `drawer` also has that
   disclosure opened and shut, and fails when the drawer's height jumps rather
   than growing and shrinking. A crowd with a `toggle` is put in another state
-  and back, such as paused, and fails when the panel or a heading in it moves.
+  and back, such as paused, and fails when the panel or a section heading in it moves.
   A crowd with a `shrink` button has it pressed, such as Clear all, and fails
   when the panel's height jumps rather than shrinking, or it scrolls sideways
   as rows leave. A crowd with `grow` buttons has them pressed, the

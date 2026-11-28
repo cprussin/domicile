@@ -1,5 +1,6 @@
 import { CaretLeftIcon } from "@phosphor-icons/react/dist/ssr/CaretLeft";
 import type { ReactNode } from "react";
+import { useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
@@ -17,7 +18,8 @@ type Props = {
   status?: ReactNode | undefined;
   /**
    * Keeps the status's line while there is none, for a panel whose status
-   * comes and goes, so its header holds one height.
+   * comes and goes, so its header holds one height. The title rests centered
+   * in it, and slides up as a status fades in under it.
    */
   reserveStatus?: boolean | undefined;
   title: ReactNode;
@@ -36,28 +38,56 @@ export const PanelHeader = ({
   status,
   title,
   titleId,
-}: Props) => (
-  <div className={headerStyles}>
-    {onBack !== undefined && (
-      <IconButton label="Back" onClick={onBack}>
-        <CaretLeftIcon aria-hidden size={14} weight="bold" />
-      </IconButton>
-    )}
-    <div className={titlesStyles}>
-      <h2 className={titleStyles} id={titleId}>
-        {title}
-      </h2>
-      {(status !== undefined || reserveStatus === true) && (
-        <p className={statusStyles}>{status}</p>
+}: Props) => {
+  // A reserved status that leaves keeps its words while it fades out.
+  const [lastStatus, setLastStatus] = useState(status);
+  if (status !== undefined && status !== lastStatus) {
+    setLastStatus(status);
+  }
+  const resting = reserveStatus === true && status === undefined;
+  return (
+    <div className={headerStyles}>
+      {onBack !== undefined && (
+        <IconButton label="Back" onClick={onBack}>
+          <CaretLeftIcon aria-hidden size={14} weight="bold" />
+        </IconButton>
       )}
+      <div
+        className={reserveStatus === true ? slidingTitlesStyles : titlesStyles}
+        data-resting={resting ? "" : undefined}
+      >
+        <h2 className={titleStyles} id={titleId}>
+          {title}
+        </h2>
+        {(status !== undefined || reserveStatus === true) && (
+          <p aria-hidden={resting ? true : undefined} className={statusStyles}>
+            {reserveStatus === true ? lastStatus : status}
+          </p>
+        )}
+      </div>
+      {action !== undefined && <span className={actionStyles}>{action}</span>}
     </div>
-    {action !== undefined && <span className={actionStyles}>{action}</span>}
-  </div>
-);
+  );
+};
 
 const headerStyles = hstack({ gap: 1, minBlockSize: 7 });
 
 const titlesStyles = css({ flex: 1, minInlineSize: 0 });
+
+// Both lines keep their places in the layout, so nothing around them moves:
+// only their paint slides, by half the status's line, to center the title.
+const slidingTitlesStyles = css({
+  "& > *": {
+    transition:
+      "translate {durations.springs.smooth} {easings.springs.smooth}, opacity {durations.fast} {easings.default}",
+  },
+  "&[data-resting] > *": {
+    translate: "0 calc({fontSizes.xs} * {lineHeights.tight} / 2)",
+  },
+  "&[data-resting] > p": { opacity: 0 },
+  flex: 1,
+  minInlineSize: 0,
+});
 
 const titleStyles = css({
   margin: 0,
