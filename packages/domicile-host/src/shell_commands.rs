@@ -46,7 +46,7 @@ struct Page {
     hear: Hear<Heard>,
     commands: Vec<ShellCommandHelp>,
     bindings: Vec<ShellBinding>,
-    /// It runs commands on a window they name.
+    /// One of its commands acts on a window.
     on_a_window: bool,
     /// It completes commands.
     completes: bool,
@@ -96,13 +96,14 @@ impl ShellCommands {
 
     /// Calls `hear` with each command and its number until the [`Listener`]
     /// drops. `commands` describes what the page runs meanwhile, and
-    /// `bindings` the keys and gestures that run them. With `on_a_window`, it
-    /// hears commands on a window too, and with `completes`, completions.
+    /// `bindings` the keys and gestures that run them. When one of
+    /// `commands` acts on a window, it hears commands on a window too, and
+    /// with `completes`, completions.
     pub(crate) fn listen(
         &self,
         commands: Vec<ShellCommandHelp>,
         bindings: Vec<ShellBinding>,
-        (on_a_window, completes): (bool, bool),
+        completes: bool,
         hear: Hear<Heard>,
     ) -> Listener {
         let mut shared = self.shared.lock().unwrap();
@@ -112,9 +113,9 @@ impl ShellCommands {
             key,
             Page {
                 hear,
+                on_a_window: commands.iter().any(|command| command.window),
                 commands,
                 bindings,
-                on_a_window,
                 completes,
             },
         );

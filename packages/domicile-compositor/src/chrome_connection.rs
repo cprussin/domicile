@@ -14,9 +14,9 @@ use domicile_host::system::{
 };
 use domicile_launch::handshake::Handshake;
 use domicile_protocol::{
-    negotiate, AgentReach, ChromeMessage, DeskRect, DeskShot, DisplayChange, EmulatedInput,
-    HostMessage, KnownAgents, SystemError, SystemErrorKind, SystemReply, SystemRequest, Theme,
-    WindowAct, PROTOCOL_VERSION,
+    named_window, negotiate, AgentReach, ChromeMessage, DeskRect, DeskShot, DisplayChange,
+    EmulatedInput, HostMessage, KnownAgents, SystemError, SystemErrorKind, SystemReply,
+    SystemRequest, Theme, WindowAct, PROTOCOL_VERSION, WINDOW_FLAG,
 };
 use tracing::{debug, error, info, warn};
 
@@ -1304,21 +1304,17 @@ fn answer_an_app(
     }
 }
 
-/// `request`, with the window a shell command acts on named as the shell
-/// knows it: a native window's app id or a browser window's engine id, for
-/// one given by its `list-windows` id. An agent's command that names none
-/// acts on the window its own keyboard is in, never the user's focus. Errs
-/// when an agent's command names a window its seat doesn't hold, so an agent
-/// acts only on its own windows.
+/// `request`, with the window a shell command's `--window` names named as
+/// the shell knows it: a native window's app id or a browser window's engine
+/// id, for one given by its `list-windows` id. An agent's command that names
+/// none acts on the window its own keyboard is in, never the user's focus.
+/// Errs when an agent's command names a window its seat doesn't hold, so an
+/// agent acts only on its own windows.
 fn aimed(hub: &ChromeHub, request: SystemRequest) -> Result<SystemRequest, String> {
-    let SystemRequest::SendShell {
-        command,
-        window,
-        agent,
-    } = request
-    else {
+    let SystemRequest::SendShell { command, agent } = request else {
         return Ok(request);
     };
+    let (window, mut command) = named_window(&command)?;
     let host = hub.host.lock().unwrap();
     let window = match (window, agent) {
         (None, None) => None,
@@ -1340,11 +1336,12 @@ fn aimed(hub: &ChromeHub, request: SystemRequest) -> Result<SystemRequest, Strin
             Some(window)
         }
     };
-    Ok(SystemRequest::SendShell {
-        command,
-        window,
-        agent,
-    })
+    command.extend(
+        window
+            .into_iter()
+            .flat_map(|window| [WINDOW_FLAG.to_string(), window]),
+    );
+    Ok(SystemRequest::SendShell { command, agent })
 }
 
 /// Run a system call for the page, unless the desktop is locked.

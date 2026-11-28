@@ -6,7 +6,12 @@ import { KeymapChoice } from "@domicile-desktop/sdk/keymap-choice";
 import { Axis, Direction } from "../direction";
 import { Layout } from "../tree/node";
 import type { WindowAction as Action } from "../window-state";
-import { WindowAction, WORKSPACES, windowActedOn } from "../window-state";
+import {
+  ON_A_WINDOW,
+  WindowAction,
+  WORKSPACES,
+  windowActedOn,
+} from "../window-state";
 import {
   COMMAND_HELP,
   completeCommand,
@@ -188,6 +193,18 @@ describe("COMMAND_HELP", () => {
           command,
           true,
         ]);
+      }
+    },
+  );
+
+  it.each(COMMAND_HELP)(
+    "says whether `$usage` acts on a window, as it runs",
+    ({ usage, window = false }) => {
+      for (const command of commandsOf(usage)) {
+        expect([
+          command,
+          parsing(command).map(({ kind }) => ON_A_WINDOW.has(kind)),
+        ]).toStrictEqual([command, Ok(window)]);
       }
     },
   );

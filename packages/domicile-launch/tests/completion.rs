@@ -53,6 +53,7 @@ fn shell_commands() -> Vec<ShellCommandHelp> {
     .map(|(usage, description)| ShellCommandHelp {
         usage: usage.to_string(),
         description: description.to_string(),
+        window: usage.starts_with("fullscreen"),
     })
     .to_vec()
 }
@@ -298,16 +299,41 @@ fn every_shell_has_a_script_that_runs_complete() {
 }
 
 #[test]
-fn send_shell_takes_a_window_before_its_words() {
-    assert_eq!(values(completed(&["send-shell"], "--w")), ["--window"]);
+fn a_shell_command_on_a_window_takes_one_after_its_first_word() {
     assert_eq!(
-        values(completed(&["send-shell", "--window"], "")),
+        values(completed(&["send-shell", "fullscreen"], "--w")),
+        ["--window"]
+    );
+    assert_eq!(
+        values(completed(&["send-shell", "fullscreen", "--window"], "")),
         ["a1", "b2"]
     );
     assert_eq!(
-        values(completed(&["send-shell", "--window", "a1", "focus"], "l")),
-        ["left"]
+        values(completed(
+            &["send-shell", "fullscreen", "--window", "a1"],
+            ""
+        )),
+        ["toggle"]
     );
+    assert!(values(completed(
+        &["send-shell", "fullscreen", "--window", "a1", "toggle"],
+        "--w"
+    ))
+    .is_empty());
+    // At the end too.
+    assert_eq!(
+        values(completed(&["send-shell", "fullscreen", "toggle"], "--w")),
+        ["--window"]
+    );
+    assert_eq!(
+        values(completed(
+            &["send-shell", "fullscreen", "toggle", "--window"],
+            ""
+        )),
+        ["a1", "b2"]
+    );
+    assert!(values(completed(&["send-shell", "workspace"], "--w")).is_empty());
+    assert!(values(completed(&["send-shell"], "--w")).is_empty());
 }
 
 #[test]

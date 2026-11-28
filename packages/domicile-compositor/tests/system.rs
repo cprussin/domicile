@@ -175,7 +175,6 @@ fn a_locked_desk_runs_nothing_but_reads_the_kernel() {
         SystemRequest::ShellCommands {
             commands: Vec::new(),
             bindings: Vec::new(),
-            on_a_window: false,
             completes: false,
         },
     );
@@ -185,7 +184,6 @@ fn a_locked_desk_runs_nothing_but_reads_the_kernel() {
         4,
         SystemRequest::SendShell {
             command: vec!["focus".into(), "right".into()],
-            window: None,
             agent: None,
         },
     );
@@ -220,7 +218,6 @@ fn a_command_sent_on_the_socket_reaches_every_page_listening() {
             SystemRequest::ShellCommands {
                 commands: Vec::new(),
                 bindings: Vec::new(),
-                on_a_window: false,
                 completes: false,
             },
         );

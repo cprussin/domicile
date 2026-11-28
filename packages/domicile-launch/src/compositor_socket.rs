@@ -104,18 +104,16 @@ pub fn screen_record(socket: &Path) -> Result<Option<PathBuf>, CompositorError> 
 }
 
 /// Tells the compositor at `socket` to send `command` to every page listening
-/// for shell commands, on `window` and for agent session `agent` if given.
-/// Returns what the page that ran it printed, if anything.
+/// for shell commands, for agent session `agent` if given. Returns what the
+/// page that ran it printed, if anything.
 pub fn send_shell(
     socket: &Path,
     command: &[String],
-    window: Option<&str>,
     agent: Option<u32>,
     patience: Option<Duration>,
 ) -> Result<Option<String>, CompositorError> {
     let request = SystemRequest::SendShell {
         command: command.to_vec(),
-        window: window.map(str::to_string),
         agent,
     };
     let answer = called(socket, request, patience)?;

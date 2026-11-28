@@ -272,7 +272,7 @@ fn send_shell_on_a_window_takes_it_with_the_agents_keyboard_then_aims_at_it() {
     let replies = served(
         &[call(
             "send_shell",
-            json!({"words": ["move", "container", "to", "workspace", "3"], "window": "n1"}),
+            json!({"words": ["move", "--window", "n1", "container", "to", "workspace", "3"]}),
         )],
         |args: &[String]| match args[0].as_str() {
             "idle-time" => panic!("a command on the agent's own window waited for the user"),
@@ -288,9 +288,9 @@ fn send_shell_on_a_window_takes_it_with_the_agents_keyboard_then_aims_at_it() {
                 "send-shell",
                 "--agent",
                 "7",
+                "move",
                 "--window",
                 "n1",
-                "move",
                 "container",
                 "to",
                 "workspace",
@@ -305,7 +305,7 @@ fn send_shell_on_a_window_the_agent_cant_take_says_why() {
     let replies = served(
         &[call(
             "send_shell",
-            json!({"words": ["kill"], "window": "n1"}),
+            json!({"words": ["kill", "--window", "n1"]}),
         )],
         |args: &[String]| match args[0].as_str() {
             "focus-window" => refused("the user is using window n1"),
