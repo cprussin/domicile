@@ -298,6 +298,13 @@ impl DomicileCompositor {
             "latency: {} round(s) whose key was never delivered",
             report.undelivered
         );
+        for (round, timeline) in report.timelines.iter().enumerate() {
+            tracing::info!(
+                target: "domicile::engine::spike",
+                "latency round {}, in ms after its key: {timeline}",
+                round + 1
+            );
+        }
         match report.ended {
             latency::Ended::Completed => tracing::info!(
                 target: "domicile::engine::spike",

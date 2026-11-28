@@ -226,6 +226,15 @@ committed a frame after a key — check that it takes OSC 11 for its background 
   exit 1
 fi
 
+# Each round's events, in ms after its key, so a figure out of range shows
+# which stage held the frame: the probes asked and answered, the commits and
+# the presentations.
+rounds_timeline() {
+  echo "each round, in ms after its key:" >&2
+  grep -aoE "latency round [0-9]+, in ms after its key: .*" "$COMP_LOG" \
+    | sed 's/, in ms after its key//; s/^/  /' >&2
+}
+
 FRAME="$(latency_display_frame "$COMP_LOG")"
 FLOOR="$(latency_median floor "$COMP_LOG")"
 OURS="$(latency_median "commit to pixel" "$COMP_LOG")"
@@ -294,7 +303,8 @@ if [ "${ABANDONED:-0}" -gt 0 ]; then
   annotate "guard-latency: $ABANDONED round(s) went unanswered — the client did" \
        "not change color when a key was pressed, so what was measured is not" \
        "a keystroke reaching a pixel"
-  grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
+  grep -aE "latency" "$COMP_LOG" | grep -avF "latency round" | tail -8 | sed 's/^/  /' >&2
+  rounds_timeline
   exit 1
 fi
 
@@ -305,7 +315,8 @@ if [ "${MOVED:-0}" -gt 0 ]; then
   annotate "guard-latency: $MOVED round(s) had the probe point change color" \
        "before the client answered, so a frame from before the keystroke is" \
        "what changed it and the run measured fewer rounds than it set out to"
-  grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
+  grep -aE "latency" "$COMP_LOG" | grep -avF "latency round" | tail -8 | sed 's/^/  /' >&2
+  rounds_timeline
   exit 1
 fi
 
@@ -316,7 +327,8 @@ if [ "${LATE:-0}" -gt 0 ]; then
        "the key for the key to have caused it, so what would have been timed" \
        "is a redraw of the client's own and the run measured fewer rounds than" \
        "it set out to"
-  grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
+  grep -aE "latency" "$COMP_LOG" | grep -avF "latency round" | tail -8 | sed 's/^/  /' >&2
+  rounds_timeline
   exit 1
 fi
 
@@ -347,7 +359,8 @@ if ! latency_within "$FRAME" 2 "$FLOOR"; then
        "priced its probe at ${FLOOR}ms — a probe round trip is at least one" \
        "display frame, so the frame this would be measured against is not the" \
        "one this desktop is drawing at"
-  grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
+  grep -aE "latency" "$COMP_LOG" | grep -avF "latency round" | tail -8 | sed 's/^/  /' >&2
+  rounds_timeline
   exit 1
 fi
 
@@ -361,5 +374,6 @@ annotate "guard-latency: commit to pixel is ${OURS}ms, more than the probe's" \
      "floor and one display frame of ${FRAME}ms (${ALLOWED}ms) — a client's" \
      "frame is waiting on a stage of its own somewhere between the commit and" \
      "the page"
-grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
+grep -aE "latency" "$COMP_LOG" | grep -avF "latency round" | tail -8 | sed 's/^/  /' >&2
+  rounds_timeline
 exit 1
