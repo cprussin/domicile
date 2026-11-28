@@ -490,6 +490,12 @@ impl DomicileCompositor {
                         app_id,
                         started,
                         matches!(published, Published::Held | Published::Copied { .. }),
+                        match published {
+                            Published::Held => "held",
+                            Published::Copied { .. } => "copied",
+                            Published::Waiting { .. } => "waiting",
+                            Published::NotShown => "not shown",
+                        },
                     );
                     // The frame the engine will report, if it reached viz or
                     // goes up later.

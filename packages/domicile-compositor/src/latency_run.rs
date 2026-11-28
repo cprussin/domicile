@@ -37,7 +37,9 @@ impl DomicileCompositor {
     /// Called on the commit path because a round ends with the client's
     /// answering commit, which only arrives here. See `latency.rs` for the
     /// measurements. Off unless `DOMICILE_SPIKE_LATENCY` is set.
-    pub fn drive_latency(&mut self, app_id: &str, committed: Instant, held: bool) {
+    ///
+    /// `published` is how the engine took the frame, for the round's timeline.
+    pub fn drive_latency(&mut self, app_id: &str, committed: Instant, held: bool, published: &str) {
         let (Some(_), Some(budget)) = (spike_latency_point(), spike_latency_budget()) else {
             return;
         };
@@ -45,6 +47,19 @@ impl DomicileCompositor {
         // refuses instantly, and the floor would spend its budget in one
         // callback and end as `ProbeWentDark`.
         if !held {
+            // A frame the engine has not taken yet does not answer a key, but
+            // the round shows it, since its import can hold the answer back.
+            if let Some(run) = self.latency.as_mut() {
+                if takes_part(self.latency_app.as_deref(), app_id) {
+                    run.noted(
+                        Instant::now(),
+                        format!(
+                            "a commit {published} by the engine after {:.2}",
+                            committed.elapsed().as_secs_f64() * 1000.0
+                        ),
+                    );
+                }
+            }
             return;
         }
         // Measure only the first app to commit, so a second window does not add
@@ -61,6 +76,13 @@ impl DomicileCompositor {
         // Use the caller's timestamp from before `publish_frame`, so the import
         // and submit count in `commit_to_pixel`, not the client's time.
         run.committed(committed);
+        run.noted(
+            Instant::now(),
+            format!(
+                "{published} by the engine after {:.2}",
+                committed.elapsed().as_secs_f64() * 1000.0
+            ),
+        );
         self.latency = Some(run);
         // Sampling happens in `step_the_latency`, not here.
     }

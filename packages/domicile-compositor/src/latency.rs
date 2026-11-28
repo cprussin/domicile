@@ -492,6 +492,12 @@ impl Latency {
         }
     }
 
+    /// Notes `what` in the current round's timeline, from outside the run:
+    /// how the engine took a commit, say. Nothing outside a round.
+    pub fn noted(&mut self, now: Instant, what: impl Into<String>) {
+        self.note(now, what);
+    }
+
     /// Notes `what` in the current round's timeline. Nothing outside a round.
     fn note(&mut self, now: Instant, what: impl Into<String>) {
         let key = match self.phase {
