@@ -1,10 +1,10 @@
 import type { Result } from "@cprussin/option-result";
+import { useNamedIcons } from "@domicile-desktop/manganese-host/useNamedIcons";
 import type { MenuEntry } from "@domicile-desktop/sdk/dbusmenu";
 import { MenuEntryKind } from "@domicile-desktop/sdk/dbusmenu";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { ThemedIcon } from "@domicile-desktop/system-apps/app-icons";
-import { useEffect, useState } from "react";
 
 import type { MenuIcons } from "./menu-icons";
 
@@ -17,42 +17,15 @@ export const useMenuIcons = (
   domicile: Domicile,
   menu: Result<readonly MenuEntry[], SystemError> | undefined,
   icons: MenuIcons,
-): ReadonlyMap<string, ThemedIcon> => {
-  const [found, setFound] = useState<ReadonlyMap<string, ThemedIcon>>(
-    new Map(),
-  );
-  // The menu is new on every read; its names are what change.
-  const key =
+): ReadonlyMap<string, ThemedIcon> =>
+  useNamedIcons(
+    domicile,
     menu === undefined
-      ? ""
-      : menu.match({
-          Err: () => "",
-          Ok: (entries) => [...new Set(namesIn(entries))].toSorted().join("\n"),
-        });
-
-  useEffect(() => {
-    if (key === "") {
-      return undefined;
-    } else {
-      let current = true;
-      pictures(domicile, key.split("\n"), icons)
-        .then((read) => {
-          if (current) {
-            setFound(read);
-          }
-        })
-        .catch((error: unknown) => {
-          // biome-ignore lint/suspicious/noConsole: entries stay without icons; say why
-          console.error("Could not read a tray menu's icons", error);
-        });
-      return () => {
-        current = false;
-      };
-    }
-  }, [domicile, icons, key]);
-
-  return found;
-};
+      ? []
+      : menu.match({ Err: () => [], Ok: (entries) => namesIn(entries) }),
+    icons,
+    "Could not read a tray menu's icons",
+  );
 
 /** Every icon name in `entries` and their submenus. */
 const namesIn = (entries: readonly MenuEntry[]): string[] =>
@@ -68,33 +41,4 @@ const namesIn = (entries: readonly MenuEntry[]): string[] =>
         ];
       }
     }
-  });
-
-/** `names` that have an icon, each with its icon. */
-const pictures = async (
-  domicile: Domicile,
-  names: readonly string[],
-  icons: MenuIcons,
-): Promise<ReadonlyMap<string, ThemedIcon>> => {
-  const lookup = succeeded(await icons(domicile));
-  const read = await Promise.all(
-    names.map(async (name) =>
-      succeeded(await lookup(name)).match({
-        None: () => [],
-        Some: (icon): [string, ThemedIcon][] => [[name, icon]],
-      }),
-    ),
-  );
-  return new Map(read.flat());
-};
-
-/** The value, or a throw: a desktop that refuses to read fails the lookup. */
-const succeeded = <T extends NonNullable<unknown>>(
-  result: Result<T, SystemError>,
-): T =>
-  result.match({
-    Err: (error) => {
-      throw new Error(`could not read the icons: ${error.message}`);
-    },
-    Ok: (value) => value,
   });
