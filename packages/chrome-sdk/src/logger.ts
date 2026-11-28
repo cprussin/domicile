@@ -7,6 +7,10 @@
 // files the name as `DOMICILE_SUBSYSTEM`, so
 // `journalctl --user -t domicile-shell DOMICILE_SUBSYSTEM=notifications`
 // reads one part of a shell. See docs/LOGGING.md.
+//
+// The engine logs a console message as text, where an object is only
+// `[object Object]`, so each object is written out first: an error as its
+// stack, anything else as its JSON.
 
 /** Logs for one part of a shell. */
 export type Logger = {
@@ -37,9 +41,20 @@ export const logger = (subsystem: string, sink: LogSink = console): Logger => {
   }
   const tag = `[${subsystem}]`;
   return {
-    debug: (...said) => sink.debug(tag, ...said),
-    error: (...said) => sink.error(tag, ...said),
-    info: (...said) => sink.info(tag, ...said),
-    warn: (...said) => sink.warn(tag, ...said),
+    debug: (...said) => sink.debug(tag, ...said.map(written)),
+    error: (...said) => sink.error(tag, ...said.map(written)),
+    info: (...said) => sink.info(tag, ...said.map(written)),
+    warn: (...said) => sink.warn(tag, ...said.map(written)),
   };
+};
+
+/** `said` as the journal can show it: an object as text, the rest as is. */
+const written = (said: unknown): unknown => {
+  if (said instanceof Error) {
+    return said.stack ?? String(said);
+  } else if (typeof said === "object" && said !== null) {
+    return JSON.stringify(said);
+  } else {
+    return said;
+  }
 };

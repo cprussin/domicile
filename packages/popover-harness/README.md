@@ -21,6 +21,8 @@ Chromium through Playwright, and fails on any that runs off the screen.
   as rows leave. A crowd with `grow` buttons has them pressed, the
   last growing the panel to a height that fits, such as a short page of
   details, and fails when any part of it shows a scrollbar on the way.
+  Every crowd fails when its page reports an error, such as a
+  ResizeObserver loop, which the engine logs as an error from the shell.
 - **`viewport-units.test.ts`** fails any popover's content sized in `vh` or
   `vw`, which measure the whole desk, not the panel's screen.
 

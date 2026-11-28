@@ -80,12 +80,13 @@ export const followLogind = async (bus: MessageBus, signals: LogindSignals) => {
     signals.shutdown(startSchema.parse(start));
   });
   // The bus answers in order, so once it answers this it has the match
-  // rules the listeners above asked for.
+  // rules the listeners above asked for. GetId, on the bus's own interface:
+  // the system bus's policy refuses its Peer interface.
   await bus.call(
     new Message({
       destination: "org.freedesktop.DBus",
-      interface: "org.freedesktop.DBus.Peer",
-      member: "Ping",
+      interface: "org.freedesktop.DBus",
+      member: "GetId",
       path: "/org/freedesktop/DBus",
     }),
   );

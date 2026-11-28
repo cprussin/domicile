@@ -4,8 +4,13 @@
 // each item registered with it, and a file chooser portal that answers what a
 // test tells it to, and, unless a test says there's none, a Secret Service
 // that keeps its items in memory, never locked, and logind's manager, whose
-// sleep and shutdown signals a test sends.
+// sleep and shutdown signals a test sends. A test can ask for the system bus's
+// policy, where a method call reaches only the bus's own interfaces and
+// logind, as on the real system bus logind sits on.
 
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { MessageBus } from "dbus-next";
 import {
   DBusError,
@@ -266,10 +271,16 @@ export type StoredSecret = {
 
 export const startFakeDesktopBus = async (
   appearance: PortalAppearance,
-  { secretService = true }: { secretService?: boolean } = {},
+  {
+    secretService = true,
+    systemPolicy = false,
+  }: { secretService?: boolean; systemPolicy?: boolean } = {},
 ) => {
+  const config = systemPolicy
+    ? ["--config-file", await writtenSystemPolicy()]
+    : ["--session"];
   const daemon = Bun.spawn(
-    ["dbus-daemon", "--session", "--nofork", "--print-address=1"],
+    ["dbus-daemon", ...config, "--nofork", "--print-address=1"],
     { stderr: "inherit", stdin: "ignore", stdout: "pipe" },
   );
   const reader = daemon.stdout.getReader();
@@ -373,4 +384,45 @@ export const startFakeDesktopBus = async (
     /** The Secret Service's items. */
     secrets,
   };
+};
+
+/**
+ * A bus config with the system bus's default policy: a method call reaches
+ * only the bus's own `org.freedesktop.DBus`, `Introspectable` and `Properties`
+ * interfaces, as `/usr/share/dbus-1/system.conf` allows, and logind, as its
+ * own policy does. Returns its path.
+ */
+const writtenSystemPolicy = async (): Promise<string> => {
+  const path = join(
+    await mkdtemp(join(tmpdir(), "domicile-system-bus-")),
+    "system.conf",
+  );
+  await Bun.write(
+    path,
+    `<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <type>session</type>
+  <listen>unix:tmpdir=${tmpdir()}</listen>
+  <auth>EXTERNAL</auth>
+  <policy context="default">
+    <allow user="*"/>
+    <allow own="*"/>
+    <deny send_type="method_call"/>
+    <allow send_type="signal"/>
+    <allow send_requested_reply="true" send_type="method_return"/>
+    <allow send_requested_reply="true" send_type="error"/>
+    <allow receive_type="method_call"/>
+    <allow receive_type="method_return"/>
+    <allow receive_type="error"/>
+    <allow receive_type="signal"/>
+    <allow send_destination="org.freedesktop.DBus" send_interface="org.freedesktop.DBus"/>
+    <allow send_destination="org.freedesktop.DBus" send_interface="org.freedesktop.DBus.Introspectable"/>
+    <allow send_destination="org.freedesktop.DBus" send_interface="org.freedesktop.DBus.Properties"/>
+    <allow send_destination="org.freedesktop.login1"/>
+  </policy>
+</busconfig>
+`,
+  );
+  return path;
 };

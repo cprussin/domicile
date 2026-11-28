@@ -29,6 +29,15 @@ describe("logger", () => {
     ]);
   });
 
+  it("writes an object as its JSON and an error as its stack, as the engine logs only text", () => {
+    const { said, sink } = recording();
+    const error = new Error("gone");
+    logger("network", sink).warn("refused", { kind: "Busy" }, error, 3);
+    expect(said).toEqual([
+      ["warn", ["[network]", "refused", '{"kind":"Busy"}', error.stack, 3]],
+    ]);
+  });
+
   it("refuses a subsystem the journal could not file", () => {
     expect(() => logger("two words")).toThrow(/letters, digits/);
     expect(() => logger("")).toThrow(/letters, digits/);

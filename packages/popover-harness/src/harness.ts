@@ -2,8 +2,10 @@
 // Playwright, on a small screen. Fails a popover that runs off the screen,
 // covers the bar or stands taller than {@link SCREEN_SHARE} of the screen, whose last row can't be scrolled into view, that scrolls sideways, whose
 // buttons are too narrow for their labels, whose drawer's height jumps as it
-// opens or shuts or that falls behind its drawer, that moves when put in another state and back, or that shows
-// a scrollbar while growing to a height that fits. See the package README.
+// opens or shuts or that falls behind its drawer, that moves when put in
+// another state and back, that shows a scrollbar while growing to a height
+// that fits, or whose page reports an error, such as a ResizeObserver loop.
+// See the package README.
 //
 //   bun src/harness.ts [--chromium <path>] [<crowd>...]
 
@@ -111,6 +113,19 @@ const checked = async (
   crowd: Crowd,
 ): Promise<boolean> => {
   const page = await browser.newPage({ viewport: DESK });
+  // Each error the page reports, such as a ResizeObserver loop, which the
+  // engine logs as the shell's error.
+  const errors: string[] = [];
+  await page.exposeFunction("popoverHarnessError", (message: string) => {
+    errors.push(message);
+  });
+  await page.addInitScript(() => {
+    window.addEventListener("error", (event) => {
+      (
+        window as unknown as { popoverHarnessError: (message: string) => void }
+      ).popoverHarnessError(event.message);
+    });
+  });
   await page.goto(url);
   await page.locator("[data-crowd-scene]").waitFor();
   await pressed(page, crowd.presses);
@@ -143,6 +158,9 @@ const checked = async (
       : await shrinkProblems(panel, crowd.shrink)),
   ];
   await page.close();
+  problems.push(
+    ...errors.map((error) => `the page reports an error: ${error}`),
+  );
   if (problems.length === 0) {
     said(
       `PASS: ${crowd.id}: fits ${percent(SCREEN_SHARE)} of a ${describe(SCREEN)} screen beside a taller one, and scrolls${crowd.drawer === undefined ? "" : `; its ${crowd.drawer} drawer grows and shrinks`}${crowd.toggle === undefined ? "" : "; it holds still when toggled"}${crowd.arrive === undefined ? "" : "; a row arriving moves the rows below smoothly"}${crowd.shrink === undefined ? "" : `; it shrinks when pressing ${crowd.shrink}`}${crowd.grow === undefined ? "" : `; it grows without a scrollbar when pressing ${crowd.grow.join(", ")}`}`,
@@ -437,25 +455,23 @@ const shrinkProblems = async (
       if (button === undefined) {
         throw new Error(`popover-harness: no ${name} button in the panel`);
       }
+      // Just after each frame is drawn: what it showed, with any easing the
+      // popover started for it. Not a ResizeObserver: the popover's own eases
+      // its height as it answers, which would leave one here undelivered.
       const heights: number[] = [root.getBoundingClientRect().height];
-      // Observed after the popover's own observer, as each frame is drawn: what
-      // it shows, with any easing the popover started.
-      const observer = new ResizeObserver(() => {
-        heights.push(root.getBoundingClientRect().height);
-      });
       // The most each part held past its width, by its tag.
       const sideways = new Map<Element, number>();
-      const frame = () =>
+      const drawn = () =>
         new Promise<void>((resolve) => {
           requestAnimationFrame(() => {
-            resolve();
+            setTimeout(resolve, 0);
           });
         });
-      observer.observe(root);
       button.click();
       const start = performance.now();
       while (performance.now() - start < lengthMs) {
-        await frame();
+        await drawn();
+        heights.push(root.getBoundingClientRect().height);
         for (const element of [root, ...root.querySelectorAll("*")]) {
           const over = element.scrollWidth - element.clientWidth;
           if (
@@ -466,7 +482,6 @@ const shrinkProblems = async (
           }
         }
       }
-      observer.disconnect();
       return {
         heights,
         sideways: [...sideways].map(

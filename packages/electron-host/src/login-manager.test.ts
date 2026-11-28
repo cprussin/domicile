@@ -9,7 +9,12 @@ describe(followLogind, () => {
   let desktopBus: Awaited<ReturnType<typeof startFakeDesktopBus>>;
   let bus: MessageBus;
   beforeAll(async () => {
-    desktopBus = await startFakeDesktopBus({ colorScheme: 0, contrast: 0 });
+    // logind is on the system bus, whose policy lets a call reach only the
+    // bus's own interfaces and logind.
+    desktopBus = await startFakeDesktopBus(
+      { colorScheme: 0, contrast: 0 },
+      { systemPolicy: true },
+    );
     bus = sessionBus({ busAddress: desktopBus.address });
   });
   afterAll(async () => {

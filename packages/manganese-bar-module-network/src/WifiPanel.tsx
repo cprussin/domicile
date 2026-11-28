@@ -14,6 +14,7 @@ import { Switch } from "@domicile-desktop/component-library/Switch";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import { useRequests } from "@domicile-desktop/manganese-host/useRequests";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import { logger } from "@domicile-desktop/sdk/logger";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type {
   Wifi,
@@ -260,6 +261,8 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
   );
 };
 
+const log = logger("network");
+
 /**
  * Scans once, when shown with the radio on. Nobody asked for it, so a
  * refusal is logged rather than shown; the Scan button shows its own.
@@ -278,15 +281,14 @@ const ScanOnShow = ({
       (result) => {
         result.match({
           Err: (error) => {
-            // biome-ignore lint/suspicious/noConsole: nothing in the panel shows it
-            console.error("The Wi-Fi service refused to scan", error);
+            // The panel got past it: the networks it knows still show.
+            log.warn("The Wi-Fi service refused to scan", error);
           },
           Ok: () => undefined,
         });
       },
       (error: unknown) => {
-        // biome-ignore lint/suspicious/noConsole: surfacing a background failure
-        console.error("Failed to scan for Wi-Fi networks", error);
+        log.error("Failed to scan for Wi-Fi networks", error);
       },
     );
   }, [actions, backend, device, host, name]);

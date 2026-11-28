@@ -30,14 +30,20 @@ type Easing = { animation: Animation; to: number };
  * content overflows once eased: a part that fits at rest would otherwise
  * scroll while the panel is shorter than it on the way.
  *
+ * An ease starts as what it holds changes, before the frame is laid out, so
+ * it never resizes the popup while a ResizeObserver answers: anything else
+ * watching the popup, such as what places it, would see that as a
+ * ResizeObserver loop, which the engine logs as an error. A ResizeObserver
+ * only keeps its height at rest.
+ *
  * Returns the function that stops it.
  */
 export const easeHeight = (popup: HTMLElement): (() => void) => {
   const state: {
     easing?: Easing | undefined;
     frame?: number;
-    height?: number;
-  } = {};
+    height: number;
+  } = { height: popup.offsetHeight };
   const stopped = () => {
     state.easing = undefined;
     delete popup.dataset.easingHeight;
@@ -90,19 +96,26 @@ export const easeHeight = (popup: HTMLElement): (() => void) => {
       }
     }
   };
-  const observer = new ResizeObserver(() => {
+  const changes = new MutationObserver(() => {
     if (state.easing === undefined) {
-      const from = state.height;
-      if (from === undefined) {
-        state.height = popup.offsetHeight;
-      } else {
-        start(from);
-      }
+      start(state.height);
     }
   });
-  observer.observe(popup);
+  changes.observe(popup, {
+    attributes: true,
+    characterData: true,
+    childList: true,
+    subtree: true,
+  });
+  const resizes = new ResizeObserver(() => {
+    if (state.easing === undefined) {
+      state.height = popup.offsetHeight;
+    }
+  });
+  resizes.observe(popup);
   return () => {
-    observer.disconnect();
+    changes.disconnect();
+    resizes.disconnect();
     if (state.frame !== undefined) {
       cancelAnimationFrame(state.frame);
     }
