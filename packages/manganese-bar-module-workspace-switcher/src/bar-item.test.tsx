@@ -11,6 +11,7 @@ const switcher = (toggleOverview: () => void) =>
     <BarContext value={{ locked: false, popsUp: false, screen: "left" }}>
       <WorkspacesContext
         value={{
+          agents: [],
           current: { left: "2" },
           focused: "left",
           homes: { "1": "left", "2": "left" },

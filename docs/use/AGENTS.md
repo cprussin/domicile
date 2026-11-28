@@ -53,6 +53,11 @@ A window the agent is using has a violet ring with the agent's name, and its
 pointer is violet with its name too. The pill's panel lists the windows it's
 using now: **Take over** makes one yours.
 
+Agents usually work on a workspace you aren't on, so they stay out of your
+way, unless what you asked is better done in front of you. Their windows keep
+working there while you can't see them, and a violet dot on the workspace's
+number in the bar shows an agent is working there.
+
 **Settings › Agents** lists every agent connected or remembered. **Stop** ends
 it, **Forget** makes it ask again, and **Sign out** makes an agent on the web
 ask to sign in again.

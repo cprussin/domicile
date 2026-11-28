@@ -71,6 +71,10 @@ the detail, when there is one. Remove a gap when it's fixed.
 - **Hiding your device's details covers pages, not workers,** nor WebGL,
   fonts or the screen's size.
   [AD-BLOCKING.md](/docs/architecture/AD-BLOCKING.md#device-details).
+- **An agent can't screenshot a window that isn't on screen,** such as one
+  on another workspace: a page nobody draws presents no frame, so
+  `Page.captureScreenshot` is refused. Agents read it with `browser_snapshot`.
+  [AGENT-SEATS.md](/docs/architecture/AGENT-SEATS.md#browser-windows-at-desk-positions).
 - **Resize cost is unmeasured.**
   [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#embed-deadlines).
 
