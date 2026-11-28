@@ -37,7 +37,7 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key)
 - **One server for apps and pages.** Chrome on Linux sends Web Notifications
   over `org.freedesktop.Notifications`, so both arrive the same way.
 - **The notification portal joins the same history.** Its notifications
-  (`portals/notification.rs`) get history ids; a press goes back to the portal
+  (`domicile-portal-notification`) get history ids; a press goes back to the portal
   as `ActionInvoked` with the action's target, not over the bus. Each is
   named and drawn by its app's desktop entry, matched as the dialogs match it
   (see [PORTALS.md](/docs/PORTALS.md)). Mapping:

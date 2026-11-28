@@ -1,0 +1,20 @@
+[package]
+name = "domicile-portal-inhibit"
+description = "The Inhibit portal: applications holding off idle, logout and suspend, and hearing when the screensaver starts."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+domicile-portal = { path = "../domicile-portal" }
+domicile-protocol = { path = "../domicile-protocol" }
+tracing = "0.1"
+zbus.workspace = true
+
+[dev-dependencies]
+domicile-portal = { path = "../domicile-portal", features = ["testing"] }
+zbus = { workspace = true, features = ["p2p"] }
+
+[lints]
+workspace = true

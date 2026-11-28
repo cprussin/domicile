@@ -1,0 +1,19 @@
+[package]
+name = "domicile-portal-notification"
+description = "The Notification portal: notifications from sandboxed applications, into the desk's notification history."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+domicile-host = { path = "../domicile-host" }
+tracing = "0.1"
+zbus.workspace = true
+
+[dev-dependencies]
+domicile-portal = { path = "../domicile-portal", features = ["testing"] }
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -504,7 +504,9 @@ dependencies = [
  "domicile-portal-dynamic-launcher",
  "domicile-portal-email",
  "domicile-portal-file-chooser",
+ "domicile-portal-inhibit",
  "domicile-portal-lockdown",
+ "domicile-portal-notification",
  "domicile-portal-print",
  "domicile-portal-settings",
  "domicile-portal-usb",
@@ -695,10 +697,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "domicile-portal-inhibit"
+version = "0.0.0"
+dependencies = [
+ "domicile-portal",
+ "domicile-protocol",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
 name = "domicile-portal-lockdown"
 version = "0.0.0"
 dependencies = [
  "domicile-config",
+ "zbus",
+]
+
+[[package]]
+name = "domicile-portal-notification"
+version = "0.0.0"
+dependencies = [
+ "domicile-host",
+ "domicile-portal",
+ "tempfile",
+ "tracing",
  "zbus",
 ]
 

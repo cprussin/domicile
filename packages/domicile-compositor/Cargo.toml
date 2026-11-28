@@ -52,7 +52,9 @@ domicile-portal-app-chooser = { path = "../domicile-portal-app-chooser" }
 domicile-portal-dynamic-launcher = { path = "../domicile-portal-dynamic-launcher" }
 domicile-portal-email = { path = "../domicile-portal-email" }
 domicile-portal-file-chooser = { path = "../domicile-portal-file-chooser" }
+domicile-portal-inhibit = { path = "../domicile-portal-inhibit" }
 domicile-portal-lockdown = { path = "../domicile-portal-lockdown" }
+domicile-portal-notification = { path = "../domicile-portal-notification" }
 domicile-portal-print = { path = "../domicile-portal-print" }
 domicile-portal-settings = { path = "../domicile-portal-settings" }
 domicile-portal-usb = { path = "../domicile-portal-usb" }

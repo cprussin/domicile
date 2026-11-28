@@ -48,9 +48,7 @@ mod clipboard;
 #[cfg(test)]
 mod fixture;
 mod global_shortcuts;
-mod inhibit;
 mod input_capture;
-mod notification;
 mod recording;
 mod remote_desktop;
 mod screencast;
@@ -67,15 +65,15 @@ use domicile_portal_background::{Background, RunningApps};
 use domicile_portal_dynamic_launcher::DynamicLauncher;
 use domicile_portal_email::{Email, Open};
 use domicile_portal_file_chooser::FileChooser;
+use domicile_portal_inhibit::{Inhibit, Inhibitors};
 use domicile_portal_lockdown::Lockdown;
+use domicile_portal_notification::Notification;
 use domicile_portal_print::Print;
 use domicile_portal_settings::{color_scheme, Appearance, Settings};
 use domicile_portal_usb::Usb;
 use domicile_portal_wallpaper::{Pictures, Wallpaper};
 use global_shortcuts::{GlobalShortcuts, Shortcuts};
-use inhibit::{Inhibit, Inhibitors};
 use input_capture::{InputCapture, Inputs, Zones};
-use notification::Notification;
 use recording::Recordings;
 use remote_desktop::{RemoteDesktop, Remotes};
 use screencast::ScreenCast;
@@ -664,7 +662,7 @@ fn answer(
     backends
         .notifications
         .on_portal_action(move |invoked: Invoked<OwnedVariant>, token| {
-            notification::invoked(&notification, invoked, token)
+            domicile_portal_notification::invoked(&notification, invoked, token)
         });
     let names = zbus::block_on(zbus::fdo::DBusProxy::new(&connection))?;
     let mut acquired = zbus::block_on(names.receive_name_acquired_with_args(&[(0, BUS_NAME)]))?;
@@ -696,7 +694,7 @@ fn heard(connection: &zbus::Connection, backends: &Backends, told: Told) -> zbus
         Told::Appearance(appearance) => {
             domicile_portal_settings::changed(&settings(connection)?, None, Some(appearance))
         }
-        Told::Screensaver(active) => inhibit::screensaver(
+        Told::Screensaver(active) => domicile_portal_inhibit::screensaver(
             &zbus::block_on(
                 connection
                     .object_server()
@@ -840,7 +838,7 @@ fn export<'a>(
         .serve_at(
             OBJECT_PATH,
             Notification {
-                notifications: backends.notifications.clone(),
+                notifications: Box::new(backends.notifications.clone()),
             },
         )
         .serve_at(
@@ -1580,7 +1578,7 @@ mod tests {
                 .interface::<_, Notification>(OBJECT_PATH),
         )
         .expect("served");
-        notification::invoked(
+        domicile_portal_notification::invoked(
             &iface,
             Invoked {
                 app_id: "org.example.App".into(),
@@ -1750,7 +1748,7 @@ mod tests {
         .expect("Close answered");
 
         let mut messages = zbus::MessageStream::from(&served.client);
-        inhibit::screensaver(&inhibit, true).expect("said");
+        domicile_portal_inhibit::screensaver(&inhibit, true).expect("said");
 
         assert_eq!(responses, [0, 0]);
         // The closed monitor would have been told first.

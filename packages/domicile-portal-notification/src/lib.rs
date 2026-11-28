@@ -1,8 +1,8 @@
 //! `org.freedesktop.impl.portal.Notification` (version 2): notifications from
 //! sandboxed and portal-using applications.
 //!
-//! They go straight into the `org.freedesktop.Notifications` history
-//! ([`crate::notifications`]), so the shell's drawer shows them with the rest.
+//! They go straight into the desk's `org.freedesktop.Notifications` history
+//! (the [`History`]), so the shell's drawer shows them with the rest.
 //! A press on one comes back as `ActionInvoked` with its target and an
 //! `xdg-activation` token.
 
@@ -15,14 +15,27 @@ use domicile_host::portal_notifications::{Action, Button, Invoked, PortalNotific
 use zbus::object_server::SignalEmitter;
 use zbus::{Fd, OwnedVariant, Variant};
 
-use crate::notifications::NotificationServer;
-
 /// The `org.freedesktop.impl.portal.Notification` version implemented.
 const INTERFACE_VERSION: u32 = 2;
 
+/// Where the portal's notifications go: the desk's notification history,
+/// which the shell draws.
+pub trait History: Send + Sync {
+    /// Add or replace `app_id`'s notification `id`.
+    fn add_from_portal(
+        &self,
+        app_id: String,
+        id: String,
+        notification: PortalNotification<OwnedVariant>,
+    );
+
+    /// Remove `app_id`'s notification `id`, if held.
+    fn remove_from_portal(&self, app_id: &str, id: &str);
+}
+
 /// The `Notification` backend object.
 pub struct Notification {
-    pub notifications: NotificationServer,
+    pub notifications: Box<dyn History>,
 }
 
 #[zbus::interface(name = "org.freedesktop.impl.portal.Notification")]
@@ -177,8 +190,8 @@ fn icon(sent: OwnedVariant) -> Option<Icon> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::fixture::options as sent;
     use super::*;
+    use domicile_portal::testing::options as sent;
     use std::io::{Seek, Write};
 
     fn button_sent(
