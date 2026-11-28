@@ -9,7 +9,10 @@
 //! `current_exe` resolves symlinks, so a binary run from `~/.nix-profile`
 //! finds its siblings in the store.
 
+use std::ffi::OsString;
+use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
+use std::process::{Command, ExitCode};
 
 /// A component missing next to the binary and not set in the environment.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -161,6 +164,51 @@ pub fn app_module(
         )?,
     };
     Ok(root.join(format!("{name}.js")))
+}
+
+/// Runs `domicile open --app` on Domicile's own app `name`, at `#<page>` when
+/// a page is given, in place of this process: what `domicile-history` and
+/// `domicile-settings` do. Returns only on failure, having said why on stderr
+/// as `command`.
+#[allow(
+    clippy::print_stderr,
+    reason = "a command: what it says on stderr is for the person or program that ran it"
+)]
+pub fn open_own_app(command: &str, name: &str, page: Option<OsString>) -> ExitCode {
+    let binary = match std::env::current_exe() {
+        Ok(binary) => binary,
+        Err(why) => {
+            eprintln!("{command}: cannot find myself: {why}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let module = match app_module(
+        &binary,
+        name,
+        &|variable| std::env::var(variable).ok(),
+        &|path| path.exists(),
+    ) {
+        Ok(module) => module,
+        Err(missing) => {
+            eprintln!("{command}: {missing}");
+            return ExitCode::FAILURE;
+        }
+    };
+    // The app reads the page from its address, and opens on its first page
+    // when it names none it has.
+    let mut target = module.into_os_string();
+    if let Some(page) = page {
+        target.push("#");
+        target.push(page);
+    }
+    let domicile = binary.with_file_name("domicile");
+    let why = Command::new(&domicile)
+        .arg("open")
+        .arg("--app")
+        .arg(target)
+        .exec();
+    eprintln!("{command}: could not run {}: {why}", domicile.display());
+    ExitCode::FAILURE
 }
 
 /// The file naming the installed version and commit: `libexec/domicile/version`.

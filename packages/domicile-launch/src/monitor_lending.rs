@@ -9,13 +9,14 @@
 //! the monitor, the compositor's hangs up on the command.
 
 use std::io::{BufRead, Write};
+use std::os::unix::net::UnixStream;
 use std::path::Path;
-use std::sync::Arc;
 use std::time::Duration;
 
 use crate::cli::{monitor_mode, MonitorMode};
-use crate::compositor_socket::virtual_monitor;
+use crate::compositor_socket::{virtual_monitor, HeldMonitor};
 use crate::control::{to_line, Lent, Request, Response};
+use crate::lending::{self, Lending};
 
 /// Holds the monitor `lent` asked for, from the compositor at `chrome`,
 /// until either side hangs up. `patience` is how long the compositor may take
@@ -25,71 +26,49 @@ pub fn lend(lent: Lent, chrome: &Path, patience: Duration) {
         name,
         mode,
         lines,
-        mut client,
+        client,
     } = lent;
-    let held = match virtual_monitor(chrome, &name, mode, Some(patience)) {
-        Ok(held) => Arc::new(held),
-        Err(why) => {
-            // The client may be gone already; there is no one else to tell.
-            let _ = client.write_all(
-                to_line(&Response::Refused {
-                    why: why.to_string(),
-                })
-                .as_bytes(),
-            );
-            return;
-        }
-    };
-    let answered = client.write_all(
-        to_line(&Response::VirtualMonitor {
-            output: held.output().to_owned(),
-        })
-        .as_bytes(),
+    lending::serve(
+        virtual_monitor(chrome, &name, mode, Some(patience)),
+        client,
+        lines,
+        |line| format!("a monitor's client sent '{line}', so it was removed"),
     );
-    // The compositor going hangs up on the client, which ends the loop below.
-    let watching = match (answered, client.try_clone()) {
-        (Ok(()), Ok(hanging_up)) => {
-            let held = Arc::clone(&held);
-            Some(std::thread::spawn(move || {
-                held.until_it_ends();
-                let _ = hanging_up.shutdown(std::net::Shutdown::Both);
-            }))
-        }
-        _ => None,
-    };
-    if watching.is_some() {
-        for line in lines.lines() {
-            let Ok(line) = line else { break };
-            match serde_json::from_str::<Request>(line.trim()) {
-                Ok(Request::ResizeVirtualMonitor {
-                    width,
-                    height,
-                    refresh_mhz,
-                    scale,
-                }) => {
-                    let mode = MonitorMode {
-                        size: (width, height),
-                        refresh_mhz,
-                        scale,
-                    };
-                    if held.resize(mode).is_err() {
-                        break;
-                    }
-                }
-                // Not what a monitor's connection carries; end it rather
-                // than guess.
-                _ => {
-                    crate::launcher_log::error(&format!(
-                        "a monitor's client sent '{line}', so it was removed"
-                    ));
-                    break;
-                }
-            }
+}
+
+// The compositor removing the monitor hangs up on the client.
+impl Lending for HeldMonitor {
+    fn answer(&self) -> Response {
+        Response::VirtualMonitor {
+            output: self.output().to_owned(),
         }
     }
-    held.give_back();
-    if let Some(watching) = watching {
-        let _ = watching.join();
+
+    fn watch(&self, _client: &mut UnixStream) {
+        self.until_it_ends();
+    }
+
+    fn heard(&self, request: Request) -> Option<bool> {
+        match request {
+            Request::ResizeVirtualMonitor {
+                width,
+                height,
+                refresh_mhz,
+                scale,
+            } => Some(
+                self.resize(MonitorMode {
+                    size: (width, height),
+                    refresh_mhz,
+                    scale,
+                })
+                .is_ok(),
+            ),
+            _ => None,
+        }
+    }
+
+    fn give_back(&self) {
+        HeldMonitor::give_back(self);
     }
 }
 

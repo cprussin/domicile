@@ -9,12 +9,13 @@
 //! list, the compositor's (the shell stopped it) hangs up on the command.
 
 use std::io::{BufRead, Write};
+use std::os::unix::net::UnixStream;
 use std::path::Path;
-use std::sync::Arc;
 use std::time::Duration;
 
-use crate::compositor_socket::agent;
+use crate::compositor_socket::{agent, HeldAgent};
 use crate::control::{to_line, Admission, Request, Response};
+use crate::lending::{self, Lending};
 
 /// How long the user has to answer: the compositor's minute, and some.
 pub const DECIDING_WITHIN: Duration = Duration::from_secs(75);
@@ -25,72 +26,47 @@ pub fn admit(admission: Admission, chrome: &Path, patience: Duration) {
     let Admission {
         agent: name,
         lines,
-        mut client,
+        client,
     } = admission;
-    let held = match agent(chrome, &name, Some(patience)) {
-        Ok(held) => Arc::new(held),
-        Err(why) => {
-            // The client may be gone already; there is no one else to tell.
-            let _ = client.write_all(
-                to_line(&Response::Refused {
-                    why: why.to_string(),
-                })
-                .as_bytes(),
-            );
-            return;
-        }
-    };
-    let answered = client.write_all(
-        to_line(&Response::Agent {
-            reach: held.reach().clone(),
-            session: held.session(),
-        })
-        .as_bytes(),
+    lending::serve(
+        agent(chrome, &name, Some(patience)),
+        client,
+        lines,
+        |line| format!("an agent's client sent '{line}', so it was let go"),
     );
-    // Each change the user makes is told to the client as another
-    // `Response::Agent`. The shell stopping it hangs up on the client, which
-    // ends the loop below.
-    let watching = match (answered, client.try_clone()) {
-        (Ok(()), Ok(mut telling)) => {
-            let held = Arc::clone(&held);
-            Some(std::thread::spawn(move || {
-                while let Some(reach) = held.changed() {
-                    let told = to_line(&Response::Agent {
-                        reach,
-                        session: held.session(),
-                    });
-                    if telling.write_all(told.as_bytes()).is_err() {
-                        break;
-                    }
-                }
-                let _ = telling.shutdown(std::net::Shutdown::Both);
-            }))
+}
+
+// Each change the user makes is told to the client as another
+// `Response::Agent`. The shell stopping it hangs up on the client.
+impl Lending for HeldAgent {
+    fn answer(&self) -> Response {
+        Response::Agent {
+            reach: self.reach().clone(),
+            session: self.session(),
         }
-        _ => None,
-    };
-    if watching.is_some() {
-        for line in lines.lines() {
-            let Ok(line) = line else { break };
-            match serde_json::from_str::<Request>(line.trim()) {
-                Ok(Request::AgentDid { said }) => {
-                    if held.did(said).is_err() {
-                        break;
-                    }
-                }
-                // Not what an agent's connection carries; end it rather than
-                // guess.
-                _ => {
-                    crate::launcher_log::error(&format!(
-                        "an agent's client sent '{line}', so it was let go"
-                    ));
-                    break;
-                }
+    }
+
+    fn watch(&self, client: &mut UnixStream) {
+        while let Some(reach) = self.changed() {
+            let told = to_line(&Response::Agent {
+                reach,
+                session: self.session(),
+            });
+            if client.write_all(told.as_bytes()).is_err() {
+                break;
             }
         }
     }
-    held.give_back();
-    if let Some(watching) = watching {
-        let _ = watching.join();
+
+    fn heard(&self, request: Request) -> Option<bool> {
+        match request {
+            Request::AgentDid { said } => Some(self.did(said).is_ok()),
+            _ => None,
+        }
+    }
+
+    fn give_back(&self) {
+        HeldAgent::give_back(self);
     }
 }
 

@@ -79,6 +79,7 @@ pub mod idle_inhibit;
 pub mod install_app;
 pub mod journal;
 pub mod launcher_log;
+pub mod lending;
 pub mod listing;
 pub mod log_export;
 pub mod log_levels;
