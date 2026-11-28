@@ -57,17 +57,16 @@ export type KeyHandlers = {
    * command, with its arguments. `Ok({ output })` is printed by
    * `domicile send-shell`, as a query's answer; `Err` says why the shell did
    * not run it, which `domicile send-shell` fails with.
+   *
+   * `window` is the window to run it on rather than the user's focus, by app
+   * id or a browser window's engine id: the one its `--window` named, or an
+   * agent's own focus. Only a page with a command in `commands` that acts on
+   * a window hears one, and it refuses `window` for a command that acts on
+   * none.
    */
-  onCommand: (args: readonly string[]) => Result<CommandRan, string>;
-  /**
-   * `domicile send-shell --window` sent a command to run on `window`, by app
-   * id or a browser window's engine id, rather than the user's focus: an
-   * agent's on a window it holds, say. Answered as `onCommand` is. Without
-   * it, the page never hears such a command.
-   */
-  onWindowCommand?: (
+  onCommand: (
     args: readonly string[],
-    window: string,
+    window: string | undefined,
   ) => Result<CommandRan, string>;
   /**
    * The words that can follow `args` in a command, for `domicile
@@ -123,7 +122,6 @@ export const bindKeys = (
     onCommand,
     onComplete,
     onModeChanged,
-    onWindowCommand,
     report = reportToConsole,
     reportRefusal = refusalToConsole,
   }: KeyHandlers,
@@ -142,7 +140,7 @@ export const bindKeys = (
   const run = (action: OneKeyAction | undefined) => {
     switch (action?.kind) {
       case KeyActionKind.SendShell: {
-        onCommand(action.args).match({
+        onCommand(action.args, undefined).match({
           Err: reportRefusal,
           Ok: () => undefined,
         });
@@ -235,7 +233,7 @@ export const bindKeys = (
     domicile.shell,
     help,
     describedBindings(bindings),
-    { onCommand, onComplete, onWindowCommand },
+    { onCommand, onComplete },
     report,
   );
   return {
@@ -362,11 +360,9 @@ const hearCommands = (
   {
     onCommand,
     onComplete,
-    onWindowCommand,
   }: {
     onCommand: KeyHandlers["onCommand"];
     onComplete: KeyHandlers["onComplete"];
-    onWindowCommand: KeyHandlers["onWindowCommand"];
   },
   report: (error: SystemError) => void,
 ): { stop: () => void } => {
@@ -378,19 +374,8 @@ const hearCommands = (
     complete,
     window,
     words,
-  }: ShellCommand): Result<CommandRan, string> => {
-    if (complete) {
-      return completed(words, onComplete);
-    } else if (window === undefined) {
-      return onCommand(words);
-    } else if (onWindowCommand === undefined) {
-      // The compositor sends one only to a page that asked; run on the
-      // user's focus instead, it would act on the wrong window.
-      return Err("this shell runs no command on a given window");
-    } else {
-      return onWindowCommand(words, window);
-    }
-  };
+  }: ShellCommand): Result<CommandRan, string> =>
+    complete ? completed(words, onComplete) : onCommand(words, window);
   const runAndAnswer = (command: ShellCommand) => {
     shell
       .answer(command.sent, run(command))
@@ -400,12 +385,7 @@ const hearCommands = (
       .catch(reportToConsole);
   };
   shell
-    .commands(
-      help,
-      bound,
-      onWindowCommand !== undefined,
-      onComplete !== undefined,
-    )
+    .commands(help, bound, onComplete !== undefined)
     .then((result) => {
       result.match({
         Err: report,

@@ -44,8 +44,8 @@ type Options = {
   /** Answers a query such as `get-tree` with JSON. */
   answer: (query: Query) => string;
   /**
-   * The window on a workspace that `send-shell --window` names, by its app id
-   * or a browser window's engine id; see `windowNamed`.
+   * The window on a workspace that a command's `--window` names, by its app
+   * id or a browser window's engine id; see `windowNamed`.
    */
   windowNamed: (name: string) => string | undefined;
   /** Reports unknown commands. Injectable for tests. */
@@ -82,7 +82,7 @@ export const useKeybindings = ({
   // A known command the launcher or overview holds back still counts as run:
   // it is the shell's to hold back. A query changes nothing, so it always
   // answers.
-  const onCommand = useEffectEvent(
+  const onFocusCommand = useEffectEvent(
     (args: readonly string[]): Result<CommandRan, string> => {
       const query = parseQuery(args);
       if (query !== undefined) {
@@ -100,8 +100,8 @@ export const useKeybindings = ({
     },
   );
 
-  // An agent's command on a window it holds acts on that window, so neither
-  // the launcher nor the overview holds it back.
+  // A command on a window, such as an agent's on one it holds, acts on that
+  // window, so neither the launcher nor the overview holds it back.
   const onWindowCommand = useEffectEvent(
     (args: readonly string[], window: string): Result<CommandRan, string> => {
       const id = windowNamed(window);
@@ -112,6 +112,16 @@ export const useKeybindings = ({
             return "ran" as const;
           });
     },
+  );
+
+  const onCommand = useEffectEvent(
+    (
+      args: readonly string[],
+      window: string | undefined,
+    ): Result<CommandRan, string> =>
+      window === undefined
+        ? onFocusCommand(args)
+        : onWindowCommand(args, window),
   );
 
   const reportRefusal = useEffectEvent((why: string) => {
@@ -128,7 +138,6 @@ export const useKeybindings = ({
       onCommand,
       onComplete: completeCommand,
       onModeChanged: modeChanged,
-      onWindowCommand,
       reportRefusal: (why) => {
         reportRefusal(why);
       },

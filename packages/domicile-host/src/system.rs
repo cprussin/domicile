@@ -34,9 +34,9 @@ use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 
 use domicile_protocol::{
-    AgentReach, Bus, DirEntry, FileType, HostMessage, InhibitorAction, KeymapChoice, KnownAgents,
-    PreviewedWindow, Scale, Signal, Stream, SystemEnd, SystemError, SystemErrorKind, SystemEvent,
-    SystemReply, SystemRequest, WindowState,
+    named_window, AgentReach, Bus, DirEntry, FileType, HostMessage, InhibitorAction, KeymapChoice,
+    KnownAgents, PreviewedWindow, Scale, Signal, Stream, SystemEnd, SystemError, SystemErrorKind,
+    SystemEvent, SystemReply, SystemRequest, WindowState,
 };
 use notify::{EventKindMask, RecursiveMode, Watcher};
 use zbus::export::ordered_stream::OrderedStreamExt;
@@ -1040,14 +1040,13 @@ impl System {
             SystemRequest::ShellCommands {
                 commands,
                 bindings,
-                on_a_window,
                 completes,
             } => self.starting(id, |system| {
                 let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
                 let listener = system.shell_commands.listen(
                     commands,
                     bindings,
-                    (on_a_window, completes),
+                    completes,
                     Arc::new(move |(command, sent, sending): &Heard| {
                         let Some(running) = running.upgrade() else {
                             return;
@@ -1146,10 +1145,20 @@ impl System {
                 seconds,
                 Mark::BeforeBlanking(Duration::from_secs(seconds)),
             ),
-            // The compositor checked `agent` holds `window`.
-            SystemRequest::SendShell {
-                command, window, ..
-            } => self.send_shell(id, &command, Sent::Run(window)),
+            // The compositor checked `agent` holds the window named.
+            SystemRequest::SendShell { command, .. } => match named_window(&command) {
+                Ok((window, command)) => self.send_shell(id, &command, Sent::Run(window)),
+                Err(message) => {
+                    (self.tell)(HostMessage::SystemReply {
+                        id,
+                        reply: failed(SystemError {
+                            kind: SystemErrorKind::Other,
+                            message,
+                        }),
+                    });
+                    Handled::Done
+                }
+            },
             SystemRequest::CompleteShell { command } => {
                 self.send_shell(id, &command, Sent::Complete)
             }

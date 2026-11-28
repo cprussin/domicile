@@ -262,7 +262,6 @@ fn the_compositor_is_told_to_send_the_command_and_says_it_did() {
             &path,
             &["focus".to_string(), "right".to_string()],
             None,
-            None,
             Some(BRIEFLY)
         ),
         Ok(Some("done".to_string()))
@@ -335,7 +334,7 @@ fn a_command_the_compositor_did_not_send_is_carried_back_in_its_own_words() {
     );
 
     assert_eq!(
-        send_shell(&path, &["focus".to_string()], None, None, Some(BRIEFLY)),
+        send_shell(&path, &["focus".to_string()], None, Some(BRIEFLY)),
         Err(CompositorError::Refused {
             why: "the desktop is locked".to_string()
         })

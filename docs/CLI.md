@@ -323,7 +323,7 @@ domicile export-logs
 domicile export-logs --show-everything ~/bug.txt
 ```
 
-## `domicile send-shell [--agent <session>] [--window <id>] <word>...`
+## `domicile send-shell [--agent <session>] <word>...`
 
 Run a shell command, as a keybinding bound to it does:
 `domicile send-shell workspace 2`. Manganese's commands are in
@@ -341,20 +341,19 @@ domicile send-shell get-workspaces | jq '.[] | select(.visible) | .name'
 domicile send-shell get-tree
 ```
 
-With `--window`, by its `list-windows` id, the command acts on that window
-instead of the focus. Only a page that runs commands on a given window
-(`bindKeys`' `onWindowCommand`) hears it; manganese runs every command that
-acts on a window there, such as `move container to workspace <name>`,
-`floating toggle` or `kill`, and refuses the ones that act on the desk.
+A command that acts on a window takes `--window <id>`, by its `list-windows`
+id, anywhere after its first word, and acts on that window instead of the
+focus. `list-shell-commands` shows which: `move [--window <id>] left|right|up|down`.
+A shell says so for each command in its `bindKeys` `commands`, and refuses
+`--window` on the others, such as `workspace 2`.
 
 With `--agent`, the command acts on the agent's window, never the user's:
 the one `--window` names, which the agent must hold, or else the one the
-agent's keyboard is in. So an agent's command always names a window, and one
-that acts on the desk, such as `workspace 2`, is refused.
+agent's keyboard is in. So a command that acts on the desk is refused.
 
 ```sh
 domicile send-shell --agent 3 move container to workspace 2
-domicile send-shell --window <id> floating toggle
+domicile send-shell floating --window <id> toggle
 ```
 
 ## `domicile list-shell-commands [--json]`
@@ -553,7 +552,7 @@ that is `xwayland-satellite` and every X11 window.
 
 `focus-window` without `--agent`, `close-window` and `kill-window` take only
 native windows. The shell shows and closes browser windows:
-`send-shell --window <id> kill` closes one.
+`send-shell kill --window <id>` closes one.
 
 ## `domicile exec [--agent <session>] <program> [<arg>...]`
 
@@ -733,7 +732,7 @@ Each tool runs a verb and answers what it printed, or its error:
 | Tool | Runs |
 |---|---|
 | `list_windows`, `list_displays`, `list_inputs`, `status`, `list_shell_commands`, `list_bindings` | that verb with `--json` |
-| `send_shell` | `send-shell --agent <words>...`, on the window the agent's keyboard is in; given `window`, `focus-window --agent` on it, then `send-shell --agent --window <window> <words>...` |
+| `send_shell` | `send-shell --agent <words>...`, on the window the agent's keyboard is in; when `words` hold `--window <window>`, `focus-window --agent <window>` first |
 | `exec` | `exec <argv>...` |
 | `open` | `open [--app] [--profile <id>] <target>` |
 | `focus_window` | `focus-window --agent <window>` |
