@@ -9,10 +9,16 @@
 //
 //   bun src/harness.ts [--chromium <path>] [<crowd>...]
 
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { parseArgs } from "node:util";
+import {
+  launched,
+  named,
+  said,
+  served,
+  storyUrl,
+} from "@domicile-desktop/story-harness/harness";
 import type { Browser, Locator, Page } from "playwright";
-import { chromium } from "playwright";
 
 import type { Crowd } from "./crowd";
 import { CROWDS } from "./crowds";
@@ -45,66 +51,34 @@ const main = async () => {
     allowPositionals: true,
     options: { chromium: { type: "string" } },
   });
-  const crowds = positionals.length === 0 ? CROWDS : positionals.map(named);
-  const browser = await launched(values.chromium);
-  const server = Bun.serve({
-    fetch: (request) =>
-      new Response(
-        Bun.file(join(STORYBOOK, new URL(request.url).pathname.slice(1))),
-      ),
-    port: 0,
+  const crowds =
+    positionals.length === 0 ? CROWDS : positionals.map(crowdNamed);
+  const browser = await launched({
+    executablePath: values.chromium,
+    harness: "popover-harness",
+    options: { ignoreDefaultArgs: SHOWN },
+    variable: "DOMICILE_POPOVER_CHROMIUM",
   });
+  const server = served(STORYBOOK);
   const verdicts: boolean[] = [];
   for (const crowd of crowds) {
-    verdicts.push(await checked(browser, storyUrl(server.url, crowd), crowd));
+    verdicts.push(await checked(browser, crowdUrl(server.url, crowd), crowd));
   }
   await server.stop();
   await browser.close();
   process.exit(verdicts.every(Boolean) ? 0 : 1);
 };
 
-/** The crowd with `id`. Throws on one the harness does not know. */
-const named = (id: string): Crowd => {
-  const crowd = CROWDS.find((found) => found.id === id);
-  if (crowd === undefined) {
-    throw new Error(
-      `popover-harness: no crowd ${id}; there are ${CROWDS.map((known) => known.id).join(", ")}`,
-    );
-  } else {
-    return crowd;
-  }
-};
-
-/**
- * Chromium: the one at `executablePath`, or Playwright's own. Exits as a skip
- * when neither is given nor installed.
- */
-const launched = async (
-  executablePath: string | undefined,
-): Promise<Browser> => {
-  if (executablePath !== undefined) {
-    return chromium.launch({ executablePath, ignoreDefaultArgs: SHOWN });
-  } else if (await Bun.file(chromium.executablePath()).exists()) {
-    return chromium.launch({ ignoreDefaultArgs: SHOWN });
-  } else {
-    said(
-      "SKIP: no Chromium for Playwright; run `node_modules/.bin/playwright install --with-deps chromium` in packages/popover-harness, or set DOMICILE_POPOVER_CHROMIUM",
-    );
-    process.exit(77);
-  }
-};
-
 /** Playwright's flag hiding scrollbars, left out so the harness sees them. */
 const SHOWN = ["--hide-scrollbars"];
 
+/** The crowd with `id`. Throws on one the harness does not know. */
+const crowdNamed = (id: string): Crowd =>
+  named("popover-harness", "crowd", CROWDS, id);
+
 /** The story drawing `crowd`, alone in its frame. */
-const storyUrl = (storybook: URL, crowd: Crowd): string => {
-  const url = new URL("iframe.html", storybook);
-  url.searchParams.set("id", "crowd--crowded");
-  url.searchParams.set("viewMode", "story");
-  url.searchParams.set("args", `crowd:${crowd.id}`);
-  return url.toString();
-};
+const crowdUrl = (storybook: URL, crowd: Crowd): string =>
+  storyUrl(storybook, "crowd--crowded", `crowd:${crowd.id}`);
 
 /** Opens `crowd`'s panel at `url` and prints its verdict. */
 const checked = async (
@@ -690,10 +664,5 @@ const px = (value: number) => `${Math.round(value).toString()}px`;
 
 const describe = ({ height, width }: { height: number; width: number }) =>
   `${width.toString()}x${height.toString()}`;
-
-const said = (line: string) => {
-  // biome-ignore lint/suspicious/noConsole: the check's verdicts
-  console.log(line);
-};
 
 await main();

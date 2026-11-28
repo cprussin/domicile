@@ -1,0 +1,28 @@
+{
+  "description": "Shared pieces of the harnesses that check a built Storybook in Chromium through Playwright.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@pandacss/dev": "catalog:",
+    "@storybook/react-vite": "catalog:",
+    "@types/bun": "catalog:",
+    "playwright": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  },
+  "engines": {
+    "bun": ">=1.4.2"
+  },
+  "exports": {
+    "./harness": "./src/harness.ts",
+    "./storybook-config": "./src/storybook-config.ts"
+  },
+  "license": "MIT",
+  "name": "@domicile-desktop/story-harness",
+  "private": true,
+  "scripts": {
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

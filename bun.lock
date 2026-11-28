@@ -158,6 +158,7 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/story-harness": "workspace:*",
         "@domicile-desktop/test-support": "workspace:*",
         "@storybook/addon-docs": "catalog:",
         "@storybook/addon-themes": "catalog:",
@@ -1106,6 +1107,7 @@
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
         "@domicile-desktop/check-runner": "workspace:*",
+        "@domicile-desktop/story-harness": "workspace:*",
         "@domicile-desktop/test-support": "workspace:*",
         "@pandacss/dev": "catalog:",
         "@storybook/react-vite": "catalog:",
@@ -1145,6 +1147,7 @@
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
         "@domicile-desktop/check-runner": "workspace:*",
+        "@domicile-desktop/story-harness": "workspace:*",
         "@domicile-desktop/test-support": "workspace:*",
         "@pandacss/dev": "catalog:",
         "@storybook/react-vite": "catalog:",
@@ -1357,6 +1360,19 @@
       "version": "0.0.1",
       "devDependencies": {
         "@domicile-desktop/check-runner": "workspace:*",
+      },
+    },
+    "packages/story-harness": {
+      "name": "@domicile-desktop/story-harness",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@pandacss/dev": "catalog:",
+        "@storybook/react-vite": "catalog:",
+        "@types/bun": "catalog:",
+        "playwright": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
       },
     },
     "packages/system-apps": {
@@ -1763,6 +1779,8 @@
     "@domicile-desktop/site": ["@domicile-desktop/site@workspace:packages/site"],
 
     "@domicile-desktop/spelling": ["@domicile-desktop/spelling@workspace:packages/spelling"],
+
+    "@domicile-desktop/story-harness": ["@domicile-desktop/story-harness@workspace:packages/story-harness"],
 
     "@domicile-desktop/system-apps": ["@domicile-desktop/system-apps@workspace:packages/system-apps"],
 

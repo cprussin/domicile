@@ -7,8 +7,14 @@
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import {
+  launched,
+  named,
+  said,
+  served,
+  storyUrl,
+} from "@domicile-desktop/story-harness/harness";
 import type { Browser, Page } from "playwright";
-import { chromium } from "playwright";
 
 import type { Motion } from "./motion";
 import { MOTIONS } from "./motions";
@@ -34,25 +40,28 @@ const main = async () => {
     allowPositionals: true,
     options: { chromium: { type: "string" }, frames: { type: "string" } },
   });
-  const motions = positionals.length === 0 ? MOTIONS : positionals.map(named);
-  const browser = await launched(values.chromium);
-  const server = Bun.serve({
-    fetch: (request) =>
-      new Response(
-        Bun.file(join(STORYBOOK, new URL(request.url).pathname.slice(1))),
-      ),
-    port: 0,
+  const motions =
+    positionals.length === 0 ? MOTIONS : positionals.map(motionNamed);
+  const browser = await launched({
+    executablePath: values.chromium,
+    harness: "motion-harness",
+    variable: "DOMICILE_MOTION_CHROMIUM",
   });
+  const server = served(STORYBOOK);
   const verdicts = await sequentially(motions, async (motion) => {
     const passed = verdict(
       motion,
-      await traced(browser, storyUrl(server.url, "as-shipped", motion), motion),
+      await traced(
+        browser,
+        motionUrl(server.url, "as-shipped", motion),
+        motion,
+      ),
     );
     if (values.frames !== undefined) {
       const frames = join(values.frames, motion.id);
       const count = await recorded(
         browser,
-        storyUrl(server.url, "slowed", motion),
+        motionUrl(server.url, "slowed", motion),
         motion,
         frames,
       );
@@ -66,35 +75,12 @@ const main = async () => {
 };
 
 /** The motion with `id`. Throws on one the harness does not know. */
-const named = (id: string): Motion => {
-  const motion = MOTIONS.find((found) => found.id === id);
-  if (motion === undefined) {
-    throw new Error(
-      `motion-harness: no motion ${id}; there are ${MOTIONS.map((known) => known.id).join(", ")}`,
-    );
-  } else {
-    return motion;
-  }
-};
+const motionNamed = (id: string): Motion =>
+  named("motion-harness", "motion", MOTIONS, id);
 
-/**
- * Chromium: the one at `executablePath`, or Playwright's own. Exits as a skip
- * when neither is given nor installed.
- */
-const launched = async (
-  executablePath: string | undefined,
-): Promise<Browser> => {
-  if (executablePath !== undefined) {
-    return chromium.launch({ executablePath });
-  } else if (await Bun.file(chromium.executablePath()).exists()) {
-    return chromium.launch();
-  } else {
-    said(
-      "SKIP: no Chromium for Playwright; run `node_modules/.bin/playwright install --with-deps chromium` in packages/motion-harness, or set DOMICILE_MOTION_CHROMIUM",
-    );
-    process.exit(77);
-  }
-};
+/** The story `story` of the Storybook at `storybook` playing `motion`. */
+const motionUrl = (storybook: URL, story: string, motion: Motion): string =>
+  storyUrl(storybook, `motion--${story}`, `motion:${motion.id}`);
 
 /** Runs `each` on every item, one after another. */
 const sequentially = async <T, R>(
@@ -106,15 +92,6 @@ const sequentially = async <T, R>(
     results.push(await each(item));
   }
   return results;
-};
-
-/** The story `story` of `storybook` playing `motion`, alone in its frame. */
-const storyUrl = (storybook: URL, story: string, motion: Motion): string => {
-  const url = new URL("iframe.html", storybook);
-  url.searchParams.set("id", `motion--${story}`);
-  url.searchParams.set("viewMode", "story");
-  url.searchParams.set("args", `motion:${motion.id}`);
-  return url.toString();
 };
 
 /** The animations `motion` runs at `url`, played forward and back. */
@@ -241,11 +218,6 @@ const verdict = (
     );
     return true;
   }
-};
-
-const said = (line: string) => {
-  // biome-ignore lint/suspicious/noConsole: the check's verdicts
-  console.log(line);
 };
 
 await main();

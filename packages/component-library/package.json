@@ -12,6 +12,7 @@
   "description": "React components and the Panda CSS design system that Domicile's shells are built from.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/story-harness": "workspace:*",
     "@domicile-desktop/test-support": "workspace:*",
     "@storybook/addon-docs": "catalog:",
     "@storybook/addon-themes": "catalog:",
