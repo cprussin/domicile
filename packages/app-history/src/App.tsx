@@ -3,6 +3,7 @@ import type { Point } from "@domicile-desktop/component-library/ContextMenu";
 import { ContextMenu } from "@domicile-desktop/component-library/ContextMenu";
 import {
   createToastManager,
+  TextToaster,
   Toaster,
 } from "@domicile-desktop/component-library/Toaster";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
@@ -16,7 +17,7 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { css } from "../styled-system/css";
-import { flex, vstack } from "../styled-system/patterns";
+import { flex } from "../styled-system/patterns";
 import { Atmosphere } from "./Atmosphere";
 import type { Browser } from "./browser";
 import { ClearDataDialog } from "./ClearDataDialog";
@@ -291,24 +292,7 @@ export const App = ({ browser, now = Date.now }: Props) => {
           open={clearing}
           removeBrowsingData={browser.removeBrowsingData}
         />
-        <div className={toastAreaStyles}>
-          <Toaster label="Notifications">
-            {(toast) => (
-              <div className={toastStyles}>
-                <span className={toastTitleStyles}>
-                  <Toaster.Title>{toast.title}</Toaster.Title>
-                </span>
-                {toast.description !== undefined && (
-                  <span className={toastDescriptionStyles}>
-                    <Toaster.Description>
-                      {toast.description}
-                    </Toaster.Description>
-                  </span>
-                )}
-              </div>
-            )}
-          </Toaster>
-        </div>
+        <TextToaster label="Notifications" />
       </div>
     </Toaster.Provider>
   );
@@ -413,30 +397,4 @@ const columnStyles = css({
   marginInline: "auto",
   maxInlineSize: 200,
   paddingBlockStart: 2,
-});
-
-const toastAreaStyles = css({
-  inlineSize: 96,
-  insetBlockStart: 4,
-  insetInlineEnd: 4,
-  position: "fixed",
-  zIndex: "toast",
-});
-
-const toastStyles = vstack({
-  alignItems: "flex-start",
-  gap: 0.5,
-  paddingBlock: 3,
-  paddingInline: 4,
-});
-
-const toastTitleStyles = css({
-  color: "foreground",
-  fontSize: "sm",
-  fontWeight: "semibold",
-});
-
-const toastDescriptionStyles = css({
-  color: "muted",
-  fontSize: "xs",
 });

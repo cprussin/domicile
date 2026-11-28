@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 
 import { springTransition } from "../__test__/spring-transition";
-import { createToastManager, Toaster } from "./Toaster";
+import { createToastManager, TextToaster, Toaster } from "./Toaster";
 
 /** A toaster over `manager`, each toast drawn as its title and description. */
 const toaster = (manager: ReturnType<typeof createToastManager>) =>
@@ -245,5 +245,39 @@ describe(Toaster, () => {
 
       expect(clicks).toEqual(["card"]);
     });
+  });
+});
+
+describe(TextToaster, () => {
+  const textToaster = () => {
+    const manager = createToastManager();
+    render(
+      <Toaster.Provider toastManager={manager}>
+        <TextToaster label="Notifications" />
+      </Toaster.Provider>,
+    );
+    return manager;
+  };
+
+  it("draws a toast's title and description", async () => {
+    const manager = textToaster();
+    act(() => {
+      manager.add({ description: "Ada: lunch?", title: "New message" });
+    });
+
+    expect(
+      await screen.findByRole("dialog", { name: "New message" }),
+    ).toHaveAccessibleDescription("Ada: lunch?");
+  });
+
+  it("draws only the title of a toast without a description", async () => {
+    const manager = textToaster();
+    act(() => {
+      manager.add({ title: "Browsing data cleared" });
+    });
+
+    expect(
+      await screen.findByRole("dialog", { name: "Browsing data cleared" }),
+    ).not.toHaveAccessibleDescription();
   });
 });

@@ -1,5 +1,6 @@
 import {
   createToastManager,
+  TextToaster,
   Toaster,
 } from "@domicile-desktop/component-library/Toaster";
 import type { ComponentType, ReactNode } from "react";
@@ -148,24 +149,7 @@ export const App = ({ extensions, host }: Props) => {
             />
           </TemporaryChangesProvider>
         </main>
-        <div className={toastAreaStyles}>
-          <Toaster label="Notifications">
-            {(toast) => (
-              <div className={toastStyles}>
-                <span className={toastTitleStyles}>
-                  <Toaster.Title>{toast.title}</Toaster.Title>
-                </span>
-                {toast.description !== undefined && (
-                  <span className={toastDescriptionStyles}>
-                    <Toaster.Description>
-                      {toast.description}
-                    </Toaster.Description>
-                  </span>
-                )}
-              </div>
-            )}
-          </Toaster>
-        </div>
+        <TextToaster label="Notifications" />
       </div>
     </Toaster.Provider>
   );
@@ -406,30 +390,4 @@ const failureStyles = vstack({
   maxInlineSize: 200,
   paddingBlockStart: 6,
   paddingInline: 8,
-});
-
-const toastAreaStyles = css({
-  inlineSize: 96,
-  insetBlockStart: 4,
-  insetInlineEnd: 4,
-  position: "fixed",
-  zIndex: "toast",
-});
-
-const toastStyles = vstack({
-  alignItems: "flex-start",
-  gap: 0.5,
-  paddingBlock: 3,
-  paddingInline: 4,
-});
-
-const toastTitleStyles = css({
-  color: "foreground",
-  fontSize: "sm",
-  fontWeight: "semibold",
-});
-
-const toastDescriptionStyles = css({
-  color: "muted",
-  fontSize: "xs",
 });

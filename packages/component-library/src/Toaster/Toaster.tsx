@@ -166,6 +166,57 @@ export const Toaster = Object.assign(ToasterComponent, {
   Title,
 });
 
+/**
+ * A toaster of toasts that say only a title and, under it, an optional
+ * description, in the top trailing corner of the window.
+ */
+export const TextToaster = ({ label }: { label: string }) => (
+  <div className={textAreaStyles}>
+    <ToasterComponent label={label}>
+      {(toast) => (
+        <div className={textStyles}>
+          <span className={textTitleStyles}>
+            <Title>{toast.title}</Title>
+          </span>
+          {toast.description !== undefined && (
+            <span className={textDescriptionStyles}>
+              <Description>{toast.description}</Description>
+            </span>
+          )}
+        </div>
+      )}
+    </ToasterComponent>
+  </div>
+);
+
+const textAreaStyles = css({
+  inlineSize: 96,
+  insetBlockStart: 4,
+  insetInlineEnd: 4,
+  position: "fixed",
+  zIndex: "toast",
+});
+
+const textStyles = css({
+  alignItems: "flex-start",
+  display: "flex",
+  flexDirection: "column",
+  gap: 0.5,
+  paddingBlock: 3,
+  paddingInline: 4,
+});
+
+const textTitleStyles = css({
+  color: "foreground",
+  fontSize: "sm",
+  fontWeight: "semibold",
+});
+
+const textDescriptionStyles = css({
+  color: "muted",
+  fontSize: "xs",
+});
+
 // Stacks below modal panels so a toast never covers an open dialog.
 const viewportStyles = css({
   inlineSize: "min({spacing.96}, 100%)",
