@@ -1,8 +1,8 @@
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { Link } from "@domicile-desktop/sdk/shell-command";
+import { eachOf } from "@domicile-desktop/sdk/streams";
 import type { Listening } from "@domicile-desktop/sdk/system";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
 import type { Inbox, InboxReading } from "./inbox";
 import { InboxKind, sendersOf } from "./inbox";
 import type { Sender } from "./MailPicker";
@@ -154,16 +154,6 @@ const claimLinks = (
     state.stopped = true;
     state.listening?.stop();
   };
-};
-
-/** Call `each` with every item `items` brings, until it closes. */
-const eachOf = async <T>(
-  items: ReadableStream<T>,
-  each: (item: T) => void,
-): Promise<void> => {
-  for await (const item of items) {
-    each(item);
-  }
 };
 
 const report = (error: unknown): void => {

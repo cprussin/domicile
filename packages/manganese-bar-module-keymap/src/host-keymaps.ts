@@ -1,5 +1,6 @@
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { Keymaps } from "@domicile-desktop/sdk/keymap-choice";
+import { eachOf } from "@domicile-desktop/sdk/streams";
 import type { Listening } from "@domicile-desktop/sdk/system";
 
 /** The keymaps as the bar's keymap item uses them. */
@@ -43,14 +44,4 @@ export const hostKeymaps = ({
 const logFailure = (error: unknown): void => {
   // biome-ignore lint/suspicious/noConsole: the item keeps showing the last keymap it heard
   console.error("could not watch the keymaps", error);
-};
-
-/** Call `each` with every item `items` brings, until it closes. */
-const eachOf = async <T>(
-  items: ReadableStream<T>,
-  each: (item: T) => void,
-): Promise<void> => {
-  for await (const item of items) {
-    each(item);
-  }
 };

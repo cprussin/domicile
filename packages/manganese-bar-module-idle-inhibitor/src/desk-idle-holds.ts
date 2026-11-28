@@ -2,6 +2,7 @@ import { perDesktop } from "@domicile-desktop/react/per-desktop";
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import { eachOf } from "@domicile-desktop/sdk/streams";
 import type { Listening } from "@domicile-desktop/sdk/system";
 
 /**
@@ -45,14 +46,4 @@ export const deskIdleHolds = perDesktop(
 const logFailure = (error: unknown): void => {
   // biome-ignore lint/suspicious/noConsole: the eye keeps showing the last holders it heard
   console.error("could not watch what holds the desk awake", error);
-};
-
-/** Call `each` with every item `items` brings, until it closes. */
-const eachOf = async <T>(
-  items: ReadableStream<T>,
-  each: (item: T) => void,
-): Promise<void> => {
-  for await (const item of items) {
-    each(item);
-  }
 };

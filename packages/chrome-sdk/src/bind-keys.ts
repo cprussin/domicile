@@ -40,6 +40,7 @@ import type {
   ShellCommand,
   ShellCommandHelp,
 } from "./shell-command";
+import { eachOf } from "./streams";
 import type { Listening, SystemError } from "./system";
 
 /** The initial binding mode. */
@@ -417,13 +418,3 @@ const completed = (
   onComplete === undefined
     ? Err("this shell completes no command")
     : Ok({ output: JSON.stringify(onComplete(words)) });
-
-/** Call `each` with every item `items` brings, until it closes. */
-const eachOf = async <T>(
-  items: ReadableStream<T>,
-  each: (item: T) => void,
-): Promise<void> => {
-  for await (const item of items) {
-    each(item);
-  }
-};
