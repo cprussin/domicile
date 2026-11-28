@@ -459,6 +459,24 @@ class FrameSinkBrokerTest : public testing::Test {
     return local_surface_id_allocator_.GetCurrentLocalSurfaceId();
   }
 
+  // A producer connected to the broker, with one sink brokered to it.
+  struct Producer {
+    mojo::Remote<mojom::FrameSinkBroker> remote;
+    viz::MockCompositorFrameSinkClient sink_client;
+    mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+    viz::FrameSinkId frame_sink_id;
+  };
+
+  // Connects a producer that has brokered one sink, observed by no one.
+  std::unique_ptr<Producer> ConnectAProducer() {
+    auto producer = std::make_unique<Producer>();
+    broker()->Bind(producer->remote.BindNewPipeAndPassReceiver());
+    producer->frame_sink_id =
+        BrokerASink(producer->remote, producer->sink_client, producer->sink,
+                    mojo::NullRemote());
+    return producer;
+  }
+
   // Brokers a sink to `observer` and returns its id, leaving `sink` bound.
   viz::FrameSinkId BrokerASink(
       mojo::Remote<mojom::FrameSinkBroker>& remote,
@@ -763,12 +781,8 @@ TEST_F(FrameSinkBrokerTest, BrokersASinkToACallerThatIsNotARenderer) {
   viz::MockCompositorFrameSinkClient sink_client;
   mojo::Remote<viz::mojom::CompositorFrameSink> sink;
 
-  base::test::TestFuture<const viz::FrameSinkId&> future;
-  remote->CreateFrameSink(sink_client.BindInterfaceRemote(),
-                          sink.BindNewPipeAndPassReceiver(), mojo::NullRemote(),
-                          "test-app", future.GetCallback());
-
-  const viz::FrameSinkId frame_sink_id = future.Get();
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
   EXPECT_TRUE(frame_sink_id.is_valid());
   EXPECT_EQ(kBrowserClientId, frame_sink_id.client_id());
 
@@ -811,16 +825,8 @@ TEST_F(FrameSinkBrokerTest, AllocatesADistinctIdPerSink) {
 
 // DestroyFrameSink removes the sink from viz.
 TEST_F(FrameSinkBrokerTest, DestroyFrameSinkRemovesTheSinkFromViz) {
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  base::test::TestFuture<const viz::FrameSinkId&> future;
-  remote->CreateFrameSink(sink_client.BindInterfaceRemote(),
-                          sink.BindNewPipeAndPassReceiver(), mojo::NullRemote(),
-                          "test-app", future.GetCallback());
-  const viz::FrameSinkId frame_sink_id = future.Get();
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
   RunUntilIdle();
   ASSERT_TRUE(VizHasFrameSink(frame_sink_id));
 
@@ -838,11 +844,8 @@ TEST_F(FrameSinkBrokerTest, DroppingTheConnectionDestroysEverySink) {
 
   viz::MockCompositorFrameSinkClient sink_client;
   mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  base::test::TestFuture<const viz::FrameSinkId&> future;
-  (*remote)->CreateFrameSink(
-      sink_client.BindInterfaceRemote(), sink.BindNewPipeAndPassReceiver(),
-      mojo::NullRemote(), "test-app", future.GetCallback());
-  const viz::FrameSinkId frame_sink_id = future.Get();
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(*remote, sink_client, sink, mojo::NullRemote());
   RunUntilIdle();
   ASSERT_TRUE(VizHasFrameSink(frame_sink_id));
 
@@ -858,15 +861,8 @@ TEST_F(FrameSinkBrokerTest, DroppingTheConnectionDestroysEverySink) {
 TEST_F(FrameSinkBrokerTest, AProducerThatDisconnectsIsSaidToHaveGone) {
   base::test::TestFuture<void> gone;
   broker()->SetProducerGoneCallback(gone.GetRepeatingCallback());
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  base::test::TestFuture<const viz::FrameSinkId&> future;
-  remote->CreateFrameSink(sink_client.BindInterfaceRemote(),
-                          sink.BindNewPipeAndPassReceiver(), mojo::NullRemote(),
-                          "test-app", future.GetCallback());
-  const viz::FrameSinkId frame_sink_id = future.Get();
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
   RunUntilIdle();
   EXPECT_FALSE(gone.IsReady());
 
@@ -879,13 +875,8 @@ TEST_F(FrameSinkBrokerTest, AProducerThatDisconnectsIsSaidToHaveGone) {
 // The page supplies the LocalSurfaceId and gets back the FrameSinkId, as with
 // RemoteFrame.
 TEST_F(FrameSinkBrokerTest, EmbedAnswersWithTheBrokeredFrameSinkId) {
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
   RunUntilIdle();
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
@@ -918,12 +909,8 @@ TEST_F(FrameSinkBrokerTest, EmbedWaitsForAProducer) {
 
 // A renderer embeds under its own frame sink through the provider.
 TEST_F(FrameSinkBrokerTest, ARendererEmbedsUnderItsOwnFrameSink) {
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
 
   ExternalSurfaceProvider provider(broker());
   mojo::Remote<mojom::ExternalSurfaceProvider> page;
@@ -1010,12 +997,8 @@ TEST_F(FrameSinkBrokerTest, ARendererHearsWhenItsProducerDisconnects) {
 // A window closing ends its sink as closed, so the page does not embed it
 // again and leave a request waiting for an app that never returns.
 TEST_F(FrameSinkBrokerTest, DestroyingASinkEndsItAsClosed) {
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
 
   base::test::TestFuture<mojom::FrameSinkEnd> ended;
   broker()->WaitForEnd(frame_sink_id, ended.GetCallback());
@@ -1337,13 +1320,8 @@ TEST_F(FrameSinkBrokerTest, AnOlderSurfaceArrivingLateIsNotPassedOn) {
 // Embedding registers the producer under the page so BeginFrames arrive.
 // Before an embed, there is no parent.
 TEST_F(FrameSinkBrokerTest, EmbedRegistersTheHierarchyUnderThePage) {
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
   RunUntilIdle();
   ASSERT_FALSE(VizHasHierarchy(kPageFrameSinkId, frame_sink_id));
 
@@ -1440,13 +1418,8 @@ TEST_F(FrameSinkBrokerTest, AnUndrawnWindowsFramesMayNotBeThrottled) {
 
 // Destroying a sink also unregisters it from the hierarchy.
 TEST_F(FrameSinkBrokerTest, DestroyingTheSinkUnregistersTheHierarchy) {
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
   broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
                   kEmbeddedSize, kEmbeddedScale, kEmbeddedZoom,
@@ -2053,12 +2026,8 @@ TEST_F(FrameSinkBrokerTest, ABrowserWindowThatIsNotOpenIsRefused) {
 TEST_F(FrameSinkBrokerTest, AnImportAnswersOnceTheGpuHasMadeItsImage) {
   UseTheGpu();
   HoldSignals();
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
   base::test::TestFuture<uint64_t, std::optional<gpu::ExportedSharedImage>>
       imported;
 
@@ -2084,12 +2053,8 @@ TEST_F(FrameSinkBrokerTest, AnImportAnswersOnceTheGpuHasMadeItsImage) {
 TEST_F(FrameSinkBrokerTest, AnImportIsRefusedIfTheGpuGoesBeforeItsImage) {
   UseTheGpu();
   HoldSignals();
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
   base::test::TestFuture<uint64_t, std::optional<gpu::ExportedSharedImage>>
       imported;
   remote->ImportBuffer(frame_sink_id, ADmabuf(kBufferSize), kBufferSize,
@@ -2109,12 +2074,8 @@ TEST_F(FrameSinkBrokerTest, AnImportIsRefusedIfTheGpuGoesBeforeItsImage) {
 // after the fence is in place.
 TEST_F(FrameSinkBrokerTest, AFencedBufferIsReadOnlyAfterItsFence) {
   UseTheGpu();
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
   const auto [buffer_id, mailbox] = ImportABuffer(remote, frame_sink_id);
 
   base::test::TestFuture<const std::optional<gpu::SyncToken>&> fenced;
@@ -2133,12 +2094,8 @@ TEST_F(FrameSinkBrokerTest, AFencedBufferIsReadOnlyAfterItsFence) {
 // the window until the client draws again.
 TEST_F(FrameSinkBrokerTest, ADestroyedBufferGoesAfterVizsLastReadOfIt) {
   UseTheGpu();
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
   const auto [buffer_id, mailbox] = ImportABuffer(remote, frame_sink_id);
   gpu::SyncToken read_done(gpu::CommandBufferNamespace::GPU_IO,
                            gpu::CommandBufferId::FromUnsafeValue(7),
@@ -2157,12 +2114,8 @@ TEST_F(FrameSinkBrokerTest, ADestroyedBufferGoesAfterVizsLastReadOfIt) {
 // The image goes after every one of those reads.
 TEST_F(FrameSinkBrokerTest, ABufferReadOnSeveralStreamsGoesAfterEveryRead) {
   UseTheGpu();
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
   const auto [buffer_id, mailbox] = ImportABuffer(remote, frame_sink_id);
   std::vector<gpu::SyncToken> read_done = {
       gpu::SyncToken(gpu::CommandBufferNamespace::GPU_IO,
@@ -2186,12 +2139,8 @@ TEST_F(FrameSinkBrokerTest, ABufferReadOnSeveralStreamsGoesAfterEveryRead) {
 
 TEST_F(FrameSinkBrokerTest, FencingABufferNeverImportedIsRefused) {
   UseTheGpu();
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
 
   base::test::TestFuture<const std::optional<gpu::SyncToken>&> fenced;
   remote->FenceBuffer(frame_sink_id, /*buffer_id=*/1, AFence(),
@@ -2220,12 +2169,8 @@ TEST_F(FrameSinkBrokerTest, EachFourccIsImportedInItsOwnFormat) {
       {0x48344241, viz::SinglePlaneFormat::kRGBA_F16, kPremul_SkAlphaType},
   };
   UseTheGpu();
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
 
   for (const Expected& expected : kExpected) {
     SCOPED_TRACE(testing::Message() << "fourcc 0x" << std::hex
@@ -2241,12 +2186,8 @@ TEST_F(FrameSinkBrokerTest, EachFourccIsImportedInItsOwnFormat) {
 // A format the engine does not list would draw with permuted channels.
 TEST_F(FrameSinkBrokerTest, AnUnlistedFourccIsRefused) {
   UseTheGpu();
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
 
   // DRM_FORMAT_RGB565.
   EXPECT_FALSE(ImportAs(remote, frame_sink_id, 0x36314752));
@@ -2257,12 +2198,8 @@ TEST_F(FrameSinkBrokerTest, AnUnlistedFourccIsRefused) {
 // padding is zero would draw transparent.
 TEST_F(FrameSinkBrokerTest, ADeepFourccWithoutAlphaIsRefused) {
   UseTheGpu();
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
 
   // DRM_FORMAT_XRGB2101010, XBGR2101010 and XBGR16161616F.
   for (const uint32_t fourcc : {0x30335258u, 0x30334258u, 0x48344258u}) {
@@ -2275,12 +2212,8 @@ TEST_F(FrameSinkBrokerTest, ADeepFourccWithoutAlphaIsRefused) {
 // that color space, which viz converts from to each display's.
 TEST_F(FrameSinkBrokerTest, ABufferIsImportedInTheColorSpaceAskedFor) {
   UseTheGpu();
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
   const gfx::ColorSpace pq(gfx::ColorSpace::PrimaryID::BT2020,
                            gfx::ColorSpace::TransferID::PQ);
 
@@ -2297,12 +2230,8 @@ TEST_F(FrameSinkBrokerTest, ABufferIsImportedInTheColorSpaceAskedFor) {
 TEST_F(FrameSinkBrokerTest, AnImportInSharedMemoryAnswersAtOnce) {
   CompositeInSoftware();
   HoldSignals();
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
   constexpr uint32_t kStride = 4 * 64;
 
   auto [buffer_id, exported] = ImportShm(
@@ -2318,12 +2247,8 @@ TEST_F(FrameSinkBrokerTest, AnImportInSharedMemoryAnswersAtOnce) {
 // software: the memory itself becomes the image viz draws, uncopied.
 TEST_F(FrameSinkBrokerTest, AWindowInSharedMemoryIsASoftwareImageOverIt) {
   CompositeInSoftware();
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
   constexpr uint32_t kStride = 4 * 64 + 16;
   base::UnsafeSharedMemoryRegion region =
       base::UnsafeSharedMemoryRegion::Create(kStride * 48);
@@ -2345,12 +2270,8 @@ TEST_F(FrameSinkBrokerTest, AWindowInSharedMemoryIsASoftwareImageOverIt) {
 // blank with nothing said.
 TEST_F(FrameSinkBrokerTest, AWindowInSharedMemoryIsRefusedOnTheGpu) {
   UseTheGpu();
-  mojo::Remote<mojom::FrameSinkBroker> remote;
-  broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  viz::MockCompositorFrameSinkClient sink_client;
-  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
-  const viz::FrameSinkId frame_sink_id =
-      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const std::unique_ptr<Producer> producer = ConnectAProducer();
+  auto& [remote, sink_client, sink, frame_sink_id] = *producer;
 
   auto [buffer_id, exported] =
       ImportShm(remote, frame_sink_id,

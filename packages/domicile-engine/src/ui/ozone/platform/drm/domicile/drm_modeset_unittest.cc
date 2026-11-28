@@ -755,71 +755,73 @@ class FakeDelegate : public display::NativeDisplayDelegate {
   size_t readings_asked_ = 0;
 };
 
+// A modeset driving a `FakeDelegate` that reads `snapshots`, on a screen of
+// its own. Members are torn down in reverse, so the modeset, which owns the
+// delegate and draws on the screen, goes first.
+struct Driven {
+  explicit Driven(std::vector<std::unique_ptr<display::DisplaySnapshot>> read)
+      : snapshots(std::move(read)) {
+    auto owned = std::make_unique<FakeDelegate>();
+    fake = owned.get();
+    fake->SetSnapshots(Pointers(snapshots));
+    modeset = std::make_unique<DrmModeset>(std::move(owned), &screen);
+  }
+
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  DrmWindowHostManager window_manager;
+  DrmScreen screen{&window_manager, nullptr};
+  // Owned by `modeset`, which outlives every use of it.
+  raw_ptr<FakeDelegate, DanglingUntriaged> fake;
+  std::unique_ptr<DrmModeset> modeset;
+};
+
 // The first `Configure` goes out before the GPU process has a DRM device, so
 // it never answers. The udev ADD that follows carries the same reading and must
 // still modeset.
 TEST(DrmModesetTest, AnAskThatReachedNothingDoesNotSuppressTheNextOne) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(
       SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
-  fake->SetSnapshots(Pointers(snapshots));
+  Driven drm(std::move(snapshots));
 
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
+  drm.modeset->Start();
+  ASSERT_EQ(drm.fake->asks(), 1u) << "the first reading must be asked for";
+  drm.fake->NeverAnswers();  // The GPU process has no DRM device yet.
 
-  modeset.Start();
-  ASSERT_EQ(fake->asks(), 1u) << "the first reading must be asked for";
-  fake->NeverAnswers();  // The GPU process has no DRM device yet.
-
-  modeset.OnConfigurationChanged();
-  EXPECT_EQ(fake->asks(), 2u)
+  drm.modeset->OnConfigurationChanged();
+  EXPECT_EQ(drm.fake->asks(), 2u)
       << "an ask nothing confirmed must not suppress the ask that follows it";
 }
 
 // After a confirmed modeset, the hotplug it causes must not modeset again.
 TEST(DrmModesetTest, AConfirmedModesetSuppressesTheHotplugItCauses) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(
       SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
-  fake->SetSnapshots(Pointers(snapshots));
+  Driven drm(std::move(snapshots));
 
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
+  drm.modeset->Start();
+  ASSERT_EQ(drm.fake->asks(), 1u);
+  drm.fake->Answer(true);
 
-  modeset.Start();
-  ASSERT_EQ(fake->asks(), 1u);
-  fake->Answer(true);
-
-  modeset.OnConfigurationChanged();
-  EXPECT_EQ(fake->asks(), 1u)
+  drm.modeset->OnConfigurationChanged();
+  EXPECT_EQ(drm.fake->asks(), 1u)
       << "the CHANGE a successful Configure emits is this driver's own echo";
 }
 
 // After a refused modeset the hardware state is unknown, so the next reading
 // must modeset.
 TEST(DrmModesetTest, ARefusedModesetDoesNotSuppressTheNextOne) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(
       SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
-  fake->SetSnapshots(Pointers(snapshots));
+  Driven drm(std::move(snapshots));
 
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
+  drm.modeset->Start();
+  drm.fake->Answer(false);
 
-  modeset.Start();
-  fake->Answer(false);
-
-  modeset.OnConfigurationChanged();
-  EXPECT_EQ(fake->asks(), 2u);
+  drm.modeset->OnConfigurationChanged();
+  EXPECT_EQ(drm.fake->asks(), 2u);
 }
 
 // `Start()` runs before the GPU process exists, so `DrmDisplayHostManager`
@@ -827,24 +829,18 @@ TEST(DrmModesetTest, ARefusedModesetDoesNotSuppressTheNextOne) {
 // answer would suppress a matching first real reading, and a machine whose
 // dummy reading matches its real one would never modeset.
 TEST(DrmModesetTest, AnAnswerFromInsideTheAskIsNotAConfirmation) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(
       SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
-  fake->SetSnapshots(Pointers(snapshots));
-  fake->AnswersFromInsideConfigure(true);
+  Driven drm(std::move(snapshots));
+  drm.fake->AnswersFromInsideConfigure(true);
 
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
-
-  modeset.Start();
-  ASSERT_EQ(fake->asks(), 1u) << "the first reading must be asked for";
+  drm.modeset->Start();
+  ASSERT_EQ(drm.fake->asks(), 1u) << "the first reading must be asked for";
 
   // The GPU process is up and reports the same displays as the dummies.
-  modeset.OnConfigurationChanged();
-  EXPECT_EQ(fake->asks(), 2u)
+  drm.modeset->OnConfigurationChanged();
+  EXPECT_EQ(drm.fake->asks(), 2u)
       << "a yes that arrived before the ask returned reached no hardware, so "
          "the first real reading must still get through";
 }
@@ -853,23 +849,17 @@ TEST(DrmModesetTest, AnAnswerFromInsideTheAskIsNotAConfirmation) {
 // After a resume the GPU state is lost but the connectors report the same as
 // before, so the loop guard alone would leave every panel dark.
 TEST(DrmModesetTest, AWakeLightsTheScreensAgainThoughTheyReadTheSame) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(
       SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
-  fake->SetSnapshots(Pointers(snapshots));
+  Driven drm(std::move(snapshots));
 
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
+  drm.modeset->Start();
+  ASSERT_EQ(drm.fake->asks(), 1u);
+  drm.fake->Answer(true);
 
-  modeset.Start();
-  ASSERT_EQ(fake->asks(), 1u);
-  fake->Answer(true);
-
-  modeset.Relight();
-  EXPECT_EQ(fake->asks(), 2u)
+  drm.modeset->Relight();
+  EXPECT_EQ(drm.fake->asks(), 2u)
       << "a GPU that came back with its CRTCs reset reports what it reported "
          "before, so the reading cannot be what decides";
 }
@@ -877,25 +867,19 @@ TEST(DrmModesetTest, AWakeLightsTheScreensAgainThoughTheyReadTheSame) {
 // `Relight` clears one confirmation, not the guard: the hotplug its own
 // modeset causes is still suppressed.
 TEST(DrmModesetTest, ARelitScreenStillSuppressesTheHotplugItCauses) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(
       SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
-  fake->SetSnapshots(Pointers(snapshots));
+  Driven drm(std::move(snapshots));
 
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
+  drm.modeset->Start();
+  drm.fake->Answer(true);
+  drm.modeset->Relight();
+  ASSERT_EQ(drm.fake->asks(), 2u);
+  drm.fake->Answer(true);
 
-  modeset.Start();
-  fake->Answer(true);
-  modeset.Relight();
-  ASSERT_EQ(fake->asks(), 2u);
-  fake->Answer(true);
-
-  modeset.OnConfigurationChanged();
-  EXPECT_EQ(fake->asks(), 2u)
+  drm.modeset->OnConfigurationChanged();
+  EXPECT_EQ(drm.fake->asks(), 2u)
       << "the CHANGE the relight's own Configure emits is still this driver's "
          "own echo";
 }
@@ -903,39 +887,33 @@ TEST(DrmModesetTest, ARelitScreenStillSuppressesTheHotplugItCauses) {
 // A display asked for again can flash, so sleeping or waking one monitor asks
 // for that monitor alone.
 TEST(DrmModesetTest, AModesetAsksOnlyForTheDisplaysThatChanged) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(SnapshotBuilder().Id(1).Build());
   snapshots.push_back(SnapshotBuilder().Id(2).Build());
-  fake->SetSnapshots(Pointers(snapshots));
+  Driven drm(std::move(snapshots));
 
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
-
-  modeset.SetLayout(
+  drm.modeset->SetLayout(
       {{.id = 1, .enabled = true, .origin = gfx::Point()},
        {.id = 2, .enabled = true, .origin = gfx::Point(1920, 0)}});
-  ASSERT_EQ(fake->last_ask().size(), 2u);
-  fake->Answer(true);
+  ASSERT_EQ(drm.fake->last_ask().size(), 2u);
+  drm.fake->Answer(true);
 
-  modeset.SetLayout(
+  drm.modeset->SetLayout(
       {{.id = 1, .enabled = false, .origin = gfx::Point()},
        {.id = 2, .enabled = true, .origin = gfx::Point(1920, 0)}});
-  ASSERT_EQ(fake->asks(), 2u);
-  ASSERT_EQ(fake->last_ask().size(), 1u);
-  EXPECT_EQ(fake->last_ask()[0].id, 1);
-  EXPECT_EQ(fake->last_ask()[0].mode, nullptr);
-  fake->Answer(true);
+  ASSERT_EQ(drm.fake->asks(), 2u);
+  ASSERT_EQ(drm.fake->last_ask().size(), 1u);
+  EXPECT_EQ(drm.fake->last_ask()[0].id, 1);
+  EXPECT_EQ(drm.fake->last_ask()[0].mode, nullptr);
+  drm.fake->Answer(true);
 
-  modeset.SetLayout(
+  drm.modeset->SetLayout(
       {{.id = 1, .enabled = true, .origin = gfx::Point()},
        {.id = 2, .enabled = true, .origin = gfx::Point(1920, 0)}});
-  ASSERT_EQ(fake->asks(), 3u);
-  ASSERT_EQ(fake->last_ask().size(), 1u);
-  EXPECT_EQ(fake->last_ask()[0].id, 1);
-  EXPECT_NE(fake->last_ask()[0].mode, nullptr);
+  ASSERT_EQ(drm.fake->asks(), 3u);
+  ASSERT_EQ(drm.fake->last_ask().size(), 1u);
+  EXPECT_EQ(drm.fake->last_ask()[0].id, 1);
+  EXPECT_NE(drm.fake->last_ask()[0].mode, nullptr);
 }
 
 TEST(DrmModesetTest, AnUnchangedDisplayThatReadsDarkIsAskedForAgain) {
@@ -1023,36 +1001,30 @@ TEST(DrmModesetTest, AVirtualDisplayLightsNoCrtc) {
 
 // The desk extends onto it, so the screen lists it beside the connectors.
 TEST(DrmModesetTest, VirtualDisplaysJoinEveryReading) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(
       SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
-  fake->SetSnapshots(Pointers(snapshots));
+  Driven drm(std::move(snapshots));
+  drm.modeset->Start();
+  drm.fake->Answer(true);
 
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
-  modeset.Start();
-  fake->Answer(true);
-
-  modeset.SetVirtualDisplays({{.id = kVirtualId,
+  drm.modeset->SetVirtualDisplays({{.id = kVirtualId,
                                .mode = gfx::Size(1920, 1080),
                                .refresh_mhz = 60000,
                                .name = "TV"}});
 
-  ASSERT_EQ(screen.GetAllDisplays().size(), 2u);
-  EXPECT_EQ(screen.GetAllDisplays()[1].id(), kVirtualId);
-  EXPECT_EQ(screen.GetAllDisplays()[1].bounds(),
+  ASSERT_EQ(drm.screen.GetAllDisplays().size(), 2u);
+  EXPECT_EQ(drm.screen.GetAllDisplays()[1].id(), kVirtualId);
+  EXPECT_EQ(drm.screen.GetAllDisplays()[1].bounds(),
             gfx::Rect(2880, 0, 1920, 1080))
       << "placed past the connectors, as an unnamed connector is";
-  EXPECT_EQ(screen.connectors().at(kVirtualId), "virtual-1");
-  EXPECT_EQ(fake->asks(), 1u)
+  EXPECT_EQ(drm.screen.connectors().at(kVirtualId), "virtual-1");
+  EXPECT_EQ(drm.fake->asks(), 1u)
       << "the connectors read the same, so nothing is modeset again";
 
-  modeset.SetVirtualDisplays({});
+  drm.modeset->SetVirtualDisplays({});
 
-  EXPECT_EQ(screen.GetAllDisplays().size(), 1u);
+  EXPECT_EQ(drm.screen.GetAllDisplays().size(), 1u);
 }
 
 // White as the curve draws it, per channel, out of 65535.
@@ -1069,164 +1041,124 @@ DomicileGammaRamp WarmRamp() {
 // Each display draws with its own ramp, so one warms and its neighbor does
 // not.
 TEST(DrmModesetTest, AGammaRampReachesOnlyItsDisplay) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(SnapshotBuilder().Id(11).Build());
   snapshots.push_back(SnapshotBuilder().Id(12).Build());
-  fake->SetSnapshots(Pointers(snapshots));
+  Driven drm(std::move(snapshots));
+  drm.modeset->Start();
 
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
-  modeset.Start();
+  drm.modeset->SetGamma(12, WarmRamp());
 
-  modeset.SetGamma(12, WarmRamp());
-
-  ASSERT_EQ(fake->gamma().size(), 1u);
-  EXPECT_EQ(fake->gamma()[0].first, 12);
-  EXPECT_EQ(WhiteOf(fake->gamma()[0].second),
+  ASSERT_EQ(drm.fake->gamma().size(), 1u);
+  EXPECT_EQ(drm.fake->gamma()[0].first, 12);
+  EXPECT_EQ(WhiteOf(drm.fake->gamma()[0].second),
             (std::vector<uint16_t>{65535, 32768, 16384}));
 }
 
 // An empty ramp writes an identity ramp: an empty curve left the last warm
 // ramp on the CRTCs.
 TEST(DrmModesetTest, AnEmptyRampWritesAnIdentityRamp) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(SnapshotBuilder().Id(11).Build());
-  fake->SetSnapshots(Pointers(snapshots));
+  Driven drm(std::move(snapshots));
+  drm.modeset->Start();
 
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
-  modeset.Start();
+  drm.modeset->SetGamma(11, {});
 
-  modeset.SetGamma(11, {});
-
-  ASSERT_EQ(fake->gamma().size(), 1u);
-  EXPECT_FALSE(fake->gamma()[0].second.IsDefaultIdentity());
-  EXPECT_EQ(WhiteOf(fake->gamma()[0].second),
+  ASSERT_EQ(drm.fake->gamma().size(), 1u);
+  EXPECT_FALSE(drm.fake->gamma()[0].second.IsDefaultIdentity());
+  EXPECT_EQ(WhiteOf(drm.fake->gamma()[0].second),
             (std::vector<uint16_t>{65535, 65535, 65535}));
 }
 
 // A resume or a console switch back can leave the CRTCs at another process's
 // ramp, so each confirmed modeset sets every display's ramp again.
 TEST(DrmModesetTest, AConfirmedModesetSetsEachDisplaysRampAgain) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(SnapshotBuilder().Id(11).Build());
   snapshots.push_back(SnapshotBuilder().Id(12).Build());
-  fake->SetSnapshots(Pointers(snapshots));
+  Driven drm(std::move(snapshots));
+  drm.modeset->Start();
+  drm.modeset->SetGamma(11, WarmRamp());
+  drm.modeset->SetGamma(12, {});
+  ASSERT_EQ(drm.fake->gamma().size(), 2u);
 
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
-  modeset.Start();
-  modeset.SetGamma(11, WarmRamp());
-  modeset.SetGamma(12, {});
-  ASSERT_EQ(fake->gamma().size(), 2u);
+  drm.fake->Answer(true);
 
-  fake->Answer(true);
-
-  ASSERT_EQ(fake->gamma().size(), 4u);
-  EXPECT_EQ(fake->gamma()[2].first, 11);
-  EXPECT_EQ(WhiteOf(fake->gamma()[2].second),
+  ASSERT_EQ(drm.fake->gamma().size(), 4u);
+  EXPECT_EQ(drm.fake->gamma()[2].first, 11);
+  EXPECT_EQ(WhiteOf(drm.fake->gamma()[2].second),
             (std::vector<uint16_t>{65535, 32768, 16384}));
-  EXPECT_EQ(fake->gamma()[3].first, 12);
-  EXPECT_EQ(WhiteOf(fake->gamma()[3].second),
+  EXPECT_EQ(drm.fake->gamma()[3].first, 12);
+  EXPECT_EQ(WhiteOf(drm.fake->gamma()[3].second),
             (std::vector<uint16_t>{65535, 65535, 65535}));
 }
 
 // The browser's display hosts go with their snapshots, and a ramp for one
 // that is gone would reach nothing. The next reading names the displays.
 TEST(DrmModesetTest, AGammaRampWaitsForTheReadingAfterAnInvalidation) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(SnapshotBuilder().Id(11).Build());
-  fake->SetSnapshots(Pointers(snapshots));
+  Driven drm(std::move(snapshots));
+  drm.modeset->Start();
+  drm.fake->Answer(true);
 
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
-  modeset.Start();
-  fake->Answer(true);
-
-  modeset.OnDisplaySnapshotsInvalidated();
-  modeset.SetGamma(11, WarmRamp());
-  EXPECT_TRUE(fake->gamma().empty());
+  drm.modeset->OnDisplaySnapshotsInvalidated();
+  drm.modeset->SetGamma(11, WarmRamp());
+  EXPECT_TRUE(drm.fake->gamma().empty());
 }
 
 // No CRTC drives a virtual display, so it has no ramp to set.
 TEST(DrmModesetTest, AGammaRampForAVirtualDisplayReachesNothing) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(SnapshotBuilder().Id(11).Build());
-  fake->SetSnapshots(Pointers(snapshots));
-
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
-  modeset.Start();
-  fake->Answer(true);
-  modeset.SetVirtualDisplays({{.id = kVirtualId,
+  Driven drm(std::move(snapshots));
+  drm.modeset->Start();
+  drm.fake->Answer(true);
+  drm.modeset->SetVirtualDisplays({{.id = kVirtualId,
                                .mode = gfx::Size(1920, 1080),
                                .refresh_mhz = 60000,
                                .name = "TV"}});
 
-  modeset.SetGamma(kVirtualId, WarmRamp());
+  drm.modeset->SetGamma(kVirtualId, WarmRamp());
 
-  EXPECT_TRUE(fake->gamma().empty());
+  EXPECT_TRUE(drm.fake->gamma().empty());
 }
 
 // sway's fallback: a driver that refuses a modeset with adaptive sync gets
 // the same one without it, and the panel reports it off.
 TEST(DrmModesetTest, ARefusedModesetWithAdaptiveSyncIsAskedAgainWithout) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(AnAdaptivePanel());
-  fake->SetSnapshots(Pointers(snapshots));
+  Driven drm(std::move(snapshots));
 
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
+  drm.modeset->SetLayout({{.id = 5, .enabled = true, .adaptive_sync = true}});
+  ASSERT_EQ(drm.fake->asks(), 1u);
+  ASSERT_TRUE(drm.fake->last_ask()[0].enable_vrr);
+  drm.fake->Answer(false);
 
-  modeset.SetLayout({{.id = 5, .enabled = true, .adaptive_sync = true}});
-  ASSERT_EQ(fake->asks(), 1u);
-  ASSERT_TRUE(fake->last_ask()[0].enable_vrr);
-  fake->Answer(false);
+  ASSERT_EQ(drm.fake->asks(), 2u) << "a refusal with adaptive sync is retried";
+  EXPECT_FALSE(drm.fake->last_ask()[0].enable_vrr);
+  ASSERT_NE(drm.fake->last_ask()[0].mode, nullptr)
+      << "the retry still lights it";
+  drm.fake->Answer(true);
+  EXPECT_EQ(drm.screen.panels().at(5).adaptive_sync,
+            DomicileAdaptiveSync::kOff);
 
-  ASSERT_EQ(fake->asks(), 2u) << "a refusal with adaptive sync is retried";
-  EXPECT_FALSE(fake->last_ask()[0].enable_vrr);
-  ASSERT_NE(fake->last_ask()[0].mode, nullptr) << "the retry still lights it";
-  fake->Answer(true);
-  EXPECT_EQ(screen.panels().at(5).adaptive_sync, DomicileAdaptiveSync::kOff);
-
-  modeset.SetLayout({{.id = 5, .enabled = true, .adaptive_sync = true}});
-  EXPECT_EQ(fake->asks(), 2u)
+  drm.modeset->SetLayout({{.id = 5, .enabled = true, .adaptive_sync = true}});
+  EXPECT_EQ(drm.fake->asks(), 2u)
       << "a panel that refused it is not asked again while plugged in";
 }
 
 // A refusal of a modeset that asked for no adaptive sync is not about it.
 TEST(DrmModesetTest, ARefusedModesetWithoutAdaptiveSyncIsNotRetried) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(AnAdaptivePanel());
-  fake->SetSnapshots(Pointers(snapshots));
+  Driven drm(std::move(snapshots));
 
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
-
-  modeset.SetLayout({{.id = 5, .enabled = true}});
-  fake->Answer(false);
-  EXPECT_EQ(fake->asks(), 1u);
+  drm.modeset->SetLayout({{.id = 5, .enabled = true}});
+  drm.fake->Answer(false);
+  EXPECT_EQ(drm.fake->asks(), 1u);
 }
 
 // A panel asked for again only because it reads dark, as one another session
@@ -1266,25 +1198,19 @@ TEST(DrmModesetTest, APanelAskedForOnlyBecauseItReadsDarkKeepsAdaptiveSync) {
 // A snapshot reads adaptive sync off the CRTC, so the reading a modeset went
 // out with predates it. The display list must not keep saying it is off.
 TEST(DrmModesetTest, AModesetTurningOnAdaptiveSyncReadsTheDisplaysAgain) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(AnAdaptivePanel());
-  fake->SetSnapshots(Pointers(snapshots));
+  Driven drm(std::move(snapshots));
 
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
-
-  modeset.SetLayout({{.id = 5, .enabled = true, .adaptive_sync = true}});
-  ASSERT_EQ(screen.panels().at(5).adaptive_sync, DomicileAdaptiveSync::kOff);
+  drm.modeset->SetLayout({{.id = 5, .enabled = true, .adaptive_sync = true}});
+  ASSERT_EQ(drm.screen.panels().at(5).adaptive_sync, DomicileAdaptiveSync::kOff);
   // The CRTC now has VRR_ENABLED set.
-  snapshots[0]->set_variable_refresh_rate_state(
+  drm.snapshots[0]->set_variable_refresh_rate_state(
       display::VariableRefreshRateState::kVrrEnabled);
-  fake->Answer(true);
+  drm.fake->Answer(true);
 
-  EXPECT_EQ(screen.panels().at(5).adaptive_sync, DomicileAdaptiveSync::kOn);
-  EXPECT_EQ(fake->asks(), 1u)
+  EXPECT_EQ(drm.screen.panels().at(5).adaptive_sync, DomicileAdaptiveSync::kOn);
+  EXPECT_EQ(drm.fake->asks(), 1u)
       << "the reading after asks for the modeset already confirmed";
 }
 
@@ -1321,27 +1247,21 @@ TEST(DrmModesetTest, OverlappingReadingsLeaveEveryDisplayRampable) {
 // A ramp sent while the displays were unread reaches them on the next
 // reading, even one that reads the same and so modesets nothing.
 TEST(DrmModesetTest, AReadingThatChangesNothingAppliesTheStoredRamps) {
-  auto owned = std::make_unique<FakeDelegate>();
-  FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
   snapshots.push_back(SnapshotBuilder().Id(11).Build());
-  fake->SetSnapshots(Pointers(snapshots));
+  Driven drm(std::move(snapshots));
+  drm.modeset->Start();
+  drm.fake->Answer(true);
+  drm.modeset->OnDisplaySnapshotsInvalidated();
+  drm.modeset->SetGamma(11, WarmRamp());
+  ASSERT_TRUE(drm.fake->gamma().empty());
 
-  DrmWindowHostManager window_manager;
-  DrmScreen screen(&window_manager, nullptr);
-  DrmModeset modeset(std::move(owned), &screen);
-  modeset.Start();
-  fake->Answer(true);
-  modeset.OnDisplaySnapshotsInvalidated();
-  modeset.SetGamma(11, WarmRamp());
-  ASSERT_TRUE(fake->gamma().empty());
+  drm.modeset->OnConfigurationChanged();
 
-  modeset.OnConfigurationChanged();
-
-  EXPECT_FALSE(fake->was_asked());
-  ASSERT_EQ(fake->gamma().size(), 1u);
-  EXPECT_EQ(fake->gamma()[0].first, 11);
-  EXPECT_EQ(WhiteOf(fake->gamma()[0].second),
+  EXPECT_FALSE(drm.fake->was_asked());
+  ASSERT_EQ(drm.fake->gamma().size(), 1u);
+  EXPECT_EQ(drm.fake->gamma()[0].first, 11);
+  EXPECT_EQ(WhiteOf(drm.fake->gamma()[0].second),
             (std::vector<uint16_t>{65535, 32768, 16384}));
 }
 
