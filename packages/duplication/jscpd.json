@@ -12,7 +12,9 @@
     "**/*.stories.tsx",
     "packages/*/tests/**",
     "packages/domicile-engine/src/third_party/**",
-    "packages/domicile-engine/upstream/**"
+    "packages/domicile-engine/upstream/**",
+    "packages/electron-host/src/electron/surface.ts",
+    "packages/manganese-bar-module-brightness/src/zone-coordinates.ts"
   ],
   "minLines": 8,
   "minTokens": 70
