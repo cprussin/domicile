@@ -664,16 +664,11 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
             },
             Verb::Sending => {
                 let agent = agent_flag(&mut args)?;
-                let window = window_flag(&mut args, &first)?;
                 let command: Vec<String> = args.collect();
                 match command.is_empty() {
                     true => Err(CliError::NothingToSend),
                     false => Ok(Invocation::Ask {
-                        request: Request::SendShell {
-                            command,
-                            window,
-                            agent,
-                        },
+                        request: Request::SendShell { command, agent },
                     }),
                 }
             }

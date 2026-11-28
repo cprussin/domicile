@@ -214,21 +214,22 @@ capturing   -
 
 #[test]
 fn the_shells_commands_print_with_their_usage_lined_up() {
-    let help = |usage: &str, description: &str| ShellCommandHelp {
+    let help = |usage: &str, description: &str, window| ShellCommandHelp {
         usage: usage.to_string(),
         description: description.to_string(),
+        window,
     };
     assert_eq!(
         shell_commands_table(
             Paint::PLAIN,
             &[
-                help("focus left|right|up|down", "Move focus."),
-                help("lock", "Lock the desktop."),
+                help("move left|right", "Move the window.", true),
+                help("lock", "Lock the desktop.", false),
             ]
         ),
         "\
-focus left|right|up|down  Move focus.
-lock                      Lock the desktop.
+move [--window <id>] left|right  Move the window.
+lock                             Lock the desktop.
 "
     );
     assert_eq!(

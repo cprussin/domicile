@@ -55,6 +55,22 @@ pub fn next_words(usage: &str, typed: &[String]) -> Vec<Word> {
     next
 }
 
+/// `typed` is the start of a command `usage` describes, or all of one.
+pub fn begins(usage: &str, typed: &[String]) -> bool {
+    begun(&slots(usage), typed)
+}
+
+fn begun(slots: &[Slot], typed: &[String]) -> bool {
+    let Some((said, rest)) = typed.split_first() else {
+        return true;
+    };
+    let Some((slot, later)) = slots.split_first() else {
+        return false;
+    };
+    (slot.choices.iter().any(|choice| fits(choice, said)) && begun(later, rest))
+        || (slot.optional && begun(later, typed))
+}
+
 /// Adds to `next` what can come after `typed` in `slots`.
 fn follow(slots: &[Slot], typed: &[String], next: &mut Vec<Word>) {
     let Some((slot, later)) = slots.split_first() else {

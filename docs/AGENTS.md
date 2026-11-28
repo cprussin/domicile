@@ -62,11 +62,12 @@ it, as `domicile pointer --agent <session>` and the like:
   agent types in copies to and pastes from the agent's, never the user's,
   and the clipboard history leaves them out. They go when the session ends.
 
-Every tool that acts on a window (`send_shell`, `close_window`, `key`,
-`type_text`, and the `browser_` and `app_` tools) takes a `window`, by its
-`list_windows` id. Left out, it acts on the window the agent's own keyboard is
-in, never the user's. Given one, the agent's keyboard takes it first, as
-`focus_window` does, so a window the user is in is refused.
+Every tool that acts on a window (`close_window`, `key`, `type_text`, and the
+`browser_` and `app_` tools) takes a `window`, by its `list_windows` id, and
+`send_shell` takes `--window <id>` in the words of a command that acts on a
+window. Left out, it acts on the window the agent's own keyboard is in, never
+the user's. Given one, the agent's keyboard takes it first, as `focus_window`
+does, so a window the user is in is refused.
 `send_shell` runs a shell command on that window at once: the compositor sends
 the shell only a command on a window the agent's seat holds, and Manganese runs
 its window commands, such as `move container to workspace <name>` or

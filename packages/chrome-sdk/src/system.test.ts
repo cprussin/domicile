@@ -665,7 +665,7 @@ describe("shell commands", () => {
 
   it("hears words to complete when it says it completes them", async () => {
     const host = new FakeHost();
-    const listening = system(host).shellCommands([], [], false, true);
+    const listening = system(host).shellCommands([], [], true);
     host.reply(1, { kind: "started" });
     const commands = started(await listening);
     host.event(1, {
@@ -685,9 +685,12 @@ describe("shell commands", () => {
     ]);
   });
 
-  it("hears commands on a window, naming it, when it says it runs them", async () => {
+  it("hears commands on a window, naming it", async () => {
     const host = new FakeHost();
-    const listening = system(host).shellCommands([], [], true);
+    const help = [
+      { description: "Close the window.", usage: "kill", window: true },
+    ];
+    const listening = system(host).shellCommands(help, []);
     host.reply(1, { kind: "started" });
     const commands = started(await listening);
     host.event(1, {
@@ -701,7 +704,7 @@ describe("shell commands", () => {
 
     expect(host.calls[0]).toStrictEqual([
       1,
-      { bindings: [], call: "shell_commands", commands: [], on_a_window: true },
+      { bindings: [], call: "shell_commands", commands: help },
     ]);
     expect(await Array.fromAsync(commands.items)).toStrictEqual([
       {

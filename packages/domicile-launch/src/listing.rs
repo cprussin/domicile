@@ -174,18 +174,20 @@ pub fn shell_commands_table(paint: Paint, commands: &[ShellCommandHelp]) -> Stri
     if commands.is_empty() {
         return "The shell describes no commands.\n".to_string();
     }
-    let width = commands
+    let usages: Vec<String> = commands.iter().map(ShellCommandHelp::shown_usage).collect();
+    let width = usages
         .iter()
-        .map(|command| command.usage.chars().count())
+        .map(|usage| usage.chars().count())
         .max()
         .expect("there are commands");
     commands
         .iter()
-        .map(|command| {
+        .zip(&usages)
+        .map(|(command, usage)| {
             format!(
                 "{}{}  {}\n",
-                paint.usage(&command.usage),
-                " ".repeat(width - command.usage.chars().count()),
+                paint.usage(usage),
+                " ".repeat(width - usage.chars().count()),
                 command.description
             )
         })
