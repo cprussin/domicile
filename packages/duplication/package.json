@@ -1,7 +1,8 @@
 {
   "description": "Checks that the repository defines each codec and helper once.",
   "devDependencies": {
-    "@domicile-desktop/check-runner": "workspace:*"
+    "@domicile-desktop/check-runner": "workspace:*",
+    "jscpd": "catalog:"
   },
   "engines": {
     "bun": ">=1.4.2"
@@ -10,6 +11,7 @@
   "name": "@domicile-desktop/duplication",
   "private": true,
   "scripts": {
+    "clones:baseline": "cd ../.. && jscpd --config packages/duplication/jscpd.json --baseline packages/duplication/clones-baseline.json --update-baseline --reporters silent . && biome check --write packages/duplication/clones-baseline.json",
     "test:shell": "check-runner tests/*.sh"
   },
   "type": "module",
