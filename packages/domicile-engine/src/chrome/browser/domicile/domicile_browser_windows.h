@@ -21,6 +21,7 @@
 class GURL;
 
 namespace content {
+class BrowserContext;
 class RenderFrameHost;
 class WebContents;
 }  // namespace content
@@ -225,6 +226,11 @@ base::CallbackListSubscription WatchBrowserWindowDomReadies(
 
 // The shell's WebContents in any profile, or null while there is none.
 content::WebContents* DeskShellContents();
+
+// The browser context the shell's window is in, or null while there is no
+// such window. Unlike DeskShellContents, known while the window's first
+// domicile:// page is still opening, as when an app connects at login.
+content::BrowserContext* DeskShellContext();
 
 // The browser windows whose pages `at`, a point in the shell page's CSS
 // pixels, is on, and where on each. Empty while there is no shell.

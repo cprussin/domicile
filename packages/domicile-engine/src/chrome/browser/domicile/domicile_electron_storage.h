@@ -22,7 +22,7 @@ class StoragePartition;
 namespace domicile {
 
 // The storage of `partition`, as WebViewGuest makes it for a window there,
-// or none without a shell.
+// or none before the shell has a window.
 content::StoragePartition* StorageOf(const WebViewPartition& partition);
 
 // An Electron app session's storage: its cookies (session.cookies), its

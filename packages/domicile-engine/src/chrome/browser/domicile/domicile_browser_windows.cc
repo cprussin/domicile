@@ -2344,6 +2344,24 @@ content::WebContents* DeskShellContents() {
   return ShellContentsIn(nullptr);
 }
 
+content::BrowserContext* DeskShellContext() {
+  content::BrowserContext* context = nullptr;
+  GlobalBrowserCollection::GetInstance()->ForEach(
+      [&context](BrowserWindowInterface* browser) {
+        tabs::TabInterface* tab = browser->GetActiveTabInterface();
+        // The visible URL is the committed one, or the one a first page is
+        // opening.
+        if (tab != nullptr &&
+            tab->GetContents()->GetVisibleURL().SchemeIs(kDomicileScheme)) {
+          context = tab->GetContents()->GetBrowserContext();
+          return false;
+        }
+        return true;
+      },
+      BrowserCollection::Order::kCreation);
+  return context;
+}
+
 std::vector<PointerOverWindow> BrowserWindowsAt(const gfx::PointF& at) {
   content::WebContents* shell = ShellContentsIn(nullptr);
   if (shell == nullptr) {

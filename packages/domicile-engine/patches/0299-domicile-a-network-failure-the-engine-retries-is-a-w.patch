@@ -1,0 +1,65 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 28 Nov 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a network failure the engine retries is a warning
+
+GCM's connection to its MCS endpoint fails whenever the network is down
+or changing, as after a resume, and a page's WebRTC host lookup fails
+for hosts a page probes. Each was LOG(ERROR), and at the engine's
+default --log-level=2 filled the desktop's error log, though the
+engine retries GCM with backoff and the page is only told there are no
+addresses. They are LOG(WARNING), shown once `domicile set-log-level`
+asks for them. See docs/guidelines/LOGGING.md.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ google_apis/gcm/engine/connection_factory_impl.cc | 9 +++++++--
+ services/network/p2p/socket_manager.cc            | 7 +++++--
+ 2 files changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/google_apis/gcm/engine/connection_factory_impl.cc b/google_apis/gcm/engine/connection_factory_impl.cc
+index c1fa62aeb2..02aa8ab440 100644
+--- a/google_apis/gcm/engine/connection_factory_impl.cc
++++ b/google_apis/gcm/engine/connection_factory_impl.cc
+@@ -424,7 +424,10 @@ void ConnectionFactoryImpl::OnConnectDone(
+     return;
+   }
+   if (result != net::OK) {
+-    LOG(ERROR) << "Failed to connect to MCS endpoint with error " << result;
++    // Domicile's engine fork: a warning, not an error. It happens whenever
++    // the network is down or changing, as after a resume, and the factory
++    // retries with backoff, so nothing the user sees broke.
++    LOG(WARNING) << "Failed to connect to MCS endpoint with error " << result;
+     recorder_->RecordConnectionFailure(result);
+     CloseSocket();
+     if (!ignore_connection_failure) {
+@@ -471,7 +474,9 @@ void ConnectionFactoryImpl::ConnectionHandlerCallback(int result) {
+   if (result != net::OK) {
+     // TODO(zea): Consider how to handle errors that may require some sort of
+     // user intervention (login page, etc.).
+-    LOG(ERROR) << "ConnectionHandler failed with net error: " << result;
++    // Domicile's engine fork: a warning, as for a failed connect above: the
++    // factory reconnects with backoff.
++    LOG(WARNING) << "ConnectionHandler failed with net error: " << result;
+ 
+     // Failures prior to handshake completion reuse the existing backoff entry.
+     if (handshake_in_progress_) {
+diff --git a/services/network/p2p/socket_manager.cc b/services/network/p2p/socket_manager.cc
+index ecebfc3798..e0ed0cee75 100644
+--- a/services/network/p2p/socket_manager.cc
++++ b/services/network/p2p/socket_manager.cc
+@@ -143,8 +143,11 @@ class P2PSocketManager::DnsRequest {
+     net::IPAddressList list;
+     const net::AddressList& addresses = request_->GetAddressResults();
+     if (result != net::OK) {
+-      LOG(ERROR) << "Failed to resolve address for " << host_name_
+-                 << ", errorcode: " << result;
++      // Domicile's engine fork: a warning, not an error. The host is one a
++      // page's WebRTC asked for, often a STUN server it probes, and the page
++      // is told it has no addresses: the desktop broke nothing.
++      LOG(WARNING) << "Failed to resolve address for " << host_name_
++                   << ", errorcode: " << result;
+       std::move(done_callback_).Run(list);
+       return;
+     }

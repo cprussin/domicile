@@ -44,6 +44,8 @@ An agent now has its own pointer, keyboard and clipboard, so it can work in any 
 
 - Slack and Claude hear the computer sleep, wake and shut down again, so they reconnect after a suspend.
 - A bar panel easing to a new height, such as when notifications arrive or are cleared, no longer fills the desktop's log with errors.
+- Electron apps that start as you log in, such as Slack and Element, find their saved data even before the desktop has finished loading.
+- The desktop's log no longer shows an error each time the network drops or changes, a site probes for a video-call server that doesn't exist, or a touchpad reports a glitch it already ignored.
 - A headset's play button, such as squeezing an AirPod, now plays and pauses, as the keyboard's play/pause key does.
 - The clipboard history's Remove button has a trash icon, so it reads as a button, as Forget does on saved Wi-Fi networks. [Clipboard](CLIPBOARD.md)
 - A Wi-Fi network's sign-in page, as at a hotel or an airport, now opens even when the network is slow to answer at first.

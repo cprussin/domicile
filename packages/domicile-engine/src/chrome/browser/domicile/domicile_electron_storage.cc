@@ -35,11 +35,12 @@
 namespace domicile {
 
 content::StoragePartition* StorageOf(const WebViewPartition& partition) {
-  content::WebContents* shell = DeskShellContents();
-  if (shell == nullptr) {
+  // The shell's window's context rather than its committed page's: an app
+  // started at login asks while the shell's first page is still opening.
+  content::BrowserContext* context = DeskShellContext();
+  if (context == nullptr) {
     return nullptr;
   }
-  content::BrowserContext* context = shell->GetBrowserContext();
   return context->GetStoragePartition(content::StoragePartitionConfig::Create(
       context, kWebViewPartitionDomain, partition.name, !partition.persist));
 }

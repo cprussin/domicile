@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <string>
 #include <utility>
 
 #include "base/check.h"
@@ -113,7 +114,15 @@ void LibInputSeat::LogHandler(libinput* context,
       VLOG(1) << "libinput: " << message;
       break;
     case LIBINPUT_LOG_PRIORITY_ERROR:
-      LOG(ERROR) << "libinput: " << message;
+      // libinput reports a device's or kernel's fault, such as a touchpad's
+      // touch jump, at its error priority too, and discards what was wrong:
+      // the desktop got past it. Its client bugs, such as the engine reading
+      // events too slowly, are the engine's and stay errors.
+      if (message.find("kernel bug:") != std::string::npos) {
+        LOG(WARNING) << "libinput: " << message;
+      } else {
+        LOG(ERROR) << "libinput: " << message;
+      }
       break;
   }
 }
