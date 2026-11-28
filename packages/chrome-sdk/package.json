@@ -242,6 +242,10 @@
       "types": "./dist/system.d.ts",
       "default": "./dist/system.js"
     },
+    "./system-message": {
+      "types": "./dist/system-message.d.ts",
+      "default": "./dist/system-message.js"
+    },
     "./theme": {
       "types": "./dist/theme.d.ts",
       "default": "./dist/theme.js"
