@@ -173,15 +173,20 @@ latency_within 27.99 2 16.67 && expect "a run whose floor sampled low still pass
 latency_within 29.18 2 16.67 && expect "and so does the one whose floor sampled high" ok ok ||
   expect "and so does the one whose floor sampled high" ok FAILED
 
-# `commit to pixel` may take the probe's floor plus one display frame. The
-# floor counts for at most two frames, so a floor sampled during startup does
-# not raise the bar.
-expect "the allowance is the floor plus a frame" \
-  "23.33" "$(latency_allowance 15.00 8.33)"
-expect "and a floor over two frames counts as two" \
-  "50.01" "$(latency_allowance 48.71 16.67)"
-expect "an unread floor gives no allowance" \
-  "" "$(latency_allowance "nothing measured" 16.67)"
+# A guard's PASS line prints each figure's spread, not only its median.
+expect "a spread is min, median and max" \
+  "min 12.10, median 20.40, max 30.00 ms" "$(latency_spread "commit to present" "$RUN_LOG")"
+expect "and commit to pixel's is not commit to present's" \
+  "min 16.61, median 16.68, max 34.10 ms" "$(latency_spread "commit to pixel" "$RUN_LOG")"
+expect "an unmeasured figure has no spread" \
+  "" "$(latency_spread floor "$(log_of "latency floor: nothing measured")")"
+
+# With the keys spread over the frame, a present 1.5 frames after the commit
+# passes and one a stage later does not.
+latency_within 20.40 1.5 16.67 && expect "a present within a frame and a half passes" ok ok ||
+  expect "a present within a frame and a half passes" ok FAILED
+latency_within 33.40 1.5 16.67 && expect "and one a frame later fails" ok FAILED ||
+  expect "and one a frame later fails" ok ok
 
 # A headless output presents nothing, so the run takes its frame from the
 # mode `under-wayland.sh` set.

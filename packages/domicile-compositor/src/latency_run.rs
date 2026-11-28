@@ -106,7 +106,7 @@ impl DomicileCompositor {
     }
 
     fn new_latency_run(&self, budget: latency::Budget) -> Latency {
-        let mut run = Latency::new(budget);
+        let mut run = Latency::new(budget).staggered();
         // The window's first frame may be shown before the run starts, and a
         // still client draws no other.
         if let Some(frame) = self.latency_frame.or_else(spike_latency_frame) {

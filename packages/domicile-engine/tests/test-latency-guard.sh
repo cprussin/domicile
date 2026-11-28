@@ -41,7 +41,7 @@ spread() { # $1 label, $2 median
   say "latency $1: min $2, median $2, max $2 ms over 60 (median 1.0 frames)"
 }
 
-run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 ending, $5 undelivered, $6 display frame, $7 moved before the answer, $8 answered too late, $9 commits passed over for coming too soon
+run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 ending, $5 undelivered, $6 display frame, $7 moved before the answer, $8 answered too late, $9 commits passed over for coming too soon, $10 commit-to-present (defaults to $2, "" for none)
   local f; f="$(mktemp "$FIXTURES/XXXXXX")"
   {
     # The guard divides by this. Defaults to 60Hz, which `crux` advertises.
@@ -50,7 +50,11 @@ run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 endin
     say "latency key to commit: min 1.40, median 1.40, max 1.40 ms over 60 (median 0.1 frames)"
     if [ -n "$2" ]; then
       spread "commit to pixel" "$2"
-      spread "commit to present" "$2"
+      if [ -n "${10-$2}" ]; then
+        spread "commit to present" "${10-$2}"
+      else
+        say "latency commit to present: nothing measured"
+      fi
       spread "key to pixel" "$2"
     else
       say "latency commit to pixel: nothing measured"
@@ -69,6 +73,9 @@ run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 endin
   } >"$f"
   echo "$f"
 }
+
+# The script's own default, which the verdict block reads.
+eval "$(grep '^PRESENT_FRAMES=' "$GUARD")"
 
 # Runs the real block in a subshell so its `exit` does not end this test.
 verdict() { # $1 log, $2 NEGATIVE
@@ -90,50 +97,56 @@ verdict_code() { # $1 log, $2 NEGATIVE
 # --- the measurement itself ---
 
 GOOD="$(run_log 16.67 16.68 0 completed)"
-expect "a frame that arrives in one display frame passes" \
+expect "a frame presented within a display frame passes" \
   "0" "$(verdict_code "$GOOD" 0)"
-expect "and says what it was measured against" \
-  "PASS: a client's frame reaches the page in 16.68ms, within the probe's floor and one display frame: 33.34ms." \
+expect "and says what it was measured against, with every spread" \
+  "PASS: a client's frame is presented 16.68ms after its commit, within 1.5 display frames of 16.67ms. min 16.68, median 16.68, max 16.68 ms; commit to pixel min 16.68, median 16.68, max 16.68 ms, floor min 16.67, median 16.67, max 16.67 ms." \
   "$(verdict "$GOOD" 0)"
 
 # A frame over the threshold suggests an extra stage, such as a readback, an
 # extra composite or a queued frame.
 SLOW="$(run_log 16.67 50.10 0 completed)"
-expect "a frame that takes three display frames fails" "1" "$(verdict_code "$SLOW" 0)"
+expect "a frame presented three display frames after its commit fails" "1" "$(verdict_code "$SLOW" 0)"
 expect "and names the frame it is measured against" \
-  "::error::guard-latency: commit to pixel is 50.10ms, more than the probe's floor and one display frame of 16.67ms (33.34ms) — a client's frame is waiting on a stage of its own somewhere between the commit and the page" \
+  "::error::guard-latency: commit to present is 50.10ms, more than 1.5 display frames of 16.67ms — a client's frame is waiting on a stage of its own somewhere between the commit and the screen" \
   "$(verdict "$SLOW" 0)"
+# One stage more presents a whole frame later, from about half a frame to
+# about one and a half.
+expect "a stage of one frame more fails" \
+  "1" "$(verdict_code "$(run_log 16.67 33.40 0 completed 0 16.67 0 0 0 25.20)" 0)"
 
 # Boundary cases, since this is a float comparison in shell.
-expect "just under twice the display frame passes" \
-  "0" "$(verdict_code "$(run_log 16.67 33.33 0 completed)" 0)"
-expect "just over twice the display frame fails" \
-  "1" "$(verdict_code "$(run_log 16.67 33.35 0 completed)" 0)"
+expect "just under a frame and a half passes" \
+  "0" "$(verdict_code "$(run_log 16.67 33.33 0 completed 0 16.67 0 0 0 25.00)" 0)"
+expect "just over a frame and a half fails" \
+  "1" "$(verdict_code "$(run_log 16.67 33.33 0 completed 0 16.67 0 0 0 25.01)" 0)"
 
-# Readings from real CI runs. `commit to pixel` was 28-29 ms each time, but
-# the floor varied from 16.43 to 48.71 ms on the same machine. Measured against
-# the display frame, both runs give the same verdict.
-expect "a run whose floor sampled one frame passes" \
-  "0" "$(verdict_code "$(run_log 16.43 27.99 0 completed)" 0)"
-expect "and the same reading against a floor that sampled three still passes" \
-  "0" "$(verdict_code "$(run_log 48.71 29.18 0 completed)" 0)"
+# Readings from real CI runs (2026-11-28): the probe read commit to pixel as
+# 15, 31 or 40 ms and the floor as 16 or 33 on unrelated trees, by where it
+# landed in the frame. Commit to present was 15 throughout. The verdict must
+# not move with the probe.
+expect "a probe that read 40 ms over a floor of 16 does not fail a frame presented in 15" \
+  "0" "$(verdict_code "$(run_log 16.40 40.10 0 completed 0 16.67 0 0 0 14.98)" 0)"
+expect "nor does one that read 15" \
+  "0" "$(verdict_code "$(run_log 16.40 15.10 0 completed 0 16.67 0 0 0 14.98)" 0)"
+expect "nor one that read 31 over a floor of 33" \
+  "0" "$(verdict_code "$(run_log 32.70 31.48 0 completed 0 16.67 0 0 0 14.98)" 0)"
 
-# A high floor must not raise the bar: 50.10 ms is three display frames and
-# fails regardless of the floor.
+# A high floor must not raise the bar.
 expect "a floor that sampled three frames does not excuse a slow one" \
   "1" "$(verdict_code "$(run_log 48.71 50.10 0 completed)" 0)"
-# A low floor must not fail a normal reading.
-expect "nor does a floor that sampled low condemn a good one" \
-  "0" "$(verdict_code "$(run_log 13.50 28.18 0 completed)" 0)"
 
-# lyra's 120 Hz panel, where the probe costs two frames: on the panel
-# (2026-10-22), and nested in a session (2026-10-25).
-expect "a probe that costs two 120 Hz frames passes on the panel" \
-  "0" "$(verdict_code "$(run_log 17.92 20.64 0 completed 0 8.33)" 0)"
-expect "and nested" \
-  "0" "$(verdict_code "$(run_log 17.15 17.44 0 completed 0 8.33)" 0)"
-expect "while a frame more than that fails" \
-  "1" "$(verdict_code "$(run_log 17.15 25.70 0 completed 0 8.33)" 0)"
+# lyra's 120 Hz panel: the bar is a frame and a half of its own frame.
+expect "a frame presented within a 120 Hz frame passes" \
+  "0" "$(verdict_code "$(run_log 17.92 20.64 0 completed 0 8.33 0 0 0 8.10)" 0)"
+expect "while one a 120 Hz frame later fails" \
+  "1" "$(verdict_code "$(run_log 17.92 20.64 0 completed 0 8.33 0 0 0 16.40)" 0)"
+
+# Without presentation feedback there is nothing to assert. Assert the
+# message: an empty figure also fails `latency_within`.
+expect "a run with no presentation feedback fails" \
+  "::error::guard-latency: the run completed with no presentation feedback for the client's frames, so there is no commit-to-present figure to check" \
+  "$(verdict "$(run_log 16.67 16.68 0 completed 0 16.67 0 0 0 '')" 0)"
 
 # The display frame is the interval viz reports. A probe costs at least one,
 # so a floor far below it means the reported rate is wrong. Contention only raises the floor, so this check fires in one

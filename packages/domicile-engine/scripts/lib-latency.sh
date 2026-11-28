@@ -26,6 +26,15 @@ latency_median() {
     sed -n 's/.*median \([0-9.]*\), max .*/\1/p'
 }
 
+# "min X, median Y, max Z ms" from the last `latency <what>:` line, for a
+# guard's PASS line. Empty when the line is absent or says "nothing measured".
+latency_spread() {
+  local what="$1" log="$2"
+  grep -a "latency $what: " "$log" 2>/dev/null |
+    tail -1 |
+    sed -n 's/.*: \(min [0-9.]*, median [0-9.]*, max [0-9.]* ms\) over .*/\1/p'
+}
+
 # One display frame in milliseconds, as the run reported it. Empty when
 # missing; callers treat that as failure.
 #
@@ -141,21 +150,6 @@ latency_undelivered() {
 latency_frame_of_mode() {
   printf '%s' "$1" | sed -n 's/.*@\([0-9.]*\)Hz$/\1/p' |
     awk '$1 > 0 { printf "%.3f", 1000 / $1 }'
-}
-
-# How long `commit to pixel` may take, in ms: probe floor `$1` plus one display
-# frame `$2`. Empty when either is unreadable.
-#
-# The probe costs about one frame at 60 Hz and two at 120 Hz, so a fixed
-# count of frames fits one rate only. The floor counts for at most two frames:
-# it is sampled while the browser starts and can read three.
-latency_allowance() {
-  local floor="$1" frame="$2"
-  awk -v floor="$floor" -v frame="$frame" 'BEGIN {
-    if (floor == "" || frame == "" || floor + 0 != floor || frame + 0 != frame) { exit 1 }
-    probe = floor < 2 * frame ? floor : 2 * frame
-    printf "%.2f", probe + frame
-  }'
 }
 
 # Whether `$1` <= `$2` * `$3`, in floating point.
