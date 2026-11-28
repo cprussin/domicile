@@ -611,7 +611,6 @@ fn send_shell_sends_every_word_after_it_as_the_command() {
         Ok(Invocation::Ask {
             request: Request::SendShell {
                 command: vec!["focus".to_string(), "right".to_string()],
-                window: None,
                 agent: None,
             }
         })
@@ -619,58 +618,24 @@ fn send_shell_sends_every_word_after_it_as_the_command() {
 }
 
 #[test]
-fn send_shell_aims_a_command_at_a_window_maybe_for_an_agent() {
-    let command = ["move", "container", "to", "workspace", "3"].map(String::from);
+fn send_shell_passes_a_commands_window_on_with_its_words() {
+    // The compositor takes `--window` out of the words, wherever it is.
+    let command = ["move", "--window", "w1", "right"].map(String::from);
     assert_eq!(
         run(&[
             "send-shell",
             "--agent",
             "4",
+            "move",
             "--window",
             "w1",
-            "move",
-            "container",
-            "to",
-            "workspace",
-            "3"
+            "right"
         ]),
         Ok(Invocation::Ask {
             request: Request::SendShell {
                 command: command.to_vec(),
-                window: Some("w1".to_string()),
                 agent: Some(4),
             }
-        })
-    );
-    assert_eq!(
-        run(&["send-shell", "--window", "w1", "kill"]),
-        Ok(Invocation::Ask {
-            request: Request::SendShell {
-                command: vec!["kill".to_string()],
-                window: Some("w1".to_string()),
-                agent: None,
-            }
-        })
-    );
-}
-
-#[test]
-fn send_shell_for_an_agent_without_a_window_acts_on_its_focus() {
-    // The compositor finds the window the agent's keyboard is in.
-    assert_eq!(
-        run(&["send-shell", "--agent", "4", "kill"]),
-        Ok(Invocation::Ask {
-            request: Request::SendShell {
-                command: vec!["kill".to_string()],
-                window: None,
-                agent: Some(4),
-            }
-        })
-    );
-    assert_eq!(
-        run(&["send-shell", "--window"]),
-        Err(CliError::NoWindowGiven {
-            verb: "send-shell".to_string()
         })
     );
 }
@@ -883,7 +848,6 @@ fn help_after_a_verb_s_first_argument_is_that_argument() {
         Ok(Invocation::Ask {
             request: Request::SendShell {
                 command: vec!["exec".to_string(), "foot".to_string(), "--help".to_string()],
-                window: None,
                 agent: None,
             }
         })

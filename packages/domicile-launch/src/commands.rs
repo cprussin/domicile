@@ -201,13 +201,16 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "send-shell",
         group: Group::Shell,
-        takes: "[--window <id>] <word>...",
+        takes: "<word>...",
         summary: "Run a shell command, as a key does",
         forms: &[],
         about: &[
             "Runs a shell command, as a keybinding bound to it does, and prints \
              what it answers. `send-shell --help` lists the running shell's \
              commands.",
+            "A command that acts on a window takes `--window <id>`, as \
+             `list-windows` prints it, after its first word, and acts on that \
+             window rather than the focus.",
             "Fails with the shell's reason when no page listens, when every page \
              refuses the command, or when none says it ran it within a second.",
         ],
@@ -215,7 +218,7 @@ pub const COMMANDS: &[Command] = &[
         examples: &[
             "domicile send-shell workspace 2",
             "domicile send-shell get-workspaces | jq '.[].name'",
-            "domicile send-shell --window <id> move container to workspace 3",
+            "domicile send-shell move --window <id> container to workspace 3",
         ],
         see_also: &["list-shell-commands", "list-bindings"],
     },
@@ -1125,19 +1128,12 @@ const ON_A_WINDOW: Section = Section {
 
 const SEND_SHELL: Section = Section {
     title: "Options",
-    entries: &[
-        (
-            "--agent <session>",
-            "Send it for that agent session, as `agent` prints it. The command then acts on the \
-             agent's window, never the user's",
-        ),
-        (
-            "--window <id>",
-            "Act on that window, as `list-windows` prints it, not the focus. Left out, the window \
-             the keyboard is in: with `--agent`, the one that agent's keyboard is in. Only a shell \
-             that runs commands on a given window hears a command with a window",
-        ),
-    ],
+    entries: &[(
+        "--agent <session>",
+        "Send it for that agent session, as `agent` prints it. The command then acts on the \
+             agent's window, never the user's: the one its `--window` names, or the one that \
+             agent's keyboard is in",
+    )],
 };
 
 /// The command named `name`.

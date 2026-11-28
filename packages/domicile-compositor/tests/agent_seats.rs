@@ -9,7 +9,7 @@ use std::os::unix::net::UnixStream;
 
 use domicile_protocol::{
     AgentPageInput, AgentReach, ChromeMessage, EmulatedInput, HostMessage, PointerButton,
-    PortalAnswer, PortalKind, SystemEvent, SystemReply, SystemRequest,
+    PortalAnswer, PortalKind, ShellCommandHelp, SystemEvent, SystemReply, SystemRequest,
 };
 
 use crate::running::{Client, Compositor};
@@ -284,7 +284,8 @@ fn an_agent_focuses_a_native_window_by_its_listed_id() {
 }
 
 /// Sends shell command `command` on `window` for agent `session`, as
-/// `domicile send-shell --agent` does, and returns how it ended.
+/// `domicile send-shell --agent` does, naming the window after the command's
+/// first word, and returns how it ended.
 fn shell_command_as_the_agent(
     compositor: &Compositor,
     session: u32,
@@ -295,8 +296,13 @@ fn shell_command_as_the_agent(
     let said = serde_json::to_string(&ChromeMessage::SystemRequest {
         id: 1,
         request: SystemRequest::SendShell {
-            command: command.iter().map(|word| word.to_string()).collect(),
-            window: window.map(str::to_string),
+            command: command[..1]
+                .iter()
+                .copied()
+                .chain(window.into_iter().flat_map(|window| ["--window", window]))
+                .chain(command[1..].iter().copied())
+                .map(str::to_string)
+                .collect(),
             agent: Some(session),
         },
     })
@@ -326,9 +332,12 @@ fn an_agents_shell_command_acts_on_a_window_it_holds() {
         .say(&ChromeMessage::SystemRequest {
             id: 7,
             request: SystemRequest::ShellCommands {
-                commands: Vec::new(),
+                commands: vec![ShellCommandHelp {
+                    usage: "kill".into(),
+                    description: "Close the window.".into(),
+                    window: true,
+                }],
                 bindings: Vec::new(),
-                on_a_window: true,
                 completes: false,
             },
         })
@@ -366,9 +375,9 @@ fn an_agents_shell_command_acts_on_a_window_it_holds() {
     let HostMessage::SystemEvent {
         event:
             SystemEvent::ShellCommand {
+                command,
                 sent: number,
                 window,
-                ..
             },
         ..
     } = heard
@@ -376,6 +385,7 @@ fn an_agents_shell_command_acts_on_a_window_it_holds() {
         unreachable!("the wait matched on this variant")
     };
     assert_eq!(window, Some(desk.other.1.clone()));
+    assert_eq!(command, ["move", "container", "to", "workspace", "3"]);
     desk.chrome
         .say(&ChromeMessage::SystemRequest {
             id: 8,
@@ -404,9 +414,12 @@ fn an_agents_shell_command_naming_no_window_acts_on_its_own_focus() {
         .say(&ChromeMessage::SystemRequest {
             id: 7,
             request: SystemRequest::ShellCommands {
-                commands: Vec::new(),
+                commands: vec![ShellCommandHelp {
+                    usage: "kill".into(),
+                    description: "Close the window.".into(),
+                    window: true,
+                }],
                 bindings: Vec::new(),
-                on_a_window: true,
                 completes: false,
             },
         })
@@ -445,13 +458,16 @@ fn an_agents_shell_command_naming_no_window_acts_on_its_own_focus() {
         })
         .expect("the shell hears the agent's command");
     let HostMessage::SystemEvent {
-        event: SystemEvent::ShellCommand { window, .. },
+        event: SystemEvent::ShellCommand {
+            command, window, ..
+        },
         ..
     } = heard
     else {
         unreachable!("the wait matched on this variant")
     };
     assert_eq!(window, Some(desk.other.1.clone()));
+    assert_eq!(command, ["floating", "toggle"]);
 }
 
 /// An agent's shell command on a window its seat doesn't hold, such as the

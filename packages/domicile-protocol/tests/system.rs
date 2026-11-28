@@ -6,10 +6,10 @@
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    Bus, ChromeMessage, DirEntry, FileType, HostMessage, InhibitorAction, KeymapChoice,
-    ListedKeymap, PreviewedWindow, ResizeEdges, Scale, ShellBinding, ShellCommandHelp, Signal,
-    Stream, SystemEnd, SystemError, SystemErrorKind, SystemEvent, SystemReply, SystemRequest,
-    UnlockRefusal, WindowRequest, WindowState,
+    named_window, Bus, ChromeMessage, DirEntry, FileType, HostMessage, InhibitorAction,
+    KeymapChoice, ListedKeymap, PreviewedWindow, ResizeEdges, Scale, ShellBinding,
+    ShellCommandHelp, Signal, Stream, SystemEnd, SystemError, SystemErrorKind, SystemEvent,
+    SystemReply, SystemRequest, UnlockRefusal, WindowRequest, WindowState,
 };
 
 fn chrome(json: &str) -> ChromeMessage {
@@ -476,7 +476,6 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
             request: SystemRequest::ShellCommands {
                 commands: Vec::new(),
                 bindings: Vec::new(),
-                on_a_window: false,
                 completes: false,
             },
         }
@@ -491,9 +490,9 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
                 commands: vec![ShellCommandHelp {
                     usage: "lock".into(),
                     description: "Lock the desktop.".into(),
+                    window: false,
                 }],
                 bindings: Vec::new(),
-                on_a_window: false,
                 completes: false,
             },
         }
@@ -519,7 +518,6 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
             id: 1,
             request: SystemRequest::SendShell {
                 command: vec!["focus".into(), "right".into()],
-                window: None,
                 agent: None,
             },
         }
@@ -553,7 +551,6 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
                     chord: "Meta+l".into(),
                     action: "send-shell lock".into(),
                 }],
-                on_a_window: false,
                 completes: false,
             },
         }
@@ -571,37 +568,39 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
     );
 }
 
-/// A command can name the window it acts on, for an agent session that holds
-/// it; it goes only to pages that run commands on a given window, naming the
-/// window as the shell knows it.
+/// A shell says which of its commands act on a window; `send-shell` names the
+/// window among a command's words, and the page hears it named as the shell
+/// knows it.
 #[test]
 fn a_shell_command_can_act_on_a_window_it_names() {
     assert_eq!(
         chrome(
-            r#"{"type":"system_request","id":1,"request":{"call":"send_shell","command":["move","container","to","workspace","3"],"window":"Xy7pQ2mN","agent":4}}"#
+            r#"{"type":"system_request","id":12,"request":{"call":"shell_commands","commands":[{"usage":"kill","description":"Close the window.","window":true}]}}"#
         ),
         ChromeMessage::SystemRequest {
-            id: 1,
-            request: SystemRequest::SendShell {
-                command: ["move", "container", "to", "workspace", "3"]
-                    .map(String::from)
-                    .to_vec(),
-                window: Some("Xy7pQ2mN".into()),
-                agent: Some(4),
+            id: 12,
+            request: SystemRequest::ShellCommands {
+                commands: vec![ShellCommandHelp {
+                    usage: "kill".into(),
+                    description: "Close the window.".into(),
+                    window: true,
+                }],
+                bindings: Vec::new(),
+                completes: false,
             },
         }
     );
     assert_eq!(
         chrome(
-            r#"{"type":"system_request","id":12,"request":{"call":"shell_commands","on_a_window":true}}"#
+            r#"{"type":"system_request","id":1,"request":{"call":"send_shell","command":["move","--window","Xy7pQ2mN","right"],"agent":4}}"#
         ),
         ChromeMessage::SystemRequest {
-            id: 12,
-            request: SystemRequest::ShellCommands {
-                commands: Vec::new(),
-                bindings: Vec::new(),
-                on_a_window: true,
-                completes: false,
+            id: 1,
+            request: SystemRequest::SendShell {
+                command: ["move", "--window", "Xy7pQ2mN", "right"]
+                    .map(String::from)
+                    .to_vec(),
+                agent: Some(4),
             },
         }
     );
@@ -615,6 +614,54 @@ fn a_shell_command_can_act_on_a_window_it_names() {
             },
         }),
         r#"{"type":"system_event","id":12,"event":{"kind":"shell_command","command":["kill"],"sent":5,"window":"app-3"}}"#
+    );
+}
+
+fn words(said: &[&str]) -> Vec<String> {
+    said.iter().map(|word| word.to_string()).collect()
+}
+
+/// `--window <id>` can be anywhere among a command's words, once.
+#[test]
+fn a_commands_words_name_its_window_anywhere() {
+    assert_eq!(
+        named_window(&words(&["move", "--window", "w1", "right"])),
+        Ok((Some("w1".to_string()), words(&["move", "right"])))
+    );
+    assert_eq!(
+        named_window(&words(&["kill", "--window", "w1"])),
+        Ok((Some("w1".to_string()), words(&["kill"])))
+    );
+    assert_eq!(
+        named_window(&words(&["focus", "left"])),
+        Ok((None, words(&["focus", "left"])))
+    );
+    assert_eq!(
+        named_window(&words(&["kill", "--window"])),
+        Err("--window takes a window's id from `domicile list-windows`".to_string())
+    );
+    assert_eq!(
+        named_window(&words(&["kill", "--window", "w1", "--window", "w2"])),
+        Err("--window names one window".to_string())
+    );
+}
+
+/// A command that acts on a window shows `--window` after its first word.
+#[test]
+fn a_command_on_a_window_shows_it_takes_one() {
+    let help = |usage: &str, window| ShellCommandHelp {
+        usage: usage.into(),
+        description: String::new(),
+        window,
+    };
+    assert_eq!(
+        help("move left|right", true).shown_usage(),
+        "move [--window <id>] left|right"
+    );
+    assert_eq!(help("kill", true).shown_usage(), "kill [--window <id>]");
+    assert_eq!(
+        help("workspace <name>", false).shown_usage(),
+        "workspace <name>"
     );
 }
 
@@ -642,7 +689,6 @@ fn a_page_that_completes_commands_hears_the_words_typed() {
             request: SystemRequest::ShellCommands {
                 commands: Vec::new(),
                 bindings: Vec::new(),
-                on_a_window: false,
                 completes: true,
             },
         }

@@ -123,14 +123,10 @@ pub enum Request {
     /// Record the screen: the shell's picker, then until the user stops the
     /// recording. See `SystemRequest::ScreenRecord`.
     ScreenRecord,
-    /// Send this command to the shell, as a `send-shell` keybinding would.
-    /// With `window`, it acts on that window, not the user's focus; with
-    /// `agent` too, only if that agent session's seat holds it. See
-    /// `SystemRequest::SendShell`.
+    /// Send this command to the shell, as a `send-shell` keybinding would,
+    /// for agent session `agent` if given. See `SystemRequest::SendShell`.
     SendShell {
         command: Vec<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        window: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<u32>,
     },
@@ -652,12 +648,11 @@ pub type Screenshot<'a> = &'a dyn Fn(Option<&Path>) -> Result<Shot, String>;
 /// tests.
 pub type ScreenRecord<'a> = &'a dyn Fn() -> Result<Option<PathBuf>, String>;
 
-/// Tells the compositor to send the shell a command, on a window and for an
-/// agent session if given.
+/// Tells the compositor to send the shell a command, for an agent session if
+/// given.
 ///
 /// [`crate::compositor_socket::send_shell`] in a desktop; a closure in tests.
-pub type SendShell<'a> =
-    &'a dyn Fn(&[String], Option<&str>, Option<u32>) -> Result<Option<String>, String>;
+pub type SendShell<'a> = &'a dyn Fn(&[String], Option<u32>) -> Result<Option<String>, String>;
 
 /// Asks the engine for every permission's default and every site's own
 /// setting.
@@ -1132,14 +1127,12 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(None) => Response::Canceled,
             Err(why) => Response::Refused { why },
         }),
-        Ok(Request::SendShell {
-            command,
-            window,
-            agent,
-        }) => to_line(&match (desktop.send)(&command, window.as_deref(), agent) {
-            Ok(output) => Response::Sent { output },
-            Err(why) => Response::Refused { why },
-        }),
+        Ok(Request::SendShell { command, agent }) => {
+            to_line(&match (desktop.send)(&command, agent) {
+                Ok(output) => Response::Sent { output },
+                Err(why) => Response::Refused { why },
+            })
+        }
         Ok(Request::SettingsFiles) => to_line(&Response::SettingsFiles {
             files: SettingsFiles {
                 options: Some(

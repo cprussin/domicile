@@ -922,13 +922,15 @@ bindKeys(
   every page bound. `send-shell` fails with the `Err`, or when no page answers
   within a second. A page that cannot listen calls `report`, which logs by
   default.
-- `onWindowCommand(args, window)` runs a command on a given window rather than
-  the user's focus: `send-shell --window`, and every agent's `send_shell`,
-  on the agent's own window. `window` is an app id or a browser window's engine id, as
-  seats name windows. Run only what makes sense on that window, and `Err` the
-  rest. Without it, the page never hears such a command.
+- `onCommand(args, window)` gets a `window` for a command to run on that
+  window rather than the user's focus: the one its `--window <id>` names, or
+  an agent's own focus for every agent's `send_shell`. `window` is an app id
+  or a browser window's engine id, as seats name windows. `Err` it for a
+  command that acts on no window. Only a page with a command marked `window`
+  hears one.
 - `commands` describes what `onCommand` runs: `domicile list-shell-commands`
-  (and `send-shell --help`) prints it. `domicile list-bindings` prints your
+  (and `send-shell --help`) prints it. `window: true` marks a command that
+  acts on a window, which then takes `--window <id>` after its first word. `domicile list-bindings` prints your
   keybindings, which `bindKeys` describes for you.
 - Tab completion of `send-shell` reads each `usage`: `a|b` is a choice,
   `[...]` optional, `<name>` a value. Call a window id `<window>` and a
