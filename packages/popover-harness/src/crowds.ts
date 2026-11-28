@@ -4,7 +4,10 @@ import type { Crowd } from "./crowd";
 import { AgentsScene } from "./scenes/agents";
 import { DownloadsScene } from "./scenes/downloads";
 import { NotificationsScene } from "./scenes/notifications";
-import { QuickSettingsScene } from "./scenes/quick-settings";
+import {
+  FittingQuickSettingsScene,
+  QuickSettingsScene,
+} from "./scenes/quick-settings";
 import { TrayScene } from "./scenes/tray";
 
 export const CROWDS: readonly Crowd[] = [
@@ -37,6 +40,13 @@ export const CROWDS: readonly Crowd[] = [
     last: "Network 40",
     presses: ["Quick settings", "Wi-Fi details"],
     Scene: QuickSettingsScene,
+  },
+  {
+    drawer: "Details",
+    id: "network-details",
+    last: "Network 2",
+    presses: ["Quick settings", "Wi-Fi details"],
+    Scene: FittingQuickSettingsScene,
   },
   {
     id: "tray",

@@ -2,7 +2,7 @@
 // Playwright, on a small screen. Fails a popover that runs off the screen,
 // covers the bar or stands taller than {@link SCREEN_SHARE} of the screen, whose last row can't be scrolled into view, that scrolls sideways, whose
 // buttons are too narrow for their labels, whose drawer's height jumps as it
-// opens or shuts, that moves when put in another state and back, or that shows
+// opens or shuts or that falls behind its drawer, that moves when put in another state and back, or that shows
 // a scrollbar while growing to a height that fits. See the package README.
 //
 //   bun src/harness.ts [--chromium <path>] [<crowd>...]
@@ -335,34 +335,42 @@ const squeezedButtons = async (panel: Locator): Promise<string[]> => {
 };
 
 /**
- * Why the drawer behind `panel`'s `name` disclosure doesn't grow and shrink:
- * pressed open and then shut, its height must pass between nothing and its
- * full height each way, not jump.
+ * Why the drawer behind `panel`'s `name` disclosure doesn't grow and shrink,
+ * with the panel following it: pressed open and then, as soon as it has
+ * opened, shut, its height must pass between nothing and its full height each
+ * way, not jump, and the panel's height must keep up with it.
  */
 const drawerProblems = async (
   panel: Locator,
   name: string,
 ): Promise<string[]> => {
   const trigger = panel.getByRole("button", { exact: true, name });
-  const opening = await heightsAfterPressing(trigger, undefined);
-  const full = opening.at(-1);
+  const opening = await framesAfterPressing(trigger, undefined);
+  const full = opening.drawer.at(-1);
   // base-ui names the drawer on its trigger only while it is open.
   const drawer = await trigger.getAttribute("aria-controls");
   if (full === undefined || full <= 1 || drawer === null) {
     return [`the ${name} drawer did not open`];
   } else {
-    const closing = await heightsAfterPressing(trigger, drawer);
-    const shut = closing.at(-1);
+    // Shut while the panel may still be settling, as a quick second press is.
+    const closing = await framesAfterPressing(trigger, drawer);
+    const shut = closing.drawer.at(-1);
     return [
-      ...(passesBetween(opening, full)
+      ...(passesBetween(opening.drawer, full)
         ? []
         : [`the ${name} drawer jumped to ${px(full)} as it opened`]),
-      ...(passesBetween(closing, full)
+      ...(passesBetween(closing.drawer, full)
         ? []
         : [`the ${name} drawer jumped from ${px(full)} as it shut`]),
       ...(shut === undefined || shut > 1
         ? [`the ${name} drawer did not shut`]
         : []),
+      // Shut, the panel goes back to its height before the drawer opened.
+      ...lagProblems(
+        `as the ${name} drawer shuts`,
+        closing,
+        opening.panel[0] ?? 0,
+      ),
     ];
   }
 };
@@ -580,33 +588,83 @@ const passesBetween = (heights: readonly number[], full: number) =>
   heights.some((height) => height > 1 && height < full - 1);
 
 /**
- * Presses `trigger` and reads the height of `drawer`, or of the drawer it
- * names once pressed, on every frame for {@link DRAWER_MS}: 0 while there is
- * none.
+ * The most the panel's height may fall behind its drawer's, as a share of the
+ * way each goes: more is a panel holding its height while the drawer moves.
  */
-const heightsAfterPressing = (
+const MAX_LAG = 0.5;
+
+/**
+ * Why the panel's height, going to `rest`, doesn't keep up with its drawer's
+ * over `frames`: on no frame may the panel have gone {@link MAX_LAG} less of
+ * its way than the drawer has of its own. A panel that holds its height, such
+ * as one capped by the screen, has nowhere to go.
+ */
+const lagProblems = (
+  what: string,
+  { drawer, panel }: Frames,
+  rest: number,
+): string[] => {
+  const drawerFrom = drawer[0] ?? 0;
+  const panelFrom = panel[0] ?? 0;
+  const drawerWay = Math.abs((drawer.at(-1) ?? 0) - drawerFrom);
+  const panelWay = Math.abs(rest - panelFrom);
+  const lag = Math.max(
+    ...drawer.map(
+      (height, index) =>
+        Math.abs(height - drawerFrom) / drawerWay -
+        Math.abs((panel[index] ?? panelFrom) - panelFrom) / panelWay,
+    ),
+  );
+  return panelWay <= 1 || drawerWay <= 1 || lag <= MAX_LAG
+    ? []
+    : [
+        `${what}, the panel falls ${percent(lag)} of the way behind it, holding near ${px(panelFrom)} before going to ${px(rest)}`,
+      ];
+};
+
+/** Heights, a frame each, of a drawer (0 while there is none) and its panel. */
+type Frames = { drawer: number[]; panel: number[] };
+
+/**
+ * Presses `trigger` and reads the height of `drawer`, or of the drawer it
+ * names once pressed, and of the panel holding it, on every frame until the
+ * drawer stops easing, for at most {@link DRAWER_MS}.
+ */
+const framesAfterPressing = (
   trigger: Locator,
   drawer: string | undefined,
-): Promise<number[]> =>
+): Promise<Frames> =>
   trigger.evaluate(
     async (button, { drawer, lengthMs }) => {
       const frame = () =>
         new Promise<number>((resolve) => {
           requestAnimationFrame(resolve);
         });
-      const height = () => {
+      const found = () => {
         const id = drawer ?? button.getAttribute("aria-controls");
-        const found = id === null ? null : document.getElementById(id);
-        return found === null ? 0 : found.getBoundingClientRect().height;
+        return id === null ? null : document.getElementById(id);
       };
-      const heights: number[] = [];
+      const panel = button.closest("[role=dialog]");
+      if (panel === null) {
+        throw new Error("popover-harness: the drawer is in no panel");
+      }
+      const frames: { drawer: number[]; panel: number[] } = {
+        drawer: [found()?.getBoundingClientRect().height ?? 0],
+        panel: [panel.getBoundingClientRect().height],
+      };
+      const first = frames.drawer[0];
+      // Until it has moved and stopped easing.
+      const easing = () =>
+        frames.drawer.at(-1) === first ||
+        (found()?.getAnimations().length ?? 0) > 0;
       const start = performance.now();
       button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      while (performance.now() - start < lengthMs) {
+      while (performance.now() - start < lengthMs && easing()) {
         await frame();
-        heights.push(height());
+        frames.drawer.push(found()?.getBoundingClientRect().height ?? 0);
+        frames.panel.push(panel.getBoundingClientRect().height);
       }
-      return heights;
+      return frames;
     },
     { drawer, lengthMs: DRAWER_MS },
   );

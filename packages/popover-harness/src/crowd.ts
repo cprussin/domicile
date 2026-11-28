@@ -11,8 +11,8 @@ export type Crowd = {
   presses: readonly string[];
   /**
    * A row's disclosure in the open panel, such as "Details". The harness opens
-   * and shuts its drawer, and fails when the drawer's height jumps rather than
-   * following it.
+   * its drawer and shuts it as soon as it has opened, and fails when the
+   * drawer's height jumps, or the panel's height falls behind it.
    */
   drawer?: string | undefined;
   /**
