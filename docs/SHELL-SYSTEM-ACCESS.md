@@ -142,6 +142,8 @@ const inbox = await domicile.browser.fetch(
 | `@domicile-desktop/system-apps` | desktop entries, icons and bookmarks |
 | `@domicile-desktop/sdk/file-preview` | a launcher's file preview: directory entries, text, audio tags and cover |
 | `@domicile-desktop/sdk/dbusmenu` | a tray item's `com.canonical.dbusmenu` menu, on the item's own bus name |
+| `@domicile-desktop/sdk/sysfs` | `/sys` through `files`: `sysfsEntries` and `sysfsLine` read a missing directory or file as none, not an error, and `anyOf` tests names one at a time |
+| `@domicile-desktop/sdk/streams` | `eachOf(items, each)` calls `each` with every item a process, watch or D-Bus match brings, until it closes |
 
 Each library owns its system's format and the safety rules for it (for
 example, `system-backlight` never sets the level to zero), with tests on

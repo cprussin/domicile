@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { Err, Ok } from "@cprussin/option-result";
+import type { SysfsDesktop } from "@domicile-desktop/sdk/sysfs";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { FileType, SystemErrorKind } from "@domicile-desktop/sdk/system";
 
-import type { SysfsDesktop } from "./hardware";
 import { hasBluetoothHardware } from "./hardware";
 
 /** `files` as `/sys`, by absolute path: each listed directory holds what is under it. */
