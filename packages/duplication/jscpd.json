@@ -1,0 +1,19 @@
+{
+  "format": ["typescript", "tsx", "rust", "cpp", "cpp-header", "c-header"],
+  "gitignore": true,
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/styled-system/**",
+    "**/.next/**",
+    "**/target/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.stories.tsx",
+    "packages/*/tests/**",
+    "packages/domicile-engine/src/third_party/**",
+    "packages/domicile-engine/upstream/**"
+  ],
+  "minLines": 8,
+  "minTokens": 70
+}
