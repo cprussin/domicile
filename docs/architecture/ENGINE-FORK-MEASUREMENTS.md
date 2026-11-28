@@ -17,7 +17,7 @@ it reads. Nothing measures presentation on a lit screen yet.
 | A page embeds a surface it did not allocate | yes, and it moves with CSS | `spike.sh` |
 | CSS treats `<app>` like a `<div>` | bit-exact for 7 properties on the GPU | `guard-css-and-resize.sh` |
 | A client frame adds a compositing stage | no, same frame as the page | `css_parity.cc` |
-| Keystroke to pixel | 1.7 display frames (limit 2) | `guard-latency.sh` |
+| A client's frame waits on a stage of its own | no: presented within 1.5 display frames of its commit | `guard-latency.sh` |
 | A real Wayland client's window is on the page | yes, exact color | `guard-client-window.sh` |
 | A dmabuf is imported and released | yes | `spike-dmabuf.sh` |
 | The host honors the shortcut inhibitor | yes, on sway | `guard-shortcuts-inhibitor-chord.sh` |
@@ -155,9 +155,22 @@ the pixel reaching the page. It uses a real Wayland client under
 | 3 | 28.18 ms | 16.67 ms | 1.69 |
 | 4 | 28.24 ms | 16.67 ms | 1.71 |
 
-- The limit is the probe's floor plus one display frame, with the floor
-  counted as at most two frames (`latency_allowance`). A limit in
-  milliseconds would measure whatever else the runner was doing.
+The runs above pressed every key at the same point of the frame. Later runs
+on `crux` read commit to pixel as 15, 31 or 40 ms and the floor as 16 or 33,
+in whole frames, on unrelated trees (2026-11-28). The probe is a blocking
+`CopyOutputRequest` and a readback, so where it lands in the frame decides how
+many frames it reads. Commit to present held at about 15 ms throughout. So:
+
+- The guard asserts `commit to present`, from viz's presentation feedback: its
+  median is within 1.5 display frames (`PRESENT_FRAMES`). A pipeline with no
+  stage of its own presents about half a frame after the deadline on average;
+  a stage more moves every round by a whole frame.
+- Each round presses its key at a different point of the frame
+  (`key_phase` in `latency.rs`, a golden-ratio step), so the median covers
+  every phase instead of whichever one the run fell on.
+- The probe still has to see each key's color, or the round is abandoned,
+  moved or late and the run fails. `commit to pixel` and the floor are
+  reported with their spreads, not asserted.
 - The frame is the interval viz reports with each presented frame. Headless
   sway presents nothing, so there the run takes the frame of
   `under-wayland.sh`'s output mode.
@@ -190,8 +203,8 @@ that compositor's. `PLATFORM=drm` runs on the scanout platform:
 - `latency_window_flags` and `latency_platform_refusal` in `lib-latency.sh`
   implement this. `packages/domicile-engine/tests/test-the-latency-run-picks-its-platform.sh` tests
   it.
-- `commit to present` comes from viz's presentation feedback. It is reported,
-  not asserted: nested, it includes the host compositor's own pass.
+- Nested in a desktop session, `commit to present` includes the host
+  compositor's own pass. Set `PRESENT_FRAMES` to allow the host's frame too.
 
 One run on lyra (Framework 13, Radeon 890M, 2880x1920 panel modeset at
 120 Hz), 60 rounds, 2026-10-22:
