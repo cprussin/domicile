@@ -19,6 +19,22 @@ JSCPD="$PACKAGE/node_modules/.bin/jscpd"
 }
 cd "$ROOT"
 
+# A generated file's generator is its one definition, so the file is skipped.
+# Each file that says near its top not to edit it is in `jscpd.json`'s
+# `ignore`, and each file named there is generated.
+GENERATED="$(git grep -lE "Do not|Don't" -- '*.ts' '*.tsx' '*.rs' '*.cc' '*.h' \
+  ':!packages/domicile-engine/src/third_party/**' ':!packages/domicile-engine/upstream/**' |
+  while read -r file; do
+    head -5 "$file" | sed 's|^ *//[/!]* *||' | tr '\n' ' ' | grep -qE "(Do not|Don't) edit" &&
+      printf '%s\n' "$file"
+  done | sort)"
+IGNORED="$(jq -r '.ignore[] | select(contains("*") | not)' "$PACKAGE/jscpd.json" | sort)"
+[ "$GENERATED" = "$IGNORED" ] || {
+  diff <(printf '%s\n' "$GENERATED") <(printf '%s\n' "$IGNORED") | sed -n 's/^< /generated, not in ignore: /p; s/^> /in ignore, not generated: /p'
+  echo "FAIL: jscpd.json's ignore must list exactly the generated files"
+  exit 1
+}
+
 REPORT="$(mktemp -d)"
 trap 'rm -rf "$REPORT"' EXIT
 "$JSCPD" --config "$PACKAGE/jscpd.json" --baseline "$PACKAGE/clones-baseline.json" \
