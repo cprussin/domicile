@@ -1,130 +1,15 @@
 import { describe, expect, it } from "bun:test";
-import type { Result } from "@cprussin/option-result";
-import { Err, Ok } from "@cprussin/option-result";
 import {
-  encodeFrame,
-  frameDecoder,
-} from "@domicile-desktop/component-library/app-host-frames";
-import type { Processes } from "@domicile-desktop/sdk/desktop/processes";
-import type {
-  Exit,
-  Subprocess,
-  SystemError,
-} from "@domicile-desktop/sdk/system";
-import { Signal, SystemErrorKind } from "@domicile-desktop/sdk/system";
+  settled,
+  started as startedOver,
+} from "@domicile-desktop/app-host-client/fake";
 
+import type { HistoryHost } from "./host";
 import { spawnedHost } from "./host";
 
-/** A started host process, as a test drives it. */
-type FakeProcess = {
-  /** Each message the app wrote to its stdin. */
-  sent: unknown[];
-  /** Writes `message` to its stdout, as one frame or split in two. */
-  answer: (message: unknown, split?: number) => void;
-  /** Ends it, after writing `stderr`. */
-  end: (exit: Result<Exit, SystemError>, stderr?: string) => void;
-  /** Each signal the app sent it. */
-  killed: Signal[];
-};
-
-/**
- * A `spawn` that starts fake processes, or fails with each of `failures`
- * first.
- */
-const fakeDesktop = (failures: SystemError[] = []) => {
-  const processes: FakeProcess[] = [];
-  const system: Pick<Processes, "spawn"> = {
-    spawn: (argv, options) => {
-      expect(argv).toEqual(["domicile-app-host"]);
-      expect(options).toEqual({ stdin: true });
-      const failure = failures.shift();
-      return Promise.resolve(
-        failure === undefined ? Ok(fakeProcess(processes)) : Err(failure),
-      );
-    },
-  };
-  return { processes, system };
-};
-
-/** A process whose controls go in `processes`. */
-const fakeProcess = (processes: FakeProcess[]): Subprocess => {
-  const stdout = pushed();
-  const stderr = pushed();
-  const { promise: exited, resolve: settle } =
-    Promise.withResolvers<Result<Exit, SystemError>>();
-  const decode = frameDecoder();
-  const sent: unknown[] = [];
-  const killed: Signal[] = [];
-  const end = (exit: Result<Exit, SystemError>, text = "") => {
-    stderr.push(new TextEncoder().encode(text));
-    stdout.close();
-    stderr.close();
-    settle(exit);
-  };
-  processes.push({
-    answer: (message, split = 0) => {
-      const frame = encodeFrame(message);
-      stdout.push(frame.slice(0, split));
-      stdout.push(frame.slice(split));
-    },
-    end,
-    killed,
-    sent,
-  });
-  return {
-    closeStdin: () => {
-      throw new Error("The app never closes the host's stdin");
-    },
-    exited,
-    kill: (signal = Signal.Term) => {
-      killed.push(signal);
-      end(Ok({ code: undefined, signal: 15 }));
-    },
-    stderr: stderr.stream,
-    stdout: stdout.stream,
-    write: (data) => {
-      sent.push(
-        ...decode(
-          typeof data === "string" ? new TextEncoder().encode(data) : data,
-        ),
-      );
-    },
-  };
-};
-
-/** A stream the test writes to. */
-const pushed = () => {
-  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
-  const stream = new ReadableStream<Uint8Array>({
-    start: (started) => {
-      controller = started;
-    },
-  });
-  return {
-    close: () => {
-      controller?.close();
-    },
-    push: (chunk: Uint8Array) => {
-      controller?.enqueue(chunk);
-    },
-    stream,
-  };
-};
-
-/** Lets the host spawn and write what it was asked. */
-const settled = () =>
-  new Promise((resolve) => {
-    setTimeout(resolve, 0);
-  });
-
 /** The host over fake processes, with what it already asked. */
-const started = async <T>(ask: (host: ReturnType<typeof spawnedHost>) => T) => {
-  const fake = fakeDesktop();
-  const host = spawnedHost(fake.system);
-  const asked = ask(host);
-  await settled();
-  return { ...fake, asked, host };
-};
+const started = <T>(ask: (host: HistoryHost) => T) =>
+  startedOver(spawnedHost, ask);
 
 const QUERY = { endTime: 5, maxResults: 150, text: "a" };
 
@@ -230,82 +115,5 @@ describe(spawnedHost, () => {
         "The app host answered deleted, not opened",
       );
     });
-  });
-
-  describe("the process", () => {
-    it.each([
-      [
-        "its stderr",
-        Ok({ code: 1, signal: undefined }),
-        "domicile-app-host: DOMICILE_SOCK is not set\n",
-        "domicile-app-host: DOMICILE_SOCK is not set",
-      ],
-      [
-        "its exit code",
-        Ok({ code: 1, signal: undefined }),
-        "",
-        "The app host exited with code 1",
-      ],
-      [
-        "the signal that killed it",
-        Ok({ code: undefined, signal: 9 }),
-        "",
-        "The app host was killed by signal 9",
-      ],
-      [
-        "why it could not be followed",
-        Err({ kind: SystemErrorKind.Other, message: "the desktop went away" }),
-        "",
-        "the desktop went away",
-      ],
-    ] satisfies [string, Result<Exit, SystemError>, string, string][])(
-      "fails what was asked with %s when it ends, and starts again for the next",
-      async (_, exit, stderr, why) => {
-        const { asked, host, processes } = await started((host) =>
-          host.visits("https://a.test/"),
-        );
-        processes[0]?.end(exit, stderr);
-        await expect(asked).rejects.toThrow(why);
-
-        const again = host.visits("https://a.test/");
-        await settled();
-        expect(processes).toHaveLength(2);
-        processes[1]?.answer({ id: 2, times: [1], type: "visits" });
-        expect(await again).toEqual([1]);
-      },
-    );
-
-    it("fails what was asked when it cannot start, and tries again for the next", async () => {
-      const { processes, system } = fakeDesktop([
-        {
-          kind: SystemErrorKind.NotFound,
-          message: "No such file or directory",
-        },
-      ]);
-      const host = spawnedHost(system);
-      await expect(host.visits("https://a.test/")).rejects.toThrow(
-        "No such file or directory",
-      );
-
-      const again = host.visits("https://a.test/");
-      await settled();
-      processes[0]?.answer({ id: 2, times: [1], type: "visits" });
-      expect(await again).toEqual([1]);
-    });
-
-    it.each([
-      ["of an unknown type", { id: 1, type: "nonsense" }],
-      ["to a request never made", { id: 9, type: "deleted" }],
-    ])(
-      "stops a host that sends a reply %s, failing what was asked",
-      async (_, reply) => {
-        const { asked, processes } = await started((host) =>
-          host.visits("https://a.test/"),
-        );
-        processes[0]?.answer(reply);
-        await expect(asked).rejects.toThrow("The app host sent a bad message");
-        expect(processes[0]?.killed).toEqual([Signal.Term]);
-      },
-    );
   });
 });

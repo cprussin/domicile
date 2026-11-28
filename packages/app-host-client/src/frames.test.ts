@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { encodeFrame, frameDecoder } from "./app-host-frames";
+import { encodeFrame, frameDecoder } from "./frames";
 
 const concat = (...parts: Uint8Array[]) =>
   Uint8Array.from(parts.flatMap((part) => [...part]));

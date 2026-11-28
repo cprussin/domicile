@@ -3,17 +3,8 @@
 // extensions it loads, configures and uninstalls, and its cameras and microphones. Every reply is
 // parsed. The protocol is `domicile_launch::app_host`'s.
 
-import type { Result } from "@cprussin/option-result";
-import {
-  encodeFrame,
-  frameDecoder,
-} from "@domicile-desktop/component-library/app-host-frames";
+import { spawnedAppHost } from "@domicile-desktop/app-host-client";
 import type { Processes } from "@domicile-desktop/sdk/desktop/processes";
-import type {
-  Exit,
-  Subprocess,
-  SystemError,
-} from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
 import type { ConfigPath } from "./config-document";
@@ -25,9 +16,6 @@ export type ExportedLogs = {
   /** What could not be hidden, and why, if anything. */
   unhidden: string | undefined;
 };
-
-/** The command that starts the host. */
-const HOST = ["domicile-app-host"];
 
 export const PERMISSIONS = [
   "camera",
@@ -456,327 +444,186 @@ export type SettingsHost = {
 export const spawnedHost = (
   processes: Pick<Processes, "spawn">,
 ): SettingsHost => {
-  const pending = new Map<number, Pending>();
   const changes = new Set<() => void>();
-  let running: Promise<Subprocess> | undefined;
-  let lastId = 0;
-
-  const ended = (why: Error) => {
-    running = undefined;
-    for (const waiting of pending.values()) {
-      waiting.reject(why);
-    }
-    pending.clear();
-  };
-
-  const connected = (): Promise<Subprocess> => {
-    if (running === undefined) {
-      const starting = processes.spawn(HOST, { stdin: true }).then((spawned) =>
-        spawned.match({
-          Err: (error) => {
-            running = undefined;
-            throw new Error(error.message);
-          },
-          Ok: (process) => {
-            follow(process, (message) => {
-              received(message, pending, changes);
-            }).then(ended, (error: unknown) => {
-              ended(new Error("The settings host stopped", { cause: error }));
-            });
-            return process;
-          },
-        }),
-      );
-      running = starting;
-      return starting;
-    } else {
-      return running;
-    }
-  };
-
-  const ask = (request: Record<string, unknown>) =>
-    new Promise<Reply>((resolve, reject) => {
-      lastId += 1;
-      const id = lastId;
-      pending.set(id, { reject, resolve });
-      connected().then(
-        (process) => {
-          process.write(encodeFrame({ ...request, id }));
-        },
-        (error: unknown) => {
-          pending.delete(id);
-          reject(error);
-        },
-      );
-    });
+  const { ask, start } = spawnedAppHost({
+    onEvent: (message) => {
+      eventSchema.parse(message);
+      for (const listener of changes) {
+        listener();
+      }
+    },
+    processes,
+    replies: replySchema,
+  });
 
   return {
     agents: async () => {
-      const reply = await ask({ type: "agents" });
-      if (reply.type === "agents") {
-        return reply.agents;
-      } else {
-        throw unexpected(reply, "agents");
-      }
+      const reply = await ask({ type: "agents" }, "agents");
+      return reply.agents;
     },
     browserProfiles: async () => {
-      const reply = await ask({ type: "browser_profiles" });
-      if (reply.type === "browser_profiles") {
-        return {
-          defaultPrivateProfile: reply.default_private_profile,
-          defaultProfile: reply.default_profile,
-          profiles: reply.profiles,
-          sites: reply.sites,
-        };
-      } else {
-        throw unexpected(reply, "browser_profiles");
-      }
+      const reply = await ask({ type: "browser_profiles" }, "browser_profiles");
+      return {
+        defaultPrivateProfile: reply.default_private_profile,
+        defaultProfile: reply.default_profile,
+        profiles: reply.profiles,
+        sites: reply.sites,
+      };
     },
     chooseFolder: async () => {
-      const reply = await ask({ type: "choose_folder" });
-      if (reply.type === "folder") {
-        return reply.path ?? undefined;
-      } else {
-        throw unexpected(reply, "folder");
-      }
+      const reply = await ask({ type: "choose_folder" }, "folder");
+      return reply.path ?? undefined;
     },
     clearSiteData: async (host) => {
-      const reply = await ask({ host, type: "clear_site_data" });
-      if (reply.type !== "cleared") {
-        throw unexpected(reply, "cleared");
-      }
+      await ask({ host, type: "clear_site_data" }, "cleared");
     },
     configExtensions: async () => {
-      const reply = await ask({ type: "config_extensions" });
-      if (reply.type === "config_extensions") {
-        return reply.ids;
-      } else {
-        throw unexpected(reply, "config_extensions");
-      }
+      const reply = await ask(
+        { type: "config_extensions" },
+        "config_extensions",
+      );
+      return reply.ids;
     },
     configOverrides: async () =>
-      overridesOf(await ask({ type: "config_overrides" })),
+      (await ask({ type: "config_overrides" }, "config_overrides")).overrides,
     configureExtension: async (extension, settings) => {
-      const reply = await ask({
-        extension,
-        settings,
-        type: "configure_extension",
-      });
-      if (reply.type !== "stored") {
-        throw unexpected(reply, "stored");
-      }
+      await ask(
+        {
+          extension,
+          settings,
+          type: "configure_extension",
+        },
+        "stored",
+      );
     },
     detailedLogging: async () => {
-      const reply = await ask({ type: "detailed_logging" });
-      if (reply.type === "detailed_logging") {
-        return reply.on;
-      } else {
-        throw unexpected(reply, "detailed_logging");
-      }
+      const reply = await ask({ type: "detailed_logging" }, "detailed_logging");
+      return reply.on;
     },
     exportLogs: async (redact) => {
-      const reply = await ask({ redact, type: "export_logs" });
-      if (reply.type === "exported_logs") {
-        return { path: reply.path, unhidden: reply.unhidden ?? undefined };
-      } else {
-        throw unexpected(reply, "exported_logs");
-      }
+      const reply = await ask({ redact, type: "export_logs" }, "exported_logs");
+      return { path: reply.path, unhidden: reply.unhidden ?? undefined };
     },
     extensions: async () => {
-      const reply = await ask({ type: "extensions" });
-      if (reply.type === "extensions") {
-        return reply.extensions;
-      } else {
-        throw unexpected(reply, "extensions");
-      }
+      const reply = await ask({ type: "extensions" }, "extensions");
+      return reply.extensions;
     },
     forgetAgent: async (agent) => {
-      const reply = await ask({ agent, type: "forget_agent" });
-      if (reply.type !== "done") {
-        throw unexpected(reply, "done");
-      }
+      await ask({ agent, type: "forget_agent" }, "done");
     },
     loadUnpacked: async (directory) => {
-      const reply = await ask({ directory, type: "load_unpacked" });
-      if (reply.type === "loaded_unpacked") {
-        return reply.extension;
-      } else {
-        throw unexpected(reply, "loaded_unpacked");
-      }
+      const reply = await ask(
+        { directory, type: "load_unpacked" },
+        "loaded_unpacked",
+      );
+      return reply.extension;
     },
     mediaDevices: async () => {
-      const reply = await ask({ type: "media_devices" });
-      if (reply.type === "media_devices") {
-        return { cameras: reply.cameras, microphones: reply.microphones };
-      } else {
-        throw unexpected(reply, "media_devices");
-      }
+      const reply = await ask({ type: "media_devices" }, "media_devices");
+      return { cameras: reply.cameras, microphones: reply.microphones };
     },
     monitors: async () => {
-      const reply = await ask({ type: "monitors" });
-      if (reply.type === "monitors") {
-        return reply.monitors;
-      } else {
-        throw unexpected(reply, "monitors");
-      }
+      const reply = await ask({ type: "monitors" }, "monitors");
+      return reply.monitors;
     },
     onChange: (listener) => {
       changes.add(listener);
-      // A failed start fails the requests made with it, which report it.
-      connected().catch(() => {
-        /* reported by the requests */
-      });
+      start();
       return () => {
         changes.delete(listener);
       };
     },
     openDownloads: async () => {
-      const reply = await ask({ type: "open_downloads" });
-      if (reply.type !== "opened") {
-        throw unexpected(reply, "opened");
-      }
+      await ask({ type: "open_downloads" }, "opened");
     },
     openUrl: async (url) => {
-      const reply = await ask({ type: "open_url", url });
-      if (reply.type !== "opened") {
-        throw unexpected(reply, "opened");
-      }
+      await ask({ type: "open_url", url }, "opened");
     },
     pinBrowserSite: async (site, profile) => {
-      const reply = await ask({ profile, site, type: "pin_browser_site" });
-      if (reply.type !== "stored") {
-        throw unexpected(reply, "stored");
-      }
+      await ask({ profile, site, type: "pin_browser_site" }, "stored");
     },
     read: async () => {
-      const reply = await ask({ type: "read" });
-      if (reply.type === "files") {
-        return {
-          config: reply.config ?? undefined,
-          evaluated: reply.evaluated ?? undefined,
-          options: reply.options ?? undefined,
-          shell: reply.shell ?? undefined,
-        };
-      } else {
-        throw unexpected(reply, "files");
-      }
+      const reply = await ask({ type: "read" }, "files");
+      return {
+        config: reply.config ?? undefined,
+        evaluated: reply.evaluated ?? undefined,
+        options: reply.options ?? undefined,
+        shell: reply.shell ?? undefined,
+      };
     },
     resetConfigOverrides: async (paths) =>
-      overridesOf(await ask({ paths, type: "reset_config_overrides" })),
+      (await ask({ paths, type: "reset_config_overrides" }, "config_overrides"))
+        .overrides,
     retryWebAgents: async () => {
-      const reply = await ask({ type: "retry_web_agents" });
-      if (reply.type !== "done") {
-        throw unexpected(reply, "done");
-      }
+      await ask({ type: "retry_web_agents" }, "done");
     },
     setConfigOverride: async (path, value) =>
-      overridesOf(
-        await ask({
-          path,
-          type: "set_config_override",
-          value: JSON.stringify(value ?? null),
-        }),
-      ),
+      (
+        await ask(
+          {
+            path,
+            type: "set_config_override",
+            value: JSON.stringify(value ?? null),
+          },
+          "config_overrides",
+        )
+      ).overrides,
     setDetailedLogging: async (on) => {
-      const reply = await ask({ on, type: "set_detailed_logging" });
-      if (reply.type === "detailed_logging") {
-        return reply.on;
-      } else {
-        throw unexpected(reply, "detailed_logging");
-      }
+      const reply = await ask(
+        { on, type: "set_detailed_logging" },
+        "detailed_logging",
+      );
+      return reply.on;
     },
     setExtensionEnabled: async (extension, enabled, profile) => {
-      const reply = await ask({
-        enabled,
-        extension,
-        ...(profile === undefined ? {} : { profile }),
-        type: "set_extension_enabled",
-      });
-      if (reply.type !== "stored") {
-        throw unexpected(reply, "stored");
-      }
+      await ask(
+        {
+          enabled,
+          extension,
+          ...(profile === undefined ? {} : { profile }),
+          type: "set_extension_enabled",
+        },
+        "stored",
+      );
     },
     setMediaDevice: async (kind, device) => {
-      const reply = await ask({ device, kind, type: "set_media_device" });
-      if (reply.type !== "stored") {
-        throw unexpected(reply, "stored");
-      }
+      await ask({ device, kind, type: "set_media_device" }, "stored");
     },
     setSitePermission: async (site) => {
-      const reply = await ask({ site, type: "set_site_permission" });
-      if (reply.type !== "stored") {
-        throw unexpected(reply, "stored");
-      }
+      await ask({ site, type: "set_site_permission" }, "stored");
     },
     setSitePrivacy: async (change) => {
-      const reply = await ask({ change, type: "set_site_privacy" });
-      if (reply.type !== "stored") {
-        throw unexpected(reply, "stored");
-      }
+      await ask({ change, type: "set_site_privacy" }, "stored");
     },
     signOutWebAgent: async (client) => {
-      const reply = await ask({ client, type: "sign_out_web_agent" });
-      if (reply.type !== "done") {
-        throw unexpected(reply, "done");
-      }
+      await ask({ client, type: "sign_out_web_agent" }, "done");
     },
     siteData: async () => {
-      const reply = await ask({ type: "site_data" });
-      if (reply.type === "site_data") {
-        return reply.sites;
-      } else {
-        throw unexpected(reply, "site_data");
-      }
+      const reply = await ask({ type: "site_data" }, "site_data");
+      return reply.sites;
     },
     sitePermissions: async () => {
-      const reply = await ask({ type: "site_permissions" });
-      if (reply.type === "site_permissions") {
-        return { defaults: reply.defaults, sites: reply.sites };
-      } else {
-        throw unexpected(reply, "site_permissions");
-      }
+      const reply = await ask({ type: "site_permissions" }, "site_permissions");
+      return { defaults: reply.defaults, sites: reply.sites };
     },
     sitePrivacy: async () => {
-      const reply = await ask({ type: "site_privacy" });
-      if (reply.type === "site_privacy") {
-        return reply.sites;
-      } else {
-        throw unexpected(reply, "site_privacy");
-      }
+      const reply = await ask({ type: "site_privacy" }, "site_privacy");
+      return reply.sites;
     },
     stopAgent: async (session) => {
-      const reply = await ask({ session, type: "stop_agent" });
-      if (reply.type !== "done") {
-        throw unexpected(reply, "done");
-      }
+      await ask({ session, type: "stop_agent" }, "done");
     },
     uninstallExtension: async (extension) => {
-      const reply = await ask({ extension, type: "uninstall_extension" });
-      if (reply.type !== "uninstalled") {
-        throw unexpected(reply, "uninstalled");
-      }
+      await ask({ extension, type: "uninstall_extension" }, "uninstalled");
     },
     webAgents: async () => {
-      const reply = await ask({ type: "web_agents" });
-      if (reply.type === "web_agents") {
-        return reply.webAgents;
-      } else {
-        throw unexpected(reply, "web_agents");
-      }
+      const reply = await ask({ type: "web_agents" }, "web_agents");
+      return reply.webAgents;
     },
     write: async (file, text) => {
-      const reply = await ask({ file, text, type: "write" });
-      if (reply.type !== "written") {
-        throw unexpected(reply, "written");
-      }
+      await ask({ file, text, type: "write" }, "written");
     },
   };
-};
-
-/** A request waiting for its reply. */
-type Pending = {
-  reject: (error: Error) => void;
-  resolve: (reply: Reply) => void;
 };
 
 const replySchema = z.discriminatedUnion("type", [
@@ -878,99 +725,7 @@ const replySchema = z.discriminatedUnion("type", [
     type: z.literal("exported_logs"),
     unhidden: z.string().nullable(),
   }),
-  z.object({ id: z.number(), type: z.literal("refused"), why: z.string() }),
-  z.object({ type: z.literal("changed") }),
 ]);
 
-type Reply = z.output<typeof replySchema>;
-
-/** Settles the request `message` answers, or tells listeners of a change. */
-const received = (
-  message: unknown,
-  pending: Map<number, Pending>,
-  changes: ReadonlySet<() => void>,
-) => {
-  const reply = replySchema.parse(message);
-  if (reply.type === "changed") {
-    for (const listener of changes) {
-      listener();
-    }
-  } else {
-    const waiting = pending.get(reply.id);
-    if (waiting === undefined) {
-      throw new Error(`The settings host answered ${reply.id}, never asked`);
-    } else {
-      pending.delete(reply.id);
-      if (reply.type === "refused") {
-        waiting.reject(new Error(reply.why));
-      } else {
-        waiting.resolve(reply);
-      }
-    }
-  }
-};
-
-/** The temporary changes `reply` gives. */
-const overridesOf = (reply: Reply): ConfigOverride[] => {
-  if (reply.type === "config_overrides") {
-    return reply.overrides;
-  } else {
-    throw unexpected(reply, "config_overrides");
-  }
-};
-
-/** The error for a reply of the wrong type. */
-const unexpected = (reply: Reply, wanted: Reply["type"]) =>
-  new Error(`The settings host answered ${reply.type}, not ${wanted}`);
-
-/**
- * Hands each message `process` writes to `received` until it ends, and
- * resolves with why it ended. A message `received` throws on stops it.
- */
-const follow = async (
-  process: Subprocess,
-  received: (message: unknown) => void,
-): Promise<Error> => {
-  const decode = frameDecoder();
-  const [broken, stderr, exit] = await Promise.all([
-    eachChunk(process.stdout, (chunk) => {
-      for (const message of decode(chunk)) {
-        received(message);
-      }
-    }).then(
-      () => undefined,
-      (error: unknown) => {
-        process.kill();
-        return new Error("The settings host sent a bad message", {
-          cause: error,
-        });
-      },
-    ),
-    new Response(process.stderr).text(),
-    process.exited,
-  ]);
-  return broken ?? new Error(whyEnded(stderr, exit));
-};
-
-/** Why the host ended: what it said on stderr, or how it exited. */
-const whyEnded = (stderr: string, exit: Result<Exit, SystemError>): string =>
-  stderr.trim() === ""
-    ? exit.match({
-        Err: (error) => error.message,
-        Ok: ({ code, signal }) =>
-          signal === undefined
-            ? `The settings host exited with code ${String(code)}`
-            : `The settings host was killed by signal ${String(signal)}`,
-      })
-    : stderr.trim();
-
-/** Calls `each` with every chunk `stream` reads, until it closes. */
-const eachChunk = async (
-  stream: ReadableStream<Uint8Array>,
-  each: (chunk: Uint8Array) => void,
-) => {
-  const reader = stream.getReader();
-  for (let read = await reader.read(); !read.done; read = await reader.read()) {
-    each(read.value);
-  }
-};
+/** The one event the host sends: a file changed on disk. */
+const eventSchema = z.object({ type: z.literal("changed") });
