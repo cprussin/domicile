@@ -17,8 +17,8 @@ use zbus::object_server::ObjectServer;
 use zbus::proxy::CacheProperties;
 use zbus::{OwnedObjectPath, OwnedVariant};
 
-use super::queue::{ask, Queue};
 use domicile_host::uri::file_uri;
+use domicile_portal::queue::{ask, Queue};
 
 /// AccountsService's bus name.
 const ACCOUNTS: &str = "org.freedesktop.Accounts";
@@ -223,7 +223,7 @@ mod tests {
     use super::*;
     use std::process::Command;
 
-    use super::super::socket_pair;
+    use domicile_portal::testing as socket_pair;
 
     #[test]
     fn a_full_name_is_the_first_part_of_the_gecos_field() {

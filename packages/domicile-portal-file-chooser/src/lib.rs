@@ -19,7 +19,7 @@ use tracing::warn;
 use zbus::object_server::ObjectServer;
 use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
-use super::queue::{ask, Queue};
+use domicile_portal::queue::{ask, Queue};
 
 /// A portal filter: its name and `(type, pattern)` pairs.
 type PortalFilter = (String, Vec<(u32, String)>);
@@ -314,8 +314,8 @@ fn owned(value: Variant<'_>) -> OwnedVariant {
 
 #[cfg(test)]
 mod tests {
-    use super::super::fixture::options;
     use super::*;
+    use domicile_portal::testing::options;
 
     fn filter(name: &str, patterns: &[(u32, &str)]) -> PortalFilter {
         (

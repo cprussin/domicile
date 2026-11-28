@@ -21,7 +21,7 @@ use tracing::debug;
 use zbus::object_server::ObjectServer;
 use zbus::{OwnedObjectPath, OwnedVariant};
 
-use super::queue::{ask, Queue};
+use domicile_portal::queue::{ask, Queue};
 
 /// The `Wallpaper` backend object.
 pub struct Wallpaper {
@@ -157,7 +157,7 @@ mod tests {
     use domicile_protocol::PortalRequest;
     use zbus::{ObjectPath, Variant};
 
-    use crate::portals::socket_pair::connected;
+    use domicile_portal::testing::connected;
 
     const HANDLE: &str = "/org/freedesktop/portal/desktop/request/1_7/w";
 
@@ -189,7 +189,7 @@ mod tests {
         let serving = Arc::clone(&queue);
         let (server, client) = connected(move |builder| {
             builder.serve_at(
-                super::super::OBJECT_PATH,
+                domicile_portal::OBJECT_PATH,
                 Wallpaper {
                     queue: serving,
                     pictures,
@@ -225,7 +225,7 @@ mod tests {
                 .collect();
             zbus::block_on(client.call_method(
                 None::<&str>,
-                super::super::OBJECT_PATH,
+                domicile_portal::OBJECT_PATH,
                 Some("org.freedesktop.impl.portal.Wallpaper"),
                 "SetWallpaperURI",
                 &(

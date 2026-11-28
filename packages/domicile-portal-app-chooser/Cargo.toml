@@ -1,0 +1,20 @@
+[package]
+name = "domicile-portal-app-chooser"
+description = "The AppChooser portal: asks the user which application opens a file or link."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+domicile-portal = { path = "../domicile-portal" }
+domicile-protocol = { path = "../domicile-protocol" }
+tracing = "0.1"
+zbus.workspace = true
+
+[dev-dependencies]
+domicile-portal = { path = "../domicile-portal", features = ["testing"] }
+zbus = { workspace = true, features = ["p2p"] }
+
+[lints]
+workspace = true

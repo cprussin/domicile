@@ -33,7 +33,7 @@ use domicile_protocol::{
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
-use super::queue::{ask_noting, Queue};
+use domicile_portal::queue::{ask_noting, Queue};
 
 /// How long the user has to answer before the ask counts as canceled.
 pub const PATIENCE: Duration = Duration::from_secs(60);

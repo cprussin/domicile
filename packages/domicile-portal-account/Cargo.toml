@@ -1,0 +1,22 @@
+[package]
+name = "domicile-portal-account"
+description = "The Account portal: tells an application who the user is, if they agree."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+domicile-host = { path = "../domicile-host" }
+domicile-portal = { path = "../domicile-portal" }
+domicile-protocol = { path = "../domicile-protocol" }
+libc = "0.2"
+tracing = "0.1"
+zbus.workspace = true
+
+[dev-dependencies]
+domicile-portal = { path = "../domicile-portal", features = ["testing"] }
+zbus = { workspace = true, features = ["p2p"] }
+
+[lints]
+workspace = true

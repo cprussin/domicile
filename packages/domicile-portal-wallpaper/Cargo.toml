@@ -1,0 +1,22 @@
+[package]
+name = "domicile-portal-wallpaper"
+description = "The Wallpaper portal: lets an application set the desk's wallpaper, if the user agrees."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+domicile-host = { path = "../domicile-host" }
+domicile-portal = { path = "../domicile-portal" }
+domicile-protocol = { path = "../domicile-protocol" }
+tracing = "0.1"
+zbus.workspace = true
+
+[dev-dependencies]
+domicile-portal = { path = "../domicile-portal", features = ["testing"] }
+tempfile.workspace = true
+zbus = { workspace = true, features = ["p2p"] }
+
+[lints]
+workspace = true

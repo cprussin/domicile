@@ -26,9 +26,9 @@ use domicile_protocol::{
 use zbus::object_server::ObjectServer;
 use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
-use super::queue::{ask, ask_unbidden, Queue};
 use crate::casting::{Casting, Desk};
 use domicile_host::uri::file_uri;
+use domicile_portal::queue::{ask, ask_unbidden, Queue};
 
 /// Takes a frame of the whole desk, or says why it cannot.
 pub type Shoot =
@@ -557,7 +557,7 @@ fn part(shot: Shot, area: Option<ShotRect>) -> Shot {
 /// A [`Shoot`] that takes its frames through `casting`.
 pub fn shooting(casting: Casting) -> Shoot {
     Arc::new(move || {
-        let (replier, developed) = crate::reply::reply();
+        let (replier, developed) = domicile_portal::reply::reply();
         casting.shoot(Box::new(move |desk| replier.send(desk)));
         Box::pin(async move {
             developed
@@ -570,7 +570,7 @@ pub fn shooting(casting: Casting) -> Shoot {
 /// A [`ShootWindow`] that captures browser windows through `casting`.
 pub fn shooting_browser_windows(casting: Casting) -> ShootWindow {
     Arc::new(move |id| {
-        let (replier, developed) = crate::reply::reply();
+        let (replier, developed) = domicile_portal::reply::reply();
         casting.shoot_browser_window(id, Box::new(move |shot| replier.send(shot)));
         Box::pin(async move {
             developed
@@ -583,7 +583,7 @@ pub fn shooting_browser_windows(casting: Casting) -> ShootWindow {
 /// A [`ShootWindow`] that takes its frames through `casting`.
 pub fn shooting_windows(casting: Casting) -> ShootWindow {
     Arc::new(move |app_id| {
-        let (replier, developed) = crate::reply::reply();
+        let (replier, developed) = domicile_portal::reply::reply();
         casting.shoot_window(app_id, Box::new(move |shot| replier.send(shot)));
         Box::pin(async move {
             developed
@@ -694,8 +694,8 @@ mod tests {
     use zbus::Connection;
     use zbus::{ObjectPath, Variant};
 
-    use crate::portals::socket_pair::connected_both;
     use crate::portals::OBJECT_PATH;
+    use domicile_portal::testing::connected_both;
 
     const INTERFACE: &str = "org.freedesktop.impl.portal.Screenshot";
     const HANDLE: &str = "/org/freedesktop/portal/desktop/request/1_7/s";

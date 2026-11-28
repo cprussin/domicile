@@ -44,67 +44,51 @@ use crate::eis::barriers::Zone;
 use crate::eis::{Captured, Eis};
 use crate::notifications::NotificationServer;
 
-mod access;
 mod accessibility;
-mod account;
 pub mod agent;
-mod app_chooser;
 mod background;
 mod clipboard;
-mod dynamic_launcher;
-mod email;
-mod file_chooser;
 #[cfg(test)]
 mod fixture;
 mod global_shortcuts;
 mod inhibit;
 mod input_capture;
-mod lockdown;
 mod notification;
-mod print;
-mod queue;
 mod recording;
 mod remote_desktop;
-mod request;
 mod restore;
 mod screencast;
 mod screenshot;
 mod session;
-mod settings;
-#[cfg(test)]
-pub(crate) mod socket_pair;
-mod usb;
-mod wallpaper;
 
-use access::Access;
-use account::{Account, LookUp};
-use app_chooser::AppChooser;
 use background::{Background, RunningApps};
 pub use clipboard::Selection;
 use clipboard::{Clipboard, Transfers};
-use dynamic_launcher::DynamicLauncher;
-use email::{Email, Open};
-use file_chooser::FileChooser;
+use domicile_portal::queue::Queue;
+use domicile_portal_access::Access;
+use domicile_portal_account::{Account, LookUp};
+use domicile_portal_app_chooser::AppChooser;
+use domicile_portal_dynamic_launcher::DynamicLauncher;
+use domicile_portal_email::{Email, Open};
+use domicile_portal_file_chooser::FileChooser;
+use domicile_portal_lockdown::Lockdown;
+use domicile_portal_print::Print;
+use domicile_portal_settings::{color_scheme, Appearance, Settings};
+use domicile_portal_usb::Usb;
+use domicile_portal_wallpaper::{Pictures, Wallpaper};
 use global_shortcuts::{GlobalShortcuts, Shortcuts};
 use inhibit::{Inhibit, Inhibitors};
 use input_capture::{InputCapture, Inputs, Zones};
-use lockdown::Lockdown;
 use notification::Notification;
-use print::Print;
-use queue::Queue;
 use recording::Recordings;
 use remote_desktop::{RemoteDesktop, Remotes};
 use restore::Tokens;
 use screencast::ScreenCast;
 use screenshot::{Screenshot, Shoot, Shots};
-use settings::{color_scheme, Appearance, Settings};
-use usb::Usb;
-use wallpaper::{Pictures, Wallpaper};
+
+use domicile_portal::OBJECT_PATH;
 
 use crate::casting::Casting;
-
-/// The object path the frontend calls backends at.
-const OBJECT_PATH: &str = "/org/freedesktop/portal/desktop";
 
 /// The bus name this backend owns.
 ///
@@ -605,8 +589,11 @@ pub fn serve(
             screen_cast: screen_cast(&backends.queue, casting, shots.shoot.clone()),
             shots,
             open,
-            user: account::the_user(),
-            cups: Cups::at(std::env::var_os("CUPS_SERVER"), account::login_name()),
+            user: domicile_portal_account::the_user(),
+            cups: Cups::at(
+                std::env::var_os("CUPS_SERVER"),
+                domicile_portal_account::login_name(),
+            ),
         };
         // Every failure has the same effect: clients do not follow the theme,
         // and their dialogs go unanswered.
@@ -708,9 +695,11 @@ fn answer(
 /// Do one thing the portal thread was told.
 fn heard(connection: &zbus::Connection, backends: &Backends, told: Told) -> zbus::Result<()> {
     match told {
-        Told::Theme(theme) => settings::changed(&settings(connection)?, Some(theme), None),
+        Told::Theme(theme) => {
+            domicile_portal_settings::changed(&settings(connection)?, Some(theme), None)
+        }
         Told::Appearance(appearance) => {
-            settings::changed(&settings(connection)?, None, Some(appearance))
+            domicile_portal_settings::changed(&settings(connection)?, None, Some(appearance))
         }
         Told::Screensaver(active) => inhibit::screensaver(
             &zbus::block_on(
@@ -720,7 +709,7 @@ fn heard(connection: &zbus::Connection, backends: &Backends, told: Told) -> zbus
             )?,
             active,
         ),
-        Told::Lockdown(lockdown) => lockdown::changed(
+        Told::Lockdown(lockdown) => domicile_portal_lockdown::changed(
             &zbus::block_on(
                 connection
                     .object_server()
@@ -1204,7 +1193,7 @@ mod tests {
     use std::time::Duration;
     use zbus::export::ordered_stream::OrderedStreamExt;
 
-    use account::User;
+    use domicile_portal_account::User;
     use domicile_protocol::{
         AccessDialog, AccountDialog, AppChooserDialog, FileChooserAnswer, Inhibited, Inhibition,
         Notification as Shown, PortalKind,
@@ -1259,7 +1248,7 @@ mod tests {
             move || listening,
             |parent_window| (parent_window == "wayland:abc").then(|| "app-3".to_string()),
         );
-        let (server, client) = socket_pair::connected(|builder| {
+        let (server, client) = domicile_portal::testing::connected(|builder| {
             let starting = Starting {
                 lockdown: LockdownConfig {
                     disable_camera: true,
@@ -1788,7 +1777,7 @@ mod tests {
         .expect("served");
         let mut messages = zbus::MessageStream::from(&served.client);
 
-        settings::changed(
+        domicile_portal_settings::changed(
             &settings,
             None,
             Some(Appearance {
@@ -2084,7 +2073,7 @@ mod tests {
         )
         .expect("Lockdown is served");
 
-        lockdown::changed(
+        domicile_portal_lockdown::changed(
             &lockdown,
             LockdownConfig {
                 disable_printing: true,

@@ -45,7 +45,7 @@ use std::sync::Arc;
 
 use smithay::reexports::calloop::channel::Sender;
 
-use crate::reply::{reply, Replier, Reply};
+use domicile_portal::reply::{reply, Replier, Reply};
 
 pub use audio::Heard;
 pub use captures::Capturer;

@@ -1,7 +1,6 @@
 //! The portal backends served over a socket pair, with a real EIS loop
 //! behind them, for tests.
 
-use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver};
 use std::thread;
 use std::time::Duration;
@@ -9,24 +8,24 @@ use std::time::Duration;
 use domicile_config::LockdownConfig;
 use domicile_host::cups::Cups;
 use domicile_protocol::{Capturing, PortalRequest, Theme};
-use zbus::{ObjectPath, OwnedVariant, Variant};
+use zbus::ObjectPath;
 
 use super::clipboard::Selection;
 use super::global_shortcuts::Shortcuts;
 use super::restore::Tokens;
-use super::settings::Appearance;
-use super::socket_pair::connected;
 use super::{export, heard, Backends, Starting, OBJECT_PATH};
 use crate::client_requests::ClientRequest;
 use crate::eis::recorded::in_the_background;
 use crate::notifications::NotificationServer;
+use domicile_portal::testing::connected;
+use domicile_portal_settings::Appearance;
 
 const REMOTE_DESKTOP: &str = "org.freedesktop.impl.portal.RemoteDesktop";
 
 pub const SESSION: &str = "/org/freedesktop/portal/desktop/session/1_7/s";
 pub const APP: &str = "org.example.Remote";
 
-pub type Results = HashMap<String, OwnedVariant>;
+pub use domicile_portal::testing::{options, Results};
 
 /// The backend served to a client, over a real EIS loop.
 pub struct Served {
@@ -118,12 +117,6 @@ where
 
 pub fn path(path: &str) -> ObjectPath<'_> {
     ObjectPath::try_from(path).expect("a path")
-}
-
-pub fn options(sent: Vec<(&str, Variant<'static>)>) -> Results {
-    sent.into_iter()
-        .map(|(name, value)| (name.into(), OwnedVariant::try_from(value).expect("ownable")))
-        .collect()
 }
 
 pub fn reply(message: zbus::message::Message) -> (u32, Results) {

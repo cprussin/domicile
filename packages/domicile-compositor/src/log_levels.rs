@@ -138,7 +138,6 @@ const MODULES: [(Subsystem, &[&str]); 13] = [
             "protocol_trace",
             "chrome_editor",
             "outbound",
-            "reply",
             "restatement",
             "shell_config",
             "config_adoption",
@@ -154,9 +153,13 @@ const MODULES: [(Subsystem, &[&str]); 13] = [
 
 /// Targets outside `domicile_compositor::` and the subsystem they belong to.
 ///
+/// A target is a prefix, so `domicile_portal` also covers each portal's own
+/// crate, `domicile_portal_<name>`.
+///
 /// `engine_pump` hears every engine event; its lines about other subsystems
 /// take these targets, so they follow those subsystems' levels.
-const TARGETS: [(Subsystem, &str); 6] = [
+const TARGETS: [(Subsystem, &str); 7] = [
+    (Subsystem::Portals, "domicile_portal"),
     (Subsystem::Rendering, "domicile::engine::spike"),
     (Subsystem::Displays, "domicile::engine::displays"),
     (Subsystem::Windows, "domicile::engine::windows"),
@@ -258,6 +261,25 @@ mod tests {
     #[test]
     fn a_subsystem_covers_targets_outside_the_crate() {
         assert!(targets(Subsystem::Rendering).any(|target| target == "domicile::engine::spike"));
+    }
+
+    #[test]
+    fn the_portals_cover_each_portals_own_crate() {
+        use tracing_subscriber::layer::SubscriberExt;
+
+        let filter = EnvFilter::try_new(directives(
+            "warn",
+            &LogLevels {
+                all: None,
+                subsystems: [(Subsystem::Portals, LogLevel::Trace)].into(),
+            },
+        ))
+        .expect("a filter");
+        let heard = tracing::subscriber::with_default(
+            Registry::default().with(filter),
+            || tracing::enabled!(target: "domicile_portal_print", tracing::Level::TRACE),
+        );
+        assert!(heard);
     }
 
     #[test]

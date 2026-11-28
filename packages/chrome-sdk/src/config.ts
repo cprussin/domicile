@@ -671,8 +671,8 @@ export type StartupConfig = {
 /**
  * How the desktop is themed.
  *
- * Clients read every field but `mode` through the settings portal; see the
- * compositor's `portals::settings`.
+ * Clients read every field but `mode` through the settings portal; see
+ * `domicile-portal-settings`.
  */
 export type ThemeConfig = {
   /** The color clients highlight with, or their own when unset. */
@@ -729,7 +729,7 @@ export type ThemeConfig = {
  *
  * There is no "follow the system" option: the chrome is the system, so there
  * is nothing to follow. Clients follow this value through the settings
- * portal; see the compositor's `portals::settings`.
+ * portal; see `domicile-portal-settings`.
  */
 export type ThemeMode = "dark" | "light";
 

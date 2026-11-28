@@ -36,13 +36,13 @@ use tracing::{debug, info, warn};
 use zbus::object_server::ObjectServer;
 use zbus::{OwnedObjectPath, OwnedVariant, Variant};
 
-use super::queue::{ask, Queue};
 use super::screenshot::{frozen, Shoot};
 use super::session;
 use crate::casting::{
     self, Candidate, Casting, CursorMode, Event, Heard, Region, Source, StreamId,
 };
-use crate::reply::{reply, Replier, Reply};
+use domicile_portal::queue::{ask, Queue};
+use domicile_portal::reply::{reply, Replier, Reply};
 
 /// The `org.freedesktop.impl.portal.ScreenCast` version implemented.
 const INTERFACE_VERSION: u32 = 5;
@@ -1239,9 +1239,9 @@ mod tests {
 
     use crate::casting::{Candidate, Desk, Ended, Event, Region, Request, Source};
     use crate::portals::screenshot::{Shoot, Shots};
-    use crate::portals::socket_pair::connected;
     use crate::portals::OBJECT_PATH;
     use domicile_host::screenshot::Shot;
+    use domicile_portal::testing::connected;
 
     const INTERFACE: &str = "org.freedesktop.impl.portal.ScreenCast";
     const SESSION: &str = "/org/freedesktop/portal/desktop/session/1_7/s";

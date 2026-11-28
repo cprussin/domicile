@@ -25,11 +25,11 @@ use domicile_protocol::{
 };
 use tracing::debug;
 
-use super::queue::{ask_unbidden, Queue};
 use super::screencast::{captured, chosen, dialog, preview, Selected};
 use super::screenshot::{now, user_dirs, Shoot};
 use crate::casting::{Candidate, Casting, CursorMode, Event, Source, StreamId};
-use crate::reply::reply;
+use domicile_portal::queue::{ask_unbidden, Queue};
+use domicile_portal::reply::reply;
 
 /// The recorder's binary, beside the compositor's.
 const RECORDER: &str = "domicile-recorder";

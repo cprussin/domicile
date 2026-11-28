@@ -533,15 +533,15 @@ export const startupConfigSchema = z.strictObject({
  *
  * There is no "follow the system" option: the chrome is the system, so there
  * is nothing to follow. Clients follow this value through the settings
- * portal; see the compositor's `portals::settings`.
+ * portal; see `domicile-portal-settings`.
  */
 export const themeModeSchema = z.union([z.literal("dark"), z.literal("light")]);
 
 /**
  * How the desktop is themed.
  *
- * Clients read every field but `mode` through the settings portal; see the
- * compositor's `portals::settings`.
+ * Clients read every field but `mode` through the settings portal; see
+ * `domicile-portal-settings`.
  */
 export const themeConfigSchema = z.strictObject({
   accent_color: accentColorSchema

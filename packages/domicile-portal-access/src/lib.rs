@@ -8,7 +8,7 @@ use domicile_protocol::{AccessDialog, PortalKind};
 use zbus::object_server::ObjectServer;
 use zbus::{OwnedObjectPath, OwnedVariant};
 
-use super::queue::{ask, Queue};
+use domicile_portal::queue::{ask, Queue};
 
 /// The `Access` backend object.
 pub struct Access {
@@ -64,8 +64,8 @@ fn dialog(
 
 #[cfg(test)]
 mod tests {
-    use super::super::fixture::options;
     use super::*;
+    use domicile_portal::testing::options;
     use zbus::Variant;
 
     #[test]

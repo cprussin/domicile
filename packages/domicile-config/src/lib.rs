@@ -700,7 +700,7 @@ impl LockConfig {
 ///
 /// There is no "follow the system" option: the chrome is the system, so there
 /// is nothing to follow. Clients follow this value through the settings
-/// portal; see the compositor's `portals::settings`.
+/// portal; see `domicile-portal-settings`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ThemeMode {
@@ -713,8 +713,8 @@ pub enum ThemeMode {
 
 /// How the desktop is themed.
 ///
-/// Clients read every field but `mode` through the settings portal; see the
-/// compositor's `portals::settings`.
+/// Clients read every field but `mode` through the settings portal; see
+/// `domicile-portal-settings`.
 // `PartialEq` lets a reload detect a change; see the compositor's
 // `Restatement`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
