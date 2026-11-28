@@ -22,6 +22,11 @@
 //                                or tag, at load and after each change. The
 //                                command socket's devtools gives agents no
 //                                Runtime.evaluate, so the guard reads this.
+//   GUARD hidden                 every browser window's `<webview>` went
+//                                `display: none`, as a shell hides a window
+//                                on a workspace nobody is looking at, once
+//                                the user's field took the text "hide".
+//                                guard-agent-hidden-window.sh types it.
 //   GUARD shell-asked-for-files mode=…
 //                                a browser window's page asked this shell for
 //                                files (`domicile-file-chooser`), which it
@@ -51,6 +56,12 @@ export const HostShell = (root, desktop) => {
   field.style.blockSize = `${strip}px`;
   field.addEventListener("input", () => {
     say(`user-input value=${field.value}`);
+    if (field.value === "hide") {
+      for (const view of document.querySelectorAll("webview")) {
+        view.style.display = "none";
+      }
+      say("hidden");
+    }
   });
   root.append(field);
 

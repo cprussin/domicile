@@ -209,6 +209,11 @@ pub struct Report {
     /// Separate from `abandoned`: these are probe or screen failures, not the
     /// client's.
     pub ended: Ended,
+    /// Each round's events, in milliseconds after its key: every probe asked
+    /// and what it answered, every commit and how it was taken, and each
+    /// presentation. Logged so a figure out of range shows which stage held
+    /// the frame.
+    pub timelines: Vec<String>,
 }
 
 /// How a run finished.
@@ -441,6 +446,10 @@ pub struct Latency {
     /// probe point again, so that frame cannot look like it came after the
     /// key.
     in_flight: Option<Instant>,
+    /// The current round's events, timed from its key. See
+    /// [`Report::timelines`].
+    timeline: Vec<(Duration, String)>,
+    timelines: Vec<String>,
 }
 
 impl Latency {
@@ -478,7 +487,26 @@ impl Latency {
             waited_for_a_frame: 0,
             undelivered: 0,
             in_flight: None,
+            timeline: Vec::new(),
+            timelines: Vec::new(),
         }
+    }
+
+    /// Notes `what` in the current round's timeline, from outside the run:
+    /// how the engine took a commit, say. Nothing outside a round.
+    pub fn noted(&mut self, now: Instant, what: impl Into<String>) {
+        self.note(now, what);
+    }
+
+    /// Notes `what` in the current round's timeline. Nothing outside a round.
+    fn note(&mut self, now: Instant, what: impl Into<String>) {
+        let key = match self.phase {
+            Phase::Pressed { at, .. } => at,
+            Phase::Polling { keyed, .. } => keyed,
+            _ => return,
+        };
+        self.timeline
+            .push((now.saturating_duration_since(key), what.into()));
     }
 
     /// What to do now.
@@ -486,7 +514,10 @@ impl Latency {
     /// Takes `now` because the floor's round trip is timed from this ask.
     pub fn next(&mut self, now: Instant) -> Step {
         match self.phase {
-            Phase::Polling { .. } => Step::Sample,
+            Phase::Polling { .. } => {
+                self.note(now, "ask");
+                Step::Sample
+            }
             Phase::Floor {
                 taken,
                 holding,
@@ -530,13 +561,30 @@ impl Latency {
             }
             // Watch the probe point while waiting for the commit. A change
             // here came from an earlier frame. See `sampled`.
-            Phase::Pressed { .. } => Step::Sample,
+            Phase::Pressed { .. } => {
+                self.note(now, "ask");
+                Step::Sample
+            }
             Phase::Done(_) => Step::Wait,
         }
     }
 
     /// The engine answered with the color at the probe point.
     pub fn sampled(&mut self, now: Instant, argb: u32) {
+        let before = match self.phase {
+            Phase::Pressed { before, .. } | Phase::Polling { before, .. } => Some(before),
+            _ => None,
+        };
+        if let Some(before) = before {
+            self.note(
+                now,
+                if argb == before {
+                    "answer unchanged"
+                } else {
+                    "answer changed"
+                },
+            );
+        }
         self.last = Some(argb);
         match self.phase {
             Phase::Floor {
@@ -644,6 +692,13 @@ impl Latency {
     /// Ignored outside a round: a client redraws unprompted, and the floor
     /// handles a self-repainting screen ([`Ended::NeverSettled`]).
     pub fn committed(&mut self, now: Instant) {
+        self.note(
+            now,
+            match self.phase {
+                Phase::Pressed { .. } => "commit",
+                _ => "commit again",
+            },
+        );
         match self.phase {
             Phase::Pressed { at, before, .. } => {
                 let waited = now.saturating_duration_since(at);
@@ -760,6 +815,13 @@ impl Latency {
     /// left out. Feedback arrives after the probe saw the pixel, so the last
     /// round's frame lands after the run ends and is not counted.
     pub fn presented(&mut self, took: Duration) {
+        self.note(
+            Instant::now(),
+            format!(
+                "presented a frame {:.2} after its commit",
+                took.as_secs_f64() * 1000.0
+            ),
+        );
         match self.phase {
             Phase::Ready | Phase::Pressed { .. } | Phase::Polling { .. } => {
                 self.commit_to_present.push(took);
@@ -790,10 +852,17 @@ impl Latency {
             waited_for_a_frame: self.waited_for_a_frame,
             undelivered: self.undelivered,
             ended,
+            timelines: self.timelines.clone(),
         })
     }
 
     fn end_round(&mut self) {
+        let timeline = std::mem::take(&mut self.timeline)
+            .into_iter()
+            .map(|(at, what)| format!("{:.2} {what}", at.as_secs_f64() * 1000.0))
+            .collect::<Vec<_>>()
+            .join(", ");
+        self.timelines.push(timeline);
         self.round += 1;
         self.phase = if self.round >= self.budget.rounds {
             Phase::Done(Ended::Completed)
@@ -1307,6 +1376,14 @@ mod tests {
         );
         assert_eq!(report.commit_to_pixel.unwrap().median, ms(17));
         assert_eq!(report.abandoned, 0);
+        // Each round's events, timed from its key, so a figure out of range
+        // shows where the frame waited.
+        assert_eq!(
+            report.timelines,
+            vec![String::from(
+                "0.82 commit, 0.82 ask, 1.82 answer unchanged, 18.00 commit, 18.00 ask, 35.00 answer changed"
+            )]
+        );
         assert_eq!(
             report.answered_too_soon, 1,
             "a stray passed over is counted, not quietly missing from the run"
