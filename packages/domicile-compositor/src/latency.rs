@@ -318,6 +318,23 @@ const MAX_REFUSALS_RUNNING: usize = 8;
 /// stray.
 const MAX_WAIT_FRAMES: u32 = 6;
 
+/// How far into a display frame round `round`'s key is pressed, as a share of
+/// the frame: the fractional parts of multiples of the golden ratio, which
+/// cover the frame evenly for any number of rounds.
+///
+/// Every figure here is counted in frames, so a key pressed at the same point
+/// of every frame reads the same whole number of frames each round, and that
+/// number moves with where the run happens to fall: `commit to pixel` read
+/// 15, 31 or 40 ms on the same code. Spread over the frame, a run reads the
+/// pipeline at every phase, and a stage of its own moves every round by a
+/// frame.
+fn key_phase(round: usize) -> f64 {
+    const GOLDEN: f64 = 0.618_033_988_749_894_9;
+    #[allow(clippy::cast_precision_loss, reason = "a round count is small")]
+    let turns = round as f64 * GOLDEN;
+    turns.fract()
+}
+
 /// A commit sooner than `frame / MIN_WAIT_FRAME_SHARE` after the key is not
 /// its answer.
 ///
@@ -450,6 +467,11 @@ pub struct Latency {
     /// [`Report::timelines`].
     timeline: Vec<(Duration, String)>,
     timelines: Vec<String>,
+    /// Whether each key waits [`key_phase`] of a frame once the round is
+    /// ready. See [`Latency::staggered`].
+    staggered: bool,
+    /// When the current round was first ready to press, for the stagger.
+    ready_since: Option<Instant>,
 }
 
 impl Latency {
@@ -489,7 +511,26 @@ impl Latency {
             in_flight: None,
             timeline: Vec::new(),
             timelines: Vec::new(),
+            staggered: false,
+            ready_since: None,
         }
+    }
+
+    /// Presses each round's key [`key_phase`] of a display frame after the
+    /// round is ready, so the rounds sample every phase of the frame.
+    #[must_use]
+    pub fn staggered(mut self) -> Self {
+        self.staggered = true;
+        self
+    }
+
+    /// Whether this round's key is still waiting out its [`key_phase`].
+    fn not_due(&mut self, now: Instant) -> bool {
+        let frame = self
+            .frame
+            .expect("a round starts only once viz has reported its frame");
+        let since = *self.ready_since.get_or_insert(now);
+        now.saturating_duration_since(since) < frame.mul_f64(key_phase(self.round))
     }
 
     /// Notes `what` in the current round's timeline, from outside the run:
@@ -513,6 +554,16 @@ impl Latency {
     ///
     /// Takes `now` because the floor's round trip is timed from this ask.
     pub fn next(&mut self, now: Instant) -> Step {
+        // A round ready to press, its frame known and nothing in flight,
+        // waits out its key's phase first.
+        if matches!(self.phase, Phase::Ready)
+            && self.frame.is_some()
+            && self.in_flight.is_none()
+            && self.staggered
+            && self.not_due(now)
+        {
+            return Step::Wait;
+        }
         match self.phase {
             Phase::Polling { .. } => {
                 self.note(now, "ask");
@@ -550,6 +601,7 @@ impl Latency {
                 }
             }
             Phase::Ready => {
+                self.ready_since = None;
                 self.phase = Phase::Pressed {
                     at: now,
                     // `Ready` is only entered from a completed floor, which has
@@ -1331,6 +1383,31 @@ mod tests {
             report.answered_too_late, 1,
             "a round given up is counted, not quietly missing from the run"
         );
+    }
+
+    /// A staggered run presses each key a golden-ratio share of a frame
+    /// after its round is ready, so its rounds sample the whole frame.
+    #[test]
+    fn a_staggered_run_spreads_its_keys_over_the_frame() {
+        let mut driver = Driver::new(3, 3, 10);
+        driver.latency =
+            std::mem::replace(&mut driver.latency, Latency::new(Budget::default())).staggered();
+        driver.reach_first_press(ms(17));
+        // The first round is at the start of the frame.
+        driver.round(ms(5), ms(17));
+
+        // The second waits 0.618 of a 16.667 ms frame: 10.301 ms.
+        assert_eq!(driver.tick(ms(0)), Step::Wait);
+        assert_eq!(driver.tick(Duration::from_micros(10_290)), Step::Wait);
+        driver.now += Duration::from_micros(20);
+        driver.round(ms(5), ms(17));
+
+        // The third, 0.236 of one: 3.935 ms.
+        assert_eq!(driver.tick(ms(0)), Step::Wait);
+        driver.now += Duration::from_micros(3_940);
+        driver.round(ms(5), ms(17));
+
+        assert_eq!(driver.latency.report().unwrap().ended, Ended::Completed);
     }
 
     /// A commit 0.82 ms after the key is skipped, and the round waits for the
