@@ -1,5 +1,93 @@
 # @domicile-desktop/app-settings
 
+## 0.3.0
+
+### Minor Changes
+
+- 55d3d53: Each protection beside a page's ad blocking, hiding device details and removing tracking from links, turns on or off for the page's site or its window with a `<webview>`'s `setPrivacyProtection(name, on, "site" | "window")`, and reads back with `privacyProtections()` and `privacyProtectionsSetFor()`; every protection is off where ad blocking is. The engine's `site_privacy` lists a site's protections beside its mode and `set_site_privacy` takes `protections`, and Settings' Sites you changed lists and clears them.
+- 343876f: The engine blocks ads and trackers in every website's page, with adblock-rust and the config's `browser.block_lists` (EasyList, EasyPrivacy and uBlock Origin's filters unless set) plus the user's `browser.block_rules`. Each profile's `protections.block_ads_and_trackers` is `standard`, which blocks other sites' ads and trackers, `strict`, which blocks a site's own too and is a private profile's default, or `off`. Settings › Privacy chooses it per profile.
+- e8f1f41: Extensions are switched on per profile. The Settings app's Extensions page has no switch: it shows the profiles each extension is on in, with **Choose profiles**, shows its settings while it is off, and asks which profiles a folder just loaded goes on in. The tray's menu switches an extension the config lists by a temporary change of the profile's list, until the desktop restarts. The Profiles page does the same on a read-only config, and on one it writes changes the file's list in one click; either way it shows "Changed from your config" with Reset. The SDK drops `extensions.setEnabled`; `browser.setExtensionEnabled` switches through the config where the config sets it, and `browser.changedExtensions` and `browser.resetExtension` show and end those changes.
+- bd6ceb4: The engine hides the device's details from pages, as Brave farbles them: a
+  canvas's exported pixels, what an `OfflineAudioContext` renders and
+  `navigator.hardwareConcurrency` come out a little off, the same way for one
+  site all session and differently for each site and each start. Off reads the
+  truth. Each profile's new `protections.hide_device_details`, on unless set
+  `false`, turns it off, and Settings › Privacy has its switch, "Hide your
+  device's details".
+- fc566f5: The engine hides cookie banners and blocks the scripts that show them, with the config's new `browser.cookie_banner_lists` (the EasyList Cookie List and uBlock Origin's cookie notices unless set), in each profile whose new `protections.hide_cookie_banners` is on, which it is unless set. A shield turns it on or off for a site or a window as `hideCookieBanners`, and Settings › Privacy has a switch for it.
+- 9f34661: Settings changes a config it cannot write until the desktop restarts or the file changes that setting, marking each change with Reset. The compositor holds the changes: `set_config_override`, `reset_config_overrides` and `config_overrides` on the control socket.
+- 286de9e: Settings › Privacy lists the sites whose protections the shield changed in the chosen profile, with **Turn back on** or **Remove** for each. The engine's command socket lists and sets them with `site_privacy` and `set_site_privacy`.
+- c76af17: The engine takes the tracking out of a link from one site to another: in
+  Standard, click ids such as `fbclid`, `gclid` and `msclkid` (Brave's list);
+  in Strict, the `utm_` campaign parameters too. Off keeps everything. Each
+  profile's new `protections.remove_tracking_from_links`, on unless set
+  `false`, turns it off, and Settings › Privacy has its switch.
+
+### Patch Changes
+
+- 1bc9a96: An extension's lines on the Extensions page are spaced apart rather than ruled, so its profiles no longer sit against a line. `SettingRow` takes `divided={false}` for a row in a list that spaces its rows itself.
+- 88a71a0: A disabled `Switch` fades, flattens its knob and grays its label, so it can't pass for a live one. Settings marks a page locked by a read-only config with a lock and plainer copy.
+- 79d8d48: `idle.ignore_pointer_motion` blanks and locks whether or not the pointer moves: its motion holds off neither timeout and lights no dark screen. Keys, touches, clicks and scrolling still do. For a mouse that reports motion by itself. The engine says whether each input was a key, a touch, pointer motion or another use of the pointer, and reports the rest however much the pointer moves.
+- 089b085: Each browser profile has `protections`, all on unless the config turns one off: it blocks third-party cookies, sends Global Privacy Control, and hides the local IP address from WebRTC. Settings › Privacy switches them per profile.
+- Updated dependencies [0034f1d]
+- Updated dependencies [55d3d53]
+- Updated dependencies [343876f]
+- Updated dependencies [e8f1f41]
+- Updated dependencies [8ab0523]
+- Updated dependencies [db55f37]
+- Updated dependencies [6dd0c95]
+- Updated dependencies [1fce39d]
+- Updated dependencies [90e1c93]
+- Updated dependencies [50b429c]
+- Updated dependencies [0966517]
+- Updated dependencies [bd6ceb4]
+- Updated dependencies [fc566f5]
+- Updated dependencies [e33f628]
+- Updated dependencies [bf4e447]
+- Updated dependencies [88a71a0]
+- Updated dependencies [082ddd7]
+- Updated dependencies [79d8d48]
+- Updated dependencies [525150c]
+- Updated dependencies [c76af17]
+- Updated dependencies [02e8509]
+- Updated dependencies [cc64389]
+- Updated dependencies [962d6ae]
+- Updated dependencies [78733ca]
+- Updated dependencies [b9abd20]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [089b085]
+- Updated dependencies [a64fb76]
+- Updated dependencies [c0d8052]
+- Updated dependencies [2a2328a]
+- Updated dependencies [fb2d9c3]
+- Updated dependencies [6f8fea2]
+- Updated dependencies [e8f1f41]
+- Updated dependencies [6dd0c95]
+- Updated dependencies [3cc9d3d]
+- Updated dependencies [34f4903]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [96b06ae]
+- Updated dependencies [4d479d1]
+- Updated dependencies [aecbd9d]
+- Updated dependencies [1726356]
+- Updated dependencies [0bf1cdc]
+- Updated dependencies [83d6c24]
+- Updated dependencies [24f66a6]
+- Updated dependencies [4809bee]
+- Updated dependencies [786360e]
+- Updated dependencies [dc1279f]
+- Updated dependencies [7839ab1]
+- Updated dependencies [68fe399]
+- Updated dependencies [9c59e57]
+- Updated dependencies [90e1c93]
+- Updated dependencies [395b9ed]
+- Updated dependencies [cb357cb]
+- Updated dependencies [3cc9d3d]
+  - @domicile-desktop/component-library@3.0.0
+  - @domicile-desktop/sdk@4.0.0
+  - @domicile-desktop/react@0.3.0
+  - @domicile-desktop/app-host-client@0.0.2
+
 ## 0.2.0
 
 ### Minor Changes

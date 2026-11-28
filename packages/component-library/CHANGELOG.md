@@ -1,5 +1,89 @@
 # @domicile-desktop/component-library
 
+## 3.0.0
+
+### Major Changes
+
+- 0034f1d: `@domicile-desktop/component-library/app-host-frames` is gone. The framing of `domicile-app-host` lives with its client in the new private `@domicile-desktop/app-host-client` package, which History and Settings share.
+- 0966517: A cleared notification or removed download slides out, then the rows below rise over its place on a spring, all by transform instead of animating the list's height.
+  
+  - `useLeavingRows` gives each row its `motion` for `LeavingRow`, and `onLeft` drops a row at once. `RowMotion` takes `rise`, `onSlid` and `onClosed` in place of `onLeft`, and `Row.leaving` is a `Leaving` in place of the row's order.
+
+### Minor Changes
+
+- 1fce39d: Manganese shows what agents are using: a violet ring and the agent's name around each window it uses, its own named pointer, a "You're using this window" banner with Give back on a window the user took, and the windows it uses in the agent pill with Take over. The component library adds the `agent` and `onAgent` colors.
+- 50b429c: `ListFilter`: a box that filters the list below it and walks its highlight with the list keys while focus stays in the box. The launcher, the clipboard history and the file picker share it.
+- e33f628: The bar's buttons share one `barButton` Panda pattern, from `@domicile-desktop/manganese-bar/panda-preset`. A package whose CSS a shell emits can take its Panda config from `packagePandaConfig` in `@domicile-desktop/component-library/panda-package-config`.
+- bf4e447: Pausing notifications moves nothing in the drawer: its header keeps the "Paused until …" line's room while not paused.
+  
+  - `PanelHeader` takes `reserveStatus`, which keeps the status's line while there is none.
+- 02e8509: Build with Panda CSS 2.
+- cc64389: Add `springs.snappy`, `springs.smooth` and `springs.bouncy` easing and duration tokens, each a `linear()` curve sampled from a spring with its settle time as the duration.
+- a64fb76: `TextToaster` draws toasts that say only a title and an optional description, in the top trailing corner of the window. History and Settings use it.
+- fb2d9c3: Move the shell's surfaces onto the `springs.*` tokens:
+  
+  - `Popover` grows from its trigger, and `ModalDialog` takes an `origin` (or a `DialogOrigin` around it) to spring from and back into. Portal dialogs and the file picker spring from the window that asked, and the launcher from the bar button that opened it.
+  - `SlideOver`, `Toaster` and `LevelToast` move on springs; a swiped toast leaves at the speed it was let go.
+  - What is in a `ListRow` drawer fades and slides into place on springs.
+  - Menus, `Select` lists and tooltips fade in rising 2px off their anchor.
+  - The region picker's corners snap out on a spring when let go, and the recording toolbar springs in.
+  - The lock's clock and field, page dialogs and the workspace switcher's highlight move on springs.
+- 6f8fea2: Taking a window from an agent says so plainly. The window's ring turns amber and its tag reads "Paused", a banner slides down under its title bar with Give back and Hide, the agent's pointer turns gray there, and the agent pill turns amber. Rings fade in and out. Adds the `agentPaused` color token.
+- 9c59e57: A workspace switch turned back, and every scratchpad stow, slide forwards on their spring from where the window is instead of playing the opposite slide backwards, which started in the spring's still tail. `turnedBack` in `springs` gives the offset.
+- 3cc9d3d: A `surface="glass"` `ModalDialog` frosts its backdrop while `<html>`'s `data-shader-effects` lists `frost`, and keeps its plain blur otherwise. A shell that lists `frost` sets `--device-pixel-ratio` on `<html>` to `devicePixelRatio`. Add `ModalDialog/frost`, the `FROST` effect a shell registers as `frost`, and the `_frost` condition.
+
+### Patch Changes
+
+- 8ab0523: A `PanelHeader` that reserves its status line centers its title in it while
+  there is no status, and slides the title up as a status fades in under it.
+- db55f37: A `Popover`, `ModalDialog` or `Autocomplete` list easing its height follows its content as soon as that changes, rather than finishing first and moving again late.
+- 88a71a0: A disabled `Switch` fades, flattens its knob and grays its label, so it can't pass for a live one. Settings marks a page locked by a read-only config with a lock and plainer copy.
+- 525150c: A `Popover`, `ModalDialog` or `Autocomplete` list easing to a height its content fits no longer shows a scrollbar on the way.
+- b9abd20: Popovers grow no taller than the room on their screen and scroll the rest, so bar panels with many rows stay on a small screen.
+- c8a08d4: - `Popover`, `ModalDialog` and `Autocomplete` lists ease to their content's height instead of jumping.
+  - A `LeavingRow` grows from no height as it arrives, moving the rows below smoothly, and sliding in or out no longer scrolls its list sideways.
+  - `FakeDomicileHost` clears downloads not in progress on `clearDownloads()`, as the engine does.
+- c8a08d4: A `Popover` on a `<Screen>` region grows no taller than 60% of the screen; its body scrolls the rest.
+- 96b06ae: The desktop's error log no longer fills with a shell's ResizeObserver loops and `[object Object]`, and Electron apps follow logind on the system bus. `easeHeight` starts easing as a popup's content changes, before layout, rather than resizing it while a ResizeObserver answers; the SDK's `logger` writes objects as JSON and errors as their stacks; electron-host waits on the bus with `GetId`, which the system bus's policy allows, not `Peer.Ping`.
+- 4d479d1: A `PanelFooter`'s action in a `ListRow` stays inside the row's padding, drawer or not, so it keeps a gap from a tile's edge.
+- 0bf1cdc: Right-clicking an extension's row in the tray's menu opens its action menu, and an action menu holding one submenu shows that submenu's items. `Popover`'s body leaves room for a `PanelFooter` action, so it no longer scrolls sideways.
+- dc1279f: `ListRow` drawers grow and shrink as they open and shut again, moving the rows under them and the panel's edge with them.
+- 68fe399: `domicile open --agent <session> <url>` opens a new browser window held by the agent's seat, listed with `agent` so the shell opens it without the user's focus; the engine's `open_url` answers with the window's id. Manganese opens a window an agent holds in a group of its own beside the user's. `domicile list-windows` gives browser windows `focused` and `size` from the engine's new `browser_windows` command.
+- Updated dependencies [55d3d53]
+- Updated dependencies [343876f]
+- Updated dependencies [e8f1f41]
+- Updated dependencies [6dd0c95]
+- Updated dependencies [90e1c93]
+- Updated dependencies [bd6ceb4]
+- Updated dependencies [fc566f5]
+- Updated dependencies [082ddd7]
+- Updated dependencies [79d8d48]
+- Updated dependencies [c76af17]
+- Updated dependencies [962d6ae]
+- Updated dependencies [78733ca]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [089b085]
+- Updated dependencies [c0d8052]
+- Updated dependencies [2a2328a]
+- Updated dependencies [e8f1f41]
+- Updated dependencies [6dd0c95]
+- Updated dependencies [3cc9d3d]
+- Updated dependencies [34f4903]
+- Updated dependencies [96b06ae]
+- Updated dependencies [aecbd9d]
+- Updated dependencies [1726356]
+- Updated dependencies [83d6c24]
+- Updated dependencies [24f66a6]
+- Updated dependencies [4809bee]
+- Updated dependencies [786360e]
+- Updated dependencies [7839ab1]
+- Updated dependencies [68fe399]
+- Updated dependencies [90e1c93]
+- Updated dependencies [395b9ed]
+- Updated dependencies [cb357cb]
+  - @domicile-desktop/sdk@4.0.0
+  - @domicile-desktop/system-apps@1.3.1
+
 ## 2.2.0
 
 ### Minor Changes

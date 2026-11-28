@@ -1,5 +1,60 @@
 # @domicile-desktop/e2e-harness
 
+## 0.1.1
+
+### Patch Changes
+
+- bd6ceb4: The engine hides the device's details from pages, as Brave farbles them: a
+  canvas's exported pixels, what an `OfflineAudioContext` renders and
+  `navigator.hardwareConcurrency` come out a little off, the same way for one
+  site all session and differently for each site and each start. Off reads the
+  truth. Each profile's new `protections.hide_device_details`, on unless set
+  `false`, turns it off, and Settings › Privacy has its switch, "Hide your
+  device's details".
+- 9f34661: Settings changes a config it cannot write until the desktop restarts or the file changes that setting, marking each change with Reset. The compositor holds the changes: `set_config_override`, `reset_config_overrides` and `config_overrides` on the control socket.
+- c76af17: The engine takes the tracking out of a link from one site to another: in
+  Standard, click ids such as `fbclid`, `gclid` and `msclkid` (Brave's list);
+  in Strict, the `utm_` campaign parameters too. Off keeps everything. Each
+  profile's new `protections.remove_tracking_from_links`, on unless set
+  `false`, turns it off, and Settings › Privacy has its switch.
+- 2a2328a: A shell command that acts on a window takes `--window <id>` after its first word (`domicile send-shell move --window <id> right`) and runs on that window, not the user's focus, and an agent's `send_shell` takes one for a window its seat holds, so an agent can move its own window to another workspace. A shell marks such commands `window: true` in `bindKeys`' `commands`, and `onCommand` gets the window as its second argument.
+- 6dd0c95: `@domicile-desktop/sdk/system-message` exports the schemas of the compositor's answers to system calls (`systemReplySchema`, `systemEventSchema`, `systemEndSchema`). The e2e harness takes them from there instead of keeping its own copy, which had fallen behind: it now reads `real_path`, a cast's `preview` frame, `sent` output and the `agents` reply.
+- aecbd9d: `domicile completions` asks the shell for placeholders only it knows: `bindKeys` takes `onComplete(args)`, which returns the words that can follow. Manganese completes its workspace names after `workspace` and `move container to workspace`.
+- f9449f1: A keybinding fires from every key that types its keysym, not only the lowest one, so `XF86AudioPlay` also answers a headset's play button, such as AirPods'. `shell_config`'s `keys` maps each keysym to every key it is on, lowest first.
+- Updated dependencies [55d3d53]
+- Updated dependencies [343876f]
+- Updated dependencies [e8f1f41]
+- Updated dependencies [6dd0c95]
+- Updated dependencies [90e1c93]
+- Updated dependencies [bd6ceb4]
+- Updated dependencies [fc566f5]
+- Updated dependencies [082ddd7]
+- Updated dependencies [79d8d48]
+- Updated dependencies [c76af17]
+- Updated dependencies [962d6ae]
+- Updated dependencies [78733ca]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [089b085]
+- Updated dependencies [c0d8052]
+- Updated dependencies [2a2328a]
+- Updated dependencies [e8f1f41]
+- Updated dependencies [6dd0c95]
+- Updated dependencies [3cc9d3d]
+- Updated dependencies [34f4903]
+- Updated dependencies [96b06ae]
+- Updated dependencies [aecbd9d]
+- Updated dependencies [1726356]
+- Updated dependencies [83d6c24]
+- Updated dependencies [24f66a6]
+- Updated dependencies [4809bee]
+- Updated dependencies [786360e]
+- Updated dependencies [7839ab1]
+- Updated dependencies [68fe399]
+- Updated dependencies [90e1c93]
+- Updated dependencies [395b9ed]
+- Updated dependencies [cb357cb]
+  - @domicile-desktop/sdk@4.0.0
+
 ## 0.1.0
 
 ### Minor Changes

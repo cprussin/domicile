@@ -1,5 +1,89 @@
 # @domicile-desktop/engine
 
+## 1.0.0
+
+### Major Changes
+
+- e8f1f41: Extensions are switched on per profile. The Settings app's Extensions page has no switch: it shows the profiles each extension is on in, with **Choose profiles**, shows its settings while it is off, and asks which profiles a folder just loaded goes on in. The tray's menu switches an extension the config lists by a temporary change of the profile's list, until the desktop restarts. The Profiles page does the same on a read-only config, and on one it writes changes the file's list in one click; either way it shows "Changed from your config" with Reset. The SDK drops `extensions.setEnabled`; `browser.setExtensionEnabled` switches through the config where the config sets it, and `browser.changedExtensions` and `browser.resetExtension` show and end those changes.
+- cb357cb: `domicile.pointer.warp(x, y, onlyOver, unlessOver)` moves the pointer only while it is over one of the `onlyOver` boxes and not over `unlessOver`; the engine checks. `onlyOver` is required. Manganese passes every other shown window's frame, so switching tabs or moving focus with the pointer over the top bar no longer warps it.
+
+### Minor Changes
+
+- 90e1c93: A shell's shader effect can draw an element through a mesh, a grid or instances placed by a vertex program; sample images; read array uniforms set per element; and draw as far as the screen. One whose outset holds through an animation animates on the compositor.
+- 55d3d53: Each protection beside a page's ad blocking, hiding device details and removing tracking from links, turns on or off for the page's site or its window with a `<webview>`'s `setPrivacyProtection(name, on, "site" | "window")`, and reads back with `privacyProtections()` and `privacyProtectionsSetFor()`; every protection is off where ad blocking is. The engine's `site_privacy` lists a site's protections beside its mode and `set_site_privacy` takes `protections`, and Settings' Sites you changed lists and clears them.
+- 1726356: A shell can register SkSL shader effects, which `filter: domicile-shader(name, …)` and `backdrop-filter` draw over any element. viz compiles and runs them for the shell only, and drops one that hangs the GPU.
+- 343876f: The engine blocks ads and trackers in every website's page, with adblock-rust and the config's `browser.block_lists` (EasyList, EasyPrivacy and uBlock Origin's filters unless set) plus the user's `browser.block_rules`. Each profile's `protections.block_ads_and_trackers` is `standard`, which blocks other sites' ads and trackers, `strict`, which blocks a site's own too and is a private profile's default, or `off`. Settings › Privacy chooses it per profile.
+- 8b27261: `domicile open --app <module>#<fragment>` opens an app module's window at that fragment, which the app reads as `location.hash`, and `domicile-settings <page>` opens Settings on that page. The shield's Privacy settings opens Settings on the Privacy page.
+- 90e1c93: A window says where it came from: `launchedFrom` names where the launch it answered started, as `launch(argv, from)` named it, and a browser window's `opener` is the window whose page opened it. A closed window's last frame stays while its `<app>` is in the page, up to 10 seconds.
+- bd6ceb4: The engine hides the device's details from pages, as Brave farbles them: a
+  canvas's exported pixels, what an `OfflineAudioContext` renders and
+  `navigator.hardwareConcurrency` come out a little off, the same way for one
+  site all session and differently for each site and each start. Off reads the
+  truth. Each profile's new `protections.hide_device_details`, on unless set
+  `false`, turns it off, and Settings › Privacy has its switch, "Hide your
+  device's details".
+- fc566f5: The engine hides cookie banners and blocks the scripts that show them, with the config's new `browser.cookie_banner_lists` (the EasyList Cookie List and uBlock Origin's cookie notices unless set), in each profile whose new `protections.hide_cookie_banners` is on, which it is unless set. A shield turns it on or off for a site or a window as `hideCookieBanners`, and Settings › Privacy has a switch for it.
+- 28ccc38: The lists' procedural filters (`:has-text()`, `:upward()`, `:remove()`, `:style()`) apply in a website's page, with Brave's own script in an isolated world, in Standard and Strict.
+- 082ddd7: The engine runs the scriptlets filter lists name with `##+js(...)`, in the page's own world before any of its scripts, from the config's new `browser.scriptlet_resources`: uBlock Origin's scriptlets unless set, built and published by CI and pinned by their sha256, and `null` runs none.
+- 79d8d48: `idle.ignore_pointer_motion` blanks and locks whether or not the pointer moves: its motion holds off neither timeout and lights no dark screen. Keys, touches, clicks and scrolling still do. For a mouse that reports motion by itself. The engine says whether each input was a key, a touch, pointer motion or another use of the pointer, and reports the rest however much the pointer moves.
+- 286de9e: Settings › Privacy lists the sites whose protections the shield changed in the chosen profile, with **Turn back on** or **Remove** for each. The engine's command socket lists and sets them with `site_privacy` and `set_site_privacy`.
+- c76af17: The engine takes the tracking out of a link from one site to another: in
+  Standard, click ids such as `fbclid`, `gclid` and `msclkid` (Brave's list);
+  in Strict, the `utm_` campaign parameters too. Off keeps everything. Each
+  profile's new `protections.remove_tracking_from_links`, on unless set
+  `false`, turns it off, and Settings › Privacy has its switch.
+- 962d6ae: The engine acts on the lists' `$redirect`, `$removeparam` and `$csp` rules, blocks a server's redirect to a blocked address, finds a tracker behind a CNAME by its canonical name, as Brave does, and keeps each list as long as its `! Expires:` says. The config's new `browser.block_in_electron_apps` blocks in Electron apps' pages too, in Standard. Carried from #2662 by lillecarl.
+- c0d8052: A `<webview>` reports how its page blocks ads and trackers and how many of its requests were blocked (`privacySite`, `blockAdsAndTrackers`, `blockAdsAndTrackersSetFor`, `blockedCount`, `domicile-site-privacy-change`), and `setBlockAdsAndTrackers(mode, "site" | "window")` changes it for the page's site, kept in its profile, or for its window until it closes.
+- c18b1a0: An agent seat's pointer and keyboard reach browser windows at desk positions. The compositor sends each step to the browser as `agent_input`, which hit tests the desk point to the page under it, refuses the shell's own page, carries drags between pages, and answers `agent_input_reached`. The user's own press or key in a browser window an agent holds takes it. Manganese draws an agent's ring, name and pointer on browser windows too, and its agent pill lists the browser windows an agent uses.
+- a1ce3af: A file chooser an agent's press or key opens waits for the agent (`Domicile.fileChooser`, `Domicile.chooseFiles`), not the shell; the MCP server's `browser_choose_files` answers it.
+- e8f1f41: A shell makes temporary changes to the config with `domicile.config` (`setOverride`, `resetOverrides`, `overrides`), over the engine's new `changeConfig` and `configoverrides`. Each change says what the file has under it (`written`). An extension's site and file access are set in every browser profile, and one the user installs starts off in every profile, for the shell to ask where it goes on.
+- 34f4903: A shell lists and runs extensions' commands and menu items: `extensions.commands`, `on("commandPressed")` and `runCommand()` for `chrome.commands`, `extensions.menu()` and `runMenuItem()` for the items an extension adds to its action's menu, and `extensionItems` and `runExtensionItem()` on a page's context menu event.
+- aecbd9d: `domicile completions` asks the shell for placeholders only it knows: `bindKeys` takes `onComplete(args)`, which returns the words that can follow. Manganese completes its workspace names after `workspace` and `move container to workspace`.
+- 630af2d: The engine hides what the filter lists name by a page's elements (`##.ad`,
+  `example.com##.promo`), with their exceptions and `$generichide`, in
+  Standard and Strict alike: the browser sends each website frame its site's
+  rules and the generic ones before it commits, and the renderer asks about the
+  page's classes and ids as they appear.
+- 786360e: Browser windows no `<webview>` shows, or whose `<webview>` is not rendered, have their pages unloaded while the computer is short of memory, much as Chrome unloads tabs, and load again when they are shown. Shells get `isDiscarded` on a window, `browser.discard(id)` to unload one by hand, and `browser.on("memoryShort", …)` to decide themselves which go.
+- 7839ab1: Shells can ask where the pointer is: `domicile.pointer.position()` resolves to the pointer's place in the shell page's CSS pixels, or `undefined` when it is off the desk. The answer is right over a browser window's page too.
+- 68fe399: `domicile open --agent <session> <url>` opens a new browser window held by the agent's seat, listed with `agent` so the shell opens it without the user's focus; the engine's `open_url` answers with the window's id. Manganese opens a window an agent holds in a group of its own beside the user's. `domicile list-windows` gives browser windows `focused` and `size` from the engine's new `browser_windows` command.
+
+### Patch Changes
+
+- 34f4903: An extension gets any key its manifest suggests, Chrome's own shortcuts included, such as Bitwarden's Ctrl+Shift+L, except those the shell names with `extensions.reserveKeys()`.
+- 8c88950: An agent's keys in a browser window type what the desk's keymap says, so its text shows up on a nested desk too.
+- c2231ca: A picker's anchor is in its `<webview>`'s coordinates, wherever the `<webview>` is on the desktop.
+- f221ee9: Setting a site's permission, to "ask" too, clears Chrome's count of requests left unanswered, so a site that Chrome stopped from asking asks again.
+- 53ced25: A hidden page draws its new colors when the desktop's theme turns, so it is not shown in the old theme first.
+- 652c81c: An agent's copy in a browser window goes to its own clipboard, so the user's paste never gets it.
+- e3387a0: The engine no longer loads Chrome's Gemini in Chrome and Contextual Tasks extensions. Each one started a background process of about 30 MiB in every browser profile whenever a page opened, and a desk has neither feature.
+- cf06eb3: The engine downloads only the components a page needs (Widevine, certificate revocation and transparency, origin trials, the autoplay list, hyphenation, Screen AI), never downloads Chrome's on-device AI models, never asks Google for the time or whether AI Mode is offered, and opens no connection to the search engine before a search.
+- a77e445: Fingerprinting protection now always changes a canvas a page reads back, however little of it is drawn. Before, it picked pixels from the whole canvas and skipped clear ones, so a mostly clear canvas came back unchanged for about one site in thirty.
+- 34f4903: An extension's key pressed in a page runs its command in that page's browser profile, as in Chrome, and the page does not get it. A shell that listens for `extensioncommandpressed` runs it instead.
+- d90ad77: The engine logs what it gets past as warnings, not errors: GCM failing to reach its MCS endpoint while the network is down or changing, a page's WebRTC host lookup failing, and libinput's reports of a kernel's or device's fault, such as a touchpad's touch jump. libinput's client bugs stay errors.
+  
+  An Electron app's session finds its storage while the shell's first page is still opening, so an app started at login no longer logs "the engine named no storage path for a session: there is no shell".
+- ec69bfd: An agent's keys in a browser window are the page's alone: the shell no longer hears them as the user's, so they no longer move the user's keyboard into the agent's window, and they run no desk, browser or extension shortcut.
+- e687b71: `tabs.detectLanguage`, which Ghostery calls, fails with `not supported on a Domicile desk`.
+- d3dcb84: A browser window an agent works in runs as shown on a hidden workspace, a screenshot of it is refused at once rather than timing out, the MCP server hints agents to work on a workspace the user isn't on, its batch results read a line a step, and manganese's workspace switcher dots workspaces an agent is working on.
+- 089b085: Each browser profile has `protections`, all on unless the config turns one off: it blocks third-party cookies, sends Global Privacy Control, and hides the local IP address from WebRTC. Settings › Privacy switches them per profile.
+- d64da20: A browser window that slides, as in a workspace switch, keeps its page's place until the slide ends, so the page does not redraw every frame of the slide.
+- c441cdf: Bytes an Electron app sends over IPC, or a page sends it, arrive as bytes, so VSCodium's window gets past its splash.
+- e0eea8b: An extension switched back on while it reloads comes back on, and a hidden page draws its new colors however long a busy page takes. A `<webview>` logs whether each new surface it embeds waits for its page, and how long its tooltip waited. A keystroke-to-pixel run starts once the engine takes the window's frame, even with no commit after it.
+- ed82ea5: A shader effect's arrays reach it while its filter animates on the compositor. The engine kept each `update` made during such an animation from the compositor until something else changed, so the example shell's cloth close effect only faded.
+- f1c2b2d: An installed extension takes each key its manifest suggests that is free at its next start, such as Bitwarden's Ctrl+Shift+L, unless the person cleared it.
+- 8444ede: Loading an unpacked extension again, as the Settings app's **Load unpacked folder** does, reloads it in every browser profile that has it.
+- 05ec2b0: An Electron app's `session.setCodeCachePath` moves its session's code cache instead of crashing the engine.
+- f9449f1: A keybinding fires from every key that types its keysym, not only the lowest one, so `XF86AudioPlay` also answers a headset's play button, such as AirPods'. `shell_config`'s `keys` maps each keysym to every key it is on, lowest first.
+- 13dbd28: A browser window's page runs `pagehide` and `unload` when the user logs out, for two seconds at most. Element no longer says it is open in another window after a quick log out and in.
+- 987c8af: The engine's checks run it on flake.lock's glibc: `.#full` sets `NIX_LD`, and Chromium's nix-shell takes flake.lock's nixpkgs, not the host's flake registry.
+- 24f66a6: Domicile's D-Bus names are under `com.domicile_desktop`: Miracast is `com.domicile_desktop.Miracast1` (was `net.domicile.Miracast1`) and the screen-cast picker is `com.domicile_desktop.ScreenCast` (was `org.domicile.ScreenCast`).
+- 31a7f8a: A `<webview>`'s tooltip comes only from the frame under the pointer, as in Chrome. Entering a frame no longer shows the iframe element's `title` at a point in the frame's coordinates.
+- 34f4903: An extension's item in a page's context menu runs only while that page is shown, so it never gives the extension access to a page opened after.
+- bec6046: A container query that was unknown while its container had no size is evaluated again when the root font size or the viewport changes. Before, its cached result could go stale, and engine builds with expensive DCHECKs stopped on `container_query_evaluator.cc`'s unit flags check.
+- 82c4a80: A window opening while a DevTools client is auto-attached to new pages no longer stops the engine on `Check failed: zoom`.
+- e8b1947: The latency run counts a commit that came within an eighth of a frame of the key as its answer when the probe pixel changes after it with no commit since. kitty 0.51 answers that fast, and every such round was dropped as moved before the answer.
+
 ## 0.4.0
 
 ### Minor Changes

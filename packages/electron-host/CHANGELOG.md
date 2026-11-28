@@ -1,5 +1,14 @@
 # @domicile-desktop/electron-host
 
+## 0.1.1
+
+### Patch Changes
+
+- 549119e: VSCodium runs on the engine. Electron apps' mains get `original-fs` and `module.registerHooks` (resolve hooks for `require`), and VSCodium's schemes register from the engine's first start. `domicile open --electron` follows wrappers into an app's own `sh` launcher, says when one exits without starting a program, and kills whatever following them started.
+- c441cdf: Bytes an Electron app sends over IPC, or a page sends it, arrive as bytes, so VSCodium's window gets past its splash.
+- 96b06ae: The desktop's error log no longer fills with a shell's ResizeObserver loops and `[object Object]`, and Electron apps follow logind on the system bus. `easeHeight` starts easing as a popup's content changes, before layout, rather than resizing it while a ResizeObserver answers; the SDK's `logger` writes objects as JSON and errors as their stacks; electron-host waits on the bus with `GetId`, which the system bus's policy allows, not `Peer.Ping`.
+- 63aab6f: A file an Electron app's protocol handler fetches keeps its Content-Type, so VSCodium's workbench loads on a fresh start instead of stopping at its splash.
+
 ## 0.1.0
 
 ### Minor Changes

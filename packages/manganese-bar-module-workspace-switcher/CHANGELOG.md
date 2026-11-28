@@ -1,5 +1,71 @@
 # @domicile-desktop/manganese-bar-module-workspace-switcher
 
+## 1.2.2
+
+### Patch Changes
+
+- e33f628: The bar's buttons share one `barButton` Panda pattern, from `@domicile-desktop/manganese-bar/panda-preset`. A package whose CSS a shell emits can take its Panda config from `packagePandaConfig` in `@domicile-desktop/component-library/panda-package-config`.
+- d3dcb84: A browser window an agent works in runs as shown on a hidden workspace, a screenshot of it is refused at once rather than timing out, the MCP server hints agents to work on a workspace the user isn't on, its batch results read a line a step, and manganese's workspace switcher dots workspaces an agent is working on.
+- fb2d9c3: Move the shell's surfaces onto the `springs.*` tokens:
+  
+  - `Popover` grows from its trigger, and `ModalDialog` takes an `origin` (or a `DialogOrigin` around it) to spring from and back into. Portal dialogs and the file picker spring from the window that asked, and the launcher from the bar button that opened it.
+  - `SlideOver`, `Toaster` and `LevelToast` move on springs; a swiped toast leaves at the speed it was let go.
+  - What is in a `ListRow` drawer fades and slides into place on springs.
+  - Menus, `Select` lists and tooltips fade in rising 2px off their anchor.
+  - The region picker's corners snap out on a spring when let go, and the recording toolbar springs in.
+  - The lock's clock and field, page dialogs and the workspace switcher's highlight move on springs.
+- 20b26f3: Send a window flying into its workspace's chip in the bar, grow a client's dialog out of the window it is for, and land a dropped window on a spring. The window model remembers the window each client window is a dialog for (`opener`), and the workspace switcher marks each chip with `WORKSPACE_CHIP`.
+- Updated dependencies [9511236]
+- Updated dependencies [0034f1d]
+- Updated dependencies [d85cc61]
+- Updated dependencies [8ab0523]
+- Updated dependencies [8b27261]
+- Updated dependencies [db55f37]
+- Updated dependencies [1fce39d]
+- Updated dependencies [6dd0c95]
+- Updated dependencies [1fce39d]
+- Updated dependencies [50b429c]
+- Updated dependencies [0966517]
+- Updated dependencies [e33f628]
+- Updated dependencies [bf4e447]
+- Updated dependencies [88a71a0]
+- Updated dependencies [72d3e73]
+- Updated dependencies [d3dcb84]
+- Updated dependencies [525150c]
+- Updated dependencies [02e8509]
+- Updated dependencies [cc64389]
+- Updated dependencies [e3ccef6]
+- Updated dependencies [b9abd20]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [a64fb76]
+- Updated dependencies [2a2328a]
+- Updated dependencies [3cc9d3d]
+- Updated dependencies [fb2d9c3]
+- Updated dependencies [c18b1a0]
+- Updated dependencies [6f8fea2]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [96b06ae]
+- Updated dependencies [4d479d1]
+- Updated dependencies [5701ee7]
+- Updated dependencies [04cf220]
+- Updated dependencies [7ef68c9]
+- Updated dependencies [06fcd97]
+- Updated dependencies [aecbd9d]
+- Updated dependencies [8c99222]
+- Updated dependencies [0bf1cdc]
+- Updated dependencies [20b26f3]
+- Updated dependencies [cf81dad]
+- Updated dependencies [dc1279f]
+- Updated dependencies [bfc6e43]
+- Updated dependencies [68fe399]
+- Updated dependencies [9c59e57]
+- Updated dependencies [bf012f0]
+- Updated dependencies [cb357cb]
+- Updated dependencies [3cc9d3d]
+  - @domicile-desktop/manganese-window-management@2.1.0
+  - @domicile-desktop/component-library@3.0.0
+  - @domicile-desktop/manganese-bar@1.2.0
+
 ## 1.2.1
 
 ### Patch Changes

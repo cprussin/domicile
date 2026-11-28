@@ -1,5 +1,12 @@
 # @domicile-desktop/ci
 
+## 0.0.4
+
+### Patch Changes
+
+- 860c38b: Guards and docs-media take their `nixpkgs#` tools from flake.lock, not the host's flake registry.
+- 987c8af: The engine's checks run it on flake.lock's glibc: `.#full` sets `NIX_LD`, and Chromium's nix-shell takes flake.lock's nixpkgs, not the host's flake registry.
+
 ## 0.0.3
 
 ### Patch Changes

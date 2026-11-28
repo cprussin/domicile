@@ -1,5 +1,42 @@
 # @domicile-desktop/manganese-bar
 
+## 1.2.0
+
+### Minor Changes
+
+- e33f628: The bar's buttons share one `barButton` Panda pattern, from `@domicile-desktop/manganese-bar/panda-preset`. A package whose CSS a shell emits can take its Panda config from `packagePandaConfig` in `@domicile-desktop/component-library/panda-package-config`.
+
+### Patch Changes
+
+- Updated dependencies [0034f1d]
+- Updated dependencies [8ab0523]
+- Updated dependencies [db55f37]
+- Updated dependencies [1fce39d]
+- Updated dependencies [50b429c]
+- Updated dependencies [0966517]
+- Updated dependencies [e33f628]
+- Updated dependencies [bf4e447]
+- Updated dependencies [88a71a0]
+- Updated dependencies [525150c]
+- Updated dependencies [02e8509]
+- Updated dependencies [cc64389]
+- Updated dependencies [b9abd20]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [a64fb76]
+- Updated dependencies [fb2d9c3]
+- Updated dependencies [6f8fea2]
+- Updated dependencies [c8a08d4]
+- Updated dependencies [96b06ae]
+- Updated dependencies [4d479d1]
+- Updated dependencies [5701ee7]
+- Updated dependencies [0bf1cdc]
+- Updated dependencies [dc1279f]
+- Updated dependencies [68fe399]
+- Updated dependencies [9c59e57]
+- Updated dependencies [3cc9d3d]
+  - @domicile-desktop/component-library@3.0.0
+  - @domicile-desktop/manganese-host@2.1.0
+
 ## 1.1.3
 
 ### Patch Changes
