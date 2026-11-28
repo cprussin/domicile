@@ -40,6 +40,7 @@ use domicile_host::portal_notifications::{
     Action, Button, Invoked, PortalNotification, PortalNotifications, Priority,
 };
 use domicile_host::tray::TrayIcons;
+use domicile_portal_notification::History;
 use domicile_protocol::Notification;
 use tracing::{debug, warn};
 use zbus::object_server::InterfaceRef;
@@ -183,42 +184,6 @@ impl NotificationServer {
     /// The user replied `text` to `id`.
     pub fn reply(&self, id: u32, text: String) {
         let _ = self.told.send(Event::Reply { id, text });
-    }
-
-    /// Add or replace `app_id`'s notification `id`, from the notification
-    /// portal.
-    pub fn add_from_portal(
-        &self,
-        app_id: String,
-        id: String,
-        notification: PortalNotification<OwnedVariant>,
-    ) {
-        let app = app(&app_id, &self.store.applications);
-        let notified = self.store.change(|held| {
-            let notified = held.portal.add(
-                &mut held.notifications,
-                app,
-                app_id,
-                id,
-                notification,
-                now(),
-            );
-            (
-                notified,
-                notified
-                    .evicted
-                    .is_some_and(|evicted| held.portal.forget(evicted)),
-            )
-        });
-        if let (
-            Notified {
-                evicted: Some(id), ..
-            },
-            false,
-        ) = notified
-        {
-            let _ = self.told.send(Event::Expired { id });
-        }
     }
 
     /// Warn that the desk does not lock: the machine lacks the lock's PAM
@@ -373,12 +338,6 @@ impl NotificationServer {
         );
     }
 
-    /// Remove `app_id`'s notification `id`, if held.
-    pub fn remove_from_portal(&self, app_id: &str, id: &str) {
-        self.store
-            .change(|held| held.portal.remove(&mut held.notifications, app_id, id));
-    }
-
     /// Call `invoked` with each action the user takes on a portal
     /// notification, and the token its application raises its window with.
     pub fn on_portal_action(
@@ -388,6 +347,49 @@ impl NotificationServer {
         if self.store.portal_actions.set(Box::new(invoked)).is_err() {
             panic!("portal notifications have one listener");
         }
+    }
+}
+
+/// The Notification portal's notifications join the rest, so the shell's
+/// drawer shows them together.
+impl History for NotificationServer {
+    fn add_from_portal(
+        &self,
+        app_id: String,
+        id: String,
+        notification: PortalNotification<OwnedVariant>,
+    ) {
+        let app = app(&app_id, &self.store.applications);
+        let notified = self.store.change(|held| {
+            let notified = held.portal.add(
+                &mut held.notifications,
+                app,
+                app_id,
+                id,
+                notification,
+                now(),
+            );
+            (
+                notified,
+                notified
+                    .evicted
+                    .is_some_and(|evicted| held.portal.forget(evicted)),
+            )
+        });
+        if let (
+            Notified {
+                evicted: Some(id), ..
+            },
+            false,
+        ) = notified
+        {
+            let _ = self.told.send(Event::Expired { id });
+        }
+    }
+
+    fn remove_from_portal(&self, app_id: &str, id: &str) {
+        self.store
+            .change(|held| held.portal.remove(&mut held.notifications, app_id, id));
     }
 }
 

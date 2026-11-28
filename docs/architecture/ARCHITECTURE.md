@@ -112,10 +112,12 @@ engine or Smithay:
 - `domicile-portal`: what the `xdg-desktop-portal` backend's interfaces
   share: the dialogs waiting on the shell, their `Request` and `Session`
   objects, and the grants a restore token brings back.
-- `domicile-portal-<name>`: one interface each, for those that need nothing
-  of the compositor: `access`, `account`, `app-chooser`, `background`,
-  `dynamic-launcher`, `email`, `file-chooser`, `lockdown`, `print`,
-  `settings`, `usb` and `wallpaper`. The compositor's `portals/` serves them on its bus name.
+- `domicile-portal-<name>`: one interface each, for those that reach the
+  compositor, if at all, through a trait of their own (as the Notification
+  portal's `History`): `access`, `account`, `app-chooser`, `background`,
+  `dynamic-launcher`, `email`, `file-chooser`, `inhibit`, `lockdown`,
+  `notification`, `print`, `settings`, `usb` and `wallpaper`. The
+  compositor's `portals/` serves them on its bus name.
 - `domicile-agents`: the agents the desk lets in, such as one connected
   through `domicile mcp`, and the dialog that asks the user first. See
   [AGENTS.md](../AGENTS.md).

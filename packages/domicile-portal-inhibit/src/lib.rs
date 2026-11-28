@@ -2,7 +2,7 @@
 //! logout, user switching and suspend, and watching the session's state.
 //!
 //! - An idle inhibitor (flag 8) vetoes blanking, as a
-//!   `zwp_idle_inhibit_manager_v1` inhibitor does; see [`crate::idle`]. The
+//!   `zwp_idle_inhibit_manager_v1` inhibitor does; see the compositor's `idle`. The
 //!   desk hears who holds each one, so a shell can name them.
 //! - Logout, user-switch and suspend inhibitors (1, 2, 4) are listed in the
 //!   portal requests as [`PortalKind::Inhibit`], so a shell can say who holds
