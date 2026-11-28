@@ -1,0 +1,30 @@
+{
+  "dependencies": {
+    "@cprussin/option-result": "catalog:",
+    "@domicile-desktop/sdk": "workspace:*",
+    "zod": "catalog:"
+  },
+  "description": "The client app modules talk to `domicile-app-host` with: framed JSON over a process they spawn.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "bun": ">=1.4.2"
+  },
+  "exports": {
+    ".": "./src/client.ts",
+    "./fake": "./src/fake.ts",
+    "./frames": "./src/frames.ts"
+  },
+  "license": "MIT",
+  "name": "@domicile-desktop/app-host-client",
+  "private": true,
+  "scripts": {
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.1"
+}

@@ -2,6 +2,7 @@
   "dependencies": {
     "@base-ui/react": "catalog:",
     "@cprussin/option-result": "catalog:",
+    "@domicile-desktop/app-host-client": "workspace:*",
     "@domicile-desktop/component-library": "workspace:*",
     "@domicile-desktop/react": "workspace:*",
     "@domicile-desktop/sdk": "workspace:*",

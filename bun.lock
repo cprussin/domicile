@@ -27,6 +27,7 @@
       "dependencies": {
         "@base-ui/react": "catalog:",
         "@cprussin/option-result": "catalog:",
+        "@domicile-desktop/app-host-client": "workspace:*",
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/react": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
@@ -51,12 +52,27 @@
         "vite": "catalog:",
       },
     },
+    "packages/app-host-client": {
+      "name": "@domicile-desktop/app-host-client",
+      "version": "0.0.1",
+      "dependencies": {
+        "@cprussin/option-result": "catalog:",
+        "@domicile-desktop/sdk": "workspace:*",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/app-settings": {
       "name": "@domicile-desktop/app-settings",
       "version": "0.2.0",
       "dependencies": {
         "@base-ui/react": "catalog:",
         "@cprussin/option-result": "catalog:",
+        "@domicile-desktop/app-host-client": "workspace:*",
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/react": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
@@ -1631,6 +1647,8 @@
     "@domicile-desktop/animated-properties": ["@domicile-desktop/animated-properties@workspace:packages/animated-properties"],
 
     "@domicile-desktop/app-history": ["@domicile-desktop/app-history@workspace:packages/app-history"],
+
+    "@domicile-desktop/app-host-client": ["@domicile-desktop/app-host-client@workspace:packages/app-host-client"],
 
     "@domicile-desktop/app-settings": ["@domicile-desktop/app-settings@workspace:packages/app-settings"],
 
